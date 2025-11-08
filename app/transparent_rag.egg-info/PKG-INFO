@@ -1,3 +1,15 @@
+Metadata-Version: 2.4
+Name: transparent-rag
+Version: 0.1.0
+Summary: Modular Pinecone-backed retrieval toolkit for TransparentRAG.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pinecone>=5.0.0
+Requires-Dist: sentence-transformers>=2.5.1
+Requires-Dist: pydantic>=2.6.0
+Requires-Dist: pypdf>=4.0.0
+Requires-Dist: pytest>=7.0.0
+
 # TransparentRAG
 
 Modular Pinecone-backed retrieval components for the TransparentRAG project. This initial version focuses on chunking raw text files, embedding with transformer models, and indexing/retrieving via Pinecone with optional reranking.

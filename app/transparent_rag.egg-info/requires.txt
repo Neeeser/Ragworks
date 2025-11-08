@@ -1,0 +1,5 @@
+pinecone>=5.0.0
+sentence-transformers>=2.5.1
+pydantic>=2.6.0
+pypdf>=4.0.0
+pytest>=7.0.0
