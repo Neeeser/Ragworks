@@ -1,0 +1,1 @@
+TransparentRAG makes every chunk observable. This is a sample document for integration tests.

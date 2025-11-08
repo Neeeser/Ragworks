@@ -1,1 +1,7 @@
+api
+core
+db
 retrieval
+schemas
+services
+utils

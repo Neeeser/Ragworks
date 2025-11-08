@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Any, Dict, Optional, Sequence
 
@@ -41,14 +42,23 @@ class PineconeIndexer(Indexer):
         spec_kwargs.setdefault("region", config.region)
         spec = ServerlessSpec(**spec_kwargs)
 
-        self._client.create_index(
+        create_kwargs = dict(
             name=config.name,
             dimension=config.dimension,
             metric=config.metric,
             spec=spec,
             deletion_protection=config.deletion_protection,
-            metadata_config=config.metadata_config,
         )
+        # Pinecone>=7 dropped the metadata_config kwarg, so only pass it when supported.
+        if config.metadata_config:
+            try:
+                params = inspect.signature(self._client.create_index).parameters
+            except (TypeError, ValueError):
+                params = {}
+            if "metadata_config" in params:
+                create_kwargs["metadata_config"] = config.metadata_config
+
+        self._client.create_index(**create_kwargs)
 
     def upsert(
         self,
@@ -62,7 +72,7 @@ class PineconeIndexer(Indexer):
         namespace = namespace or config.namespace
         index = self._get_index(config.name)
 
-        records: list[Dict[str, Any]] = []
+        vectors: list[Dict[str, Any]] = []
         for chunk in chunks:
             if chunk.embedding is None:
                 raise ValueError(f"Chunk {chunk.chunk_id} missing embedding.")
@@ -70,7 +80,7 @@ class PineconeIndexer(Indexer):
             metadata["document_id"] = chunk.document_id
             metadata["order"] = chunk.order
             metadata[config.text_key] = chunk.text
-            records.append(
+            vectors.append(
                 {
                     "id": chunk.chunk_id,
                     "values": chunk.embedding,
@@ -78,7 +88,7 @@ class PineconeIndexer(Indexer):
                 }
             )
 
-        index.upsert(records=records, namespace=namespace)
+        index.upsert(vectors=vectors, namespace=namespace)
 
     def delete_index(self, name: str) -> None:
         if self._client.has_index(name):
@@ -89,4 +99,3 @@ class PineconeIndexer(Indexer):
         if name not in self._indexes:
             self._indexes[name] = self._client.Index(name)
         return self._indexes[name]
-
