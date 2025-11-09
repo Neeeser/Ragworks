@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,18 @@ from app.api.routes import auth, chat, collections, documents, health, models, s
 from app.db.session import init_db
 
 settings = get_settings()
+log_level_name = (settings.log_level or "").strip().upper()
+if log_level_name:
+    log_level = getattr(logging, log_level_name, logging.INFO)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
+    logging.getLogger().setLevel(log_level)
+    logging.getLogger("uvicorn").setLevel(log_level)
+    logging.getLogger("uvicorn.access").setLevel(log_level)
+    logging.getLogger("uvicorn.error").setLevel(log_level)
 
 
 @asynccontextmanager
