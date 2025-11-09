@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional, Sequence
 
 from .chunkers.base import DocumentChunker
@@ -7,6 +8,8 @@ from .embedders.base import Embedder
 from .indexers.base import Indexer, VectorIndexConfig
 from .models import Document, DocumentChunk
 from .parsers import DocumentParser, DocumentSource
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentIndexer:
@@ -40,7 +43,38 @@ class DocumentIndexer:
 
         chunks = list(self._chunker.chunk(document))
         if not chunks:
+            logger.warning(
+                "Chunker %s produced no chunks for document %s (text chars=%s)",
+                self._chunker.__class__.__name__,
+                document.document_id,
+                len(document.text or ""),
+            )
             return []
+        chunk_preview = chunks[0].text.replace("\n", " ").strip()[:200]
+        chunk_lengths = [len(chunk.text or "") for chunk in chunks]
+        if chunk_lengths:
+            min_len = min(chunk_lengths)
+            max_len = max(chunk_lengths)
+            total_len = sum(chunk_lengths)
+            avg_len = total_len / len(chunk_lengths)
+        else:
+            min_len = max_len = total_len = avg_len = 0
+        sample_lengths = chunk_lengths[:5]
+        logger.info(
+            "Chunked document %s into %s chunk(s) via %s (chunk_size=%s overlap=%s). "
+            "Chunk char stats min=%s max=%s avg=%.1f total=%s sample=%s. First chunk preview=%r",
+            document.document_id,
+            len(chunks),
+            self._chunker.__class__.__name__,
+            getattr(self._chunker, "chunk_size", "n/a"),
+            getattr(self._chunker, "overlap", "n/a"),
+            min_len,
+            max_len,
+            avg_len,
+            total_len,
+            sample_lengths,
+            chunk_preview + ("..." if len(chunks[0].text) > 200 else ""),
+        )
 
         embeddings = self._embedder.embed_documents(chunks)
         if len(embeddings) != len(chunks):

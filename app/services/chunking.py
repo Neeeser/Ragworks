@@ -28,22 +28,65 @@ class _BaseChunker(DocumentChunker):
             metadata=document.metadata.model_copy(deep=True),
         )
 
+    def _chunk_segments(self, document: Document, segments: Sequence[str]) -> Sequence[DocumentChunk]:
+        normalized = [segment.strip() for segment in segments if segment and segment.strip()]
+        if not normalized:
+            fallback = (document.text or "").strip()
+            normalized = [fallback] if fallback else []
+        if not normalized:
+            return []
+
+        chunks: list[DocumentChunk] = []
+        buffer: list[str] = []
+        buffer_tokens = 0
+        has_new_tokens = False
+
+        def emit_chunk() -> None:
+            nonlocal buffer, buffer_tokens, has_new_tokens
+            if not buffer:
+                return
+            chunk_text = " ".join(buffer)
+            if chunk_text:
+                chunks.append(self._build_chunk(document, chunk_text, len(chunks)))
+            if self.overlap > 0:
+                buffer = buffer[-self.overlap :]
+                buffer_tokens = len(buffer)
+            else:
+                buffer = []
+                buffer_tokens = 0
+            has_new_tokens = False
+
+        for segment in normalized:
+            tokens = segment.split()
+            if not tokens:
+                continue
+            idx = 0
+            while idx < len(tokens):
+                if buffer_tokens == self.chunk_size:
+                    emit_chunk()
+                    continue
+                remaining = self.chunk_size - buffer_tokens
+                take = min(remaining, len(tokens) - idx)
+                if take <= 0:
+                    break
+                buffer.extend(tokens[idx : idx + take])
+                buffer_tokens += take
+                has_new_tokens = True
+                idx += take
+                if buffer_tokens == self.chunk_size:
+                    emit_chunk()
+
+        if buffer and has_new_tokens:
+            emit_chunk()
+
+        return chunks
+
 
 class TokenChunker(_BaseChunker):
     """Whitespace token chunker that supports overlap."""
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
-        tokens = document.text.split()
-        if not tokens:
-            return []
-        step = self.chunk_size - self.overlap
-        chunks: list[DocumentChunk] = []
-        for idx in range(0, len(tokens), step):
-            window = tokens[idx : idx + self.chunk_size]
-            if not window:
-                continue
-            chunks.append(self._build_chunk(document, " ".join(window), len(chunks)))
-        return chunks
+        return self._chunk_segments(document, [document.text])
 
 
 class SentenceChunker(_BaseChunker):
@@ -53,17 +96,7 @@ class SentenceChunker(_BaseChunker):
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
         sentences = [s.strip() for s in self.SENTENCE_REGEX.split(document.text) if s.strip()]
-        if not sentences:
-            return []
-        chunks: list[DocumentChunk] = []
-        step = self.chunk_size - self.overlap
-        for idx in range(0, len(sentences), step):
-            window = sentences[idx : idx + self.chunk_size]
-            if not window:
-                continue
-            text = " ".join(window)
-            chunks.append(self._build_chunk(document, text, len(chunks)))
-        return chunks
+        return self._chunk_segments(document, sentences)
 
 
 class ParagraphChunker(_BaseChunker):
@@ -71,17 +104,7 @@ class ParagraphChunker(_BaseChunker):
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", document.text) if p.strip()]
-        if not paragraphs:
-            return []
-        chunks: list[DocumentChunk] = []
-        step = self.chunk_size - self.overlap
-        for idx in range(0, len(paragraphs), step):
-            window = paragraphs[idx : idx + self.chunk_size]
-            if not window:
-                continue
-            text = "\n\n".join(window)
-            chunks.append(self._build_chunk(document, text, len(chunks)))
-        return chunks
+        return self._chunk_segments(document, paragraphs)
 
 
 class SemanticChunker(_BaseChunker):
@@ -114,14 +137,7 @@ class SemanticChunker(_BaseChunker):
                 flush()
         flush()
 
-        step = max(1, self.chunk_size - self.overlap)
-        for idx in range(0, len(buffers), step):
-            window = buffers[idx : idx + self.chunk_size]
-            if not window:
-                continue
-            text = "\n\n".join(window)
-            chunks.append(self._build_chunk(document, text, len(chunks)))
-        return chunks
+        return self._chunk_segments(document, buffers)
 
 
 def build_chunker(strategy: ChunkStrategy, chunk_size: int, overlap: int) -> DocumentChunker:
@@ -132,4 +148,3 @@ def build_chunker(strategy: ChunkStrategy, chunk_size: int, overlap: int) -> Doc
     if strategy == ChunkStrategy.SEMANTIC:
         return SemanticChunker(chunk_size=chunk_size, overlap=overlap)
     return TokenChunker(chunk_size=chunk_size, overlap=overlap)
-

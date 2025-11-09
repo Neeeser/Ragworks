@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -23,6 +24,8 @@ from app.retrieval.parsers.txt import TxtDocumentParser
 from app.services.chunking import build_chunker
 from app.services.openrouter import get_openrouter_client
 from app.utils.file_storage import FileStorage
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionService:
@@ -69,6 +72,12 @@ class IngestionService:
 
         try:
             parser = self._select_parser(document.content_type)
+            logger.info(
+                "Selected parser %s for document %s (%s)",
+                parser.__class__.__name__,
+                document.id,
+                document.content_type,
+            )
             source = DocumentSource(
                 document_id=str(document.id),
                 path=Path(path),
@@ -76,7 +85,25 @@ class IngestionService:
                 metadata=self._build_metadata(document),
             )
             parsed: RetrievalDocument = parser.parse(source)  # type: ignore[assignment]
+            parsed_text = (parsed.text or "").strip()
+            snippet = (parsed_text[:200] + ("..." if len(parsed_text) > 200 else "")) if parsed_text else ""
+            logger.info(
+                "Parsed uploaded document %s (%s) content_type=%s chars=%s snippet=%r",
+                document.id,
+                document.name,
+                document.content_type,
+                len(parsed_text),
+                snippet,
+            )
             chunker = build_chunker(collection.chunk_strategy, collection.chunk_size, collection.chunk_overlap)
+            logger.info(
+                "Constructed chunker=%s strategy=%s size=%s overlap=%s for document %s",
+                chunker.__class__.__name__,
+                collection.chunk_strategy,
+                collection.chunk_size,
+                collection.chunk_overlap,
+                document.id,
+            )
             embedder = OpenRouterEmbedder(self.openrouter, collection.embedding_model)
             index_config = PineconeIndexConfig(
                 name=collection.pinecone_index,

@@ -73,6 +73,11 @@ class Settings(BaseSettings):
         default=60 * 24,
         validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
+    log_level: Optional[str] = Field(
+        default=None,
+        validation_alias="LOG_LEVEL",
+        description="Python logging level for application logs. Leave unset to use default FastAPI/uvicorn logging.",
+    )
 
 
 @lru_cache(maxsize=1)
