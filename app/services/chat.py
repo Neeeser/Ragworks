@@ -275,7 +275,10 @@ class ChatService:
         if payload.session_id:
             existing = self.chat_repo.get_session(payload.session_id, user_id=user.id)
             if existing:
+                if existing.collection_id != collection.id:
+                    raise ValueError("Session does not belong to this collection.")
                 return existing
+            raise ValueError("Chat session not found.")
         title = payload.title or payload.content[:60]
         session_model = models.ChatSession(
             user_id=user.id,
@@ -330,6 +333,39 @@ class ChatService:
         self.session.commit()
         return message
 
+    def _apply_edit(
+        self,
+        *,
+        session_model: models.ChatSession,
+        target_message: models.ChatMessage,
+        new_content: Optional[str],
+    ) -> None:
+        if target_message.session_id != session_model.id:
+            raise ValueError("Message does not belong to this session.")
+
+        if target_message.role == models.ChatRole.USER:
+            trimmed = (new_content or "").strip()
+            if not trimmed:
+                raise ValueError("Edited message cannot be empty.")
+            target_message.content = trimmed
+            target_message.updated_at = datetime.utcnow()
+            self.session.add(target_message)
+            self.session.flush()
+            self.chat_repo.delete_messages_after(
+                session_id=session_model.id,
+                created_at=target_message.created_at,
+                include_anchor=False,
+            )
+        else:
+            self.chat_repo.delete_messages_after(
+                session_id=session_model.id,
+                created_at=target_message.created_at,
+                include_anchor=True,
+            )
+        session_model.updated_at = datetime.utcnow()
+        self.session.add(session_model)
+        self.session.flush()
+
     def _convert_session(self, session_model: models.ChatSession) -> ChatSessionRead:
         return ChatSessionRead(
             id=session_model.id,
@@ -370,12 +406,34 @@ class ChatService:
         collection: models.Collection,
         payload: ChatMessageCreate,
     ) -> ChatCompletionResponse:
-        session_model = self._ensure_session(user=user, collection=collection, payload=payload)
-        self._record_message(
-            session_id=session_model.id,
-            role=models.ChatRole.USER,
-            content=payload.content,
-        )
+        edit_target: Optional[models.ChatMessage] = None
+        if payload.edit_message_id:
+            edit_target = self.chat_repo.get_message(payload.edit_message_id, user_id=user.id)
+            if not edit_target:
+                raise ValueError("Message not found for editing.")
+            session_model = self.chat_repo.get_session(edit_target.session_id, user_id=user.id)
+            if not session_model:
+                raise ValueError("Chat session not found for edit.")
+            if session_model.collection_id != collection.id:
+                raise ValueError("Message belongs to a different collection.")
+        else:
+            session_model = self._ensure_session(user=user, collection=collection, payload=payload)
+
+        if edit_target:
+            self._apply_edit(
+                session_model=session_model,
+                target_message=edit_target,
+                new_content=payload.content,
+            )
+        else:
+            trimmed_content = (payload.content or "").strip()
+            if not trimmed_content:
+                raise ValueError("Message content cannot be empty.")
+            self._record_message(
+                session_id=session_model.id,
+                role=models.ChatRole.USER,
+                content=trimmed_content,
+            )
 
         history = self.chat_repo.list_messages(session_model.id)
         messages = [{"role": "system", "content": self._system_prompt(collection)}]

@@ -63,7 +63,10 @@ def chat_with_collection(
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     chat_service = ChatService(session)
-    return chat_service.send_message(user=current_user, collection=collection, payload=payload)
+    try:
+        return chat_service.send_message(user=current_user, collection=collection, payload=payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/collections/{collection_id}/sessions", response_model=List[ChatSessionRead])
@@ -93,4 +96,3 @@ def get_chat_history(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
     messages = repo.list_messages(session_id)
     return [_message_to_schema(message) for message in messages]
-

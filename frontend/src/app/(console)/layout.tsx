@@ -35,63 +35,19 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="flex min-h-screen flex-col gap-6 px-4 py-6 text-slate-100 lg:flex-row lg:px-10 lg:py-8">
-      <aside className="glass-panel hidden min-h-[calc(100vh-4rem)] w-[280px] flex-shrink-0 flex-col justify-between rounded-[2rem] px-6 py-8 lg:flex">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-violet-300">
-            <Bot className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-400">TransparentRAG</p>
-            <p className="text-lg font-semibold text-white">Control Room</p>
-          </div>
-        </Link>
-
-        <nav className="flex flex-col gap-1">
-          {navLinks.map((link) => {
-            const isActive = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition',
-                  isActive
-                    ? 'bg-white/10 text-white shadow-lg shadow-violet-500/20'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white',
-                )}
-              >
-                <link.icon className="h-4 w-4" />
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Operator</p>
-          <div>
-            <p className="text-base font-semibold text-white">{user.full_name || user.email}</p>
-            <p className="text-sm text-slate-400">{user.email}</p>
-          </div>
-          <Button variant="ghost" onClick={signOut}>
-            Sign out
-          </Button>
-        </div>
-      </aside>
-
-      <div className="flex-1 space-y-6">
-        <div className="glass-panel flex flex-col gap-3 rounded-3xl px-5 py-4 lg:hidden">
-          <div className="flex items-center justify-between">
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      <header className="sticky top-0 z-30 border-b border-white/5 bg-slate-950/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
+          <Link href="/dashboard" className="flex items-center gap-3 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-violet-300">
+              <Bot className="h-6 w-6" />
+            </div>
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-slate-400">TransparentRAG</p>
-              <p className="text-lg font-semibold">Operator Console</p>
+              <p className="text-lg font-semibold">Control Room</p>
             </div>
-            <Button variant="ghost" onClick={signOut}>
-              Sign out
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
+          </Link>
+          <nav className="flex flex-1 justify-center gap-2 text-sm">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
@@ -99,18 +55,29 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    'rounded-full px-4 py-1.5 text-sm',
-                    isActive ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white',
+                    'rounded-full px-4 py-2 font-medium transition',
+                    isActive
+                      ? 'bg-white/15 text-white shadow shadow-violet-500/40'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-white',
                   )}
                 >
                   {link.label}
                 </Link>
               );
             })}
+          </nav>
+          <div className="flex items-center gap-3">
+            <div className="text-right text-xs">
+              <p className="font-semibold text-white">{user.full_name || user.email}</p>
+              <p className="text-slate-400">{user.email}</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              Sign out
+            </Button>
           </div>
         </div>
-        {children}
-      </div>
+      </header>
+      <main className="flex-1 px-4 py-6 lg:px-10 lg:py-8">{children}</main>
     </div>
   );
 }

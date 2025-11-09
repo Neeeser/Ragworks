@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Iterable, Optional
 from uuid import UUID
 
+from sqlalchemy import delete as sa_delete
 from sqlmodel import Session, select
 
 from app.db import models
@@ -101,6 +103,31 @@ class ChatRepository:
         self.session.add(message)
         self.session.flush()
         return message
+
+    def get_message(self, message_id: UUID, user_id: Optional[UUID] = None) -> Optional[models.ChatMessage]:
+        statement = select(models.ChatMessage).where(models.ChatMessage.id == message_id)
+        if user_id:
+            statement = statement.join(models.ChatSession).where(models.ChatSession.user_id == user_id)
+        return self.session.exec(statement).first()
+
+    def delete_messages_after(
+        self,
+        session_id: UUID,
+        created_at: datetime,
+        *,
+        include_anchor: bool = False,
+    ) -> None:
+        comparator = (
+            models.ChatMessage.created_at >= created_at
+            if include_anchor
+            else models.ChatMessage.created_at > created_at
+        )
+        statement = sa_delete(models.ChatMessage).where(
+            models.ChatMessage.session_id == session_id,
+            comparator,
+        )
+        self.session.exec(statement)
+        self.session.flush()
 
     def list_messages(self, session_id: UUID, limit: int = 50) -> Iterable[models.ChatMessage]:
         statement = (

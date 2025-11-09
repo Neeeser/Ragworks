@@ -49,6 +49,7 @@ class ChatMessageCreate(BaseModel):
     content: str
     mode: ChatMode = ChatMode.CHAT
     title: Optional[str] = None
+    edit_message_id: Optional[UUID] = None
 
 
 class ChatCompletionResponse(BaseModel):
