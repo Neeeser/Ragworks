@@ -453,7 +453,7 @@ export default function ChatStudioExperience() {
   };
 
   const renderHistoryList = () => (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col min-h-0">
       <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-slate-500">History</p>
@@ -468,7 +468,7 @@ export default function ChatStudioExperience() {
           <PanelLeftClose className="h-4 w-4" />
         </Button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {sessions.length === 0 ? (
           <p className="text-sm text-slate-400">No chats yet — start one below.</p>
         ) : (
@@ -504,7 +504,7 @@ export default function ChatStudioExperience() {
   );
 
   const renderTelemetry = () => (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col min-h-0">
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Context</p>
@@ -519,7 +519,7 @@ export default function ChatStudioExperience() {
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <div className="mt-4 flex-1 space-y-4 overflow-y-auto">
+      <div className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto">
         {collection && (
           <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-slate-400">
@@ -603,7 +603,7 @@ export default function ChatStudioExperience() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.35em] text-slate-400">Chat studio</p>
@@ -625,120 +625,126 @@ export default function ChatStudioExperience() {
         </GlassCard>
       )}
 
-      {loading ? (
-        <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
-          <Loader className="h-6 w-6" />
-        </GlassCard>
-      ) : !collection ? (
-        <GlassCard className="rounded-[2rem] p-10 text-center text-sm text-slate-300">
-          Unable to load this collection.
-        </GlassCard>
-      ) : (
-        <div className="glass-panel relative flex h-[calc(100vh-8rem)] min-h-[720px] overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
-          {historyOpen && (
-            <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
-              {renderHistoryList()}
-            </aside>
-          )}
-          {!historyOpen && (
-            <button
-              type="button"
-              className="absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
-          )}
+      <div className="flex flex-1 flex-col min-h-0">
+        {loading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
+              <Loader className="h-6 w-6" />
+            </GlassCard>
+          </div>
+        ) : !collection ? (
+          <div className="flex flex-1 items-center justify-center">
+            <GlassCard className="rounded-[2rem] p-10 text-center text-sm text-slate-300">
+              Unable to load this collection.
+            </GlassCard>
+          </div>
+        ) : (
+          <div className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
+            {historyOpen && (
+              <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
+                {renderHistoryList()}
+              </aside>
+            )}
+            {!historyOpen && (
+              <button
+                type="button"
+                className="absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </button>
+            )}
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Conversation</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-2xl font-semibold text-white">{collection.name}</h2>
-                  <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    {documentCount} documents
-                  </span>
+            <div className="flex min-w-0 flex-1 flex-col min-h-0">
+              <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Conversation</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-2xl font-semibold text-white">{collection.name}</h2>
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      {documentCount} documents
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 w-10 rounded-full border border-white/10 p-0 text-slate-300"
+                    onClick={() => setHistoryOpen((prev) => !prev)}
+                  >
+                    {historyOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="secondary" className="gap-2" onClick={handleStartNewChat}>
+                    <PlusCircle className="h-4 w-4" />
+                    New chat
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 w-10 rounded-full border border-white/10 p-0 text-slate-300"
+                    onClick={() => setTelemetryOpen((prev) => !prev)}
+                  >
+                    {telemetryOpen ? (
+                      <PanelRightClose className="h-4 w-4" />
+                    ) : (
+                      <PanelRightOpen className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 w-10 rounded-full border border-white/10 p-0 text-slate-300"
-                  onClick={() => setHistoryOpen((prev) => !prev)}
-                >
-                  {historyOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-                </Button>
-                <Button variant="secondary" className="gap-2" onClick={handleStartNewChat}>
-                  <PlusCircle className="h-4 w-4" />
-                  New chat
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 w-10 rounded-full border border-white/10 p-0 text-slate-300"
-                  onClick={() => setTelemetryOpen((prev) => !prev)}
-                >
-                  {telemetryOpen ? (
-                    <PanelRightClose className="h-4 w-4" />
-                  ) : (
-                    <PanelRightOpen className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
 
-            <div className="flex h-full flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto px-8 py-6">
-                <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
-                  {renderMessages()}
-                  <div ref={endRef} />
+              <div className="flex h-full flex-col min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
+                  <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
+                    {renderMessages()}
+                    <div ref={endRef} />
+                  </div>
                 </div>
-              </div>
-              <div className="border-t border-white/5 bg-black/30 px-6 py-4">
-                <div className="flex flex-col gap-3">
-                  <textarea
-                    className="h-36 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-                    placeholder="Ask anything about this collection…"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>{draft.length} characters</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        onClick={handleSend}
-                        loading={sending}
-                        disabled={!draft.trim()}
-                        className="gap-2"
-                      >
-                        Send turn
-                      </Button>
+                <div className="border-t border-white/5 bg-black/30 px-6 py-4">
+                  <div className="flex flex-col gap-3">
+                    <textarea
+                      className="h-36 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
+                      placeholder="Ask anything about this collection…"
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                    />
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>{draft.length} characters</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          onClick={handleSend}
+                          loading={sending}
+                          disabled={!draft.trim()}
+                          className="gap-2"
+                        >
+                          Send turn
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {telemetryOpen && (
-            <aside className="hidden h-full w-80 flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
-              {renderTelemetry()}
-            </aside>
-          )}
-          {!telemetryOpen && (
-            <button
-              type="button"
-              className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
-              onClick={() => setTelemetryOpen(true)}
-            >
-              <PanelRightOpen className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      )}
+            {telemetryOpen && (
+              <aside className="hidden h-full w-80 flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
+                {renderTelemetry()}
+              </aside>
+            )}
+            {!telemetryOpen && (
+              <button
+                type="button"
+                className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
+                onClick={() => setTelemetryOpen(true)}
+              >
+                <PanelRightOpen className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
