@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Dict, List, Optional
-from uuid import UUID
+from typing import Any, Dict, List, Optional, Set, Tuple
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
@@ -28,6 +28,8 @@ class ChatService:
         self.chat_repo = ChatRepository(session)
         self.openrouter = get_openrouter_client()
         self.retrieval = RetrievalService()
+        effort_value = (self.settings.openrouter_reasoning_effort or "").strip()
+        self.reasoning_effort: Optional[str] = effort_value or None
 
     @staticmethod
     def _coerce_usage_value(value: object) -> Optional[int]:
@@ -50,6 +52,169 @@ class ChatService:
                     has_component = True
             return total if has_component else None
         return None
+
+    @staticmethod
+    def _normalize_reasoning_segments(raw_reasoning: Any) -> List[Dict[str, Any]]:
+        if raw_reasoning is None:
+            return []
+        if isinstance(raw_reasoning, str):
+            stripped = raw_reasoning.strip()
+            if not stripped:
+                return []
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                return [{"type": "text", "content": stripped}]
+            return ChatService._normalize_reasoning_segments(parsed)
+        if isinstance(raw_reasoning, dict):
+            return [raw_reasoning]
+        if isinstance(raw_reasoning, list):
+            normalized: List[Dict[str, Any]] = []
+            for item in raw_reasoning:
+                if isinstance(item, dict):
+                    normalized.append(item)
+                elif isinstance(item, str):
+                    text_value = item.strip()
+                    if text_value:
+                        normalized.append({"type": "text", "content": text_value})
+                else:
+                    normalized.append({"type": "value", "content": item})
+            return normalized
+        return [{"type": "text", "content": str(raw_reasoning)}]
+
+    @staticmethod
+    def _ensure_arguments_string(arguments: Any) -> str:
+        if isinstance(arguments, str):
+            stripped = arguments.strip()
+            if not stripped:
+                return "{}"
+            try:
+                json.loads(stripped)
+                return stripped
+            except json.JSONDecodeError:
+                return json.dumps({"input": stripped})
+        if arguments is None:
+            return "{}"
+        return json.dumps(arguments)
+
+    @staticmethod
+    def _decode_tool_arguments(arguments: Any) -> Dict[str, Any]:
+        if isinstance(arguments, dict):
+            return arguments
+        if isinstance(arguments, str):
+            stripped = arguments.strip()
+            if not stripped:
+                return {}
+            try:
+                decoded = json.loads(stripped)
+                if isinstance(decoded, dict):
+                    return decoded
+            except json.JSONDecodeError:
+                return {"query": stripped}
+        return {}
+
+    @staticmethod
+    def _build_reasoning_options(
+        supported_parameters: Optional[List[str]],
+        effort: Optional[str],
+    ) -> Dict[str, Any]:
+        if not supported_parameters:
+            return {}
+        normalized = {param.lower() for param in supported_parameters}
+        options: Dict[str, Any] = {}
+        if "include_reasoning" in normalized:
+            options["include_reasoning"] = True
+        if effort and "reasoning" in normalized:
+            options["reasoning"] = {"effort": effort}
+        return options
+
+    def _reasoning_request_options(self, model_name: str) -> Dict[str, Any]:
+        model_info = self.openrouter.get_model(model_name)
+        supported = model_info.supported_parameters if model_info else []
+        return self._build_reasoning_options(supported, self.reasoning_effort)
+
+    @staticmethod
+    def _normalize_tool_calls(
+        tool_calls: List[Dict[str, Any]],
+        processed_ids: Set[str],
+    ) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for call in tool_calls:
+            function_payload = call.get("function") or {}
+            if not isinstance(function_payload, dict):
+                continue
+            name = function_payload.get("name")
+            if not name:
+                continue
+            arguments_str = ChatService._ensure_arguments_string(function_payload.get("arguments"))
+            call_id = str(call.get("id") or f"tool_call_{uuid4().hex}")
+            processed_ids.add(call_id)
+            normalized.append(
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments_str},
+                }
+            )
+        return normalized
+
+    @staticmethod
+    def _extract_reasoning_tool_calls(
+        reasoning_segments: List[Dict[str, Any]],
+        processed_ids: Set[str],
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+        tool_calls: List[Dict[str, Any]] = []
+        context: Dict[str, Dict[str, Any]] = {}
+        candidate_types = {"tool_call", "tool_use", "tool_request", "call_tool", "function_call"}
+        for segment in reasoning_segments:
+            segment_type = str(segment.get("type") or "").lower()
+            has_function = isinstance(segment.get("function"), dict)
+            has_call = isinstance(segment.get("call"), dict)
+            if not (segment_type in candidate_types or has_function or has_call):
+                continue
+            function_payload = segment.get("function") if has_function else {}
+            if not isinstance(function_payload, dict):
+                function_payload = {}
+            call_payload = segment.get("call") if has_call else {}
+            if not isinstance(call_payload, dict):
+                call_payload = {}
+            name = (
+                function_payload.get("name")
+                or call_payload.get("name")
+                or segment.get("name")
+                or segment.get("tool_name")
+                or segment.get("function_name")
+            )
+            arguments_source = (
+                function_payload.get("arguments")
+                or call_payload.get("arguments")
+                or call_payload.get("input")
+                or segment.get("arguments")
+                or segment.get("input")
+                or segment.get("params")
+                or segment.get("parameters")
+            )
+            if not name:
+                continue
+            call_id = str(
+                segment.get("id")
+                or segment.get("tool_call_id")
+                or segment.get("call_id")
+                or f"reasoning_tool_{uuid4().hex}"
+            )
+            if call_id in processed_ids:
+                continue
+            processed_ids.add(call_id)
+            arguments_str = ChatService._ensure_arguments_string(arguments_source)
+            tool_calls.append(
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments_str},
+                }
+            )
+            context[call_id] = segment
+        return tool_calls, context
 
     def _system_prompt(self, collection: models.Collection) -> str:
         metadata_lines = [f"- Collection: {collection.name}", f"- Description: {collection.description or 'N/A'}"]
@@ -221,6 +386,10 @@ class ChatService:
         tool_traces: List[ToolCallTrace] = []
         usage_aggregate: Dict[str, int] = {}
         provider = "openrouter"
+        reasoning_trace: List[Dict[str, Any]] = []
+        processed_reasoning_calls: Set[str] = set()
+        reasoning_call_segments: Dict[str, Dict[str, Any]] = {}
+        reasoning_options = self._reasoning_request_options(collection.chat_model)
 
         max_iterations = 4
         iteration = 0
@@ -233,6 +402,7 @@ class ChatService:
                 tools=tools,
                 model=collection.chat_model,
                 parallel_tool_calls=True,
+                extra_body=reasoning_options or None,
             )
             final_response = response
             choice = response["choices"][0]
@@ -248,32 +418,58 @@ class ChatService:
                         continue
                     usage_aggregate[key] = usage_aggregate.get(key, 0) + coerced
 
-            tool_calls = message.get("tool_calls")
-            if tool_calls:
-                messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
-                for tool_call in tool_calls:
-                    name = tool_call["function"]["name"]
-                    try:
-                        arguments = json.loads(tool_call["function"]["arguments"] or "{}")
-                    except json.JSONDecodeError:
-                        arguments = {"query": tool_call["function"]["arguments"]}
+            reasoning_segments = self._normalize_reasoning_segments(message.get("reasoning_content"))
+            if reasoning_segments:
+                reasoning_trace.extend(reasoning_segments)
+
+            base_tool_calls = self._normalize_tool_calls(message.get("tool_calls") or [], processed_reasoning_calls)
+            reasoning_tool_calls, reasoning_context = self._extract_reasoning_tool_calls(
+                reasoning_segments, processed_reasoning_calls
+            )
+            if reasoning_context:
+                reasoning_call_segments.update(reasoning_context)
+            pending_tool_calls = base_tool_calls + reasoning_tool_calls
+            if pending_tool_calls:
+                assistant_content = message.get("content")
+                if isinstance(assistant_content, list):
+                    assistant_content = json.dumps(assistant_content)
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": assistant_content or "",
+                        "tool_calls": pending_tool_calls,
+                    }
+                )
+                for tool_call in pending_tool_calls:
+                    function_block = tool_call.get("function") or {}
+                    if not isinstance(function_block, dict):
+                        function_block = {}
+                    name = function_block.get("name") or "tool_call"
+                    arguments = self._decode_tool_arguments(function_block.get("arguments"))
                     query_text = arguments.get("query") or arguments.get("text") or payload.content
-                    top_k = int(arguments.get("top_k", 5))
+                    try:
+                        top_k = int(arguments.get("top_k", 5))
+                    except (TypeError, ValueError):
+                        top_k = 5
+                    top_k = max(1, min(10, top_k))
                     retrieval_response = self.retrieval.query_collection(collection, query_text, top_k=top_k)
                     tool_content = json.dumps(retrieval_response)
+                    call_id = tool_call.get("id")
                     messages.append(
                         {
                             "role": "tool",
-                            "tool_call_id": tool_call["id"],
+                            "tool_call_id": call_id,
                             "content": tool_content,
                         }
                     )
+                    reasoning_segment = reasoning_call_segments.pop(call_id, None)
                     tool_traces.append(
                         ToolCallTrace(
-                            id=tool_call["id"],
+                            id=call_id,
                             name=name,
                             arguments=arguments,
                             response=retrieval_response,
+                            reasoning=reasoning_segment,
                         )
                     )
                     self._record_message(
@@ -281,15 +477,17 @@ class ChatService:
                         role=models.ChatRole.TOOL,
                         content=tool_content,
                         tool_name=name,
-                        tool_call_id=tool_call["id"],
+                        tool_call_id=call_id,
                         tool_payload=retrieval_response,
                     )
                 continue
 
             # Final assistant message
-            content = message.get("content", "")
-            reasoning_entries = message.get("reasoning_content")
-            reasoning_payload = {"segments": reasoning_entries} if reasoning_entries else None
+            assistant_content = message.get("content")
+            if isinstance(assistant_content, list):
+                assistant_content = json.dumps(assistant_content)
+            content = assistant_content or ""
+            reasoning_payload = {"segments": reasoning_trace} if reasoning_trace else None
             assistant_msg = self._record_message(
                 session_id=session_model.id,
                 role=models.ChatRole.ASSISTANT,

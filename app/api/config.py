@@ -41,6 +41,11 @@ class Settings(BaseSettings):
         default="openai/gpt-oss-120b",
         validation_alias="OPENROUTER_DEFAULT_CHAT_MODEL",
     )
+    openrouter_reasoning_effort: Optional[str] = Field(
+        default="medium",
+        validation_alias="OPENROUTER_REASONING_EFFORT",
+        description="Default reasoning effort (minimal/low/medium/high). Set empty to disable.",
+    )
 
     # Pinecone
     pinecone_api_key: str = Field(validation_alias="PINECONE_API_KEY")
@@ -75,4 +80,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.storage_path.mkdir(parents=True, exist_ok=True)
     return settings
-

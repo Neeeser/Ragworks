@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, Play, Sparkles, Waves } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,15 @@ const samplePrompts = [
   'What chunking strategy is this collection using?',
   'Show me the last Pinecone tool call and its score distribution.',
 ];
+
+const safeParseJSON = (value?: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
 
 export default function ChatPage() {
   const { token } = useAuth();
@@ -298,27 +307,73 @@ export default function ChatPage() {
                     Send a message to start a transparent chat session.
                   </p>
                 ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        'rounded-2xl border px-4 py-3 text-sm',
-                        message.role === 'assistant'
-                          ? 'border-white/10 bg-white/5 text-white'
-                          : 'border-violet-500/30 bg-violet-500/10 text-violet-50',
-                      )}
-                    >
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                        {message.role}
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap">{message.content}</p>
-                      {message.tool_name && (
-                        <p className="mt-2 text-xs text-slate-400">
-                          tool: {message.tool_name} ({message.tool_call_id})
+                  messages.flatMap((message) => {
+                    const bubbles: ReactNode[] = [];
+                    const variantClasses: Record<
+                      'user' | 'assistant' | 'tool' | 'reasoning' | 'system',
+                      string
+                    > = {
+                      user: 'border-violet-500/40 bg-violet-500/15 text-violet-50',
+                      assistant: 'border-white/15 bg-white/10 text-white',
+                      tool: 'border-cyan-400/30 bg-cyan-500/10 text-cyan-50',
+                      reasoning: 'border-amber-400/40 bg-amber-500/10 text-amber-50',
+                      system: 'border-slate-500/30 bg-slate-800 text-slate-100',
+                    };
+
+                    const roleLabel = message.role.toUpperCase();
+                    const variant =
+                      variantClasses[message.role as keyof typeof variantClasses] ??
+                      variantClasses.system;
+                    const parsedToolPayload =
+                      message.role === 'tool'
+                        ? message.tool_payload ?? safeParseJSON(message.content)
+                        : null;
+                    const displayedContent =
+                      parsedToolPayload != null
+                        ? JSON.stringify(parsedToolPayload, null, 2)
+                        : message.content?.trim() || 'No assistant response generated.';
+
+                    bubbles.push(
+                      <div
+                        key={message.id}
+                        className={cn('rounded-2xl border px-4 py-3 text-sm', variant)}
+                      >
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                          {roleLabel}
+                          {message.tool_name ? ` • ${message.tool_name}` : ''}
                         </p>
-                      )}
-                    </div>
-                  ))
+                        <pre className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                          {displayedContent}
+                        </pre>
+                      </div>,
+                    );
+
+                    const reasoningSegments = message.reasoning_trace?.segments ?? [];
+                    reasoningSegments.forEach((segment, idx) => {
+                      const reasoningLabel = `REASONING • Step ${idx + 1}`;
+                      const reasoningText =
+                        (typeof segment.text === 'string' && segment.text.trim()) ||
+                        (typeof segment.content === 'string' && segment.content.trim()) ||
+                        JSON.stringify(segment, null, 2);
+                      bubbles.push(
+                        <div
+                          key={`${message.id}-reasoning-${idx}`}
+                          className={cn(
+                            'rounded-2xl border px-4 py-3 text-sm',
+                            variantClasses.reasoning,
+                          )}
+                        >
+                          <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
+                            {reasoningLabel}
+                          </p>
+                          <pre className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                            {reasoningText}
+                          </pre>
+                        </div>,
+                      );
+                    });
+                    return bubbles;
+                  })
                 )}
                 <div ref={endRef} />
               </div>

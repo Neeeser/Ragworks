@@ -14,6 +14,7 @@ class ToolCallTrace(BaseModel):
     name: str
     arguments: Dict[str, Any]
     response: Optional[Dict[str, Any]] = None
+    reasoning: Optional[Dict[str, Any]] = None
 
 
 class ChatMessageRead(BaseModel):

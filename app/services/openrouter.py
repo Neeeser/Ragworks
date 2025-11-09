@@ -73,6 +73,7 @@ class OpenRouterClient:
         tool_choice: Optional[Dict[str, Any]] = None,
         parallel_tool_calls: Optional[bool] = None,
         extra_headers: Optional[Dict[str, str]] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
     ) -> dict[str, Any]:
         kwargs: Dict[str, Any] = {"messages": messages, "model": model or self.settings.default_chat_model}
         if tools:
@@ -83,6 +84,8 @@ class OpenRouterClient:
             kwargs["parallel_tool_calls"] = parallel_tool_calls
         if extra_headers:
             kwargs["extra_headers"] = extra_headers
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         response = self._client.chat.completions.create(**kwargs)
         return response.model_dump()
 
