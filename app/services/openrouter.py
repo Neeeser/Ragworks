@@ -3,12 +3,13 @@ from __future__ import annotations
 import time
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import quote
 
 import httpx
 from openai import OpenAI
 
 from app.api.config import get_settings
-from app.schemas.models import ModelInfo
+from app.schemas.models import EndpointsListResponse, ModelInfo
 
 
 class OpenRouterClient:
@@ -75,6 +76,14 @@ class OpenRouterClient:
             return match
         refreshed = self.list_models(force_refresh=True)
         return _match(refreshed)
+
+    def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
+        author_segment = quote(author, safe="")
+        slug_segment = quote(slug, safe="")
+        response = self._http.get(f"/models/{author_segment}/{slug_segment}/endpoints")
+        response.raise_for_status()
+        payload = response.json()
+        return EndpointsListResponse(**payload)
 
     def embed(
         self,
