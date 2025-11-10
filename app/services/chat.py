@@ -177,11 +177,14 @@ class ChatService:
     def _extract_reasoning_tool_calls(
         reasoning_segments: List[Dict[str, Any]],
         processed_ids: Set[str],
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
         tool_calls: List[Dict[str, Any]] = []
         context: Dict[str, Dict[str, Any]] = {}
+        residual_segments: List[Dict[str, Any]] = []
         candidate_types = {"tool_call", "tool_use", "tool_request", "call_tool", "function_call"}
+        pending_context: List[Dict[str, Any]] = []
         for segment in reasoning_segments:
+            pending_context.append(segment)
             segment_type = str(segment.get("type") or "").lower()
             has_function = isinstance(segment.get("function"), dict)
             has_call = isinstance(segment.get("call"), dict)
@@ -227,12 +230,14 @@ class ChatService:
                         "function": {"name": name, "arguments": arguments_str},
                     }
                 )
-            existing = context.get(call_id)
-            if existing and "segments" in existing:
-                existing["segments"].append(segment)
+            if call_id in context and "segments" in context[call_id]:
+                context[call_id]["segments"].extend(pending_context)
             else:
-                context[call_id] = {"segments": [segment]}
-        return tool_calls, context
+                context[call_id] = {"segments": list(pending_context)}
+            pending_context = []
+        if pending_context:
+            residual_segments.extend(pending_context)
+        return tool_calls, context, residual_segments
 
     def _system_prompt(self, collection: models.Collection) -> str:
         metadata_lines = [f"- Collection: {collection.name}", f"- Description: {collection.description or 'N/A'}"]
@@ -518,16 +523,19 @@ class ChatService:
                 reasoning_content = message.get("reasoning_content")
             
             reasoning_segments = self._normalize_reasoning_segments(reasoning_content)
-            if reasoning_segments:
-                reasoning_trace.extend(reasoning_segments)
-
             base_tool_calls = self._normalize_tool_calls(message.get("tool_calls") or [], processed_reasoning_calls)
-            reasoning_tool_calls, reasoning_context = self._extract_reasoning_tool_calls(
+            reasoning_tool_calls, reasoning_context, residual_reasoning = self._extract_reasoning_tool_calls(
                 reasoning_segments, processed_reasoning_calls
             )
-            if reasoning_context:
-                reasoning_call_segments.update(reasoning_context)
             pending_tool_calls = base_tool_calls + reasoning_tool_calls
+            shared_tool_reasoning: Optional[Dict[str, Any]] = None
+            if pending_tool_calls:
+                if reasoning_context:
+                    reasoning_call_segments.update(reasoning_context)
+                elif reasoning_segments:
+                    shared_tool_reasoning = {"segments": reasoning_segments}
+            elif reasoning_segments:
+                reasoning_trace.extend(residual_reasoning or reasoning_segments)
             if pending_tool_calls:
                 assistant_content = message.get("content")
                 if isinstance(assistant_content, list):
@@ -559,6 +567,8 @@ class ChatService:
                     tool_content = json.dumps(tool_payload)
                     call_id = tool_call.get("id")
                     reasoning_segment = reasoning_call_segments.pop(call_id, None)
+                    if reasoning_segment is None and shared_tool_reasoning:
+                        reasoning_segment = shared_tool_reasoning
                     reasoning_payload = None
                     if reasoning_segment:
                         if "segments" not in reasoning_segment:
