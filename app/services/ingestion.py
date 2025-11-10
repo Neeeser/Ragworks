@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import UUID
@@ -24,6 +23,7 @@ from app.retrieval.parsers.txt import TxtDocumentParser
 from app.services.chunking import build_chunker
 from app.services.openrouter import get_openrouter_client
 from app.utils.file_storage import FileStorage
+from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class IngestionService:
             document.num_chunks = len(chunk_records)
             document.num_tokens = sum(len(chunk.text.split()) for chunk in enriched_chunks)
             document.source_path = str(path)
-            document.updated_at = datetime.utcnow()
+            document.updated_at = utc_now()
             usage = embedder.usage or {}
             self.session.add(models.IngestionEvent(
                 document_id=document.id,
@@ -166,7 +166,7 @@ class IngestionService:
             }
         except Exception as exc:
             document.status = models.DocumentStatus.FAILED
-            document.updated_at = datetime.utcnow()
+            document.updated_at = utc_now()
             self.session.add(models.IngestionEvent(
                 document_id=document.id,
                 collection_id=collection.id,

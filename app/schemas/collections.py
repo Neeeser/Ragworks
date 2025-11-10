@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.db.models import ChunkStrategy
+from app.schemas.base import DateTimeConfigMixin
 
 
 class ChunkSettings(BaseModel):
@@ -36,7 +37,7 @@ class CollectionUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
-class CollectionRead(CollectionBase):
+class CollectionRead(DateTimeConfigMixin, CollectionBase):
     id: UUID
     user_id: UUID
     pinecone_index: str

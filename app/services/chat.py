@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
@@ -20,6 +19,7 @@ from app.schemas.chat import (
 )
 from app.services.openrouter import get_openrouter_client
 from app.services.retrieval import RetrievalService
+from app.utils.time import utc_now
 
 
 class ChatService:
@@ -513,7 +513,7 @@ class ChatService:
         session_id: Optional[UUID] = None,
     ) -> models.ChatSession:
         base_title = payload.title or (payload.content[:60] if payload.content else None)
-        fallback_title = f"Chat {datetime.utcnow().strftime('%H:%M:%S')}"
+        fallback_title = f"Chat {utc_now().strftime('%H:%M:%S')}"
         session_model = models.ChatSession(
             id=session_id or uuid4(),
             user_id=user.id,
@@ -562,8 +562,8 @@ class ChatService:
             prompt_tokens=usage_payload.get("prompt_tokens"),
             completion_tokens=usage_payload.get("completion_tokens"),
             usage=usage_payload or None,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=utc_now(),
+            updated_at=utc_now(),
         )
         self.chat_repo.add_message(message)
         self.session.commit()
@@ -584,7 +584,7 @@ class ChatService:
             if not trimmed:
                 raise ValueError("Edited message cannot be empty.")
             target_message.content = trimmed
-            target_message.updated_at = datetime.utcnow()
+            target_message.updated_at = utc_now()
             self.session.add(target_message)
             self.session.flush()
             self.chat_repo.delete_messages_after(
@@ -598,7 +598,7 @@ class ChatService:
                 created_at=target_message.created_at,
                 include_anchor=True,
             )
-        session_model.updated_at = datetime.utcnow()
+        session_model.updated_at = utc_now()
         self.session.add(session_model)
         self.session.flush()
 
@@ -835,7 +835,7 @@ class ChatService:
                 if latest_usage_total is not None
                 else usage_aggregate.get("total_tokens", 0)
             )
-            session_model.updated_at = datetime.utcnow()
+            session_model.updated_at = utc_now()
             self.session.add(session_model)
             self.session.commit()
 

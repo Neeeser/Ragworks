@@ -7,9 +7,10 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.db.models import ChunkStrategy, DocumentStatus
+from app.schemas.base import DateTimeConfigMixin
 
 
-class DocumentRead(BaseModel):
+class DocumentRead(DateTimeConfigMixin, BaseModel):
     id: UUID
     collection_id: UUID
     name: str
@@ -24,7 +25,7 @@ class DocumentRead(BaseModel):
     updated_at: datetime
 
 
-class ChunkRead(BaseModel):
+class ChunkRead(DateTimeConfigMixin, BaseModel):
     id: UUID
     document_id: UUID
     chunk_index: int

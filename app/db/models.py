@@ -8,10 +8,12 @@ from uuid import UUID, uuid4
 from sqlalchemy import JSON, Column, String, Text
 from sqlmodel import Field, SQLModel
 
+from app.utils.time import utc_now
+
 
 class TimestampMixin:
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)
+    updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 
 class ChunkStrategy(str, Enum):

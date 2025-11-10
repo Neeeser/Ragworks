@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import List
 from uuid import UUID, uuid4
 
@@ -23,6 +22,7 @@ from app.schemas.collections import (
 )
 from app.services.openrouter import get_openrouter_client
 from app.utils.file_storage import FileStorage
+from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
@@ -168,7 +168,7 @@ def update_collection(
             collection.chunk_overlap = settings_obj.chunk_overlap
         if "strategy" in fields_set:
             collection.chunk_strategy = settings_obj.strategy
-    collection.updated_at = datetime.utcnow()
+    collection.updated_at = utc_now()
     session.add(collection)
     session.commit()
     session.refresh(collection)

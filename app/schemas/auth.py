@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from app.schemas.base import DateTimeConfigMixin
 
 
-class UserBase(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class UserBase(DateTimeConfigMixin, BaseModel):
+    model_config = ConfigDict(**DateTimeConfigMixin.model_config, from_attributes=True)
 
     email: EmailStr
     full_name: Optional[str] = None
