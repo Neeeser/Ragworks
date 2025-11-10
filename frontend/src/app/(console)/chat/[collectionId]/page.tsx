@@ -672,6 +672,10 @@ export default function ChatStudioExperience() {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = usePersistentToggle('chat.historyOpen', true);
   const [telemetryOpen, setTelemetryOpen] = usePersistentToggle('chat.telemetryOpen', true);
+  const [modelSelectorOpen, setModelSelectorOpen] = usePersistentToggle(
+    'chat.telemetry.modelsOpen',
+    true,
+  );
   const [vitalsOpen, setVitalsOpen] = usePersistentToggle('chat.telemetry.vitalsOpen', true);
   const [usageOpen, setUsageOpen] = usePersistentToggle('chat.telemetry.usageOpen', true);
   const [modelParametersOpen, setModelParametersOpen] = usePersistentToggle(
@@ -1631,10 +1635,9 @@ export default function ChatStudioExperience() {
     const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
 
     return (
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Model routing</p>
             <p className="text-sm text-slate-300">
               {currentModelInfo?.name || selectedModelKey || 'Select a tool-enabled model'}
             </p>
@@ -2637,7 +2640,17 @@ export default function ChatStudioExperience() {
           </Button>
         </div>
         <div className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto">
-          {renderModelSelector()}
+          <TelemetrySection
+            title="Model routing"
+            description={
+              currentModelInfo?.name || selectedModelKey || 'Select a tool-enabled model'
+            }
+            icon={<RotateCcw className="h-4 w-4 text-violet-300" />}
+            isOpen={modelSelectorOpen}
+            onToggle={() => setModelSelectorOpen((prev) => !prev)}
+          >
+            {renderModelSelector()}
+          </TelemetrySection>
           <TelemetrySection
             title="Provider routing"
             description={
