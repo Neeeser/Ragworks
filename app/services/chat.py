@@ -514,13 +514,14 @@ class ChatService:
     ) -> models.ChatSession:
         base_title = payload.title or (payload.content[:60] if payload.content else None)
         fallback_title = f"Chat {utc_now().strftime('%H:%M:%S')}"
+        preferred_model = (payload.chat_model or "").strip() or collection.chat_model
         session_model = models.ChatSession(
             id=session_id or uuid4(),
             user_id=user.id,
             collection_id=collection.id,
             title=base_title or fallback_title,
             mode=payload.mode,
-            chat_model=collection.chat_model,
+            chat_model=preferred_model,
         )
         self.chat_repo.add_session(session_model)
         self.session.commit()
@@ -671,6 +672,16 @@ class ChatService:
                 content=trimmed_content,
             )
 
+        requested_model = (payload.chat_model or "").strip() or None
+        if requested_model and requested_model != session_model.chat_model:
+            session_model.chat_model = requested_model
+            self.session.add(session_model)
+            self.session.flush()
+
+        active_model_name = session_model.chat_model or collection.chat_model
+        if not active_model_name:
+            raise ValueError("This collection does not have a chat model configured.")
+
         history = self.chat_repo.list_messages(session_model.id)
         messages = [{"role": "system", "content": self._system_prompt(collection)}]
         for msg in history:
@@ -684,10 +695,16 @@ class ChatService:
         reasoning_trace: List[Dict[str, Any]] = []
         processed_reasoning_calls: Set[str] = set()
         reasoning_call_segments: Dict[str, Dict[str, Any]] = {}
-        model_info = self.openrouter.get_model(collection.chat_model)
-        supported_parameters = model_info.supported_parameters if model_info else []
-        reasoning_options = self._reasoning_request_options(collection.chat_model, model_info)
+        model_info = self.openrouter.get_model(active_model_name)
+        if not model_info:
+            raise ValueError("Selected model is not available on OpenRouter.")
+        supported_parameters = model_info.supported_parameters if model_info.supported_parameters else []
+        tool_supported = any(param.lower() == "tools" for param in supported_parameters)
+        if not tool_supported:
+            raise ValueError("Selected model does not support tool calls required for retrieval.")
+        reasoning_options = self._reasoning_request_options(active_model_name, model_info)
         parameter_overrides = self._sanitize_parameter_overrides(payload.parameters, supported_parameters)
+        context_window = model_info.context_length or collection.context_window
 
         max_iterations = 48
         iteration = 0
@@ -699,7 +716,7 @@ class ChatService:
             response = self.openrouter.chat(
                 messages=messages,
                 tools=tools,
-                model=collection.chat_model,
+                model=active_model_name,
                 parallel_tool_calls=True,
                 extra_body=extra_body,
                 parameters=parameter_overrides or None,
@@ -845,7 +862,7 @@ class ChatService:
                 tool_traces=tool_traces,
                 usage=final_usage,
                 provider=provider,
-                context_window=collection.context_window,
+                context_window=context_window,
                 context_consumed=session_model.context_tokens,
             )
 

@@ -56,10 +56,25 @@ class OpenRouterClient:
         return models
 
     def get_model(self, model_id: str) -> Optional[ModelInfo]:
-        for model in self.list_models():
-            if model.id == model_id:
-                return model
-        return None
+        if not model_id:
+            return None
+
+        def _match(models: List[ModelInfo]) -> Optional[ModelInfo]:
+            for model in models:
+                if model.id == model_id or model.canonical_slug == model_id:
+                    return model
+            normalized = model_id.lower()
+            for model in models:
+                if model.id.lower() == normalized or (model.canonical_slug and model.canonical_slug.lower() == normalized):
+                    return model
+            return None
+
+        cached = self.list_models()
+        match = _match(cached)
+        if match:
+            return match
+        refreshed = self.list_models(force_refresh=True)
+        return _match(refreshed)
 
     def embed(
         self,

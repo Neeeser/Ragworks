@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronRight,
   Edit3,
@@ -16,6 +17,7 @@ import {
   PanelRightOpen,
   PlusCircle,
   RotateCcw,
+  Search,
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
@@ -499,6 +501,8 @@ export default function ChatStudioExperience() {
   const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [modelSearchTerm, setModelSearchTerm] = useState('');
   const [parameterOverrides, setParameterOverrides] = useState<ParameterOverrides>({});
   const endRef = useRef<HTMLDivElement | null>(null);
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -625,6 +629,24 @@ export default function ChatStudioExperience() {
   }, [authToken]);
 
   useEffect(() => {
+    if (!collection) {
+      setActiveModelId(null);
+      return;
+    }
+    setActiveModelId((current) => current ?? collection.chat_model);
+  }, [collection]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      return;
+    }
+    const session = sessions.find((item) => item.id === selectedSessionId);
+    if (session?.chat_model) {
+      setActiveModelId((current) => (current === session.chat_model ? current : session.chat_model));
+    }
+  }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
     if (!authToken) return;
     if (!selectedSessionId) {
       setMessages([]);
@@ -710,17 +732,16 @@ export default function ChatStudioExperience() {
 
   useEffect(() => {
     setParameterOverrides({});
-  }, [collection?.chat_model]);
+  }, [activeModelId]);
 
   const currentModelInfo = useMemo(() => {
-    if (!collection) return null;
+    const lookupId = activeModelId || collection?.chat_model;
+    if (!lookupId) return null;
     return (
-      modelCatalog.find(
-        (model) =>
-          model.id === collection.chat_model || model.canonical_slug === collection.chat_model,
-      ) ?? null
+      modelCatalog.find((model) => model.id === lookupId || model.canonical_slug === lookupId) ??
+      null
     );
-  }, [collection, modelCatalog]);
+  }, [activeModelId, collection?.chat_model, modelCatalog]);
 
   const supportedParameterKeys = useMemo(() => {
     const supported = new Set<ModelParameterKey>();
@@ -849,6 +870,31 @@ export default function ChatStudioExperience() {
     return map;
   }, [toolTraces]);
 
+  const toolReadyModels = useMemo(
+    () =>
+      modelCatalog.filter((model) =>
+        (model.supported_parameters || []).some((param) => param.toLowerCase() === 'tools'),
+      ),
+    [modelCatalog],
+  );
+
+  const filteredModelCatalog = useMemo(() => {
+    const query = modelSearchTerm.trim().toLowerCase();
+    if (!query) return toolReadyModels;
+    return toolReadyModels.filter((model) => {
+      const haystack = [model.name, model.id, model.canonical_slug, model.description]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [modelSearchTerm, toolReadyModels]);
+
+  const selectedModelKey = useMemo(
+    () => activeModelId || collection?.chat_model || '',
+    [activeModelId, collection?.chat_model],
+  );
+
 
   const applyChatResponse = useCallback(
     (response: ChatCompletionPayload) => {
@@ -863,6 +909,7 @@ export default function ChatStudioExperience() {
       setContextConsumed(response.context_consumed);
       setContextWindow(response.context_window || collection?.context_window || 0);
       setSelectedSessionId(response.session.id);
+      setActiveModelId(response.session.chat_model);
       setSessions((prev) => {
         const next = [...prev];
         const idx = next.findIndex((session) => session.id === response.session.id);
@@ -879,6 +926,11 @@ export default function ChatStudioExperience() {
 
   const handleSend = async () => {
     if (!authToken || !collection) return;
+    const targetModelId = activeModelId || collection.chat_model;
+    if (!targetModelId) {
+      setStatus('Select a chat model before sending a message.');
+      return;
+    }
     const trimmed = draft.trim();
     if (!trimmed) return;
     let sessionId = selectedSessionId;
@@ -892,7 +944,7 @@ export default function ChatStudioExperience() {
         user_id: collection.user_id,
         title: `Chat ${new Date().toLocaleTimeString()}`,
         mode: 'chat',
-        chat_model: collection.chat_model,
+        chat_model: targetModelId,
         context_tokens: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -920,6 +972,7 @@ export default function ChatStudioExperience() {
         content: trimmed,
         mode: 'chat',
         title: isNewSession ? `Chat ${new Date().toLocaleTimeString()}` : undefined,
+        chat_model: targetModelId,
         parameters,
       });
     } catch (error) {
@@ -939,6 +992,11 @@ export default function ChatStudioExperience() {
 
   const runEditMutation = async (messageId: string, newContent: string) => {
     if (!authToken || !collection || !selectedSessionId) return;
+    const targetModelId = activeModelId || collection.chat_model;
+    if (!targetModelId) {
+      setStatus('Select a chat model before sending a message.');
+      return;
+    }
     const parameterPayload = buildParameterPayload();
     const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
     try {
@@ -946,6 +1004,7 @@ export default function ChatStudioExperience() {
         content: newContent,
         edit_message_id: messageId,
         mode: 'chat',
+        chat_model: targetModelId,
         parameters,
       });
       setEditingMessageId(null);
@@ -1255,7 +1314,113 @@ export default function ChatStudioExperience() {
     );
   };
 
+  const renderModelSelector = () => {
+    const visibleModels = filteredModelCatalog.slice(0, 50);
+    const formatCost = (value?: number | string | null) => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      if (typeof value === 'number') {
+        return value.toLocaleString(undefined, {
+          minimumFractionDigits: 4,
+          maximumFractionDigits: 6,
+        });
+      }
+      const trimmed = String(value).trim();
+      return trimmed || null;
+    };
+
+    return (
+      <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Model routing</p>
+            <p className="text-sm text-slate-300">
+              {currentModelInfo?.name || selectedModelKey || 'Select a tool-enabled model'}
+            </p>
+            {selectedModelKey && (
+              <p className="text-[11px] text-slate-500 break-all">{selectedModelKey}</p>
+            )}
+          </div>
+          <div className="text-right text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            <span>{toolReadyModels.length} ready</span>
+            {modelsLoading && (
+              <span className="ml-2 inline-flex items-center gap-1 text-slate-300">
+                <Loader className="h-3.5 w-3.5" />
+                Syncing
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          Only models with OpenAI-compatible tool calling are available. Pick any option to apply it
+          to the current or next turn.
+        </p>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="search"
+            className="w-full rounded-2xl border border-white/10 bg-black/40 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
+            placeholder="Search OpenRouter models…"
+            value={modelSearchTerm}
+            onChange={(event) => setModelSearchTerm(event.target.value)}
+          />
+        </div>
+        {modelsError && <p className="text-sm text-rose-300">{modelsError}</p>}
+        <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+          {modelsLoading && toolReadyModels.length === 0 ? (
+            <p className="text-sm text-slate-400">Loading tool-compatible models…</p>
+          ) : visibleModels.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              {modelSearchTerm
+                ? `No models match "${modelSearchTerm}".`
+                : 'No tool-enabled models available.'}
+            </p>
+          ) : (
+            visibleModels.map((model) => {
+              const isSelected =
+                (selectedModelKey && model.id === selectedModelKey) ||
+                (selectedModelKey && model.canonical_slug === selectedModelKey);
+              const contextLabel = model.context_length
+                ? `${model.context_length.toLocaleString()} ctx`
+                : null;
+              const promptLabel = formatCost(model.pricing?.prompt);
+              const completionLabel = formatCost(model.pricing?.completion);
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => setActiveModelId(model.id)}
+                  className={cn(
+                    'w-full rounded-2xl border px-3 py-2 text-left transition',
+                    isSelected
+                      ? 'border-violet-400 bg-violet-500/10 text-white'
+                      : 'border-white/10 bg-white/5 text-slate-200 hover:border-white/40',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">{model.name}</p>
+                      <p className="text-[11px] text-slate-500 break-all">{model.id}</p>
+                    </div>
+                    {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-violet-300" />}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                    {contextLabel && <span>{contextLabel}</span>}
+                    {promptLabel && <span>Prompt {promptLabel}</span>}
+                    {completionLabel && <span>Completion {completionLabel}</span>}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderParameterControls = () => {
+    const selectedModelLabel = activeModelId || collection?.chat_model || 'the selected model';
     if (modelsError) {
       return <p className="text-sm text-rose-300">{modelsError}</p>;
     }
@@ -1268,7 +1433,7 @@ export default function ChatStudioExperience() {
     if (!currentModelInfo) {
       return (
         <p className="text-sm text-slate-400">
-          Unable to find OpenRouter metadata for <span className="text-white">{collection.chat_model}</span>.
+          Unable to find OpenRouter metadata for <span className="text-white">{selectedModelLabel}</span>.
         </p>
       );
     }
@@ -1630,6 +1795,7 @@ export default function ChatStudioExperience() {
           </Button>
         </div>
         <div className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto">
+          {renderModelSelector()}
           <TelemetrySection
             title="Collection vitals"
             description="Current ingestion settings"

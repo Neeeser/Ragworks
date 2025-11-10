@@ -13,6 +13,7 @@ class ModelPricing(BaseModel):
 
 class ModelInfo(BaseModel):
     id: str
+    canonical_slug: Optional[str] = None
     name: str
     description: Optional[str] = None
     context_length: Optional[int] = None

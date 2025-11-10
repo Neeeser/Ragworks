@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
 import type { ReasoningTraceSegment } from '@/lib/types';
-import { cn } from '@/lib/utils';
 
 interface CollapsibleReasoningProps {
   segments: ReasoningTraceSegment[];

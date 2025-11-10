@@ -52,6 +52,7 @@ class ChatMessageCreate(BaseModel):
     mode: ChatMode = ChatMode.CHAT
     title: Optional[str] = None
     edit_message_id: Optional[UUID] = None
+    chat_model: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
 
 
