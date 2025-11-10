@@ -844,6 +844,16 @@ export default function ChatStudioExperience() {
           <PanelLeftClose className="h-4 w-4" />
         </Button>
       </div>
+      <div className="border-b border-white/5 px-5 py-3">
+        <Button
+          variant="secondary"
+          className="flex h-10 w-full items-center justify-center gap-2"
+          onClick={handleStartNewChat}
+        >
+          <PlusCircle className="h-4 w-4" />
+          <span>New chat</span>
+        </Button>
+      </div>
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {sessions.length === 0 ? (
           <p className="text-sm text-slate-400">No chats yet — start one below.</p>
@@ -869,12 +879,6 @@ export default function ChatStudioExperience() {
             ))}
           </div>
         )}
-      </div>
-      <div className="border-t border-white/5 px-5 py-4">
-        <Button variant="secondary" className="w-full" onClick={handleStartNewChat}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          New chat
-        </Button>
       </div>
     </div>
   );
@@ -1078,10 +1082,16 @@ return (
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary" className="gap-2" onClick={handleStartNewChat}>
-                    <PlusCircle className="h-4 w-4" />
-                    New chat
-                  </Button>
+                  {!historyOpen && (
+                    <Button
+                      variant="secondary"
+                      className="flex h-10 items-center justify-center gap-2"
+                      onClick={handleStartNewChat}
+                    >
+                      <PlusCircle className="h-4 w-4" />
+                      <span>New chat</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
