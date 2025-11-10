@@ -925,9 +925,9 @@ export default function ChatStudioExperience() {
         )}
 
         <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
+          <div className="space-y-1 text-xs uppercase tracking-[0.3em] text-slate-400">
             <span>Usage</span>
-            <span>
+            <span className="block text-sm text-slate-300">
               {contextConsumed.toLocaleString()} / {contextWindow.toLocaleString()} tokens
             </span>
           </div>
