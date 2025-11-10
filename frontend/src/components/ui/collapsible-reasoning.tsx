@@ -42,10 +42,14 @@ export function CollapsibleReasoning({ segments, messageId }: CollapsibleReasoni
       {isOpen && (
         <div className="border-t border-amber-400/30 px-4 py-3 space-y-3">
           {segments.map((segment, idx) => {
+            const preferredText =
+              (typeof segment.text === 'string' && segment.text) ||
+              (typeof segment.content === 'string' && segment.content) ||
+              null;
             const reasoningText =
-              (typeof segment.text === 'string' && segment.text.trim()) ||
-              (typeof segment.content === 'string' && segment.content.trim()) ||
-              JSON.stringify(segment, null, 2);
+              preferredText && preferredText.trim().length > 0
+                ? preferredText
+                : preferredText ?? JSON.stringify(segment, null, 2);
 
             return (
               <div

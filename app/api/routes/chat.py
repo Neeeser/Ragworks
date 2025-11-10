@@ -3,12 +3,17 @@ from __future__ import annotations
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
-from app.api.dependencies import get_current_user, get_session
+from app.api.dependencies import get_current_user, get_session, oauth2_scheme
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
+from app.db.session import engine
 from app.schemas.chat import (
     ChatCompletionResponse,
     ChatMessageCreate,
@@ -68,6 +73,59 @@ def chat_with_collection(
         return chat_service.send_message(user=current_user, collection=collection, payload=payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/collections/{collection_id}/chat/stream")
+def stream_chat_with_collection(
+    collection_id: UUID,
+    payload: ChatMessageCreate,
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+) -> StreamingResponse:
+    session = Session(engine)
+    session_closed = False
+
+    def close_session():
+        nonlocal session_closed
+        if not session_closed:
+            session.close()
+            session_closed = True
+
+    try:
+        current_user = get_current_user(token=token, session=session)
+        collection_repo = CollectionRepository(session)
+        collection = collection_repo.get(collection_id, user_id=current_user.id)
+        if not collection:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
+        chat_service = ChatService(session)
+    except Exception:
+        close_session()
+        raise
+
+    def format_event(data: dict[str, object]) -> str:
+        serialized = jsonable_encoder(data)
+        return f"data: {json.dumps(serialized)}\n\n"
+
+    async def event_stream():
+        stream_gen = chat_service.stream_message(user=current_user, collection=collection, payload=payload)
+        try:
+            for event in stream_gen:
+                yield format_event(event)
+                if await request.is_disconnected():
+                    stream_gen.close()
+                    break
+        except Exception as exc:  # noqa: BLE001
+            message = str(exc) or "Streaming request failed."
+            yield format_event({"type": "error", "message": message})
+        finally:
+            yield "data: [DONE]\n\n"
+            close_session()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/collections/{collection_id}/sessions", response_model=List[ChatSessionRead])

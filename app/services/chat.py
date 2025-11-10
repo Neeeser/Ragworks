@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
 from sqlmodel import Session
@@ -144,27 +144,100 @@ class ChatService:
         if isinstance(raw_reasoning, str):
             stripped = raw_reasoning.strip()
             if not stripped:
-                return []
+                return [{"type": "text", "content": raw_reasoning}]
             try:
                 parsed = json.loads(stripped)
             except json.JSONDecodeError:
-                return [{"type": "text", "content": stripped}]
+                return [{"type": "text", "content": raw_reasoning}]
             return ChatService._normalize_reasoning_segments(parsed)
         if isinstance(raw_reasoning, dict):
-            return [raw_reasoning]
+            return ChatService._merge_reasoning_segment_list([raw_reasoning])
         if isinstance(raw_reasoning, list):
             normalized: List[Dict[str, Any]] = []
             for item in raw_reasoning:
                 if isinstance(item, dict):
-                    normalized.append(item)
+                    normalized.append(dict(item))
                 elif isinstance(item, str):
                     text_value = item.strip()
                     if text_value:
                         normalized.append({"type": "text", "content": text_value})
                 else:
                     normalized.append({"type": "value", "content": item})
-            return normalized
-        return [{"type": "text", "content": str(raw_reasoning)}]
+            return ChatService._merge_reasoning_segment_list(normalized)
+        return ChatService._merge_reasoning_segment_list(
+            [{"type": "text", "content": str(raw_reasoning)}]
+        )
+
+    @staticmethod
+    def _merge_reasoning_segment_list(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        ChatService._extend_reasoning_segments(merged, segments)
+        return merged
+
+    @staticmethod
+    def _extend_reasoning_segments(
+        destination: List[Dict[str, Any]],
+        additions: List[Dict[str, Any]],
+    ) -> None:
+        for addition in additions:
+            if isinstance(addition, dict):
+                ChatService._append_reasoning_segment(destination, dict(addition))
+
+    @staticmethod
+    def _append_reasoning_segment(target: List[Dict[str, Any]], segment: Dict[str, Any]) -> None:
+        if not segment:
+            return
+        entry = dict(segment)
+        segment_type = str(entry.get("type") or "").lower()
+        if not segment_type and (entry.get("text") or entry.get("content")):
+            segment_type = "text"
+            entry["type"] = "text"
+        text_value: Optional[str] = None
+        if isinstance(entry.get("text"), str):
+            text_value = entry["text"]
+        elif isinstance(entry.get("content"), str):
+            text_value = entry["content"]
+        elif isinstance(entry.get("value"), str):
+            text_value = entry["value"]
+        mergeable_types = {"text", "", "reasoning.text"}
+        if (
+            target
+            and text_value
+            and segment_type in mergeable_types
+            and str(target[-1].get("type") or "").lower() in mergeable_types
+        ):
+            last = target[-1]
+            for key in ("id", "call_id", "tool_call_id"):
+                left = last.get(key)
+                right = entry.get(key)
+                if (left is None) ^ (right is None):
+                    break
+                if left is not None and right is not None and left != right:
+                    break
+            else:
+                existing_text = last.get("text") or last.get("content") or ""
+                last_text = ChatService._join_text_with_spacing(existing_text, text_value)
+                last["text"] = last_text
+                last["content"] = last_text
+                return
+        if text_value is not None:
+            entry["text"] = text_value
+            entry["content"] = text_value
+        target.append(entry)
+
+    @staticmethod
+    def _join_text_with_spacing(left: str, right: str) -> str:
+        if not left:
+            return right
+        if not right:
+            return left
+        if left[-1].isspace() or right[0].isspace():
+            return left + right
+        no_space_after = ",.!?:;)]}'\""
+        no_space_before = "([{"
+        if right[0] in no_space_after or left[-1] in no_space_before:
+            return left + right
+        return f"{left} {right}"
 
     @staticmethod
     def _ensure_arguments_string(arguments: Any) -> str:
@@ -602,6 +675,147 @@ class ChatService:
             residual_segments.extend(pending_context)
         return tool_calls, context, residual_segments
 
+    @staticmethod
+    def _coerce_stream_text(content: Any) -> Optional[str]:
+        if content is None:
+            return None
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text_value = item.get("text")
+                    if isinstance(text_value, str):
+                        parts.append(text_value)
+            return "".join(parts) or None
+        if isinstance(content, dict):
+            text_value = content.get("text")
+            if isinstance(text_value, str):
+                return text_value
+        return str(content)
+
+    @staticmethod
+    def _accumulate_stream_tool_calls(
+        accumulator: Dict[int, Dict[str, Any]],
+        updates: List[Dict[str, Any]],
+    ) -> None:
+        for update in updates:
+            if not isinstance(update, dict):
+                continue
+            index_value = update.get("index")
+            try:
+                index = int(index_value) if index_value is not None else 0
+            except (TypeError, ValueError):
+                index = 0
+            entry = accumulator.setdefault(
+                index,
+                {
+                    "id": update.get("id"),
+                    "type": update.get("type") or "function",
+                    "function": {"name": None, "arguments": ""},
+                },
+            )
+            if update.get("id"):
+                entry["id"] = update["id"]
+            if update.get("type"):
+                entry["type"] = update["type"]
+            function_payload = update.get("function")
+            if not isinstance(function_payload, dict):
+                continue
+            function_block = entry.setdefault("function", {"name": None, "arguments": ""})
+            if function_payload.get("name"):
+                function_block["name"] = function_payload["name"]
+            arguments_fragment = function_payload.get("arguments")
+            if isinstance(arguments_fragment, str):
+                prior_arguments = function_block.get("arguments") or ""
+                function_block["arguments"] = prior_arguments + arguments_fragment
+
+    def _stream_model_completion(
+        self,
+        *,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        model: str,
+        extra_body: Optional[Dict[str, Any]],
+        parameters: Optional[Dict[str, Any]],
+    ) -> Generator[Dict[str, str], None, Tuple[Dict[str, Any], Dict[str, Any], str, Optional[str], Optional[str]]]:
+        stream = self.openrouter.chat_stream(
+            messages=messages,
+            tools=tools,
+            model=model,
+            parallel_tool_calls=True,
+            extra_body=extra_body,
+            parameters=parameters or None,
+        )
+        content_parts: List[str] = []
+        reasoning_chunks: List[Dict[str, Any]] = []
+        tool_call_fragments: Dict[int, Dict[str, Any]] = {}
+        latest_usage: Dict[str, Any] = {}
+        provider = "openrouter"
+        finish_reason: Optional[str] = None
+        response_model: Optional[str] = None
+
+        for chunk in stream:
+            if not isinstance(chunk, dict):
+                continue
+            provider = chunk.get("provider", provider)
+            response_model = chunk.get("model", response_model)
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+            choice = choices[0]
+            finish_reason = choice.get("finish_reason") or finish_reason
+            delta = choice.get("delta") or {}
+            token_text = self._coerce_stream_text(delta.get("content"))
+            if token_text:
+                content_parts.append(token_text)
+                yield {"type": "token", "content": token_text}
+            tool_call_updates = delta.get("tool_calls")
+            if isinstance(tool_call_updates, list) and tool_call_updates:
+                self._accumulate_stream_tool_calls(tool_call_fragments, tool_call_updates)
+            reasoning_delta = delta.get("reasoning")
+            if reasoning_delta:
+                reasoning_update = self._normalize_reasoning_segments(reasoning_delta)
+                if reasoning_update:
+                    self._extend_reasoning_segments(reasoning_chunks, reasoning_update)
+                    yield {
+                        "type": "reasoning",
+                        "segments": [dict(segment) for segment in reasoning_chunks],
+                    }
+            chunk_usage = chunk.get("usage")
+            if chunk_usage:
+                latest_usage = chunk_usage
+
+        tool_calls: List[Dict[str, Any]] = []
+        for index in sorted(tool_call_fragments.keys()):
+            call_entry = tool_call_fragments[index]
+            function_block = call_entry.get("function") or {}
+            name = function_block.get("name")
+            arguments_value = function_block.get("arguments") or ""
+            if not name:
+                continue
+            tool_calls.append(
+                {
+                    "id": call_entry.get("id") or f"tool_call_{uuid4().hex}",
+                    "type": call_entry.get("type") or "function",
+                    "function": {
+                        "name": name,
+                        "arguments": arguments_value,
+                    },
+                }
+            )
+
+        message: Dict[str, Any] = {"content": "".join(content_parts)}
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+        if reasoning_chunks:
+            message["reasoning"] = [dict(segment) for segment in reasoning_chunks]
+
+        return message, latest_usage, provider, finish_reason, response_model
+
     def _tool_spec(self, collection: models.Collection) -> List[Dict[str, object]]:
         return [
             {
@@ -783,6 +997,238 @@ class ChatService:
             for msg in messages
         ]
 
+    def stream_message(
+        self,
+        *,
+        user: models.User,
+        collection: models.Collection,
+        payload: ChatMessageCreate,
+    ) -> Generator[Dict[str, Any], None, None]:
+        edit_target: Optional[models.ChatMessage] = None
+        if payload.edit_message_id:
+            edit_target = self.chat_repo.get_message(payload.edit_message_id, user_id=user.id)
+            if not edit_target:
+                raise ValueError("Message not found for editing.")
+            session_model = self.chat_repo.get_session(edit_target.session_id, user_id=user.id)
+            if not session_model:
+                raise ValueError("Chat session not found for edit.")
+            if session_model.collection_id != collection.id:
+                raise ValueError("Message belongs to a different collection.")
+        else:
+            session_model = self._ensure_session(user=user, collection=collection, payload=payload)
+
+        if edit_target:
+            self._apply_edit(
+                session_model=session_model,
+                target_message=edit_target,
+                new_content=payload.content,
+            )
+        else:
+            trimmed_content = (payload.content or "").strip()
+            if not trimmed_content:
+                raise ValueError("Message content cannot be empty.")
+            self._record_message(
+                session_id=session_model.id,
+                role=models.ChatRole.USER,
+                content=trimmed_content,
+            )
+
+        requested_model = (payload.chat_model or "").strip() or None
+        if requested_model and requested_model != session_model.chat_model:
+            session_model.chat_model = requested_model
+            self.session.add(session_model)
+            self.session.flush()
+
+        active_model_name = session_model.chat_model or collection.chat_model
+        if not active_model_name:
+            raise ValueError("This collection does not have a chat model configured.")
+
+        history = self.chat_repo.list_messages(session_model.id)
+        system_prompt = render_system_prompt(collection, user)
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            messages.append(self._serialize_message(msg))
+
+        tools = self._tool_spec(collection)
+        tool_traces: List[ToolCallTrace] = []
+        usage_aggregate: Dict[str, float] = {}
+        latest_usage_payload: Dict[str, Any] = {}
+        provider = "openrouter"
+        reasoning_trace: List[Dict[str, Any]] = []
+        processed_reasoning_calls: Set[str] = set()
+        reasoning_call_segments: Dict[str, Dict[str, Any]] = {}
+        model_info = self.openrouter.get_model(active_model_name)
+        if not model_info:
+            raise ValueError("Selected model is not available on OpenRouter.")
+        supported_parameters = model_info.supported_parameters if model_info.supported_parameters else []
+        tool_supported = any(param.lower() == "tools" for param in supported_parameters)
+        if not tool_supported:
+            raise ValueError("Selected model does not support tool calls required for retrieval.")
+        parameter_overrides = self._sanitize_parameter_overrides(payload.parameters, supported_parameters)
+        reasoning_override = self._prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
+        reasoning_options = self._reasoning_request_options(
+            active_model_name,
+            model_info,
+            reasoning_override,
+        )
+        provider_preferences = self._sanitize_provider_preferences(payload.provider)
+        context_window = model_info.context_length or collection.context_window
+
+        max_iterations = 48
+        iteration = 0
+
+        while iteration < max_iterations:
+            iteration += 1
+            extra_body = self._build_openrouter_body(reasoning_options, provider_preferences)
+            stream_result = yield from self._stream_model_completion(
+                messages=messages,
+                tools=tools,
+                model=active_model_name,
+                extra_body=extra_body,
+                parameters=parameter_overrides or None,
+            )
+            message, usage, provider_name, _finish_reason, response_model_name = stream_result
+            provider = provider_name or provider
+
+            if usage:
+                latest_usage_payload = usage
+                prompt_tokens = self._coerce_usage_value(usage.get("prompt_tokens"))
+                completion_tokens = self._coerce_usage_value(usage.get("completion_tokens"))
+                total_tokens = self._coerce_usage_value(usage.get("total_tokens"))
+                reasoning_tokens = self._extract_reasoning_tokens_from_usage(usage)
+                cost_value = self._coerce_float_value(usage.get("cost"))
+                self._add_usage_value(usage_aggregate, "prompt_tokens", prompt_tokens)
+                self._add_usage_value(usage_aggregate, "completion_tokens", completion_tokens)
+                self._add_usage_value(usage_aggregate, "total_tokens", total_tokens)
+                self._add_usage_value(usage_aggregate, "reasoning_tokens", reasoning_tokens)
+                self._add_usage_value(usage_aggregate, "cost", cost_value)
+
+            reasoning_content = message.get("reasoning") or message.get("reasoning_content")
+            reasoning_segments = self._normalize_reasoning_segments(reasoning_content)
+            base_tool_calls = self._normalize_tool_calls(message.get("tool_calls") or [], processed_reasoning_calls)
+            (
+                reasoning_tool_calls,
+                reasoning_context,
+                residual_reasoning,
+            ) = self._extract_reasoning_tool_calls(reasoning_segments, processed_reasoning_calls)
+            pending_tool_calls = base_tool_calls + reasoning_tool_calls
+            shared_tool_reasoning: Optional[Dict[str, Any]] = None
+            if pending_tool_calls:
+                if reasoning_context:
+                    reasoning_call_segments.update(reasoning_context)
+                elif reasoning_segments:
+                    shared_tool_reasoning = {"segments": reasoning_segments}
+            elif reasoning_segments:
+                reasoning_trace.extend(residual_reasoning or reasoning_segments)
+            if pending_tool_calls:
+                assistant_content = message.get("content")
+                if isinstance(assistant_content, list):
+                    assistant_content = json.dumps(assistant_content)
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": assistant_content or "",
+                        "tool_calls": pending_tool_calls,
+                    }
+                )
+                for tool_call in pending_tool_calls:
+                    function_block = tool_call.get("function") or {}
+                    if not isinstance(function_block, dict):
+                        function_block = {}
+                    name = function_block.get("name") or "tool_call"
+                    arguments = self._decode_tool_arguments(function_block.get("arguments"))
+                    query_text = arguments.get("query") or arguments.get("text") or payload.content
+                    try:
+                        top_k = int(arguments.get("top_k", 5))
+                    except (TypeError, ValueError):
+                        top_k = 5
+                    top_k = max(1, min(10, top_k))
+                    retrieval_response = self.retrieval.query_collection(collection, query_text, top_k=top_k)
+                    tool_payload = {
+                        "arguments": arguments,
+                        "response": retrieval_response,
+                    }
+                    tool_content = json.dumps(tool_payload)
+                    call_id = tool_call.get("id")
+                    reasoning_segment = reasoning_call_segments.pop(call_id, None)
+                    if reasoning_segment is None and shared_tool_reasoning:
+                        reasoning_segment = shared_tool_reasoning
+                    reasoning_payload = None
+                    if reasoning_segment:
+                        if "segments" not in reasoning_segment:
+                            reasoning_payload = {"segments": [reasoning_segment]}
+                        else:
+                            reasoning_payload = reasoning_segment
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": tool_content,
+                        }
+                    )
+                    tool_traces.append(
+                        ToolCallTrace(
+                            id=call_id,
+                            name=name,
+                            arguments=arguments,
+                            response=retrieval_response,
+                            reasoning=reasoning_payload,
+                        )
+                    )
+                    self._record_message(
+                        session_id=session_model.id,
+                        role=models.ChatRole.TOOL,
+                        content=tool_content,
+                        tool_name=name,
+                        tool_call_id=call_id,
+                        tool_payload=tool_payload,
+                        reasoning=reasoning_payload,
+                    )
+                continue
+
+            assistant_content = message.get("content")
+            if isinstance(assistant_content, list):
+                assistant_content = json.dumps(assistant_content)
+            content = assistant_content or ""
+            reasoning_payload = {"segments": reasoning_trace} if reasoning_trace else None
+            latest_usage_source = latest_usage_payload or usage or {}
+            latest_usage_total = self._coerce_usage_value(latest_usage_source.get("total_tokens"))
+            final_usage: Dict[str, Any] = dict(latest_usage_payload or usage or {})
+            if usage_aggregate:
+                final_usage = dict(final_usage) if final_usage else {}
+                final_usage.update({key: value for key, value in usage_aggregate.items() if value is not None})
+            assistant_msg = self._record_message(
+                session_id=session_model.id,
+                role=models.ChatRole.ASSISTANT,
+                content=content,
+                model=response_model_name,
+                reasoning=reasoning_payload,
+                usage=final_usage,
+            )
+            messages.append(self._serialize_message(assistant_msg))
+            session_model.context_tokens = (
+                latest_usage_total
+                if latest_usage_total is not None
+                else usage_aggregate.get("total_tokens", 0)
+            )
+            session_model.updated_at = utc_now()
+            self.session.add(session_model)
+            self.session.commit()
+
+            response_payload = ChatCompletionResponse(
+                session=self._convert_session(session_model),
+                messages=self._convert_messages(session_model.id),
+                tool_traces=tool_traces,
+                usage=final_usage,
+                provider=provider,
+                context_window=context_window,
+                context_consumed=session_model.context_tokens,
+            )
+            yield {"type": "final", "payload": response_payload.model_dump()}
+            return
+
+        raise RuntimeError("LLM did not complete within the allowed tool iteration limit.")
+
     def send_message(
         self,
         *,
@@ -902,11 +1348,17 @@ class ChatService:
                 reasoning_content = message.get("reasoning_content")
             
             reasoning_segments = self._normalize_reasoning_segments(reasoning_content)
-            base_tool_calls = self._normalize_tool_calls(message.get("tool_calls") or [], processed_reasoning_calls)
+            base_tool_calls = self._normalize_tool_calls(
+                message.get("tool_calls") or [],
+                processed_reasoning_calls,
+            )
             reasoning_tool_calls, reasoning_context, residual_reasoning = self._extract_reasoning_tool_calls(
                 reasoning_segments, processed_reasoning_calls
             )
-            pending_tool_calls = base_tool_calls + reasoning_tool_calls
+            if base_tool_calls:
+                pending_tool_calls = base_tool_calls
+            else:
+                pending_tool_calls = reasoning_tool_calls
             shared_tool_reasoning: Optional[Dict[str, Any]] = None
             if pending_tool_calls:
                 if reasoning_context:

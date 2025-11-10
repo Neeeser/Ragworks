@@ -52,6 +52,7 @@ import {
   listChatSessions,
   listModelEndpoints,
   listModels,
+  streamChatWithCollection,
   updateCollectionPrompt,
 } from '@/lib/api';
 import type {
@@ -334,25 +335,106 @@ const usePersistentToggle = (key: string, defaultValue: boolean) => {
   return [value, setValue] as const;
 };
 
+const joinTextWithSpacing = (left: string, right: string): string => {
+  if (!left) return right;
+  if (!right) return left;
+  const leftTail = left[left.length - 1];
+  const rightHead = right[0];
+  if (/\s/.test(leftTail) || /\s/.test(rightHead)) {
+    return `${left}${right}`;
+  }
+  const noSpaceAfter = ',.!?:;)]}\'"';
+  const noSpaceBefore = '([{';
+  if (noSpaceAfter.includes(rightHead) || noSpaceBefore.includes(leftTail)) {
+    return `${left}${right}`;
+  }
+  return `${left} ${right}`;
+};
+
+const appendReasoningSegment = (
+  target: ReasoningTraceSegment[],
+  segment: ReasoningTraceSegment,
+) => {
+  if (!segment) {
+    return;
+  }
+  const entry: ReasoningTraceSegment = { ...segment };
+  const textValue =
+    typeof entry.text === 'string'
+      ? entry.text
+      : typeof entry.content === 'string'
+        ? entry.content
+        : undefined;
+  const mergeableTypes = new Set(['', 'text', 'reasoning.text']);
+  if (
+    textValue &&
+    target.length > 0 &&
+    mergeableTypes.has((entry.type ?? '').toLowerCase())
+  ) {
+    const prev = target[target.length - 1];
+    const prevMergeable = mergeableTypes.has((prev.type ?? '').toLowerCase());
+    const contextKeys = ['id', 'call_id', 'tool_call_id'] as const;
+    const sameContext = contextKeys.every((key) => {
+      const prevValue = (prev as Record<string, unknown>)[key];
+      const nextValue = (entry as Record<string, unknown>)[key];
+      if (prevValue == null && nextValue == null) {
+        return true;
+      }
+      return prevValue === nextValue;
+    });
+    if (prevMergeable && sameContext) {
+      const existing =
+        (typeof prev.text === 'string' ? prev.text : typeof prev.content === 'string' ? prev.content : '') ?? '';
+      const combined = joinTextWithSpacing(existing, textValue);
+      prev.text = combined;
+      prev.content = combined;
+      return;
+    }
+  }
+  if (textValue) {
+    entry.text = textValue;
+    entry.content = textValue;
+    if (!entry.type) {
+      entry.type = 'text';
+    }
+  }
+  target.push(entry);
+};
+
+const mergeReasoningSegments = (segments: ReasoningTraceSegment[]): ReasoningTraceSegment[] => {
+  const merged: ReasoningTraceSegment[] = [];
+  segments.forEach((segment) => {
+    if (segment) {
+      appendReasoningSegment(merged, segment);
+    }
+  });
+  return merged;
+};
+
 const normalizeReasoningSegments = (payload: unknown): ReasoningTraceSegment[] => {
   if (!payload) {
     return [];
   }
+  let segments: ReasoningTraceSegment[] = [];
   if (Array.isArray(payload)) {
-    return payload.filter(Boolean) as ReasoningTraceSegment[];
-  }
-  if (typeof payload === 'object') {
+    segments = payload.filter(Boolean) as ReasoningTraceSegment[];
+  } else if (typeof payload === 'object') {
     const candidate = payload as { segments?: ReasoningTraceSegment[] };
     if (Array.isArray(candidate?.segments)) {
-      return candidate.segments.filter(Boolean) as ReasoningTraceSegment[];
+      segments = candidate.segments.filter(Boolean) as ReasoningTraceSegment[];
+    } else {
+      segments = [candidate as ReasoningTraceSegment];
     }
-    return [candidate as ReasoningTraceSegment];
+  } else if (typeof payload === 'string') {
+    if (!payload.trim()) {
+      segments = [];
+    } else {
+      segments = [{ type: 'text', content: payload }];
+    }
+  } else {
+    segments = [{ type: 'value', content: String(payload) }];
   }
-  if (typeof payload === 'string') {
-    const trimmed = payload.trim();
-    return trimmed ? [{ type: 'text', content: trimmed }] : [];
-  }
-  return [{ type: 'value', content: String(payload) }];
+  return mergeReasoningSegments(segments);
 };
 
 const coerceRecord = (value: unknown): Record<string, unknown> => {
@@ -1092,6 +1174,11 @@ export default function ChatStudioExperience() {
     'chat.telemetry.providersOpen',
     true,
   );
+  const [streamingOptionsOpen, setStreamingOptionsOpen] = usePersistentToggle(
+    'chat.telemetry.streamingOpen',
+    true,
+  );
+  const [streamingEnabled, setStreamingEnabled] = usePersistentToggle('chat.streamingEnabled', false);
   const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -1109,6 +1196,9 @@ export default function ChatStudioExperience() {
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
   const [promptSaving, setPromptSaving] = useState(false);
+  const [liveResponse, setLiveResponse] = useState('');
+  const [isStreamingResponse, setIsStreamingResponse] = useState(false);
+  const [liveReasoningSegments, setLiveReasoningSegments] = useState<ReasoningTraceSegment[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const promptEditorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1673,6 +1763,9 @@ export default function ChatStudioExperience() {
 
   const applyChatResponse = useCallback(
     (response: ChatCompletionPayload) => {
+      setLiveResponse('');
+      setIsStreamingResponse(false);
+      setLiveReasoningSegments([]);
       pendingSessionIdsRef.current.delete(response.session.id);
       syncMessages(response.messages);
       const nextToolTraces =
@@ -1743,6 +1836,9 @@ export default function ChatStudioExperience() {
     const parameterPayload = buildParameterPayload();
     const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
     const provider = providerRuleCount > 0 ? providerPayload : undefined;
+    setLiveResponse('');
+    setIsStreamingResponse(false);
+    setLiveReasoningSegments([]);
     try {
       await performChatMutation(sessionId, {
         content: trimmed,
@@ -1751,6 +1847,7 @@ export default function ChatStudioExperience() {
         chat_model: targetModelId,
         parameters,
         provider,
+        stream: streamingEnabled,
       });
     } catch (error) {
       setDraft(trimmed);
@@ -1785,6 +1882,7 @@ export default function ChatStudioExperience() {
         chat_model: targetModelId,
         parameters,
         provider,
+        stream: streamingEnabled,
       });
       setEditingMessageId(null);
       setEditingDraft('');
@@ -1818,6 +1916,9 @@ export default function ChatStudioExperience() {
     setUsage(null);
     setContextConsumed(0);
     setDraft('');
+    setLiveResponse('');
+    setIsStreamingResponse(false);
+    setLiveReasoningSegments([]);
     setEditingMessageId(null);
     setEditingDraft('');
     setOptimisticMessages([]);
@@ -2049,19 +2150,42 @@ export default function ChatStudioExperience() {
       }
       setSending(true);
       setStatus(null);
+      setLiveResponse('');
+      setIsStreamingResponse(false);
+      setLiveReasoningSegments([]);
       startProgressPolling(sessionId);
       try {
-        const result = await chatWithCollection(
-          collection.id,
-          {
-            ...payload,
-            session_id: sessionId,
-          },
-          authToken,
-        );
+        const requestPayload: ChatRequestPayload = {
+          ...payload,
+          session_id: sessionId,
+        };
+        let result: ChatCompletionPayload | null;
+        if (payload.stream) {
+          setIsStreamingResponse(true);
+          result = await streamChatWithCollection(collection.id, requestPayload, authToken, {
+            onToken: (token) => {
+              if (token) {
+                setLiveResponse((prev) => `${prev}${token}`);
+              }
+            },
+            onReasoning: (segments) => {
+              setLiveReasoningSegments(segments ?? []);
+            },
+            onError: (message) => {
+              setStatus(message);
+            },
+          });
+        } else {
+          result = await chatWithCollection(collection.id, requestPayload, authToken);
+        }
+        if (!result) {
+          throw new Error('Streaming response did not complete.');
+        }
         applyChatResponse(result);
         return result;
       } catch (error) {
+        setLiveResponse('');
+        setIsStreamingResponse(false);
         throw error;
       } finally {
         stopProgressPolling();
@@ -2897,13 +3021,28 @@ export default function ChatStudioExperience() {
       );
     }
 
+    const hasLiveText = liveResponse.trim().length > 0;
+    const hasLiveReasoning = liveReasoningSegments.length > 0;
+    const showStreamingBubble =
+      streamingEnabled && (isStreamingResponse || hasLiveText || hasLiveReasoning);
     const assistantTypingBubble = sending && (
       <div key="typing-indicator" className="flex justify-start">
         <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
           </div>
-          <TypingAnimation />
+          {showStreamingBubble && hasLiveText ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {liveResponse}
+            </ReactMarkdown>
+          ) : (
+            <TypingAnimation />
+          )}
+          {showStreamingBubble && hasLiveReasoning && (
+            <div className="mt-3">
+              <CollapsibleReasoning segments={liveReasoningSegments} messageId="live-reasoning" />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -3277,6 +3416,28 @@ export default function ChatStudioExperience() {
             ) : (
               <p className="text-sm text-slate-400">Prompt details unavailable.</p>
             )}
+          </TelemetrySection>
+          <TelemetrySection
+            title="Streaming"
+            description={streamingEnabled ? 'Live tokens enabled' : 'Responses buffered until completion'}
+            icon={<Share2 className="h-4 w-4 text-emerald-300" />}
+            isOpen={streamingOptionsOpen}
+            onToggle={() => setStreamingOptionsOpen((prev) => !prev)}
+          >
+            <div className="space-y-2 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-slate-300">
+              <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+                <span className="font-medium text-white">Enable streaming</span>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-white/30 bg-transparent"
+                  checked={streamingEnabled}
+                  onChange={(event) => setStreamingEnabled(event.target.checked)}
+                />
+              </label>
+              <p className="text-xs text-slate-400">
+                Stream OpenRouter completions to this console via Server-Sent Events for real-time feedback.
+              </p>
+            </div>
           </TelemetrySection>
           <TelemetrySection
             title="Model routing"
