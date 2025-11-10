@@ -243,8 +243,16 @@ export default function ChatStudioExperience() {
   const headerDescription =
     collection ? collection.description?.trim() || 'No description provided yet.' : '';
 
-  const sortSessions = (items: ChatSession[]) =>
-    [...items].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  const sortSessions = useCallback((items: ChatSession[]) => {
+    const pendingIds = pendingSessionIdsRef.current;
+    return [...items].sort((a, b) => {
+      const aPending = pendingIds.has(a.id);
+      const bPending = pendingIds.has(b.id);
+      if (aPending && !bPending) return -1;
+      if (!aPending && bPending) return 1;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+  }, []);
 
   useEffect(() => {
     if (!authToken || !collectionId) {
@@ -292,7 +300,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, collectionId]);
+  }, [authToken, collectionId, sortSessions]);
 
   useEffect(() => {
     if (!authToken) return;
