@@ -1123,6 +1123,17 @@ const markdownComponents: Components = {
   strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
 };
 
+const sortMessagesChronologically = (messages: ChatMessage[]) => {
+  return [...messages].sort((a, b) => {
+    const aTime = Date.parse(a.created_at) || 0;
+    const bTime = Date.parse(b.created_at) || 0;
+    if (aTime === bTime) {
+      return a.id.localeCompare(b.id);
+    }
+    return aTime - bTime;
+  });
+};
+
 export default function ChatStudioExperience() {
   const params = useParams<{ collectionId: string }>();
   const collectionId = params?.collectionId ?? '';
@@ -1143,6 +1154,8 @@ export default function ChatStudioExperience() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [isStopping, setIsStopping] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
@@ -1199,9 +1212,10 @@ export default function ChatStudioExperience() {
   const syncMessages = useCallback(
     (incoming: ChatMessage[], options: { hydrate?: boolean } = {}) => {
       const { hydrate = false } = options;
-      setMessages(incoming);
+      const sorted = sortMessagesChronologically(incoming);
+      setMessages(sorted);
       setVisibleMessageIds((prev) => {
-        const nextIds = incoming.map((message) => message.id);
+        const nextIds = sorted.map((message) => message.id);
         if (hydrate || prev.length === 0) {
           setPendingMessageIds([]);
           return nextIds;
@@ -1782,6 +1796,9 @@ export default function ChatStudioExperience() {
     [collection, deriveToolTraces, sortSessions, syncMessages],
   );
 
+  const isAbortError = (value: unknown): value is DOMException =>
+    value instanceof DOMException && value.name === 'AbortError';
+
   const handleSend = async () => {
     if (!authToken || !collection) return;
     const targetModelId = activeModelId || collection.chat_model;
@@ -1840,19 +1857,37 @@ export default function ChatStudioExperience() {
         stream: streamingEnabled,
       });
     } catch (error) {
-      setDraft(trimmed);
-      if (isNewSession && sessionId) {
+      const aborted = isAbortError(error);
+      if (sessionId) {
         pendingSessionIdsRef.current.delete(sessionId);
+      }
+      if (!aborted) {
+        setDraft(trimmed);
+      }
+      if (isNewSession && sessionId && !aborted) {
         setSessions((prev) => prev.filter((session) => session.id !== sessionId));
         setSelectedSessionId(null);
       }
-      setStatus(error instanceof Error ? error.message : 'Unable to send your message.');
+      if (!aborted) {
+        const statusMessage =
+          error instanceof Error ? error.message : 'Unable to send your message.';
+        setStatus(statusMessage);
+      }
     } finally {
       setOptimisticMessages((prev) =>
         prev.filter((message) => message.id !== placeholderMessageId),
       );
     }
   };
+
+  const handleStopGeneration = useCallback(() => {
+    if (!sending) {
+      return;
+    }
+    setIsStopping(true);
+    abortControllerRef.current?.abort();
+    stopProgressPolling();
+  }, [sending, stopProgressPolling]);
 
   const runEditMutation = async (messageId: string, newContent: string) => {
     if (!authToken || !collection || !selectedSessionId) return;
@@ -2138,6 +2173,10 @@ export default function ChatStudioExperience() {
       if (!authToken || !collection) {
         throw new Error('Missing authentication context.');
       }
+      const controller = new AbortController();
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = controller;
+      setIsStopping(false);
       setSending(true);
       setStatus(null);
       setLiveResponse('');
@@ -2153,6 +2192,7 @@ export default function ChatStudioExperience() {
         if (payload.stream) {
           setIsStreamingResponse(true);
           result = await streamChatWithCollection(collection.id, requestPayload, authToken, {
+            signal: controller.signal,
             onToken: (token) => {
               if (token) {
                 setLiveResponse((prev) => `${prev}${token}`);
@@ -2166,7 +2206,12 @@ export default function ChatStudioExperience() {
             },
           });
         } else {
-          result = await chatWithCollection(collection.id, requestPayload, authToken);
+          result = await chatWithCollection(
+            collection.id,
+            requestPayload,
+            authToken,
+            controller.signal,
+          );
         }
         if (!result) {
           throw new Error('Streaming response did not complete.');
@@ -2174,12 +2219,18 @@ export default function ChatStudioExperience() {
         applyChatResponse(result);
         return result;
       } catch (error) {
-        setLiveResponse('');
         setIsStreamingResponse(false);
+        const shouldClearLiveState = !isAbortError(error);
+        if (shouldClearLiveState) {
+          setLiveResponse('');
+          setLiveReasoningSegments([]);
+        }
         throw error;
       } finally {
         stopProgressPolling();
         setSending(false);
+        setIsStopping(false);
+        abortControllerRef.current = null;
       }
     },
     [applyChatResponse, authToken, collection, startProgressPolling, stopProgressPolling],
@@ -3015,7 +3066,7 @@ export default function ChatStudioExperience() {
     const hasLiveReasoning = liveReasoningSegments.length > 0;
     const showStreamingBubble =
       streamingEnabled && (isStreamingResponse || hasLiveText || hasLiveReasoning);
-    const assistantTypingBubble = sending && (
+    const assistantTypingBubble = showStreamingBubble ? (
       <div key="typing-indicator" className="flex justify-start">
         <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -3035,7 +3086,7 @@ export default function ChatStudioExperience() {
           )}
         </div>
       </div>
-    );
+    ) : null;
 
     const messageBubbles = allMessages.flatMap((message) => {
       const bubbles: ReactNode[] = [];
@@ -3043,7 +3094,13 @@ export default function ChatStudioExperience() {
       const isUser = message.role === 'user';
       const isAssistant = message.role === 'assistant';
       const showActions = (isUser || isAssistant) && !!selectedSessionId;
-      const displayedContent = message.content?.trim() || 'No response captured.';
+      const trimmedContent = message.content?.trim() || '';
+      const isToolCallPlaceholder =
+        isAssistant &&
+        !trimmedContent &&
+        Array.isArray(message.tool_payload?.tool_calls) &&
+        message.tool_payload?.tool_calls.length > 0;
+      const displayedContent = trimmedContent || 'No response captured.';
       const messageReasoningSegments = normalizeReasoningSegments(message.reasoning_trace);
 
       if (isAssistant) {
@@ -3116,115 +3173,117 @@ export default function ChatStudioExperience() {
         return bubbles;
       }
 
-      bubbles.push(
-        <div key={message.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
-          <div className="group relative max-w-[75%]">
-            <div className={cn('rounded-2xl border px-4 py-3 text-sm', variant)}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-                  {message.role.toUpperCase()}
-                  {message.tool_name ? ` • ${message.tool_name}` : ''}
-                </p>
-                {showActions && (
-                  <div className="flex items-center gap-2 text-[11px] text-slate-300">
-                    {isUser && (
-                      <button
+      if (!isToolCallPlaceholder) {
+        bubbles.push(
+          <div key={message.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+            <div className="group relative max-w-[75%]">
+              <div className={cn('rounded-2xl border px-4 py-3 text-sm', variant)}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                    {message.role.toUpperCase()}
+                    {message.tool_name ? ` • ${message.tool_name}` : ''}
+                  </p>
+                  {showActions && (
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                      {isUser && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
+                          onClick={() => {
+                            setEditingMessageId(message.id);
+                            setEditingDraft(message.content);
+                          }}
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                      )}
+                      {isAssistant && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
+                          onClick={() => handleRetryAssistant(message.id)}
+                          disabled={sending}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {isUser && editingMessageId === message.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                      value={editingDraft}
+                      onChange={(event) => setEditingDraft(event.target.value)}
+                    />
+                    <div className="flex items-center gap-3">
+                      <Button size="sm" onClick={handleEditSubmit} loading={sending}>
+                        Update & rerun
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
                         onClick={() => {
-                          setEditingMessageId(message.id);
-                          setEditingDraft(message.content);
+                          setEditingMessageId(null);
+                          setEditingDraft('');
                         }}
                       >
-                        <Edit3 className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
-                    )}
-                    {isAssistant && (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
-                        onClick={() => handleRetryAssistant(message.id)}
-                        disabled={sending}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Retry
-                      </button>
-                    )}
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
+                ) : message.role === 'assistant' ? (
+                  <div className="space-y-3">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      {displayedContent}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayedContent}</p>
                 )}
               </div>
-              {isUser && editingMessageId === message.id ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
-                    value={editingDraft}
-                    onChange={(event) => setEditingDraft(event.target.value)}
-                  />
-                  <div className="flex items-center gap-3">
-                    <Button size="sm" onClick={handleEditSubmit} loading={sending}>
-                      Update & rerun
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      type="button"
-                      onClick={() => {
-                        setEditingMessageId(null);
-                        setEditingDraft('');
-                      }}
-                    >
-                      Cancel
-                    </Button>
+              {message.usage && (
+                <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400/60">
+                    {message.usage.total_tokens != null && (
+                      <span>
+                        {message.usage.total_tokens.toLocaleString()} tok
+                      </span>
+                    )}
+                    {message.usage.prompt_tokens != null && (
+                      <span>
+                        {message.usage.prompt_tokens.toLocaleString()} in
+                      </span>
+                    )}
+                    {message.usage.completion_tokens != null && (
+                      <span>
+                        {message.usage.completion_tokens.toLocaleString()} out
+                      </span>
+                    )}
+                    {message.usage.reasoning_tokens != null && message.usage.reasoning_tokens > 0 && (
+                      <span>
+                        {message.usage.reasoning_tokens.toLocaleString()} reasoning
+                      </span>
+                    )}
+                    {message.usage.cost != null && (
+                      <span className="text-slate-400/80">
+                        ${message.usage.cost.toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 6,
+                        })}
+                      </span>
+                    )}
                   </div>
                 </div>
-              ) : message.role === 'assistant' ? (
-                <div className="space-y-3">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {displayedContent}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayedContent}</p>
               )}
             </div>
-            {message.usage && (
-              <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400/60">
-                  {message.usage.total_tokens != null && (
-                    <span>
-                      {message.usage.total_tokens.toLocaleString()} tok
-                    </span>
-                  )}
-                  {message.usage.prompt_tokens != null && (
-                    <span>
-                      {message.usage.prompt_tokens.toLocaleString()} in
-                    </span>
-                  )}
-                  {message.usage.completion_tokens != null && (
-                    <span>
-                      {message.usage.completion_tokens.toLocaleString()} out
-                    </span>
-                  )}
-                  {message.usage.reasoning_tokens != null && message.usage.reasoning_tokens > 0 && (
-                    <span>
-                      {message.usage.reasoning_tokens.toLocaleString()} reasoning
-                    </span>
-                  )}
-                  {message.usage.cost != null && (
-                    <span className="text-slate-400/80">
-                      ${message.usage.cost.toLocaleString(undefined, {
-                        minimumFractionDigits: 4,
-                        maximumFractionDigits: 6,
-                      })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>,
-      );
+          </div>,
+        );
+      }
 
       return bubbles;
     });
@@ -3822,12 +3881,11 @@ export default function ChatStudioExperience() {
                       <div className="flex items-center gap-2">
                         <Button
                           type="button"
-                          onClick={handleSend}
-                          loading={sending}
-                          disabled={!draft.trim()}
+                          onClick={sending ? handleStopGeneration : handleSend}
+                          disabled={!sending && !draft.trim()}
                           className="gap-2"
                         >
-                          Send turn
+                          {sending ? (isStopping ? 'Stopping...' : 'Stop') : 'Send turn'}
                         </Button>
                       </div>
                     </div>

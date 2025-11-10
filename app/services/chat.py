@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+from copy import deepcopy
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.config import get_settings
 from app.db import models
@@ -889,7 +890,35 @@ class ChatService:
                 "content": message.content,
             }
         role_value = message.role.value if isinstance(message.role, models.ChatRole) else str(message.role)
-        return {"role": role_value, "content": message.content}
+        serialized: Dict[str, object] = {"role": role_value, "content": message.content}
+        tool_payload = message.tool_payload
+        if (
+            isinstance(tool_payload, dict)
+            and message.role == models.ChatRole.ASSISTANT
+            and isinstance(tool_payload.get("tool_calls"), list)
+        ):
+            serialized["tool_calls"] = deepcopy(tool_payload["tool_calls"])
+        return serialized
+
+    def _record_tool_call_assistant_message(
+        self,
+        *,
+        session_model: models.ChatSession,
+        content: str,
+        tool_calls: List[Dict[str, Any]],
+    ) -> None:
+        if not tool_calls:
+            return
+        tool_call_payload = {"tool_calls": deepcopy(tool_calls)}
+        self._record_message(
+            session_id=session_model.id,
+            role=models.ChatRole.ASSISTANT,
+            content=content or "",
+            tool_payload=tool_call_payload,
+        )
+        session_model.updated_at = utc_now()
+        self.session.add(session_model)
+        self.session.flush()
 
     def _record_message(
         self,
@@ -924,6 +953,30 @@ class ChatService:
         self.session.commit()
         return message
 
+    def _record_partial_assistant_message(
+        self,
+        *,
+        session_model: models.ChatSession,
+        content: str,
+        reasoning_segments: Optional[List[Dict[str, Any]]],
+        model: Optional[str],
+    ) -> None:
+        trimmed_content = (content or "").strip()
+        has_reasoning = bool(reasoning_segments)
+        if not trimmed_content and not has_reasoning:
+            return
+        reasoning_payload = {"segments": reasoning_segments} if reasoning_segments else None
+        self._record_message(
+            session_id=session_model.id,
+            role=models.ChatRole.ASSISTANT,
+            content=content or "",
+            model=model or session_model.chat_model,
+            reasoning=reasoning_payload,
+        )
+        session_model.updated_at = utc_now()
+        self.session.add(session_model)
+        self.session.flush()
+
     def _apply_edit(
         self,
         *,
@@ -948,9 +1001,32 @@ class ChatService:
                 include_anchor=False,
             )
         else:
+            user_threshold = target_message.created_at
+            last_user = self.chat_repo.get_last_user_message_before(
+                session_model.id,
+                target_message.created_at,
+            )
+            if last_user:
+                user_threshold = last_user.created_at
+            anchor_statement = (
+                select(models.ChatMessage)
+                .where(
+                    models.ChatMessage.session_id == session_model.id,
+                    models.ChatMessage.created_at >= user_threshold,
+                    models.ChatMessage.role != models.ChatRole.USER,
+                )
+                .order_by(models.ChatMessage.created_at.asc())
+                .limit(1)
+            )
+            anchor_message = self.session.exec(anchor_statement).first()
+            anchor_created_at = anchor_message.created_at if anchor_message else target_message.created_at
+            self.chat_repo.delete_tool_messages_since(
+                session_id=session_model.id,
+                since=user_threshold,
+            )
             self.chat_repo.delete_messages_after(
                 session_id=session_model.id,
-                created_at=target_message.created_at,
+                created_at=anchor_created_at,
                 include_anchor=True,
             )
         session_model.updated_at = utc_now()
@@ -1073,13 +1149,52 @@ class ChatService:
         while iteration < max_iterations:
             iteration += 1
             extra_body = self._build_openrouter_body(reasoning_options, provider_preferences)
-            stream_result = yield from self._stream_model_completion(
-                messages=messages,
-                tools=tools,
-                model=active_model_name,
-                extra_body=extra_body,
-                parameters=parameter_overrides or None,
-            )
+            partial_state = {
+                "content_parts": [],
+                "reasoning_segments": [],
+            }
+
+            def intercept_stream() -> Generator[Dict[str, Any], None, Tuple[Dict[str, Any], Dict[str, Any], str, Optional[str], Optional[str]]]:
+                stream = self._stream_model_completion(
+                    messages=messages,
+                    tools=tools,
+                    model=active_model_name,
+                    extra_body=extra_body,
+                    parameters=parameter_overrides or None,
+                )
+                while True:
+                    try:
+                        event = next(stream)
+                    except StopIteration as stop:
+                        return stop.value
+                    if isinstance(event, dict):
+                        event_type = event.get("type")
+                        if event_type == "token":
+                            token_text = event.get("content")
+                            if isinstance(token_text, str):
+                                partial_state["content_parts"].append(token_text)
+                        elif event_type == "reasoning":
+                            segments = event.get("segments")
+                            if isinstance(segments, list):
+                                partial_state["reasoning_segments"] = segments
+                    yield event
+
+            try:
+                stream_result = yield from intercept_stream()
+            except GeneratorExit:
+                partial_content = "".join(partial_state["content_parts"])
+                reasoning_segments = [
+                    dict(segment)
+                    for segment in partial_state["reasoning_segments"]
+                    if isinstance(segment, dict)
+                ]
+                self._record_partial_assistant_message(
+                    session_model=session_model,
+                    content=partial_content,
+                    reasoning_segments=reasoning_segments,
+                    model=active_model_name,
+                )
+                raise
             message, usage, provider_name, _finish_reason, response_model_name = stream_result
             provider = provider_name or provider
 
@@ -1123,6 +1238,11 @@ class ChatService:
                         "content": assistant_content or "",
                         "tool_calls": pending_tool_calls,
                     }
+                )
+                self._record_tool_call_assistant_message(
+                    session_model=session_model,
+                    content=assistant_content or "",
+                    tool_calls=pending_tool_calls,
                 )
                 for tool_call in pending_tool_calls:
                     function_block = tool_call.get("function") or {}
@@ -1370,6 +1490,11 @@ class ChatService:
                         "content": assistant_content or "",
                         "tool_calls": pending_tool_calls,
                     }
+                )
+                self._record_tool_call_assistant_message(
+                    session_model=session_model,
+                    content=assistant_content or "",
+                    tool_calls=pending_tool_calls,
                 )
                 for tool_call in pending_tool_calls:
                     function_block = tool_call.get("function") or {}
