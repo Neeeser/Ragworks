@@ -47,6 +47,7 @@ def _message_to_schema(message: models.ChatMessage) -> ChatMessageRead:
         reasoning_trace=message.reasoning_trace,
         prompt_tokens=message.prompt_tokens,
         completion_tokens=message.completion_tokens,
+        usage=message.usage,
         created_at=message.created_at,
     )
 

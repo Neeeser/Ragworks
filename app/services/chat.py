@@ -54,6 +54,26 @@ class ChatService:
         return None
 
     @staticmethod
+    def _add_usage_value(aggregate: Dict[str, int], key: str, value: Optional[int]) -> None:
+        if value is None:
+            return
+        aggregate[key] = aggregate.get(key, 0) + value
+
+    @staticmethod
+    def _extract_reasoning_tokens_from_usage(usage: Dict[str, Any]) -> Optional[int]:
+        if not usage:
+            return None
+        direct = ChatService._coerce_usage_value(usage.get("reasoning_tokens"))
+        if direct is not None:
+            return direct
+        details = usage.get("completion_tokens_details")
+        if isinstance(details, dict):
+            nested = ChatService._coerce_usage_value(details.get("reasoning_tokens"))
+            if nested is not None:
+                return nested
+        return None
+
+    @staticmethod
     def _normalize_reasoning_segments(raw_reasoning: Any) -> List[Dict[str, Any]]:
         if raw_reasoning is None:
             return []
@@ -380,6 +400,7 @@ class ChatService:
             reasoning_trace=reasoning,
             prompt_tokens=usage_payload.get("prompt_tokens"),
             completion_tokens=usage_payload.get("completion_tokens"),
+            usage=usage_payload or None,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -525,11 +546,14 @@ class ChatService:
             provider = response.get("provider", provider)
 
             if usage:
-                for key, value in usage.items():
-                    coerced = self._coerce_usage_value(value)
-                    if coerced is None:
-                        continue
-                    usage_aggregate[key] = usage_aggregate.get(key, 0) + coerced
+                prompt_tokens = self._coerce_usage_value(usage.get("prompt_tokens"))
+                completion_tokens = self._coerce_usage_value(usage.get("completion_tokens"))
+                total_tokens = self._coerce_usage_value(usage.get("total_tokens"))
+                reasoning_tokens = self._extract_reasoning_tokens_from_usage(usage)
+                self._add_usage_value(usage_aggregate, "prompt_tokens", prompt_tokens)
+                self._add_usage_value(usage_aggregate, "completion_tokens", completion_tokens)
+                self._add_usage_value(usage_aggregate, "total_tokens", total_tokens)
+                self._add_usage_value(usage_aggregate, "reasoning_tokens", reasoning_tokens)
 
             # Extract reasoning from the reasoning field (new format)
             reasoning_content = message.get("reasoning")
@@ -623,15 +647,21 @@ class ChatService:
                 assistant_content = json.dumps(assistant_content)
             content = assistant_content or ""
             reasoning_payload = {"segments": reasoning_trace} if reasoning_trace else None
+            latest_usage_total = self._coerce_usage_value(usage.get("total_tokens"))
+            final_usage = usage_aggregate or usage
             assistant_msg = self._record_message(
                 session_id=session_model.id,
                 role=models.ChatRole.ASSISTANT,
                 content=content,
                 model=response.get("model"),
                 reasoning=reasoning_payload,
-                usage=usage,
+                usage=final_usage,
             )
-            session_model.context_tokens = usage_aggregate.get("total_tokens", usage.get("total_tokens", 0))
+            session_model.context_tokens = (
+                latest_usage_total
+                if latest_usage_total is not None
+                else usage_aggregate.get("total_tokens", 0)
+            )
             session_model.updated_at = datetime.utcnow()
             self.session.add(session_model)
             self.session.commit()
@@ -640,7 +670,7 @@ class ChatService:
                 session=self._convert_session(session_model),
                 messages=self._convert_messages(session_model.id),
                 tool_traces=tool_traces,
-                usage=usage_aggregate or usage,
+                usage=final_usage,
                 provider=provider,
                 context_window=collection.context_window,
                 context_consumed=session_model.context_tokens,

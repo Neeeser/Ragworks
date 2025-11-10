@@ -29,6 +29,7 @@ class ChatMessageRead(BaseModel):
     reasoning_trace: Optional[Dict[str, Any]]
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
+    usage: Optional[Dict[str, Any]] = None
     created_at: datetime
 
 

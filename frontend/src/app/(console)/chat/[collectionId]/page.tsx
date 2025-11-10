@@ -111,6 +111,23 @@ const deriveToolTracesFromMessages = (items: ChatMessage[]): ToolCallTrace[] =>
       } satisfies ToolCallTrace;
     });
 
+const usageMetrics: { key: keyof UsageBreakdown; label: string }[] = [
+  { key: 'prompt_tokens', label: 'Prompt tokens' },
+  { key: 'completion_tokens', label: 'Completion tokens' },
+  { key: 'total_tokens', label: 'Total tokens' },
+  { key: 'reasoning_tokens', label: 'Reasoning tokens' },
+];
+
+const getLatestAssistantUsage = (items: ChatMessage[]): UsageBreakdown | null => {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const message = items[index];
+    if (message.role === 'assistant' && message.usage) {
+      return message.usage;
+    }
+  }
+  return null;
+};
+
 const isToolReasoningSegment = (segment: ReasoningTraceSegment): boolean => {
   const typeValue = typeof segment.type === 'string' ? segment.type.toLowerCase() : '';
   if (
@@ -147,7 +164,7 @@ const PROGRESS_POLL_INTERVAL = 800;
 
 const markdownComponents: Components = {
   p: ({ children }) => (
-    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-100">{children}</p>
+    <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-100">{children}</div>
   ),
   a: ({ children, href }) => (
     <a
@@ -329,7 +346,7 @@ export default function ChatStudioExperience() {
         if (!cancelled) {
           syncMessages(history, { hydrate: true });
           setToolTraces(deriveToolTraces(history));
-          setUsage(null);
+          setUsage(getLatestAssistantUsage(history));
         }
       } catch (error) {
         if (!cancelled) {
@@ -920,15 +937,21 @@ export default function ChatStudioExperience() {
               style={{ width: `${contextUtilization}%` }}
             />
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            {['prompt_tokens', 'completion_tokens', 'total_tokens'].map((key) => (
-              <div key={key} className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{key}</p>
-                <p className="mt-1 text-2xl font-semibold">
-                  {usage?.[key as keyof UsageBreakdown]?.toLocaleString() ?? '—'}
-                </p>
-              </div>
-            ))}
+          <div className="space-y-3">
+            {usageMetrics.map((metric) => {
+              const metricValue = usage?.[metric.key];
+              const formattedValue =
+                metricValue != null ? metricValue.toLocaleString() : '—';
+              return (
+                <div
+                  key={`${metric.key}`}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-3 text-center"
+                >
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{metric.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{formattedValue}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
 

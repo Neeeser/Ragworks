@@ -164,6 +164,10 @@ class ChatMessage(SQLModel, TimestampMixin, table=True):
     )
     prompt_tokens: Optional[int] = Field(default=None, nullable=True)
     completion_tokens: Optional[int] = Field(default=None, nullable=True)
+    usage: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
 
 
 class QueryEvent(SQLModel, TimestampMixin, table=True):
