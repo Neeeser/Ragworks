@@ -374,29 +374,66 @@ const ENDPOINT_STATUS_LABELS: Record<string, string> = {
   '-10': 'Disabled',
 };
 
+const formatPricePerMillion = (value?: number | string | null): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const raw =
+    typeof value === 'number'
+      ? value
+      : Number(
+          String(value)
+            .trim()
+            .replace(/[^0-9eE.+-]/g, ''),
+        );
+  if (!Number.isFinite(raw)) {
+    const fallback = String(value).trim();
+    return fallback || null;
+  }
+  const pricePerMillion = raw * 1_000_000;
+  const trimFractionDigits = (numericString: string, minFractionDigits: number) => {
+    if (!numericString.includes('.')) {
+      return numericString;
+    }
+    const [whole, fraction] = numericString.split('.');
+    if (fraction.length <= minFractionDigits) {
+      return `${whole}.${fraction.padEnd(minFractionDigits, '0')}`;
+    }
+    let trimmedFraction = fraction;
+    while (trimmedFraction.length > minFractionDigits && trimmedFraction.endsWith('0')) {
+      trimmedFraction = trimmedFraction.slice(0, -1);
+    }
+    return trimmedFraction.length > 0 ? `${whole}.${trimmedFraction}` : whole;
+  };
+
+  let minFractionDigits = 0;
+  let maxFractionDigits = 0;
+  if (pricePerMillion >= 100) {
+    minFractionDigits = 0;
+    maxFractionDigits = 0;
+  } else if (pricePerMillion >= 10) {
+    minFractionDigits = 1;
+    maxFractionDigits = 1;
+  } else if (pricePerMillion >= 1) {
+    minFractionDigits = 2;
+    maxFractionDigits = 2;
+  } else if (pricePerMillion >= 0.1) {
+    minFractionDigits = 2;
+    maxFractionDigits = 3;
+  } else if (pricePerMillion >= 0.01) {
+    minFractionDigits = 2;
+    maxFractionDigits = 4;
+  } else {
+    minFractionDigits = 2;
+    maxFractionDigits = 6;
+  }
+  const fixed = pricePerMillion.toFixed(maxFractionDigits);
+  const normalized = trimFractionDigits(fixed, minFractionDigits);
+  return `$${normalized}/M`;
+};
+
 const formatProviderPrice = (value?: number | string | null): string => {
-  if (value === null || value === undefined || value === '') {
-    return '—';
-  }
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      return '—';
-    }
-    const formatted = value >= 1 ? value.toFixed(2) : value.toPrecision(2);
-    return `$${formatted}`;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '—';
-  }
-  if (/^[0-9.]+$/.test(trimmed)) {
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric)) {
-      const formatted = numeric >= 1 ? numeric.toFixed(2) : numeric.toPrecision(2);
-      return `$${formatted}`;
-    }
-  }
-  return trimmed;
+  return formatPricePerMillion(value) ?? '—';
 };
 
 const formatUptimePercentage = (value?: number | null): string => {
@@ -1591,19 +1628,7 @@ export default function ChatStudioExperience() {
 
   const renderModelSelector = () => {
     const visibleModels = filteredModelCatalog.slice(0, 50);
-    const formatCost = (value?: number | string | null) => {
-      if (value === null || value === undefined) {
-        return null;
-      }
-      if (typeof value === 'number') {
-        return value.toLocaleString(undefined, {
-          minimumFractionDigits: 4,
-          maximumFractionDigits: 6,
-        });
-      }
-      const trimmed = String(value).trim();
-      return trimmed || null;
-    };
+    const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
 
     return (
       <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -1886,8 +1911,20 @@ export default function ChatStudioExperience() {
             : 'border-white/10 bg-white/5 text-slate-200 hover:border-white/40',
         );
       const cardKey = `${slug}-${endpoint.provider_name ?? 'unknown'}-${endpoint.tag ?? 'default'}-${position}`;
+      const quantizationLabel =
+        typeof endpoint.quantization === 'string'
+          ? endpoint.quantization?.toUpperCase()
+          : endpoint.quantization && typeof endpoint.quantization === 'object'
+            ? Object.values(endpoint.quantization)
+                .filter(Boolean)
+                .map((value) => String(value))
+                .join(', ')
+            : null;
       return (
-        <div key={cardKey} className="space-y-3 rounded-2xl border border-white/10 bg-black/40 p-3">
+        <div
+          key={cardKey}
+          className="space-y-4 rounded-2xl border border-white/10 bg-gradient-to-b from-black/60 to-black/30 p-4"
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-sm text-white">{slug}</p>
@@ -1906,28 +1943,34 @@ export default function ChatStudioExperience() {
                   Cache
                 </span>
               )}
+              {quantizationLabel && (
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-100">
+                  {quantizationLabel}
+                </span>
+              )}
             </div>
           </div>
-          <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/5 bg-black/30 p-2">
+          <div className="grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+            <div className="rounded-xl border border-white/5 bg-black/40 p-3">
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Prompt</p>
-              <p className="text-white">{promptPrice}</p>
+              <p className="text-lg font-semibold text-white">{promptPrice}</p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-black/30 p-2">
+            <div className="rounded-xl border border-white/5 bg-black/40 p-3">
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Completion</p>
-              <p className="text-white">{completionPrice}</p>
+              <p className="text-lg font-semibold text-white">{completionPrice}</p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-black/30 p-2">
+            <div className="rounded-xl border border-white/5 bg-black/40 p-3">
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Capacity</p>
-              <p className="text-white">
+              <p className="text-lg font-semibold text-white">
                 {maxTokens ? `${Math.round(maxTokens).toLocaleString()} tokens` : '—'}
               </p>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                {parameterCount} params
-              </p>
+            </div>
+            <div className="rounded-xl border border-white/5 bg-black/40 p-3">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Supported params</p>
+              <p className="text-lg font-semibold text-white">{parameterCount}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 text-center text-xs uppercase tracking-[0.3em] text-white sm:grid-cols-3">
             <button
               type="button"
               className={actionClasses(orderActive)}
@@ -2840,7 +2883,7 @@ return (
             </div>
 
             {telemetryOpen && (
-              <aside className="hidden h-full w-80 flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
+              <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
                 {renderTelemetry()}
               </aside>
             )}
