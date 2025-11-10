@@ -382,10 +382,10 @@ const formatPricePerMillion = (value?: number | string | null): string | null =>
     typeof value === 'number'
       ? value
       : Number(
-          String(value)
-            .trim()
-            .replace(/[^0-9eE.+-]/g, ''),
-        );
+        String(value)
+          .trim()
+          .replace(/[^0-9eE.+-]/g, ''),
+      );
   if (!Number.isFinite(raw)) {
     const fallback = String(value).trim();
     return fallback || null;
@@ -481,7 +481,7 @@ const createDefaultProviderForm = (): ProviderFormState => ({
   ignore: [],
   quantizations: [],
   allowFallbacks: true,
-  requireParameters: true,
+  requireParameters: false,
   dataCollection: 'allow',
   zdr: false,
   enforceDistillableText: false,
@@ -1783,11 +1783,10 @@ export default function ChatStudioExperience() {
       normalizedSearch.length === 0
         ? endpoints
         : endpoints.filter((endpoint) => {
-            const haystack = `${endpoint.name} ${endpoint.provider_name ?? ''} ${
-              endpoint.tag ?? ''
+          const haystack = `${endpoint.name} ${endpoint.provider_name ?? ''} ${endpoint.tag ?? ''
             }`.toLowerCase();
-            return haystack.includes(normalizedSearch);
-          });
+          return haystack.includes(normalizedSearch);
+        });
     const visibleEndpoints = [...filteredEndpoints].sort((a, b) => {
       const providerCompare = (a.provider_name || '').localeCompare(b.provider_name || '');
       if (providerCompare !== 0) {
@@ -1919,9 +1918,9 @@ export default function ChatStudioExperience() {
           ? endpoint.quantization?.toUpperCase()
           : endpoint.quantization && typeof endpoint.quantization === 'object'
             ? Object.values(endpoint.quantization)
-                .filter(Boolean)
-                .map((value) => String(value))
-                .join(', ')
+              .filter(Boolean)
+              .map((value) => String(value))
+              .join(', ')
             : null;
       return (
         <div
@@ -2373,17 +2372,16 @@ export default function ChatStudioExperience() {
         );
         if (assistantSegments.length > 0) {
           bubbles.push(
-            <div
-              key={`${message.id}-assistant-reasoning`}
-              className={cn('rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
+            <div key={`${message.id}-assistant-reasoning`} className="flex justify-start">
+              <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
+                </div>
+                <CollapsibleReasoning
+                  segments={assistantSegments}
+                  messageId={`${message.id}-assistant-reasoning`}
+                />
               </div>
-              <CollapsibleReasoning
-                segments={assistantSegments}
-                messageId={`${message.id}-assistant-reasoning`}
-              />
             </div>,
           );
         }
@@ -2397,16 +2395,15 @@ export default function ChatStudioExperience() {
         const toolLabel = trace?.name || message.tool_name || 'Tool';
         if (toolSegments.length > 0) {
           bubbles.push(
-            <div
-              key={`${message.id}-tool-reasoning`}
-              className={cn('rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-                  Reasoning • {toolLabel}
-                </p>
+            <div key={`${message.id}-tool-reasoning`} className="flex justify-start">
+              <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                    Reasoning • {toolLabel}
+                  </p>
+                </div>
+                <CollapsibleReasoning segments={toolSegments} messageId={`${message.id}-tool-reasoning`} />
               </div>
-              <CollapsibleReasoning segments={toolSegments} messageId={`${message.id}-tool-reasoning`} />
             </div>,
           );
         }
@@ -2414,35 +2411,34 @@ export default function ChatStudioExperience() {
         const payloadRecord: Record<string, unknown> = trace
           ? { arguments: trace.arguments, response: trace.response }
           : coerceRecord(
-              (message.tool_payload as Record<string, unknown> | null) ??
-                safeParseJSON(message.content) ??
-                {},
-            );
+            (message.tool_payload as Record<string, unknown> | null) ??
+            safeParseJSON(message.content) ??
+            {},
+          );
         const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
         const responseRecord = coerceRecord(payloadRecord.response ?? payloadRecord);
         bubbles.push(
-          <div
-            key={`${message.id}-tool`}
-            className={cn('rounded-2xl border px-4 py-3 text-sm', roleVariants.tool)}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-                Tool Call • {toolLabel}
-              </p>
-            </div>
-            {Object.keys(argsRecord).length > 0 && (
-              <div className="mb-3 space-y-1">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Arguments</p>
-                <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs text-cyan-100">
-                  {JSON.stringify(argsRecord, null, 2)}
+          <div key={`${message.id}-tool`} className="flex justify-start">
+            <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.tool)}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                  Tool Call • {toolLabel}
+                </p>
+              </div>
+              {Object.keys(argsRecord).length > 0 && (
+                <div className="mb-3 space-y-1">
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Arguments</p>
+                  <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs text-cyan-100">
+                    {JSON.stringify(argsRecord, null, 2)}
+                  </pre>
+                </div>
+              )}
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Response</p>
+                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-100">
+                  {JSON.stringify(responseRecord, null, 2)}
                 </pre>
               </div>
-            )}
-            <div className="space-y-1">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Response</p>
-              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-100">
-                {JSON.stringify(responseRecord, null, 2)}
-              </pre>
             </div>
           </div>,
         );
@@ -2450,74 +2446,76 @@ export default function ChatStudioExperience() {
       }
 
       bubbles.push(
-        <div key={message.id} className={cn('rounded-2xl border px-4 py-3 text-sm', variant)}>
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-              {message.role.toUpperCase()}
-              {message.tool_name ? ` • ${message.tool_name}` : ''}
-            </p>
-            {showActions && (
-              <div className="flex items-center gap-2 text-[11px] text-slate-300">
-                {isUser && (
-                  <button
+        <div key={message.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+          <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', variant)}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                {message.role.toUpperCase()}
+                {message.tool_name ? ` • ${message.tool_name}` : ''}
+              </p>
+              {showActions && (
+                <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                  {isUser && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
+                      onClick={() => {
+                        setEditingMessageId(message.id);
+                        setEditingDraft(message.content);
+                      }}
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  )}
+                  {isAssistant && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
+                      onClick={() => handleRetryAssistant(message.id)}
+                      disabled={sending}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Retry
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {isUser && editingMessageId === message.id ? (
+              <div className="space-y-2">
+                <textarea
+                  className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                  value={editingDraft}
+                  onChange={(event) => setEditingDraft(event.target.value)}
+                />
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={handleEditSubmit} loading={sending}>
+                    Update & rerun
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
                     onClick={() => {
-                      setEditingMessageId(message.id);
-                      setEditingDraft(message.content);
+                      setEditingMessageId(null);
+                      setEditingDraft('');
                     }}
                   >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Edit
-                  </button>
-                )}
-                {isAssistant && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 hover:border-white/30 hover:text-white"
-                    onClick={() => handleRetryAssistant(message.id)}
-                    disabled={sending}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Retry
-                  </button>
-                )}
+                    Cancel
+                  </Button>
+                </div>
               </div>
+            ) : message.role === 'assistant' ? (
+              <div className="space-y-3">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {displayedContent}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayedContent}</p>
             )}
           </div>
-          {isUser && editingMessageId === message.id ? (
-            <div className="space-y-2">
-              <textarea
-                className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
-                value={editingDraft}
-                onChange={(event) => setEditingDraft(event.target.value)}
-              />
-              <div className="flex items-center gap-3">
-                <Button size="sm" onClick={handleEditSubmit} loading={sending}>
-                  Update & rerun
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  type="button"
-                  onClick={() => {
-                    setEditingMessageId(null);
-                    setEditingDraft('');
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : message.role === 'assistant' ? (
-            <div className="space-y-3">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {displayedContent}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{displayedContent}</p>
-          )}
         </div>,
       );
 
@@ -2614,9 +2612,9 @@ export default function ChatStudioExperience() {
     const usageCostLabel =
       usage?.cost != null
         ? `$${usage.cost.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 6,
-          })}`
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 6,
+        })}`
         : '—';
 
     const usageDescription = contextWindow
@@ -2765,7 +2763,7 @@ export default function ChatStudioExperience() {
     );
   };
 
-return (
+  return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
@@ -2856,8 +2854,8 @@ return (
               </div>
 
               <div className="flex h-full flex-col min-h-0 overflow-hidden">
-                <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
-                  <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
+                <div className="flex-1 min-h-0 overflow-y-auto px-16 py-6">
+                  <div className="flex h-full flex-col gap-4">
                     {renderMessages()}
                     <div ref={endRef} />
                   </div>
