@@ -18,6 +18,7 @@ from app.schemas.chat import (
     ToolCallTrace,
 )
 from app.services.openrouter import get_openrouter_client
+from app.services.prompts import render_system_prompt
 from app.services.retrieval import RetrievalService
 from app.utils.time import utc_now
 
@@ -601,27 +602,6 @@ class ChatService:
             residual_segments.extend(pending_context)
         return tool_calls, context, residual_segments
 
-    def _system_prompt(self, collection: models.Collection) -> str:
-        metadata_lines = [f"- Collection: {collection.name}", f"- Description: {collection.description or 'N/A'}"]
-        strategy = (
-            collection.chunk_strategy.value
-            if isinstance(collection.chunk_strategy, models.ChunkStrategy)
-            else str(collection.chunk_strategy)
-        )
-        metadata_lines.append(f"- Chunking: {strategy} ({collection.chunk_size}/{collection.chunk_overlap})")
-        metadata_lines.append(f"- Context window: {collection.context_window} tokens")
-        metadata_lines.append(
-            "- Always transparently describe the context you used, "
-            "the provider/model, and any tool calls you triggered."
-        )
-        metadata_lines.append("- Only use the pinecone_query tool for grounded responses.")
-        return (
-            "You are TransparentRAG, a Retrieval-Augmented assistant. "
-            "Prioritize transparency and cite the retrieved chunks you rely on. "
-            "Dataset metadata:\n"
-            + "\n".join(metadata_lines)
-        )
-
     def _tool_spec(self, collection: models.Collection) -> List[Dict[str, object]]:
         return [
             {
@@ -850,7 +830,8 @@ class ChatService:
             raise ValueError("This collection does not have a chat model configured.")
 
         history = self.chat_repo.list_messages(session_model.id)
-        messages = [{"role": "system", "content": self._system_prompt(collection)}]
+        system_prompt = render_system_prompt(collection, user)
+        messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(self._serialize_message(msg))
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -48,3 +48,21 @@ class CollectionRead(DateTimeConfigMixin, CollectionBase):
 
 class CollectionDeleteResponse(BaseModel):
     status: str = "deleted"
+
+
+class PromptVariable(BaseModel):
+    name: str
+    description: str
+    example: Optional[str] = None
+
+
+class CollectionPromptRead(BaseModel):
+    template: str
+    rendered: str
+    context: Dict[str, str]
+    variables: List[PromptVariable]
+    is_custom: bool = False
+
+
+class CollectionPromptUpdate(BaseModel):
+    template: Optional[str] = None

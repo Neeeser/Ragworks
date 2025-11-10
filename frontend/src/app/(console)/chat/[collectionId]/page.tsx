@@ -1,6 +1,15 @@
 'use client';
 
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,6 +22,7 @@ import {
   ChevronRight,
   Edit3,
   MessageCircle,
+  NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -23,6 +33,7 @@ import {
   Share2,
   SlidersHorizontal,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { Components } from 'react-markdown';
 
@@ -37,9 +48,11 @@ import {
   fetchCollections,
   fetchDocuments,
   getChatHistory,
+  getCollectionPrompt,
   listChatSessions,
   listModelEndpoints,
   listModels,
+  updateCollectionPrompt,
 } from '@/lib/api';
 import type {
   ChatCompletionPayload,
@@ -47,6 +60,7 @@ import type {
   ChatRequestPayload,
   ChatSession,
   Collection,
+  CollectionPromptDetails,
   ModelEndpointDirectory,
   ModelInfo,
   ProviderEndpoint,
@@ -354,6 +368,364 @@ const coerceRecord = (value: unknown): Record<string, unknown> => {
   return { value };
 };
 
+const formatKeyLabel = (key: string): string => {
+  return key
+    .split(/[\s._-]+/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+};
+
+const truncateText = (value: string, limit = 360): string => {
+  const trimmed = value.trim();
+  if (trimmed.length <= limit) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, limit)}…`;
+};
+
+const formatToolLabel = (label: string): string => {
+  if (!label) return 'Tool';
+  const friendly = label
+    .split(/[_-]+/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+  return friendly || 'Tool';
+};
+
+const stringifyData = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+interface JsonBlockProps {
+  data: unknown;
+  className?: string;
+  maxHeight?: number;
+}
+
+const JsonBlock = ({ data, className, maxHeight = 240 }: JsonBlockProps) => (
+  <pre
+    style={{ maxHeight }}
+    className={cn(
+      'overflow-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-950/40 p-3 text-xs text-slate-100',
+      className,
+    )}
+  >
+    {stringifyData(data)}
+  </pre>
+);
+
+interface ToolValueProps {
+  value: unknown;
+}
+
+const ToolValue = ({ value }: ToolValueProps) => {
+  if (value === null || value === undefined) {
+    return <span className="text-slate-400">N/A</span>;
+  }
+  if (typeof value === 'string') {
+    return <span className="font-medium text-white">{value}</span>;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return (
+      <code className="rounded bg-white/10 px-1 py-0.5 text-xs text-cyan-200">
+        {String(value)}
+      </code>
+    );
+  }
+  if (Array.isArray(value)) {
+    const primitiveItems = value.every(
+      (item) =>
+        item === null ||
+        item === undefined ||
+        typeof item === 'string' ||
+        typeof item === 'number' ||
+        typeof item === 'boolean',
+    );
+    if (primitiveItems) {
+      return (
+        <ul className="list-disc space-y-1 pl-5 text-slate-100">
+          {value.map((item, index) => (
+            <li key={`tool-value-${index}`}>{String(item ?? 'N/A')}</li>
+          ))}
+        </ul>
+      );
+    }
+    return <JsonBlock data={value} />;
+  }
+  if (typeof value === 'object') {
+    return <JsonBlock data={value} />;
+  }
+  return <span className="text-white">{String(value)}</span>;
+};
+
+interface ToolKeyValueGridProps {
+  data: Record<string, unknown>;
+  emptyLabel?: string;
+}
+
+const ToolKeyValueGrid = ({ data, emptyLabel = 'No data available.' }: ToolKeyValueGridProps) => {
+  const entries = Object.entries(data).filter((entry) => {
+    const value = entry[1];
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return true;
+  });
+
+  if (entries.length === 0) {
+    return <p className="text-xs text-slate-400">{emptyLabel}</p>;
+  }
+
+  return (
+    <dl className="grid gap-3 text-left sm:grid-cols-2">
+      {entries.map(([key, value]) => (
+        <div
+          key={key}
+          className="rounded-2xl border border-white/10 bg-slate-950/30 p-3"
+        >
+          <dt className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+            {formatKeyLabel(key)}
+          </dt>
+          <dd className="mt-1 text-sm">
+            <ToolValue value={value} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+};
+
+interface ToolPayloadSectionProps {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+}
+
+const ToolPayloadSection = ({
+  title,
+  description,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+}: ToolPayloadSectionProps) => {
+  const [open, setOpen] = useState(defaultOpen);
+
+  if (!collapsible) {
+    return (
+      <section className="space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <header>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-slate-300">{title}</p>
+          {description && <p className="text-xs text-slate-400">{description}</p>}
+        </header>
+        {children}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+      >
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-slate-300">{title}</p>
+          {description && <p className="text-xs text-slate-400">{description}</p>}
+        </div>
+        <ChevronDown className={cn('h-4 w-4 text-slate-200 transition', open ? 'rotate-180' : '')} />
+      </button>
+      {open && <div>{children}</div>}
+    </section>
+  );
+};
+
+interface ToolChunkListProps {
+  chunks: unknown[];
+}
+
+const ToolChunkList = ({ chunks }: ToolChunkListProps) => {
+  const normalized = chunks
+    .map((chunk) => (chunk && typeof chunk === 'object' ? (chunk as Record<string, unknown>) : null))
+    .filter(Boolean) as Record<string, unknown>[];
+
+  if (normalized.length === 0) {
+    return <p className="text-xs text-slate-400">No chunk data returned.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {normalized.map((chunk, index) => {
+        const chunkId = (chunk.chunk_id as string) || (chunk.id as string) || `chunk-${index + 1}`;
+        const documentId = (chunk.document_id as string) ?? chunk.documentId;
+        const order = typeof chunk.order === 'number' ? chunk.order : null;
+        const score =
+          typeof chunk.score === 'number'
+            ? chunk.score
+            : typeof chunk.score === 'string'
+              ? Number(chunk.score)
+              : null;
+        const textValue = typeof chunk.text === 'string' ? chunk.text : null;
+        const metadata =
+          chunk.metadata && typeof chunk.metadata === 'object'
+            ? (chunk.metadata as Record<string, unknown>)
+            : null;
+
+        return (
+          <article
+            key={`${chunkId}-${index}`}
+            className="rounded-2xl border border-white/10 bg-slate-950/40 p-4"
+          >
+            <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-slate-400">
+              <span>Chunk {index + 1}</span>
+              {Number.isFinite(score) && (
+                <span className="font-mono text-cyan-200">
+                  Score {Number(score).toFixed(3)}
+                </span>
+              )}
+            </div>
+            {textValue && (
+              <p className="mt-2 text-sm text-slate-100">{truncateText(textValue)}</p>
+            )}
+            <dl className="mt-3 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
+              {documentId && (
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Document</dt>
+                  <dd className="font-mono text-slate-100">{documentId}</dd>
+                </div>
+              )}
+              {chunkId && (
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Chunk ID</dt>
+                  <dd className="font-mono text-slate-100 break-all">{chunkId}</dd>
+                </div>
+              )}
+              {Number.isFinite(order) && (
+                <div>
+                  <dt className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Order</dt>
+                  <dd className="font-mono text-slate-100">{order}</dd>
+                </div>
+              )}
+            </dl>
+            {metadata && Object.keys(metadata).length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Metadata</p>
+                <JsonBlock data={metadata} maxHeight={180} className="mt-1" />
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+};
+
+interface ToolCallBubbleProps {
+  label: string;
+  variantClass: string;
+  args: Record<string, unknown>;
+  response: Record<string, unknown>;
+  rawPayload: Record<string, unknown>;
+}
+
+const ToolCallBubble = ({ label, variantClass, args, response, rawPayload }: ToolCallBubbleProps) => {
+  const responseMeta: Record<string, unknown> = { ...response };
+  const rawChunks = responseMeta.chunks;
+  if (Object.prototype.hasOwnProperty.call(responseMeta, 'chunks')) {
+    delete responseMeta.chunks;
+  }
+  const chunkList = Array.isArray(rawChunks) ? rawChunks : null;
+  const hasResponseMeta = Object.keys(responseMeta).length > 0;
+
+  const chunkPreview = chunkList?.find(
+    (chunk) => chunk && typeof chunk === 'object' && typeof (chunk as Record<string, unknown>).text === 'string',
+  ) as Record<string, unknown> | undefined;
+  const chunkPreviewText = chunkPreview?.text as string | undefined;
+  const summary =
+    (typeof args.query === 'string' && args.query.trim()) ||
+    (typeof responseMeta.query === 'string' && responseMeta.query.trim()) ||
+    (chunkPreviewText ? truncateText(chunkPreviewText, 120) : null) ||
+    'View tool output';
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="flex justify-start">
+      <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', variantClass)}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200">Tool Call</p>
+            <p className="text-base font-semibold text-white">{formatToolLabel(label)}</p>
+          </div>
+          <span className="rounded-full border border-cyan-300/40 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-cyan-200">
+            Complete
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="mt-3 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-slate-200 transition hover:border-cyan-300/40"
+          aria-expanded={expanded}
+        >
+          <div className="flex-1 pr-3">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Summary</p>
+            <p className="line-clamp-2 text-sm text-white">{summary}</p>
+          </div>
+          <ChevronDown className={cn('h-4 w-4 text-cyan-200 transition', expanded ? 'rotate-180' : '')} />
+        </button>
+        {expanded && (
+          <div className="mt-4 space-y-4">
+            <ToolPayloadSection title="Invocation" description="Parameters sent with this call.">
+              <ToolKeyValueGrid data={args} emptyLabel="No arguments were provided." />
+            </ToolPayloadSection>
+            {chunkList && chunkList.length > 0 ? (
+              <>
+                <ToolPayloadSection
+                  title={`Retrieved chunks (${chunkList.length})`}
+                  description="Top matches returned by the retriever."
+                  collapsible
+                  defaultOpen={false}
+                >
+                  <ToolChunkList chunks={chunkList} />
+                </ToolPayloadSection>
+                {hasResponseMeta && (
+                  <ToolPayloadSection title="Response metadata" collapsible defaultOpen={false}>
+                    <ToolKeyValueGrid data={responseMeta} emptyLabel="No metadata returned." />
+                  </ToolPayloadSection>
+                )}
+              </>
+            ) : (
+              <ToolPayloadSection title="Response" collapsible defaultOpen={false}>
+                <ToolKeyValueGrid data={responseMeta} emptyLabel="Tool did not return structured data." />
+              </ToolPayloadSection>
+            )}
+            <details className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-100">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-100">
+                Raw payload
+              </summary>
+              <JsonBlock data={rawPayload} className="mt-3" />
+            </details>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const QUANTIZATION_OPTIONS = [
   'int4',
   'int8',
@@ -561,16 +933,6 @@ const usageMetrics: { key: keyof UsageBreakdown; label: string }[] = [
   { key: 'reasoning_tokens', label: 'Reasoning tokens' },
 ];
 
-const getLatestAssistantUsage = (items: ChatMessage[]): UsageBreakdown | null => {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const message = items[index];
-    if (message.role === 'assistant' && message.usage) {
-      return message.usage;
-    }
-  }
-  return null;
-};
-
 const calculateSessionUsage = (items: ChatMessage[]): UsageBreakdown | null => {
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
@@ -719,6 +1081,7 @@ export default function ChatStudioExperience() {
     'chat.telemetry.modelsOpen',
     true,
   );
+  const [systemPromptOpen, setSystemPromptOpen] = usePersistentToggle('chat.telemetry.promptOpen', true);
   const [vitalsOpen, setVitalsOpen] = usePersistentToggle('chat.telemetry.vitalsOpen', true);
   const [usageOpen, setUsageOpen] = usePersistentToggle('chat.telemetry.usageOpen', true);
   const [modelParametersOpen, setModelParametersOpen] = usePersistentToggle(
@@ -740,8 +1103,15 @@ export default function ChatStudioExperience() {
   const [providerDirectoryLoading, setProviderDirectoryLoading] = useState(false);
   const [providerDirectoryError, setProviderDirectoryError] = useState<string | null>(null);
   const [providerSearchTerm, setProviderSearchTerm] = useState('');
+  const [promptDetails, setPromptDetails] = useState<CollectionPromptDetails | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptSaving, setPromptSaving] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
   const activePollingSession = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
@@ -837,6 +1207,39 @@ export default function ChatStudioExperience() {
       cancelled = true;
     };
   }, [authToken, collectionId, sortSessions]);
+
+  useEffect(() => {
+    if (!authToken || !collectionId) {
+      setPromptDetails(null);
+      setPromptDraft('');
+      return;
+    }
+    let cancelled = false;
+    async function loadPrompt() {
+      setPromptLoading(true);
+      setPromptError(null);
+      try {
+        const details = await getCollectionPrompt(collectionId, authToken);
+        if (cancelled) return;
+        setPromptDetails(details);
+        if (!promptEditorOpen) {
+          setPromptDraft(details.template ?? '');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPromptError(error instanceof Error ? error.message : 'Unable to load system prompt.');
+        }
+      } finally {
+        if (!cancelled) {
+          setPromptLoading(false);
+        }
+      }
+    }
+    loadPrompt();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, collectionId, promptEditorOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1237,6 +1640,36 @@ export default function ChatStudioExperience() {
     [activeModelId, collection?.chat_model],
   );
 
+  const substitutePromptVariables = useCallback(
+    (templateValue: string) => {
+      if (!templateValue) return '';
+      if (!promptDetails) return templateValue;
+      return templateValue.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, rawKey) => {
+        const key = String(rawKey).trim();
+        return promptDetails.context?.[key] ?? `{{${key}}}`;
+      });
+    },
+    [promptDetails],
+  );
+
+  const promptPreviewMarkdown = useMemo(() => {
+    if (promptDraft) {
+      return substitutePromptVariables(promptDraft);
+    }
+    if (promptDetails?.template) {
+      return substitutePromptVariables(promptDetails.template);
+    }
+    return promptDetails?.rendered ?? '';
+  }, [promptDraft, promptDetails, substitutePromptVariables]);
+
+  const promptHasChanges = useMemo(() => {
+    if (!promptDetails) {
+      return Boolean(promptDraft);
+    }
+    const original = promptDetails.template ?? '';
+    return promptDraft !== original;
+  }, [promptDetails, promptDraft]);
+
 
   const applyChatResponse = useCallback(
     (response: ChatCompletionPayload) => {
@@ -1389,6 +1822,69 @@ export default function ChatStudioExperience() {
     setEditingDraft('');
     setOptimisticMessages([]);
   };
+
+  const handlePromptEditorOpen = useCallback(() => {
+    if (promptDetails) {
+      setPromptDraft(promptDetails.template ?? '');
+    }
+    setPromptEditorOpen(true);
+    window.setTimeout(() => {
+      promptEditorRef.current?.focus();
+    }, 20);
+  }, [promptDetails]);
+
+  const handlePromptEditorClose = useCallback(() => {
+    setPromptEditorOpen(false);
+  }, []);
+
+  const handleInsertPromptVariable = useCallback((variableName: string) => {
+    const insertion = `{{${variableName}}}`;
+    setPromptDraft((prev) => {
+      const textarea = promptEditorRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart ?? prev.length;
+        const end = textarea.selectionEnd ?? prev.length;
+        const next = prev.slice(0, start) + insertion + prev.slice(end);
+        window.requestAnimationFrame(() => {
+          const cursor = start + insertion.length;
+          textarea.selectionStart = cursor;
+          textarea.selectionEnd = cursor;
+          textarea.focus();
+        });
+        return next;
+      }
+      const spacer = prev.endsWith(' ') || prev.endsWith('\n') || prev.length === 0 ? '' : ' ';
+      return `${prev}${spacer}${insertion}`;
+    });
+  }, []);
+
+  const handlePromptReset = useCallback(() => {
+    setPromptDraft('');
+    window.requestAnimationFrame(() => {
+      promptEditorRef.current?.focus();
+    });
+  }, []);
+
+  const handlePromptSave = useCallback(async () => {
+    if (!authToken || !collectionId) {
+      setPromptError('Sign in to update the system prompt.');
+      return;
+    }
+    setPromptSaving(true);
+    setPromptError(null);
+    try {
+      const updated = await updateCollectionPrompt(collectionId, promptDraft, authToken);
+      setPromptDetails(updated);
+      setPromptDraft(updated.template ?? '');
+      setPromptEditorOpen(false);
+    } catch (error) {
+      setPromptError(
+        error instanceof Error ? error.message : 'Unable to update the system prompt right now.',
+      );
+    } finally {
+      setPromptSaving(false);
+    }
+  }, [authToken, collectionId, promptDraft]);
 
   const handleDeleteSession = async (sessionId: string) => {
     if (!authToken) return;
@@ -2463,39 +2959,30 @@ export default function ChatStudioExperience() {
           );
         }
 
-        const payloadRecord: Record<string, unknown> = trace
-          ? { arguments: trace.arguments, response: trace.response }
-          : coerceRecord(
-            (message.tool_payload as Record<string, unknown> | null) ??
-            safeParseJSON(message.content) ??
-            {},
-          );
+        const rawPayload =
+          (message.tool_payload as Record<string, unknown> | null) ??
+          safeParseJSON(message.content) ??
+          {};
+        const payloadRecord: Record<string, unknown> = {
+          ...coerceRecord(rawPayload),
+          ...(trace
+            ? {
+                arguments: trace.arguments,
+                response: trace.response,
+              }
+            : {}),
+        };
         const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
         const responseRecord = coerceRecord(payloadRecord.response ?? payloadRecord);
         bubbles.push(
-          <div key={`${message.id}-tool`} className="flex justify-start">
-            <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.tool)}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-                  Tool Call • {toolLabel}
-                </p>
-              </div>
-              {Object.keys(argsRecord).length > 0 && (
-                <div className="mb-3 space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Arguments</p>
-                  <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs text-cyan-100">
-                    {JSON.stringify(argsRecord, null, 2)}
-                  </pre>
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Response</p>
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-100">
-                  {JSON.stringify(responseRecord, null, 2)}
-                </pre>
-              </div>
-            </div>
-          </div>,
+          <ToolCallBubble
+            key={`${message.id}-tool`}
+            label={toolLabel}
+            variantClass={roleVariants.tool}
+            args={argsRecord}
+            response={responseRecord}
+            rawPayload={payloadRecord}
+          />,
         );
         return bubbles;
       }
@@ -2732,6 +3219,66 @@ export default function ChatStudioExperience() {
         </div>
         <div className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto">
           <TelemetrySection
+            title="System prompt"
+            description={
+              promptLoading
+                ? 'Loading prompt...'
+                : promptDetails
+                  ? promptDetails.is_custom
+                    ? 'Custom template active'
+                    : 'Using default template'
+                  : promptError || 'Define per-collection instructions'
+            }
+            icon={<NotebookPen className="h-4 w-4 text-amber-300" />}
+            isOpen={systemPromptOpen}
+            onToggle={() => setSystemPromptOpen((prev) => !prev)}
+          >
+            {promptLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader className="h-5 w-5 text-slate-400" />
+              </div>
+            ) : promptError ? (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+                {promptError}
+              </div>
+            ) : promptDetails ? (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">
+                  Prompt renders with collection metadata and user context. Click any variable in the
+                  editor to inject placeholders like{' '}
+                  <code className="rounded bg-white/10 px-1 text-[11px] text-violet-200">
+                    {'{{collection.name}}'}
+                  </code>
+                  .
+                </p>
+                <div className="max-h-48 overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-sm">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {promptDetails.rendered}
+                  </ReactMarkdown>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                  <span>
+                    Generated for{' '}
+                    <strong className="text-white">{promptDetails.context?.['datetime.iso']}</strong>
+                  </span>
+                  <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] uppercase tracking-[0.25em] text-slate-300">
+                    {promptDetails.is_custom ? 'Custom template' : 'Default'}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={handlePromptEditorOpen}
+                  >
+                    Edit prompt
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">Prompt details unavailable.</p>
+            )}
+          </TelemetrySection>
+          <TelemetrySection
             title="Model routing"
             description={
               currentModelInfo?.name || selectedModelKey || 'Select a tool-enabled model'
@@ -2856,42 +3403,194 @@ export default function ChatStudioExperience() {
     );
   };
 
-  return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Chat studio</p>
-            <h1 className="text-3xl font-semibold text-white min-w-0 truncate">
-              {collection ? collection.name : 'Loading collection…'}
-            </h1>
-          </div>
-          {collection && headerDescription && (
-            <p
-              className="text-sm text-slate-400 break-words"
-              style={{ maxWidth: 'clamp(18rem, 50vw, 40rem)' }}
+  const renderPromptEditorOverlay = () => {
+    if (!promptEditorOpen || !promptDetails) {
+      return null;
+    }
+    const variables = promptDetails.variables ?? [];
+    const contextEntries = Object.entries(promptDetails.context ?? {});
+    const previewSource = promptPreviewMarkdown?.trim()
+      ? promptPreviewMarkdown
+      : '_No content yet._';
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          onClick={handlePromptEditorClose}
+        />
+        <div className="relative z-10 flex h-[85vh] w-full max-w-6xl flex-col rounded-3xl border border-white/10 bg-slate-950/95 p-6 text-white shadow-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-500">System prompt</p>
+              <h2 className="text-2xl font-semibold text-white">Edit collection instructions</h2>
+              <p className="text-sm text-slate-400">
+                Craft Markdown guidance for this collection. Variables inject metadata, letting the
+                prompt stay fresh as the context changes.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 p-0 text-slate-300"
+              onClick={handlePromptEditorClose}
             >
-              {headerDescription}
-            </p>
-          )}
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mt-5 flex flex-1 flex-col gap-4 overflow-y-auto">
+            <div className="flex flex-col gap-4 lg:flex-row">
+              <div className="flex w-full flex-1 flex-col rounded-2xl border border-white/10 bg-black/30 p-4 lg:w-1/2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-white" htmlFor="system-prompt-editor">
+                    Markdown template
+                  </label>
+                  <button
+                    type="button"
+                    className="text-xs text-violet-300 hover:text-violet-200"
+                    onClick={handlePromptReset}
+                  >
+                    Revert to default
+                  </button>
+                </div>
+                <textarea
+                  id="system-prompt-editor"
+                  ref={promptEditorRef}
+                  className="mt-3 min-h-[300px] flex-1 resize-none rounded-2xl border border-white/15 bg-black/60 px-4 py-3 font-mono text-sm text-white outline-none focus:border-violet-400"
+                  value={promptDraft}
+                  onChange={(event) => setPromptDraft(event.target.value)}
+                  placeholder="Write instructions with Markdown. Use {{collection.name}} style variables."
+                />
+                <p className="mt-3 text-xs text-slate-500">
+                  Leave blank to fall back to the default prompt shipped with TransparentRAG.
+                </p>
+              </div>
+              <div className="flex w-full flex-1 flex-col rounded-2xl border border-white/10 bg-black/30 p-4 lg:w-1/2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white">Rendered preview</p>
+                  <span className="text-xs text-slate-500">
+                    {promptDetails.is_custom ? 'Custom template' : 'Default template'}
+                  </span>
+                </div>
+                <div className="mt-3 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-4">
+                  <div className="prose prose-invert max-w-none text-sm leading-relaxed">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      {previewSource}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Variables</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Click a variable to insert it at the cursor. Each one renders with current metadata.
+                </p>
+                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
+                  {variables.map((variable) => (
+                    <button
+                      key={variable.name}
+                      type="button"
+                      className="w-full rounded-2xl border border-white/5 bg-black/30 px-3 py-2 text-left transition hover:border-violet-400/60 hover:bg-black/60"
+                      onClick={() => handleInsertPromptVariable(variable.name)}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <code className="rounded bg-white/10 px-2 py-0.5 text-[12px] text-violet-200">
+                          {`{{${variable.name}}}`}
+                        </code>
+                        {variable.example && (
+                          <span className="text-[11px] text-slate-500">
+                            Example: <span className="text-slate-300">{variable.example}</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-300">{variable.description}</p>
+                    </button>
+                  ))}
+                  {variables.length === 0 && (
+                    <p className="text-sm text-slate-500">No template variables available.</p>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Example context</p>
+                <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1 text-xs">
+                  {contextEntries.map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="flex items-start justify-between gap-3 border-b border-white/5 py-1 last:border-b-0"
+                    >
+                      <span className="truncate text-slate-500">{key}</span>
+                      <span className="max-w-[60%] truncate text-right text-slate-200">{value}</span>
+                    </div>
+                  ))}
+                  {contextEntries.length === 0 && (
+                    <p className="text-slate-500">Context not available yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 border-t border-white/5 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            {promptEditorOpen && promptError && (
+              <p className="text-sm text-rose-300">{promptError}</p>
+            )}
+            <div className="flex flex-1 justify-end gap-2">
+              <Button variant="ghost" onClick={handlePromptEditorClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handlePromptSave}
+                loading={promptSaving}
+                disabled={!promptHasChanges || promptSaving}
+                className="px-5"
+              >
+                Save prompt
+              </Button>
+            </div>
+          </div>
         </div>
-        <Button
-          variant="ghost"
-          className="flex-shrink-0 items-center gap-2 whitespace-nowrap"
-          onClick={() => router.push('/chat')}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Collections
-        </Button>
       </div>
+    );
+  };
 
-      {status && (
-        <GlassCard className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-          {status}
-        </GlassCard>
-      )}
+  return (
+    <Fragment>
+      <div className="flex h-full flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Chat studio</p>
+              <h1 className="text-3xl font-semibold text-white min-w-0 truncate">
+                {collection ? collection.name : 'Loading collection…'}
+              </h1>
+            </div>
+            {collection && headerDescription && (
+              <p
+                className="text-sm text-slate-400 break-words"
+                style={{ maxWidth: 'clamp(18rem, 50vw, 40rem)' }}
+              >
+                {headerDescription}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            className="flex-shrink-0 items-center gap-2 whitespace-nowrap"
+            onClick={() => router.push('/chat')}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Collections
+          </Button>
+        </div>
 
-      <div className="flex flex-1 flex-col min-h-0">
+        {status && (
+          <GlassCard className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-100">
+            {status}
+          </GlassCard>
+        )}
+
+        <div className="flex flex-1 flex-col min-h-0">
         {loading ? (
           <div className="flex flex-1 items-center justify-center">
             <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
@@ -3004,5 +3703,7 @@ export default function ChatStudioExperience() {
         )}
       </div>
     </div>
+    {renderPromptEditorOverlay()}
+  </Fragment>
   );
 }
