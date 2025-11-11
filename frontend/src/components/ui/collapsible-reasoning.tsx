@@ -23,11 +23,11 @@ export function CollapsibleReasoning({
 
   useEffect(() => {
     if (isAutoOpen) {
-      setIsOpen(true);
+      setIsOpen((prev) => (prev === true ? prev : true));
       return;
     }
     if (!preventAutoClose) {
-      setIsOpen(false);
+      setIsOpen((prev) => (prev === false ? prev : false));
     }
   }, [isAutoOpen, preventAutoClose]);
 
@@ -40,13 +40,11 @@ export function CollapsibleReasoning({
       <button
         type="button"
         onClick={() => {
-          setIsOpen((prev) => {
-            const next = !prev;
-            if (onManualToggle) {
-              onManualToggle(messageId, next);
-            }
-            return next;
-          });
+          const next = !isOpen;
+          setIsOpen(next);
+          if (onManualToggle) {
+            onManualToggle(messageId, next);
+          }
         }}
         className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-amber-500/15"
       >

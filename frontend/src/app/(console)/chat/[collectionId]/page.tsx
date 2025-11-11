@@ -1162,6 +1162,19 @@ const sortMessagesChronologically = (messages: ChatMessage[]) => {
   });
 };
 
+const mergeMessageHistory = (
+  existing: ChatMessage[],
+  incoming: ChatMessage[],
+): ChatMessage[] => {
+  if (incoming.length === 0) {
+    return existing;
+  }
+  const mergedMap = new Map<string, ChatMessage>();
+  existing.forEach((message) => mergedMap.set(message.id, message));
+  incoming.forEach((message) => mergedMap.set(message.id, message));
+  return sortMessagesChronologically(Array.from(mergedMap.values()));
+};
+
 export default function ChatStudioExperience() {
   const params = useParams<{ collectionId: string }>();
   const collectionId = params?.collectionId ?? '';
@@ -1230,6 +1243,9 @@ export default function ChatStudioExperience() {
   const [liveResponse, setLiveResponse] = useState('');
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
   const [liveReasoningSegments, setLiveReasoningSegments] = useState<ReasoningTraceSegment[]>([]);
+  const [persistedLiveReasoningSegments, setPersistedLiveReasoningSegments] = useState<
+    ReasoningTraceSegment[]
+  >([]);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [activeReasoningId, setActiveReasoningId] = useState<string | null>(null);
   const [manuallyOpenedReasoningIds, setManuallyOpenedReasoningIds] = useState<Set<string>>(
@@ -1248,29 +1264,52 @@ export default function ChatStudioExperience() {
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
   const reasoningCacheRef = useRef<Map<string, ReasoningTraceSegment[]>>(new Map());
 
+  const hasLiveText = liveResponse.trim().length > 0;
+  const hasLiveReasoning = liveReasoningSegments.length > 0;
+  const showStreamingBubble =
+    streamingEnabled && (isStreamingResponse || hasLiveText || hasLiveReasoning);
+  const liveReasoningDisplaySegments = hasLiveReasoning
+    ? liveReasoningSegments
+    : persistedLiveReasoningSegments;
+  const hasDisplayedLiveReasoning = liveReasoningDisplaySegments.length > 0;
+  const shouldShowStreamingReasoningBubble =
+    (showStreamingBubble || hasDisplayedLiveReasoning) && hasDisplayedLiveReasoning;
+
+  const resetLiveReasoningState = useCallback(() => {
+    setLiveReasoningSegments([]);
+    setPersistedLiveReasoningSegments([]);
+  }, []);
+
   const syncMessages = useCallback(
     (incoming: ChatMessage[], options: { hydrate?: boolean } = {}) => {
       const { hydrate = false } = options;
-      const sorted = sortMessagesChronologically(incoming);
-      setMessages(sorted);
-      setVisibleMessageIds((prev) => {
-        const nextIds = sorted.map((message) => message.id);
-        if (hydrate || prev.length === 0) {
-          setPendingMessageIds([]);
-          return nextIds;
-        }
-        const nextIdSet = new Set(nextIds);
-        const hasRemoval = prev.some((id) => !nextIdSet.has(id));
-        if (hasRemoval) {
-          setPendingMessageIds([]);
-          return nextIds;
-        }
-        const prevSet = new Set(prev);
-        const newIds = nextIds.filter((id) => !prevSet.has(id));
-        if (newIds.length > 0) {
-          setPendingMessageIds((queue) => [...queue, ...newIds]);
-        }
-        return prev;
+      setMessages((previousMessages) => {
+        const sortedIncoming = sortMessagesChronologically(incoming);
+        const nextMessages = hydrate
+          ? sortedIncoming
+          : mergeMessageHistory(previousMessages, sortedIncoming);
+
+        setVisibleMessageIds((prevVisible) => {
+          const nextIds = nextMessages.map((message) => message.id);
+          if (hydrate || prevVisible.length === 0) {
+            setPendingMessageIds([]);
+            return nextIds;
+          }
+          const nextIdSet = new Set(nextIds);
+          const hasRemoval = prevVisible.some((id) => !nextIdSet.has(id));
+          if (hasRemoval) {
+            setPendingMessageIds([]);
+            return nextIds;
+          }
+          const prevSet = new Set(prevVisible);
+          const newIds = nextIds.filter((id) => !prevSet.has(id));
+          if (newIds.length > 0) {
+            setPendingMessageIds((queue) => [...queue, ...newIds]);
+          }
+          return prevVisible;
+        });
+
+        return nextMessages;
       });
     },
     [],
@@ -1722,6 +1761,12 @@ export default function ChatStudioExperience() {
     [],
   );
 
+  useEffect(() => {
+    if (liveReasoningSegments.length > 0) {
+      setPersistedLiveReasoningSegments(liveReasoningSegments);
+    }
+  }, [liveReasoningSegments]);
+
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) {
@@ -1749,7 +1794,7 @@ export default function ChatStudioExperience() {
 
   const showFollowButton =
     !autoScrollEnabled &&
-    (messages.length > 0 || liveResponse.trim().length > 0 || liveReasoningSegments.length > 0);
+    (messages.length > 0 || hasLiveText || hasDisplayedLiveReasoning);
 
   useLayoutEffect(() => {
     const textarea = chatPromptRef.current;
@@ -1772,7 +1817,9 @@ export default function ChatStudioExperience() {
         if (activePollingSession.current !== sessionId) {
           return;
         }
-        syncMessages(history);
+        // Hydrate instead of queueing pending reveals so previously streamed bubbles
+        // stay mounted while their persisted counterparts arrive.
+        syncMessages(history, { hydrate: true });
         setToolTraces(deriveToolTraces(history));
         setUsage(calculateSessionUsage(history));
       } catch {
@@ -1980,13 +2027,14 @@ export default function ChatStudioExperience() {
     (response: ChatCompletionPayload, options: { hydrate?: boolean } = {}) => {
       setLiveResponse('');
       setIsStreamingResponse(false);
-      setLiveReasoningSegments([]);
+      resetLiveReasoningState();
       pendingSessionIdsRef.current.delete(response.session.id);
       const enrichedMessages = attachUsageToLastAssistantMessage(
         response.messages,
         response.usage ?? null,
       );
-      syncMessages(enrichedMessages, { hydrate: Boolean(options.hydrate) });
+      // Always hydrate when streaming to prevent delayed message reveals
+      syncMessages(enrichedMessages, { hydrate: true });
       const nextToolTraces =
         response.tool_traces && response.tool_traces.length > 0
           ? response.tool_traces
@@ -2008,7 +2056,7 @@ export default function ChatStudioExperience() {
         return sortSessions(next);
       });
     },
-    [collection, deriveToolTraces, sortSessions, syncMessages],
+    [collection, deriveToolTraces, resetLiveReasoningState, sortSessions, syncMessages],
   );
 
   const isAbortError = (value: unknown): value is DOMException =>
@@ -2060,7 +2108,7 @@ export default function ChatStudioExperience() {
     const provider = providerRuleCount > 0 ? providerPayload : undefined;
     setLiveResponse('');
     setIsStreamingResponse(false);
-    setLiveReasoningSegments([]);
+    resetLiveReasoningState();
     try {
       await performChatMutation(sessionId, {
         content: trimmed,
@@ -2158,7 +2206,7 @@ export default function ChatStudioExperience() {
     setDraft('');
     setLiveResponse('');
     setIsStreamingResponse(false);
-    setLiveReasoningSegments([]);
+    resetLiveReasoningState();
     setEditingMessageId(null);
     setEditingDraft('');
     setOptimisticMessages([]);
@@ -2418,7 +2466,7 @@ export default function ChatStudioExperience() {
       setStatus(null);
       setLiveResponse('');
       setIsStreamingResponse(false);
-      setLiveReasoningSegments([]);
+      resetLiveReasoningState();
       startProgressPolling(sessionId);
       try {
         const requestPayload: ChatRequestPayload = {
@@ -2460,7 +2508,7 @@ export default function ChatStudioExperience() {
         const shouldClearLiveState = !isAbortError(error);
         if (shouldClearLiveState) {
           setLiveResponse('');
-          setLiveReasoningSegments([]);
+          resetLiveReasoningState();
         }
         throw error;
       } finally {
@@ -2470,7 +2518,14 @@ export default function ChatStudioExperience() {
         abortControllerRef.current = null;
       }
     },
-    [applyChatResponse, authToken, collection, startProgressPolling, stopProgressPolling],
+    [
+      applyChatResponse,
+      authToken,
+      collection,
+      resetLiveReasoningState,
+      startProgressPolling,
+      stopProgressPolling,
+    ],
   );
 
   const roleVariants: Record<string, string> = {
@@ -3299,19 +3354,14 @@ export default function ChatStudioExperience() {
       );
     }
 
-    const hasLiveText = liveResponse.trim().length > 0;
-    const hasLiveReasoning = liveReasoningSegments.length > 0;
-    const showStreamingBubble =
-      streamingEnabled && (isStreamingResponse || hasLiveText || hasLiveReasoning);
-    const streamingReasoningBubble =
-      showStreamingBubble && hasLiveReasoning ? (
+    const streamingReasoningBubble = shouldShowStreamingReasoningBubble ? (
         <div key="live-reasoning-stream" className="flex justify-start">
           <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
             </div>
             <CollapsibleReasoning
-              segments={liveReasoningSegments}
+              segments={liveReasoningDisplaySegments}
               messageId="live-reasoning"
               isAutoOpen={activeReasoningId === 'live-reasoning'}
               preventAutoClose={manuallyOpenedReasoningIds.has('live-reasoning')}
@@ -3338,7 +3388,7 @@ export default function ChatStudioExperience() {
     ) : null;
 
     const messageBubbles = allMessages.flatMap((message) => {
-      const bubbles: ReactNode[] = [];
+      const bubbles: Array<{ key: string; node: ReactNode }> = [];
       const variant = roleVariants[message.role] ?? roleVariants.system;
       const isUser = message.role === 'user';
       const isAssistant = message.role === 'assistant';
@@ -3360,24 +3410,26 @@ export default function ChatStudioExperience() {
           (segment) => !isToolReasoningSegment(segment),
         );
         if (assistantSegments.length > 0) {
-          bubbles.push(
-            <div key={`${message.id}-assistant-reasoning`} className="flex justify-start">
-              <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
+          const reasoningKey = `${message.id}-assistant-reasoning`;
+          bubbles.push({
+            key: reasoningKey,
+            node: (
+              <div className="flex justify-start">
+                <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
+                  </div>
+                  <CollapsibleReasoning
+                    segments={assistantSegments}
+                    messageId={reasoningKey}
+                    isAutoOpen={activeReasoningId === reasoningKey}
+                    preventAutoClose={manuallyOpenedReasoningIds.has(reasoningKey)}
+                    onManualToggle={handleReasoningToggle}
+                  />
                 </div>
-                <CollapsibleReasoning
-                  segments={assistantSegments}
-                  messageId={`${message.id}-assistant-reasoning`}
-                  isAutoOpen={activeReasoningId === `${message.id}-assistant-reasoning`}
-                  preventAutoClose={manuallyOpenedReasoningIds.has(
-                    `${message.id}-assistant-reasoning`,
-                  )}
-                  onManualToggle={handleReasoningToggle}
-                />
               </div>
-            </div>,
-          );
+            ),
+          });
         }
       }
 
@@ -3389,24 +3441,28 @@ export default function ChatStudioExperience() {
         );
         const toolLabel = trace?.name || message.tool_name || 'Tool';
         if (toolSegments.length > 0) {
-          bubbles.push(
-            <div key={`${message.id}-tool-reasoning`} className="flex justify-start">
-              <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
-                    Reasoning • {toolLabel}
-                  </p>
+          const toolReasoningKey = `${message.id}-tool-reasoning`;
+          bubbles.push({
+            key: toolReasoningKey,
+            node: (
+              <div className="flex justify-start">
+                <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">
+                      Reasoning • {toolLabel}
+                    </p>
+                  </div>
+                  <CollapsibleReasoning
+                    segments={toolSegments}
+                    messageId={toolReasoningKey}
+                    isAutoOpen={activeReasoningId === toolReasoningKey}
+                    preventAutoClose={manuallyOpenedReasoningIds.has(toolReasoningKey)}
+                    onManualToggle={handleReasoningToggle}
+                  />
                 </div>
-                <CollapsibleReasoning
-                  segments={toolSegments}
-                  messageId={`${message.id}-tool-reasoning`}
-                  isAutoOpen={activeReasoningId === `${message.id}-tool-reasoning`}
-                  preventAutoClose={manuallyOpenedReasoningIds.has(`${message.id}-tool-reasoning`)}
-                  onManualToggle={handleReasoningToggle}
-                />
               </div>
-            </div>,
-          );
+            ),
+          });
         }
 
         const rawPayload =
@@ -3424,22 +3480,26 @@ export default function ChatStudioExperience() {
         };
         const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
         const responseRecord = coerceRecord(payloadRecord.response ?? payloadRecord);
-        bubbles.push(
-          <ToolCallBubble
-            key={`${message.id}-tool`}
-            label={toolLabel}
-            variantClass={roleVariants.tool}
-            args={argsRecord}
-            response={responseRecord}
-            rawPayload={payloadRecord}
-          />,
-        );
-        return bubbles;
+        bubbles.push({
+          key: `${message.id}-tool`,
+          node: (
+            <ToolCallBubble
+              label={toolLabel}
+              variantClass={roleVariants.tool}
+              args={argsRecord}
+              response={responseRecord}
+              rawPayload={payloadRecord}
+            />
+          ),
+        });
+        return bubbles.map((b) => <Fragment key={b.key}>{b.node}</Fragment>);
       }
 
       if (!isToolCallPlaceholder) {
-        bubbles.push(
-          <div key={message.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+        bubbles.push({
+          key: message.id,
+          node: (
+            <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
             <div className="group relative max-w-[75%]">
               <div className={cn('rounded-2xl border px-4 py-3 text-sm', variant)}>
                 <div className="mb-2 flex items-center justify-between gap-3">
@@ -3545,16 +3605,17 @@ export default function ChatStudioExperience() {
                 </div>
               )}
             </div>
-          </div>,
-        );
+          </div>
+          ),
+        });
       }
 
-      return bubbles;
+      return bubbles.map((b) => <Fragment key={b.key}>{b.node}</Fragment>);
     });
 
-    const streamingBubbles = [streamingReasoningBubble, assistantTypingBubble].filter(
-      (bubble): bubble is ReactNode => Boolean(bubble),
-    );
+    const streamingBubbles: ReactNode[] = [];
+    if (streamingReasoningBubble) streamingBubbles.push(streamingReasoningBubble);
+    if (assistantTypingBubble) streamingBubbles.push(assistantTypingBubble);
     return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;
   };
 
