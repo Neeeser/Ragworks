@@ -3120,6 +3120,17 @@ export default function ChatStudioExperience() {
     const hasLiveReasoning = liveReasoningSegments.length > 0;
     const showStreamingBubble =
       streamingEnabled && (isStreamingResponse || hasLiveText || hasLiveReasoning);
+    const streamingReasoningBubble =
+      showStreamingBubble && hasLiveReasoning ? (
+        <div key="live-reasoning-stream" className="flex justify-start">
+          <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
+            </div>
+            <CollapsibleReasoning segments={liveReasoningSegments} messageId="live-reasoning" />
+          </div>
+        </div>
+      ) : null;
     const assistantTypingBubble = showStreamingBubble ? (
       <div key="typing-indicator" className="flex justify-start">
         <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
@@ -3132,11 +3143,6 @@ export default function ChatStudioExperience() {
             </ReactMarkdown>
           ) : (
             <TypingAnimation />
-          )}
-          {showStreamingBubble && hasLiveReasoning && (
-            <div className="mt-3">
-              <CollapsibleReasoning segments={liveReasoningSegments} messageId="live-reasoning" />
-            </div>
           )}
         </div>
       </div>
@@ -3342,7 +3348,10 @@ export default function ChatStudioExperience() {
       return bubbles;
     });
 
-    return assistantTypingBubble ? [...messageBubbles, assistantTypingBubble] : messageBubbles;
+    const streamingBubbles = [streamingReasoningBubble, assistantTypingBubble].filter(
+      (bubble): bubble is ReactNode => Boolean(bubble),
+    );
+    return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;
   };
 
   const renderHistoryList = () => (
