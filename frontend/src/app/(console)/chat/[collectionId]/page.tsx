@@ -1247,6 +1247,8 @@ export default function ChatStudioExperience() {
     ReasoningTraceSegment[]
   >([]);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [liveResponseAnimationKey, setLiveResponseAnimationKey] = useState(0);
+  const [liveReasoningAnimationKey, setLiveReasoningAnimationKey] = useState(0);
   const [activeReasoningId, setActiveReasoningId] = useState<string | null>(null);
   const [manuallyOpenedReasoningIds, setManuallyOpenedReasoningIds] = useState<Set<string>>(
     () => new Set(),
@@ -1254,6 +1256,7 @@ export default function ChatStudioExperience() {
   const [reasoningFocusActive, setReasoningFocusActive] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
   const programmaticScrollRef = useRef(false);
   const programmaticScrollTimeoutRef = useRef<number | null>(null);
   const reasoningFocusTimeoutRef = useRef<number | null>(null);
@@ -1274,6 +1277,20 @@ export default function ChatStudioExperience() {
   const hasDisplayedLiveReasoning = liveReasoningDisplaySegments.length > 0;
   const shouldShowStreamingReasoningBubble =
     (showStreamingBubble || hasDisplayedLiveReasoning) && hasDisplayedLiveReasoning;
+
+  useEffect(() => {
+    if (!hasLiveText) {
+      return;
+    }
+    setLiveResponseAnimationKey((prev) => prev + 1);
+  }, [hasLiveText, liveResponse]);
+
+  useEffect(() => {
+    if (liveReasoningSegments.length === 0) {
+      return;
+    }
+    setLiveReasoningAnimationKey((prev) => prev + 1);
+  }, [liveReasoningSegments]);
 
   const resetLiveReasoningState = useCallback(() => {
     setLiveReasoningSegments([]);
@@ -1696,21 +1713,35 @@ export default function ChatStudioExperience() {
   }, []);
 
   const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = 'auto') => {
+    (behavior: ScrollBehavior = 'smooth') => {
       if (!endRef.current) {
         return;
       }
+      if (scrollAnimationFrameRef.current) {
+        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+      }
       markProgrammaticScroll(behavior === 'smooth' ? 600 : 150);
-      endRef.current.scrollIntoView({ behavior });
+      scrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        endRef.current?.scrollIntoView({ behavior });
+        scrollAnimationFrameRef.current = null;
+      });
     },
     [markProgrammaticScroll],
   );
 
   useEffect(() => {
+    return () => {
+      if (scrollAnimationFrameRef.current) {
+        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!autoScrollEnabled) {
       return;
     }
-    scrollToBottom('auto');
+    scrollToBottom('smooth');
   }, [autoScrollEnabled, liveReasoningSegments, liveResponse, scrollToBottom, visibleMessageIds]);
 
   useEffect(() => {
@@ -3355,24 +3386,36 @@ export default function ChatStudioExperience() {
     }
 
     const streamingReasoningBubble = shouldShowStreamingReasoningBubble ? (
-        <div key="live-reasoning-stream" className="flex justify-start">
-          <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
-            </div>
-            <CollapsibleReasoning
-              segments={liveReasoningDisplaySegments}
-              messageId="live-reasoning"
-              isAutoOpen={activeReasoningId === 'live-reasoning'}
-              preventAutoClose={manuallyOpenedReasoningIds.has('live-reasoning')}
-              onManualToggle={handleReasoningToggle}
-            />
+      <div key="live-reasoning-stream" className="flex justify-start">
+        <div
+          className={cn(
+            'live-stream-reasoning relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
+            roleVariants.assistant,
+          )}
+          data-live-reasoning-key={liveReasoningAnimationKey}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">Reasoning</p>
           </div>
+          <CollapsibleReasoning
+            segments={liveReasoningDisplaySegments}
+            messageId="live-reasoning"
+            isAutoOpen={activeReasoningId === 'live-reasoning'}
+            preventAutoClose={manuallyOpenedReasoningIds.has('live-reasoning')}
+            onManualToggle={handleReasoningToggle}
+          />
         </div>
-      ) : null;
+      </div>
+    ) : null;
     const assistantTypingBubble = showStreamingBubble ? (
       <div key="typing-indicator" className="flex justify-start">
-        <div className={cn('max-w-[75%] rounded-2xl border px-4 py-3 text-sm', roleVariants.assistant)}>
+        <div
+          className={cn(
+            'live-stream-text relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
+            roleVariants.assistant,
+          )}
+          data-live-stream-key={liveResponseAnimationKey}
+        >
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
           </div>
@@ -4200,7 +4243,7 @@ export default function ChatStudioExperience() {
                   <div
                     ref={messagesContainerRef}
                     onScroll={handleScroll}
-                    className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6"
+                    className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth"
                   >
                     <div className="flex h-full flex-col gap-4">
                       {renderMessages()}
