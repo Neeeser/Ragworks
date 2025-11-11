@@ -1059,6 +1059,22 @@ const calculateSessionUsage = (items: ChatMessage[]): UsageBreakdown | null => {
   };
 };
 
+const attachUsageToLastAssistantMessage = (
+  messages: ChatMessage[],
+  usage: UsageBreakdown | null,
+): ChatMessage[] => {
+  if (!usage) {
+    return messages;
+  }
+  const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+  if (!lastAssistant || lastAssistant.usage) {
+    return messages;
+  }
+  return messages.map((message) =>
+    message.id === lastAssistant.id ? { ...message, usage } : message,
+  );
+};
+
 const isToolReasoningSegment = (segment: ReasoningTraceSegment): boolean => {
   const typeValue = typeof segment.type === 'string' ? segment.type.toLowerCase() : '';
   if (
@@ -1783,13 +1799,17 @@ export default function ChatStudioExperience() {
       setIsStreamingResponse(false);
       setLiveReasoningSegments([]);
       pendingSessionIdsRef.current.delete(response.session.id);
-      syncMessages(response.messages, { hydrate: Boolean(options.hydrate) });
+      const enrichedMessages = attachUsageToLastAssistantMessage(
+        response.messages,
+        response.usage ?? null,
+      );
+      syncMessages(enrichedMessages, { hydrate: Boolean(options.hydrate) });
       const nextToolTraces =
         response.tool_traces && response.tool_traces.length > 0
           ? response.tool_traces
           : deriveToolTraces(response.messages);
       setToolTraces(nextToolTraces);
-      setUsage(calculateSessionUsage(response.messages));
+      setUsage(calculateSessionUsage(enrichedMessages) ?? response.usage ?? null);
       setContextConsumed(response.context_consumed);
       setContextWindow(response.context_window || collection?.context_window || 0);
       setSelectedSessionId(response.session.id);
