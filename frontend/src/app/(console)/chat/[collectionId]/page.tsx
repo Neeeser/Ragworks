@@ -908,6 +908,18 @@ const sanitizeModelSlug = (candidate?: string | null): string | null => {
   return baseSlug;
 };
 
+const sanitizeFileName = (candidate?: string | null): string => {
+  if (!candidate) {
+    return '';
+  }
+  return candidate
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9-_]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
 const parsePriceInput = (value: string): number | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -1948,6 +1960,28 @@ export default function ChatStudioExperience() {
     setEditingDraft('');
     setOptimisticMessages([]);
   };
+
+  const handleExportChatHistory = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const sortedMessages = sortMessagesChronologically(messages);
+    const payload = { messages: sortedMessages };
+    const titleSegment = sanitizeFileName(
+      sessions.find((session) => session.id === selectedSessionId)?.title ?? null,
+    );
+    const idSegment = sanitizeFileName(selectedSessionId ?? null);
+    const fallbackSegment =
+      titleSegment || idSegment || sanitizeFileName(new Date().toISOString());
+    const fileName = `chat-history-${fallbackSegment || Date.now().toString(36)}.json`;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [messages, selectedSessionId, sessions]);
 
   const handlePromptEditorOpen = useCallback(() => {
     if (promptDetails) {
@@ -3604,6 +3638,19 @@ export default function ChatStudioExperience() {
                     </div>
                   );
                 })}
+              </div>
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-white/30 hover:text-white"
+                  onClick={handleExportChatHistory}
+                  title="Exports the full chat messages array as formatted JSON"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Export chat history
+                </Button>
               </div>
             </div>
           </TelemetrySection>
