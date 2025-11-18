@@ -1294,6 +1294,7 @@ export default function ChatStudioExperience() {
     ReasoningTraceSegment[]
   >([]);
   const [activeStreamEntryKey, setActiveStreamEntryKey] = useState<string | null>(null);
+  const activeStreamEntryKeyRef = useRef<string | null>(null);
   const [streamEntryKeyMap, setStreamEntryKeyMap] = useState<Record<string, string>>({});
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [liveResponseAnimationKey, setLiveResponseAnimationKey] = useState(0);
@@ -2091,10 +2092,18 @@ export default function ChatStudioExperience() {
   const normalizedChatEntryIds = useMemo(() => chatEntries.map((entry) => entry.id), [chatEntries]);
 
   useEffect(() => {
-    setChatEntryOrder(normalizedChatEntryIds);
+    setChatEntryOrder((prev) => {
+      const sameOrder =
+        prev.length === normalizedChatEntryIds.length &&
+        prev.every((id, index) => id === normalizedChatEntryIds[index]);
+      if (sameOrder) {
+        return prev;
+      }
+      console.debug('[chat] normalized entries', { normalizedChatEntryIds });
+      return normalizedChatEntryIds;
+    });
     setChatRevealQueue([]);
     chatHydrationPendingRef.current = false;
-    console.debug('[chat] normalized entries', { normalizedChatEntryIds });
   }, [normalizedChatEntryIds]);
 
   const pendingRevealCount = chatRevealQueue.length;
@@ -2208,18 +2217,24 @@ export default function ChatStudioExperience() {
 
 
   const applyChatResponse = useCallback((response: ChatCompletionPayload) => {
+      console.debug('[chat] applyChatResponse start', {
+        activeStreamEntryKey: activeStreamEntryKeyRef.current,
+        responseMessages: response.messages.length,
+      });
       setLiveResponse('');
       setIsStreamingResponse(false);
       resetLiveReasoningState();
       const finalAssistant = [...response.messages].reverse().find((msg) => msg.role === 'assistant');
-      if (finalAssistant?.id && activeStreamEntryKey) {
-        setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: activeStreamEntryKey }));
+      const streamKey = activeStreamEntryKeyRef.current;
+      if (finalAssistant?.id && streamKey) {
+        setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: streamKey }));
         console.debug('[chat] mapped stream key to message', {
           messageId: finalAssistant.id,
-          key: activeStreamEntryKey,
+          key: streamKey,
         });
       }
       setActiveStreamEntryKey(null);
+      activeStreamEntryKeyRef.current = null;
       pendingSessionIdsRef.current.delete(response.session.id);
       const enrichedMessages = attachUsageToLastAssistantMessage(
         response.messages,
@@ -2231,6 +2246,7 @@ export default function ChatStudioExperience() {
         messages: response.messages.length,
         toolTraces: response.tool_traces?.length ?? 0,
         usage: response.usage,
+        streamEntryKeyMap,
       });
       const nextToolTraces =
         response.tool_traces && response.tool_traces.length > 0
@@ -2253,15 +2269,7 @@ export default function ChatStudioExperience() {
         return sortSessions(next);
       });
     },
-    [
-      activeStreamEntryKey,
-      collection,
-      deriveToolTraces,
-      resetLiveReasoningState,
-      setStreamEntryKeyMap,
-      sortSessions,
-      syncMessages,
-    ],
+    [collection, deriveToolTraces, resetLiveReasoningState, setStreamEntryKeyMap, sortSessions, syncMessages],
   );
 
   const isAbortError = (value: unknown): value is DOMException =>
@@ -2413,6 +2421,7 @@ export default function ChatStudioExperience() {
     setLiveResponse('');
     setIsStreamingResponse(false);
     setActiveStreamEntryKey(null);
+    activeStreamEntryKeyRef.current = null;
     setStreamEntryKeyMap({});
     resetLiveReasoningState();
     setEditingMessageId(null);
@@ -2689,9 +2698,11 @@ export default function ChatStudioExperience() {
         let result: ChatCompletionPayload | null;
         if (payload.stream) {
           setIsStreamingResponse(true);
-          setActiveStreamEntryKey(
-            () => `stream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-          );
+          const streamKey = `stream-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`;
+          setActiveStreamEntryKey(streamKey);
+          activeStreamEntryKeyRef.current = streamKey;
           result = await streamChatWithCollection(collection.id, requestPayload, authToken, {
             signal: controller.signal,
             onToken: (token) => {
@@ -2714,6 +2725,7 @@ export default function ChatStudioExperience() {
             controller.signal,
           );
           setActiveStreamEntryKey(null);
+          activeStreamEntryKeyRef.current = null;
         }
         if (!result) {
           throw new Error('Streaming response did not complete.');
@@ -2727,6 +2739,7 @@ export default function ChatStudioExperience() {
           setLiveResponse('');
           resetLiveReasoningState();
           setActiveStreamEntryKey(null);
+          activeStreamEntryKeyRef.current = null;
         }
         throw error;
       } finally {
@@ -3581,8 +3594,8 @@ export default function ChatStudioExperience() {
           <CollapsibleReasoning
             segments={liveReasoningDisplaySegments}
             messageId="live-reasoning"
-            isAutoOpen={activeReasoningId === 'live-reasoning'}
-            preventAutoClose={manuallyOpenedReasoningIds.has('live-reasoning')}
+            isAutoOpen={false}
+            preventAutoClose
             onManualToggle={handleReasoningToggle}
           />
         </div>
@@ -3639,8 +3652,8 @@ export default function ChatStudioExperience() {
                 segments={entry.segments}
                 messageId={entry.id}
                 title={entry.title}
-                isAutoOpen={activeReasoningId === entry.id}
-                preventAutoClose={manuallyOpenedReasoningIds.has(entry.id)}
+                isAutoOpen={false}
+                preventAutoClose
                 onManualToggle={handleReasoningToggle}
                 className={cn(
                   'chat-bubble chat-bubble-enter max-w-[75%] border px-4 py-3',
