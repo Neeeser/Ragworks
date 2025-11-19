@@ -1,26 +1,12 @@
 'use client';
 
-import {
-  Fragment,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ArrowDown, ArrowLeft, Edit3, PanelLeftOpen, PanelRightOpen, PlusCircle, RotateCcw } from 'lucide-react';
-import type { Components } from 'react-markdown';
+import { ArrowDown, ArrowLeft, PanelLeftOpen, PanelRightOpen, PlusCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/ui/panel';
 import { Loader } from '@/components/ui/loader';
-import { CollapsibleReasoning } from '@/components/ui/collapsible-reasoning';
-import { TypingAnimation } from '@/components/ui/typing-animation';
 import { HistoryPanel } from '@/components/chat-studio/HistoryPanel';
 import {
   chatWithCollection,
@@ -49,11 +35,21 @@ import type {
   ToolCallTrace,
   UsageBreakdown,
 } from '@/lib/types';
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { ChatInput, PromptEditorOverlay } from '@/components/chat-studio';
 import { TelemetryPanel } from '@/components/chat-studio/telemetry/TelemetryPanel';
-import { ToolCallBubble, formatToolLabel } from '@/components/chat-studio/Tooling';
+import { formatToolLabel } from '@/components/chat-studio/Tooling';
+import { ChatTimeline } from './components/ChatTimeline';
+import {
+  coerceRecord,
+  markdownComponents,
+  normalizeReasoningSegments,
+  parsePriceInput,
+  sanitizeFileName,
+  sanitizeModelSlug,
+  safeParseJSON,
+} from './chat-utils';
+import type { ChatEntry } from './chat-types';
 import type {
   ModelParameterKey,
   ParameterDefinition,
@@ -79,15 +75,6 @@ const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
     {} as Record<ModelParameterKey, ParameterDefinition>,
   );
 
-const safeParseJSON = (value?: string | null) => {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-};
-
 const usePersistentToggle = (key: string, defaultValue: boolean) => {
   const [value, setValue] = useState(() => {
     if (typeof window === 'undefined') {
@@ -105,179 +92,6 @@ const usePersistentToggle = (key: string, defaultValue: boolean) => {
   }, [key, value]);
 
   return [value, setValue] as const;
-};
-
-const joinTextWithSpacing = (left: string, right: string): string => {
-  if (!left) return right;
-  if (!right) return left;
-  return `${left}${right}`;
-};
-
-const appendReasoningSegment = (
-  target: ReasoningTraceSegment[],
-  segment: ReasoningTraceSegment,
-) => {
-  if (!segment) {
-    return;
-  }
-  const entry: ReasoningTraceSegment = { ...segment };
-  const textValue =
-    typeof entry.text === 'string'
-      ? entry.text
-      : typeof entry.content === 'string'
-        ? entry.content
-        : undefined;
-  const mergeableTypes = new Set(['', 'text', 'reasoning.text']);
-  if (
-    textValue &&
-    target.length > 0 &&
-    mergeableTypes.has((entry.type ?? '').toLowerCase())
-  ) {
-    const prev = target[target.length - 1];
-    const prevMergeable = mergeableTypes.has((prev.type ?? '').toLowerCase());
-    const contextKeys = ['id', 'call_id', 'tool_call_id'] as const;
-    const sameContext = contextKeys.every((key) => {
-      const prevValue = (prev as Record<string, unknown>)[key];
-      const nextValue = (entry as Record<string, unknown>)[key];
-      if (prevValue == null && nextValue == null) {
-        return true;
-      }
-      return prevValue === nextValue;
-    });
-    if (prevMergeable && sameContext) {
-      const existing =
-        (typeof prev.text === 'string' ? prev.text : typeof prev.content === 'string' ? prev.content : '') ?? '';
-      const combined = joinTextWithSpacing(existing, textValue);
-      prev.text = combined;
-      prev.content = combined;
-      return;
-    }
-  }
-  if (textValue) {
-    entry.text = textValue;
-    entry.content = textValue;
-    if (!entry.type) {
-      entry.type = 'text';
-    }
-  }
-  target.push(entry);
-};
-
-const mergeReasoningSegments = (segments: ReasoningTraceSegment[]): ReasoningTraceSegment[] => {
-  const merged: ReasoningTraceSegment[] = [];
-  segments.forEach((segment) => {
-    if (segment) {
-      appendReasoningSegment(merged, segment);
-    }
-  });
-  return merged;
-};
-
-const normalizeReasoningSegments = (payload: unknown): ReasoningTraceSegment[] => {
-  if (!payload) {
-    return [];
-  }
-  let segments: ReasoningTraceSegment[] = [];
-  if (Array.isArray(payload)) {
-    segments = payload.filter(Boolean) as ReasoningTraceSegment[];
-  } else if (typeof payload === 'object') {
-    const candidate = payload as { segments?: ReasoningTraceSegment[] };
-    if (Array.isArray(candidate?.segments)) {
-      segments = candidate.segments.filter(Boolean) as ReasoningTraceSegment[];
-    } else {
-      segments = [candidate as ReasoningTraceSegment];
-    }
-  } else if (typeof payload === 'string') {
-    if (!payload.trim()) {
-      segments = [];
-    } else {
-      segments = [{ type: 'text', content: payload }];
-    }
-  } else {
-    segments = [{ type: 'value', content: String(payload) }];
-  }
-  return mergeReasoningSegments(segments);
-};
-
-type ReasoningSource = 'assistant' | 'tool';
-
-interface ChatEntryBase {
-  id: string;
-  messageId?: string;
-  createdAt: string;
-}
-
-interface ChatMessageEntry extends ChatEntryBase {
-  type: 'user' | 'assistant' | 'system';
-  message: ChatMessage;
-  content: string;
-}
-
-interface ChatReasoningEntry extends ChatEntryBase {
-  type: 'reasoning';
-  source: ReasoningSource;
-  title: string;
-  segments: ReasoningTraceSegment[];
-  relatedToolLabel?: string;
-}
-
-interface ChatToolEntry extends ChatEntryBase {
-  type: 'tool-call';
-  message: ChatMessage;
-  label: string;
-  args: Record<string, unknown>;
-  response: Record<string, unknown>;
-  rawPayload: Record<string, unknown>;
-}
-
-type ChatEntry = ChatMessageEntry | ChatReasoningEntry | ChatToolEntry;
-
-const coerceRecord = (value: unknown): Record<string, unknown> => {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  if (Array.isArray(value)) {
-    return { items: value };
-  }
-  if (value === null || value === undefined) {
-    return {};
-  }
-  return { value };
-};
-
-
-const sanitizeModelSlug = (candidate?: string | null): string | null => {
-  if (!candidate) {
-    return null;
-  }
-  const baseSlug = candidate.split(':')[0]?.trim() ?? '';
-  if (!baseSlug || !baseSlug.includes('/')) {
-    return null;
-  }
-  return baseSlug;
-};
-
-const sanitizeFileName = (candidate?: string | null): string => {
-  if (!candidate) {
-    return '';
-  }
-  return candidate
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9-_]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
-
-const parsePriceInput = (value: string): number | null => {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  return parsed;
 };
 
 const createDefaultProviderForm = (): ProviderFormState => ({
@@ -413,41 +227,6 @@ const generateClientMessageId = () => {
 const CHAT_INPUT_MIN_HEIGHT = 40;
 const CHAT_INPUT_MAX_HEIGHT = 160;
 const PROGRESS_POLL_INTERVAL = 800;
-
-const markdownComponents: Components = {
-  p: ({ children }) => (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-100">{children}</div>
-  ),
-  a: ({ children, href }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="text-cyan-300 underline decoration-dotted underline-offset-4"
-    >
-      {children}
-    </a>
-  ),
-  code: ({ inline, className, children }) =>
-    inline ? (
-      <code className={cn('rounded bg-white/10 px-1 py-0.5 text-[0.85em] text-cyan-200', className)}>
-        {children}
-      </code>
-    ) : (
-      <pre className="mt-3 overflow-auto rounded-2xl bg-slate-900/70 p-3 text-xs text-slate-100">
-        <code className={className}>{children}</code>
-      </pre>
-    ),
-  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-sm">{children}</ul>,
-  ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-sm">{children}</ol>,
-  li: ({ children }) => <li className="text-slate-100">{children}</li>,
-  blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-violet-400/60 pl-3 text-sm italic text-slate-200">
-      {children}
-    </blockquote>
-  ),
-  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-};
 
 const sortMessagesChronologically = (messages: ChatMessage[]) => {
   return [...messages].sort((a, b) => {
@@ -1938,252 +1717,6 @@ export default function ChatStudioExperience() {
     ],
   );
 
-  const roleVariants: Record<string, string> = {
-    user: 'border-violet-500/50 bg-violet-600/20 text-violet-50 backdrop-blur-sm',
-    assistant: 'border-white/20 bg-white/10 text-white backdrop-blur-sm',
-    tool: 'border-cyan-400/40 bg-cyan-500/15 text-cyan-50 backdrop-blur-sm',
-    system: 'border-sky-500/30 bg-sky-500/10 text-sky-50',
-    reasoning: 'border-amber-400/50 bg-amber-500/15 text-amber-50 backdrop-blur-sm',
-  };
-
-  const renderMessages = () => {
-    if (chatEntries.length === 0) {
-      return (
-        <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
-          <div className="space-y-2">
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
-            <h3 className="text-3xl font-semibold text-white">
-              {collection ? collection.name : 'Select a collection'}
-            </h3>
-            <p className="text-sm text-slate-400">
-              Ask anything about this dataset and we will cite the chunks that back it up.
-            </p>
-          </div>
-          <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
-            {samplePrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-slate-300 transition hover:border-white/30 hover:text-white"
-                onClick={() => setDraft(prompt)}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    const liveStreamBubbleKey = activeStreamEntryKey ?? 'typing-indicator';
-
-    const streamingReasoningBubble = shouldShowStreamingReasoningBubble ? (
-      <div key="live-reasoning-stream" className="flex justify-start">
-        <div
-          className={cn(
-            'live-stream-reasoning chat-bubble chat-bubble-enter relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
-            roleVariants.reasoning,
-          )}
-          data-live-reasoning-key={liveReasoningAnimationKey}
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-amber-100/90">Reasoning</p>
-          </div>
-          <CollapsibleReasoning
-            segments={liveReasoningDisplaySegments}
-            messageId="live-reasoning"
-            isAutoOpen={false}
-            preventAutoClose
-            onManualToggle={handleReasoningToggle}
-          />
-        </div>
-      </div>
-    ) : null;
-    const assistantTypingBubble = showStreamingBubble ? (
-      <div key={liveStreamBubbleKey} className="flex justify-start">
-        <div className="group relative max-w-[75%]">
-          <div
-            className={cn(
-              'live-stream-text chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl',
-              roleVariants.assistant,
-            )}
-            data-live-stream-key={liveResponseAnimationKey}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
-            </div>
-            {showStreamingBubble && hasLiveText ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {liveResponse}
-              </ReactMarkdown>
-            ) : (
-              <TypingAnimation />
-            )}
-          </div>
-        </div>
-      </div>
-    ) : null;
-
-    const timelineEntries = chatEntryOrder
-      .map((entryId) => chatEntryMap.get(entryId))
-      .filter((entry): entry is ChatEntry => Boolean(entry));
-
-    const messageBubbles = timelineEntries.map((entry) => {
-      if (entry.type === 'tool-call') {
-        return (
-          <Fragment key={entry.id}>
-            <ToolCallBubble
-              label={entry.label}
-              variantClass={roleVariants.tool}
-              args={entry.args}
-              response={entry.response}
-              rawPayload={entry.rawPayload}
-              className="chat-bubble chat-bubble-enter"
-            />
-          </Fragment>
-        );
-      }
-
-      if (entry.type === 'reasoning') {
-        return (
-          <Fragment key={entry.id}>
-            <div className="flex justify-start">
-              <CollapsibleReasoning
-                segments={entry.segments}
-                messageId={entry.id}
-                title={entry.title}
-                isAutoOpen={false}
-                preventAutoClose
-                onManualToggle={handleReasoningToggle}
-                className={cn(
-                  'chat-bubble chat-bubble-enter max-w-[75%] border px-4 py-3',
-                  roleVariants.reasoning,
-                )}
-              />
-            </div>
-          </Fragment>
-        );
-      }
-
-      const variant = roleVariants[entry.type] ?? roleVariants.system;
-      const isUser = entry.type === 'user';
-      const isAssistant = entry.type === 'assistant';
-      const showActions = (isUser || isAssistant) && !!selectedSessionId;
-      const alignClass = isUser ? 'justify-end' : 'justify-start';
-      const usage = entry.message.usage;
-      const headerLabel =
-        entry.message.role === 'user' ? 'You' : entry.message.role.toUpperCase();
-      const bubbleKey = streamEntryKeyMap[entry.id] ?? entry.id;
-
-      return (
-        <div key={bubbleKey} className={cn('flex', alignClass)}>
-          <div className="group relative max-w-[75%]">
-            <div
-              className={cn(
-                'chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl transition',
-                variant,
-              )}
-              data-chat-role={entry.type}
-            >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-white/70">
-                  {headerLabel}
-                  {entry.message.tool_name ? ` • ${entry.message.tool_name}` : ''}
-                </p>
-                {showActions && (
-                  <div className="flex items-center gap-2 text-[11px] text-white/80">
-                    {isUser && (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
-                        onClick={() => {
-                          setEditingMessageId(entry.message.id);
-                          setEditingDraft(entry.message.content);
-                        }}
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
-                    )}
-                    {isAssistant && (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
-                        onClick={() => handleRetryAssistant(entry.message.id)}
-                        disabled={sending}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Retry
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              {isUser && editingMessageId === entry.message.id ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="min-h-[120px] w-full rounded-2xl border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
-                    value={editingDraft}
-                    onChange={(event) => setEditingDraft(event.target.value)}
-                  />
-                  <div className="flex items-center gap-3">
-                    <Button size="sm" onClick={handleEditSubmit} loading={sending}>
-                      Update & rerun
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      type="button"
-                      onClick={() => {
-                        setEditingMessageId(null);
-                        setEditingDraft('');
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : isAssistant ? (
-                <div className="space-y-3">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {entry.content}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
-              )}
-            </div>
-            {usage && (
-              <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70">
-                  {usage.total_tokens != null && <span>{usage.total_tokens.toLocaleString()} tok</span>}
-                  {usage.prompt_tokens != null && <span>{usage.prompt_tokens.toLocaleString()} in</span>}
-                  {usage.completion_tokens != null && <span>{usage.completion_tokens.toLocaleString()} out</span>}
-                  {usage.reasoning_tokens != null && usage.reasoning_tokens > 0 && (
-                    <span>{usage.reasoning_tokens.toLocaleString()} reasoning</span>
-                  )}
-                  {usage.cost != null && (
-                    <span className="text-slate-100/80">
-                      ${usage.cost.toLocaleString(undefined, {
-                        minimumFractionDigits: 4,
-                        maximumFractionDigits: 6,
-                      })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    });
-
-    const streamingBubbles: ReactNode[] = [];
-    if (streamingReasoningBubble) streamingBubbles.push(streamingReasoningBubble);
-    if (assistantTypingBubble) streamingBubbles.push(assistantTypingBubble);
-    return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;
-  };
-
   return (
     <Fragment>
       <div className="flex h-full flex-col gap-4">
@@ -2291,7 +1824,39 @@ export default function ChatStudioExperience() {
                     style={{ overflowAnchor: 'none' }}
                   >
                     <div className="flex h-full flex-col gap-4">
-                      {renderMessages()}
+                      <ChatTimeline
+                        collectionName={collection ? collection.name : null}
+                        chatEntryOrder={chatEntryOrder}
+                        chatEntryMap={chatEntryMap}
+                        streamEntryKeyMap={streamEntryKeyMap}
+                        selectedSessionId={selectedSessionId}
+                        sending={sending}
+                        editingMessageId={editingMessageId}
+                        editingDraft={editingDraft}
+                        onEditChange={setEditingDraft}
+                        onEditStart={(messageId, content) => {
+                          setEditingMessageId(messageId);
+                          setEditingDraft(content);
+                        }}
+                        onEditCancel={() => {
+                          setEditingMessageId(null);
+                          setEditingDraft('');
+                        }}
+                        onEditSubmit={handleEditSubmit}
+                        onRetryAssistant={handleRetryAssistant}
+                        onReasoningToggle={handleReasoningToggle}
+                        markdownComponents={markdownComponents}
+                        samplePrompts={samplePrompts}
+                        onSamplePromptSelect={setDraft}
+                        liveResponse={liveResponse}
+                        hasLiveText={hasLiveText}
+                        liveResponseAnimationKey={liveResponseAnimationKey}
+                        activeStreamEntryKey={activeStreamEntryKey}
+                        shouldShowStreamingReasoningBubble={shouldShowStreamingReasoningBubble}
+                        liveReasoningAnimationKey={liveReasoningAnimationKey}
+                        liveReasoningDisplaySegments={liveReasoningDisplaySegments}
+                        showStreamingBubble={showStreamingBubble}
+                      />
                       <div ref={endRef} />
                     </div>
                   </div>

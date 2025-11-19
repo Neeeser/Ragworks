@@ -1,0 +1,303 @@
+import React, { Fragment } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Edit3, RotateCcw } from 'lucide-react';
+
+import { CollapsibleReasoning } from '@/components/ui/collapsible-reasoning';
+import { TypingAnimation } from '@/components/ui/typing-animation';
+import { ToolCallBubble } from '@/components/chat-studio/Tooling';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import type { ReasoningTraceSegment } from '@/lib/types';
+import type { Components } from 'react-markdown';
+
+import type { ChatEntry } from '../chat-types';
+
+const roleVariants: Record<string, string> = {
+  user: 'border-violet-500/50 bg-violet-600/20 text-violet-50 backdrop-blur-sm',
+  assistant: 'border-white/20 bg-white/10 text-white backdrop-blur-sm',
+  tool: 'border-cyan-400/40 bg-cyan-500/15 text-cyan-50 backdrop-blur-sm',
+  system: 'border-sky-500/30 bg-sky-500/10 text-sky-50',
+  reasoning: 'border-amber-400/50 bg-amber-500/15 text-amber-50 backdrop-blur-sm',
+};
+
+type ChatTimelineProps = {
+  collectionName: string | null;
+  chatEntryOrder: string[];
+  chatEntryMap: Map<string, ChatEntry>;
+  streamEntryKeyMap: Record<string, string>;
+  selectedSessionId: string | null;
+  sending: boolean;
+  editingMessageId: string | null;
+  editingDraft: string;
+  onEditChange: (value: string) => void;
+  onEditStart: (messageId: string, content: string) => void;
+  onEditCancel: () => void;
+  onEditSubmit: () => void;
+  onRetryAssistant: (messageId: string) => void;
+  onReasoningToggle: (messageId: string, isOpen: boolean) => void;
+  markdownComponents: Components;
+  samplePrompts: string[];
+  onSamplePromptSelect: (value: string) => void;
+  liveResponse: string;
+  hasLiveText: boolean;
+  liveResponseAnimationKey: number;
+  activeStreamEntryKey: string | null;
+  shouldShowStreamingReasoningBubble: boolean;
+  liveReasoningAnimationKey: number;
+  liveReasoningDisplaySegments: ReasoningTraceSegment[];
+  showStreamingBubble: boolean;
+};
+
+export function ChatTimeline({
+  collectionName,
+  chatEntryOrder,
+  chatEntryMap,
+  streamEntryKeyMap,
+  selectedSessionId,
+  sending,
+  editingMessageId,
+  editingDraft,
+  onEditChange,
+  onEditStart,
+  onEditCancel,
+  onEditSubmit,
+  onRetryAssistant,
+  onReasoningToggle,
+  markdownComponents,
+  samplePrompts,
+  onSamplePromptSelect,
+  liveResponse,
+  hasLiveText,
+  liveResponseAnimationKey,
+  activeStreamEntryKey,
+  shouldShowStreamingReasoningBubble,
+  liveReasoningAnimationKey,
+  liveReasoningDisplaySegments,
+  showStreamingBubble,
+}: ChatTimelineProps) {
+  const timelineEntries = chatEntryOrder
+    .map((entryId) => chatEntryMap.get(entryId))
+    .filter((entry): entry is ChatEntry => Boolean(entry));
+
+  if (timelineEntries.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
+        <div className="space-y-2">
+          <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
+          <h3 className="text-3xl font-semibold text-white">
+            {collectionName ? collectionName : 'Select a collection'}
+          </h3>
+          <p className="text-sm text-slate-400">
+            Ask anything about this dataset and we will cite the chunks that back it up.
+          </p>
+        </div>
+        <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
+          {samplePrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-slate-300 transition hover:border-white/30 hover:text-white"
+              onClick={() => onSamplePromptSelect(prompt)}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const liveStreamBubbleKey = activeStreamEntryKey ?? 'typing-indicator';
+
+  const streamingReasoningBubble = shouldShowStreamingReasoningBubble ? (
+    <div key="live-reasoning-stream" className="flex justify-start">
+      <div
+        className={cn(
+          'live-stream-reasoning chat-bubble chat-bubble-enter relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
+          roleVariants.reasoning,
+        )}
+        data-live-reasoning-key={liveReasoningAnimationKey}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.3em] text-amber-100/90">Reasoning</p>
+        </div>
+        <CollapsibleReasoning
+          segments={liveReasoningDisplaySegments}
+          messageId="live-reasoning"
+          isAutoOpen={false}
+          preventAutoClose
+          onManualToggle={onReasoningToggle}
+        />
+      </div>
+    </div>
+  ) : null;
+
+  const assistantTypingBubble = showStreamingBubble ? (
+    <div key={liveStreamBubbleKey} className="flex justify-start">
+      <div className="group relative max-w-[75%]">
+        <div
+          className={cn(
+            'live-stream-text chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl',
+            roleVariants.assistant,
+          )}
+          data-live-stream-key={liveResponseAnimationKey}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
+          </div>
+          {showStreamingBubble && hasLiveText ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {liveResponse}
+            </ReactMarkdown>
+          ) : (
+            <TypingAnimation />
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const messageBubbles = timelineEntries.map((entry) => {
+    if (entry.type === 'tool-call') {
+      return (
+        <Fragment key={entry.id}>
+          <ToolCallBubble
+            label={entry.label}
+            variantClass={roleVariants.tool}
+            args={entry.args}
+            response={entry.response}
+            rawPayload={entry.rawPayload}
+            className="chat-bubble chat-bubble-enter"
+          />
+        </Fragment>
+      );
+    }
+
+    if (entry.type === 'reasoning') {
+      return (
+        <Fragment key={entry.id}>
+          <div className="flex justify-start">
+            <CollapsibleReasoning
+              segments={entry.segments}
+              messageId={entry.id}
+              title={entry.title}
+              isAutoOpen={false}
+              preventAutoClose
+              onManualToggle={onReasoningToggle}
+              className={cn(
+                'chat-bubble chat-bubble-enter max-w-[75%] border px-4 py-3',
+                roleVariants.reasoning,
+              )}
+            />
+          </div>
+        </Fragment>
+      );
+    }
+
+    const variant = roleVariants[entry.type] ?? roleVariants.system;
+    const isUser = entry.type === 'user';
+    const isAssistant = entry.type === 'assistant';
+    const showActions = (isUser || isAssistant) && !!selectedSessionId;
+    const alignClass = isUser ? 'justify-end' : 'justify-start';
+    const usage = entry.message.usage;
+    const headerLabel = entry.message.role === 'user' ? 'You' : entry.message.role.toUpperCase();
+    const bubbleKey = streamEntryKeyMap[entry.id] ?? entry.id;
+
+    return (
+      <div key={bubbleKey} className={cn('flex', alignClass)}>
+        <div className="group relative max-w-[75%]">
+          <div
+            className={cn(
+              'chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl transition',
+              variant,
+            )}
+            data-chat-role={entry.type}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/70">
+                {headerLabel}
+                {entry.message.tool_name ? ` • ${entry.message.tool_name}` : ''}
+              </p>
+              {showActions && (
+                <div className="flex items-center gap-2 text-[11px] text-white/80">
+                  {isUser && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
+                      onClick={() => onEditStart(entry.message.id, entry.message.content)}
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  )}
+                  {isAssistant && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
+                      onClick={() => onRetryAssistant(entry.message.id)}
+                      disabled={sending}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Retry
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {isUser && editingMessageId === entry.message.id ? (
+              <div className="space-y-2">
+                <textarea
+                  className="min-h-[120px] w-full rounded-2xl border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                  value={editingDraft}
+                  onChange={(event) => onEditChange(event.target.value)}
+                />
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={onEditSubmit} loading={sending}>
+                    Update & rerun
+                  </Button>
+                  <Button size="sm" variant="ghost" type="button" onClick={onEditCancel}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : isAssistant ? (
+              <div className="space-y-3">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {entry.content}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
+            )}
+          </div>
+          {usage && (
+            <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70">
+                {usage.total_tokens != null && <span>{usage.total_tokens.toLocaleString()} tok</span>}
+                {usage.prompt_tokens != null && <span>{usage.prompt_tokens.toLocaleString()} in</span>}
+                {usage.completion_tokens != null && <span>{usage.completion_tokens.toLocaleString()} out</span>}
+                {usage.reasoning_tokens != null && usage.reasoning_tokens > 0 && (
+                  <span>{usage.reasoning_tokens.toLocaleString()} reasoning</span>
+                )}
+                {usage.cost != null && (
+                  <span className="text-slate-100/80">
+                    ${usage.cost.toLocaleString(undefined, {
+                      minimumFractionDigits: 4,
+                      maximumFractionDigits: 6,
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  });
+
+  const streamingBubbles: React.ReactNode[] = [];
+  if (streamingReasoningBubble) streamingBubbles.push(streamingReasoningBubble);
+  if (assistantTypingBubble) streamingBubbles.push(assistantTypingBubble);
+  return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;
+}
