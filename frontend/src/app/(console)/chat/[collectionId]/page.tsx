@@ -1786,6 +1786,10 @@ export default function ChatStudioExperience() {
       return;
     }
     scrollToBottom('smooth');
+    const timeout = setTimeout(() => {
+      scrollToBottom('smooth');
+    }, 100);
+    return () => clearTimeout(timeout);
   }, [autoScrollEnabled, chatEntryOrder, liveReasoningSegments, liveResponse, scrollToBottom]);
 
   useEffect(() => {
@@ -2047,9 +2051,9 @@ export default function ChatStudioExperience() {
           ...coerceRecord(rawPayload),
           ...(trace
             ? {
-                arguments: trace.arguments,
-                response: trace.response,
-              }
+              arguments: trace.arguments,
+              response: trace.response,
+            }
             : {}),
         };
         const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
@@ -2217,58 +2221,58 @@ export default function ChatStudioExperience() {
 
 
   const applyChatResponse = useCallback((response: ChatCompletionPayload) => {
-      console.debug('[chat] applyChatResponse start', {
-        activeStreamEntryKey: activeStreamEntryKeyRef.current,
-        responseMessages: response.messages.length,
+    console.debug('[chat] applyChatResponse start', {
+      activeStreamEntryKey: activeStreamEntryKeyRef.current,
+      responseMessages: response.messages.length,
+    });
+    setLiveResponse('');
+    setIsStreamingResponse(false);
+    resetLiveReasoningState();
+    const finalAssistant = [...response.messages].reverse().find((msg) => msg.role === 'assistant');
+    const streamKey = activeStreamEntryKeyRef.current;
+    if (finalAssistant?.id && streamKey) {
+      setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: streamKey }));
+      console.debug('[chat] mapped stream key to message', {
+        messageId: finalAssistant.id,
+        key: streamKey,
       });
-      setLiveResponse('');
-      setIsStreamingResponse(false);
-      resetLiveReasoningState();
-      const finalAssistant = [...response.messages].reverse().find((msg) => msg.role === 'assistant');
-      const streamKey = activeStreamEntryKeyRef.current;
-      if (finalAssistant?.id && streamKey) {
-        setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: streamKey }));
-        console.debug('[chat] mapped stream key to message', {
-          messageId: finalAssistant.id,
-          key: streamKey,
-        });
+    }
+    setActiveStreamEntryKey(null);
+    activeStreamEntryKeyRef.current = null;
+    pendingSessionIdsRef.current.delete(response.session.id);
+    const enrichedMessages = attachUsageToLastAssistantMessage(
+      response.messages,
+      response.usage ?? null,
+    );
+    // Always hydrate when streaming to prevent delayed message reveals
+    syncMessages(enrichedMessages, { hydrate: true });
+    console.debug('[chat] applied chat response', {
+      messages: response.messages.length,
+      toolTraces: response.tool_traces?.length ?? 0,
+      usage: response.usage,
+      streamEntryKeyMap,
+    });
+    const nextToolTraces =
+      response.tool_traces && response.tool_traces.length > 0
+        ? response.tool_traces
+        : deriveToolTraces(response.messages);
+    setToolTraces(nextToolTraces);
+    setUsage(calculateSessionUsage(enrichedMessages) ?? response.usage ?? null);
+    setContextConsumed(response.context_consumed);
+    setContextWindow(response.context_window || collection?.context_window || 0);
+    setSelectedSessionId(response.session.id);
+    setActiveModelId(response.session.chat_model);
+    setSessions((prev) => {
+      const next = [...prev];
+      const idx = next.findIndex((session) => session.id === response.session.id);
+      if (idx >= 0) {
+        next[idx] = response.session;
+      } else {
+        next.push(response.session);
       }
-      setActiveStreamEntryKey(null);
-      activeStreamEntryKeyRef.current = null;
-      pendingSessionIdsRef.current.delete(response.session.id);
-      const enrichedMessages = attachUsageToLastAssistantMessage(
-        response.messages,
-        response.usage ?? null,
-      );
-      // Always hydrate when streaming to prevent delayed message reveals
-      syncMessages(enrichedMessages, { hydrate: true });
-      console.debug('[chat] applied chat response', {
-        messages: response.messages.length,
-        toolTraces: response.tool_traces?.length ?? 0,
-        usage: response.usage,
-        streamEntryKeyMap,
-      });
-      const nextToolTraces =
-        response.tool_traces && response.tool_traces.length > 0
-          ? response.tool_traces
-          : deriveToolTraces(response.messages);
-      setToolTraces(nextToolTraces);
-      setUsage(calculateSessionUsage(enrichedMessages) ?? response.usage ?? null);
-      setContextConsumed(response.context_consumed);
-      setContextWindow(response.context_window || collection?.context_window || 0);
-      setSelectedSessionId(response.session.id);
-      setActiveModelId(response.session.chat_model);
-      setSessions((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex((session) => session.id === response.session.id);
-        if (idx >= 0) {
-          next[idx] = response.session;
-        } else {
-          next.push(response.session);
-        }
-        return sortSessions(next);
-      });
-    },
+      return sortSessions(next);
+    });
+  },
     [collection, deriveToolTraces, resetLiveReasoningState, setStreamEntryKeyMap, sortSessions, syncMessages],
   );
 
@@ -3603,23 +3607,25 @@ export default function ChatStudioExperience() {
     ) : null;
     const assistantTypingBubble = showStreamingBubble ? (
       <div key={liveStreamBubbleKey} className="flex justify-start">
-        <div
-          className={cn(
-            'live-stream-text chat-bubble chat-bubble-enter relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
-            roleVariants.assistant,
-          )}
-          data-live-stream-key={liveResponseAnimationKey}
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
+        <div className="group relative max-w-[75%]">
+          <div
+            className={cn(
+              'live-stream-text chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl',
+              roleVariants.assistant,
+            )}
+            data-live-stream-key={liveResponseAnimationKey}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-300/80">ASSISTANT</p>
+            </div>
+            {showStreamingBubble && hasLiveText ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {liveResponse}
+              </ReactMarkdown>
+            ) : (
+              <TypingAnimation />
+            )}
           </div>
-          {showStreamingBubble && hasLiveText ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {liveResponse}
-            </ReactMarkdown>
-          ) : (
-            <TypingAnimation />
-          )}
         </div>
       </div>
     ) : null;
@@ -4307,65 +4313,66 @@ export default function ChatStudioExperience() {
         )}
 
         <div className="flex flex-1 flex-col min-h-0">
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center">
-            <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
-              <Loader className="h-6 w-6" />
-            </GlassCard>
-          </div>
-        ) : !collection ? (
-          <div className="flex flex-1 items-center justify-center">
-            <GlassCard className="rounded-[2rem] p-10 text-center text-sm text-slate-300">
-              Unable to load this collection.
-            </GlassCard>
-          </div>
-        ) : (
-          <div className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
-            {historyOpen && (
-              <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
-                {renderHistoryList()}
-              </aside>
-            )}
-            {!historyOpen && (
-              <button
-                type="button"
-                className="absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
-                onClick={() => setHistoryOpen(true)}
-              >
-                <PanelLeftOpen className="h-4 w-4" />
-              </button>
-            )}
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center">
+              <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
+                <Loader className="h-6 w-6" />
+              </GlassCard>
+            </div>
+          ) : !collection ? (
+            <div className="flex flex-1 items-center justify-center">
+              <GlassCard className="rounded-[2rem] p-10 text-center text-sm text-slate-300">
+                Unable to load this collection.
+              </GlassCard>
+            </div>
+          ) : (
+            <div className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
+              {historyOpen && (
+                <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
+                  {renderHistoryList()}
+                </aside>
+              )}
+              {!historyOpen && (
+                <button
+                  type="button"
+                  className="absolute left-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+              )}
 
-            <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
-              <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Conversation</p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-2xl font-semibold text-white">{collection.name}</h2>
-                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      {documentCount} documents
-                    </span>
+              <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
+                <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Conversation</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-semibold text-white">{collection.name}</h2>
+                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                        {documentCount} documents
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!historyOpen && (
+                      <Button
+                        variant="secondary"
+                        className="flex h-10 items-center justify-center gap-2"
+                        onClick={handleStartNewChat}
+                      >
+                        <PlusCircle className="h-4 w-4" />
+                        <span>New chat</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {!historyOpen && (
-                    <Button
-                      variant="secondary"
-                      className="flex h-10 items-center justify-center gap-2"
-                      onClick={handleStartNewChat}
-                    >
-                      <PlusCircle className="h-4 w-4" />
-                      <span>New chat</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
 
                 <div className="flex h-full flex-col min-h-0 overflow-hidden">
                   <div
                     ref={messagesContainerRef}
                     onScroll={handleScroll}
-                    className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth"
+                    className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth !overflow-anchor-none"
+                    style={{ overflowAnchor: 'none' }}
                   >
                     <div className="flex h-full flex-col gap-4">
                       {renderMessages()}
@@ -4384,57 +4391,57 @@ export default function ChatStudioExperience() {
                       </button>
                     </div>
                   )}
-                <div className="border-t border-white/5 bg-black/30 px-6 py-4">
-                  <div className="flex flex-col gap-3">
-                    <textarea
-                      ref={chatPromptRef}
-                      rows={1}
-                      className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-                      placeholder="Ask anything about this collection…"
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      style={{
-                        minHeight: CHAT_INPUT_MIN_HEIGHT,
-                        maxHeight: CHAT_INPUT_MAX_HEIGHT,
-                      }}
-                    />
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>{draft.length} characters</span>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          onClick={sending ? handleStopGeneration : handleSend}
-                          disabled={!sending && !draft.trim()}
-                          className="gap-2"
-                        >
-                          {sending ? (isStopping ? 'Stopping...' : 'Stop') : 'Send turn'}
-                        </Button>
+                  <div className="border-t border-white/5 bg-black/30 px-6 py-4">
+                    <div className="flex flex-col gap-3">
+                      <textarea
+                        ref={chatPromptRef}
+                        rows={1}
+                        className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
+                        placeholder="Ask anything about this collection…"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        style={{
+                          minHeight: CHAT_INPUT_MIN_HEIGHT,
+                          maxHeight: CHAT_INPUT_MAX_HEIGHT,
+                        }}
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>{draft.length} characters</span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            onClick={sending ? handleStopGeneration : handleSend}
+                            disabled={!sending && !draft.trim()}
+                            className="gap-2"
+                          >
+                            {sending ? (isStopping ? 'Stopping...' : 'Stop') : 'Send turn'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {telemetryOpen && (
-              <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
-                {renderTelemetry()}
-              </aside>
-            )}
-            {!telemetryOpen && (
-              <button
-                type="button"
-                className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
-                onClick={() => setTelemetryOpen(true)}
-              >
-                <PanelRightOpen className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
+              {telemetryOpen && (
+                <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
+                  {renderTelemetry()}
+                </aside>
+              )}
+              {!telemetryOpen && (
+                <button
+                  type="button"
+                  className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
+                  onClick={() => setTelemetryOpen(true)}
+                >
+                  <PanelRightOpen className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-    {renderPromptEditorOverlay()}
-  </Fragment>
+      {renderPromptEditorOverlay()}
+    </Fragment>
   );
 }
