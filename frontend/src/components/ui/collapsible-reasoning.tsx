@@ -2,31 +2,59 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { ReasoningTraceSegment } from '@/lib/types';
 
 interface CollapsibleReasoningProps {
   segments: ReasoningTraceSegment[];
   messageId: string;
+  isAutoOpen?: boolean;
+  preventAutoClose?: boolean;
+  onManualToggle?: (messageId: string, isOpen: boolean) => void;
+  title?: string;
+  className?: string;
 }
 
-export function CollapsibleReasoning({ segments, messageId }: CollapsibleReasoningProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function CollapsibleReasoning({
+  segments,
+  messageId,
+  isAutoOpen = false,
+  preventAutoClose = false,
+  onManualToggle,
+  title = 'Reasoning Tokens',
+  className,
+}: CollapsibleReasoningProps) {
+  const [manualState, setManualState] = useState<boolean | null>(null);
+  const isOpen =
+    isAutoOpen || manualState !== null
+      ? isAutoOpen || manualState === true
+      : preventAutoClose;
 
   if (!segments || segments.length === 0) {
     return null;
   }
 
   return (
-    <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 overflow-hidden w-full">
+    <div
+      className={cn(
+        'w-full overflow-hidden rounded-2xl border border-amber-400/40 bg-amber-500/10 shadow-[0_20px_60px_rgba(251,191,36,0.25)]',
+        className,
+      )}
+    >
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const next = !isOpen;
+          setManualState(next);
+          onManualToggle?.(messageId, next);
+        }}
         className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-amber-500/15"
+        aria-expanded={isOpen}
       >
         <div className="flex items-center gap-2">
           <Lightbulb className="h-4 w-4 text-amber-300" />
           <span className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
-            Reasoning Tokens
+            {title}
           </span>
           <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs text-amber-100">
             {segments.length} {segments.length === 1 ? 'step' : 'steps'}
@@ -42,10 +70,14 @@ export function CollapsibleReasoning({ segments, messageId }: CollapsibleReasoni
       {isOpen && (
         <div className="border-t border-amber-400/30 px-4 py-3 space-y-3">
           {segments.map((segment, idx) => {
+            const preferredText =
+              (typeof segment.text === 'string' && segment.text) ||
+              (typeof segment.content === 'string' && segment.content) ||
+              null;
             const reasoningText =
-              (typeof segment.text === 'string' && segment.text.trim()) ||
-              (typeof segment.content === 'string' && segment.content.trim()) ||
-              JSON.stringify(segment, null, 2);
+              preferredText && preferredText.trim().length > 0
+                ? preferredText
+                : preferredText ?? JSON.stringify(segment, null, 2);
 
             return (
               <div

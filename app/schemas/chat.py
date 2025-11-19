@@ -55,6 +55,7 @@ class ChatMessageCreate(BaseModel):
     chat_model: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
     provider: Optional[Dict[str, Any]] = None
+    stream: Optional[bool] = False
 
 
 class ChatCompletionResponse(BaseModel):

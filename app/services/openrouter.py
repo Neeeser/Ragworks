@@ -128,6 +128,36 @@ class OpenRouterClient:
         response = self._client.chat.completions.create(**kwargs)
         return response.model_dump()
 
+    def chat_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+    ):
+        kwargs: Dict[str, Any] = {"messages": messages, "model": model or self.settings.default_chat_model}
+        if tools:
+            kwargs["tools"] = tools
+        if tool_choice:
+            kwargs["tool_choice"] = tool_choice
+        if parallel_tool_calls is not None:
+            kwargs["parallel_tool_calls"] = parallel_tool_calls
+        kwargs["extra_headers"] = self._merge_extra_headers(extra_headers)
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        if parameters:
+            for key, value in parameters.items():
+                if value is not None:
+                    kwargs[key] = value
+        kwargs["stream"] = True
+        stream = self._client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            yield chunk.model_dump()
+
 
 @lru_cache(maxsize=1)
 def get_openrouter_client() -> OpenRouterClient:
