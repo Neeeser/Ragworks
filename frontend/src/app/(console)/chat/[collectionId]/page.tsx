@@ -13,7 +13,7 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowDown, ArrowLeft, Edit3, PanelLeftOpen, PanelRightOpen, PlusCircle, RotateCcw, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Edit3, PanelLeftOpen, PanelRightOpen, PlusCircle, RotateCcw } from 'lucide-react';
 import type { Components } from 'react-markdown';
 
 import { Button } from '@/components/ui/button';
@@ -316,56 +316,6 @@ const deriveToolTracesFromMessages = (items: ChatMessage[]): ToolCallTrace[] =>
       } satisfies ToolCallTrace;
     });
 
-interface TelemetrySectionProps {
-  title: string;
-  description?: ReactNode;
-  icon?: ReactNode;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}
-
-const TelemetrySection = ({
-  title,
-  description,
-  icon,
-  isOpen,
-  onToggle,
-  children,
-}: TelemetrySectionProps) => (
-  <div className="rounded-2xl border border-white/10 bg-white/5">
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={isOpen}
-      className="flex w-full items-center justify-between gap-3 rounded-2xl border-b border-white/5 px-4 py-3 text-left transition hover:bg-white/10"
-    >
-      <div className="flex flex-1 items-center gap-2">
-        {icon && <span className="text-slate-300">{icon}</span>}
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{title}</p>
-          {description && (
-            <p className="text-[11px] text-slate-300">{description}</p>
-          )}
-        </div>
-      </div>
-      {isOpen ? (
-        <ChevronDown className="h-4 w-4 text-slate-300" />
-      ) : (
-        <ChevronRight className="h-4 w-4 text-slate-300" />
-      )}
-    </button>
-    {isOpen && <div className="space-y-3 px-4 pb-4 pt-3">{children}</div>}
-  </div>
-);
-
-const usageMetrics: { key: keyof UsageBreakdown; label: string }[] = [
-  { key: 'prompt_tokens', label: 'Prompt tokens' },
-  { key: 'completion_tokens', label: 'Completion tokens' },
-  { key: 'total_tokens', label: 'Total tokens' },
-  { key: 'reasoning_tokens', label: 'Reasoning tokens' },
-];
-
 const calculateSessionUsage = (items: ChatMessage[]): UsageBreakdown | null => {
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
@@ -462,7 +412,6 @@ const generateClientMessageId = () => {
 
 const CHAT_INPUT_MIN_HEIGHT = 40;
 const CHAT_INPUT_MAX_HEIGHT = 160;
-const CHAT_ENTRY_REVEAL_DELAY = 360;
 const PROGRESS_POLL_INTERVAL = 800;
 
 const markdownComponents: Components = {
@@ -536,7 +485,6 @@ export default function ChatStudioExperience() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolTraces, setToolTraces] = useState<ToolCallTrace[]>([]);
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
-  const [chatRevealQueue, setChatRevealQueue] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageBreakdown | null>(null);
   const [contextWindow, setContextWindow] = useState<number>(0);
   const [contextConsumed, setContextConsumed] = useState<number>(0);
@@ -601,17 +549,11 @@ export default function ChatStudioExperience() {
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [liveResponseAnimationKey, setLiveResponseAnimationKey] = useState(0);
   const [liveReasoningAnimationKey, setLiveReasoningAnimationKey] = useState(0);
-  const [activeReasoningId, setActiveReasoningId] = useState<string | null>(null);
-  const [manuallyOpenedReasoningIds, setManuallyOpenedReasoningIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [reasoningFocusActive, setReasoningFocusActive] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollAnimationFrameRef = useRef<number | null>(null);
   const programmaticScrollRef = useRef(false);
   const programmaticScrollTimeoutRef = useRef<number | null>(null);
-  const reasoningFocusTimeoutRef = useRef<number | null>(null);
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const promptEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
@@ -824,7 +766,6 @@ export default function ChatStudioExperience() {
       setMessages([]);
       setToolTraces([]);
       setChatEntryOrder([]);
-      setChatRevealQueue([]);
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
@@ -834,7 +775,6 @@ export default function ChatStudioExperience() {
       setMessages([]);
       setToolTraces([]);
       setChatEntryOrder([]);
-      setChatRevealQueue([]);
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
@@ -1099,34 +1039,15 @@ export default function ChatStudioExperience() {
   }, [selectedSessionId]);
 
   useEffect(() => {
-    setManuallyOpenedReasoningIds(new Set());
     reasoningCacheRef.current.clear();
   }, [selectedSessionId]);
 
   useEffect(() => {
     setChatEntryOrder([]);
-    setChatRevealQueue([]);
     chatHydrationPendingRef.current = true;
   }, [selectedSessionId]);
 
-  const handleReasoningToggle = useCallback((messageId: string, isOpen: boolean) => {
-    setManuallyOpenedReasoningIds((prev) => {
-      if (isOpen) {
-        if (prev.has(messageId)) {
-          return prev;
-        }
-        const next = new Set(prev);
-        next.add(messageId);
-        return next;
-      }
-      if (!prev.has(messageId)) {
-        return prev;
-      }
-      const next = new Set(prev);
-      next.delete(messageId);
-      return next;
-    });
-  }, []);
+  const handleReasoningToggle = useCallback(() => {}, []);
 
   const getPersistedReasoningSegments = useCallback(
     (messageId: string, segments: ReasoningTraceSegment[]) => {
@@ -1264,11 +1185,6 @@ export default function ChatStudioExperience() {
       stopProgressPolling();
     }
   }, [selectedSessionId, stopProgressPolling]);
-
-  const contextUtilization = useMemo(() => {
-    if (!contextWindow) return 0;
-    return Math.min(100, Math.round((contextConsumed / contextWindow) * 100));
-  }, [contextConsumed, contextWindow]);
 
   const toolTraceMap = useMemo(() => {
     const map = new Map<string, ToolCallTrace>();
@@ -1408,63 +1324,8 @@ export default function ChatStudioExperience() {
       console.debug('[chat] normalized entries', { normalizedChatEntryIds });
       return normalizedChatEntryIds;
     });
-    setChatRevealQueue([]);
     chatHydrationPendingRef.current = false;
   }, [normalizedChatEntryIds]);
-
-  const pendingRevealCount = chatRevealQueue.length;
-  const liveReasoningCount = liveReasoningSegments.length;
-
-  useEffect(() => {
-    const inProgress =
-      isStreamingResponse || liveReasoningCount > 0 || pendingRevealCount > 0;
-    if (inProgress) {
-      if (reasoningFocusTimeoutRef.current) {
-        window.clearTimeout(reasoningFocusTimeoutRef.current);
-        reasoningFocusTimeoutRef.current = null;
-      }
-      setReasoningFocusActive(true);
-      return;
-    }
-    if (reasoningFocusTimeoutRef.current) {
-      window.clearTimeout(reasoningFocusTimeoutRef.current);
-    }
-    reasoningFocusTimeoutRef.current = window.setTimeout(() => {
-      setReasoningFocusActive(false);
-      reasoningFocusTimeoutRef.current = null;
-    }, 400);
-  }, [isStreamingResponse, liveReasoningCount, pendingRevealCount]);
-
-  useEffect(
-    () => () => {
-      if (reasoningFocusTimeoutRef.current) {
-        window.clearTimeout(reasoningFocusTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  const latestReasoningId = useMemo(() => {
-    for (let i = chatEntryOrder.length - 1; i >= 0; i--) {
-      const entry = chatEntryMap.get(chatEntryOrder[i]);
-      if (entry?.type === 'reasoning') {
-        return entry.id;
-      }
-    }
-    return null;
-  }, [chatEntryMap, chatEntryOrder]);
-
-  useEffect(() => {
-    if (!reasoningFocusActive) {
-      setActiveReasoningId((prev) => (prev === null ? prev : null));
-      return;
-    }
-    if (liveReasoningCount > 0) {
-      setActiveReasoningId((prev) => (prev === 'live-reasoning' ? prev : 'live-reasoning'));
-      return;
-    }
-    setActiveReasoningId((prev) => (prev === latestReasoningId ? prev : latestReasoningId));
-  }, [latestReasoningId, liveReasoningCount, reasoningFocusActive]);
 
   const toolReadyModels = useMemo(
     () =>
@@ -1575,7 +1436,15 @@ export default function ChatStudioExperience() {
       return sortSessions(next);
     });
   },
-    [collection, deriveToolTraces, resetLiveReasoningState, setStreamEntryKeyMap, sortSessions, syncMessages],
+    [
+      collection,
+      deriveToolTraces,
+      resetLiveReasoningState,
+      setStreamEntryKeyMap,
+      sortSessions,
+      streamEntryKeyMap,
+      syncMessages,
+    ],
   );
 
   const isAbortError = (value: unknown): value is DOMException =>
@@ -1719,7 +1588,6 @@ export default function ChatStudioExperience() {
     setMessages([]);
     setToolTraces([]);
     setChatEntryOrder([]);
-    setChatRevealQueue([]);
     chatHydrationPendingRef.current = true;
     setUsage(null);
     setContextConsumed(0);
