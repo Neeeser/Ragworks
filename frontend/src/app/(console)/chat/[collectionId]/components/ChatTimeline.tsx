@@ -13,6 +13,13 @@ import type { Components } from 'react-markdown';
 
 import type { ChatEntry } from '../chat-types';
 
+const TOOL_REASONING_TYPES = new Set(['tool_call', 'tool_use', 'tool_request', 'call_tool', 'function_call']);
+
+const isToolReasoningSegment = (segment: ReasoningTraceSegment): boolean => {
+  const typeValue = typeof segment.type === 'string' ? segment.type.toLowerCase() : '';
+  return TOOL_REASONING_TYPES.has(typeValue);
+};
+
 const roleVariants: Record<string, string> = {
   user: 'border-violet-500/50 bg-violet-600/20 text-violet-50 backdrop-blur-sm',
   assistant: 'border-white/20 bg-white/10 text-white backdrop-blur-sm',
@@ -109,31 +116,54 @@ export function ChatTimeline({
   }
 
   const liveStreamBubbleKey = activeStreamEntryKey ?? 'typing-indicator';
+  const assistantBubbleKey = activeStreamEntryKey ? `${activeStreamEntryKey}-assistant` : liveStreamBubbleKey;
+  const liveReasoningBubbleKey = activeStreamEntryKey
+    ? `${activeStreamEntryKey}-reasoning`
+    : 'live-reasoning-stream';
+  const hasStreamingToolReasoning = liveReasoningDisplaySegments.some((segment) =>
+    isToolReasoningSegment(segment),
+  );
+  const shouldShowAssistantSubtitle = hasLiveText && !hasStreamingToolReasoning;
+  const liveReasoningSubtitle = hasStreamingToolReasoning
+    ? undefined
+    : shouldShowAssistantSubtitle
+      ? 'Assistant reasoning'
+      : undefined;
 
-  const streamingReasoningBubble = shouldShowStreamingReasoningBubble ? (
-    <div key="live-reasoning-stream" className="flex justify-start">
-      <div
-        className={cn(
-          'live-stream-reasoning chat-bubble chat-bubble-enter relative max-w-[75%] rounded-2xl border px-4 py-3 text-sm',
-          roleVariants.reasoning,
-        )}
-        data-live-reasoning-key={liveReasoningAnimationKey}
-      >
-        <CollapsibleReasoning
-          segments={liveReasoningDisplaySegments}
-          messageId="live-reasoning"
-          title="Reasoning"
-          subtitle="Assistant reasoning"
-          isAutoOpen={false}
-          preventAutoClose
-          onManualToggle={onReasoningToggle}
-        />
-      </div>
+  const hasFinalReasoningForStream =
+    Boolean(activeStreamEntryKey) &&
+    timelineEntries.some((entry) => {
+      if (entry.type !== 'reasoning' || !entry.messageId) {
+        return false;
+      }
+      const mappedKey = streamEntryKeyMap[entry.messageId];
+      if (!mappedKey) {
+        return false;
+      }
+      return `${mappedKey}-reasoning` === liveReasoningBubbleKey;
+    });
+
+  const streamingReasoningBubble = shouldShowStreamingReasoningBubble && !hasFinalReasoningForStream ? (
+    <div
+      key={liveReasoningBubbleKey}
+      className="flex justify-start"
+      data-live-reasoning-key={liveReasoningAnimationKey}
+    >
+      <CollapsibleReasoning
+        segments={liveReasoningDisplaySegments}
+        messageId="live-reasoning"
+        title="Reasoning"
+        subtitle={liveReasoningSubtitle}
+        isAutoOpen={false}
+        preventAutoClose
+        onManualToggle={onReasoningToggle}
+        className={cn('live-stream-reasoning chat-bubble chat-bubble-enter max-w-[75%]', roleVariants.reasoning)}
+      />
     </div>
   ) : null;
 
   const assistantTypingBubble = showStreamingBubble ? (
-    <div key={liveStreamBubbleKey} className="flex justify-start">
+    <div key={assistantBubbleKey} className="flex justify-start">
       <div className="group relative max-w-[75%]">
         <div
           className={cn(
@@ -174,8 +204,10 @@ export function ChatTimeline({
     }
 
     if (entry.type === 'reasoning') {
+      const mappedKey = entry.messageId ? streamEntryKeyMap[entry.messageId] : undefined;
+      const bubbleKey = mappedKey ? `${mappedKey}-reasoning` : entry.id;
       return (
-        <Fragment key={entry.id}>
+        <Fragment key={bubbleKey}>
           <div className="flex justify-start">
             <CollapsibleReasoning
               segments={entry.segments}
