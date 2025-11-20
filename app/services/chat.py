@@ -1250,19 +1250,28 @@ class ChatService:
                         function_block = {}
                     name = function_block.get("name") or "tool_call"
                     arguments = self._decode_tool_arguments(function_block.get("arguments"))
+                    call_id = tool_call.get("id") or f"tool_call_{uuid4().hex}"
+                    reasoning_entry = reasoning_call_segments.get(call_id) or shared_tool_reasoning
                     query_text = arguments.get("query") or arguments.get("text") or payload.content
                     try:
                         top_k = int(arguments.get("top_k", 5))
                     except (TypeError, ValueError):
                         top_k = 5
                     top_k = max(1, min(10, top_k))
+                    # Emit a streaming tool call event so the client can render without waiting
+                    yield {
+                        "type": "tool_call",
+                        "id": call_id,
+                        "name": name,
+                        "arguments": arguments,
+                        "reasoning": reasoning_entry,
+                    }
                     retrieval_response = self.retrieval.query_collection(collection, query_text, top_k=top_k)
                     tool_payload = {
                         "arguments": arguments,
                         "response": retrieval_response,
                     }
                     tool_content = json.dumps(tool_payload)
-                    call_id = tool_call.get("id")
                     reasoning_segment = reasoning_call_segments.pop(call_id, None)
                     if reasoning_segment is None and shared_tool_reasoning:
                         reasoning_segment = shared_tool_reasoning
@@ -1272,6 +1281,15 @@ class ChatService:
                             reasoning_payload = {"segments": [reasoning_segment]}
                         else:
                             reasoning_payload = reasoning_segment
+                    # Emit streaming tool result so the client can show the output immediately
+                    yield {
+                        "type": "tool_result",
+                        "id": call_id,
+                        "name": name,
+                        "arguments": arguments,
+                        "response": retrieval_response,
+                        "reasoning": reasoning_payload,
+                    }
                     messages.append(
                         {
                             "role": "tool",

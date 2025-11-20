@@ -30,6 +30,7 @@ export interface ChatToolEntry extends ChatEntryBase {
   args: Record<string, unknown>;
   response: Record<string, unknown>;
   rawPayload: Record<string, unknown>;
+  toolId?: string;
 }
 
 export type ChatEntry = ChatMessageEntry | ChatReasoningEntry | ChatToolEntry;

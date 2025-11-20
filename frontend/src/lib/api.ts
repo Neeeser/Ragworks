@@ -212,6 +212,8 @@ export async function chatWithCollection(
 export interface ChatStreamHandlers {
   onToken?: (token: string) => void;
   onReasoning?: (segments: ReasoningTraceSegment[]) => void;
+  onToolCall?: (event: ToolStreamEvent) => void;
+  onToolResult?: (event: ToolStreamEvent) => void;
   onError?: (message: string) => void;
   signal?: AbortSignal;
 }
@@ -219,11 +221,34 @@ export interface ChatStreamHandlers {
 type ChatStreamEvent =
   | { type: 'token'; content?: string }
   | { type: 'reasoning'; segments?: ReasoningTraceSegment[] }
+  | {
+      type: 'tool_call';
+      id?: string;
+      name?: string;
+      arguments?: Record<string, unknown>;
+      reasoning?: unknown;
+    }
+  | {
+      type: 'tool_result';
+      id?: string;
+      name?: string;
+      arguments?: Record<string, unknown>;
+      response?: Record<string, unknown>;
+      reasoning?: unknown;
+    }
   | { type: 'final'; payload: ChatCompletionPayload }
   | { type: 'error'; message?: string };
 
 const isAbortError = (value: unknown): value is DOMException =>
   value instanceof DOMException && value.name === 'AbortError';
+
+export interface ToolStreamEvent {
+  id?: string;
+  name?: string;
+  arguments?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+  reasoning?: unknown;
+}
 
 export async function streamChatWithCollection(
   collectionId: string,
@@ -297,6 +322,21 @@ export async function streamChatWithCollection(
           handlers?.onToken?.(parsed.content);
         } else if (parsed.type === 'reasoning') {
           handlers?.onReasoning?.(parsed.segments ?? []);
+        } else if (parsed.type === 'tool_call') {
+          handlers?.onToolCall?.({
+            id: parsed.id,
+            name: parsed.name,
+            arguments: parsed.arguments,
+            reasoning: parsed.reasoning,
+          });
+        } else if (parsed.type === 'tool_result') {
+          handlers?.onToolResult?.({
+            id: parsed.id,
+            name: parsed.name,
+            arguments: parsed.arguments,
+            response: parsed.response,
+            reasoning: parsed.reasoning,
+          });
         } else if (parsed.type === 'final' && parsed.payload) {
           finalPayload = parsed.payload;
         } else if (parsed.type === 'error') {

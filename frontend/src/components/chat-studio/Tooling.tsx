@@ -263,6 +263,7 @@ interface ToolCallBubbleProps {
   response: Record<string, unknown>;
   rawPayload: Record<string, unknown>;
   className?: string;
+  status?: 'pending' | 'complete';
 }
 
 export const formatToolLabel = (label: string): string => {
@@ -290,6 +291,7 @@ export const ToolCallBubble = ({
   response,
   rawPayload,
   className,
+  status = 'complete',
 }: ToolCallBubbleProps) => {
   const responseMeta: Record<string, unknown> = { ...response };
   const rawChunks = responseMeta.chunks;
@@ -309,6 +311,11 @@ export const ToolCallBubble = ({
     (chunkPreviewText ? truncateText(chunkPreviewText, 120) : null) ||
     'View tool output';
   const [expanded, setExpanded] = useState(false);
+  const statusLabel = status === 'pending' ? 'In progress' : 'Complete';
+  const statusClass =
+    status === 'pending'
+      ? 'border-amber-300/60 text-amber-100'
+      : 'border-cyan-300/40 text-cyan-200';
 
   return (
     <div className="flex justify-start">
@@ -324,8 +331,13 @@ export const ToolCallBubble = ({
             <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200">Tool Call</p>
             <p className="text-base font-semibold text-white">{formatToolLabel(label)}</p>
           </div>
-          <span className="rounded-full border border-cyan-300/40 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-cyan-200">
-            Complete
+          <span
+            className={cn(
+              'rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.3em]',
+              statusClass,
+            )}
+          >
+            {statusLabel}
           </span>
         </div>
         <button
