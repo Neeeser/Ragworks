@@ -186,7 +186,7 @@ export function ChatTimeline({
               preventAutoClose
               onManualToggle={onReasoningToggle}
               className={cn(
-                'chat-bubble chat-bubble-enter max-w-[75%] border px-4 py-3',
+                'chat-bubble chat-bubble-enter max-w-[75%]',
                 roleVariants.reasoning,
               )}
             />
