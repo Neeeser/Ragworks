@@ -119,12 +119,11 @@ export function ChatTimeline({
         )}
         data-live-reasoning-key={liveReasoningAnimationKey}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-amber-100/90">Reasoning</p>
-        </div>
         <CollapsibleReasoning
           segments={liveReasoningDisplaySegments}
           messageId="live-reasoning"
+          title="Reasoning"
+          subtitle="Assistant reasoning"
           isAutoOpen={false}
           preventAutoClose
           onManualToggle={onReasoningToggle}
@@ -182,6 +181,7 @@ export function ChatTimeline({
               segments={entry.segments}
               messageId={entry.id}
               title={entry.title}
+              subtitle={entry.subtitle}
               isAutoOpen={false}
               preventAutoClose
               onManualToggle={onReasoningToggle}

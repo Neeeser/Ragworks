@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReasoningTraceSegment } from '@/lib/types';
 
 interface CollapsibleReasoningProps {
   segments: ReasoningTraceSegment[];
   messageId: string;
+  subtitle?: string;
   isAutoOpen?: boolean;
   preventAutoClose?: boolean;
   onManualToggle?: (messageId: string, isOpen: boolean) => void;
@@ -18,10 +19,11 @@ interface CollapsibleReasoningProps {
 export function CollapsibleReasoning({
   segments,
   messageId,
+  subtitle,
   isAutoOpen = false,
   preventAutoClose = false,
   onManualToggle,
-  title = 'Reasoning Tokens',
+  title = 'Reasoning',
   className,
 }: CollapsibleReasoningProps) {
   const [manualState, setManualState] = useState<boolean | null>(null);
@@ -51,20 +53,26 @@ export function CollapsibleReasoning({
         className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-amber-500/15"
         aria-expanded={isOpen}
       >
-        <div className="flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-amber-300" />
-          <span className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
-            {title}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col leading-tight">
+            <span className="text-[11px] uppercase tracking-[0.35em] text-amber-200/80">
+              {title}
+            </span>
+            {subtitle ? (
+              <span className="text-base font-semibold text-amber-50">{subtitle}</span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
           <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs text-amber-100">
             {segments.length} {segments.length === 1 ? 'step' : 'steps'}
           </span>
+          {isOpen ? (
+            <ChevronDown className="h-4 w-4 text-amber-300" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-amber-300" />
+          )}
         </div>
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-amber-300" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-amber-300" />
-        )}
       </button>
 
       {isOpen && (

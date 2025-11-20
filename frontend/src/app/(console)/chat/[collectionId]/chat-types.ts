@@ -18,6 +18,7 @@ export interface ChatReasoningEntry extends ChatEntryBase {
   type: 'reasoning';
   source: ReasoningSource;
   title: string;
+  subtitle?: string;
   segments: ReasoningTraceSegment[];
   relatedToolLabel?: string;
 }
@@ -32,4 +33,3 @@ export interface ChatToolEntry extends ChatEntryBase {
 }
 
 export type ChatEntry = ChatMessageEntry | ChatReasoningEntry | ChatToolEntry;
-
