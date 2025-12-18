@@ -426,6 +426,8 @@ export default function ChatStudioExperience() {
     liveReasoningBlocks.length > 0 || liveReasoningDisplaySegments.length > 0;
   const shouldShowStreamingReasoningBubble =
     Boolean(activeStreamEntryKey) && hasDisplayedLiveReasoning;
+  const hadLiveTextRef = useRef(false);
+  const hadLiveReasoningRef = useRef(false);
 
   useEffect(() => {
     isStreamingResponseRef.current = isStreamingResponse;
@@ -436,18 +438,23 @@ export default function ChatStudioExperience() {
   }, [chatEntryOrder]);
 
   useEffect(() => {
-    if (!hasLiveText) {
+    const hadLiveText = hadLiveTextRef.current;
+    hadLiveTextRef.current = hasLiveText;
+    if (!hasLiveText || hadLiveText) {
       return;
     }
     setLiveResponseAnimationKey((prev) => prev + 1);
-  }, [hasLiveText, liveResponse]);
+  }, [hasLiveText]);
 
   useEffect(() => {
-    if (liveReasoningSegments.length === 0) {
+    const hasSegments = liveReasoningSegments.length > 0;
+    const hadLiveReasoning = hadLiveReasoningRef.current;
+    hadLiveReasoningRef.current = hasSegments;
+    if (!hasSegments || hadLiveReasoning) {
       return;
     }
     setLiveReasoningAnimationKey((prev) => prev + 1);
-  }, [liveReasoningSegments]);
+  }, [liveReasoningSegments.length]);
 
   const resetLiveReasoningState = useCallback(() => {
     setLiveReasoningSegments([]);
