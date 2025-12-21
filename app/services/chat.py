@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
+from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session, select
 
 from app.api.config import get_settings
@@ -1267,9 +1268,10 @@ class ChatService:
                         "reasoning": reasoning_entry,
                     }
                     retrieval_response = self.retrieval.query_collection(collection, query_text, top_k=top_k)
+                    response_payload = jsonable_encoder(retrieval_response)
                     tool_payload = {
                         "arguments": arguments,
-                        "response": retrieval_response,
+                        "response": response_payload,
                     }
                     tool_content = json.dumps(tool_payload)
                     reasoning_segment = reasoning_call_segments.pop(call_id, None)
@@ -1302,7 +1304,7 @@ class ChatService:
                             id=call_id,
                             name=name,
                             arguments=arguments,
-                            response=retrieval_response,
+                            response=response_payload,
                             reasoning=reasoning_payload,
                         )
                     )
@@ -1527,9 +1529,10 @@ class ChatService:
                         top_k = 5
                     top_k = max(1, min(10, top_k))
                     retrieval_response = self.retrieval.query_collection(collection, query_text, top_k=top_k)
+                    response_payload = jsonable_encoder(retrieval_response)
                     tool_payload = {
                         "arguments": arguments,
-                        "response": retrieval_response,
+                        "response": response_payload,
                     }
                     tool_content = json.dumps(tool_payload)
                     call_id = tool_call.get("id")
@@ -1554,7 +1557,7 @@ class ChatService:
                             id=call_id,
                             name=name,
                             arguments=arguments,
-                            response=retrieval_response,
+                            response=response_payload,
                             reasoning=reasoning_payload,
                         )
                     )

@@ -21,6 +21,7 @@ It's backbones are pinecone for vector storage and Openrouter for Embeddings and
 - Before finishing your work on a backend change:
   - Run `make test` (or `make coverage-report` while iterating)
   - Run `make coverage` and review the terminal `term-missing` output
+  - Always run these before sending your final response
 - Check for untested code and add tests as needed.
 
 # Backend Coding Guidelines

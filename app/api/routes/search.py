@@ -8,7 +8,7 @@ from sqlmodel import Session
 from app.api.dependencies import get_current_user, get_session
 from app.db import models
 from app.db.repositories import CollectionRepository
-from app.schemas.chat import CollectionQueryRequest, CollectionQueryResponse
+from app.schemas.retrieval import CollectionQueryRequest, CollectionQueryResponse
 from app.services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/api/collections", tags=["search"])
@@ -26,11 +26,4 @@ def run_collection_query(
     if not collection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     retrieval_service = RetrievalService()
-    result = retrieval_service.query_collection(collection, query=payload.query, top_k=payload.top_k)
-    return CollectionQueryResponse(
-        query=result["query"],
-        top_k=payload.top_k,
-        chunks=result["chunks"],
-        usage=result.get("usage", {}),
-    )
-
+    return retrieval_service.query_collection(collection, query=payload.query, top_k=payload.top_k)

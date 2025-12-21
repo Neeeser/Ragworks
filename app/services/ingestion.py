@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import UploadFile
@@ -17,10 +17,11 @@ from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig, Pinecon
 from app.retrieval.indexing import DocumentIndexer
 from app.retrieval.models import Document as RetrievalDocument
 from app.retrieval.models import DocumentMetadata
-from app.retrieval.parsers.base import DocumentSource
+from app.retrieval.parsers.base import DocumentParser, DocumentSource
 from app.retrieval.parsers.pdf import PdfToTextParser
 from app.retrieval.parsers.txt import TxtDocumentParser
 from app.services.chunking import build_chunker
+from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.openrouter import get_openrouter_client
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
@@ -38,7 +39,7 @@ class IngestionService:
         self._indexer = PineconeIndexer(client=self._pinecone)
         self.chunks = ChunkRepository(session)
 
-    def _select_parser(self, content_type: str) -> object:
+    def _select_parser(self, content_type: str) -> DocumentParser:
         if "pdf" in (content_type or ""):
             return PdfToTextParser()
         return TxtDocumentParser()
@@ -52,7 +53,23 @@ class IngestionService:
             }
         )
 
-    def ingest_upload(self, *, user: models.User, collection: models.Collection, upload: UploadFile) -> Dict[str, object]:
+    def _document_to_schema(self, document: models.Document) -> DocumentRead:
+        return DocumentRead(
+            id=document.id,
+            collection_id=document.collection_id,
+            name=document.name,
+            content_type=document.content_type,
+            status=document.status,
+            num_chunks=document.num_chunks,
+            num_tokens=document.num_tokens,
+            chunk_size=document.chunk_size,
+            chunk_overlap=document.chunk_overlap,
+            chunk_strategy=document.chunk_strategy,
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+        )
+
+    def ingest_upload(self, *, user: models.User, collection: models.Collection, upload: UploadFile) -> IngestionResponse:
         document = models.Document(
             collection_id=collection.id,
             user_id=user.id,
@@ -157,13 +174,13 @@ class IngestionService:
             ))
             self.session.commit()
 
-            return {
-                "document": document,
-                "chunk_count": len(chunk_records),
-                "pinecone_namespace": collection.pinecone_namespace,
-                "embedding_model": collection.embedding_model,
-                "usage": usage,
-            }
+            return IngestionResponse(
+                document=self._document_to_schema(document),
+                chunk_count=len(chunk_records),
+                pinecone_namespace=collection.pinecone_namespace,
+                embedding_model=collection.embedding_model,
+                usage=usage,
+            )
         except Exception as exc:
             document.status = models.DocumentStatus.FAILED
             document.updated_at = utc_now()

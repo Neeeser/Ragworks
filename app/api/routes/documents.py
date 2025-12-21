@@ -45,15 +45,7 @@ async def upload_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
 
     ingestion_service = IngestionService(session)
-    result = ingestion_service.ingest_upload(user=current_user, collection=collection, upload=file)
-    document_schema = _document_to_schema(result["document"])
-    return IngestionResponse(
-        document=document_schema,
-        chunk_count=result["chunk_count"],
-        pinecone_namespace=result["pinecone_namespace"],
-        embedding_model=result["embedding_model"],
-        usage=result.get("usage", {}),
-    )
+    return ingestion_service.ingest_upload(user=current_user, collection=collection, upload=file)
 
 
 @router.get("/collections/{collection_id}/documents", response_model=List[DocumentRead])

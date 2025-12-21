@@ -66,15 +66,3 @@ class ChatCompletionResponse(BaseModel):
     provider: str
     context_window: int
     context_consumed: int
-
-
-class CollectionQueryRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-
-class CollectionQueryResponse(BaseModel):
-    query: str
-    top_k: int
-    chunks: List[Dict[str, Any]]
-    usage: Dict[str, Any]
