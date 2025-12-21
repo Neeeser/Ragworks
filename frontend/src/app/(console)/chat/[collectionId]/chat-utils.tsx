@@ -153,7 +153,7 @@ export const normalizeReasoningSegments = (payload: unknown): ReasoningTraceSegm
 
 export const markdownComponents: Components = {
   p: ({ children }) => (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-100">{children}</div>
+    <div className="break-words text-sm leading-relaxed text-slate-100">{children}</div>
   ),
   a: ({ children, href }) => (
     <a
@@ -165,16 +165,21 @@ export const markdownComponents: Components = {
       {children}
     </a>
   ),
-  code: ({ inline, className, children }) =>
-    inline ? (
+  code: ({ inline, className, children }) => {
+    const isInline = inline !== false;
+    return isInline ? (
       <code className={cn('rounded bg-white/10 px-1 py-0.5 text-[0.85em] text-cyan-200', className)}>
         {children}
       </code>
     ) : (
-      <pre className="mt-3 overflow-auto rounded-2xl bg-slate-900/70 p-3 text-xs text-slate-100">
-        <code className={className}>{children}</code>
-      </pre>
-    ),
+      <code className={cn('text-xs text-slate-100', className)}>{children}</code>
+    );
+  },
+  pre: ({ children }) => (
+    <pre className="mt-3 overflow-auto rounded-2xl bg-slate-900/70 p-3 text-xs text-slate-100">
+      {children}
+    </pre>
+  ),
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-sm">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-sm">{children}</ol>,
   li: ({ children }) => <li className="text-slate-100">{children}</li>,
@@ -185,4 +190,3 @@ export const markdownComponents: Components = {
   ),
   strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
 };
-

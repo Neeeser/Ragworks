@@ -15,14 +15,6 @@ It's backbones are pinecone for vector storage and Openrouter for Embeddings and
 - `make coverage-report`: like `make coverage`, but does not fail the Make target if tests fail
 - `make coverage-open`: open `htmlcov/index.html`
 
-# Backend Tests and Coverage
-
-- Prefer adding/adjusting tests alongside new backend code.
-- Before finishing your work on a backend change:
-  - Run `make test` (or `make coverage-report` while iterating)
-  - Run `make coverage` and review the terminal `term-missing` output
-  - Always run these before sending your final response
-- Check for untested code and add tests as needed.
 
 # Backend Coding Guidelines
 
@@ -38,3 +30,12 @@ It's backbones are pinecone for vector storage and Openrouter for Embeddings and
 - Keep code modular: small, focused modules with clear responsibilities.
 - Put shared models in dedicated `models` modules/files and reuse them rather than duplicating shapes.
 - Organize code into the existing folder structure (`app/api`, `app/services`, `app/db`, `app/schemas`, `app/retrieval`); introduce new folders only when they clarify ownership.
+
+## Backend Tests and Coverage
+
+- Always add/adjust tests alongside new backend code.
+- Before finishing your work on a backend change:
+  - Run `make test` (or `make coverage-report` while iterating)
+  - Run `make coverage` and review the terminal `term-missing` output
+  - Always run these before sending your final response
+- Check for untested code and add tests as needed.
