@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.schemas.openrouter import OpenRouterChatResponse, OpenRouterStreamChunk
+from app.schemas.openrouter import (
+    OpenRouterChatResponse,
+    OpenRouterEmbeddingsResponse,
+    OpenRouterStreamChunk,
+)
 
 
 def test_openrouter_chat_response_preserves_extra_fields() -> None:
@@ -65,3 +69,21 @@ def test_openrouter_stream_chunk_parses_tool_calls_and_usage() -> None:
     assert tool_call.function.name == "pinecone_query"
     assert parsed.usage
     assert parsed.usage.total_tokens == 3
+
+
+def test_openrouter_embeddings_response_allows_extra_fields() -> None:
+    payload = {
+        "id": "embed-1",
+        "object": "list",
+        "model": "test-embed",
+        "data": [{"embedding": [0.1, 0.2], "index": 0, "extra": "keep"}],
+        "usage": {"prompt_tokens": 3, "total_tokens": 3, "cost": 0.01},
+        "new_field": {"nested": True},
+    }
+
+    parsed = OpenRouterEmbeddingsResponse.model_validate(payload)
+    dumped = parsed.model_dump(exclude_none=True)
+
+    assert dumped["new_field"]["nested"] is True
+    assert dumped["data"][0]["extra"] == "keep"
+    assert dumped["usage"]["cost"] == 0.01

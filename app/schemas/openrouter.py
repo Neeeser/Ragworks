@@ -86,3 +86,21 @@ class OpenRouterStreamChunk(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     usage: Optional[OpenRouterUsage] = None
+
+
+class OpenRouterEmbeddingItem(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    object: Optional[str] = None
+    embedding: Optional[Any] = None
+    index: Optional[int] = None
+
+
+class OpenRouterEmbeddingsResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    id: Optional[str] = None
+    object: Optional[str] = None
+    data: Optional[List[OpenRouterEmbeddingItem]] = None
+    model: Optional[str] = None
+    usage: Optional[OpenRouterUsage] = None

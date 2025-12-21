@@ -4,8 +4,11 @@ import logging
 from collections.abc import Iterable, Sequence
 from typing import Optional
 
+from pydantic import ValidationError
+
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
+from app.schemas.openrouter import OpenRouterEmbeddingItem, OpenRouterEmbeddingsResponse
 from app.services.openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
@@ -24,24 +27,40 @@ class OpenRouterEmbedder(Embedder):
         return self._last_usage
 
     def _extract_vectors(self, payload: dict[str, object]) -> list[EmbeddingVector]:
-        data = payload.get("data")
+        parsed: OpenRouterEmbeddingsResponse | None = None
+        try:
+            parsed = OpenRouterEmbeddingsResponse.model_validate(payload)
+        except ValidationError:
+            parsed = None
+
+        data = parsed.data if parsed and parsed.data is not None else payload.get("data")
         if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
             error_detail = payload.get("error") or payload
             logger.error("OpenRouter embeddings payload missing 'data': %s", error_detail)
             raise ValueError("OpenRouter returned an embeddings payload without a 'data' array.")
         vectors: list[EmbeddingVector] = []
         for index, entry in enumerate(data):
-            if not isinstance(entry, dict):
+            if isinstance(entry, OpenRouterEmbeddingItem):
+                embedding = entry.embedding
+            elif isinstance(entry, dict):
+                embedding = entry.get("embedding")
+            else:
                 logger.error("OpenRouter embeddings payload entry %s is not a mapping: %r", index, entry)
                 raise ValueError("OpenRouter returned an invalid embedding entry.")
-            embedding = entry.get("embedding")
             if not isinstance(embedding, Iterable) or isinstance(embedding, (str, bytes)):
                 logger.error("OpenRouter embeddings payload entry %s missing 'embedding': %s", index, entry)
                 raise ValueError("OpenRouter returned an embedding entry without 'embedding' values.")
             vectors.append([float(value) for value in embedding])
-        usage = payload.get("usage") or {}
-        if usage:
-            self._last_usage = {k: int(v) for k, v in usage.items() if isinstance(v, (int, float))}
+        if parsed and parsed.usage:
+            usage_payload = parsed.usage.model_dump(exclude_none=True)
+        else:
+            usage_payload = payload.get("usage") or {}
+        if usage_payload:
+            self._last_usage = {
+                k: int(v)
+                for k, v in usage_payload.items()
+                if isinstance(v, (int, float))
+            }
         return vectors
 
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:

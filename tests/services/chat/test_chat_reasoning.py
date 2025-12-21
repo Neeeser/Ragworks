@@ -84,3 +84,19 @@ def test_extract_reasoning_tool_calls_handles_multiple_calls_and_shared_context(
     assert context["call-2"]["segments"][0]["content"] == "between calls"
     assert context["call-2"]["segments"][1]["call"]["id"] == "call-2"
     assert residual == []
+
+
+def test_append_reasoning_segment_merges_adjacent_text() -> None:
+    segments = [{"type": "text", "content": "Hello"}]
+    ChatService._append_reasoning_segment(segments, {"type": "text", "text": " world"})
+
+    assert len(segments) == 1
+    assert segments[0]["text"] == "Hello world"
+
+    ChatService._append_reasoning_segment(
+        segments,
+        {"type": "text", "text": "!", "id": "call-2"},
+    )
+
+    assert len(segments) == 2
+    assert segments[1]["text"] == "!"

@@ -37,6 +37,12 @@ to ensure the most up-to-date behavior and feature availability.
 - Put shared models in dedicated `models` modules/files and reuse them rather than duplicating shapes.
 - Organize code into the existing folder structure (`app/api`, `app/services`, `app/db`, `app/schemas`, `app/retrieval`); introduce new folders only when they clarify ownership.
 
+## Style and Readability
+
+- Follow pylint-friendly formatting and conventions; keep code compliant with typical pylint rules.
+- Always include docstrings for modules, classes, and functions.
+- Add clear, concise comments where behavior is non-obvious to keep code easy to understand.
+
 ## Backend Tests and Coverage
 
 - Always add/adjust tests alongside new backend code.
