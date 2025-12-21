@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pinecone import Pinecone, ServerlessSpec
 from pinecone.exceptions import NotFoundException
+from sqlmodel import Session
 
 REQUIRED_ENV_VARS = [
     "OPENROUTER_API_KEY",
@@ -19,8 +20,8 @@ REQUIRED_ENV_VARS = [
 ]
 
 TEST_ROOT = Path(__file__).resolve().parent / ".integration"
-DB_PATH = TEST_ROOT / "integration.db"
 STORAGE_PATH = TEST_ROOT / "storage"
+DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/transparentrag_test"
 ENV_FILES = [Path(".env"), Path(".env.local")]
 _EMBED_DIMENSION_CACHE: Optional[int] = None
 
@@ -50,12 +51,10 @@ def _prepare_environment() -> None:
         )
 
     TEST_ROOT.mkdir(parents=True, exist_ok=True)
-    if DB_PATH.exists():
-        DB_PATH.unlink()
     if STORAGE_PATH.exists():
         shutil.rmtree(STORAGE_PATH)
 
-    os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH}"
+    os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
     os.environ["FILE_STORAGE_PATH"] = str(STORAGE_PATH)
 
 
@@ -66,9 +65,12 @@ from app.services.openrouter import get_openrouter_client
 
 api_config.get_settings.cache_clear()
 
-from app.db.session import init_db  # noqa: E402
+from tests.utils.db import create_test_engine, open_session, reset_database  # noqa: E402
+from app.db.session import ensure_database_exists, init_db  # noqa: E402
 from app.api.main import app  # noqa: E402
 
+ensure_database_exists(os.environ["DATABASE_URL"])
+reset_database(create_test_engine())
 init_db()
 
 
@@ -76,6 +78,11 @@ init_db()
 def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture(name="session")
+def session_fixture() -> Generator[Session, None, None]:
+    yield from open_session()
 
 
 @pytest.fixture(scope="session")

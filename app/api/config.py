@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, cast
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
 
     # Database / storage
     database_url: str = Field(
-        default="sqlite:///transparent_rag.db",
+        default="postgresql+psycopg://localhost:5432/transparentrag",
         validation_alias="DATABASE_URL",
     )
     storage_path: Path = Field(
@@ -83,6 +83,15 @@ class Settings(BaseSettings):
             "FastAPI/uvicorn logging."
         ),
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        """Ensure the configured database URL points to Postgres."""
+        normalized = (value or "").strip()
+        if not normalized.lower().startswith("postgresql"):
+            raise ValueError("DATABASE_URL must use a postgres connection string.")
+        return normalized
 
 
 @lru_cache(maxsize=1)

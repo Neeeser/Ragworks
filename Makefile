@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend server frontend run test test-verbose coverage coverage-report coverage-open lint
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose coverage coverage-report coverage-open lint
 
 UV ?= uv
 NPM ?= npm
@@ -17,6 +17,7 @@ help:
 	@echo "  make env-backend  - install backend deps only"
 	@echo "  make env-frontend - install frontend deps only"
 	@echo "  make server    - run FastAPI (reload)"
+	@echo "  make postgres  - ensure Postgres is running"
 	@echo "  make frontend  - run Next.js dev server"
 	@echo "  make run       - run server + frontend together"
 	@echo "  make test      - run pytest"
@@ -34,7 +35,10 @@ env-backend:
 env-frontend:
 	$(NPM) --prefix frontend install
 
-server: env-backend
+postgres: env-backend
+	$(UV) run python scripts/ensure_postgres.py
+
+server: postgres
 	$(UV) run uvicorn app.api.main:app --reload --host $(API_HOST) --port $(API_PORT)
 
 frontend: env-frontend
@@ -43,16 +47,16 @@ frontend: env-frontend
 run:
 	$(MAKE) -j2 server frontend
 
-test: env-backend
+test: postgres
 	$(UV) run pytest
 
-test-verbose: env-backend
+test-verbose: postgres
 	$(UV) run pytest -vv --durations=0
 
-coverage: env-backend
+coverage: postgres
 	$(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
 
-coverage-report: env-backend
+coverage-report: postgres
 	-$(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
 
 coverage-open:

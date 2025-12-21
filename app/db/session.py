@@ -2,22 +2,50 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from typing import Iterator, cast
 
+from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.api.config import get_settings
+from app.db.schema import SchemaValidationResult, build_expected_schema, inspect_database_schema
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 database_url = cast(str, settings.database_url)
-connect_args = (
-    {"check_same_thread": False}
-    if database_url.startswith("sqlite")  # pylint: disable=no-member
-    else {}
-)
-engine = create_engine(database_url, connect_args=connect_args)
+engine = create_engine(database_url, pool_pre_ping=True)
+
+
+def _safe_database_name(raw_name: str) -> str:
+    """Return a safely quoted Postgres database name."""
+    return raw_name.replace('"', '""')
+
+
+def ensure_database_exists(target_url: str) -> None:
+    """Ensure the configured Postgres database exists, creating it if needed."""
+    url = make_url(target_url)
+    if not url.database:
+        raise ValueError("DATABASE_URL must include a database name.")
+
+    admin_url = url.set(database="postgres")
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT", pool_pre_ping=True)
+    try:
+        with admin_engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :database"),
+                {"database": url.database},
+            ).first()
+            if result:
+                return
+            safe_name = _safe_database_name(url.database)
+            connection.execute(text(f'CREATE DATABASE "{safe_name}"'))
+            logger.info("Created Postgres database %s", url.database)
+    finally:
+        admin_engine.dispose()
 
 
 def init_db() -> None:
@@ -25,7 +53,25 @@ def init_db() -> None:
     # Import inside to ensure models are registered before table creation.
     import app.db.models  # pylint: disable=import-outside-toplevel,unused-import
 
-    SQLModel.metadata.create_all(engine)
+    ensure_database_exists(database_url)
+    expected = build_expected_schema()
+    actual = inspect_database_schema(engine)
+    validation = SchemaValidationResult.from_schemas(expected, actual)
+    if not validation.is_valid:
+        logger.info("Initializing missing Postgres tables.")
+        SQLModel.metadata.create_all(engine)
+        actual = inspect_database_schema(engine)
+        validation = SchemaValidationResult.from_schemas(expected, actual)
+    if not validation.is_valid:
+        missing_tables = ", ".join(sorted(validation.missing_tables)) or "none"
+        missing_columns_map = cast(dict[str, set[str]], validation.missing_columns)
+        missing_columns = ", ".join(
+            f"{table}: {sorted(columns)}" for table, columns in missing_columns_map.items()  # pylint: disable=no-member
+        ) or "none"
+        raise RuntimeError(
+            "Postgres schema validation failed. "
+            f"Missing tables: {missing_tables}. Missing columns: {missing_columns}."
+        )
 
 
 @contextmanager

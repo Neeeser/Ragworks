@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.db import models
 from app.db.models import ChunkStrategy
@@ -61,12 +61,6 @@ class _ModelOnlyOpenRouter:
         return self._model_info
 
 
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
-
-
 def _create_user(session: Session) -> models.User:
     user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
     session.add(user)
@@ -96,8 +90,7 @@ def _create_collection(session: Session, user: models.User, chat_model: str) -> 
     return collection
 
 
-def test_send_message_records_response(monkeypatch) -> None:
-    session = _session()
+def test_send_message_records_response(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="test-model")
 
@@ -146,8 +139,7 @@ def test_send_message_records_response(monkeypatch) -> None:
     assert openrouter.chat_calls
 
 
-def test_send_message_raises_for_missing_model(monkeypatch) -> None:
-    session = _session()
+def test_send_message_raises_for_missing_model(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="missing-model")
 
@@ -163,8 +155,7 @@ def test_send_message_raises_for_missing_model(monkeypatch) -> None:
         service.send_message(user=user, collection=collection, payload=ChatMessageCreate(content="hi"))
 
 
-def test_send_message_requires_tool_support(monkeypatch) -> None:
-    session = _session()
+def test_send_message_requires_tool_support(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="model-without-tools")
 
@@ -186,8 +177,7 @@ def test_send_message_requires_tool_support(monkeypatch) -> None:
         service.send_message(user=user, collection=collection, payload=ChatMessageCreate(content="hi"))
 
 
-def test_send_message_handles_tool_calls(monkeypatch) -> None:
-    session = _session()
+def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="tool-model")
 
@@ -262,8 +252,7 @@ def test_send_message_handles_tool_calls(monkeypatch) -> None:
     assert retrieval.calls[0]["top_k"] == 2
 
 
-def test_stream_message_handles_tool_calls_and_final(monkeypatch) -> None:
-    session = _session()
+def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="tool-model")
 
@@ -347,8 +336,7 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch) -> None:
     assert retrieval_calls[0]["top_k"] == 2
 
 
-def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypatch) -> None:
-    session = _session()
+def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="test-model")
 

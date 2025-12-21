@@ -5,20 +5,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import HTTPException
 from jose import jwt
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.api import dependencies
 from app.api.config import get_settings
 from app.core.security import create_access_token
 from app.db import models
-
-
-@pytest.fixture(name="session")
-def session_fixture() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
 
 
 def _create_user(session: Session, *, is_active: bool = True) -> models.User:

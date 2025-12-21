@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.api.routes import chat as chat_routes
 from app.db import models
@@ -19,12 +19,6 @@ from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate, ChatMess
 class _DummyRequest:
     async def is_disconnected(self) -> bool:
         return False
-
-
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
 
 
 def _create_user(session: Session) -> models.User:
@@ -89,8 +83,7 @@ def _add_message(session: Session, chat_session: models.ChatSession, role: ChatR
     return message
 
 
-def test_chat_with_collection_raises_when_missing() -> None:
-    session = _session()
+def test_chat_with_collection_raises_when_missing(session: Session) -> None:
     user = _create_user(session)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -99,8 +92,7 @@ def test_chat_with_collection_raises_when_missing() -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_chat_with_collection_maps_value_error(monkeypatch) -> None:
-    session = _session()
+def test_chat_with_collection_maps_value_error(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -124,8 +116,7 @@ def test_chat_with_collection_maps_value_error(monkeypatch) -> None:
     assert excinfo.value.status_code == 400
 
 
-def test_chat_with_collection_returns_response(monkeypatch) -> None:
-    session = _session()
+def test_chat_with_collection_returns_response(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)
@@ -160,8 +151,7 @@ def test_chat_with_collection_returns_response(monkeypatch) -> None:
     assert result.provider == "openrouter"
 
 
-def test_list_sessions_and_history_paths() -> None:
-    session = _session()
+def test_list_sessions_and_history_paths(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)
@@ -174,8 +164,7 @@ def test_list_sessions_and_history_paths() -> None:
     assert history[0].content == "hi"
 
 
-def test_list_sessions_and_history_missing_records() -> None:
-    session = _session()
+def test_list_sessions_and_history_missing_records(session: Session) -> None:
     user = _create_user(session)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -187,8 +176,7 @@ def test_list_sessions_and_history_missing_records() -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_delete_chat_session_paths() -> None:
-    session = _session()
+def test_delete_chat_session_paths(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)

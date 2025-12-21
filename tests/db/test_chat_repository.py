@@ -3,17 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.db import models
 from app.db.models import ChatRole, ChunkStrategy
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
-
-
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
 
 
 def _create_user(session: Session, email: str) -> models.User:
@@ -85,8 +79,7 @@ def _add_message(
     return message
 
 
-def test_chat_repository_filters_sessions_by_user() -> None:
-    session = _session()
+def test_chat_repository_filters_sessions_by_user(session: Session) -> None:
     user_a = _create_user(session, "a@example.com")
     user_b = _create_user(session, "b@example.com")
     collection_a = _create_collection(session, user_a)
@@ -101,8 +94,7 @@ def test_chat_repository_filters_sessions_by_user() -> None:
     assert len(list(repo.list_sessions(collection_id=collection_a.id, user_id=user_a.id))) == 1
 
 
-def test_chat_repository_filters_messages_by_user() -> None:
-    session = _session()
+def test_chat_repository_filters_messages_by_user(session: Session) -> None:
     user_a = _create_user(session, "a@example.com")
     user_b = _create_user(session, "b@example.com")
     collection_a = _create_collection(session, user_a)
@@ -123,8 +115,7 @@ def test_chat_repository_filters_messages_by_user() -> None:
     assert repo.get_message(message.id, user_id=user_a.id)
 
 
-def test_chat_repository_deletes_messages_after_anchor() -> None:
-    session = _session()
+def test_chat_repository_deletes_messages_after_anchor(session: Session) -> None:
     user = _create_user(session, "a@example.com")
     collection = _create_collection(session, user)
     chat_session = _create_session(session, user, collection)
@@ -143,8 +134,7 @@ def test_chat_repository_deletes_messages_after_anchor() -> None:
     assert list(repo.list_messages(chat_session.id)) == []
 
 
-def test_chat_repository_tool_deletion_and_last_user_message() -> None:
-    session = _session()
+def test_chat_repository_tool_deletion_and_last_user_message(session: Session) -> None:
     user = _create_user(session, "a@example.com")
     collection = _create_collection(session, user)
     chat_session = _create_session(session, user, collection)
@@ -163,8 +153,7 @@ def test_chat_repository_tool_deletion_and_last_user_message() -> None:
     assert ChatRole.TOOL not in remaining_roles
 
 
-def test_chat_repository_delete_session_removes_messages() -> None:
-    session = _session()
+def test_chat_repository_delete_session_removes_messages(session: Session) -> None:
     user = _create_user(session, "a@example.com")
     collection = _create_collection(session, user)
     chat_session = _create_session(session, user, collection)

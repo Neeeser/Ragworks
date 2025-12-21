@@ -1,6 +1,6 @@
 # TransparentRAG
 
-TransparentRAG is a user-centric Retrieval-Augmented Generation stack that keeps every step — parsing, chunking, embedding, indexing, and chatting — observable. The backend is a FastAPI service backed by SQLModel+SQLite, Pinecone for vector search, and OpenRouter for embeddings/LLM inference. The frontend is a Next.js + shadcn/ui control room that lets users manage collections, inspect chunks, run ad-hoc queries, and chat with full visibility into tool calls and token usage.
+TransparentRAG is a user-centric Retrieval-Augmented Generation stack that keeps every step — parsing, chunking, embedding, indexing, and chatting — observable. The backend is a FastAPI service backed by SQLModel+Postgres, Pinecone for vector search, and OpenRouter for embeddings/LLM inference. The frontend is a Next.js + shadcn/ui control room that lets users manage collections, inspect chunks, run ad-hoc queries, and chat with full visibility into tool calls and token usage.
 
 ---
 
@@ -42,7 +42,7 @@ PINECONE_CLOUD=aws
 
 # Auth / DB
 JWT_SECRET_KEY=super-secret-string
-DATABASE_URL=sqlite:///transparent_rag.db
+DATABASE_URL=postgresql+psycopg://localhost:5432/transparentrag
 FILE_STORAGE_PATH=./storage
 ```
 
@@ -53,7 +53,7 @@ make server
 # or: uv run uvicorn app.api.main:app --reload
 ```
 
-The startup hook creates/updates the local SQLite schema (`transparent_rag.db`). The primary endpoints are:
+`make server` ensures Postgres is running (set `POSTGRES_DATA_DIR` or `POSTGRES_START_COMMAND` if needed). The startup hook initializes the Postgres schema if it is missing. The primary endpoints are:
 
 | Route | Description |
 | --- | --- |
@@ -73,7 +73,7 @@ The startup hook creates/updates the local SQLite schema (`transparent_rag.db`).
 - **chat_sessions & chat_messages**: full conversation history, tool outputs, reasoning traces, and token usage.
 - **query_events / ingestion_events**: structured logs for observability.
 
-All writes go through SQLModel repositories so the physical store (SQLite now) can be swapped later.
+All writes go through SQLModel repositories so the physical store remains configurable via `DATABASE_URL`.
 
 ### 4. Running tests
 

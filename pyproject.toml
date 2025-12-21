@@ -16,6 +16,7 @@ dependencies = [
     "fastapi>=0.111.0,<0.126",
     "uvicorn[standard]>=0.29.0",
     "sqlmodel>=0.0.16",
+    "psycopg[binary]>=3.2.0",
     "httpx>=0.27.0",
     "openai>=1.30.5",
     "passlib[argon2]>=1.7.4",

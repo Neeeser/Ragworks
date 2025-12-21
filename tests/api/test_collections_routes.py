@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.api.routes import collections as collections_routes
 from app.db import models
@@ -67,12 +67,6 @@ class _StubFileStorage:
         self.deleted.append(target_path)
 
 
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
-
-
 def _create_user(session: Session) -> models.User:
     repo = UserRepository(session)
     user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
@@ -104,8 +98,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     return collection
 
 
-def test_get_collection_and_prompt_missing() -> None:
-    session = _session()
+def test_get_collection_and_prompt_missing(session: Session) -> None:
     user = _create_user(session)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -117,8 +110,7 @@ def test_get_collection_and_prompt_missing() -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_get_collection_and_prompt_success() -> None:
-    session = _session()
+def test_get_collection_and_prompt_success(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -129,8 +121,7 @@ def test_get_collection_and_prompt_success() -> None:
     assert prompt.template
 
 
-def test_update_and_delete_collection_missing() -> None:
-    session = _session()
+def test_update_and_delete_collection_missing(session: Session) -> None:
     user = _create_user(session)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -151,8 +142,7 @@ def test_update_and_delete_collection_missing() -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_create_collection_success(monkeypatch) -> None:
-    session = _session()
+def test_create_collection_success(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     openrouter = _StubOpenRouter({"data": [{"embedding": [0.1, 0.2]}]})
 
@@ -168,8 +158,7 @@ def test_create_collection_success(monkeypatch) -> None:
     assert _StubPineconeIndexer.last_config.dimension == 2
 
 
-def test_create_collection_errors_on_empty_embeddings(monkeypatch) -> None:
-    session = _session()
+def test_create_collection_errors_on_empty_embeddings(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     openrouter = _StubOpenRouter({"data": []})
 
@@ -186,8 +175,7 @@ def test_create_collection_errors_on_empty_embeddings(monkeypatch) -> None:
     assert excinfo.value.status_code == 502
 
 
-def test_create_collection_errors_on_zero_dimension(monkeypatch) -> None:
-    session = _session()
+def test_create_collection_errors_on_zero_dimension(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     openrouter = _StubOpenRouter({"data": [{"embedding": []}]})
 
@@ -204,8 +192,7 @@ def test_create_collection_errors_on_zero_dimension(monkeypatch) -> None:
     assert excinfo.value.status_code == 502
 
 
-def test_update_collection_updates_fields() -> None:
-    session = _session()
+def test_update_collection_updates_fields(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -223,8 +210,7 @@ def test_update_collection_updates_fields() -> None:
     assert updated.chunk_settings.strategy == ChunkStrategy.SENTENCE
 
 
-def test_update_collection_prompt_sets_and_clears_template() -> None:
-    session = _session()
+def test_update_collection_prompt_sets_and_clears_template(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -246,8 +232,7 @@ def test_update_collection_prompt_sets_and_clears_template() -> None:
     assert "TransparentRAG" in updated.rendered
 
 
-def test_delete_collection_removes_records(monkeypatch) -> None:
-    session = _session()
+def test_delete_collection_removes_records(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
 

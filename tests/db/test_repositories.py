@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.db import models
 from app.db.models import ChunkStrategy, DocumentStatus
@@ -14,14 +14,6 @@ from app.db.repositories import (
     QueryRepository,
     UserRepository,
 )
-
-
-@pytest.fixture(name="session")
-def session_fixture() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
 
 
 def _create_user(session: Session) -> models.User:

@@ -4,18 +4,12 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
 from app.db import models
 from app.db.models import ChunkStrategy
 from app.db.repositories import ChatRepository
 from app.services.chat import ChatService
-
-
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
 
 
 def _create_user(session: Session) -> models.User:
@@ -94,8 +88,7 @@ def _service(session: Session) -> ChatService:
     return service
 
 
-def test_apply_edit_updates_user_message_and_prunes_following() -> None:
-    session = _session()
+def test_apply_edit_updates_user_message_and_prunes_following(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)
@@ -128,8 +121,7 @@ def test_apply_edit_updates_user_message_and_prunes_following() -> None:
     assert messages[0].content == "Updated"
 
 
-def test_apply_edit_prunes_non_user_messages_after_anchor() -> None:
-    session = _session()
+def test_apply_edit_prunes_non_user_messages_after_anchor(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)
@@ -176,8 +168,7 @@ def test_apply_edit_prunes_non_user_messages_after_anchor() -> None:
     assert messages[0].role == models.ChatRole.USER
 
 
-def test_apply_edit_rejects_message_from_other_session() -> None:
-    session = _session()
+def test_apply_edit_rejects_message_from_other_session(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     chat_session = _create_chat_session(session, user, collection)
