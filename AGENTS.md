@@ -1,6 +1,6 @@
 # Project
 
-TransparentRAG is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`). 
+TransparentRAG is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`).
 The goal of this project is to provide an easy to use RAG interface for power users.
 It's backbones are pinecone for vector storage and Openrouter for Embeddings and LLMs.
 
@@ -22,3 +22,18 @@ It's backbones are pinecone for vector storage and Openrouter for Embeddings and
   - Run `make test` (or `make coverage-report` while iterating)
   - Run `make coverage` and review the terminal `term-missing` output
 - Check for untested code and add tests as needed.
+
+# Backend Coding Guidelines
+
+## Data Contracts and Types
+
+- Prefer explicit Pydantic models for request/response bodies, service boundaries, and persistence DTOs.
+- Use strong typing throughout the backend (typed function signatures, return types, and attributes).
+- Avoid `Any` and runtime type checks (e.g., `isinstance`) as a substitute for clear types and schemas.
+- Validate inputs at boundaries so internal code stays on the happy path.
+
+## Modularity and Structure
+
+- Keep code modular: small, focused modules with clear responsibilities.
+- Put shared models in dedicated `models` modules/files and reuse them rather than duplicating shapes.
+- Organize code into the existing folder structure (`app/api`, `app/services`, `app/db`, `app/schemas`, `app/retrieval`); introduce new folders only when they clarify ownership.

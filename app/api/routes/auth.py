@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestFormStrict
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
@@ -32,7 +32,7 @@ def register_user(payload: UserCreate, session: Session = Depends(get_session)) 
 
 @router.post("/token", response_model=Token)
 def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    form_data: OAuth2PasswordRequestFormStrict = Depends(),
     session: Session = Depends(get_session),
 ) -> Token:
     repo = UserRepository(session)

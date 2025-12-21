@@ -13,7 +13,10 @@ def _register_additional_user(client: TestClient) -> dict[str, object]:
         json={"email": email, "password": password, "full_name": "Isolated User"},
     )
     assert register_resp.status_code == 201, register_resp.text
-    token_resp = client.post("/api/auth/token", data={"username": email, "password": password})
+    token_resp = client.post(
+        "/api/auth/token",
+        data={"username": email, "password": password, "grant_type": "password"},
+    )
     assert token_resp.status_code == 200, token_resp.text
     token = token_resp.json()["access_token"]
     return {"headers": {"Authorization": f"Bearer {token}"}, "email": email}
