@@ -13,8 +13,7 @@ dependencies = [
     "sentence-transformers>=2.5.1",
     "pydantic>=2.6.0",
     "pypdf>=4.0.0",
-    "pytest>=7.0.0",
-    "fastapi>=0.111.0",
+    "fastapi>=0.111.0,<0.126",
     "uvicorn[standard]>=0.29.0",
     "sqlmodel>=0.0.16",
     "httpx>=0.27.0",
@@ -27,6 +26,17 @@ dependencies = [
     "pydantic-settings>=2.2.1",
     "email-validator>=2.1.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.uv]
+# This repository is an "application-style" layout (run from the repo root).
+# Avoid packaging/installing the project itself; just manage dependencies + venv.
+package = false
+default-groups = ["dev"]
 
 [tool.setuptools.packages.find]
 where = ["app"]

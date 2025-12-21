@@ -20,9 +20,8 @@ TransparentRAG is a user-centric Retrieval-Augmented Generation stack that keeps
 ### 1. Environment
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv sync --locked
+# or: make env
 ```
 
 Create an `.env.local` (or `.env`) with the required credentials:
@@ -50,7 +49,8 @@ FILE_STORAGE_PATH=./storage
 ### 2. Run the API
 
 ```bash
-uvicorn app.api.main:app --reload
+make server
+# or: uv run uvicorn app.api.main:app --reload
 ```
 
 The startup hook creates/updates the local SQLite schema (`transparent_rag.db`). The primary endpoints are:
@@ -96,6 +96,12 @@ npm install
 # Point the UI at your FastAPI host (defaults to http://127.0.0.1:8000)
 export NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"
 npm run dev
+```
+
+Or from the repo root:
+
+```bash
+make frontend
 ```
 
 ### 2. What you get
