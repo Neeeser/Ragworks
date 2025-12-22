@@ -4,7 +4,6 @@ import {
   Background,
   Controls,
   Handle,
-  MiniMap,
   Position,
   ReactFlow,
   addEdge,
@@ -55,20 +54,20 @@ const nodeTypes = {
         <Handle
           key={`input-${port.key}`}
           type="target"
-          position={Position.Left}
+          position={Position.Top}
           id={port.key}
           className="h-2 w-2 rounded-full border border-slate-500 bg-slate-900"
-          style={{ top: 42 + index * 16 }}
+          style={{ left: `${((index + 1) / (data.inputs.length + 1)) * 100}%` }}
         />
       ))}
       {data.outputs.map((port, index) => (
         <Handle
           key={`output-${port.key}`}
           type="source"
-          position={Position.Right}
+          position={Position.Bottom}
           id={port.key}
           className="h-2 w-2 rounded-full border border-slate-500 bg-slate-900"
-          style={{ top: 42 + index * 16 }}
+          style={{ left: `${((index + 1) / (data.outputs.length + 1)) * 100}%` }}
         />
       ))}
       <div className="flex items-center justify-between">
@@ -137,14 +136,14 @@ const buildDefaultDefinition = (kind: PipelineKind): PipelineDefinition => {
           type: "retriever.pinecone",
           name: "Pinecone Retriever",
           config: {},
-          position: { x: 280, y: 0 },
+          position: { x: 0, y: 140 },
         },
         {
           id: NODE_RETRIEVAL_OUTPUT,
           type: "retrieval.output",
           name: "Retrieval Output",
           config: {},
-          position: { x: 560, y: 0 },
+          position: { x: 0, y: 280 },
         },
       ],
       edges: [
@@ -181,35 +180,35 @@ const buildDefaultDefinition = (kind: PipelineKind): PipelineDefinition => {
         type: "parser.document",
         name: "Document Parser",
         config: {},
-        position: { x: 240, y: 0 },
+        position: { x: 0, y: 140 },
       },
       {
         id: NODE_CHUNK_DOCUMENT,
         type: "chunker.collection",
         name: "Chunker",
         config: {},
-        position: { x: 480, y: 0 },
+        position: { x: 0, y: 280 },
       },
       {
         id: NODE_EMBED_CHUNKS,
         type: "embedder.openrouter",
         name: "Embedder",
         config: {},
-        position: { x: 720, y: 0 },
+        position: { x: 0, y: 420 },
       },
       {
         id: NODE_INDEX_CHUNKS,
         type: "indexer.pinecone",
         name: "Indexer",
         config: {},
-        position: { x: 960, y: 0 },
+        position: { x: 0, y: 560 },
       },
       {
         id: NODE_INGEST_OUTPUT,
         type: "ingestion.output",
         name: "Ingestion Output",
         config: {},
-        position: { x: 1200, y: 0 },
+        position: { x: 0, y: 700 },
       },
     ],
     edges: [
@@ -416,7 +415,7 @@ export default function PipelinesPage() {
     const newNode: Node<PipelineNodeData> = {
       id: nodeId,
       type: "pipelineNode",
-      position: { x: 180, y: 120 + nodes.length * 60 },
+      position: { x: 160, y: 140 + nodes.length * 140 },
       data: {
         label: spec.label,
         nodeType: spec.type,
@@ -644,7 +643,6 @@ export default function PipelinesPage() {
                 fitView
               >
                 <Background gap={18} size={1} color="#1f2937" />
-                <MiniMap />
                 <Controls />
               </ReactFlow>
             </div>
