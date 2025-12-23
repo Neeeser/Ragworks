@@ -73,3 +73,21 @@ def test_init_db_adds_missing_columns() -> None:
     result = SchemaValidationResult.from_schemas(expected, actual)
 
     assert result.is_valid
+
+
+def test_collections_schema_excludes_pipeline_models() -> None:
+    init_db()
+    actual = inspect_database_schema(app_engine)
+    collection_schema = actual.tables.get("collections")
+    assert collection_schema is not None
+    excluded = {
+        "embedding_model",
+        "chat_model",
+        "context_window",
+        "chunk_size",
+        "chunk_overlap",
+        "chunk_strategy",
+        "pinecone_index",
+        "pinecone_namespace",
+    }
+    assert excluded.isdisjoint(collection_schema.columns)

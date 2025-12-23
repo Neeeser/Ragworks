@@ -22,6 +22,7 @@ from app.pipelines.runtime import (
     PipelineNodeBase,
     PipelineRunContext,
 )
+from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 from app.retrieval.parsers.base import DocumentSource
 from app.utils.file_storage import FileStorage
@@ -238,6 +239,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection, query="hello", top_k=3)
+    state: dict[str, object] = {}
 
     class _StubEmbedder:
         usage = {"prompt_tokens": 2}
@@ -250,10 +252,11 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
 
     class _StubRetriever:
         def __init__(self, index_config: object, embedder: object, client: object) -> None:
-            self.index_config = index_config
-            self.embedder = embedder
+            state["index_config"] = index_config
+            state["embedder"] = embedder
 
         def retrieve(self, request: object) -> RetrievalResponse:
+            state["request"] = request
             chunk = DocumentChunk(
                 document_id="doc",
                 chunk_id="doc:0",
@@ -278,6 +281,14 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
 
     assert payload.response.matches
     assert payload.usage == {"prompt_tokens": 2}
+    expected_namespace = DEFAULT_NAMESPACE_TEMPLATE.replace(
+        "{collection_id}",
+        str(collection.id),
+    )
+    index_config = state["index_config"]
+    assert getattr(index_config, "namespace", None) == expected_namespace
+    request = state["request"]
+    assert getattr(request, "namespace", None) == expected_namespace
 
 
 def test_reranker_node_rescores(monkeypatch, session: Session) -> None:

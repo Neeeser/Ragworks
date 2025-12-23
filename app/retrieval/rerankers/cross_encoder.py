@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from sentence_transformers import CrossEncoder
-
 from ..models import ScoredChunk
 from .base import Reranker
+
+try:
+    from sentence_transformers import CrossEncoder as SENTENCE_TRANSFORMERS_CROSS_ENCODER
+except Exception as exc:  # pylint: disable=broad-except
+    SENTENCE_TRANSFORMERS_CROSS_ENCODER = None
+    _IMPORT_ERROR = exc
+else:
+    _IMPORT_ERROR = None
+
+CrossEncoder = SENTENCE_TRANSFORMERS_CROSS_ENCODER
 
 
 class CrossEncoderReranker(Reranker):  # pylint: disable=too-few-public-methods
@@ -19,6 +27,10 @@ class CrossEncoderReranker(Reranker):  # pylint: disable=too-few-public-methods
         **model_kwargs: object,
     ) -> None:
         """Initialize the reranker with the given model name."""
+        if CrossEncoder is None:
+            raise RuntimeError(
+                "sentence-transformers is required for cross-encoder reranking."
+            ) from _IMPORT_ERROR
         self._model = CrossEncoder(model_name, **model_kwargs)
 
     def rerank(

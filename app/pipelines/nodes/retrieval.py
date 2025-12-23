@@ -199,5 +199,5 @@ class ChatSettingsNode(PipelineNodeBase):
     config_model = ChatSettingsConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """No-op node used to store chat configuration."""
+        """No-op node for storing chat settings in pipeline definitions."""
         return {}

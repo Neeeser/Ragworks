@@ -182,6 +182,7 @@ def create_collection(  # pylint: disable=too-many-locals
                 is_default=False,
             )
             ingestion_pipeline_id = custom_pipeline.id
+            ingestion_pipeline = custom_pipeline
         if payload.pipeline_overrides.retrieval:
             base_definition = pipeline_service.get_definition(retrieval_pipeline)
             override_map = {
@@ -201,6 +202,7 @@ def create_collection(  # pylint: disable=too-many-locals
                 is_default=False,
             )
             retrieval_pipeline_id = custom_pipeline.id
+            retrieval_pipeline = custom_pipeline
 
     collection = models.Collection(
         id=uuid4(),

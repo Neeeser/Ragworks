@@ -33,6 +33,12 @@ def _register_additional_user(client: TestClient) -> dict[str, object]:
     return {"headers": headers, "email": email}
 
 
+def test_collection_create_assigns_default_pipelines(collection_factory) -> None:
+    collection = collection_factory()
+    assert collection["ingestion_pipeline_id"]
+    assert collection["retrieval_pipeline_id"]
+
+
 def test_collection_listing_includes_primary(
     client: TestClient,
     user_context: dict[str, object],
