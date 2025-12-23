@@ -6,6 +6,7 @@ export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
 export type ChatMode = "query" | "chat";
 export type ChatRole = "system" | "user" | "assistant" | "tool";
+export type PipelineKind = "ingestion" | "retrieval";
 
 export interface User {
   id: UUID;
@@ -16,24 +17,14 @@ export interface User {
   updated_at: string;
 }
 
-export interface ChunkSettings {
-  strategy: ChunkStrategy;
-  chunk_size: number;
-  chunk_overlap: number;
-}
-
 export interface Collection {
   id: UUID;
   user_id: UUID;
   name: string;
   description?: string | null;
-  embedding_model: string;
-  chat_model: string;
-  pinecone_index: string;
-  pinecone_namespace: string;
-  context_window: number;
+  ingestion_pipeline_id?: UUID | null;
+  retrieval_pipeline_id?: UUID | null;
   metadata?: Record<string, unknown>;
-  chunk_settings: ChunkSettings;
   created_at: string;
   updated_at: string;
 }
@@ -73,11 +64,28 @@ export interface ModelInfo {
 export interface CollectionCreatePayload {
   name: string;
   description?: string;
-  chunk_settings?: Partial<ChunkSettings>;
   metadata?: Record<string, unknown>;
-  embedding_model?: string;
-  chat_model?: string;
-  pinecone_namespace?: string;
+  ingestion_pipeline_id?: UUID | null;
+  retrieval_pipeline_id?: UUID | null;
+  pipeline_overrides?: CollectionPipelineOverrides;
+}
+
+export interface CollectionUpdatePayload {
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  ingestion_pipeline_id?: UUID | null;
+  retrieval_pipeline_id?: UUID | null;
+}
+
+export interface PipelineNodeOverride {
+  node_id: string;
+  config: Record<string, unknown>;
+}
+
+export interface CollectionPipelineOverrides {
+  ingestion?: PipelineNodeOverride[];
+  retrieval?: PipelineNodeOverride[];
 }
 
 export interface Document {
@@ -236,6 +244,82 @@ export interface ProviderEndpoint {
   status?: string | number | null;
   uptime_last_30m?: number | null;
   supports_implicit_caching?: boolean;
+}
+
+export interface PipelineNodePosition {
+  x: number;
+  y: number;
+}
+
+export interface PipelineNodeDefinition {
+  id: string;
+  type: string;
+  name: string;
+  config: Record<string, unknown>;
+  position?: PipelineNodePosition;
+  ui?: Record<string, unknown>;
+}
+
+export interface PipelineEdgeDefinition {
+  id: string;
+  source: string;
+  target: string;
+  source_port?: string | null;
+  target_port?: string | null;
+  ui?: Record<string, unknown>;
+}
+
+export interface PipelineDefinition {
+  nodes: PipelineNodeDefinition[];
+  edges: PipelineEdgeDefinition[];
+  viewport?: Record<string, unknown>;
+}
+
+export interface Pipeline {
+  id: UUID;
+  user_id: UUID;
+  name: string;
+  description?: string | null;
+  kind: PipelineKind;
+  current_version: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+  definition: PipelineDefinition;
+}
+
+export interface PipelineVersion {
+  id: UUID;
+  pipeline_id: UUID;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  change_summary?: string | null;
+  created_by?: UUID | null;
+}
+
+export interface NodePort {
+  key: string;
+  label: string;
+  data_type: string;
+  required: boolean;
+}
+
+export interface NodeSpec {
+  type: string;
+  label: string;
+  category: string;
+  description: string;
+  example: string;
+  input_ports: NodePort[];
+  output_ports: NodePort[];
+  config_schema: Record<string, unknown>;
+  default_config: Record<string, unknown>;
+}
+
+export interface PipelineValidationResult {
+  valid: boolean;
+  errors: string[];
 }
 
 export interface ModelEndpointDirectory {

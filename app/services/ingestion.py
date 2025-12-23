@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List
 
 from fastapi import UploadFile
@@ -13,17 +12,13 @@ from sqlmodel import Session
 from app.api.config import get_settings
 from app.db import models
 from app.db.repositories import ChunkRepository
-from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
-from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig, PineconeIndexer
-from app.retrieval.indexing import DocumentIndexer
-from app.retrieval.models import Document as RetrievalDocument
-from app.retrieval.models import DocumentMetadata
-from app.retrieval.parsers.base import DocumentParser, DocumentSource
-from app.retrieval.parsers.pdf import PdfToTextParser
-from app.retrieval.parsers.txt import TxtDocumentParser
-from app.services.chunking import build_chunker
+from app.pipelines.config import resolve_ingestion_settings
+from app.pipelines.payloads import IndexingPayload
+from app.pipelines.registry import build_default_registry
+from app.pipelines.runtime import PipelineExecutor, PipelineRunContext
 from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.openrouter import get_openrouter_client
+from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
 
@@ -40,24 +35,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         self.storage = FileStorage()
         self.openrouter = get_openrouter_client()
         self._pinecone = Pinecone(api_key=self.settings.pinecone_api_key)
-        self._indexer = PineconeIndexer(client=self._pinecone)
         self.chunks = ChunkRepository(session)
-
-    def _select_parser(self, content_type: str) -> DocumentParser:
-        """Select a parser based on the upload content type."""
-        if "pdf" in (content_type or ""):
-            return PdfToTextParser()
-        return TxtDocumentParser()
-
-    def _build_metadata(self, document: models.Document) -> DocumentMetadata:
-        """Build metadata payload for the retriever document."""
-        return DocumentMetadata(
-            data={
-                "collection_id": str(document.collection_id),
-                "document_id": str(document.id),
-                "filename": document.name,
-            }
-        )
 
     # pylint: disable=too-many-locals
     def ingest_upload(
@@ -68,83 +46,52 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         upload: UploadFile,
     ) -> IngestionResponse:
         """Ingest a document upload and index its chunks."""
+        pipeline_service = PipelineService(self.session)
+        defaults = pipeline_service.ensure_default_pipelines(user)
+        pipeline_service.ensure_collection_pipelines(collection, defaults)
+        pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
+        pipeline = pipeline_service.get_pipeline(pipeline_id, user.id)
+        if not pipeline or pipeline.kind != models.PipelineKind.INGESTION:
+            raise ValueError("Ingestion pipeline could not be resolved.")
+        definition = pipeline_service.get_definition(pipeline)
+        resolved = resolve_ingestion_settings(definition, collection)
+
         document = models.Document(
             collection_id=collection.id,
             user_id=user.id,
             name=upload.filename or "uploaded-document",
             content_type=upload.content_type or "text/plain",
             status=models.DocumentStatus.PROCESSING,
-            chunk_size=collection.chunk_size,
-            chunk_overlap=collection.chunk_overlap,
-            chunk_strategy=collection.chunk_strategy,
-            embedding_model=collection.embedding_model,
+            chunk_size=resolved.chunk_size,
+            chunk_overlap=resolved.chunk_overlap,
+            chunk_strategy=resolved.chunk_strategy,
+            embedding_model=resolved.embedding_model,
         )
         self.session.add(document)
         self.session.flush()
 
         relative_path = f"collections/{collection.id}/documents/{document.id}/{document.name}"
         path = self.storage.save_upload(upload, relative_path)
+        document.source_path = str(path)
+        self.session.add(document)
 
         try:
-            parser = self._select_parser(document.content_type)
-            logger.info(
-                "Selected parser %s for document %s (%s)",
-                parser.__class__.__name__,
-                document.id,
-                document.content_type,
+            executor = PipelineExecutor(build_default_registry())
+            context = PipelineRunContext(
+                session=self.session,
+                user=user,
+                collection=collection,
+                document=document,
+                query=None,
+                top_k=None,
+                openrouter=self.openrouter,
+                pinecone=self._pinecone,
+                storage=self.storage,
+                settings=self.settings,
             )
-            source = DocumentSource(
-                document_id=str(document.id),
-                path=Path(path),
-                content_type=document.content_type,
-                metadata=self._build_metadata(document),
-            )
-            parsed: RetrievalDocument = parser.parse(source)  # type: ignore[assignment]
-            parsed_text = (parsed.text or "").strip()
-            snippet = (
-                parsed_text[:200] + ("..." if len(parsed_text) > 200 else "")
-                if parsed_text
-                else ""
-            )
-            logger.info(
-                "Parsed uploaded document %s (%s) content_type=%s chars=%s snippet=%r",
-                document.id,
-                document.name,
-                document.content_type,
-                len(parsed_text),
-                snippet,
-            )
-            chunker = build_chunker(
-                collection.chunk_strategy,
-                collection.chunk_size,
-                collection.chunk_overlap,
-            )
-            logger.info(
-                "Constructed chunker=%s strategy=%s size=%s overlap=%s for document %s",
-                chunker.__class__.__name__,
-                collection.chunk_strategy,
-                collection.chunk_size,
-                collection.chunk_overlap,
-                document.id,
-            )
-            embedder = OpenRouterEmbedder(self.openrouter, collection.embedding_model)
-            index_config = PineconeIndexConfig(
-                name=collection.pinecone_index,
-                namespace=collection.pinecone_namespace,
-                dimension=collection.extra_metadata.get("embedding_dimension", 1536),
-                metric="cosine",
-            )
-            indexer = DocumentIndexer(
-                chunker=chunker,
-                embedder=embedder,
-                indexer=self._indexer,
-                index_config=index_config,
-            )
-            indexer.ensure_index()
-            enriched_chunks = indexer.index_document(
-                document=parsed,
-                namespace=collection.pinecone_namespace,
-            )
+            result = executor.execute(definition, context)
+            payload = self._extract_indexing_payload(result.terminal_outputs)
+            enriched_chunks = payload.chunks
 
             chunk_records: List[models.DocumentChunkRecord] = []
             for chunk in enriched_chunks:
@@ -156,10 +103,10 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                         text=chunk.text,
                         embedding=chunk.embedding or [],
                         chunk_metadata=chunk.metadata.data,
-                        chunk_size=collection.chunk_size,
-                        chunk_overlap=collection.chunk_overlap,
-                        chunk_strategy=collection.chunk_strategy,
-                        embedding_model=collection.embedding_model,
+                        chunk_size=resolved.chunk_size,
+                        chunk_overlap=resolved.chunk_overlap,
+                        chunk_strategy=resolved.chunk_strategy,
+                        embedding_model=resolved.embedding_model,
                     )
                 )
             self.chunks.add_many(chunk_records)
@@ -167,9 +114,8 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             document.status = models.DocumentStatus.READY
             document.num_chunks = len(chunk_records)
             document.num_tokens = sum(len(chunk.text.split()) for chunk in enriched_chunks)
-            document.source_path = str(path)
             document.updated_at = utc_now()
-            usage = embedder.usage or {}
+            usage = payload.usage or {}
             self.session.add(
                 models.IngestionEvent(
                     document_id=document.id,
@@ -178,7 +124,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                     status="success",
                     details={
                         "chunks": len(chunk_records),
-                        "embedding_model": collection.embedding_model,
+                        "embedding_model": resolved.embedding_model,
                         "usage": usage,
                     },
                 )
@@ -188,8 +134,8 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             return IngestionResponse(
                 document=DocumentRead.from_model(document),
                 chunk_count=len(chunk_records),
-                pinecone_namespace=collection.pinecone_namespace,
-                embedding_model=collection.embedding_model,
+                pinecone_namespace=resolved.namespace or "",
+                embedding_model=resolved.embedding_model,
                 usage=usage,
             )
         except Exception as exc:
@@ -206,3 +152,13 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             )
             self.session.commit()
             raise
+
+    @staticmethod
+    def _extract_indexing_payload(
+        terminal_outputs: dict[str, dict[str, object]],
+    ) -> IndexingPayload:
+        """Find the indexing payload from terminal pipeline outputs."""
+        for outputs in terminal_outputs.values():
+            if "result" in outputs:
+                return IndexingPayload.model_validate(outputs["result"])
+        raise ValueError("Pipeline did not return an ingestion result payload.")

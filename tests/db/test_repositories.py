@@ -31,15 +31,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
         user_id=user.id,
         name="Test Collection",
         description="Unit test",
-        embedding_model="qwen/qwen3-embedding-0.6b",
-        chat_model="openai/gpt-oss-120b",
-        context_window=8192,
-        chunk_size=512,
-        chunk_overlap=32,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        pinecone_index="unit-tests",
-        pinecone_namespace=f"ns-{uuid4().hex[:8]}",
-        metadata={"embedding_dimension": 512},
+        extra_metadata={},
     )
     repo.add(collection)
     session.commit()
@@ -57,10 +49,10 @@ def _create_document(session: Session, user: models.User, collection: models.Col
         status=DocumentStatus.PROCESSING,
         num_chunks=0,
         num_tokens=0,
-        chunk_size=collection.chunk_size,
-        chunk_overlap=collection.chunk_overlap,
-        chunk_strategy=collection.chunk_strategy,
-        embedding_model=collection.embedding_model,
+        chunk_size=512,
+        chunk_overlap=32,
+        chunk_strategy=ChunkStrategy.TOKEN,
+        embedding_model="qwen/qwen3-embedding-0.6b",
     )
     repo.add(document)
     session.commit()
@@ -106,10 +98,10 @@ def test_document_and_chunk_repositories(session: Session) -> None:
         text="Hello world chunk",
         embedding=[0.1, 0.2, 0.3],
         chunk_metadata={"source": "unit-test"},
-        chunk_size=collection.chunk_size,
-        chunk_overlap=collection.chunk_overlap,
-        chunk_strategy=collection.chunk_strategy,
-        embedding_model=collection.embedding_model,
+        chunk_size=512,
+        chunk_overlap=32,
+        chunk_strategy=ChunkStrategy.TOKEN,
+        embedding_model="qwen/qwen3-embedding-0.6b",
     )
     chunk_repo.add_many([chunk_record])
     session.commit()
@@ -117,7 +109,7 @@ def test_document_and_chunk_repositories(session: Session) -> None:
     stored = list(chunk_repo.list_for_document(document.id))
     assert len(stored) == 1
     assert stored[0].chunk_metadata["source"] == "unit-test"
-    assert stored[0].embedding_model == collection.embedding_model
+    assert stored[0].embedding_model == "qwen/qwen3-embedding-0.6b"
 
 
 def test_collection_repository_get_filters_user(session: Session) -> None:

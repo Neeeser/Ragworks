@@ -1,8 +1,9 @@
 "use client";
 
-import { FilePlus, FolderKanban, Search, UploadCloud } from "lucide-react";
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FilePlus, FolderKanban, Search, SlidersHorizontal, UploadCloud } from "lucide-react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
 import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
@@ -11,15 +12,24 @@ import {
   fetchCollections,
   fetchDocumentChunks,
   fetchDocuments,
+  fetchPipelineNodes,
+  fetchPipelines,
   runCollectionQuery,
+  updateCollection,
   uploadDocument,
 } from "@/lib/api";
 import { cn, truncate } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { Chunk, Collection, CollectionQueryResult, Document } from "@/lib/types";
-
-const chunkStrategies = ["token", "sentence", "paragraph", "semantic"] as const;
+import type {
+  Chunk,
+  Collection,
+  CollectionCreatePayload,
+  CollectionQueryResult,
+  Document,
+  NodeSpec,
+  Pipeline,
+} from "@/lib/types";
 
 export default function CollectionsPage() {
   const { token } = useAuth();
@@ -29,23 +39,36 @@ export default function CollectionsPage() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [chunkView, setChunkView] = useState<Chunk[]>([]);
   const [queryResult, setQueryResult] = useState<CollectionQueryResult | null>(null);
+  const [ingestionPipelines, setIngestionPipelines] = useState<Pipeline[]>([]);
+  const [retrievalPipelines, setRetrievalPipelines] = useState<Pipeline[]>([]);
+  const [nodeSpecs, setNodeSpecs] = useState<NodeSpec[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [ingestionOverrides, setIngestionOverrides] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+  const [retrievalOverrides, setRetrievalOverrides] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+  const [pipelineBindings, setPipelineBindings] = useState({
+    ingestion: "",
+    retrieval: "",
+  });
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [binding, setBinding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<{
     name: string;
     description: string;
-    chunk_size: number;
-    chunk_overlap: number;
-    chunk_strategy: (typeof chunkStrategies)[number];
+    ingestion_pipeline_id: string;
+    retrieval_pipeline_id: string;
   }>({
     name: "",
     description: "",
-    chunk_size: 1024,
-    chunk_overlap: 200,
-    chunk_strategy: "token",
+    ingestion_pipeline_id: "",
+    retrieval_pipeline_id: "",
   });
   const [query, setQuery] = useState("What does TransparentRAG do?");
   const [topK, setTopK] = useState(4);
@@ -75,6 +98,101 @@ export default function CollectionsPage() {
     }
 
     loadCollections();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const defaultIngestion = useMemo(
+    () =>
+      ingestionPipelines.find((pipeline) => pipeline.is_default) ?? ingestionPipelines[0] ?? null,
+    [ingestionPipelines],
+  );
+  const defaultRetrieval = useMemo(
+    () =>
+      retrievalPipelines.find((pipeline) => pipeline.is_default) ?? retrievalPipelines[0] ?? null,
+    [retrievalPipelines],
+  );
+  const pipelineNameById = useMemo(() => {
+    const entries = [...ingestionPipelines, ...retrievalPipelines].map((pipeline) => [
+      pipeline.id,
+      pipeline.name,
+    ]);
+    return new Map(entries);
+  }, [ingestionPipelines, retrievalPipelines]);
+
+  const usesDefaultPipelines =
+    !!defaultIngestion &&
+    !!defaultRetrieval &&
+    form.ingestion_pipeline_id === defaultIngestion.id &&
+    form.retrieval_pipeline_id === defaultRetrieval.id;
+
+  const buildOverridesFromPipeline = useCallback(
+    (pipeline: Pipeline | null) => {
+      if (!pipeline) return {};
+      const specsByType = new Map(nodeSpecs.map((spec) => [spec.type, spec]));
+      return pipeline.definition.nodes.reduce<Record<string, Record<string, unknown>>>(
+        (acc, node) => {
+          const spec = specsByType.get(node.type);
+          acc[node.id] = { ...(spec?.default_config ?? {}), ...(node.config ?? {}) };
+          return acc;
+        },
+        {},
+      );
+    },
+    [nodeSpecs],
+  );
+
+  useEffect(() => {
+    if (!showAdvanced || !usesDefaultPipelines) return;
+    if (defaultIngestion && Object.keys(ingestionOverrides).length === 0) {
+      setIngestionOverrides(buildOverridesFromPipeline(defaultIngestion));
+    }
+    if (defaultRetrieval && Object.keys(retrievalOverrides).length === 0) {
+      setRetrievalOverrides(buildOverridesFromPipeline(defaultRetrieval));
+    }
+  }, [
+    showAdvanced,
+    usesDefaultPipelines,
+    defaultIngestion,
+    defaultRetrieval,
+    nodeSpecs,
+    buildOverridesFromPipeline,
+    ingestionOverrides,
+    retrievalOverrides,
+  ]);
+
+  useEffect(() => {
+    const authToken = token ?? "";
+    if (!authToken) return;
+    let cancelled = false;
+
+    async function loadPipelines() {
+      try {
+        const [ingestion, retrieval, specs] = await Promise.all([
+          fetchPipelines(authToken, "ingestion"),
+          fetchPipelines(authToken, "retrieval"),
+          fetchPipelineNodes(authToken),
+        ]);
+        if (cancelled) return;
+        setIngestionPipelines(ingestion);
+        setRetrievalPipelines(retrieval);
+        setNodeSpecs(specs);
+        const defaultIngestion = ingestion.find((pipeline) => pipeline.is_default) ?? ingestion[0];
+        const defaultRetrieval = retrieval.find((pipeline) => pipeline.is_default) ?? retrieval[0];
+        setForm((prev) => ({
+          ...prev,
+          ingestion_pipeline_id: prev.ingestion_pipeline_id || defaultIngestion?.id || "",
+          retrieval_pipeline_id: prev.retrieval_pipeline_id || defaultRetrieval?.id || "",
+        }));
+      } catch (err) {
+        if (!cancelled) {
+          setMessage(err instanceof Error ? err.message : "Unable to load pipelines.");
+        }
+      }
+    }
+
+    loadPipelines();
     return () => {
       cancelled = true;
     };
@@ -118,6 +236,17 @@ export default function CollectionsPage() {
   }, [selectedCollection, token]);
 
   useEffect(() => {
+    if (!selectedCollection) {
+      setPipelineBindings({ ingestion: "", retrieval: "" });
+      return;
+    }
+    setPipelineBindings({
+      ingestion: selectedCollection.ingestion_pipeline_id ?? ingestionPipelines[0]?.id ?? "",
+      retrieval: selectedCollection.retrieval_pipeline_id ?? retrievalPipelines[0]?.id ?? "",
+    });
+  }, [selectedCollection, ingestionPipelines, retrievalPipelines]);
+
+  useEffect(() => {
     const authToken = token ?? "";
     const document = selectedDocument;
     if (!authToken || !document) {
@@ -150,25 +279,40 @@ export default function CollectionsPage() {
     setCreating(true);
     setMessage(null);
     try {
-      const payload = {
+      const payload: CollectionCreatePayload = {
         name: form.name,
         description: form.description,
-        chunk_settings: {
-          chunk_size: form.chunk_size,
-          chunk_overlap: form.chunk_overlap,
-          strategy: form.chunk_strategy,
-        },
       };
+      if (form.ingestion_pipeline_id) {
+        payload.ingestion_pipeline_id = form.ingestion_pipeline_id;
+      }
+      if (form.retrieval_pipeline_id) {
+        payload.retrieval_pipeline_id = form.retrieval_pipeline_id;
+      }
+      if (showAdvanced && usesDefaultPipelines) {
+        payload.pipeline_overrides = {
+          ingestion: Object.entries(ingestionOverrides).map(([nodeId, config]) => ({
+            node_id: nodeId,
+            config,
+          })),
+          retrieval: Object.entries(retrievalOverrides).map(([nodeId, config]) => ({
+            node_id: nodeId,
+            config,
+          })),
+        };
+      }
       const newCollection = await createCollection(authToken, payload);
       setCollections((prev) => [newCollection, ...prev]);
       setSelectedCollection(newCollection);
       setForm({
         name: "",
         description: "",
-        chunk_size: 1024,
-        chunk_overlap: 200,
-        chunk_strategy: "token",
+        ingestion_pipeline_id: defaultIngestion?.id || "",
+        retrieval_pipeline_id: defaultRetrieval?.id || "",
       });
+      setIngestionOverrides({});
+      setRetrievalOverrides({});
+      setShowAdvanced(false);
       setMessage("Collection created. Configure documents below.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create collection.");
@@ -220,6 +364,27 @@ export default function CollectionsPage() {
     }
   };
 
+  const handleUpdatePipelines = async () => {
+    const authToken = token ?? "";
+    const collection = selectedCollection;
+    if (!authToken || !collection) return;
+    setBinding(true);
+    setMessage(null);
+    try {
+      const updated = await updateCollection(collection.id, authToken, {
+        ingestion_pipeline_id: pipelineBindings.ingestion || null,
+        retrieval_pipeline_id: pipelineBindings.retrieval || null,
+      });
+      setCollections((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSelectedCollection(updated);
+      setMessage("Pipeline bindings updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update pipelines.");
+    } finally {
+      setBinding(false);
+    }
+  };
+
   const topScores = useMemo(() => {
     if (!queryResult?.chunks?.length) return { max: 0 };
     const max = Math.max(...queryResult.chunks.map((chunk) => chunk.score ?? 0));
@@ -254,11 +419,19 @@ export default function CollectionsPage() {
               <div className="mt-4 space-y-3">
                 {collections.length === 0 && (
                   <p className="text-sm text-slate-400">
-                    No collections yet. Create one with chunk parameters below.
+                    No collections yet. Create one with pipeline defaults below.
                   </p>
                 )}
                 {collections.map((collection) => {
                   const isActive = selectedCollection?.id === collection.id;
+                  const ingestionName =
+                    pipelineNameById.get(collection.ingestion_pipeline_id ?? "") ??
+                    defaultIngestion?.name ??
+                    "Ingestion pipeline";
+                  const retrievalName =
+                    pipelineNameById.get(collection.retrieval_pipeline_id ?? "") ??
+                    defaultRetrieval?.name ??
+                    "Retrieval pipeline";
                   return (
                     <button
                       type="button"
@@ -274,15 +447,8 @@ export default function CollectionsPage() {
                       <p className="text-base font-semibold">{collection.name}</p>
                       <p className="text-xs text-slate-400">{collection.description}</p>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-300">
-                        <span className="rounded-full bg-white/10 px-2 py-1">
-                          {collection.chunk_settings.strategy} strategy
-                        </span>
-                        <span className="rounded-full bg-white/10 px-2 py-1">
-                          chunk {collection.chunk_settings.chunk_size}
-                        </span>
-                        <span className="rounded-full bg-white/10 px-2 py-1">
-                          overlap {collection.chunk_settings.chunk_overlap}
-                        </span>
+                        <span className="rounded-full bg-white/10 px-2 py-1">{ingestionName}</span>
+                        <span className="rounded-full bg-white/10 px-2 py-1">{retrievalName}</span>
                       </div>
                     </button>
                   );
@@ -313,52 +479,101 @@ export default function CollectionsPage() {
                     setForm((prev) => ({ ...prev, description: event.target.value }))
                   }
                 />
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   <div>
                     <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                      Chunk size
+                      Ingestion pipeline
                     </label>
-                    <input
-                      type="number"
-                      min={128}
+                    <select
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-                      value={form.chunk_size}
+                      value={form.ingestion_pipeline_id}
                       onChange={(event) =>
-                        setForm((prev) => ({ ...prev, chunk_size: Number(event.target.value) }))
+                        setForm((prev) => ({
+                          ...prev,
+                          ingestion_pipeline_id: event.target.value,
+                        }))
                       }
-                    />
+                    >
+                      {ingestionPipelines.length === 0 && (
+                        <option value="">Loading pipelines...</option>
+                      )}
+                      {ingestionPipelines.map((pipeline) => (
+                        <option key={pipeline.id} value={pipeline.id}>
+                          {pipeline.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                      Overlap
+                      Retrieval pipeline
                     </label>
-                    <input
-                      type="number"
-                      min={0}
+                    <select
                       className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-                      value={form.chunk_overlap}
+                      value={form.retrieval_pipeline_id}
                       onChange={(event) =>
-                        setForm((prev) => ({ ...prev, chunk_overlap: Number(event.target.value) }))
+                        setForm((prev) => ({
+                          ...prev,
+                          retrieval_pipeline_id: event.target.value,
+                        }))
                       }
-                    />
+                    >
+                      {retrievalPipelines.length === 0 && (
+                        <option value="">Loading pipelines...</option>
+                      )}
+                      {retrievalPipelines.map((pipeline) => (
+                        <option key={pipeline.id} value={pipeline.id}>
+                          {pipeline.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-                <select
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-                  value={form.chunk_strategy}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      chunk_strategy: event.target.value as (typeof chunkStrategies)[number],
-                    }))
-                  }
-                >
-                  {chunkStrategies.map((strategy) => (
-                    <option key={strategy} value={strategy}>
-                      {strategy} strategy
-                    </option>
-                  ))}
-                </select>
+                <div className="rounded-3xl border border-white/10 bg-black/30 p-4">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between text-sm text-slate-200"
+                    onClick={() => setShowAdvanced((prev) => !prev)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <SlidersHorizontal className="h-4 w-4 text-violet-300" />
+                      Advanced pipeline defaults
+                    </span>
+                    <span className="text-xs text-slate-400">{showAdvanced ? "Hide" : "Show"}</span>
+                  </button>
+                  {showAdvanced ? (
+                    <div className="mt-4 space-y-4">
+                      {!usesDefaultPipelines ? (
+                        <p className="text-sm text-slate-400">
+                          Advanced options are available only when the default pipelines are
+                          selected.
+                        </p>
+                      ) : nodeSpecs.length === 0 ? (
+                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                          <Loader className="h-4 w-4" />
+                          Loading node settings...
+                        </div>
+                      ) : (
+                        <>
+                          <PipelineOverridesEditor
+                            title="Ingestion defaults"
+                            pipeline={defaultIngestion}
+                            nodeSpecs={nodeSpecs}
+                            overrides={ingestionOverrides}
+                            onOverridesChange={setIngestionOverrides}
+                          />
+                          <PipelineOverridesEditor
+                            title="Retrieval defaults"
+                            pipeline={defaultRetrieval}
+                            nodeSpecs={nodeSpecs}
+                            overrides={retrievalOverrides}
+                            onOverridesChange={setRetrievalOverrides}
+                          />
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
                 <Button type="submit" loading={creating} className="w-full">
                   Create collection
                 </Button>
@@ -394,12 +609,21 @@ export default function CollectionsPage() {
                   </div>
                   <dl className="mt-6 grid gap-4 sm:grid-cols-3">
                     {[
-                      { label: "Embedding model", value: selectedCollection.embedding_model },
-                      { label: "Chat model", value: selectedCollection.chat_model },
                       {
-                        label: "Pinecone namespace",
-                        value: selectedCollection.pinecone_namespace,
+                        label: "Ingestion pipeline",
+                        value:
+                          pipelineNameById.get(selectedCollection.ingestion_pipeline_id ?? "") ??
+                          defaultIngestion?.name ??
+                          "Default ingestion pipeline",
                       },
+                      {
+                        label: "Retrieval pipeline",
+                        value:
+                          pipelineNameById.get(selectedCollection.retrieval_pipeline_id ?? "") ??
+                          defaultRetrieval?.name ??
+                          "Default retrieval pipeline",
+                      },
+                      { label: "Collection id", value: selectedCollection.id },
                     ].map((item) => (
                       <div
                         key={item.label}
@@ -412,6 +636,69 @@ export default function CollectionsPage() {
                       </div>
                     ))}
                   </dl>
+                </GlassCard>
+
+                <GlassCard className="rounded-3xl p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.35em] text-slate-400">
+                        Pipelines
+                      </p>
+                      <h2 className="text-2xl font-semibold">Collection bindings</h2>
+                      <p className="text-sm text-slate-400">
+                        Swap ingestion or retrieval flows without reconfiguring the collection.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                        Ingestion pipeline
+                      </label>
+                      <select
+                        className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
+                        value={pipelineBindings.ingestion}
+                        onChange={(event) =>
+                          setPipelineBindings((prev) => ({
+                            ...prev,
+                            ingestion: event.target.value,
+                          }))
+                        }
+                      >
+                        {ingestionPipelines.map((pipeline) => (
+                          <option key={pipeline.id} value={pipeline.id}>
+                            {pipeline.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                        Retrieval pipeline
+                      </label>
+                      <select
+                        className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
+                        value={pipelineBindings.retrieval}
+                        onChange={(event) =>
+                          setPipelineBindings((prev) => ({
+                            ...prev,
+                            retrieval: event.target.value,
+                          }))
+                        }
+                      >
+                        {retrievalPipelines.map((pipeline) => (
+                          <option key={pipeline.id} value={pipeline.id}>
+                            {pipeline.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <Button onClick={handleUpdatePipelines} loading={binding}>
+                      Apply pipelines
+                    </Button>
+                  </div>
                 </GlassCard>
 
                 <GlassCard className="rounded-3xl p-6">

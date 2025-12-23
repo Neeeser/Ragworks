@@ -46,11 +46,12 @@ to ensure the most up-to-date behavior and feature availability.
 ## Backend Tests and Coverage
 
 - Always add/adjust tests alongside new backend code.
-- Before finishing your work on a backend change that modifies backend code:
+- Before finishing your work on a backend change:
   - Run `make test` (or `make coverage-report` while iterating)
   - Run `make coverage` and review the terminal `term-missing` output
   - Always run these before sending your final response
 - Check for untested code and add tests as needed.
+- If you only made frontend changes, no need to run backend tests/coverage.
 
 ## Backend Linting
 
@@ -68,3 +69,8 @@ to ensure the most up-to-date behavior and feature availability.
 
 - Always run Prettier on frontend code you change (use `make format-frontend`).
 - Ensure CI-friendly formatting checks pass (use `make format-check-frontend`).
+
+## Modularity and Structure
+
+- Prefer modular, component-first frontend architecture. Keep `page.tsx` files focused on composition and orchestration, moving UI blocks into reusable components.
+- Use subfolders under `frontend/src/components/` to show component hierarchy and keep large views digestible.

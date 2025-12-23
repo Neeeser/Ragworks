@@ -52,3 +52,24 @@ def test_init_db_creates_missing_tables() -> None:
     result = SchemaValidationResult.from_schemas(expected, actual)
 
     assert result.is_valid
+
+
+def test_init_db_adds_missing_columns() -> None:
+    SQLModel.metadata.drop_all(app_engine)
+    SQLModel.metadata.create_all(app_engine)
+
+    with app_engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE collections DROP COLUMN IF EXISTS ingestion_pipeline_id")
+        )
+        connection.execute(
+            text("ALTER TABLE collections DROP COLUMN IF EXISTS retrieval_pipeline_id")
+        )
+
+    init_db()
+
+    expected = build_expected_schema()
+    actual = inspect_database_schema(app_engine)
+    result = SchemaValidationResult.from_schemas(expected, actual)
+
+    assert result.is_valid

@@ -295,7 +295,66 @@ class _StubChatRepo:
         return
 
 
-def test_stream_message_records_partial_on_abort() -> None:
+def _stub_pipeline_helpers(monkeypatch, *, chat_model: str, context_window: int) -> None:
+    class _StubPipelineService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def ensure_default_pipelines(self, _user):
+            return SimpleNamespace(
+                ingestion=SimpleNamespace(id="ingestion"),
+                retrieval=SimpleNamespace(id="retrieval"),
+            )
+
+        def ensure_collection_pipelines(self, collection, defaults):
+            collection.ingestion_pipeline_id = (
+                getattr(collection, "ingestion_pipeline_id", None) or defaults.ingestion.id
+            )
+            collection.retrieval_pipeline_id = (
+                getattr(collection, "retrieval_pipeline_id", None) or defaults.retrieval.id
+            )
+            return collection
+
+        def get_pipeline(self, pipeline_id, _user_id):
+            return SimpleNamespace(id=pipeline_id)
+
+        def get_definition(self, _pipeline):
+            return SimpleNamespace(nodes=[])
+
+    ingestion_settings = SimpleNamespace(
+        chunk_strategy="token",
+        chunk_size=256,
+        chunk_overlap=32,
+        embedding_model="embed-model",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+    )
+    retrieval_settings = SimpleNamespace(
+        embedding_model="embed-model",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+        chat_model=chat_model,
+        context_window=context_window,
+    )
+
+    monkeypatch.setattr(chat_module, "PipelineService", _StubPipelineService)
+    monkeypatch.setattr(
+        chat_module,
+        "resolve_ingestion_settings",
+        lambda *_args, **_kwargs: ingestion_settings,
+    )
+    monkeypatch.setattr(
+        chat_module,
+        "resolve_retrieval_settings",
+        lambda *_args, **_kwargs: retrieval_settings,
+    )
+
+
+def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
     service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
     session_model = SimpleNamespace(id="session-x", chat_model="openrouter/test", updated_at=None)
     service.chat_repo = _StubChatRepo()
@@ -311,6 +370,7 @@ def test_stream_message_records_partial_on_abort() -> None:
     service.retrieval = SimpleNamespace()
     partial_recorder = Mock()
     service._record_partial_assistant_message = partial_recorder
+    _stub_pipeline_helpers(monkeypatch, chat_model="openrouter/test", context_window=8192)
 
     def fake_stream(*args: Any, **kwargs: Any) -> Generator[Dict[str, Any], None, Tuple]:
         yield {"type": "token", "content": "Hello"}
@@ -324,14 +384,6 @@ def test_stream_message_records_partial_on_abort() -> None:
         id="collection-x",
         name="Test Collection",
         description="Just testing",
-        embedding_model="embed-model",
-        chat_model="openrouter/test",
-        context_window=8192,
-        chunk_strategy="token",
-        chunk_size=256,
-        chunk_overlap=32,
-        pinecone_index="idx",
-        pinecone_namespace="ns",
         extra_metadata={},
     )
 

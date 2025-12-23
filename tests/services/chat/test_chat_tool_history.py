@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
+from app.services import chat as chat_module
 from app.services.chat import ChatService
 
 
@@ -57,6 +58,7 @@ class _StubChatRepository:
 class _StubRetrieval:
     def query_collection(
         self,
+        _user: Any,
         collection: Any,
         query_text: str,
         top_k: int,
@@ -100,6 +102,57 @@ class _StubOpenRouter:
         return self._responses.pop(0)
 
 
+def _stub_pipeline_helpers() -> None:
+    class _StubPipelineService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def ensure_default_pipelines(self, _user):
+            return SimpleNamespace(
+                ingestion=SimpleNamespace(id="ingestion"),
+                retrieval=SimpleNamespace(id="retrieval"),
+            )
+
+        def ensure_collection_pipelines(self, collection, defaults):
+            collection.ingestion_pipeline_id = (
+                getattr(collection, "ingestion_pipeline_id", None) or defaults.ingestion.id
+            )
+            collection.retrieval_pipeline_id = (
+                getattr(collection, "retrieval_pipeline_id", None) or defaults.retrieval.id
+            )
+            return collection
+
+        def get_pipeline(self, pipeline_id, _user_id):
+            return SimpleNamespace(id=pipeline_id)
+
+        def get_definition(self, _pipeline):
+            return SimpleNamespace(nodes=[])
+
+    ingestion_settings = SimpleNamespace(
+        chunk_strategy="token",
+        chunk_size=256,
+        chunk_overlap=64,
+        embedding_model="embed-model",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+    )
+    retrieval_settings = SimpleNamespace(
+        embedding_model="embed-model",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+        chat_model="openrouter/test-model",
+        context_window=8192,
+    )
+
+    chat_module.PipelineService = _StubPipelineService
+    chat_module.resolve_ingestion_settings = lambda *_args, **_kwargs: ingestion_settings
+    chat_module.resolve_retrieval_settings = lambda *_args, **_kwargs: retrieval_settings
+
+
 def test_tool_call_history_replayed_for_follow_up() -> None:
     first_response = {
         "choices": [
@@ -141,18 +194,14 @@ def test_tool_call_history_replayed_for_follow_up() -> None:
     service.retrieval = _StubRetrieval()
     service.reasoning_effort = None
     service.settings = SimpleNamespace(openrouter_reasoning_effort=None)
+    _stub_pipeline_helpers()
 
     user = models.User(email="history@example.com", hashed_password="secret")
     collection = models.Collection(
         user_id=user.id,
         name="History Collection",
         description="Tracks tool calls",
-        embedding_model="embed-model",
-        chat_model="openrouter/test-model",
-        chunk_size=256,
-        chunk_overlap=64,
-        pinecone_index="idx",
-        pinecone_namespace="ns",
+        extra_metadata={},
     )
     payload = ChatMessageCreate(content="Lookup docs")
 

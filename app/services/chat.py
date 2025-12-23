@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,duplicate-code
 
 import json
 import math
@@ -27,6 +27,8 @@ from app.schemas.chat import (
 )
 from app.schemas.openrouter import OpenRouterChatResponse, OpenRouterStreamChunk
 from app.services.openrouter import get_openrouter_client
+from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
+from app.services.pipelines import PipelineService
 from app.services.prompts import render_system_prompt
 from app.services.retrieval import RetrievalService
 from app.utils.time import utc_now
@@ -90,7 +92,7 @@ class ChatService:
         self.settings = get_settings()
         self.chat_repo = ChatRepository(session)
         self.openrouter = get_openrouter_client()
-        self.retrieval = RetrievalService()
+        self.retrieval = RetrievalService(session)
         effort_value = (self.settings.openrouter_reasoning_effort or "").strip()
         self.reasoning_effort: Optional[str] = effort_value or None
 
@@ -953,6 +955,7 @@ class ChatService:
         user: models.User,
         collection: models.Collection,
         payload: ChatMessageCreate,
+        default_chat_model: str,
     ) -> models.ChatSession:
         """Find or create a chat session for the payload."""
         if payload.session_id:
@@ -966,8 +969,14 @@ class ChatService:
                 collection=collection,
                 payload=payload,
                 session_id=payload.session_id,
+                default_chat_model=default_chat_model,
             )
-        return self._create_session(user=user, collection=collection, payload=payload)
+        return self._create_session(
+            user=user,
+            collection=collection,
+            payload=payload,
+            default_chat_model=default_chat_model,
+        )
 
     def _create_session(
         self,
@@ -975,12 +984,13 @@ class ChatService:
         user: models.User,
         collection: models.Collection,
         payload: ChatMessageCreate,
+        default_chat_model: str,
         session_id: Optional[UUID] = None,
     ) -> models.ChatSession:
         """Create and persist a new chat session."""
         base_title = payload.title or (payload.content[:60] if payload.content else None)
         fallback_title = f"Chat {utc_now().strftime('%H:%M:%S')}"
-        preferred_model = (payload.chat_model or "").strip() or collection.chat_model
+        preferred_model = (payload.chat_model or "").strip() or default_chat_model
         session_model = models.ChatSession(
             id=session_id or uuid4(),
             user_id=user.id,
@@ -1174,6 +1184,20 @@ class ChatService:
     ) -> Generator[Dict[str, Any], None, None]:
         """Stream a chat response while yielding intermediate events."""
         edit_target: Optional[models.ChatMessage] = None
+        pipeline_service = PipelineService(self.session)
+        defaults = pipeline_service.ensure_default_pipelines(user)
+        pipeline_service.ensure_collection_pipelines(collection, defaults)
+        ingestion_pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
+        retrieval_pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
+        ingestion_pipeline = pipeline_service.get_pipeline(ingestion_pipeline_id, user.id)
+        retrieval_pipeline = pipeline_service.get_pipeline(retrieval_pipeline_id, user.id)
+        if not ingestion_pipeline or not retrieval_pipeline:
+            raise ValueError("Pipeline configuration could not be resolved.")
+        ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
+        retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
+        ingestion_settings = resolve_ingestion_settings(ingestion_definition, collection)
+        retrieval_settings = resolve_retrieval_settings(retrieval_definition, collection)
+
         if payload.edit_message_id:
             edit_target = self.chat_repo.get_message(payload.edit_message_id, user_id=user.id)
             if not edit_target:
@@ -1184,7 +1208,12 @@ class ChatService:
             if session_model.collection_id != collection.id:
                 raise ValueError("Message belongs to a different collection.")
         else:
-            session_model = self._ensure_session(user=user, collection=collection, payload=payload)
+            session_model = self._ensure_session(
+                user=user,
+                collection=collection,
+                payload=payload,
+                default_chat_model=retrieval_settings.chat_model,
+            )
 
         if edit_target:
             self._apply_edit(
@@ -1208,12 +1237,17 @@ class ChatService:
             self.session.add(session_model)
             self.session.flush()
 
-        active_model_name = session_model.chat_model or collection.chat_model
+        active_model_name = session_model.chat_model or retrieval_settings.chat_model
         if not active_model_name:
             raise ValueError("This collection does not have a chat model configured.")
 
         history = self.chat_repo.list_messages(session_model.id)
-        system_prompt = render_system_prompt(collection, user)
+        system_prompt = render_system_prompt(
+            collection,
+            user,
+            ingestion_settings=ingestion_settings,
+            retrieval_settings=retrieval_settings,
+        )
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(self._serialize_message(msg))
@@ -1246,7 +1280,7 @@ class ChatService:
             reasoning_override,
         )
         provider_preferences = self._sanitize_provider_preferences(payload.provider)
-        context_window = model_info.context_length or collection.context_window
+        context_window = model_info.context_length or retrieval_settings.context_window
 
         max_iterations = 48
         iteration = 0
@@ -1380,6 +1414,7 @@ class ChatService:
                         "reasoning": reasoning_entry,
                     }
                     retrieval_response = self.retrieval.query_collection(
+                        user,
                         collection,
                         query_text,
                         top_k=top_k,
@@ -1494,6 +1529,20 @@ class ChatService:
     ) -> ChatCompletionResponse:
         """Send a chat message and return the final response."""
         edit_target: Optional[models.ChatMessage] = None
+        pipeline_service = PipelineService(self.session)
+        defaults = pipeline_service.ensure_default_pipelines(user)
+        pipeline_service.ensure_collection_pipelines(collection, defaults)
+        ingestion_pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
+        retrieval_pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
+        ingestion_pipeline = pipeline_service.get_pipeline(ingestion_pipeline_id, user.id)
+        retrieval_pipeline = pipeline_service.get_pipeline(retrieval_pipeline_id, user.id)
+        if not ingestion_pipeline or not retrieval_pipeline:
+            raise ValueError("Pipeline configuration could not be resolved.")
+        ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
+        retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
+        ingestion_settings = resolve_ingestion_settings(ingestion_definition, collection)
+        retrieval_settings = resolve_retrieval_settings(retrieval_definition, collection)
+
         if payload.edit_message_id:
             edit_target = self.chat_repo.get_message(payload.edit_message_id, user_id=user.id)
             if not edit_target:
@@ -1504,7 +1553,12 @@ class ChatService:
             if session_model.collection_id != collection.id:
                 raise ValueError("Message belongs to a different collection.")
         else:
-            session_model = self._ensure_session(user=user, collection=collection, payload=payload)
+            session_model = self._ensure_session(
+                user=user,
+                collection=collection,
+                payload=payload,
+                default_chat_model=retrieval_settings.chat_model,
+            )
 
         if edit_target:
             self._apply_edit(
@@ -1528,12 +1582,17 @@ class ChatService:
             self.session.add(session_model)
             self.session.flush()
 
-        active_model_name = session_model.chat_model or collection.chat_model
+        active_model_name = session_model.chat_model or retrieval_settings.chat_model
         if not active_model_name:
             raise ValueError("This collection does not have a chat model configured.")
 
         history = self.chat_repo.list_messages(session_model.id)
-        system_prompt = render_system_prompt(collection, user)
+        system_prompt = render_system_prompt(
+            collection,
+            user,
+            ingestion_settings=ingestion_settings,
+            retrieval_settings=retrieval_settings,
+        )
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(self._serialize_message(msg))
@@ -1566,7 +1625,7 @@ class ChatService:
             reasoning_override,
         )
         provider_preferences = self._sanitize_provider_preferences(payload.provider)
-        context_window = model_info.context_length or collection.context_window
+        context_window = model_info.context_length or retrieval_settings.context_window
 
         max_iterations = 48
         iteration = 0
@@ -1665,6 +1724,7 @@ class ChatService:
                         top_k = 5
                     top_k = max(1, min(10, top_k))
                     retrieval_response = self.retrieval.query_collection(
+                        user,
                         collection,
                         query_text,
                         top_k=top_k,

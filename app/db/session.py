@@ -11,6 +11,7 @@ from sqlalchemy.engine.url import make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.api.config import get_settings
+from app.db.migrations import apply_missing_columns, ensure_foreign_keys, ensure_indexes
 from app.db.schema import SchemaValidationResult, build_expected_schema, inspect_database_schema
 
 settings = get_settings()
@@ -57,11 +58,18 @@ def init_db() -> None:
     expected = build_expected_schema()
     actual = inspect_database_schema(engine)
     validation = SchemaValidationResult.from_schemas(expected, actual)
-    if not validation.is_valid:
+    if validation.missing_tables:
         logger.info("Initializing missing Postgres tables.")
         SQLModel.metadata.create_all(engine)
         actual = inspect_database_schema(engine)
         validation = SchemaValidationResult.from_schemas(expected, actual)
+    if validation.missing_columns:
+        logger.info("Applying Postgres schema migrations for missing columns.")
+        apply_missing_columns(engine, validation.missing_columns)
+        actual = inspect_database_schema(engine)
+        validation = SchemaValidationResult.from_schemas(expected, actual)
+    ensure_indexes(engine)
+    ensure_foreign_keys(engine)
     if not validation.is_valid:
         missing_tables = ", ".join(sorted(validation.missing_tables)) or "none"
         missing_columns_map = cast(dict[str, set[str]], validation.missing_columns)

@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from app.api.routes import chat as chat_routes
 from app.db import models
-from app.db.models import ChatRole, ChunkStrategy
+from app.db.models import ChatRole
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate, ChatMessageRead, ChatSessionRead
 
@@ -36,15 +36,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
         user_id=user.id,
         name="Collection",
         description="",
-        embedding_model="embed",
-        chat_model="chat",
-        context_window=1024,
-        chunk_size=128,
-        chunk_overlap=8,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        pinecone_index="idx",
-        pinecone_namespace=f"ns-{uuid4().hex[:6]}",
-        metadata={"embedding_dimension": 128},
+        extra_metadata={},
     )
     repo.add(collection)
     session.commit()
@@ -58,7 +50,7 @@ def _create_chat_session(session: Session, user: models.User, collection: models
         collection_id=collection.id,
         title="Session",
         mode=models.ChatMode.CHAT,
-        chat_model=collection.chat_model,
+        chat_model="chat",
         context_tokens=0,
     )
     repo = ChatRepository(session)
@@ -128,7 +120,7 @@ def test_chat_with_collection_returns_response(monkeypatch, session: Session) ->
         tool_traces=[],
         usage={"prompt_tokens": 1},
         provider="openrouter",
-        context_window=collection.context_window,
+        context_window=1024,
         context_consumed=0,
     )
 

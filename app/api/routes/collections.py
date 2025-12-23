@@ -1,5 +1,7 @@
 """Collection management API routes."""
 
+# pylint: disable=duplicate-code
+
 from __future__ import annotations
 
 from typing import List
@@ -14,9 +16,7 @@ from app.api.config import get_settings
 from app.api.dependencies import get_current_user, get_session
 from app.db import models
 from app.db.repositories import CollectionRepository
-from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig, PineconeIndexer
 from app.schemas.collections import (
-    ChunkSettings,
     CollectionCreate,
     CollectionDeleteResponse,
     CollectionPromptRead,
@@ -24,7 +24,8 @@ from app.schemas.collections import (
     CollectionRead,
     CollectionUpdate,
 )
-from app.services.openrouter import get_openrouter_client
+from app.services.pipelines import PipelineService
+from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
 from app.services.prompts import (
     SYSTEM_PROMPT_METADATA_KEY,
     apply_prompt_template,
@@ -46,26 +47,44 @@ def _to_schema(collection: models.Collection) -> CollectionRead:
         user_id=collection.user_id,
         name=collection.name,
         description=collection.description,
-        embedding_model=collection.embedding_model,
-        chat_model=collection.chat_model,
-        pinecone_index=collection.pinecone_index,
-        pinecone_namespace=collection.pinecone_namespace,
-        context_window=collection.context_window,
+        ingestion_pipeline_id=collection.ingestion_pipeline_id,
+        retrieval_pipeline_id=collection.retrieval_pipeline_id,
         created_at=collection.created_at,
         updated_at=collection.updated_at,
         metadata=collection.extra_metadata,
-        chunk_settings=ChunkSettings(
-            strategy=collection.chunk_strategy,
-            chunk_size=collection.chunk_size,
-            chunk_overlap=collection.chunk_overlap,
-        ),
     )
 
 
-def _prompt_read(collection: models.Collection, user: models.User) -> CollectionPromptRead:
+def _prompt_read(  # pylint: disable=too-many-locals
+    collection: models.Collection,
+    user: models.User,
+    session: Session,
+) -> CollectionPromptRead:
     """Render prompt data for a collection and user."""
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    pipeline_service.ensure_collection_pipelines(collection, defaults)
+    ingestion_pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
+    retrieval_pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
+    ingestion_pipeline = pipeline_service.get_pipeline(ingestion_pipeline_id, user.id)
+    retrieval_pipeline = pipeline_service.get_pipeline(retrieval_pipeline_id, user.id)
+    if not ingestion_pipeline or not retrieval_pipeline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to resolve pipeline configuration for prompt rendering.",
+        )
+    ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
+    retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
+    ingestion_settings = resolve_ingestion_settings(ingestion_definition, collection)
+    retrieval_settings = resolve_retrieval_settings(retrieval_definition, collection)
+
     template = get_system_prompt_template(collection)
-    context = system_prompt_context(collection, user)
+    context = system_prompt_context(
+        collection,
+        user,
+        ingestion_settings=ingestion_settings,
+        retrieval_settings=retrieval_settings,
+    )
     rendered = apply_prompt_template(template, context)
     return CollectionPromptRead(
         template=template,
@@ -112,89 +131,96 @@ def get_collection_prompt(
         user_id=current_user.id,
         session=session,
     )
-    return _prompt_read(collection, current_user)
+    return _prompt_read(collection, current_user, session)
 
 
 @router.post("", response_model=CollectionRead, status_code=status.HTTP_201_CREATED)
-# pylint: disable=too-many-locals
-def create_collection(
+def create_collection(  # pylint: disable=too-many-locals
     payload: CollectionCreate,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Create a new collection for the current user."""
-    settings = get_settings()
     repo = CollectionRepository(session)
-    openrouter = get_openrouter_client()
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(current_user)
+    ingestion_pipeline_id = payload.ingestion_pipeline_id or defaults.ingestion.id
+    retrieval_pipeline_id = payload.retrieval_pipeline_id or defaults.retrieval.id
 
-    embedding_model = payload.embedding_model or settings.default_embedding_model
-    chat_model = payload.chat_model or settings.default_chat_model
+    def _validate_pipeline(pipeline_id: UUID, kind: models.PipelineKind) -> models.Pipeline:
+        pipeline = pipeline_service.get_pipeline(pipeline_id, current_user.id)
+        if not pipeline or pipeline.kind != kind:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid {kind.value} pipeline selection.",
+            )
+        return pipeline
 
-    embedding_model_info = openrouter.get_model(embedding_model)
-    chat_model_info = openrouter.get_model(chat_model)
+    ingestion_pipeline = _validate_pipeline(
+        ingestion_pipeline_id, models.PipelineKind.INGESTION
+    )
+    retrieval_pipeline = _validate_pipeline(
+        retrieval_pipeline_id, models.PipelineKind.RETRIEVAL
+    )
 
-    chunk_settings = payload.chunk_settings or ChunkSettings()
-    chunk_fields_set = getattr(chunk_settings, "model_fields_set", set())
-    auto_chunk_size = "chunk_size" not in chunk_fields_set
-    chunk_size = chunk_settings.chunk_size
-    if auto_chunk_size and embedding_model_info and embedding_model_info.context_length:
-        chunk_size = embedding_model_info.context_length
-    chunk_overlap = chunk_settings.chunk_overlap
-    chunk_strategy = chunk_settings.strategy
+    if payload.pipeline_overrides:
+        if payload.pipeline_overrides.ingestion:
+            base_definition = pipeline_service.get_definition(ingestion_pipeline)
+            override_map = {
+                override.node_id: override.config
+                for override in payload.pipeline_overrides.ingestion
+            }
+            next_definition = base_definition.model_copy(deep=True)
+            for node in next_definition.nodes:
+                if node.id in override_map:
+                    node.config = {**node.config, **override_map[node.id]}
+            custom_pipeline = pipeline_service.create_pipeline(
+                user=current_user,
+                name=f"{payload.name} Ingestion Pipeline",
+                kind=models.PipelineKind.INGESTION,
+                definition=next_definition,
+                change_summary="Customized ingestion pipeline for collection.",
+                is_default=False,
+            )
+            ingestion_pipeline_id = custom_pipeline.id
+        if payload.pipeline_overrides.retrieval:
+            base_definition = pipeline_service.get_definition(retrieval_pipeline)
+            override_map = {
+                override.node_id: override.config
+                for override in payload.pipeline_overrides.retrieval
+            }
+            next_definition = base_definition.model_copy(deep=True)
+            for node in next_definition.nodes:
+                if node.id in override_map:
+                    node.config = {**node.config, **override_map[node.id]}
+            custom_pipeline = pipeline_service.create_pipeline(
+                user=current_user,
+                name=f"{payload.name} Retrieval Pipeline",
+                kind=models.PipelineKind.RETRIEVAL,
+                definition=next_definition,
+                change_summary="Customized retrieval pipeline for collection.",
+                is_default=False,
+            )
+            retrieval_pipeline_id = custom_pipeline.id
 
-    context_window = chat_model_info.context_length if chat_model_info else 8192
-
-    dimension_probe = openrouter.embed(["dimension probe"], model=embedding_model)
-    probe_data = dimension_probe.get("data", [])
-    if not probe_data:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to probe embedding dimension from OpenRouter.",
-        )
-    embedding_dimension = len(probe_data[0].get("embedding", []))
-    if embedding_dimension == 0:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Embedding dimension returned empty vector.",
-        )
-
-    namespace = payload.pinecone_namespace or f"col-{uuid4().hex[:12]}"
     collection = models.Collection(
         id=uuid4(),
         user_id=current_user.id,
         name=payload.name,
         description=payload.description,
-        embedding_model=embedding_model,
-        chat_model=chat_model,
-        context_window=context_window,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        chunk_strategy=chunk_strategy,
-        pinecone_index=settings.pinecone_index_name,
-        pinecone_namespace=namespace,
-        extra_metadata={**payload.metadata, "embedding_dimension": embedding_dimension},
+        ingestion_pipeline_id=ingestion_pipeline_id,
+        retrieval_pipeline_id=retrieval_pipeline_id,
+        extra_metadata=payload.metadata,
     )
     repo.add(collection)
     session.commit()
-
-    # Ensure Pinecone index exists with the appropriate dimension
-    pinecone_client = Pinecone(api_key=settings.pinecone_api_key)
-    PineconeIndexer(client=pinecone_client).ensure_index(
-        PineconeIndexConfig(
-            name=collection.pinecone_index,
-            dimension=embedding_dimension,
-            metric="cosine",
-            cloud=settings.pinecone_cloud,
-            region=settings.pinecone_region,
-        )
-    )
 
     session.refresh(collection)
     return _to_schema(collection)
 
 
 @router.patch("/{collection_id}", response_model=CollectionRead)
-def update_collection(
+def update_collection(  # pylint: disable=too-many-branches
     collection_id: UUID,
     payload: CollectionUpdate,
     current_user: models.User = Depends(get_current_user),
@@ -206,22 +232,38 @@ def update_collection(
         user_id=current_user.id,
         session=session,
     )
+    pipeline_service = PipelineService(session)
 
     if payload.name is not None:
         collection.name = payload.name
     if payload.description is not None:
         collection.description = payload.description
     if payload.metadata is not None:
-        collection.extra_metadata.update(payload.metadata)
-    if payload.chunk_settings is not None:
-        settings_obj = payload.chunk_settings
-        fields_set = getattr(settings_obj, "model_fields_set", set())
-        if "chunk_size" in fields_set:
-            collection.chunk_size = settings_obj.chunk_size
-        if "chunk_overlap" in fields_set:
-            collection.chunk_overlap = settings_obj.chunk_overlap
-        if "strategy" in fields_set:
-            collection.chunk_strategy = settings_obj.strategy
+        collection.extra_metadata = {**collection.extra_metadata, **payload.metadata}
+    if payload.ingestion_pipeline_id is not None:
+        if payload.ingestion_pipeline_id:
+            pipeline = pipeline_service.get_pipeline(
+                payload.ingestion_pipeline_id,
+                current_user.id,
+            )
+            if not pipeline or pipeline.kind != models.PipelineKind.INGESTION:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid ingestion pipeline selection.",
+                )
+        collection.ingestion_pipeline_id = payload.ingestion_pipeline_id
+    if payload.retrieval_pipeline_id is not None:
+        if payload.retrieval_pipeline_id:
+            pipeline = pipeline_service.get_pipeline(
+                payload.retrieval_pipeline_id,
+                current_user.id,
+            )
+            if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid retrieval pipeline selection.",
+                )
+        collection.retrieval_pipeline_id = payload.retrieval_pipeline_id
     collection.updated_at = utc_now()
     session.add(collection)
     session.commit()
@@ -252,7 +294,7 @@ def update_collection_prompt(
     session.add(collection)
     session.commit()
     session.refresh(collection)
-    return _prompt_read(collection, current_user)
+    return _prompt_read(collection, current_user, session)
 
 
 @router.delete(
@@ -260,7 +302,7 @@ def update_collection_prompt(
     response_model=CollectionDeleteResponse,
     status_code=status.HTTP_200_OK,
 )
-def delete_collection(
+def delete_collection(  # pylint: disable=too-many-locals
     collection_id: UUID,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
@@ -275,6 +317,23 @@ def delete_collection(
     settings = get_settings()
     pinecone_client = Pinecone(api_key=settings.pinecone_api_key)
     storage = FileStorage()
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(current_user)
+    pipeline_service.ensure_collection_pipelines(collection, defaults)
+    ingestion_pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
+    ingestion_pipeline = pipeline_service.get_pipeline(ingestion_pipeline_id, current_user.id)
+    if not ingestion_pipeline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to resolve ingestion pipeline for deletion.",
+        )
+    ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
+    ingestion_settings = resolve_ingestion_settings(ingestion_definition, collection)
+    if not ingestion_settings.namespace:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ingestion pipeline namespace is not configured.",
+        )
 
     documents = session.exec(
         select(models.Document).where(models.Document.collection_id == collection.id)
@@ -287,8 +346,8 @@ def delete_collection(
     session_ids = [chat_session.id for chat_session in sessions]
 
     try:
-        index = pinecone_client.Index(collection.pinecone_index)
-        index.delete(namespace=collection.pinecone_namespace, delete_all=True)
+        index = pinecone_client.Index(ingestion_settings.index_name)
+        index.delete(namespace=ingestion_settings.namespace, delete_all=True)
     except Exception as exc:  # pragma: no cover - surfaced via API response
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

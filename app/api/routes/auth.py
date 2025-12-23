@@ -11,6 +11,7 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.db import models
 from app.db.repositories import UserRepository
 from app.schemas.auth import Token, UserCreate, UserRead
+from app.services.pipelines import PipelineService
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,6 +32,7 @@ def register_user(payload: UserCreate, session: Session = Depends(get_session)) 
         hashed_password=hash_password(payload.password),
     )
     repo.add(user)
+    PipelineService(session).ensure_default_pipelines(user)
     session.commit()
     session.refresh(user)
     return UserRead.model_validate(user)

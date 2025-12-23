@@ -1,55 +1,67 @@
 """Retrieval service for collection queries."""
 
+# pylint: disable=duplicate-code
+
 from __future__ import annotations
 
 from typing import List
 
 from pinecone import Pinecone
+from sqlmodel import Session
 
 from app.api.config import get_settings
-from app.db.models import Collection
-from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
-from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
-from app.retrieval.models import QueryRequest
-from app.retrieval.retrievers.pinecone_retriever import PineconeRetriever
+from app.db import models
+from app.pipelines.payloads import RetrievalPayload
+from app.pipelines.registry import build_default_registry
+from app.pipelines.runtime import PipelineExecutor, PipelineRunContext
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
 from app.services.openrouter import get_openrouter_client
+from app.services.pipelines import PipelineService
+from app.utils.file_storage import FileStorage
 
 
 class RetrievalService:  # pylint: disable=too-few-public-methods
     """Service for querying a collection's vector index."""
 
-    def __init__(self) -> None:
+    def __init__(self, session: Session) -> None:
         """Initialize retrieval dependencies."""
         self.settings = get_settings()
         self._pinecone = Pinecone(api_key=self.settings.pinecone_api_key)
         self.openrouter = get_openrouter_client()
+        self.session = session
 
-    def query_collection(
+    def query_collection(  # pylint: disable=too-many-locals
         self,
-        collection: Collection,
+        user: models.User,
+        collection: models.Collection,
         query: str,
         top_k: int = 5,
     ) -> CollectionQueryResponse:
         """Run a query against a collection and return scored chunks."""
-        embedder = OpenRouterEmbedder(self.openrouter, collection.embedding_model)
-        config = PineconeIndexConfig(
-            name=collection.pinecone_index,
-            namespace=collection.pinecone_namespace,
-            dimension=collection.extra_metadata.get("embedding_dimension", 1536),
-            metric="cosine",
-        )
-        retriever = PineconeRetriever(
-            index_config=config,
-            embedder=embedder,
-            client=self._pinecone,
-        )
-        request = QueryRequest(
-            text=query,
+        pipeline_service = PipelineService(self.session)
+        defaults = pipeline_service.ensure_default_pipelines(user)
+        pipeline_service.ensure_collection_pipelines(collection, defaults)
+        pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
+        pipeline = pipeline_service.get_pipeline(pipeline_id, user.id)
+        if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
+            raise ValueError("Retrieval pipeline could not be resolved.")
+        definition = pipeline_service.get_definition(pipeline)
+        executor = PipelineExecutor(build_default_registry())
+        context = PipelineRunContext(
+            session=self.session,
+            user=user,
+            collection=collection,
+            document=None,
+            query=query,
             top_k=top_k,
-            namespace=collection.pinecone_namespace,
+            openrouter=self.openrouter,
+            pinecone=self._pinecone,
+            storage=FileStorage(),
+            settings=self.settings,
         )
-        response = retriever.retrieve(request)
+        result = executor.execute(definition, context)
+        payload = self._extract_retrieval_payload(result.terminal_outputs)
+        response = payload.response
         chunks: List[RetrievedChunk] = []
         for scored in response.matches:
             chunks.append(
@@ -65,5 +77,15 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             query=query,
             top_k=top_k,
             chunks=chunks,
-            usage=embedder.usage or {},
+            usage=payload.usage or {},
         )
+
+    @staticmethod
+    def _extract_retrieval_payload(
+        terminal_outputs: dict[str, dict[str, object]],
+    ) -> RetrievalPayload:
+        """Return the retrieval payload from terminal outputs."""
+        for outputs in terminal_outputs.values():
+            if "result" in outputs:
+                return RetrievalPayload.model_validate(outputs["result"])
+        raise ValueError("Pipeline did not return a retrieval result payload.")

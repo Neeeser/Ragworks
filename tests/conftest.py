@@ -61,6 +61,7 @@ def _prepare_environment() -> None:
 _prepare_environment()
 
 from app.api import config as api_config
+from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.services.openrouter import get_openrouter_client
 
 api_config.get_settings.cache_clear()
@@ -196,13 +197,8 @@ def _collection_payload(name_suffix: str) -> dict[str, object]:
     payload: dict[str, object] = {
         "name": f"Integration Collection {name_suffix}",
         "description": "Created via integration tests.",
-        "chunk_settings": {"strategy": "token", "chunk_size": 256, "chunk_overlap": 32},
         "metadata": {"test_suite": "integration"},
     }
-    if SETTINGS.default_embedding_model:
-        payload["embedding_model"] = SETTINGS.default_embedding_model
-    if SETTINGS.default_chat_model:
-        payload["chat_model"] = SETTINGS.default_chat_model
     return payload
 
 
@@ -230,7 +226,8 @@ def collection_factory(
         response = client.post("/api/collections", json=payload, headers=user_context["headers"])
         assert response.status_code == 201, response.text
         data = response.json()
-        pinecone_namespace_tracker.register(data["pinecone_namespace"])
+        namespace = DEFAULT_NAMESPACE_TEMPLATE.replace("{collection_id}", data["id"])
+        pinecone_namespace_tracker.register(namespace)
         return data
 
     return _builder

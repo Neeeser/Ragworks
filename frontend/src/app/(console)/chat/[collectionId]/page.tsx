@@ -24,6 +24,7 @@ import {
   deleteChatSession,
   fetchCollections,
   fetchDocuments,
+  fetchPipeline,
   getChatHistory,
   getCollectionPrompt,
   listChatSessions,
@@ -63,6 +64,7 @@ import type {
   CollectionPromptDetails,
   ModelEndpointDirectory,
   ModelInfo,
+  Pipeline,
   ProviderPreferences,
   ProviderSortOption,
   ReasoningTraceSegment,
@@ -343,6 +345,7 @@ export default function ChatStudioExperience() {
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageBreakdown | null>(null);
   const [contextWindow, setContextWindow] = useState<number>(0);
+  const [defaultChatModel, setDefaultChatModel] = useState<string | null>(null);
   const [contextConsumed, setContextConsumed] = useState<number>(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -573,6 +576,19 @@ export default function ChatStudioExperience() {
     });
   }, []);
 
+  const resolveChatSettings = useCallback((pipeline: Pipeline | null) => {
+    if (!pipeline) {
+      return { chatModel: null, contextWindow: 0 };
+    }
+    const settingsNode = pipeline.definition.nodes.find((node) => node.type === "chat.settings");
+    const chatModel = settingsNode?.config?.chat_model;
+    const contextWindow = settingsNode?.config?.context_window;
+    return {
+      chatModel: typeof chatModel === "string" ? chatModel : null,
+      contextWindow: typeof contextWindow === "number" ? contextWindow : 0,
+    };
+  }, []);
+
   useEffect(() => {
     if (!authToken || !collectionId) {
       setLoading(false);
@@ -594,7 +610,17 @@ export default function ChatStudioExperience() {
           return;
         }
         setCollection(active);
-        setContextWindow(active.context_window);
+        if (active.retrieval_pipeline_id) {
+          const pipeline = await fetchPipeline(active.retrieval_pipeline_id, authToken);
+          if (!cancelled) {
+            const settings = resolveChatSettings(pipeline);
+            setDefaultChatModel(settings.chatModel);
+            setContextWindow(settings.contextWindow);
+          }
+        } else {
+          setDefaultChatModel(null);
+          setContextWindow(0);
+        }
         const [documents, sessionList] = await Promise.all([
           fetchDocuments(active.id, authToken).catch(() => []),
           listChatSessions(active.id, authToken).catch(() => []),
@@ -619,7 +645,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, collectionId, sortSessions]);
+  }, [authToken, collectionId, resolveChatSettings, sortSessions]);
 
   useEffect(() => {
     if (!authToken || !collectionId) {
@@ -685,8 +711,8 @@ export default function ChatStudioExperience() {
       setActiveModelId(null);
       return;
     }
-    setActiveModelId((current) => current ?? collection.chat_model);
-  }, [collection]);
+    setActiveModelId((current) => current ?? defaultChatModel ?? null);
+  }, [collection, defaultChatModel]);
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -799,19 +825,19 @@ export default function ChatStudioExperience() {
   }, [activeModelId]);
 
   const currentModelInfo = useMemo(() => {
-    const lookupId = activeModelId || collection?.chat_model;
+    const lookupId = activeModelId || defaultChatModel;
     if (!lookupId) return null;
     return (
       modelCatalog.find((model) => model.id === lookupId || model.canonical_slug === lookupId) ??
       null
     );
-  }, [activeModelId, collection?.chat_model, modelCatalog]);
+  }, [activeModelId, defaultChatModel, modelCatalog]);
 
   const providerModelSlug = useMemo(() => {
     const slugSource =
-      currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? collection?.chat_model ?? null;
+      currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? defaultChatModel ?? null;
     return sanitizeModelSlug(slugSource);
-  }, [collection?.chat_model, currentModelInfo?.canonical_slug, currentModelInfo?.id]);
+  }, [defaultChatModel, currentModelInfo?.canonical_slug, currentModelInfo?.id]);
 
   const supportedParameterKeys = useMemo(() => {
     const supported = new Set<ModelParameterKey>();
@@ -1339,8 +1365,8 @@ export default function ChatStudioExperience() {
   }, [modelSearchTerm, toolReadyModels]);
 
   const selectedModelKey = useMemo(
-    () => activeModelId || collection?.chat_model || "",
-    [activeModelId, collection?.chat_model],
+    () => activeModelId || defaultChatModel || "",
+    [activeModelId, defaultChatModel],
   );
 
   const substitutePromptVariables = useCallback(
@@ -1483,7 +1509,7 @@ export default function ChatStudioExperience() {
       setToolTraces(nextToolTraces);
       setUsage(calculateSessionUsage(enrichedMessages) ?? response.usage ?? null);
       setContextConsumed(response.context_consumed);
-      setContextWindow(response.context_window || collection?.context_window || 0);
+      setContextWindow(response.context_window || contextWindow || 0);
       setSelectedSessionId(response.session.id);
       setActiveModelId(response.session.chat_model);
       setSessions((prev) => {
@@ -1497,7 +1523,7 @@ export default function ChatStudioExperience() {
         return sortSessions(next);
       });
     },
-    [collection, deriveToolTraces, finalizeLiveReasoningBlock, sortSessions, syncMessages],
+    [contextWindow, deriveToolTraces, finalizeLiveReasoningBlock, sortSessions, syncMessages],
   );
 
   const isAbortError = (value: unknown): value is DOMException =>
@@ -1505,7 +1531,7 @@ export default function ChatStudioExperience() {
 
   const handleSend = async () => {
     if (!authToken || !collection) return;
-    const targetModelId = activeModelId || collection.chat_model;
+    const targetModelId = activeModelId || defaultChatModel;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
@@ -1596,7 +1622,7 @@ export default function ChatStudioExperience() {
 
   const runEditMutation = async (messageId: string, newContent: string) => {
     if (!authToken || !collection || !selectedSessionId) return;
-    const targetModelId = activeModelId || collection.chat_model;
+    const targetModelId = activeModelId || defaultChatModel;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;

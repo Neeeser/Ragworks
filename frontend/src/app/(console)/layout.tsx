@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, FolderTree, Home, MessageSquare } from "lucide-react";
+import { Bot, FolderTree, GitBranch, Home, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/dashboard", label: "Overview", icon: Home },
   { href: "/collections", label: "Collections", icon: FolderTree },
   { href: "/chat", label: "Chat Studio", icon: MessageSquare },
+  { href: "/pipelines", label: "Pipelines", icon: GitBranch },
 ];
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
   const isChatRoute = pathname?.startsWith("/chat");
+  const isPipelinesRoute = pathname?.startsWith("/pipelines");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -40,6 +42,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       className={cn(
         "flex min-h-screen flex-col bg-slate-950 text-slate-100",
         isChatRoute && "h-screen",
+        isPipelinesRoute && "xl:h-screen",
       )}
     >
       <header className="sticky top-0 z-30 border-b border-white/5 bg-slate-950/90 backdrop-blur-xl">
@@ -87,9 +90,16 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         className={cn(
           "flex-1 px-4 py-6 lg:px-10 lg:py-8 min-h-0",
           isChatRoute && "overflow-hidden",
+          isPipelinesRoute && "xl:overflow-hidden",
         )}
       >
-        {isChatRoute ? <div className="h-full">{children}</div> : children}
+        {isChatRoute || isPipelinesRoute ? (
+          <div className={cn(isChatRoute && "h-full", isPipelinesRoute && "xl:h-full")}>
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </main>
     </div>
   );

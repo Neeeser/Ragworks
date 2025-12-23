@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -8,7 +9,6 @@ import pytest
 from sqlmodel import Session
 
 from app.db import models
-from app.db.models import ChunkStrategy
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
 from app.services import chat as chat_module
@@ -21,7 +21,16 @@ class _StubSettings:
 
 
 class _StubRetrievalService:
-    def query_collection(self, _collection: models.Collection, _query: str, top_k: int = 5):
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def query_collection(
+        self,
+        _user: models.User,
+        _collection: models.Collection,
+        _query: str,
+        top_k: int = 5,
+    ):
         return {"chunks": [], "top_k": top_k}
 
 
@@ -61,6 +70,34 @@ class _ModelOnlyOpenRouter:
         return self._model_info
 
 
+def _stub_pipeline_settings(monkeypatch, *, chat_model: str, context_window: int = 1024) -> None:
+    ingestion_settings = SimpleNamespace(
+        chunk_strategy="token",
+        chunk_size=128,
+        chunk_overlap=8,
+        embedding_model="embed",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+    )
+    retrieval_settings = SimpleNamespace(
+        embedding_model="embed",
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+        chat_model=chat_model,
+        context_window=context_window,
+    )
+    monkeypatch.setattr(
+        chat_module, "resolve_ingestion_settings", lambda *_args, **_kwargs: ingestion_settings
+    )
+    monkeypatch.setattr(
+        chat_module, "resolve_retrieval_settings", lambda *_args, **_kwargs: retrieval_settings
+    )
+
+
 def _create_user(session: Session) -> models.User:
     user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
     session.add(user)
@@ -74,15 +111,7 @@ def _create_collection(session: Session, user: models.User, chat_model: str) -> 
         user_id=user.id,
         name="Collection",
         description="",
-        embedding_model="embed",
-        chat_model=chat_model,
-        context_window=1024,
-        chunk_size=128,
-        chunk_overlap=8,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        pinecone_index="idx",
-        pinecone_namespace=f"ns-{uuid4().hex[:6]}",
-        metadata={"embedding_dimension": 128},
+        extra_metadata={},
     )
     session.add(collection)
     session.commit()
@@ -127,6 +156,7 @@ def test_send_message_records_response(monkeypatch, session: Session) -> None:
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: openrouter)
     monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)
     payload = ChatMessageCreate(content="hello")
@@ -148,6 +178,7 @@ def test_send_message_raises_for_missing_model(monkeypatch, session: Session) ->
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: openrouter)
     monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="missing-model")
 
     service = ChatService(session)
 
@@ -170,6 +201,7 @@ def test_send_message_requires_tool_support(monkeypatch, session: Session) -> No
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: openrouter)
     monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="model-without-tools")
 
     service = ChatService(session)
 
@@ -233,7 +265,13 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
         def __init__(self) -> None:
             self.calls: list[dict[str, Any]] = []
 
-        def query_collection(self, collection: models.Collection, query: str, top_k: int = 5):
+        def query_collection(
+            self,
+            _user: models.User,
+            collection: models.Collection,
+            query: str,
+            top_k: int = 5,
+        ):
             self.calls.append({"collection": collection, "query": query, "top_k": top_k})
             return {"chunks": [], "top_k": top_k}
 
@@ -241,7 +279,8 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
 
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: openrouter)
-    monkeypatch.setattr(chat_module, "RetrievalService", lambda: retrieval)
+    monkeypatch.setattr(chat_module, "RetrievalService", lambda *_args, **_kwargs: retrieval)
+    _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
 
     service = ChatService(session)
 
@@ -266,7 +305,13 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Sessi
     retrieval_calls: list[dict[str, Any]] = []
 
     class _TrackingRetrievalService(_StubRetrievalService):
-        def query_collection(self, collection: models.Collection, query: str, top_k: int = 5):
+        def query_collection(
+            self,
+            _user: models.User,
+            collection: models.Collection,
+            query: str,
+            top_k: int = 5,
+        ):
             retrieval_calls.append({"collection": collection, "query": query, "top_k": top_k})
             return {"chunks": [], "top_k": top_k}
 
@@ -323,6 +368,7 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Sessi
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: _ModelOnlyOpenRouter(model_info))
     monkeypatch.setattr(chat_module, "RetrievalService", _TrackingRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
 
     service = ChatService(session)
     service._stream_model_completion = _stream_model_completion  # type: ignore[method-assign]
@@ -367,6 +413,7 @@ def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypat
     monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(chat_module, "get_openrouter_client", lambda: openrouter)
     monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)
     payload = ChatMessageCreate(content="hello")

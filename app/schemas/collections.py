@@ -8,16 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.db.models import ChunkStrategy
 from app.schemas.base import DateTimeConfigMixin
-
-
-class ChunkSettings(BaseModel):
-    """Chunking configuration for documents."""
-
-    strategy: ChunkStrategy = Field(default=ChunkStrategy.TOKEN)
-    chunk_size: int = Field(default=1024, gt=0)
-    chunk_overlap: int = Field(default=200, ge=0)
 
 
 class CollectionBase(BaseModel):
@@ -25,15 +16,29 @@ class CollectionBase(BaseModel):
 
     name: str
     description: Optional[str] = None
-    embedding_model: Optional[str] = None
-    chat_model: Optional[str] = None
-    chunk_settings: ChunkSettings = Field(default_factory=ChunkSettings)
-    pinecone_namespace: Optional[str] = None
+    ingestion_pipeline_id: Optional[UUID] = None
+    retrieval_pipeline_id: Optional[UUID] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineNodeOverride(BaseModel):
+    """Override configuration for a specific pipeline node."""
+
+    node_id: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CollectionPipelineOverrides(BaseModel):
+    """Per-collection pipeline overrides for creation."""
+
+    ingestion: List[PipelineNodeOverride] = Field(default_factory=list)
+    retrieval: List[PipelineNodeOverride] = Field(default_factory=list)
 
 
 class CollectionCreate(CollectionBase):
     """Payload for creating a collection."""
+
+    pipeline_overrides: Optional[CollectionPipelineOverrides] = None
 
 
 class CollectionUpdate(BaseModel):
@@ -41,8 +46,9 @@ class CollectionUpdate(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
-    chunk_settings: Optional[ChunkSettings] = None
     metadata: Optional[Dict[str, Any]] = None
+    ingestion_pipeline_id: Optional[UUID] = None
+    retrieval_pipeline_id: Optional[UUID] = None
 
 
 class CollectionRead(DateTimeConfigMixin, CollectionBase):
@@ -50,8 +56,6 @@ class CollectionRead(DateTimeConfigMixin, CollectionBase):
 
     id: UUID
     user_id: UUID
-    pinecone_index: str
-    context_window: int
     created_at: datetime
     updated_at: datetime
 

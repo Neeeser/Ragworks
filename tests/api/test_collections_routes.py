@@ -9,34 +9,15 @@ from sqlmodel import Session
 
 from app.api.routes import collections as collections_routes
 from app.db import models
-from app.db.models import ChunkStrategy
 from app.db.repositories import CollectionRepository, UserRepository
-from app.schemas.collections import ChunkSettings, CollectionCreate, CollectionPromptUpdate, CollectionUpdate
-from app.schemas.models import ModelInfo
-
-
-class _StubSettings:
-    default_embedding_model = "embed-model"
-    default_chat_model = "chat-model"
-    pinecone_index_name = "unit-index"
-    pinecone_api_key = "pinecone-key"
-    pinecone_cloud = "aws"
-    pinecone_region = "us-east-1"
-
-
-class _StubOpenRouter:
-    def __init__(self, embed_payload: dict[str, object]) -> None:
-        self.embed_payload = embed_payload
-        self.calls: list[dict[str, object]] = []
-
-    def get_model(self, model_id: str) -> ModelInfo:
-        if "embed" in model_id:
-            return ModelInfo(id=model_id, name="Embed", context_length=2048)
-        return ModelInfo(id=model_id, name="Chat", context_length=4096)
-
-    def embed(self, texts, model: str | None = None):
-        self.calls.append({"texts": list(texts), "model": model})
-        return dict(self.embed_payload)
+from app.schemas.collections import (
+    CollectionCreate,
+    CollectionPipelineOverrides,
+    CollectionPromptUpdate,
+    CollectionUpdate,
+    PipelineNodeOverride,
+)
+from app.services.pipelines import PipelineService
 
 
 class _StubPinecone:
@@ -47,16 +28,6 @@ class _StubPinecone:
     def Index(self, name: str):
         self.indexes.append(name)
         return SimpleNamespace(delete=lambda **_kwargs: None)
-
-
-class _StubPineconeIndexer:
-    last_config = None
-
-    def __init__(self, client) -> None:
-        self.client = client
-
-    def ensure_index(self, config) -> None:
-        _StubPineconeIndexer.last_config = config
 
 
 class _StubFileStorage:
@@ -82,15 +53,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
         user_id=user.id,
         name="Collection",
         description="",
-        embedding_model="embed-model",
-        chat_model="chat-model",
-        context_window=1024,
-        chunk_size=128,
-        chunk_overlap=8,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        pinecone_index="idx",
-        pinecone_namespace=f"ns-{uuid4().hex[:6]}",
-        extra_metadata={"embedding_dimension": 128},
+        extra_metadata={},
     )
     repo.add(collection)
     session.commit()
@@ -142,54 +105,14 @@ def test_update_and_delete_collection_missing(session: Session) -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_create_collection_success(monkeypatch, session: Session) -> None:
+def test_create_collection_success(session: Session) -> None:
     user = _create_user(session)
-    openrouter = _StubOpenRouter({"data": [{"embedding": [0.1, 0.2]}]})
-
-    monkeypatch.setattr(collections_routes, "get_settings", lambda: _StubSettings())
-    monkeypatch.setattr(collections_routes, "get_openrouter_client", lambda: openrouter)
-    monkeypatch.setattr(collections_routes, "Pinecone", _StubPinecone)
-    monkeypatch.setattr(collections_routes, "PineconeIndexer", _StubPineconeIndexer)
 
     payload = CollectionCreate(name="Unit Collection", description="Test")
     created = collections_routes.create_collection(payload, current_user=user, session=session)
 
-    assert created.chunk_settings.chunk_size == 2048
-    assert _StubPineconeIndexer.last_config.dimension == 2
-
-
-def test_create_collection_errors_on_empty_embeddings(monkeypatch, session: Session) -> None:
-    user = _create_user(session)
-    openrouter = _StubOpenRouter({"data": []})
-
-    monkeypatch.setattr(collections_routes, "get_settings", lambda: _StubSettings())
-    monkeypatch.setattr(collections_routes, "get_openrouter_client", lambda: openrouter)
-    monkeypatch.setattr(collections_routes, "Pinecone", _StubPinecone)
-    monkeypatch.setattr(collections_routes, "PineconeIndexer", _StubPineconeIndexer)
-
-    payload = CollectionCreate(name="Unit Collection", description="Test")
-
-    with pytest.raises(HTTPException) as excinfo:
-        collections_routes.create_collection(payload, current_user=user, session=session)
-
-    assert excinfo.value.status_code == 502
-
-
-def test_create_collection_errors_on_zero_dimension(monkeypatch, session: Session) -> None:
-    user = _create_user(session)
-    openrouter = _StubOpenRouter({"data": [{"embedding": []}]})
-
-    monkeypatch.setattr(collections_routes, "get_settings", lambda: _StubSettings())
-    monkeypatch.setattr(collections_routes, "get_openrouter_client", lambda: openrouter)
-    monkeypatch.setattr(collections_routes, "Pinecone", _StubPinecone)
-    monkeypatch.setattr(collections_routes, "PineconeIndexer", _StubPineconeIndexer)
-
-    payload = CollectionCreate(name="Unit Collection", description="Test")
-
-    with pytest.raises(HTTPException) as excinfo:
-        collections_routes.create_collection(payload, current_user=user, session=session)
-
-    assert excinfo.value.status_code == 502
+    assert created.ingestion_pipeline_id is not None
+    assert created.retrieval_pipeline_id is not None
 
 
 def test_update_collection_updates_fields(session: Session) -> None:
@@ -200,14 +123,58 @@ def test_update_collection_updates_fields(session: Session) -> None:
         name="Updated",
         description="Updated desc",
         metadata={"owner": "unit"},
-        chunk_settings=ChunkSettings(chunk_size=256, chunk_overlap=64, strategy=ChunkStrategy.SENTENCE),
     )
 
     updated = collections_routes.update_collection(collection.id, payload, current_user=user, session=session)
 
     assert updated.name == "Updated"
-    assert updated.chunk_settings.chunk_size == 256
-    assert updated.chunk_settings.strategy == ChunkStrategy.SENTENCE
+    assert updated.metadata["owner"] == "unit"
+
+
+def test_create_collection_with_pipeline_overrides(session: Session) -> None:
+    user = _create_user(session)
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    session.commit()
+
+    ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
+    retrieval_definition = pipeline_service.get_definition(defaults.retrieval)
+    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+    chat_node = next(node for node in retrieval_definition.nodes if node.type == "chat.settings")
+
+    payload = CollectionCreate(
+        name="Overrides Collection",
+        description="Test overrides",
+        pipeline_overrides=CollectionPipelineOverrides(
+            ingestion=[
+                PipelineNodeOverride(node_id=chunker_node.id, config={"chunk_size": 2048}),
+            ],
+            retrieval=[
+                PipelineNodeOverride(node_id=chat_node.id, config={"context_window": 4096}),
+            ],
+        ),
+    )
+
+    created = collections_routes.create_collection(payload, current_user=user, session=session)
+
+    assert created.ingestion_pipeline_id is not None
+    assert created.retrieval_pipeline_id is not None
+    assert created.ingestion_pipeline_id != defaults.ingestion.id
+    assert created.retrieval_pipeline_id != defaults.retrieval.id
+
+    ingestion_pipeline = pipeline_service.get_pipeline(created.ingestion_pipeline_id, user.id)
+    retrieval_pipeline = pipeline_service.get_pipeline(created.retrieval_pipeline_id, user.id)
+    assert ingestion_pipeline is not None
+    assert retrieval_pipeline is not None
+
+    ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
+    retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
+    updated_chunker = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+    updated_chat = next(node for node in retrieval_definition.nodes if node.type == "chat.settings")
+
+    assert updated_chunker.config["chunk_size"] == 2048
+    assert updated_chunker.config["chunk_overlap"] == 200
+    assert updated_chat.config["context_window"] == 4096
 
 
 def test_update_collection_prompt_sets_and_clears_template(session: Session) -> None:
@@ -244,10 +211,10 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
         status=models.DocumentStatus.READY,
         num_chunks=0,
         num_tokens=0,
-        chunk_size=collection.chunk_size,
-        chunk_overlap=collection.chunk_overlap,
-        chunk_strategy=collection.chunk_strategy,
-        embedding_model=collection.embedding_model,
+        chunk_size=128,
+        chunk_overlap=8,
+        chunk_strategy=models.ChunkStrategy.TOKEN,
+        embedding_model="embed-model",
         source_path="/tmp/doc.txt",
     )
     session.add(document)
@@ -257,7 +224,7 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
         collection_id=collection.id,
         title="Chat",
         mode=models.ChatMode.CHAT,
-        chat_model=collection.chat_model,
+        chat_model="chat-model",
         context_tokens=0,
     )
     session.add(chat_session)
@@ -273,7 +240,7 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
     session.commit()
 
     storage = _StubFileStorage()
-    monkeypatch.setattr(collections_routes, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(collections_routes, "get_settings", lambda: SimpleNamespace(pinecone_api_key="key"))
     monkeypatch.setattr(collections_routes, "Pinecone", _StubPinecone)
     monkeypatch.setattr(collections_routes, "FileStorage", lambda: storage)
 

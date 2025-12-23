@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.config import get_settings
-from app.api.routes import auth, chat, collections, documents, health, models, search
-from app.db.session import init_db
+from app.api.routes import auth, chat, collections, documents, health, models, pipelines, search
+from app.db.session import init_db, session_scope
+from app.services.pipelines import backfill_default_pipelines
 
 settings = get_settings()
 LOG_LEVEL_NAME = (settings.log_level or "").strip().upper()
@@ -31,6 +32,8 @@ if LOG_LEVEL_NAME:
 async def lifespan(_: FastAPI):
     """Initialize application resources on startup."""
     init_db()
+    with session_scope() as session:
+        backfill_default_pipelines(session)
     yield
 
 
@@ -52,6 +55,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(models.router)
+app.include_router(pipelines.router)
 app.include_router(collections.router)
 app.include_router(documents.router)
 app.include_router(search.router)

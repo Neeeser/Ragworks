@@ -18,21 +18,12 @@ export const CollectionVitalsCard = ({ collection, documentCount }: CollectionVi
         Documents: <span className="text-white">{documentCount}</span>
       </p>
       <p>
-        Embeddings: <span className="text-white">{collection.embedding_model}</span>
+        Ingestion pipeline:{" "}
+        <span className="text-white">{collection.ingestion_pipeline_id ?? "Default"}</span>
       </p>
       <p>
-        Chat model: <span className="text-white">{collection.chat_model}</span>
-      </p>
-      <p>
-        Chunking:{" "}
-        <span className="text-white">
-          {collection.chunk_settings.strategy} • {collection.chunk_settings.chunk_size}/
-          {collection.chunk_settings.chunk_overlap}
-        </span>
-      </p>
-      <p>
-        Context window:{" "}
-        <span className="text-white">{collection.context_window.toLocaleString()} tokens</span>
+        Retrieval pipeline:{" "}
+        <span className="text-white">{collection.retrieval_pipeline_id ?? "Default"}</span>
       </p>
     </div>
   );

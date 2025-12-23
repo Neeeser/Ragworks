@@ -1,5 +1,7 @@
 "use client";
 
+import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+
 import type {
   ModelParameterKey,
   ParameterDefinition,
@@ -44,7 +46,7 @@ export const ModelParametersCard = ({
   modelsError,
   modelsLoading,
 }: ModelParametersCardProps) => {
-  const selectedModelLabel = currentModelInfo?.id || collection?.chat_model || "the selected model";
+  const selectedModelLabel = currentModelInfo?.id || "the selected model";
 
   if (modelsError) {
     return <p className="text-sm text-rose-300">{modelsError}</p>;
@@ -71,96 +73,49 @@ export const ModelParametersCard = ({
     );
   }
 
-  const inputClasses =
-    "w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-violet-400";
-
   const renderParameterControl = (definition: ParameterDefinition) => {
     const hasOverride = Object.prototype.hasOwnProperty.call(parameterOverrides, definition.key);
     const currentValue = parameterOverrides[definition.key];
     const defaultDisplay = formatDefaultParameter(definition.key);
 
-    let control: React.ReactNode;
-    if (definition.input === "number" || definition.input === "integer") {
-      control = (
-        <input
-          type="number"
-          min={definition.min}
-          max={definition.max}
-          step={definition.step ?? (definition.input === "integer" ? 1 : 0.05)}
-          className={inputClasses}
-          placeholder={definition.placeholder}
-          value={typeof currentValue === "number" ? currentValue : ""}
-          onChange={(event) =>
-            handleNumberParameterChange(
-              definition.key,
-              event.target.value,
-              definition.input === "integer",
-            )
-          }
-        />
-      );
-    } else if (definition.input === "boolean") {
-      control = (
-        <label className="flex items-center gap-3 text-sm text-slate-200">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-white/30 bg-transparent"
-            checked={currentValue === true}
-            onChange={(event) => handleBooleanParameterChange(definition.key, event.target.checked)}
-          />
-          <span>Enable</span>
-        </label>
-      );
-    } else if (definition.input === "select") {
-      control = (
-        <select
-          className={inputClasses}
-          value={typeof currentValue === "string" ? currentValue : ""}
-          onChange={(event) => handleSelectParameterChange(definition.key, event.target.value)}
-        >
-          {(definition.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      );
-    } else {
-      control = (
-        <textarea
-          className={`${inputClasses} h-auto`}
-          rows={definition.rows ?? 2}
-          placeholder={definition.placeholder}
-          value={typeof currentValue === "string" ? currentValue : ""}
-          onChange={(event) => handleTextParameterChange(definition.key, event.target.value)}
-        />
-      );
-    }
+    const handleValueChange = (value: string | boolean) => {
+      if (definition.input === "number" || definition.input === "integer") {
+        handleNumberParameterChange(
+          definition.key,
+          value as string,
+          definition.input === "integer",
+        );
+      } else if (definition.input === "boolean") {
+        handleBooleanParameterChange(definition.key, value === true);
+      } else if (definition.input === "select") {
+        handleSelectParameterChange(definition.key, value as string);
+      } else {
+        handleTextParameterChange(definition.key, value as string);
+      }
+    };
 
     return (
-      <div
+      <ParameterFieldCard
         key={definition.key}
-        className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3"
+        label={definition.label}
+        description={definition.description}
+        helper={defaultDisplay ? `Default: ${defaultDisplay}` : null}
+        actionLabel="Clear"
+        actionDisabled={!hasOverride}
+        onAction={() => handleClearParameter(definition.key)}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-white">{definition.label}</p>
-            <p className="text-xs text-slate-400">{definition.description}</p>
-            {defaultDisplay && (
-              <p className="text-[11px] text-slate-500">Default: {defaultDisplay}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="text-xs text-slate-400 transition hover:text-white disabled:opacity-40"
-            disabled={!hasOverride}
-            onClick={() => handleClearParameter(definition.key)}
-          >
-            Clear
-          </button>
-        </div>
-        {control}
-      </div>
+        <ParameterInput
+          input={definition.input}
+          value={currentValue}
+          min={definition.min}
+          max={definition.max}
+          step={definition.step}
+          placeholder={definition.placeholder}
+          options={definition.options}
+          rows={definition.rows}
+          onChange={handleValueChange}
+        />
+      </ParameterFieldCard>
     );
   };
 

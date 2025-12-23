@@ -7,17 +7,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
-import { fetchCollections, fetchDocuments, listChatSessions } from "@/lib/api";
+import { fetchCollections, fetchDocuments, fetchPipelines, listChatSessions } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { ChatSession, Collection, Document } from "@/lib/types";
+import type { ChatSession, Collection, Document, Pipeline } from "@/lib/types";
 
 export default function DashboardPage() {
   const { token, user } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [ingestionPipelines, setIngestionPipelines] = useState<Pipeline[]>([]);
+  const [retrievalPipelines, setRetrievalPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,9 +32,15 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const cols = await fetchCollections(authToken);
+        const [cols, ingestion, retrieval] = await Promise.all([
+          fetchCollections(authToken),
+          fetchPipelines(authToken, "ingestion"),
+          fetchPipelines(authToken, "retrieval"),
+        ]);
         if (cancelled) return;
         setCollections(cols);
+        setIngestionPipelines(ingestion);
+        setRetrievalPipelines(retrieval);
         const docResults = await Promise.all(
           cols.map(async (collection) => {
             try {
@@ -75,11 +83,36 @@ export default function DashboardPage() {
     };
   }, [token]);
 
+  const pipelineNameById = useMemo(() => {
+    const entries = [...ingestionPipelines, ...retrievalPipelines].map((pipeline) => [
+      pipeline.id,
+      pipeline.name,
+    ]);
+    return new Map(entries);
+  }, [ingestionPipelines, retrievalPipelines]);
+  const defaultRetrieval = useMemo(
+    () =>
+      retrievalPipelines.find((pipeline) => pipeline.is_default) ?? retrievalPipelines[0] ?? null,
+    [retrievalPipelines],
+  );
+
+  const getContextWindow = (pipeline: Pipeline | null) => {
+    if (!pipeline) return 0;
+    const node = pipeline.definition.nodes.find((item) => item.type === "chat.settings");
+    const value = node?.config?.context_window;
+    return typeof value === "number" ? value : 0;
+  };
+
   const stats = useMemo(() => {
     const docCount = documents.length;
     const totalChunks = documents.reduce((sum, doc) => sum + doc.num_chunks, 0);
     const totalTokens = documents.reduce((sum, doc) => sum + doc.num_tokens, 0);
-    const contextCapacity = collections.reduce((sum, col) => sum + col.context_window, 0);
+    const contextCapacity = collections.reduce((sum, col) => {
+      const pipeline =
+        retrievalPipelines.find((item) => item.id === col.retrieval_pipeline_id) ||
+        defaultRetrieval;
+      return sum + getContextWindow(pipeline);
+    }, 0);
     const contextConsumed = sessions.reduce((sum, session) => sum + session.context_tokens, 0);
     const contextUtilization = contextCapacity
       ? Math.min(100, Math.round((contextConsumed / contextCapacity) * 100))
@@ -98,7 +131,7 @@ export default function DashboardPage() {
       contextCapacity,
       avgChunkSize,
     };
-  }, [collections, documents, sessions]);
+  }, [collections, documents, sessions, retrievalPipelines, defaultRetrieval]);
 
   const recentDocuments = useMemo(
     () =>
@@ -313,13 +346,12 @@ export default function DashboardPage() {
                       <p className="text-xs text-slate-400">{collection.description}</p>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
                         <span className="rounded-full bg-white/10 px-2 py-1">
-                          {collection.chunk_settings.strategy} strategy
+                          {pipelineNameById.get(collection.ingestion_pipeline_id ?? "") ??
+                            "Ingestion pipeline"}
                         </span>
                         <span className="rounded-full bg-white/10 px-2 py-1">
-                          {collection.embedding_model}
-                        </span>
-                        <span className="rounded-full bg-white/10 px-2 py-1">
-                          {collection.chat_model}
+                          {pipelineNameById.get(collection.retrieval_pipeline_id ?? "") ??
+                            "Retrieval pipeline"}
                         </span>
                       </div>
                     </div>

@@ -7,6 +7,7 @@ import type {
   ChatSession,
   Collection,
   CollectionCreatePayload,
+  CollectionUpdatePayload,
   CollectionPromptDetails,
   CollectionQueryResult,
   Document,
@@ -16,6 +17,12 @@ import type {
   ModelInfo,
   ListModelEndpointsResponse,
   ReasoningTraceSegment,
+  Pipeline,
+  PipelineDefinition,
+  PipelineKind,
+  PipelineValidationResult,
+  PipelineVersion,
+  NodeSpec,
 } from "@/lib/types";
 
 const API_BASE_URL =
@@ -137,6 +144,106 @@ export async function createCollection(
     method: "POST",
     token,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCollection(
+  collectionId: string,
+  token: string,
+  payload: CollectionUpdatePayload,
+): Promise<Collection> {
+  return apiFetch<Collection>(`/api/collections/${collectionId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchPipelines(token: string, kind?: PipelineKind): Promise<Pipeline[]> {
+  const params = kind ? `?kind=${kind}` : "";
+  return apiFetch<Pipeline[]>(`/api/pipelines${params}`, { token });
+}
+
+export async function fetchPipeline(pipelineId: string, token: string): Promise<Pipeline> {
+  return apiFetch<Pipeline>(`/api/pipelines/${pipelineId}`, { token });
+}
+
+export async function fetchPipelineNodes(token: string): Promise<NodeSpec[]> {
+  const response = await apiFetch<{ nodes: NodeSpec[] }>("/api/pipelines/nodes", { token });
+  return response.nodes;
+}
+
+export async function validatePipeline(
+  token: string,
+  definition: PipelineDefinition,
+): Promise<PipelineValidationResult> {
+  return apiFetch<PipelineValidationResult>("/api/pipelines/validate", {
+    method: "POST",
+    token,
+    body: JSON.stringify(definition),
+  });
+}
+
+export async function createPipeline(
+  token: string,
+  payload: {
+    name: string;
+    kind: PipelineKind;
+    definition: PipelineDefinition;
+    description?: string;
+    change_summary?: string;
+  },
+): Promise<Pipeline> {
+  return apiFetch<Pipeline>("/api/pipelines", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePipeline(
+  pipelineId: string,
+  token: string,
+  payload: {
+    name?: string;
+    description?: string;
+    definition?: PipelineDefinition;
+    change_summary?: string;
+  },
+): Promise<Pipeline> {
+  return apiFetch<Pipeline>(`/api/pipelines/${pipelineId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePipeline(
+  pipelineId: string,
+  token: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/pipelines/${pipelineId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listPipelineVersions(
+  pipelineId: string,
+  token: string,
+): Promise<PipelineVersion[]> {
+  return apiFetch<PipelineVersion[]>(`/api/pipelines/${pipelineId}/versions`, { token });
+}
+
+export async function activatePipelineVersion(
+  pipelineId: string,
+  version: number,
+  token: string,
+): Promise<Pipeline> {
+  return apiFetch<Pipeline>(`/api/pipelines/${pipelineId}/activate`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ version }),
   });
 }
 

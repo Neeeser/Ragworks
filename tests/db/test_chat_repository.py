@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlmodel import Session
 
 from app.db import models
-from app.db.models import ChatRole, ChunkStrategy
+from app.db.models import ChatRole
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
 
 
@@ -25,15 +25,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
         user_id=user.id,
         name="Collection",
         description="",
-        embedding_model="embed",
-        chat_model="chat",
-        context_window=1024,
-        chunk_size=128,
-        chunk_overlap=8,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        pinecone_index="idx",
-        pinecone_namespace=f"ns-{uuid4().hex[:6]}",
-        metadata={"embedding_dimension": 128},
+        extra_metadata={},
     )
     repo.add(collection)
     session.commit()
@@ -47,7 +39,7 @@ def _create_session(session: Session, user: models.User, collection: models.Coll
         collection_id=collection.id,
         title="Session",
         mode=models.ChatMode.CHAT,
-        chat_model=collection.chat_model,
+        chat_model="chat",
         context_tokens=0,
     )
     repo = ChatRepository(session)

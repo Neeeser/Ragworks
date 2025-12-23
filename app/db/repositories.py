@@ -245,3 +245,88 @@ class QueryRepository:  # pylint: disable=too-few-public-methods
         self.session.add(event)
         self.session.flush()
         return event
+
+
+class PipelineRepository:
+    """Data access helpers for pipelines."""
+
+    def __init__(self, session: Session) -> None:
+        """Initialize the repository with a database session."""
+        self.session = session
+
+    def list_for_user(
+        self,
+        user_id: UUID,
+        *,
+        kind: Optional[models.PipelineKind] = None,
+    ) -> Iterable[models.Pipeline]:
+        """List pipelines for a user, optionally filtered by kind."""
+        statement = select(models.Pipeline).where(models.Pipeline.user_id == user_id)
+        if kind:
+            statement = statement.where(models.Pipeline.kind == kind)
+        return self.session.exec(statement).all()
+
+    def get(
+        self,
+        pipeline_id: UUID,
+        user_id: Optional[UUID] = None,
+    ) -> Optional[models.Pipeline]:
+        """Return a pipeline by id, optionally scoped to a user."""
+        statement = select(models.Pipeline).where(models.Pipeline.id == pipeline_id)
+        if user_id:
+            statement = statement.where(models.Pipeline.user_id == user_id)
+        return self.session.exec(statement).first()
+
+    def get_default(
+        self,
+        user_id: UUID,
+        kind: models.PipelineKind,
+    ) -> Optional[models.Pipeline]:
+        """Return the default pipeline for a user and kind."""
+        statement = select(models.Pipeline).where(
+            models.Pipeline.user_id == user_id,
+            models.Pipeline.kind == kind,
+            models.Pipeline.is_default.is_(True),  # pylint: disable=no-member
+        )
+        return self.session.exec(statement).first()
+
+    def add(self, pipeline: models.Pipeline) -> models.Pipeline:
+        """Persist a new pipeline and return it."""
+        self.session.add(pipeline)
+        self.session.flush()
+        return pipeline
+
+
+class PipelineVersionRepository:
+    """Data access helpers for pipeline versions."""
+
+    def __init__(self, session: Session) -> None:
+        """Initialize the repository with a database session."""
+        self.session = session
+
+    def list_for_pipeline(self, pipeline_id: UUID) -> Iterable[models.PipelineVersion]:
+        """List versions for a pipeline in descending order."""
+        statement = (
+            select(models.PipelineVersion)
+            .where(models.PipelineVersion.pipeline_id == pipeline_id)
+            .order_by(desc(models.PipelineVersion.version))
+        )
+        return self.session.exec(statement).all()
+
+    def get_by_version(
+        self,
+        pipeline_id: UUID,
+        version: int,
+    ) -> Optional[models.PipelineVersion]:
+        """Return a specific version for a pipeline."""
+        statement = select(models.PipelineVersion).where(
+            models.PipelineVersion.pipeline_id == pipeline_id,
+            models.PipelineVersion.version == version,
+        )
+        return self.session.exec(statement).first()
+
+    def add(self, version: models.PipelineVersion) -> models.PipelineVersion:
+        """Persist a pipeline version and return it."""
+        self.session.add(version)
+        self.session.flush()
+        return version

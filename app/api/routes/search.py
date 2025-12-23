@@ -29,8 +29,9 @@ def run_collection_query(
         user_id=current_user.id,
         session=session,
     )
-    retrieval_service = RetrievalService()
+    retrieval_service = RetrievalService(session)
     return retrieval_service.query_collection(
+        current_user,
         collection,
         query=payload.query,
         top_k=payload.top_k,

@@ -202,15 +202,15 @@ export default function ChatStudioLanding() {
                     </div>
                     <ul className="space-y-2 text-sm">
                       <li>
-                        Chat model: <span className="text-white">{collection.chat_model}</span>
-                      </li>
-                      <li>
-                        Embeddings: <span className="text-white">{collection.embedding_model}</span>
-                      </li>
-                      <li>
-                        Context window:{" "}
+                        Ingestion pipeline:{" "}
                         <span className="text-white">
-                          {collection.context_window.toLocaleString()} tokens
+                          {collection.ingestion_pipeline_id ?? "Default"}
+                        </span>
+                      </li>
+                      <li>
+                        Retrieval pipeline:{" "}
+                        <span className="text-white">
+                          {collection.retrieval_pipeline_id ?? "Default"}
                         </span>
                       </li>
                       <li>

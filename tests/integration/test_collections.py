@@ -40,7 +40,7 @@ def test_collection_update_allows_metadata_changes(
 ) -> None:
     update_payload = {
         "description": "Updated via pytest",
-        "chunk_settings": {"chunk_overlap": 8},
+        "metadata": {"owner": "pytest"},
     }
     response = client.patch(
         f"/api/collections/{primary_collection['id']}",
@@ -50,7 +50,7 @@ def test_collection_update_allows_metadata_changes(
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["description"] == "Updated via pytest"
-    assert data["chunk_settings"]["chunk_overlap"] == 8
+    assert data["metadata"]["owner"] == "pytest"
 
 
 def test_user_isolation_blocks_foreign_collection_access(

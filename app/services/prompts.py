@@ -1,5 +1,7 @@
 """Prompt templates and rendering helpers."""
 
+# pylint: disable=duplicate-code
+
 from __future__ import annotations
 
 import json
@@ -8,6 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from app.db import models
+from app.pipelines.config import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.utils.time import utc_now
 
 SYSTEM_PROMPT_METADATA_KEY = "system_prompt_template"
@@ -35,42 +38,42 @@ PROMPT_VARIABLES: List[PromptVariableDefinition] = [
     ),
     PromptVariableDefinition(
         name="collection.embedding_model",
-        description="Embedding model name configured for this collection.",
+        description="Embedding model name configured for the ingestion pipeline.",
         example="text-embedding-3-large",
     ),
     PromptVariableDefinition(
         name="collection.chat_model",
-        description="Default chat model used when no override is provided.",
+        description="Default chat model used by the retrieval pipeline.",
         example="meta-llama/llama-3.1-70b-instruct",
     ),
     PromptVariableDefinition(
         name="collection.chunk.strategy",
-        description="Chunking strategy label.",
+        description="Chunking strategy label configured in the ingestion pipeline.",
         example="token",
     ),
     PromptVariableDefinition(
         name="collection.chunk.size",
-        description="Chunk size configured for ingestion.",
+        description="Chunk size configured in the ingestion pipeline.",
         example="1024",
     ),
     PromptVariableDefinition(
         name="collection.chunk.overlap",
-        description="Token overlap between consecutive chunks.",
+        description="Token overlap between consecutive chunks in the ingestion pipeline.",
         example="200",
     ),
     PromptVariableDefinition(
         name="collection.context_window",
-        description="Context window available for the active chat model.",
+        description="Context window configured for the retrieval pipeline.",
         example="8192",
     ),
     PromptVariableDefinition(
         name="collection.pinecone.index",
-        description="Pinecone index backing this collection.",
+        description="Pinecone index configured in the ingestion pipeline.",
         example="transparentrag-prod",
     ),
     PromptVariableDefinition(
         name="collection.pinecone.namespace",
-        description="Namespace within the Pinecone index.",
+        description="Namespace within the Pinecone index for this collection.",
         example="col-a1b2c3d4e5f6",
     ),
     PromptVariableDefinition(
@@ -162,30 +165,54 @@ def _stringify(value: object, default: str = "N/A") -> str:
 def system_prompt_context(
     collection: models.Collection,
     user: Optional[models.User],
+    *,
+    ingestion_settings: Optional[IngestionPipelineSettings] = None,
+    retrieval_settings: Optional[RetrievalPipelineSettings] = None,
 ) -> Dict[str, str]:
     """Build the rendering context for system prompt templates."""
     now = utc_now()
-    chunk_strategy = (
-        collection.chunk_strategy.value
-        if hasattr(collection.chunk_strategy, "value")
-        else str(collection.chunk_strategy)
-    )
     metadata = collection.extra_metadata or {}
     user_display_name = getattr(user, "full_name", None) or getattr(user, "email", None)
+    chunk_strategy = (
+        ingestion_settings.chunk_strategy.value
+        if ingestion_settings and hasattr(ingestion_settings.chunk_strategy, "value")
+        else str(ingestion_settings.chunk_strategy)
+        if ingestion_settings
+        else None
+    )
+    embedding_model = (
+        ingestion_settings.embedding_model
+        if ingestion_settings
+        else retrieval_settings.embedding_model
+        if retrieval_settings
+        else None
+    )
+    pinecone_index = ingestion_settings.index_name if ingestion_settings else None
+    pinecone_namespace = ingestion_settings.namespace if ingestion_settings else None
 
     context: Dict[str, str] = {
         "collection.id": str(collection.id),
         "collection.name": _stringify(collection.name, "Untitled collection"),
         "collection.description": _stringify(collection.description),
-        "collection.embedding_model": _stringify(collection.embedding_model),
-        "collection.chat_model": _stringify(collection.chat_model),
-        "collection.context_window": _stringify(collection.context_window),
+        "collection.embedding_model": _stringify(embedding_model),
+        "collection.chat_model": _stringify(
+            retrieval_settings.chat_model if retrieval_settings else None
+        ),
+        "collection.context_window": _stringify(
+            retrieval_settings.context_window if retrieval_settings else None
+        ),
         "collection.chunk.strategy": _stringify(chunk_strategy),
-        "collection.chunk.size": _stringify(collection.chunk_size),
-        "collection.chunk.overlap": _stringify(collection.chunk_overlap),
-        "collection.pinecone.index": _stringify(collection.pinecone_index),
-        "collection.pinecone.namespace": _stringify(collection.pinecone_namespace),
-        "metadata.embedding_dimension": _stringify(metadata.get("embedding_dimension")),
+        "collection.chunk.size": _stringify(
+            ingestion_settings.chunk_size if ingestion_settings else None
+        ),
+        "collection.chunk.overlap": _stringify(
+            ingestion_settings.chunk_overlap if ingestion_settings else None
+        ),
+        "collection.pinecone.index": _stringify(pinecone_index),
+        "collection.pinecone.namespace": _stringify(pinecone_namespace),
+        "metadata.embedding_dimension": _stringify(
+            ingestion_settings.dimension if ingestion_settings else None
+        ),
         "user.full_name": _stringify(user_display_name, "Anonymous user"),
         "user.email": _stringify(getattr(user, "email", None), "unknown@example.com"),
         "user.id": _stringify(getattr(user, "id", None)),
@@ -222,10 +249,21 @@ def apply_prompt_template(template: str, context: Dict[str, str]) -> str:
     return _PLACEHOLDER_PATTERN.sub(_replace, template)
 
 
-def render_system_prompt(collection: models.Collection, user: Optional[models.User]) -> str:
+def render_system_prompt(
+    collection: models.Collection,
+    user: Optional[models.User],
+    *,
+    ingestion_settings: Optional[IngestionPipelineSettings] = None,
+    retrieval_settings: Optional[RetrievalPipelineSettings] = None,
+) -> str:
     """Render the final system prompt for a collection and user."""
     template = get_system_prompt_template(collection)
-    context = system_prompt_context(collection, user)
+    context = system_prompt_context(
+        collection,
+        user,
+        ingestion_settings=ingestion_settings,
+        retrieval_settings=retrieval_settings,
+    )
     return apply_prompt_template(template, context)
 
 

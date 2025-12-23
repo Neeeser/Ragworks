@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.db import models
+from app.pipelines.config import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.services import prompts
 from app.services.prompts import (
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
@@ -26,14 +27,6 @@ def _build_collection(**overrides):
         "user_id": uuid4(),
         "name": "Demo Collection",
         "description": "Demo description",
-        "embedding_model": "text-embed",
-        "chat_model": "chat-model",
-        "context_window": 8192,
-        "chunk_size": 1024,
-        "chunk_overlap": 200,
-        "chunk_strategy": models.ChunkStrategy.TOKEN,
-        "pinecone_index": "pinecone-index",
-        "pinecone_namespace": "pinecone-namespace",
         "extra_metadata": {"embedding_dimension": 1536},
     }
     defaults.update(overrides)
@@ -66,11 +59,34 @@ def test_apply_prompt_template_replaces_known_placeholders():
 def test_system_prompt_context_includes_collection_and_metadata():
     collection = _build_collection(
         extra_metadata={"embedding_dimension": 2048, "region": "us-west"},
-        chunk_strategy=models.ChunkStrategy.PARAGRAPH,
         description=None,
     )
     user = _build_user(full_name=None)
-    context = system_prompt_context(collection, user)
+    ingestion_settings = IngestionPipelineSettings(
+        chunk_strategy=models.ChunkStrategy.PARAGRAPH,
+        chunk_size=1024,
+        chunk_overlap=200,
+        embedding_model="text-embed",
+        index_name="pinecone-index",
+        namespace="pinecone-namespace",
+        dimension=2048,
+        metric="cosine",
+    )
+    retrieval_settings = RetrievalPipelineSettings(
+        embedding_model="text-embed",
+        index_name="pinecone-index",
+        namespace="pinecone-namespace",
+        dimension=2048,
+        metric="cosine",
+        chat_model="chat-model",
+        context_window=8192,
+    )
+    context = system_prompt_context(
+        collection,
+        user,
+        ingestion_settings=ingestion_settings,
+        retrieval_settings=retrieval_settings,
+    )
 
     assert context["collection.name"] == "Demo Collection"
     assert context["collection.description"] == "N/A"
@@ -88,7 +104,32 @@ def test_render_system_prompt_uses_custom_template(monkeypatch):
     collection = _build_collection(extra_metadata={SYSTEM_PROMPT_METADATA_KEY: template})
     user = _build_user(email="custom@example.com")
 
-    rendered = render_system_prompt(collection, user)
+    ingestion_settings = IngestionPipelineSettings(
+        chunk_strategy=models.ChunkStrategy.TOKEN,
+        chunk_size=1024,
+        chunk_overlap=200,
+        embedding_model="text-embed",
+        index_name="pinecone-index",
+        namespace="pinecone-namespace",
+        dimension=1536,
+        metric="cosine",
+    )
+    retrieval_settings = RetrievalPipelineSettings(
+        embedding_model="text-embed",
+        index_name="pinecone-index",
+        namespace="pinecone-namespace",
+        dimension=1536,
+        metric="cosine",
+        chat_model="chat-model",
+        context_window=8192,
+    )
+
+    rendered = render_system_prompt(
+        collection,
+        user,
+        ingestion_settings=ingestion_settings,
+        retrieval_settings=retrieval_settings,
+    )
     assert rendered == "Hello Demo Collection by custom@example.com at 2024-01-02T03:04:05+00:00"
 
 
