@@ -33,7 +33,6 @@ import {
 import { PipelineCanvas } from "./PipelineCanvas";
 import { PipelineHeader } from "./PipelineHeader";
 import { PipelineInspector } from "./PipelineInspector";
-import { PipelineNotice } from "./PipelineNotice";
 import { PipelineRevisions } from "./PipelineRevisions";
 import { PipelineSavePanel } from "./PipelineSavePanel";
 import { PipelineSidebar } from "./PipelineSidebar";
@@ -346,8 +345,6 @@ export function PipelineBuilder() {
       />
       <PipelineHeader onCreatePipeline={handleCreatePipeline} />
 
-      {message && <PipelineNotice message={message} />}
-
       {loading ? (
         <div className="flex flex-1 items-center justify-center">
           <GlassCard className="flex items-center justify-center rounded-3xl p-10">
@@ -372,6 +369,8 @@ export function PipelineBuilder() {
             nodes={nodes}
             edges={edges}
             selectedPipeline={selectedPipeline}
+            notice={message}
+            onNoticeDismiss={() => setMessage(null)}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={handleConnect}
