@@ -23,6 +23,7 @@ import type {
   PipelineValidationResult,
   PipelineVersion,
   NodeSpec,
+  UserKeyValidation,
 } from "@/lib/types";
 
 const API_BASE_URL =
@@ -111,6 +112,24 @@ export async function registerUser(payload: {
 
 export async function getProfile(token: string): Promise<User> {
   return apiFetch<User>("/api/auth/me", { token });
+}
+
+export async function updateUserSettings(
+  token: string,
+  payload: {
+    openrouter_api_key?: string;
+    pinecone_api_key?: string;
+  },
+): Promise<User> {
+  return apiFetch<User>("/api/auth/me", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateUserKeys(token: string): Promise<UserKeyValidation> {
+  return apiFetch<UserKeyValidation>("/api/auth/me/keys/validate", { token });
 }
 
 export async function fetchCollections(token: string): Promise<Collection[]> {
@@ -490,11 +509,17 @@ export async function listModels(token?: string, refresh?: boolean): Promise<Mod
 export async function listModelEndpoints(
   author: string,
   slug: string,
+  token?: string,
 ): Promise<ListModelEndpointsResponse> {
   const encodedAuthor = encodeURIComponent(author);
   const encodedSlug = encodeURIComponent(slug);
+  const options: FetchOptions = {};
+  if (token) {
+    options.token = token;
+  }
   return apiFetch<ListModelEndpointsResponse>(
     `/api/models/${encodedAuthor}/${encodedSlug}/endpoints`,
+    options,
   );
 }
 

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlmodel import Session
 
-from app.api.dependencies import get_current_user, get_session
+from app.api.dependencies import get_session, require_user_api_keys
 from app.db import models
 from app.db.repositories import ChunkRepository, DocumentRepository
 from app.schemas.documents import ChunkRead, ChunkVisualization, DocumentRead, IngestionResponse
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api", tags=["documents"])
 async def upload_document(
     collection_id: UUID,
     file: UploadFile = File(...),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> IngestionResponse:
     """Upload and ingest a document into a collection."""
@@ -43,7 +43,7 @@ async def upload_document(
 @router.get("/collections/{collection_id}/documents", response_model=List[DocumentRead])
 def list_documents(
     collection_id: UUID,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> List[DocumentRead]:
     """List documents for a collection."""
@@ -61,7 +61,7 @@ def list_documents(
 @router.get("/documents/{document_id}/chunks", response_model=ChunkVisualization)
 def get_document_chunks(
     document_id: UUID,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> ChunkVisualization:
     """Return chunk visualization data for a document."""

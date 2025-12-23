@@ -95,7 +95,7 @@ def _client(monkeypatch) -> OpenRouterClient:
     monkeypatch.setattr(openrouter_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(openrouter_module.httpx, "Client", _StubHttpClient)
     monkeypatch.setattr(openrouter_module, "OpenAI", _StubOpenAI)
-    return OpenRouterClient()
+    return OpenRouterClient("test-key")
 
 
 def test_list_models_caches_and_refreshes(_client: OpenRouterClient) -> None:
@@ -265,7 +265,7 @@ def test_build_app_headers_skips_referer(monkeypatch) -> None:
     monkeypatch.setattr(openrouter_module.httpx, "Client", _StubHttpClient)
     monkeypatch.setattr(openrouter_module, "OpenAI", _StubOpenAI)
 
-    client = OpenRouterClient()
+    client = OpenRouterClient("test-key")
 
     assert "HTTP-Referer" not in client._app_headers
 

@@ -13,8 +13,8 @@ from pinecone.exceptions import NotFoundException
 from sqlmodel import Session
 
 REQUIRED_ENV_VARS = [
-    "OPENROUTER_API_KEY",
-    "PINECONE_API_KEY",
+    "TEST_OPENROUTER_API_KEY",
+    "TEST_PINECONE_API_KEY",
     "PINECONE_INDEX_NAME",
     "JWT_SECRET_KEY",
 ]
@@ -119,6 +119,16 @@ def user_context(client: TestClient, user_credentials: dict[str, str]) -> dict[s
     token = token_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
+    settings_resp = client.patch(
+        "/api/auth/me",
+        json={
+            "openrouter_api_key": os.getenv("TEST_OPENROUTER_API_KEY"),
+            "pinecone_api_key": os.getenv("TEST_PINECONE_API_KEY"),
+        },
+        headers=headers,
+    )
+    assert settings_resp.status_code == 200, settings_resp.text
+
     me_resp = client.get("/api/auth/me", headers=headers)
     assert me_resp.status_code == 200, me_resp.text
 
@@ -155,7 +165,8 @@ def _embedding_dimension() -> int:
     global _EMBED_DIMENSION_CACHE
     if _EMBED_DIMENSION_CACHE:
         return _EMBED_DIMENSION_CACHE
-    openrouter = get_openrouter_client()
+    openrouter_key = os.getenv("TEST_OPENROUTER_API_KEY", "")
+    openrouter = get_openrouter_client(openrouter_key)
     response = openrouter.embed(["dimension probe"], model=SETTINGS.default_embedding_model)
     data = response.get("data", [])
     if not data:
@@ -184,7 +195,8 @@ def _get_or_create_index(client: Pinecone):
 
 @pytest.fixture(scope="session")
 def pinecone_namespace_tracker() -> Generator[_PineconeNamespaceTracker, None, None]:
-    client = Pinecone(api_key=SETTINGS.pinecone_api_key)
+    pinecone_key = os.getenv("TEST_PINECONE_API_KEY", "")
+    client = Pinecone(api_key=pinecone_key)
     index = _get_or_create_index(client)
     tracker = _PineconeNamespaceTracker(index)
     try:

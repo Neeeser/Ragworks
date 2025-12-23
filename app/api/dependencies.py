@@ -64,6 +64,42 @@ def get_current_user(
     return user
 
 
+def require_openrouter_key(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Ensure the user has configured an OpenRouter API key."""
+    if not (current_user.openrouter_api_key or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OpenRouter API key is not configured. Update it in Settings to continue.",
+        )
+    return current_user
+
+
+def require_user_api_keys(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Ensure the user has configured OpenRouter and Pinecone API keys."""
+    missing: list[str] = []
+    if not (current_user.openrouter_api_key or "").strip():
+        missing.append("OpenRouter")
+    if not (current_user.pinecone_api_key or "").strip():
+        missing.append("Pinecone")
+    if missing:
+        missing_label = " and ".join(missing)
+        noun = "key is" if len(missing) == 1 else "keys are"
+        pronoun = "it" if len(missing) == 1 else "them"
+        detail = (
+            f"{missing_label} API {noun} not configured. "
+            f"Update {pronoun} in Settings to continue."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail,
+        )
+    return current_user
+
+
 def issue_access_token(user: User) -> str:
     """Issue an access token for a user."""
     return create_access_token(str(user.id))

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import List
 
-from pinecone import Pinecone
 from sqlmodel import Session
 
 from app.api.config import get_settings
@@ -14,6 +13,7 @@ from app.db import models
 from app.pipelines.payloads import RetrievalPayload
 from app.pipelines.registry import build_default_registry
 from app.pipelines.runtime import PipelineExecutor, PipelineRunContext
+from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
 from app.services.openrouter import get_openrouter_client
 from app.services.pipelines import PipelineService
@@ -26,8 +26,6 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
     def __init__(self, session: Session) -> None:
         """Initialize retrieval dependencies."""
         self.settings = get_settings()
-        self._pinecone = Pinecone(api_key=self.settings.pinecone_api_key)
-        self.openrouter = get_openrouter_client()
         self.session = session
 
     def query_collection(  # pylint: disable=too-many-locals
@@ -46,6 +44,8 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
             raise ValueError("Retrieval pipeline could not be resolved.")
         definition = pipeline_service.get_definition(pipeline)
+        openrouter = get_openrouter_client(user.openrouter_api_key or "")
+        pinecone = get_pinecone_client(api_key=user.pinecone_api_key)
         executor = PipelineExecutor(build_default_registry())
         context = PipelineRunContext(
             session=self.session,
@@ -54,8 +54,8 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             document=None,
             query=query,
             top_k=top_k,
-            openrouter=self.openrouter,
-            pinecone=self._pinecone,
+            openrouter=openrouter,
+            pinecone=pinecone,
             storage=FileStorage(),
             settings=self.settings,
         )

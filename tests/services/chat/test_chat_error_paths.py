@@ -107,6 +107,7 @@ def test_stream_message_raises_for_missing_edit_message(monkeypatch) -> None:
     service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
     service.chat_repo = _StubRepo(message=None)
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
@@ -122,6 +123,7 @@ def test_stream_message_raises_for_missing_edit_session(monkeypatch) -> None:
     edit_message = SimpleNamespace(session_id=uuid4())
     service.chat_repo = _StubRepo(message=edit_message, session=None)
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
@@ -138,6 +140,7 @@ def test_stream_message_raises_for_edit_collection_mismatch(monkeypatch) -> None
     session_model = SimpleNamespace(collection_id=uuid4())
     service.chat_repo = _StubRepo(message=edit_message, session=session_model)
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
@@ -153,6 +156,7 @@ def test_stream_message_rejects_empty_content(monkeypatch) -> None:
     session_model = SimpleNamespace(id=uuid4(), chat_model="model")
     service._ensure_session = lambda **_kwargs: session_model
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="   ")
@@ -169,6 +173,7 @@ def test_stream_message_requires_chat_model(monkeypatch) -> None:
     service._ensure_session = lambda **_kwargs: session_model
     service._record_message = lambda **_kwargs: None
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch, chat_model=None)
 
     payload = ChatMessageCreate(content="hi")
@@ -232,6 +237,7 @@ def test_send_message_raises_for_missing_edit_message(monkeypatch) -> None:
     service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
     service.chat_repo = _StubRepo(message=None)
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
@@ -247,6 +253,7 @@ def test_send_message_rejects_empty_content(monkeypatch) -> None:
     session_model = SimpleNamespace(id=uuid4(), chat_model="model")
     service._ensure_session = lambda **_kwargs: session_model
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch)
 
     payload = ChatMessageCreate(content="   ")
@@ -263,6 +270,7 @@ def test_send_message_requires_chat_model(monkeypatch) -> None:
     service._ensure_session = lambda **_kwargs: session_model
     service._record_message = lambda **_kwargs: None
     service.session = SimpleNamespace()
+    service.openrouter = SimpleNamespace()
     _stub_pipeline_helpers(monkeypatch, chat_model=None)
 
     payload = ChatMessageCreate(content="hi")

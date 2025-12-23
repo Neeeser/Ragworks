@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     )
 
     # OpenRouter / LLM settings
-    openrouter_api_key: str = Field(validation_alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         validation_alias="OPENROUTER_BASE_URL",
@@ -50,7 +49,6 @@ class Settings(BaseSettings):
     )
 
     # Pinecone
-    pinecone_api_key: str = Field(validation_alias="PINECONE_API_KEY")
     pinecone_index_name: str = Field(
         default="transparent-rag",
         validation_alias="PINECONE_INDEX_NAME",
@@ -91,6 +89,17 @@ class Settings(BaseSettings):
         normalized = (value or "").strip()
         if not normalized.lower().startswith("postgresql"):
             raise ValueError("DATABASE_URL must use a postgres connection string.")
+        return normalized
+
+    @field_validator("openrouter_base_url")
+    @classmethod
+    def normalize_openrouter_base_url(cls, value: str) -> str:
+        """Normalize the OpenRouter base URL to the API host."""
+        normalized = (value or "").strip().rstrip("/")
+        if not normalized:
+            raise ValueError("OPENROUTER_BASE_URL must be set.")
+        if not normalized.endswith("/api/v1"):
+            normalized = f"{normalized}/api/v1"
         return normalized
 
 

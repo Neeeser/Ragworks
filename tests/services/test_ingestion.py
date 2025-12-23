@@ -13,7 +13,13 @@ from app.services.ingestion import IngestionService
 
 
 def _create_user(session: Session) -> models.User:
-    user = models.User(email="unit@example.com", full_name="Unit Tester", hashed_password="hashed")
+    user = models.User(
+        email="unit@example.com",
+        full_name="Unit Tester",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -53,8 +59,12 @@ def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, 
             raise RuntimeError("parse failed")
 
     monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
-    monkeypatch.setattr(ingestion_module, "Pinecone", _StubPinecone)
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda: object())
+    monkeypatch.setattr(
+        ingestion_module,
+        "get_pinecone_client",
+        lambda **_kwargs: _StubPinecone(api_key="key"),
+    )
+    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(ingestion_module, "PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)

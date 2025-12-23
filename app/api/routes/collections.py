@@ -8,12 +8,10 @@ from typing import List
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pinecone import Pinecone
 from sqlalchemy import delete as sa_delete
 from sqlmodel import Session, select
 
-from app.api.config import get_settings
-from app.api.dependencies import get_current_user, get_session
+from app.api.dependencies import get_session, require_user_api_keys
 from app.db import models
 from app.db.repositories import CollectionRepository
 from app.schemas.collections import (
@@ -26,6 +24,7 @@ from app.schemas.collections import (
 )
 from app.services.pipelines import PipelineService
 from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
+from app.retrieval.pinecone import get_pinecone_client
 from app.services.prompts import (
     SYSTEM_PROMPT_METADATA_KEY,
     apply_prompt_template,
@@ -96,7 +95,7 @@ def _prompt_read(  # pylint: disable=too-many-locals
 
 @router.get("", response_model=List[CollectionRead])
 def list_collections(
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> List[CollectionRead]:
     """List collections owned by the current user."""
@@ -107,7 +106,7 @@ def list_collections(
 @router.get("/{collection_id}", response_model=CollectionRead)
 def get_collection(
     collection_id: UUID,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Return a collection by id."""
@@ -122,7 +121,7 @@ def get_collection(
 @router.get("/{collection_id}/prompt", response_model=CollectionPromptRead)
 def get_collection_prompt(
     collection_id: UUID,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionPromptRead:
     """Return the rendered system prompt for a collection."""
@@ -137,7 +136,7 @@ def get_collection_prompt(
 @router.post("", response_model=CollectionRead, status_code=status.HTTP_201_CREATED)
 def create_collection(  # pylint: disable=too-many-locals
     payload: CollectionCreate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Create a new collection for the current user."""
@@ -223,7 +222,7 @@ def create_collection(  # pylint: disable=too-many-locals
 def update_collection(  # pylint: disable=too-many-branches
     collection_id: UUID,
     payload: CollectionUpdate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Update collection metadata for the current user."""
@@ -275,7 +274,7 @@ def update_collection(  # pylint: disable=too-many-branches
 def update_collection_prompt(
     collection_id: UUID,
     payload: CollectionPromptUpdate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionPromptRead:
     """Update the system prompt template for a collection."""
@@ -304,7 +303,7 @@ def update_collection_prompt(
 )
 def delete_collection(  # pylint: disable=too-many-locals
     collection_id: UUID,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> CollectionDeleteResponse:
     """Delete a collection and associated data."""
@@ -314,8 +313,7 @@ def delete_collection(  # pylint: disable=too-many-locals
         session=session,
     )
 
-    settings = get_settings()
-    pinecone_client = Pinecone(api_key=settings.pinecone_api_key)
+    pinecone_client = get_pinecone_client(api_key=current_user.pinecone_api_key)
     storage = FileStorage()
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(current_user)

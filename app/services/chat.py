@@ -26,7 +26,7 @@ from app.schemas.chat import (
     ToolCallTrace,
 )
 from app.schemas.openrouter import OpenRouterChatResponse, OpenRouterStreamChunk
-from app.services.openrouter import get_openrouter_client
+from app.services.openrouter import OpenRouterClient, get_openrouter_client
 from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
 from app.services.pipelines import PipelineService
 from app.services.prompts import render_system_prompt
@@ -91,10 +91,18 @@ class ChatService:
         self.session = session
         self.settings = get_settings()
         self.chat_repo = ChatRepository(session)
-        self.openrouter = get_openrouter_client()
+        self.openrouter: Optional[OpenRouterClient] = None
         self.retrieval = RetrievalService(session)
         effort_value = (self.settings.openrouter_reasoning_effort or "").strip()
         self.reasoning_effort: Optional[str] = effort_value or None
+
+    def _ensure_openrouter(self, user: models.User) -> OpenRouterClient:
+        """Return the OpenRouter client for the current user."""
+        current = getattr(self, "openrouter", None)
+        if current is None:
+            current = get_openrouter_client(user.openrouter_api_key or "")
+            self.openrouter = current
+        return current
 
     @staticmethod
     def _coerce_usage_value(value: object) -> Optional[int]:
@@ -1183,6 +1191,7 @@ class ChatService:
         payload: ChatMessageCreate,
     ) -> Generator[Dict[str, Any], None, None]:
         """Stream a chat response while yielding intermediate events."""
+        self._ensure_openrouter(user)
         edit_target: Optional[models.ChatMessage] = None
         pipeline_service = PipelineService(self.session)
         defaults = pipeline_service.ensure_default_pipelines(user)
@@ -1528,6 +1537,7 @@ class ChatService:
         payload: ChatMessageCreate,
     ) -> ChatCompletionResponse:
         """Send a chat message and return the final response."""
+        self._ensure_openrouter(user)
         edit_target: Optional[models.ChatMessage] = None
         pipeline_service = PipelineService(self.session)
         defaults = pipeline_service.ensure_default_pipelines(user)

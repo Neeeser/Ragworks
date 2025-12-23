@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -19,7 +20,17 @@ def _register_additional_user(client: TestClient) -> dict[str, object]:
     )
     assert token_resp.status_code == 200, token_resp.text
     token = token_resp.json()["access_token"]
-    return {"headers": {"Authorization": f"Bearer {token}"}, "email": email}
+    headers = {"Authorization": f"Bearer {token}"}
+    settings_resp = client.patch(
+        "/api/auth/me",
+        json={
+            "openrouter_api_key": os.getenv("TEST_OPENROUTER_API_KEY"),
+            "pinecone_api_key": os.getenv("TEST_PINECONE_API_KEY"),
+        },
+        headers=headers,
+    )
+    assert settings_resp.status_code == 200, settings_resp.text
+    return {"headers": headers, "email": email}
 
 
 def test_collection_listing_includes_primary(

@@ -40,7 +40,13 @@ class _StubFileStorage:
 
 def _create_user(session: Session) -> models.User:
     repo = UserRepository(session)
-    user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
+    user = models.User(
+        email="user@example.com",
+        full_name="User",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     repo.add(user)
     session.commit()
     session.refresh(user)
@@ -240,8 +246,11 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
     session.commit()
 
     storage = _StubFileStorage()
-    monkeypatch.setattr(collections_routes, "get_settings", lambda: SimpleNamespace(pinecone_api_key="key"))
-    monkeypatch.setattr(collections_routes, "Pinecone", _StubPinecone)
+    monkeypatch.setattr(
+        collections_routes,
+        "get_pinecone_client",
+        lambda **_kwargs: _StubPinecone(api_key="key"),
+    )
     monkeypatch.setattr(collections_routes, "FileStorage", lambda: storage)
 
     response = collections_routes.delete_collection(collection.id, current_user=user, session=session)

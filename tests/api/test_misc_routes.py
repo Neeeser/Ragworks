@@ -33,7 +33,13 @@ class _StubOpenRouter:
 
 def _create_user(session: Session) -> models.User:
     repo = UserRepository(session)
-    user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
+    user = models.User(
+        email="user@example.com",
+        full_name="User",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     repo.add(user)
     session.commit()
     session.refresh(user)
@@ -49,12 +55,19 @@ def test_healthcheck_includes_timestamp() -> None:
 
 def test_models_routes_delegate_to_openrouter(monkeypatch) -> None:
     client = _StubOpenRouter()
-    monkeypatch.setattr(models_routes, "get_openrouter_client", lambda: client)
+    monkeypatch.setattr(models_routes, "get_openrouter_client", lambda *_args, **_kwargs: client)
 
-    models = models_routes.list_models(refresh=True)
-    endpoints = models_routes.list_model_endpoints("openai", "gpt-4")
+    user = models.User(
+        email="user@example.com",
+        full_name="User",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+    )
 
-    assert models[0].id == "model-a"
+    model_list = models_routes.list_models(refresh=True, current_user=user)
+    endpoints = models_routes.list_model_endpoints("openai", "gpt-4", current_user=user)
+
+    assert model_list[0].id == "model-a"
     assert endpoints.data.id == "model-a"
     assert client.calls[0]["force_refresh"] is True
 

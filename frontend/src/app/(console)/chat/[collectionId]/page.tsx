@@ -335,7 +335,7 @@ const pruneHistoryForEdit = (
 export default function ChatStudioExperience() {
   const params = useParams<{ collectionId: string }>();
   const collectionId = params?.collectionId ?? "";
-  const { token } = useAuth();
+  const { token, user, loading: authLoading } = useAuth();
   const [collection, setCollection] = useState<Collection | null>(null);
   const [documentCount, setDocumentCount] = useState(0);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -564,6 +564,19 @@ export default function ChatStudioExperience() {
   );
 
   const authToken = token ?? "";
+  const missingKeys = useMemo(() => {
+    if (authLoading || !user) {
+      return [];
+    }
+    const missing: string[] = [];
+    if (!user?.openrouter_configured) {
+      missing.push("OpenRouter");
+    }
+    if (!user?.pinecone_configured) {
+      missing.push("Pinecone");
+    }
+    return missing;
+  }, [authLoading, user]);
 
   const sortSessions = useCallback((items: ChatSession[]) => {
     const pendingIds = pendingSessionIdsRef.current;
@@ -590,9 +603,21 @@ export default function ChatStudioExperience() {
   }, []);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     if (!authToken || !collectionId) {
       setLoading(false);
       setStatus(collectionId ? "Sign in to access this collection." : "Missing collection id.");
+      return;
+    }
+    if (missingKeys.length) {
+      const noun = missingKeys.length === 1 ? "key is" : "keys are";
+      const pronoun = missingKeys.length === 1 ? "it" : "them";
+      setLoading(false);
+      setStatus(
+        `${missingKeys.join(" and ")} API ${noun} not configured. Update ${pronoun} in Settings to continue.`,
+      );
       return;
     }
     let cancelled = false;
@@ -645,10 +670,10 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, collectionId, resolveChatSettings, sortSessions]);
+  }, [authLoading, authToken, collectionId, missingKeys, resolveChatSettings, sortSessions]);
 
   useEffect(() => {
-    if (!authToken || !collectionId) {
+    if (authLoading || !authToken || !collectionId || missingKeys.length) {
       setPromptDetails(null);
       setPromptDraft("");
       return;
@@ -678,11 +703,26 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, collectionId, promptEditorOpen]);
+  }, [authLoading, authToken, collectionId, missingKeys, promptEditorOpen]);
 
   useEffect(() => {
     let cancelled = false;
     const loadModels = async () => {
+      if (authLoading) {
+        return;
+      }
+      if (!authToken) {
+        setModelCatalog([]);
+        setModelsLoading(false);
+        setModelsError("Sign in to load models.");
+        return;
+      }
+      if (missingKeys.includes("OpenRouter")) {
+        setModelCatalog([]);
+        setModelsLoading(false);
+        setModelsError("Add your OpenRouter API key in Settings to load models.");
+        return;
+      }
       setModelsLoading(true);
       try {
         const items = await listModels(authToken || undefined);
@@ -704,7 +744,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authToken]);
+  }, [authLoading, authToken, missingKeys]);
 
   useEffect(() => {
     if (!collection) {
@@ -928,6 +968,21 @@ export default function ChatStudioExperience() {
       setProviderDirectoryLoading(false);
       return;
     }
+    if (authLoading) {
+      return;
+    }
+    if (!authToken) {
+      setProviderDirectory(null);
+      setProviderDirectoryError("Sign in to load providers.");
+      setProviderDirectoryLoading(false);
+      return;
+    }
+    if (missingKeys.includes("OpenRouter")) {
+      setProviderDirectory(null);
+      setProviderDirectoryError("Add your OpenRouter API key in Settings to load providers.");
+      setProviderDirectoryLoading(false);
+      return;
+    }
     const [author, ...rest] = providerModelSlug.split("/");
     const slugPart = rest.join("/");
     if (!author || !slugPart) {
@@ -937,7 +992,7 @@ export default function ChatStudioExperience() {
     let cancelled = false;
     setProviderDirectoryLoading(true);
     setProviderDirectoryError(null);
-    listModelEndpoints(author, slugPart)
+    listModelEndpoints(author, slugPart, authToken || undefined)
       .then((response) => {
         if (cancelled) return;
         setProviderDirectory(response.data);
@@ -956,7 +1011,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [providerModelSlug]);
+  }, [authLoading, authToken, missingKeys, providerModelSlug]);
 
   useEffect(() => {
     setProviderSearchTerm("");

@@ -31,8 +31,32 @@ class UserRead(UserBase):
 
     id: UUID
     is_active: bool
+    openrouter_configured: bool
+    pinecone_configured: bool
     created_at: datetime
     updated_at: datetime
+
+
+class UserSettingsUpdate(BaseModel):
+    """Payload for updating user API key settings."""
+
+    openrouter_api_key: Optional[str] = None
+    pinecone_api_key: Optional[str] = None
+
+
+class ProviderKeyStatus(BaseModel):
+    """Validation status for a provider API key."""
+
+    configured: bool
+    valid: bool
+    message: Optional[str] = None
+
+
+class UserKeyValidation(BaseModel):
+    """Validation results for user API keys."""
+
+    openrouter: ProviderKeyStatus
+    pinecone: ProviderKeyStatus
 
 
 class Token(BaseModel):

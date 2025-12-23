@@ -17,11 +17,15 @@ from app.schemas.models import EndpointsListResponse, ModelInfo
 class OpenRouterClient:
     """Wrapper around the OpenRouter HTTP + OpenAI-compatible SDK."""
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str) -> None:
         """Initialize HTTP and SDK clients for OpenRouter."""
+        resolved_key = (api_key or "").strip()
+        if not resolved_key:
+            raise ValueError("OpenRouter API key must be provided.")
+        self.api_key = resolved_key
         self.settings = get_settings()
         self._app_headers = self._build_app_headers()
-        default_headers = {"Authorization": f"Bearer {self.settings.openrouter_api_key}"}
+        default_headers = {"Authorization": f"Bearer {self.api_key}"}
         default_headers.update(self._app_headers)
 
         self._http = httpx.Client(
@@ -31,7 +35,7 @@ class OpenRouterClient:
         )
         self._client = OpenAI(
             base_url=self.settings.openrouter_base_url,
-            api_key=self.settings.openrouter_api_key,
+            api_key=self.api_key,
         )
         self._model_cache: dict[str, Any] = {"ts": 0.0, "data": []}
 
@@ -65,6 +69,12 @@ class OpenRouterClient:
         models = [ModelInfo(**item) for item in payload.get("data", [])]
         self._model_cache = {"ts": now, "data": models}
         return models
+
+    def get_current_key(self) -> dict[str, Any]:
+        """Return metadata for the currently authenticated API key."""
+        response = self._http.get("/key")
+        response.raise_for_status()
+        return response.json()
 
     def get_model(self, model_id: str) -> Optional[ModelInfo]:
         """Find a model by id or canonical slug."""
@@ -186,7 +196,7 @@ class OpenRouterClient:
             yield chunk.model_dump()
 
 
-@lru_cache(maxsize=1)
-def get_openrouter_client() -> OpenRouterClient:
+@lru_cache(maxsize=64)
+def get_openrouter_client(api_key: str) -> OpenRouterClient:
     """Return a cached OpenRouter client instance."""
-    return OpenRouterClient()
+    return OpenRouterClient(api_key)

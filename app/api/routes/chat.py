@@ -11,7 +11,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
-from app.api.dependencies import get_current_user, get_session, oauth2_scheme
+from app.api.dependencies import (
+    get_current_user,
+    get_session,
+    oauth2_scheme,
+    require_user_api_keys,
+)
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.db.session import engine
@@ -31,7 +36,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 def chat_with_collection(
     collection_id: UUID,
     payload: ChatMessageCreate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_user_api_keys),
     session: Session = Depends(get_session),
 ) -> ChatCompletionResponse:
     """Send a chat message for a collection."""
@@ -67,6 +72,7 @@ def stream_chat_with_collection(
 
     try:
         current_user = get_current_user(token=token, session=session)
+        current_user = require_user_api_keys(current_user)
         collection = get_collection_or_404(
             collection_id=collection_id,
             user_id=current_user.id,

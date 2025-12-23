@@ -150,7 +150,7 @@ def test_delete_index_clears_cache() -> None:
 
 
 def test_init_requires_api_key_when_client_missing(monkeypatch) -> None:
-    monkeypatch.delenv("PINECONE_API_KEY", raising=False)
+    monkeypatch.delenv("TEST_PINECONE_API_KEY", raising=False)
 
     with pytest.raises(ValueError, match="Pinecone API key must be provided"):
         PineconeIndexer(client=None, api_key=None)

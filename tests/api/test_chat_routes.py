@@ -23,7 +23,13 @@ class _DummyRequest:
 
 def _create_user(session: Session) -> models.User:
     repo = UserRepository(session)
-    user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
+    user = models.User(
+        email="user@example.com",
+        full_name="User",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     repo.add(user)
     session.commit()
     session.refresh(user)
@@ -182,7 +188,11 @@ def test_delete_chat_session_paths(session: Session) -> None:
 
 
 def test_stream_chat_with_collection_yields_events(monkeypatch) -> None:
-    user = SimpleNamespace(id=uuid4())
+    user = SimpleNamespace(
+        id=uuid4(),
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     collection = SimpleNamespace(id=uuid4())
 
     class _StubChatService:
@@ -216,7 +226,11 @@ def test_stream_chat_with_collection_yields_events(monkeypatch) -> None:
 
 
 def test_stream_chat_with_collection_handles_errors(monkeypatch) -> None:
-    user = SimpleNamespace(id=uuid4())
+    user = SimpleNamespace(
+        id=uuid4(),
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     collection = SimpleNamespace(id=uuid4())
 
     class _StubChatService:
@@ -248,7 +262,11 @@ def test_stream_chat_with_collection_handles_errors(monkeypatch) -> None:
 
 
 def test_stream_chat_with_collection_rejects_missing_collection(monkeypatch) -> None:
-    user = SimpleNamespace(id=uuid4())
+    user = SimpleNamespace(
+        id=uuid4(),
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
 
     class _StubChatService:
         def __init__(self, _session: Session) -> None:
@@ -273,7 +291,11 @@ def test_stream_chat_with_collection_rejects_missing_collection(monkeypatch) -> 
 
 
 def test_stream_chat_with_collection_closes_on_disconnect(monkeypatch) -> None:
-    user = SimpleNamespace(id=uuid4())
+    user = SimpleNamespace(
+        id=uuid4(),
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
     collection = SimpleNamespace(id=uuid4())
 
     class _DisconnectingRequest:

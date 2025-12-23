@@ -13,8 +13,21 @@ export interface User {
   email: string;
   full_name?: string | null;
   is_active: boolean;
+  openrouter_configured: boolean;
+  pinecone_configured: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProviderKeyStatus {
+  configured: boolean;
+  valid: boolean;
+  message?: string | null;
+}
+
+export interface UserKeyValidation {
+  openrouter: ProviderKeyStatus;
+  pinecone: ProviderKeyStatus;
 }
 
 export interface Collection {

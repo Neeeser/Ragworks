@@ -24,18 +24,19 @@ uv sync --locked
 # or: make env
 ```
 
-Create an `.env.local` (or `.env`) with the required credentials:
+Create an `.env.local` (or `.env`) with the required credentials. Provider API keys
+are configured per user in the UI; the `TEST_` keys below are only used by tests.
 
 ```ini
 # OpenRouter
-OPENROUTER_API_KEY=...
+TEST_OPENROUTER_API_KEY=...
 OPENROUTER_SITE_URL=https://transparent-rag.local
 OPENROUTER_SITE_NAME=TransparentRAG
 OPENROUTER_DEFAULT_EMBEDDING_MODEL=qwen/qwen3-embedding-0.6b
 OPENROUTER_DEFAULT_CHAT_MODEL=openai/gpt-oss-120b
 
 # Pinecone
-PINECONE_API_KEY=...
+TEST_PINECONE_API_KEY=...
 PINECONE_INDEX_NAME=transparent-rag
 PINECONE_REGION=us-east-1
 PINECONE_CLOUD=aws

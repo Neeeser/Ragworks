@@ -6,7 +6,6 @@ import logging
 from typing import List
 
 from fastapi import UploadFile
-from pinecone import Pinecone
 from sqlmodel import Session
 
 from app.api.config import get_settings
@@ -16,6 +15,7 @@ from app.pipelines.config import resolve_ingestion_settings
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.registry import build_default_registry
 from app.pipelines.runtime import PipelineExecutor, PipelineRunContext
+from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.openrouter import get_openrouter_client
 from app.services.pipelines import PipelineService
@@ -33,8 +33,6 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         self.session = session
         self.settings = get_settings()
         self.storage = FileStorage()
-        self.openrouter = get_openrouter_client()
-        self._pinecone = Pinecone(api_key=self.settings.pinecone_api_key)
         self.chunks = ChunkRepository(session)
 
     # pylint: disable=too-many-locals
@@ -76,6 +74,8 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         self.session.add(document)
 
         try:
+            openrouter = get_openrouter_client(user.openrouter_api_key or "")
+            pinecone = get_pinecone_client(api_key=user.pinecone_api_key)
             executor = PipelineExecutor(build_default_registry())
             context = PipelineRunContext(
                 session=self.session,
@@ -84,8 +84,8 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 document=document,
                 query=None,
                 top_k=None,
-                openrouter=self.openrouter,
-                pinecone=self._pinecone,
+                openrouter=openrouter,
+                pinecone=pinecone,
                 storage=self.storage,
                 settings=self.settings,
             )

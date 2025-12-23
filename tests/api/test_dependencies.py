@@ -13,12 +13,20 @@ from app.core.security import create_access_token
 from app.db import models
 
 
-def _create_user(session: Session, *, is_active: bool = True) -> models.User:
+def _create_user(
+    session: Session,
+    *,
+    is_active: bool = True,
+    openrouter_api_key: str | None = None,
+    pinecone_api_key: str | None = None,
+) -> models.User:
     user = models.User(
         email="user@example.com",
         full_name="Example User",
         hashed_password="hashed",
         is_active=is_active,
+        openrouter_api_key=openrouter_api_key,
+        pinecone_api_key=pinecone_api_key,
     )
     session.add(user)
     session.commit()
@@ -78,3 +86,31 @@ def test_dependency_helpers_return_expected_types(session: Session) -> None:
     assert isinstance(db_session, Session)
     assert dependencies.get_user_repository(session).session is session
     assert isinstance(dependencies.issue_access_token(user), str)
+
+
+def test_require_openrouter_key_rejects_missing_value(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependencies.require_openrouter_key(current_user=user)
+
+    assert excinfo.value.status_code == 400
+
+
+def test_require_user_api_keys_rejects_missing_value(session: Session) -> None:
+    user = _create_user(session, openrouter_api_key="key")
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependencies.require_user_api_keys(current_user=user)
+
+    assert excinfo.value.status_code == 400
+
+
+def test_require_user_api_keys_accepts_valid_values(session: Session) -> None:
+    user = _create_user(
+        session,
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
+
+    assert dependencies.require_user_api_keys(current_user=user) == user
