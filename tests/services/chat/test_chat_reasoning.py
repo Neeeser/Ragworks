@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.chat.processing.parameters import build_reasoning_options
 from app.chat.processing.reasoning import (
     append_reasoning_segment,
+    extend_reasoning_segments,
     join_text_with_spacing,
     normalize_reasoning_segments,
 )
@@ -76,6 +77,26 @@ def test_extract_reasoning_tool_calls_captures_leading_context_and_residual_segm
     assert context["call-1"]["segments"][0]["content"] == "Step 1"
     assert context["call-1"]["segments"][1]["id"] == "call-1"
     assert residual == [{"type": "text", "content": "post-tool reflection"}]
+
+
+def test_normalize_reasoning_segments_handles_non_list_input() -> None:
+    segments = normalize_reasoning_segments(123)
+
+    assert segments == [{"type": "text", "content": "123", "text": "123"}]
+
+
+def test_normalize_reasoning_segments_skips_blank_strings_in_lists() -> None:
+    segments = normalize_reasoning_segments(["  ", {"type": "text", "content": "keep"}])
+
+    assert segments == [{"type": "text", "content": "keep", "text": "keep"}]
+
+
+def test_extend_reasoning_segments_skips_non_dict_inputs() -> None:
+    destination = [{"type": "text", "content": "Start", "text": "Start"}]
+
+    extend_reasoning_segments(destination, ["skip-me"])  # type: ignore[list-item]
+
+    assert destination == [{"type": "text", "content": "Start", "text": "Start"}]
 
 
 def test_extract_reasoning_tool_calls_handles_multiple_calls_and_shared_context() -> None:

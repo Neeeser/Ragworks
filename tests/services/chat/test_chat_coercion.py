@@ -85,5 +85,19 @@ def test_prepare_reasoning_override_coerces_values() -> None:
     }
 
 
+def test_prepare_reasoning_override_accepts_string_effort() -> None:
+    assert prepare_reasoning_override("LOW") == {"effort": "low"}
+
+
+def test_prepare_reasoning_override_filters_invalid_values() -> None:
+    raw = {
+        "effort": "loud",
+        "max_tokens": "invalid",
+        "exclude": "maybe",
+    }
+
+    assert prepare_reasoning_override(raw) is None
+
+
 def test_prepare_reasoning_override_rejects_invalid_string() -> None:
     assert prepare_reasoning_override("fast") is None

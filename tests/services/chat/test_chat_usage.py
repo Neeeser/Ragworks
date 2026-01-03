@@ -57,3 +57,9 @@ def test_extract_reasoning_tokens_from_usage_direct_value() -> None:
 
 def test_extract_reasoning_tokens_from_usage_empty_payload() -> None:
     assert extract_reasoning_tokens_from_usage({}) is None
+
+
+def test_extract_reasoning_tokens_from_usage_invalid_nested_details() -> None:
+    usage = {"completion_tokens_details": {"reasoning_tokens": "bad"}}
+
+    assert extract_reasoning_tokens_from_usage(usage) is None

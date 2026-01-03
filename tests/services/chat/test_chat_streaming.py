@@ -12,7 +12,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.services import chat as chat_module
 from app.chat.service import ChatService
 from app.chat import service as chat_service_module
-from app.chat.providers.base import ChatRequest
+from app.chat.providers.base import ChatRequest, ParsedStreamChunk
 from app.chat.providers.openrouter import OpenRouterProvider
 from app.chat.persistence.records import RecordContext
 from app.chat.streaming.streaming import stream_model_completion
@@ -193,6 +193,77 @@ def test_stream_model_completion_orders_tool_calls_by_index() -> None:
     assert finish_reason == "stop"
     assert response_model == "openrouter/second"
     assert usage == {"total_tokens": 3}
+
+
+def test_openrouter_provider_ignores_non_dict_chunks() -> None:
+    stub = SimpleNamespace(chat_stream=lambda **_kwargs: iter([]), get_model=lambda *_args: None)
+    provider = OpenRouterProvider(stub)
+
+    assert provider.parse_stream_chunk("bad") is None
+
+
+def test_stream_model_completion_handles_empty_deltas() -> None:
+    class _StubProvider:
+        name = "router"
+
+        def chat_stream(self, _request: ChatRequest):
+            return iter([{"chunk": "ok"}])
+
+        def parse_stream_chunk(self, _chunk: dict):
+            return ParsedStreamChunk(
+                provider=None,
+                response_model=None,
+                finish_reason=None,
+                delta_content="hi",
+                tool_calls=None,
+                reasoning=None,
+                usage=None,
+            )
+
+    provider = _StubProvider()
+    request = ChatRequest(messages=[], tools=None, model="model", extra_body=None, parameters=None)
+
+    events, result = _collect_stream_results(stream_model_completion(provider=provider, request=request))
+    message, usage, provider_name, finish_reason, response_model = result
+
+    assert [event["content"] for event in events if event["type"] == "token"] == ["hi"]
+    assert message["content"] == "hi"
+    assert usage == {}
+    assert provider_name == "router"
+    assert finish_reason is None
+    assert response_model is None
+
+
+def test_stream_model_completion_skips_empty_reasoning_updates() -> None:
+    class _StubProvider:
+        name = "router"
+
+        def chat_stream(self, _request: ChatRequest):
+            return iter([{"chunk": "ok"}])
+
+        def parse_stream_chunk(self, _chunk: dict):
+            return ParsedStreamChunk(
+                provider="router",
+                response_model=None,
+                finish_reason=None,
+                delta_content=None,
+                tool_calls=None,
+                reasoning=[" "],
+                usage=None,
+            )
+
+    provider = _StubProvider()
+    request = ChatRequest(messages=[], tools=None, model="model", extra_body=None, parameters=None)
+
+    events, result = _collect_stream_results(stream_model_completion(provider=provider, request=request))
+    message, usage, provider_name, finish_reason, response_model = result
+
+    assert events == []
+    assert message["content"] == ""
+    assert usage == {}
+    assert provider_name == "router"
+    assert finish_reason is None
+    assert response_model is None
 
 
 def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> None:

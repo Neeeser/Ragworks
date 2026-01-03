@@ -179,30 +179,35 @@ def prepare_reasoning_override(raw: Any) -> Optional[Dict[str, Any]]:
     return prepared or None
 
 
+def _coerce_int_parameter(value: Any) -> Optional[int]:
+    """Coerce integer parameter values from numeric input."""
+    number = coerce_numeric_parameter(value)
+    return None if number is None else int(number)
+
+
+def _coerce_enum_parameter(value: Any) -> Optional[str]:
+    """Normalize enum-like parameter values."""
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+    else:
+        lowered = str(value).strip().lower()
+    return lowered if lowered in VERBOSITY_OPTIONS else None
+
+
 def coerce_parameter_value(key: str, value: Any) -> Optional[Any]:
     """Coerce parameter values based on declared type hints."""
     hint = PARAMETER_TYPE_HINTS.get(key)
     if hint is None:
         return None
-    result: Optional[Any] = None
-    if hint == "float":
-        result = coerce_numeric_parameter(value)
-    elif hint == "int":
-        number = coerce_numeric_parameter(value)
-        result = None if number is None else int(number)
-    elif hint == "bool":
-        result = coerce_bool_parameter(value)
-    elif hint == "dict":
-        result = coerce_dict_parameter(value)
-    elif hint == "list":
-        result = coerce_list_parameter(value)
-    elif hint == "enum":
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-        else:
-            lowered = str(value).strip().lower()
-        result = lowered if lowered in VERBOSITY_OPTIONS else None
-    return result
+    converter = {
+        "float": coerce_numeric_parameter,
+        "int": _coerce_int_parameter,
+        "bool": coerce_bool_parameter,
+        "dict": coerce_dict_parameter,
+        "list": coerce_list_parameter,
+        "enum": _coerce_enum_parameter,
+    }[hint]
+    return converter(value)
 
 
 def sanitize_parameter_overrides(

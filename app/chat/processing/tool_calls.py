@@ -20,11 +20,7 @@ def _resolve_call_components(segment: Dict[str, Any]) -> Optional[Tuple[str, str
     if not (segment_type in _CANDIDATE_TOOL_TYPES or has_function or has_call):
         return None
     function_payload = segment.get("function") if has_function else {}
-    if not isinstance(function_payload, dict):
-        function_payload = {}
     call_payload = segment.get("call") if has_call else {}
-    if not isinstance(call_payload, dict):
-        call_payload = {}
     name = (
         function_payload.get("name")
         or call_payload.get("name")

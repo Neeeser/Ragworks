@@ -7,6 +7,8 @@ from app.chat.processing.tool_calls import (
     coerce_stream_text,
     decode_tool_arguments,
     ensure_arguments_string,
+    extract_reasoning_tool_calls,
+    merge_reasoning_segments,
     normalize_tool_calls,
 )
 
@@ -33,6 +35,7 @@ def test_decode_tool_arguments_handles_strings_and_dicts() -> None:
     assert decode_tool_arguments("plain") == {"query": "plain"}
     assert decode_tool_arguments(" ") == {}
     assert decode_tool_arguments("{not-json}") == {"query": "{not-json}"}
+    assert decode_tool_arguments('["list"]') == {}
 
 
 def test_decode_tool_arguments_handles_other_types() -> None:
@@ -116,3 +119,60 @@ def test_accumulate_stream_tool_calls_handles_invalid_updates() -> None:
 
     assert 0 in accumulator
     assert accumulator[1]["function"]["arguments"] == ""
+
+
+def test_extract_reasoning_tool_calls_extends_existing_context() -> None:
+    segments = [
+        {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "pinecone_query",
+            "arguments": {"query": "docs"},
+        },
+        {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "pinecone_query",
+            "arguments": {"query": "more"},
+        },
+    ]
+
+    tool_calls, context, residual = extract_reasoning_tool_calls(segments, set())
+
+    assert len(tool_calls) == 1
+    assert context["call-1"]["segments"] == segments
+    assert residual == []
+
+
+def test_extract_reasoning_tool_calls_ignores_segments_without_names() -> None:
+    segments = [{"type": "tool_call", "arguments": {"query": "docs"}}]
+
+    tool_calls, context, residual = extract_reasoning_tool_calls(segments, set())
+
+    assert tool_calls == []
+    assert context == {}
+    assert residual == segments
+
+
+def test_coerce_stream_text_handles_lists_and_dicts() -> None:
+    assert coerce_stream_text([{"text": "Hello"}, " ", {"text": "world"}]) == "Hello world"
+    assert coerce_stream_text({"text": "Hi"}) == "Hi"
+    assert coerce_stream_text([{"text": 123}]) is None
+    assert coerce_stream_text({"text": 123}) == "{'text': 123}"
+    assert coerce_stream_text([1, 2]) is None
+
+
+def test_merge_reasoning_segments_appends_updates() -> None:
+    existing = [{"type": "text", "content": "Start"}]
+
+    merged = merge_reasoning_segments([{"type": "text", "content": "Next"}], existing)
+
+    assert merged[-1]["content"] == "StartNext"
+
+
+def test_merge_reasoning_segments_skips_empty_updates() -> None:
+    existing = [{"type": "text", "content": "Start"}]
+
+    merged = merge_reasoning_segments(None, existing)
+
+    assert merged == existing

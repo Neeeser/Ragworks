@@ -47,3 +47,32 @@ def test_provider_preference_helpers_reject_invalid_values() -> None:
     assert coerce_provider_sort("speed") is None
     assert coerce_data_collection("maybe") is None
     assert coerce_max_price("0.1") is None
+
+
+def test_sanitize_provider_preferences_accepts_sort_and_price() -> None:
+    raw = {
+        "sort": "price",
+        "data_collection": "allow",
+        "max_price": {"request": "0.5"},
+    }
+
+    sanitized = sanitize_provider_preferences(raw)
+
+    assert sanitized == {
+        "sort": "price",
+        "data_collection": "allow",
+        "max_price": {"request": 0.5},
+    }
+
+
+def test_sanitize_provider_preferences_skips_invalid_sort_and_price() -> None:
+    raw = {
+        "order": "router-a",
+        "sort": "fastest",
+        "data_collection": "maybe",
+        "max_price": {"prompt": "invalid"},
+    }
+
+    sanitized = sanitize_provider_preferences(raw)
+
+    assert sanitized == {"order": ["router-a"]}
