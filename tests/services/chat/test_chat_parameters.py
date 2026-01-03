@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.services.chat import ChatService
+from app.chat.processing.parameters import (
+    coerce_dict_parameter,
+    sanitize_parameter_overrides,
+)
 
 
 def test_sanitize_parameter_overrides_coerces_and_filters() -> None:
@@ -24,7 +27,7 @@ def test_sanitize_parameter_overrides_coerces_and_filters() -> None:
         "unknown": "ignore-me",
     }
 
-    sanitized = ChatService._sanitize_parameter_overrides(overrides, supported)
+    sanitized = sanitize_parameter_overrides(overrides, supported)
 
     assert sanitized["temperature"] == 0.7
     assert sanitized["top_k"] == 4
@@ -45,11 +48,11 @@ def test_sanitize_parameter_overrides_skips_invalid_values() -> None:
         "response_format": "not-json",
     }
 
-    sanitized = ChatService._sanitize_parameter_overrides(overrides, supported)
+    sanitized = sanitize_parameter_overrides(overrides, supported)
 
     assert sanitized == {}
 
 
 def test_coerce_dict_parameter_parses_json_string() -> None:
-    assert ChatService._coerce_dict_parameter('{"type":"json_object"}') == {"type": "json_object"}
-    assert ChatService._coerce_dict_parameter(" ") is None
+    assert coerce_dict_parameter('{"type":"json_object"}') == {"type": "json_object"}
+    assert coerce_dict_parameter(" ") is None

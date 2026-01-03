@@ -2,35 +2,41 @@ from __future__ import annotations
 
 import json
 
-from app.services.chat import ChatService
+from app.chat.processing.tool_calls import (
+    accumulate_stream_tool_calls,
+    coerce_stream_text,
+    decode_tool_arguments,
+    ensure_arguments_string,
+    normalize_tool_calls,
+)
 
 
 def test_ensure_arguments_string_wraps_invalid_json() -> None:
-    assert ChatService._ensure_arguments_string(" ") == "{}"
+    assert ensure_arguments_string(" ") == "{}"
 
-    wrapped = ChatService._ensure_arguments_string("plain query")
+    wrapped = ensure_arguments_string("plain query")
     assert json.loads(wrapped) == {"input": "plain query"}
 
 
 def test_ensure_arguments_string_preserves_valid_json() -> None:
     payload = '{"query":"docs"}'
 
-    assert ChatService._ensure_arguments_string(payload) == payload
+    assert ensure_arguments_string(payload) == payload
 
 
 def test_ensure_arguments_string_handles_none() -> None:
-    assert ChatService._ensure_arguments_string(None) == "{}"
+    assert ensure_arguments_string(None) == "{}"
 
 
 def test_decode_tool_arguments_handles_strings_and_dicts() -> None:
-    assert ChatService._decode_tool_arguments({"query": "docs"}) == {"query": "docs"}
-    assert ChatService._decode_tool_arguments("plain") == {"query": "plain"}
-    assert ChatService._decode_tool_arguments(" ") == {}
-    assert ChatService._decode_tool_arguments("{not-json}") == {"query": "{not-json}"}
+    assert decode_tool_arguments({"query": "docs"}) == {"query": "docs"}
+    assert decode_tool_arguments("plain") == {"query": "plain"}
+    assert decode_tool_arguments(" ") == {}
+    assert decode_tool_arguments("{not-json}") == {"query": "{not-json}"}
 
 
 def test_decode_tool_arguments_handles_other_types() -> None:
-    assert ChatService._decode_tool_arguments(["value"]) == {}
+    assert decode_tool_arguments(["value"]) == {}
 
 
 def test_normalize_tool_calls_filters_missing_names() -> None:
@@ -40,12 +46,12 @@ def test_normalize_tool_calls_filters_missing_names() -> None:
         {"id": "call-1", "function": {"name": "pinecone_query", "arguments": {"query": "docs"}}},
     ]
 
-    normalized = ChatService._normalize_tool_calls(tool_calls, processed_ids)
+    normalized = normalize_tool_calls(tool_calls, processed_ids)
 
     assert len(normalized) == 1
     assert normalized[0]["id"] == "call-1"
     assert normalized[0]["function"]["name"] == "pinecone_query"
-    assert ChatService._decode_tool_arguments(normalized[0]["function"]["arguments"]) == {
+    assert decode_tool_arguments(normalized[0]["function"]["arguments"]) == {
         "query": "docs"
     }
     assert processed_ids == {"call-1"}
@@ -58,7 +64,7 @@ def test_normalize_tool_calls_skips_invalid_function_payload() -> None:
         {"id": "call-1", "function": {"name": "pinecone_query", "arguments": {"query": "docs"}}},
     ]
 
-    normalized = ChatService._normalize_tool_calls(tool_calls, processed_ids)
+    normalized = normalize_tool_calls(tool_calls, processed_ids)
 
     assert len(normalized) == 1
     assert normalized[0]["id"] == "call-1"
@@ -66,12 +72,12 @@ def test_normalize_tool_calls_skips_invalid_function_payload() -> None:
 
 def test_coerce_stream_text_handles_various_shapes() -> None:
     assert (
-        ChatService._coerce_stream_text([{"text": "hello"}, {"text": " world"}])
+        coerce_stream_text([{"text": "hello"}, {"text": " world"}])
         == "hello world"
     )
-    assert ChatService._coerce_stream_text({"text": "hi"}) == "hi"
-    assert ChatService._coerce_stream_text(123) == "123"
-    assert ChatService._coerce_stream_text(None) is None
+    assert coerce_stream_text({"text": "hi"}) == "hi"
+    assert coerce_stream_text(123) == "123"
+    assert coerce_stream_text(None) is None
 
 
 def test_accumulate_stream_tool_calls_concatenates_arguments() -> None:
@@ -88,7 +94,7 @@ def test_accumulate_stream_tool_calls_concatenates_arguments() -> None:
         },
     ]
 
-    ChatService._accumulate_stream_tool_calls(accumulator, updates)
+    accumulate_stream_tool_calls(accumulator, updates)
 
     entry = accumulator[0]
     function_block = entry["function"]
@@ -106,7 +112,7 @@ def test_accumulate_stream_tool_calls_handles_invalid_updates() -> None:
         {"index": 1, "type": "function", "function": {"name": "tool", "arguments": 123}},
     ]
 
-    ChatService._accumulate_stream_tool_calls(accumulator, updates)
+    accumulate_stream_tool_calls(accumulator, updates)
 
     assert 0 in accumulator
     assert accumulator[1]["function"]["arguments"] == ""

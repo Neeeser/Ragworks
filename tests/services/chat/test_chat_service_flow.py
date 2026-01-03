@@ -11,8 +11,8 @@ from sqlmodel import Session
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
-from app.services import chat as chat_module
-from app.services.chat import ChatService
+from app.chat import service as chat_service_module
+from app.chat.service import ChatService
 
 
 @dataclass
@@ -91,10 +91,14 @@ def _stub_pipeline_settings(monkeypatch, *, chat_model: str, context_window: int
         context_window=context_window,
     )
     monkeypatch.setattr(
-        chat_module, "resolve_ingestion_settings", lambda *_args, **_kwargs: ingestion_settings
+        chat_service_module,
+        "resolve_ingestion_settings",
+        lambda *_args, **_kwargs: ingestion_settings,
     )
     monkeypatch.setattr(
-        chat_module, "resolve_retrieval_settings", lambda *_args, **_kwargs: retrieval_settings
+        chat_service_module,
+        "resolve_retrieval_settings",
+        lambda *_args, **_kwargs: retrieval_settings,
     )
 
 
@@ -159,11 +163,11 @@ def test_send_message_records_response(monkeypatch, session: Session) -> None:
     }
     openrouter = _StubOpenRouter(model_info=model_info, response=response)
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
+        chat_service_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
     _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)
@@ -183,11 +187,11 @@ def test_send_message_raises_for_missing_model(monkeypatch, session: Session) ->
 
     openrouter = _StubOpenRouter(model_info=None, response={})
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
+        chat_service_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
     _stub_pipeline_settings(monkeypatch, chat_model="missing-model")
 
     service = ChatService(session)
@@ -208,11 +212,11 @@ def test_send_message_requires_tool_support(monkeypatch, session: Session) -> No
     )
     openrouter = _StubOpenRouter(model_info=model_info, response={})
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
+        chat_service_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
     _stub_pipeline_settings(monkeypatch, chat_model="model-without-tools")
 
     service = ChatService(session)
@@ -289,11 +293,11 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
 
     retrieval = _TrackingRetrievalService()
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
+        chat_service_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", lambda *_args, **_kwargs: retrieval)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", lambda *_args, **_kwargs: retrieval)
     _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
 
     service = ChatService(session)
@@ -379,17 +383,17 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Sessi
         entry = stream_results.pop(0)
         return _make_stream(entry["events"], entry["result"])
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module,
+        chat_service_module,
         "get_openrouter_client",
         lambda *_args, **_kwargs: _ModelOnlyOpenRouter(model_info),
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", _TrackingRetrievalService)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _TrackingRetrievalService)
+    monkeypatch.setattr(chat_service_module, "stream_model_completion", _stream_model_completion)
     _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
 
     service = ChatService(session)
-    service._stream_model_completion = _stream_model_completion  # type: ignore[method-assign]
 
     payload = ChatMessageCreate(content="hi")
     events = list(service.stream_message(user=user, collection=collection, payload=payload))
@@ -428,11 +432,11 @@ def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypat
     }
     openrouter = _StubOpenRouter(model_info=model_info, response=response)
 
-    monkeypatch.setattr(chat_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
     monkeypatch.setattr(
-        chat_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
+        chat_service_module, "get_openrouter_client", lambda *_args, **_kwargs: openrouter
     )
-    monkeypatch.setattr(chat_module, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
     _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)

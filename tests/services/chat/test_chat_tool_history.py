@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
-from app.services import chat as chat_module
-from app.services.chat import ChatService
+from app.chat import service as chat_service_module
+from app.chat.service import ChatService
 
 
 class _NoOpSession:
@@ -148,9 +148,9 @@ def _stub_pipeline_helpers() -> None:
         context_window=8192,
     )
 
-    chat_module.PipelineService = _StubPipelineService
-    chat_module.resolve_ingestion_settings = lambda *_args, **_kwargs: ingestion_settings
-    chat_module.resolve_retrieval_settings = lambda *_args, **_kwargs: retrieval_settings
+    chat_service_module.PipelineService = _StubPipelineService
+    chat_service_module.resolve_ingestion_settings = lambda *_args, **_kwargs: ingestion_settings
+    chat_service_module.resolve_retrieval_settings = lambda *_args, **_kwargs: retrieval_settings
 
 
 def test_tool_call_history_replayed_for_follow_up() -> None:

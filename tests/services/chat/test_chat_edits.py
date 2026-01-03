@@ -8,7 +8,7 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import ChatRepository
-from app.services.chat import ChatService
+from app.chat.persistence.sessions import apply_edit
 
 
 def _create_user(session: Session) -> models.User:
@@ -72,13 +72,6 @@ def _add_message(
     return message
 
 
-def _service(session: Session) -> ChatService:
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.session = session
-    service.chat_repo = ChatRepository(session)
-    return service
-
-
 def test_apply_edit_updates_user_message_and_prunes_following(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -99,15 +92,15 @@ def test_apply_edit_updates_user_message_and_prunes_following(session: Session) 
         created_at=base_time + timedelta(minutes=1),
     )
 
-    service = _service(session)
-
-    service._apply_edit(
+    apply_edit(
+        session=session,
+        chat_repo=ChatRepository(session),
         session_model=chat_session,
         target_message=user_message,
         new_content=" Updated ",
     )
 
-    messages = list(service.chat_repo.list_messages(chat_session.id, limit=0))
+    messages = list(ChatRepository(session).list_messages(chat_session.id, limit=0))
     assert len(messages) == 1
     assert messages[0].content == "Updated"
 
@@ -146,15 +139,15 @@ def test_apply_edit_prunes_non_user_messages_after_anchor(session: Session) -> N
         created_at=base_time + timedelta(minutes=3),
     )
 
-    service = _service(session)
-
-    service._apply_edit(
+    apply_edit(
+        session=session,
+        chat_repo=ChatRepository(session),
         session_model=chat_session,
         target_message=assistant_message,
         new_content="ignored",
     )
 
-    messages = list(service.chat_repo.list_messages(chat_session.id, limit=0))
+    messages = list(ChatRepository(session).list_messages(chat_session.id, limit=0))
     assert len(messages) == 1
     assert messages[0].role == models.ChatRole.USER
 
@@ -172,10 +165,10 @@ def test_apply_edit_rejects_message_from_other_session(session: Session) -> None
         created_at=datetime.now(timezone.utc),
     )
 
-    service = _service(session)
-
     with pytest.raises(ValueError, match="does not belong to this session"):
-        service._apply_edit(
+        apply_edit(
+            session=session,
+            chat_repo=ChatRepository(session),
             session_model=chat_session,
             target_message=other_message,
             new_content="update",

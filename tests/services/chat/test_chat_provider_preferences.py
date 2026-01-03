@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.services.chat import ChatService
+from app.chat.processing.parameters import (
+    coerce_data_collection,
+    coerce_max_price,
+    coerce_provider_sort,
+    coerce_string_list,
+    sanitize_provider_preferences,
+)
 
 
 def test_sanitize_provider_preferences_normalizes_aliases() -> None:
@@ -16,7 +22,7 @@ def test_sanitize_provider_preferences_normalizes_aliases() -> None:
         12: "ignored",
     }
 
-    sanitized = ChatService._sanitize_provider_preferences(raw)
+    sanitized = sanitize_provider_preferences(raw)
 
     assert sanitized is not None
     assert sanitized["order"] == ["router-a", "router-b"]
@@ -30,14 +36,14 @@ def test_sanitize_provider_preferences_normalizes_aliases() -> None:
 
 
 def test_sanitize_provider_preferences_returns_none_for_unknown_keys() -> None:
-    assert ChatService._sanitize_provider_preferences({"unsupported": "value"}) is None
+    assert sanitize_provider_preferences({"unsupported": "value"}) is None
 
 
 def test_coerce_string_list_handles_tuple_values() -> None:
-    assert ChatService._coerce_string_list(("a", " ", 2)) == ["a", "2"]
+    assert coerce_string_list(("a", " ", 2)) == ["a", "2"]
 
 
 def test_provider_preference_helpers_reject_invalid_values() -> None:
-    assert ChatService._coerce_provider_sort("speed") is None
-    assert ChatService._coerce_data_collection("maybe") is None
-    assert ChatService._coerce_max_price("0.1") is None
+    assert coerce_provider_sort("speed") is None
+    assert coerce_data_collection("maybe") is None
+    assert coerce_max_price("0.1") is None

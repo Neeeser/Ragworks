@@ -10,7 +10,12 @@ from pydantic import ValidationError
 
 from app.schemas.chat import ChatMessageCreate
 from app.services import chat as chat_module
-from app.services.chat import ChatService
+from app.chat.service import ChatService
+from app.chat import service as chat_service_module
+from app.chat.providers.base import ChatRequest
+from app.chat.providers.openrouter import OpenRouterProvider
+from app.chat.persistence.records import RecordContext
+from app.chat.streaming.streaming import stream_model_completion
 
 
 class _StubOpenRouter:
@@ -102,16 +107,16 @@ def test_stream_model_completion_yields_tokens_and_reasoning() -> None:
         },
     ]
     stub = _StubOpenRouter(chunks)
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.openrouter = stub  # type: ignore[attr-defined]
+    provider = OpenRouterProvider(stub)
 
-    gen = service._stream_model_completion(  # type: ignore[attr-defined]
+    request = ChatRequest(
         messages=[{"role": "system", "content": "be helpful"}],
         tools=[{"type": "function", "function": {"name": "pinecone_query"}}],
         model="openrouter/test-model",
         extra_body={"usage": {"include": True}},
         parameters={"temperature": 0},
     )
+    gen = stream_model_completion(provider=provider, request=request)
 
     events, result = _collect_stream_results(gen)
     message, usage, provider, finish_reason, response_model = result
@@ -168,16 +173,16 @@ def test_stream_model_completion_orders_tool_calls_by_index() -> None:
         },
     ]
     stub = _StubOpenRouter(chunks)
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.openrouter = stub  # type: ignore[attr-defined]
+    provider = OpenRouterProvider(stub)
 
-    gen = service._stream_model_completion(  # type: ignore[attr-defined]
+    request = ChatRequest(
         messages=[],
         tools=[],
         model="openrouter/second",
         extra_body={},
         parameters=None,
     )
+    gen = stream_model_completion(provider=provider, request=request)
     events, result = _collect_stream_results(gen)
     message, usage, provider, finish_reason, response_model = result
 
@@ -225,16 +230,16 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
         },
     ]
     stub = _StubOpenRouter(chunks)
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.openrouter = stub  # type: ignore[attr-defined]
+    provider = OpenRouterProvider(stub, stream_chunk_model=chat_module.OpenRouterStreamChunk)
 
-    gen = service._stream_model_completion(  # type: ignore[attr-defined]
+    request = ChatRequest(
         messages=[],
         tools=[],
         model="fallback-model",
         extra_body={},
         parameters=None,
     )
+    gen = stream_model_completion(provider=provider, request=request)
     events, result = _collect_stream_results(gen)
     message, usage, provider, finish_reason, response_model = result
 
@@ -262,16 +267,16 @@ def test_stream_model_completion_skips_tool_calls_without_name() -> None:
         }
     ]
     stub = _StubOpenRouter(chunks)
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.openrouter = stub  # type: ignore[attr-defined]
+    provider = OpenRouterProvider(stub)
 
-    gen = service._stream_model_completion(  # type: ignore[attr-defined]
+    request = ChatRequest(
         messages=[],
         tools=[],
         model="test-model",
         extra_body={},
         parameters=None,
     )
+    gen = stream_model_completion(provider=provider, request=request)
     _events, result = _collect_stream_results(gen)
     message, _usage, _provider, _finish_reason, _response_model = result
 
@@ -341,14 +346,14 @@ def _stub_pipeline_helpers(monkeypatch, *, chat_model: str, context_window: int)
         context_window=context_window,
     )
 
-    monkeypatch.setattr(chat_module, "PipelineService", _StubPipelineService)
+    monkeypatch.setattr(chat_service_module, "PipelineService", _StubPipelineService)
     monkeypatch.setattr(
-        chat_module,
+        chat_service_module,
         "resolve_ingestion_settings",
         lambda *_args, **_kwargs: ingestion_settings,
     )
     monkeypatch.setattr(
-        chat_module,
+        chat_service_module,
         "resolve_retrieval_settings",
         lambda *_args, **_kwargs: retrieval_settings,
     )
@@ -360,7 +365,7 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
     service.chat_repo = _StubChatRepo()
     service.session = SimpleNamespace(add=lambda *args, **kwargs: None, commit=lambda: None, flush=lambda: None)
     service.reasoning_effort = None
-    service._ensure_session = lambda **kwargs: session_model
+    monkeypatch.setattr(chat_service_module, "ensure_session", lambda *_args, **_kwargs: session_model)
     service.openrouter = SimpleNamespace(
         get_model=lambda model_name: SimpleNamespace(
             supported_parameters=["tools"],
@@ -369,7 +374,7 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
     )
     service.retrieval = SimpleNamespace()
     partial_recorder = Mock()
-    service._record_partial_assistant_message = partial_recorder
+    monkeypatch.setattr(chat_service_module, "record_partial_assistant_message", partial_recorder)
     _stub_pipeline_helpers(monkeypatch, chat_model="openrouter/test", context_window=8192)
 
     def fake_stream(*args: Any, **kwargs: Any) -> Generator[Dict[str, Any], None, Tuple]:
@@ -378,7 +383,7 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
         while True:
             yield {}
 
-    service._stream_model_completion = fake_stream  # type: ignore[attr-defined]
+    monkeypatch.setattr(chat_service_module, "stream_model_completion", fake_stream)
 
     collection = SimpleNamespace(
         id="collection-x",
@@ -397,6 +402,7 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
     stream_gen.close()
 
     partial_recorder.assert_called_once_with(
+        context=RecordContext(session=service.session, chat_repo=service.chat_repo),
         session_model=session_model,
         content="Hello",
         reasoning_segments=[{"type": "text", "content": "thinking"}],
