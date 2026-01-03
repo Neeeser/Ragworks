@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -9,7 +11,12 @@ from app.api.config import get_settings
 from app.db import models
 from app.pipelines.models import PipelineDefinition, PipelineEdgeDefinition, PipelineNodeDefinition
 from app.pipelines.runtime import NodePort, PipelineExecutor, PipelineRunContext, PipelineNodeBase, NodeRegistry
-from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue, PipelineTraceRecorder
+from app.pipelines.tracing import (
+    NodeTraceSummary,
+    NodeTraceValue,
+    PipelineTraceRecorder,
+    serialize_payload,
+)
 from app.utils.file_storage import FileStorage
 
 
@@ -198,3 +205,167 @@ def test_pipeline_trace_records_node_io(session: Session, tmp_path) -> None:
     assert all(node_run.summary for node_run in node_runs)
     payload_values = [record.payload for record in node_io]
     assert any(payload.get("text") == "hello trace" for payload in payload_values)
+
+
+def test_serialize_payload_handles_custom_types() -> None:
+    payload = {
+        "path": Path("/tmp/file.txt"),
+        "id": uuid4(),
+        "when": datetime(2024, 1, 1, tzinfo=timezone.utc),
+    }
+
+    serialized = serialize_payload(payload)
+
+    assert isinstance(serialized["path"], str)
+    assert isinstance(serialized["id"], str)
+    assert serialized["when"].endswith("+00:00")
+
+
+def test_trace_recorder_mark_run_failed_is_idempotent(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = models.Pipeline(
+        user_id=user.id,
+        name="Trace Pipeline",
+        kind=models.PipelineKind.INGESTION,
+        current_version=1,
+    )
+    session.add(pipeline)
+    session.flush()
+
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version_id=None,
+        pipeline_version=1,
+        kind=models.PipelineKind.INGESTION,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.FAILED,
+        error_message="existing",
+    )
+    session.add(run)
+    session.flush()
+
+    recorder = PipelineTraceRecorder(session, run, PipelineDefinition())
+    recorder.mark_run_failed(RuntimeError("ignored"))
+
+    assert run.status == models.PipelineRunStatus.FAILED
+    assert run.error_message == "existing"
+
+
+def test_trace_recorder_mark_run_completed_is_idempotent(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = models.Pipeline(
+        user_id=user.id,
+        name="Trace Pipeline",
+        kind=models.PipelineKind.INGESTION,
+        current_version=1,
+    )
+    session.add(pipeline)
+    session.flush()
+
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version_id=None,
+        pipeline_version=1,
+        kind=models.PipelineKind.INGESTION,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+    )
+    session.add(run)
+    session.flush()
+
+    recorder = PipelineTraceRecorder(session, run, PipelineDefinition())
+    recorder.mark_run_completed()
+
+    assert run.status == models.PipelineRunStatus.COMPLETED
+
+
+def test_trace_recorder_normalizes_non_dict_payloads() -> None:
+    payload = PipelineTraceRecorder._normalize_payload([1, 2, 3])
+
+    assert payload["value"] == [1, 2, 3]
+
+
+def test_trace_recorder_mark_run_failed_sets_status(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = models.Pipeline(
+        user_id=user.id,
+        name="Trace Pipeline",
+        kind=models.PipelineKind.INGESTION,
+        current_version=1,
+    )
+    session.add(pipeline)
+    session.flush()
+
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version_id=None,
+        pipeline_version=1,
+        kind=models.PipelineKind.INGESTION,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.RUNNING,
+    )
+    session.add(run)
+    session.flush()
+
+    recorder = PipelineTraceRecorder(session, run, PipelineDefinition())
+    recorder.mark_run_failed(RuntimeError("boom"))
+
+    assert run.status == models.PipelineRunStatus.FAILED
+    assert run.error_message == "boom"
+
+
+def test_trace_recorder_fail_node_sets_status(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = models.Pipeline(
+        user_id=user.id,
+        name="Trace Pipeline",
+        kind=models.PipelineKind.INGESTION,
+        current_version=1,
+    )
+    session.add(pipeline)
+    session.flush()
+
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version_id=None,
+        pipeline_version=1,
+        kind=models.PipelineKind.INGESTION,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.RUNNING,
+    )
+    session.add(run)
+    session.flush()
+
+    node_run = models.PipelineNodeRun(
+        run_id=run.id,
+        node_id="node",
+        node_type="type",
+        node_name="Node",
+        sequence_index=0,
+        status=models.PipelineRunStatus.RUNNING,
+    )
+    session.add(node_run)
+    session.flush()
+
+    recorder = PipelineTraceRecorder(session, run, PipelineDefinition())
+    recorder.fail_node(node_run, RuntimeError("node failed"))
+
+    assert node_run.status == models.PipelineRunStatus.FAILED
+    assert node_run.error_message == "node failed"
+
+
+def test_trace_recorder_normalizes_base_model() -> None:
+    class _Payload(BaseModel):
+        value: str
+
+    payload = PipelineTraceRecorder._normalize_payload(_Payload(value="ok"))
+
+    assert payload["value"] == "ok"

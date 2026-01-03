@@ -33,9 +33,6 @@ class FixedSizeTextChunker(DocumentChunker):  # pylint: disable=too-few-public-m
 
         for i in range(0, len(words), step):
             window = words[i : i + self.chunk_size]
-            if not window:
-                continue
-
             chunk_text = " ".join(window)
             chunk = DocumentChunk(
                 document_id=document.document_id,

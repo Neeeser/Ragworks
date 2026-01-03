@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -88,3 +89,202 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
         select(models.PipelineVersion).where(models.PipelineVersion.pipeline_id == pipeline.id)
     ).all()
     assert len(versions) == 0
+
+
+def test_list_pipeline_nodes_returns_specs() -> None:
+    response = pipelines_routes.list_pipeline_nodes(_current_user=models.User())
+
+    assert response.nodes
+
+
+def test_validate_pipeline_returns_success() -> None:
+    definition = build_default_ingestion_pipeline()
+
+    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
+
+    assert response.valid is True
+    assert response.errors == []
+
+
+def test_validate_definition_rejects_invalid(monkeypatch) -> None:
+    class _StubValidator:
+        def __init__(self, _registry) -> None:
+            pass
+
+        def validate(self, _definition):
+            return SimpleNamespace(valid=False, errors=["bad"])
+
+    monkeypatch.setattr(pipelines_routes, "PipelineValidator", _StubValidator)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes._validate_definition_or_400(build_default_ingestion_pipeline())
+
+    assert excinfo.value.status_code == 400
+
+
+def test_list_pipelines_returns_results(session: Session) -> None:
+    user = _create_user(session)
+    _create_pipeline(session, user)
+
+    results = pipelines_routes.list_pipelines(current_user=user, session=session)
+
+    assert results
+
+
+def test_list_pipelines_filters_by_kind(session: Session) -> None:
+    user = _create_user(session)
+    service = PipelineService(session)
+    service.create_pipeline(
+        user=user,
+        name="Ingestion",
+        kind=models.PipelineKind.INGESTION,
+        definition=build_default_ingestion_pipeline(),
+    )
+    service.create_pipeline(
+        user=user,
+        name="Retrieval",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_ingestion_pipeline(),
+    )
+    session.commit()
+
+    results = pipelines_routes.list_pipelines(
+        kind=models.PipelineKind.RETRIEVAL,
+        current_user=user,
+        session=session,
+    )
+
+    assert results
+    assert all(item.kind == models.PipelineKind.RETRIEVAL for item in results)
+
+
+def test_get_pipeline_returns_not_found(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.get_pipeline(uuid4(), current_user=user, session=session)
+
+    assert excinfo.value.status_code == 404
+
+
+def test_get_pipeline_returns_pipeline(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    result = pipelines_routes.get_pipeline(pipeline.id, current_user=user, session=session)
+
+    assert result.id == pipeline.id
+
+
+def test_update_pipeline_updates_name(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    updated = pipelines_routes.update_pipeline(
+        pipeline.id,
+        pipelines_routes.PipelineUpdate(name="Updated"),
+        current_user=user,
+        session=session,
+    )
+
+    assert updated.name == "Updated"
+
+
+def test_update_pipeline_missing(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.update_pipeline(
+            uuid4(),
+            pipelines_routes.PipelineUpdate(name="Updated"),
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 404
+
+
+def test_update_pipeline_updates_definition(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+    previous_version = pipeline.current_version
+
+    updated = pipelines_routes.update_pipeline(
+        pipeline.id,
+        pipelines_routes.PipelineUpdate(
+            name="Updated",
+            description="Updated description",
+            definition=build_default_ingestion_pipeline(),
+            change_summary="Updated pipeline",
+        ),
+        current_user=user,
+        session=session,
+    )
+
+    assert updated.current_version == previous_version + 1
+
+
+def test_list_pipeline_versions_returns_entries(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    versions = pipelines_routes.list_pipeline_versions(
+        pipeline.id,
+        current_user=user,
+        session=session,
+    )
+
+    assert versions
+
+
+def test_list_pipeline_versions_missing(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.list_pipeline_versions(uuid4(), current_user=user, session=session)
+
+    assert excinfo.value.status_code == 404
+
+
+def test_activate_pipeline_version_updates_current(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    response = pipelines_routes.activate_pipeline_version(
+        pipeline.id,
+        pipelines_routes.PipelineActivateRequest(version=pipeline.current_version),
+        current_user=user,
+        session=session,
+    )
+
+    assert response.id == pipeline.id
+
+
+def test_activate_pipeline_version_missing(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.activate_pipeline_version(
+            uuid4(),
+            pipelines_routes.PipelineActivateRequest(version=1),
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 404
+
+
+def test_create_pipeline_creates_record(session: Session) -> None:
+    user = _create_user(session)
+
+    created = pipelines_routes.create_pipeline(
+        pipelines_routes.PipelineCreate(
+            name="New Pipeline",
+            kind=models.PipelineKind.INGESTION,
+            definition=build_default_ingestion_pipeline(),
+        ),
+        current_user=user,
+        session=session,
+    )
+
+    assert created.name == "New Pipeline"

@@ -46,3 +46,26 @@ def test_pdf_parser_raises_for_missing_file(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError):
         PdfToTextParser().parse(source)
+
+
+def test_pdf_parser_skips_empty_pages(monkeypatch, tmp_path: Path) -> None:
+    class _StubPage:
+        def __init__(self, text: str | None) -> None:
+            self._text = text
+
+        def extract_text(self):
+            return self._text
+
+    class _StubReader:
+        def __init__(self, _path: str) -> None:
+            self.pages = [_StubPage(" "), _StubPage("Hello page")]
+
+    path = tmp_path / "sample.pdf"
+    path.write_text("fake", encoding="utf-8")
+    source = DocumentSource(document_id="doc-1", path=path, metadata=DocumentMetadata())
+
+    monkeypatch.setattr("app.retrieval.parsers.pdf.PdfReader", _StubReader)
+
+    document = PdfToTextParser().parse(source)
+
+    assert document.text == "Hello page"

@@ -335,28 +335,26 @@ def update_collection(  # pylint: disable=too-many-branches
     if payload.metadata is not None:
         collection.extra_metadata = {**collection.extra_metadata, **payload.metadata}
     if payload.ingestion_pipeline_id is not None:
-        if payload.ingestion_pipeline_id:
-            pipeline = pipeline_service.get_pipeline(
-                payload.ingestion_pipeline_id,
-                current_user.id,
+        pipeline = pipeline_service.get_pipeline(
+            payload.ingestion_pipeline_id,
+            current_user.id,
+        )
+        if not pipeline or pipeline.kind != models.PipelineKind.INGESTION:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid ingestion pipeline selection.",
             )
-            if not pipeline or pipeline.kind != models.PipelineKind.INGESTION:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid ingestion pipeline selection.",
-                )
         collection.ingestion_pipeline_id = payload.ingestion_pipeline_id
     if payload.retrieval_pipeline_id is not None:
-        if payload.retrieval_pipeline_id:
-            pipeline = pipeline_service.get_pipeline(
-                payload.retrieval_pipeline_id,
-                current_user.id,
+        pipeline = pipeline_service.get_pipeline(
+            payload.retrieval_pipeline_id,
+            current_user.id,
+        )
+        if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid retrieval pipeline selection.",
             )
-            if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid retrieval pipeline selection.",
-                )
         collection.retrieval_pipeline_id = payload.retrieval_pipeline_id
     collection.updated_at = utc_now()
     session.add(collection)

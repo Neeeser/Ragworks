@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import builtins
+import importlib
+
+import pytest
+
 from app.retrieval.models import DocumentChunk, DocumentMetadata, ScoredChunk
 from app.retrieval.rerankers import cross_encoder as reranker_module
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
@@ -55,3 +60,32 @@ def test_cross_encoder_returns_all_when_top_k_missing(monkeypatch) -> None:
     reranked = reranker.rerank("query", candidates, top_k=None)
 
     assert len(reranked) == 2
+
+
+def test_cross_encoder_raises_when_dependency_missing(monkeypatch) -> None:
+    monkeypatch.setattr(reranker_module, "CrossEncoder", None)
+    monkeypatch.setattr(reranker_module, "_IMPORT_ERROR", RuntimeError("missing"))
+
+    with pytest.raises(RuntimeError, match="sentence-transformers is required"):
+        CrossEncoderReranker(model_name="unit-test")
+
+
+def test_cross_encoder_import_error_sets_module_state(monkeypatch) -> None:
+    original_import = builtins.__import__
+
+    def _failing_import(name: str, *args: Any, **kwargs: Any):
+        if name.startswith("sentence_transformers"):
+            raise ImportError("boom")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _failing_import)
+    reloaded = importlib.reload(reranker_module)
+
+    assert reloaded.CrossEncoder is None
+    assert reloaded._IMPORT_ERROR is not None
+
+    monkeypatch.setattr(builtins, "__import__", original_import)
+    try:
+        importlib.reload(reranker_module)
+    except ImportError:
+        pass

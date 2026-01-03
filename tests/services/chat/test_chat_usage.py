@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from app.services.chat import ChatService
+from app.chat.processing.parameters import build_openrouter_body
+from app.chat.processing.usage import extract_reasoning_tokens_from_usage
 
 
 def test_build_openrouter_body_always_includes_usage_flag() -> None:
     reasoning_options = {"reasoning": {"effort": "low"}}
 
-    body = ChatService._build_openrouter_body(reasoning_options)
+    body = build_openrouter_body(reasoning_options)
 
     assert body["reasoning"]["effort"] == "low"
     assert body["usage"]["include"] is True
@@ -16,7 +17,7 @@ def test_build_openrouter_body_always_includes_usage_flag() -> None:
 def test_build_openrouter_body_merges_existing_usage_config() -> None:
     reasoning_options = {"usage": {"detail": "full", "include": False}}
 
-    body = ChatService._build_openrouter_body(reasoning_options)
+    body = build_openrouter_body(reasoning_options)
 
     assert body["usage"]["include"] is True
     assert body["usage"]["detail"] == "full"
@@ -24,13 +25,13 @@ def test_build_openrouter_body_merges_existing_usage_config() -> None:
 
 
 def test_build_openrouter_body_with_no_reasoning_options_still_includes_usage() -> None:
-    body = ChatService._build_openrouter_body(None)
+    body = build_openrouter_body(None)
 
     assert body == {"usage": {"include": True}}
 
 
 def test_build_openrouter_body_includes_provider_options() -> None:
-    body = ChatService._build_openrouter_body(
+    body = build_openrouter_body(
         {"reasoning": {"effort": "low"}},
         provider_options={"order": ["provider-a"]},
     )
@@ -41,7 +42,7 @@ def test_build_openrouter_body_includes_provider_options() -> None:
 def test_extract_reasoning_tokens_from_usage_nested_details() -> None:
     usage = {"completion_tokens_details": {"reasoning_tokens": "8"}}
 
-    reasoning_tokens = ChatService._extract_reasoning_tokens_from_usage(usage)
+    reasoning_tokens = extract_reasoning_tokens_from_usage(usage)
 
     assert reasoning_tokens == 8
 
@@ -49,10 +50,16 @@ def test_extract_reasoning_tokens_from_usage_nested_details() -> None:
 def test_extract_reasoning_tokens_from_usage_direct_value() -> None:
     usage = {"reasoning_tokens": "6"}
 
-    reasoning_tokens = ChatService._extract_reasoning_tokens_from_usage(usage)
+    reasoning_tokens = extract_reasoning_tokens_from_usage(usage)
 
     assert reasoning_tokens == 6
 
 
 def test_extract_reasoning_tokens_from_usage_empty_payload() -> None:
-    assert ChatService._extract_reasoning_tokens_from_usage({}) is None
+    assert extract_reasoning_tokens_from_usage({}) is None
+
+
+def test_extract_reasoning_tokens_from_usage_invalid_nested_details() -> None:
+    usage = {"completion_tokens_details": {"reasoning_tokens": "bad"}}
+
+    assert extract_reasoning_tokens_from_usage(usage) is None

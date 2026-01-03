@@ -353,3 +353,353 @@ def test_file_type_router_routes_pdf(session: Session) -> None:
     outputs = node.run({"source": payload}, context)
 
     assert "pdf" in outputs
+
+
+def test_ingestion_input_requires_document(session: Session) -> None:
+    from app.pipelines.nodes.ingestion import IngestionInputNode, IngestionInputConfig
+
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection, document=None)
+    node = IngestionInputNode(IngestionInputConfig())
+
+    with pytest.raises(ValueError, match="missing a document"):
+        node.run({}, context)
+
+
+def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) -> None:
+    from app.pipelines.nodes.ingestion import IngestionInputNode, IngestionInputConfig
+
+    user = _build_user()
+    collection = _build_collection(user)
+    document = _build_document(user, collection, tmp_path / "doc.txt")
+    document.source_path = None
+    context = _build_context(session, user, collection, document=document)
+    node = IngestionInputNode(IngestionInputConfig())
+
+    with pytest.raises(ValueError, match="source path is not set"):
+        node.run({}, context)
+
+
+def test_document_parser_node_resolves_modes(session: Session) -> None:
+    from app.pipelines.nodes.ingestion import DocumentParserNode, ParserConfig
+    from app.retrieval.parsers.pdf import PdfToTextParser
+    from app.retrieval.parsers.txt import TxtDocumentParser
+
+    node = DocumentParserNode(ParserConfig(mode="pdf"))
+    assert isinstance(node._resolve_parser("application/pdf"), PdfToTextParser)
+
+    node = DocumentParserNode(ParserConfig(mode="text", encoding="utf-16"))
+    assert isinstance(node._resolve_parser("application/pdf"), TxtDocumentParser)
+
+    node = DocumentParserNode(ParserConfig(mode="auto"))
+    assert isinstance(node._resolve_parser("application/pdf"), PdfToTextParser)
+    assert isinstance(node._resolve_parser("text/plain"), TxtDocumentParser)
+
+
+def test_file_type_router_routes_text_and_other(session: Session) -> None:
+    from app.pipelines.nodes.ingestion import FileTypeRouterNode, FileTypeRouterConfig
+
+    node = FileTypeRouterNode(FileTypeRouterConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    text_payload = SourcePayload(
+        source=DocumentSource(
+            document_id="doc",
+            path=Path("/tmp/test.txt"),
+            content_type="text/plain",
+        )
+    )
+    outputs = node.run({"source": text_payload}, context)
+    assert "text" in outputs
+
+    other_payload = SourcePayload(
+        source=DocumentSource(
+            document_id="doc",
+            path=Path("/tmp/test.bin"),
+            content_type="application/octet-stream",
+        )
+    )
+    outputs = node.run({"source": other_payload}, context)
+    assert "other" in outputs
+
+
+def test_file_type_router_summarizes_unknown_route(session: Session) -> None:
+    from app.pipelines.nodes.ingestion import FileTypeRouterNode, FileTypeRouterConfig
+
+    node = FileTypeRouterNode(FileTypeRouterConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    payload = SourcePayload(
+        source=DocumentSource(
+            document_id="doc",
+            path=Path("/tmp/test.txt"),
+            content_type="text/plain",
+        )
+    )
+    summary = node.summarize_io({"source": payload}, {})
+
+    assert summary.outputs[0].value == "unknown"
+
+
+def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import ChunkPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, Document
+
+    class _StubEmbedder:
+        usage = {}
+
+        def __init__(self, _client: object, _model_name: str) -> None:
+            pass
+
+        def embed_documents(self, _chunks):
+            return [[0.1, 0.2]]
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
+        DocumentChunk(document_id="doc", chunk_id="doc:1", text="b", order=1, metadata=DocumentMetadata()),
+    ]
+    payload = ChunkPayload(document=document, chunks=chunks)
+    node = EmbedderNode(EmbedderConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    with pytest.raises(ValueError, match="mismatched embeddings"):
+        node.run({"chunks": payload}, context)
+
+
+def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.payloads import EmbeddingPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, Document
+
+    class _StubIndexer:
+        def __init__(self, client: object) -> None:
+            self.client = client
+
+        def ensure_index(self, _config):
+            return None
+
+        def upsert(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
+    ]
+    payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
+    node = IndexerNode(IndexerConfig(dimension=None))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    with pytest.raises(ValueError, match="dimension could not be inferred"):
+        node.run({"embedded": payload}, context)
+
+
+def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.payloads import EmbeddingPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, Document
+
+    calls = {"ensure": 0, "upsert": 0}
+
+    class _StubIndexer:
+        def __init__(self, client: object) -> None:
+            self.client = client
+
+        def ensure_index(self, _config):
+            calls["ensure"] += 1
+
+        def upsert(self, **_kwargs):
+            calls["upsert"] += 1
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata(), embedding=[0.1, 0.2]),
+    ]
+    payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
+    node = IndexerNode(IndexerConfig(dimension=None, ensure_index=False))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    node.run({"embedded": payload}, context)
+
+    assert calls["ensure"] == 0
+    assert calls["upsert"] == 1
+
+
+def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.payloads import EmbeddingPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, Document
+
+    captured: dict[str, object] = {}
+
+    class _StubIndexer:
+        def __init__(self, client: object) -> None:
+            self.client = client
+
+        def ensure_index(self, config):
+            captured["ensure"] = config
+
+        def upsert(self, **kwargs):
+            captured["upsert"] = kwargs["config"]
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(
+            document_id="doc",
+            chunk_id="doc:0",
+            text="a",
+            order=0,
+            metadata=DocumentMetadata(),
+            embedding=[0.1, 0.2, 0.3],
+        ),
+    ]
+    payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
+    node = IndexerNode(IndexerConfig(dimension=None))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    node.run({"embedded": payload}, context)
+
+    index_config = captured["ensure"]
+    assert getattr(index_config, "dimension", None) == 3
+
+
+def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.payloads import EmbeddingPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, Document
+
+    captured: dict[str, object] = {}
+
+    class _StubIndexer:
+        def __init__(self, client: object) -> None:
+            self.client = client
+
+        def ensure_index(self, config):
+            captured["ensure"] = config
+
+        def upsert(self, **kwargs):
+            captured["upsert"] = kwargs["config"]
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(
+            document_id="doc",
+            chunk_id="doc:0",
+            text="a",
+            order=0,
+            metadata=DocumentMetadata(),
+            embedding=[0.1, 0.2, 0.3],
+        ),
+    ]
+    payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
+    node = IndexerNode(IndexerConfig(dimension=8))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    node.run({"embedded": payload}, context)
+
+    index_config = captured["ensure"]
+    assert getattr(index_config, "dimension", None) == 8
+
+
+def test_retrieval_input_requires_query(session: Session) -> None:
+    from app.pipelines.nodes.retrieval import RetrievalInputNode, RetrievalInputConfig
+
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection, query=None)
+    node = RetrievalInputNode(RetrievalInputConfig())
+
+    with pytest.raises(ValueError, match="missing a query string"):
+        node.run({}, context)
+
+
+def test_reranker_node_returns_when_disabled(session: Session) -> None:
+    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.payloads import RetrievalPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:0",
+        text="alpha",
+        order=0,
+        metadata=DocumentMetadata(),
+    )
+    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    node = RerankerNode(RerankerConfig(enabled=False))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection, query="hi")
+
+    outputs = node.run({"results": payload}, context)
+
+    assert outputs["results"].response.matches[0].chunk.chunk_id == "doc:0"
+
+
+def test_reranker_node_requires_query(session: Session) -> None:
+    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.payloads import RetrievalPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:0",
+        text="alpha",
+        order=0,
+        metadata=DocumentMetadata(),
+    )
+    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    node = RerankerNode(RerankerConfig(enabled=True))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection, query=None)
+
+    with pytest.raises(ValueError, match="requires a query string"):
+        node.run({"results": payload}, context)
+
+
+def test_reranker_node_summarize_io(session: Session) -> None:
+    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.payloads import RetrievalPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:0",
+        text="alpha",
+        order=0,
+        metadata=DocumentMetadata(),
+    )
+    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    node = RerankerNode(RerankerConfig(enabled=True))
+
+    summary = node.summarize_io({"results": payload}, {"results": payload})
+
+    assert summary.inputs
+    assert summary.outputs

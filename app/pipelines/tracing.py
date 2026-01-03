@@ -168,8 +168,6 @@ class PipelineTraceRecorder:  # pylint: disable=too-few-public-methods
         serialized = serialize_payload(payload)
         if isinstance(serialized, dict):
             return serialized
-        if isinstance(serialized, BaseModel):
-            return serialized.model_dump(mode="json")
         return {"value": serialized}
 
     @staticmethod

@@ -4,7 +4,7 @@ import pytest
 
 from app.db.models import ChunkStrategy
 from app.retrieval.models import Document, DocumentMetadata
-from app.services.chunking import build_chunker
+from app.services.chunking import _BaseChunker, build_chunker
 
 
 def _document(text: str) -> Document:
@@ -102,3 +102,34 @@ def test_semantic_chunker_flushes_on_headings() -> None:
     chunks = chunker.chunk(_document(text))
 
     assert len(chunks) >= 2
+
+
+def test_semantic_chunker_emits_buffered_segment() -> None:
+    text = "\n".join(["# Heading", "Line one", "", "Line two"])
+    chunker = build_chunker(ChunkStrategy.SEMANTIC, 10, 0)
+
+    chunks = chunker.chunk(_document(text))
+
+    assert any("Heading" in chunk.text for chunk in chunks)
+
+
+def test_base_chunker_chunk_not_implemented() -> None:
+    chunker = _BaseChunker(chunk_size=2, overlap=0)
+
+    with pytest.raises(NotImplementedError):
+        chunker.chunk(_document("hello world"))
+
+
+def test_chunk_segments_falls_back_to_document_text() -> None:
+    class _DirectChunker(_BaseChunker):
+        def __init__(self, segments: list[str]) -> None:
+            super().__init__(chunk_size=2, overlap=0)
+            self._segments = segments
+
+        def chunk(self, document: Document):
+            return self._chunk_segments(document, self._segments)
+
+    chunker = _DirectChunker(["", "   "])
+    chunks = chunker.chunk(_document("alpha beta gamma"))
+
+    assert [chunk.text for chunk in chunks] == ["alpha beta", "gamma"]

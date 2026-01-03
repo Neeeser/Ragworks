@@ -106,6 +106,26 @@ def test_require_user_api_keys_rejects_missing_value(session: Session) -> None:
     assert excinfo.value.status_code == 400
 
 
+def test_require_user_api_keys_rejects_missing_both(session: Session) -> None:
+    user = _create_user(session, openrouter_api_key=None, pinecone_api_key=None)
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependencies.require_user_api_keys(current_user=user)
+
+    assert excinfo.value.status_code == 400
+    assert "OpenRouter and Pinecone API keys are not configured" in excinfo.value.detail
+
+
+def test_require_user_api_keys_rejects_missing_openrouter(session: Session) -> None:
+    user = _create_user(session, openrouter_api_key=None, pinecone_api_key="pinecone-key")
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependencies.require_user_api_keys(current_user=user)
+
+    assert excinfo.value.status_code == 400
+    assert "OpenRouter API key is not configured" in excinfo.value.detail
+
+
 def test_require_user_api_keys_accepts_valid_values(session: Session) -> None:
     user = _create_user(
         session,

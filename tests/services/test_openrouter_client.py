@@ -177,6 +177,77 @@ def test_get_model_matches_canonical_slug_case_insensitive(_client: OpenRouterCl
     assert model.id == "OpenAI/GPT-4"
 
 
+def test_get_model_matches_canonical_slug_when_id_differs(_client: OpenRouterClient) -> None:
+    _StubHttpClient.responses = {
+        "/models": [
+            {
+                "data": [
+                    {
+                        "id": "OpenAI/GPT-4-0314",
+                        "canonical_slug": "openai/gpt-4",
+                        "name": "GPT-4",
+                    }
+                ]
+            }
+        ]
+    }
+
+    model = _client.get_model("OPENAI/GPT-4")
+
+    assert model
+    assert model.id == "OpenAI/GPT-4-0314"
+
+
+def test_get_model_returns_none_when_missing(_client: OpenRouterClient) -> None:
+    _StubHttpClient.responses = {
+        "/models": [
+            {
+                "data": [
+                    {
+                        "id": "OpenAI/GPT-4",
+                        "canonical_slug": "openai/gpt-4",
+                        "name": "GPT-4",
+                    }
+                ]
+            },
+            {
+                "data": [
+                    {
+                        "id": "OpenAI/GPT-4",
+                        "canonical_slug": "openai/gpt-4",
+                        "name": "GPT-4",
+                    }
+                ]
+            },
+        ]
+    }
+
+    model = _client.get_model("openai/gpt-5")
+
+    assert model is None
+
+
+def test_get_model_matches_id_case_insensitive_without_canonical(_client: OpenRouterClient) -> None:
+    _StubHttpClient.responses = {
+        "/models": [
+            {
+                "data": [
+                    {
+                        "id": "OpenAI/TEST",
+                        "canonical_slug": None,
+                        "name": "Test Model",
+                    }
+                ]
+            }
+        ]
+    }
+
+    model = _client.get_model("openai/test")
+
+    assert model
+    assert model.id == "OpenAI/TEST"
+
+
 def test_list_model_endpoints_encodes_path(_client: OpenRouterClient) -> None:
     response = EndpointsListResponse(data=ListEndpointsResponse(id="model", name="Model"))
     _StubHttpClient.responses = {
@@ -287,3 +358,8 @@ def test_chat_stream_includes_tool_settings(_client: OpenRouterClient) -> None:
     assert call["parallel_tool_calls"] is True
     assert call["extra_body"] == {"usage": {"include": True}}
     assert chunks == [{"chunk": 1}, {"chunk": 2}]
+
+
+def test_openrouter_client_requires_api_key() -> None:
+    with pytest.raises(ValueError, match="OpenRouter API key must be provided"):
+        OpenRouterClient(" ")

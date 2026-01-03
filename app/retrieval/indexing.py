@@ -58,13 +58,10 @@ class DocumentIndexer:
             return []
         chunk_preview = chunks[0].text.replace("\n", " ").strip()[:200]
         chunk_lengths = [len(chunk.text or "") for chunk in chunks]
-        if chunk_lengths:
-            min_len = min(chunk_lengths)
-            max_len = max(chunk_lengths)
-            total_len = sum(chunk_lengths)
-            avg_len = total_len / len(chunk_lengths)
-        else:
-            min_len = max_len = total_len = avg_len = 0
+        min_len = min(chunk_lengths)
+        max_len = max(chunk_lengths)
+        total_len = sum(chunk_lengths)
+        avg_len = total_len / len(chunk_lengths)
         sample_lengths = chunk_lengths[:5]
         logger.info(
             "Chunked document %s into %s chunk(s) via %s (chunk_size=%s overlap=%s). "

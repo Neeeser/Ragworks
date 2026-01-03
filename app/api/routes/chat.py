@@ -66,9 +66,8 @@ def stream_chat_with_collection(
     def close_session():
         """Ensure the SQL session is closed exactly once."""
         nonlocal session_closed
-        if not session_closed:
-            session.close()
-            session_closed = True
+        session.close()
+        session_closed = True
 
     try:
         current_user = get_current_user(token=token, session=session)

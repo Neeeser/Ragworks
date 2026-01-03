@@ -59,11 +59,8 @@ class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
         def emit_chunk() -> None:
             """Flush the current buffer into a chunk."""
             nonlocal buffer, buffer_tokens, has_new_tokens
-            if not buffer:
-                return
             chunk_text = " ".join(buffer)
-            if chunk_text:
-                chunks.append(self._build_chunk(document, chunk_text, len(chunks)))
+            chunks.append(self._build_chunk(document, chunk_text, len(chunks)))
             if self.overlap > 0:
                 buffer = buffer[-self.overlap :]
                 buffer_tokens = len(buffer)
@@ -74,17 +71,10 @@ class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
 
         for segment in normalized:
             tokens = segment.split()
-            if not tokens:
-                continue
             idx = 0
             while idx < len(tokens):
-                if buffer_tokens == self.chunk_size:
-                    emit_chunk()
-                    continue
                 remaining = self.chunk_size - buffer_tokens
                 take = min(remaining, len(tokens) - idx)
-                if take <= 0:
-                    break
                 buffer.extend(tokens[idx : idx + take])
                 buffer_tokens += take
                 has_new_tokens = True
@@ -140,8 +130,7 @@ class SemanticChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
             nonlocal current
             if current:
                 text = "\n".join(current).strip()
-                if text:
-                    buffers.append(text)
+                buffers.append(text)
                 current = []
 
         for line in lines:

@@ -17,6 +17,7 @@ from app.schemas.collections import (
     CollectionUpdate,
     PipelineNodeOverride,
 )
+from app.pipelines.defaults import build_default_ingestion_pipeline, build_default_retrieval_pipeline
 from app.services.pipelines import PipelineService
 
 
@@ -200,6 +201,123 @@ def test_create_collection_with_pipeline_overrides(session: Session) -> None:
     assert updated_chat.config["context_window"] == 4096
 
 
+def test_create_collection_rejects_invalid_pipeline_kind(session: Session) -> None:
+    user = _create_user(session)
+    pipeline_service = PipelineService(session)
+    retrieval_pipeline = pipeline_service.create_pipeline(
+        user=user,
+        name="Retrieval",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_retrieval_pipeline(),
+    )
+    session.commit()
+
+    payload = CollectionCreate(
+        name="Invalid",
+        ingestion_pipeline_id=retrieval_pipeline.id,
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.create_collection(payload, current_user=user, session=session)
+
+    assert excinfo.value.status_code == 400
+
+
+def test_create_collection_with_ingestion_overrides_only(session: Session) -> None:
+    user = _create_user(session)
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    session.commit()
+
+    ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
+    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+
+    payload = CollectionCreate(
+        name="Overrides Collection",
+        description="Test overrides",
+        pipeline_overrides=CollectionPipelineOverrides(
+            ingestion=[PipelineNodeOverride(node_id=chunker_node.id, config={"chunk_size": 2048})],
+        ),
+    )
+
+    created = collections_routes.create_collection(payload, current_user=user, session=session)
+
+    assert created.ingestion_pipeline_id is not None
+    assert created.ingestion_pipeline_id != defaults.ingestion.id
+
+
+def test_create_collection_with_retrieval_overrides_only(session: Session) -> None:
+    user = _create_user(session)
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    session.commit()
+
+    retrieval_definition = pipeline_service.get_definition(defaults.retrieval)
+    chat_node = next(node for node in retrieval_definition.nodes if node.type == "chat.settings")
+
+    payload = CollectionCreate(
+        name="Overrides Collection",
+        description="Test overrides",
+        pipeline_overrides=CollectionPipelineOverrides(
+            retrieval=[PipelineNodeOverride(node_id=chat_node.id, config={"context_window": 4096})],
+        ),
+    )
+
+    created = collections_routes.create_collection(payload, current_user=user, session=session)
+
+    assert created.retrieval_pipeline_id is not None
+    assert created.retrieval_pipeline_id != defaults.retrieval.id
+
+
+def test_is_missing_pinecone_namespace_variants() -> None:
+    assert collections_routes._is_missing_pinecone_namespace(Exception("Namespace not found")) is True
+    assert collections_routes._is_missing_pinecone_namespace(Exception("missing namespace")) is False
+
+    error_with_status = SimpleNamespace(status_code=404, __str__=lambda: "namespace not found")
+    assert collections_routes._is_missing_pinecone_namespace(error_with_status) is True
+
+    response_error = SimpleNamespace(
+        response=SimpleNamespace(status_code=404),
+        __str__=lambda: "namespace missing",
+    )
+    assert collections_routes._is_missing_pinecone_namespace(response_error) is True
+
+
+def test_build_collection_stats_with_empty_list(session: Session) -> None:
+    stats = collections_routes._build_collection_stats(session, uuid4(), [])
+
+    assert stats == {}
+
+
+def test_prompt_read_rejects_missing_pipeline(monkeypatch, session: Session) -> None:
+    class _StubPipelineService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def ensure_default_pipelines(self, _user):
+            return SimpleNamespace(
+                ingestion=SimpleNamespace(id=uuid4()),
+                retrieval=SimpleNamespace(id=uuid4()),
+            )
+
+        def ensure_collection_pipelines(self, *_args, **_kwargs):
+            return None
+
+        def get_pipeline(self, _pipeline_id, _user_id):
+            return None
+
+    monkeypatch.setattr(collections_routes, "PipelineService", _StubPipelineService)
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes._prompt_read(
+            collection=SimpleNamespace(ingestion_pipeline_id=None, retrieval_pipeline_id=None),
+            user=SimpleNamespace(id=uuid4()),
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 400
+
+
 def test_update_collection_prompt_sets_and_clears_template(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -369,3 +487,130 @@ def test_collection_stats_include_query_latency(session: Session) -> None:
     stats_list = collections_routes.list_collection_stats(current_user=user, session=session)
     stats_map = {entry.collection_id: entry for entry in stats_list}
     assert stats_map[collection.id].chunk_count == 8
+
+
+def test_update_collection_rejects_invalid_pipeline_kind(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline_service = PipelineService(session)
+    ingestion_pipeline = pipeline_service.create_pipeline(
+        user=user,
+        name="Ingestion",
+        kind=models.PipelineKind.INGESTION,
+        definition=build_default_ingestion_pipeline(),
+    )
+    retrieval_pipeline = pipeline_service.create_pipeline(
+        user=user,
+        name="Retrieval",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_retrieval_pipeline(),
+    )
+    session.commit()
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.update_collection(
+            collection.id,
+            CollectionUpdate(ingestion_pipeline_id=retrieval_pipeline.id),
+            current_user=user,
+            session=session,
+        )
+    assert excinfo.value.status_code == 400
+
+
+def test_update_collection_assigns_pipeline_ids(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline_service = PipelineService(session)
+    ingestion_pipeline = pipeline_service.create_pipeline(
+        user=user,
+        name="Ingestion",
+        kind=models.PipelineKind.INGESTION,
+        definition=build_default_ingestion_pipeline(),
+    )
+    retrieval_pipeline = pipeline_service.create_pipeline(
+        user=user,
+        name="Retrieval",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_retrieval_pipeline(),
+    )
+    session.commit()
+
+    updated = collections_routes.update_collection(
+        collection.id,
+        CollectionUpdate(
+            ingestion_pipeline_id=ingestion_pipeline.id,
+            retrieval_pipeline_id=retrieval_pipeline.id,
+        ),
+        current_user=user,
+        session=session,
+    )
+
+    assert updated.ingestion_pipeline_id == ingestion_pipeline.id
+    assert updated.retrieval_pipeline_id == retrieval_pipeline.id
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.update_collection(
+            collection.id,
+            CollectionUpdate(retrieval_pipeline_id=ingestion_pipeline.id),
+            current_user=user,
+            session=session,
+        )
+    assert excinfo.value.status_code == 400
+
+
+def test_delete_collection_rejects_missing_ingestion_pipeline(monkeypatch, session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    class _StubPipelineService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def ensure_default_pipelines(self, _user):
+            return SimpleNamespace(
+                ingestion=SimpleNamespace(id=uuid4()),
+                retrieval=SimpleNamespace(id=uuid4()),
+            )
+
+        def ensure_collection_pipelines(self, *_args, **_kwargs):
+            return None
+
+        def get_pipeline(self, _pipeline_id, _user_id):
+            return None
+
+    monkeypatch.setattr(collections_routes, "PipelineService", _StubPipelineService)
+    monkeypatch.setattr(
+        collections_routes,
+        "get_pinecone_client",
+        lambda **_kwargs: _StubPinecone(api_key="key"),
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.delete_collection(collection.id, current_user=user, session=session)
+
+    assert excinfo.value.status_code == 400
+    assert "Unable to resolve ingestion pipeline" in excinfo.value.detail
+
+
+def test_delete_collection_rejects_missing_namespace(monkeypatch, session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    PipelineService(session).ensure_default_pipelines(user)
+    session.commit()
+
+    monkeypatch.setattr(
+        collections_routes,
+        "resolve_ingestion_settings",
+        lambda *_args, **_kwargs: SimpleNamespace(namespace=None, index_name="index"),
+    )
+    monkeypatch.setattr(
+        collections_routes,
+        "get_pinecone_client",
+        lambda **_kwargs: _StubPinecone(api_key="key"),
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.delete_collection(collection.id, current_user=user, session=session)
+
+    assert excinfo.value.status_code == 400
+    assert "namespace is not configured" in excinfo.value.detail
