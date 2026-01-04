@@ -9,7 +9,12 @@ from pydantic import BaseModel
 
 from app.db import models
 from app.pipelines.models import PipelineDefinition, PipelineNodeDefinition
-from app.pipelines.nodes.ingestion import ChunkerConfig, EmbedderConfig, IndexerConfig
+from app.pipelines.nodes.ingestion import (
+    ChunkerConfig,
+    EmbedderConfig,
+    FixedChunkerConfig,
+    IndexerConfig,
+)
 from app.pipelines.nodes.retrieval import ChatSettingsConfig, RetrieverConfig
 from app.pipelines.template import resolve_collection_template
 
@@ -57,12 +62,32 @@ def _resolve_node_config(
     return model.model_validate(node.config if node else {})
 
 
+def _resolve_chunker_config(definition: PipelineDefinition) -> ChunkerConfig:
+    """Resolve chunking config from legacy or fixed-strategy chunkers."""
+    fixed_strategies = [
+        ("chunker.token", models.ChunkStrategy.TOKEN),
+        ("chunker.sentence", models.ChunkStrategy.SENTENCE),
+        ("chunker.paragraph", models.ChunkStrategy.PARAGRAPH),
+        ("chunker.semantic", models.ChunkStrategy.SEMANTIC),
+    ]
+    for node_type, strategy in fixed_strategies:
+        for candidate in definition.nodes:
+            if candidate.type == node_type:
+                config = FixedChunkerConfig.model_validate(candidate.config)
+                return ChunkerConfig(
+                    strategy=strategy,
+                    chunk_size=config.chunk_size,
+                    chunk_overlap=config.chunk_overlap,
+                )
+    return _resolve_node_config(definition, "chunker.collection", ChunkerConfig)
+
+
 def resolve_ingestion_settings(
     definition: PipelineDefinition,
     collection: models.Collection,
 ) -> IngestionPipelineSettings:
     """Resolve ingestion settings from a pipeline definition."""
-    chunker = _resolve_node_config(definition, "chunker.collection", ChunkerConfig)
+    chunker = _resolve_chunker_config(definition)
     embedder = _resolve_node_config(definition, "embedder.openrouter", EmbedderConfig)
     indexer = _resolve_node_config(definition, "indexer.pinecone", IndexerConfig)
     index_name = (

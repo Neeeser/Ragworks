@@ -5,12 +5,13 @@ import { GlassCard } from "@/components/ui/panel";
 import { PipelineCatalog } from "./PipelineCatalog";
 import { PipelineNodeLibrary } from "./PipelineNodeLibrary";
 
+import type { NodeFamily } from "./pipeline-theme";
 import type { NodeSpec, Pipeline } from "@/lib/types";
 
 type PipelineSidebarProps = {
   pipelines: Pipeline[];
   selectedPipelineId?: string;
-  catalog: Record<string, NodeSpec[]>;
+  catalog: Array<{ family: NodeFamily; specs: NodeSpec[] }>;
   onSelectPipeline: (pipeline: Pipeline) => void;
   onDeletePipeline: (pipeline: Pipeline) => void;
   pipelineUsage: Set<string>;

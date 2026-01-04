@@ -107,7 +107,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           </Link>
           <nav className="flex flex-1 justify-center gap-2 text-sm">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href;
+              const isActive = pathname?.startsWith(link.href);
               return (
                 <Link
                   key={link.href}

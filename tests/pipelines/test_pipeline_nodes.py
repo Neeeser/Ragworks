@@ -13,7 +13,14 @@ from app.db import models
 from app.db.models import ChunkStrategy
 from app.pipelines.defaults import build_default_ingestion_pipeline, build_default_retrieval_pipeline
 from app.pipelines.models import PipelineDefinition, PipelineEdgeDefinition, PipelineNodeDefinition
-from app.pipelines.payloads import IndexingPayload, RetrievalPayload, SourcePayload
+from app.pipelines.payloads import (
+    ChunkPayload,
+    IndexingPayload,
+    ParsedDocumentPayload,
+    RetrievalPayload,
+    SourcePayload,
+)
+from app.pipelines.nodes.ingestion import ChunkerConfig, ChunkerNode
 from app.pipelines.registry import build_default_registry
 from app.pipelines.runtime import (
     NodePort,
@@ -23,7 +30,7 @@ from app.pipelines.runtime import (
     PipelineRunContext,
 )
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
-from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+from app.retrieval.models import Document, DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 from app.retrieval.parsers.base import DocumentSource
 from app.utils.file_storage import FileStorage
 
@@ -97,6 +104,24 @@ def test_pipeline_registry_specs_include_examples() -> None:
         assert spec.example
         if spec.input_ports and spec.output_ports:
             assert "->" in spec.example
+
+
+def test_chunker_node_runs_and_summarizes(session: Session) -> None:
+    user = _build_user()
+    collection = _build_collection(user)
+    document = Document(document_id="doc-1", text="alpha beta gamma", metadata=DocumentMetadata())
+    payload = ParsedDocumentPayload(document=document)
+    node = ChunkerNode(
+        ChunkerConfig(
+            strategy=ChunkStrategy.TOKEN,
+            chunk_size=6,
+            chunk_overlap=0,
+        )
+    )
+    outputs = node.run({"document": payload}, _build_context(session, user, collection))
+    assert isinstance(outputs.get("chunks"), ChunkPayload)
+    summary = node.summarize_io({"document": payload}, outputs)
+    assert summary.outputs
 
 
 def test_pipeline_executor_skips_unreached_branch(session: Session) -> None:

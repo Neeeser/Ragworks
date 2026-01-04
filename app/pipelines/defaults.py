@@ -26,11 +26,10 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
         ),
         PipelineNodeDefinition(
             id="chunk-document",
-            type="chunker.collection",
-            name="Chunker",
+            type="chunker.token",
+            name="Token Chunker",
             position={"x": 480, "y": 0},
             config={
-                "strategy": "token",
                 "chunk_size": 1024,
                 "chunk_overlap": 200,
             },

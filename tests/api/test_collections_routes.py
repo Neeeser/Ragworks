@@ -163,7 +163,7 @@ def test_create_collection_with_pipeline_overrides(session: Session) -> None:
 
     ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
     retrieval_definition = pipeline_service.get_definition(defaults.retrieval)
-    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.token")
     chat_node = next(node for node in retrieval_definition.nodes if node.type == "chat.settings")
 
     payload = CollectionCreate(
@@ -193,7 +193,7 @@ def test_create_collection_with_pipeline_overrides(session: Session) -> None:
 
     ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
     retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
-    updated_chunker = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+    updated_chunker = next(node for node in ingestion_definition.nodes if node.type == "chunker.token")
     updated_chat = next(node for node in retrieval_definition.nodes if node.type == "chat.settings")
 
     assert updated_chunker.config["chunk_size"] == 2048
@@ -230,7 +230,7 @@ def test_create_collection_with_ingestion_overrides_only(session: Session) -> No
     session.commit()
 
     ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
-    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.collection")
+    chunker_node = next(node for node in ingestion_definition.nodes if node.type == "chunker.token")
 
     payload = CollectionCreate(
         name="Overrides Collection",

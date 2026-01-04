@@ -21,6 +21,8 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
+import { validatePipelineConnection } from "./pipeline-io";
+import { PIPELINE_KIND_STORAGE_KEY } from "./pipeline-kinds";
 import {
   buildDefaultDefinition,
   buildNodeCatalog,
@@ -41,7 +43,13 @@ import type { PipelineNodeData } from "./PipelineNode";
 import type { Collection, NodeSpec, Pipeline, PipelineKind, PipelineVersion } from "@/lib/types";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
-export function PipelineBuilder() {
+type PipelineBuilderProps = {
+  kind: PipelineKind;
+};
+
+const HIDDEN_NODE_TYPES = new Set(["chunker.collection"]);
+
+export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const { token } = useAuth();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -73,7 +81,7 @@ export function PipelineBuilder() {
       setLoading(true);
       try {
         const [pipelinesResponse, nodesResponse, collectionsResponse] = await Promise.all([
-          fetchPipelines(authToken),
+          fetchPipelines(authToken, kind),
           fetchPipelineNodes(authToken),
           fetchCollections(authToken),
         ]);
@@ -95,7 +103,12 @@ export function PipelineBuilder() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, kind]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(PIPELINE_KIND_STORAGE_KEY, kind);
+  }, [kind]);
 
   useEffect(() => {
     if (!selectedPipeline || nodeSpecs.length === 0) {
@@ -141,7 +154,15 @@ export function PipelineBuilder() {
     setConfigDraft({ ...(selectedNode.data.config ?? {}) });
   }, [selectedNode]);
 
+  const validateConnection = (connection: Connection) =>
+    validatePipelineConnection(connection, nodes);
+
   const handleConnect = (connection: Connection) => {
+    const validation = validateConnection(connection);
+    if (!validation.valid) {
+      setMessage(validation.reason ?? "Invalid connection.");
+      return;
+    }
     setEdges((prev) =>
       addEdge(
         {
@@ -221,7 +242,7 @@ export function PipelineBuilder() {
     }
   };
 
-  const handleCreatePipeline = async (kind: PipelineKind) => {
+  const handleCreatePipeline = async () => {
     const authToken = token ?? "";
     if (!authToken) return;
     setSaving(true);
@@ -325,7 +346,11 @@ export function PipelineBuilder() {
     );
   };
 
-  const catalogByCategory = useMemo(() => buildNodeCatalog(nodeSpecs), [nodeSpecs]);
+  const catalogSpecs = useMemo(
+    () => nodeSpecs.filter((spec) => spec.category === kind && !HIDDEN_NODE_TYPES.has(spec.type)),
+    [nodeSpecs, kind],
+  );
+  const catalogByFamily = useMemo(() => buildNodeCatalog(catalogSpecs), [catalogSpecs]);
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -343,7 +368,7 @@ export function PipelineBuilder() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-      <PipelineHeader onCreatePipeline={handleCreatePipeline} />
+      <PipelineHeader kind={kind} onCreatePipeline={handleCreatePipeline} />
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center">
@@ -357,7 +382,7 @@ export function PipelineBuilder() {
             <PipelineSidebar
               pipelines={pipelines}
               selectedPipelineId={selectedPipeline?.id}
-              catalog={catalogByCategory}
+              catalog={catalogByFamily}
               onSelectPipeline={setSelectedPipeline}
               onDeletePipeline={handleDeletePipeline}
               pipelineUsage={pipelineUsage}
@@ -374,6 +399,7 @@ export function PipelineBuilder() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={handleConnect}
+            isValidConnection={(connection) => validateConnection(connection).valid}
             onNodeSelect={setSelectedNodeId}
           />
 

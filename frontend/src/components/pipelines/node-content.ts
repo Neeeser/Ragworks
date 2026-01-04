@@ -40,6 +40,38 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: 'Chunk batch\n- "Hello"\n- "world!"',
     },
   },
+  "chunker.token": {
+    description:
+      "Splits the parsed document into token-based chunks using the configured size and overlap. Useful when you want chunking to match model tokenization.",
+    example: {
+      input: 'Parsed document text: "Hello world!"',
+      output: 'Chunk batch\n- "Hello"\n- "world!"',
+    },
+  },
+  "chunker.sentence": {
+    description:
+      "Splits the parsed document into sentence-based chunks with overlap for smoother context windows.",
+    example: {
+      input: 'Parsed document text: "Hello world. This is another sentence."',
+      output: 'Chunk batch\n- "Hello world."\n- "This is another sentence."',
+    },
+  },
+  "chunker.paragraph": {
+    description:
+      "Splits the parsed document into paragraph-based chunks while preserving whitespace between paragraphs.",
+    example: {
+      input: "Parsed document text with paragraphs",
+      output: "Chunk batch\n- Paragraph 1\n- Paragraph 2",
+    },
+  },
+  "chunker.semantic": {
+    description:
+      "Splits the parsed document into semantically coherent chunks based on embeddings and boundaries.",
+    example: {
+      input: "Parsed document text with topic shifts",
+      output: "Chunk batch\n- Topic A\n- Topic B",
+    },
+  },
   "embedder.openrouter": {
     description:
       "Calls the configured OpenRouter embedding model for each chunk and attaches the vector plus usage metadata. The output is ready for Pinecone indexing.",

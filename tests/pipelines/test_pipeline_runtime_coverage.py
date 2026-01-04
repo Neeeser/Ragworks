@@ -75,6 +75,22 @@ class _DoubleInputNode(PipelineNodeBase):
         return None
 
 
+class _NumberSinkNode(PipelineNodeBase):
+    type = "test.number"
+    label = "Number Sink"
+    category = "test"
+    description = "Number input node"
+    example = "Input -> Output."
+    input_ports = [NodePort(key="value", label="Value", data_type="number")]
+    output_ports = []
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        return {}
+
+    def summarize_io(self, inputs: dict[str, object], outputs: dict[str, object]):
+        return None
+
+
 class _FailingNode(PipelineNodeBase):
     type = "test.fail"
     label = "Fail"
@@ -262,6 +278,29 @@ def test_pipeline_validator_detects_missing_input_port() -> None:
 
     assert result.valid is False
     assert any("missing input port" in error for error in result.errors)
+
+
+def test_pipeline_validator_detects_incompatible_port_types() -> None:
+    registry = NodeRegistry([_InputNode, _NumberSinkNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="input", type="test.input", name="Input"),
+            PipelineNodeDefinition(id="number", type="test.number", name="Number"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="input",
+                target="number",
+                source_port="out",
+                target_port="value",
+            )
+        ],
+    )
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    assert any("incompatible port types" in error for error in result.errors)
 
 
 def test_pipeline_validator_detects_cycles() -> None:

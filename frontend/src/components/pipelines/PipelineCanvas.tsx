@@ -21,6 +21,7 @@ type PipelineCanvasProps = {
   onNodesChange: OnNodesChange<PipelineNodeData>;
   onEdgesChange: OnEdgesChange<Edge>;
   onConnect: (connection: Connection) => void;
+  isValidConnection?: (connection: Connection) => boolean;
   onNodeSelect: (nodeId: string) => void;
 };
 
@@ -33,6 +34,7 @@ export function PipelineCanvas({
   onNodesChange,
   onEdgesChange,
   onConnect,
+  isValidConnection,
   onNodeSelect,
 }: PipelineCanvasProps) {
   return (
@@ -65,6 +67,7 @@ export function PipelineCanvas({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          isValidConnection={isValidConnection}
           onNodeClick={(_, node) => onNodeSelect(node.id)}
           nodeTypes={pipelineNodeTypes}
           proOptions={{ hideAttribution: true }}

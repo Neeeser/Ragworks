@@ -1,4 +1,5 @@
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
+import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
 import type { PipelineNodeData } from "./PipelineNode";
 import type { NodeSpec, PipelineDefinition, PipelineKind } from "@/lib/types";
@@ -94,9 +95,12 @@ export const buildDefaultDefinition = (kind: PipelineKind): PipelineDefinition =
       },
       {
         id: NODE_CHUNK_DOCUMENT,
-        type: "chunker.collection",
-        name: "Chunker",
-        config: {},
+        type: "chunker.token",
+        name: "Token Chunker",
+        config: {
+          chunk_size: 1024,
+          chunk_overlap: 200,
+        },
         position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
       },
       {
@@ -216,12 +220,24 @@ export const toPipelineDefinition = (
   viewport: {},
 });
 
-export const buildNodeCatalog = (specs: NodeSpec[]) =>
-  specs.reduce<Record<string, NodeSpec[]>>((acc, spec) => {
-    acc[spec.category] = acc[spec.category] ?? [];
-    acc[spec.category].push(spec);
-    return acc;
-  }, {});
+export const buildNodeCatalog = (specs: NodeSpec[]) => {
+  const catalog = specs.reduce<Record<NodeFamily, NodeSpec[]>>(
+    (acc, spec) => {
+      const family = resolveNodeFamily(spec.type);
+      acc[family] = acc[family] ?? [];
+      acc[family].push(spec);
+      return acc;
+    },
+    {} as Record<NodeFamily, NodeSpec[]>,
+  );
+  const order = getNodeFamilyOrder();
+  return order
+    .filter((family) => catalog[family]?.length)
+    .map((family) => ({
+      family,
+      specs: catalog[family] ?? [],
+    }));
+};
 
 export const createDefaultNodePosition = (count: number) => ({
   x: 160,

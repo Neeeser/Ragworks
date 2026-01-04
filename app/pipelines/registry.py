@@ -10,6 +10,10 @@ from app.pipelines.nodes.ingestion import (
     IngestionInputNode,
     IngestionOutputNode,
     IndexerNode,
+    ParagraphChunkerNode,
+    SemanticChunkerNode,
+    SentenceChunkerNode,
+    TokenChunkerNode,
 )
 from app.pipelines.nodes.retrieval import (
     ChatSettingsNode,
@@ -29,6 +33,10 @@ def build_default_registry() -> NodeRegistry:
             DocumentParserNode,
             FileTypeRouterNode,
             ChunkerNode,
+            TokenChunkerNode,
+            SentenceChunkerNode,
+            ParagraphChunkerNode,
+            SemanticChunkerNode,
             EmbedderNode,
             IndexerNode,
             IngestionOutputNode,

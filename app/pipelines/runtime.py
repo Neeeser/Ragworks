@@ -144,6 +144,23 @@ class PipelineExecutionError(RuntimeError):
     """Raised when pipeline execution fails."""
 
 
+PORT_COMPATIBILITY: Dict[str, Set[str]] = {
+    "document_source": {"document_source"},
+    "document": {"document"},
+    "chunk_batch": {"chunk_batch"},
+    "embedded_batch": {"embedded_batch"},
+    "indexed_batch": {"indexed_batch"},
+    "query_request": {"query_request"},
+    "retrieval_results": {"retrieval_results"},
+}
+
+
+def _ports_compatible(source_type: str, target_type: str) -> bool:
+    """Return True when the source port can connect to the target port."""
+    allowed = PORT_COMPATIBILITY.get(source_type, {source_type})
+    return target_type in allowed
+
+
 @dataclass
 class PipelineRunContext:  # pylint: disable=too-many-instance-attributes
     """Execution context shared by pipeline nodes."""
@@ -198,8 +215,14 @@ class PipelineValidator:  # pylint: disable=too-few-public-methods
             target_def = node_map.get(edge.target)
             source_spec = self._registry.get_spec(source_def.type) if source_def else None
             target_spec = self._registry.get_spec(target_def.type) if target_def else None
+            source_port = None
+            target_port = None
             if source_spec and edge.source_port:
-                if edge.source_port not in {port.key for port in source_spec.output_ports}:
+                source_port = next(
+                    (port for port in source_spec.output_ports if port.key == edge.source_port),
+                    None,
+                )
+                if source_port is None:
                     errors.append(
                         (
                             f"Edge '{edge.id}' references missing output port "
@@ -207,11 +230,23 @@ class PipelineValidator:  # pylint: disable=too-few-public-methods
                         )
                     )
             if target_spec and edge.target_port:
-                if edge.target_port not in {port.key for port in target_spec.input_ports}:
+                target_port = next(
+                    (port for port in target_spec.input_ports if port.key == edge.target_port),
+                    None,
+                )
+                if target_port is None:
                     errors.append(
                         (
                             f"Edge '{edge.id}' references missing input port "
                             f"'{edge.target_port}' on '{edge.target}'."
+                        )
+                    )
+            if source_port and target_port:
+                if not _ports_compatible(source_port.data_type, target_port.data_type):
+                    errors.append(
+                        (
+                            f"Edge '{edge.id}' connects incompatible port types "
+                            f"'{source_port.data_type}' -> '{target_port.data_type}'."
                         )
                     )
 
