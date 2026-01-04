@@ -143,6 +143,47 @@ export interface ChunkVisualization {
   chunks: Chunk[];
 }
 
+export interface ChunkDetail {
+  document: Document;
+  chunk: Chunk;
+}
+
+export interface UmapProjection {
+  id: UUID;
+  collection_id: UUID;
+  embedding_model: string;
+  n_neighbors: number;
+  min_dist: number;
+  metric: string;
+  n_components: number;
+  random_state: number;
+  point_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UmapPoint {
+  id: UUID;
+  chunk_id: UUID;
+  document_id: UUID;
+  chunk_index: number;
+  x: number;
+  y: number;
+}
+
+export interface UmapVisualization {
+  projection: UmapProjection;
+  points: UmapPoint[];
+}
+
+export interface UmapComputePayload {
+  n_neighbors?: number;
+  min_dist?: number;
+  metric?: string;
+  random_state?: number;
+  n_components?: number;
+}
+
 export interface ChatSession {
   id: UUID;
   collection_id: UUID;

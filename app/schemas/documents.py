@@ -69,6 +69,13 @@ class ChunkVisualization(BaseModel):
     chunks: List[ChunkRead]
 
 
+class ChunkDetailRead(BaseModel):
+    """Response payload for a single chunk detail view."""
+
+    document: DocumentRead
+    chunk: ChunkRead
+
+
 class IngestionResponse(BaseModel):
     """Response payload for ingestion completion."""
 

@@ -11,6 +11,7 @@ requires-python = ">=3.9"
 dependencies = [
     "pinecone>=5.0.0",
     "sentence-transformers>=2.5.1",
+    "umap-learn>=0.5.5",
     "pydantic>=2.6.0",
     "pypdf>=4.0.0",
     "fastapi>=0.111.0,<0.126",

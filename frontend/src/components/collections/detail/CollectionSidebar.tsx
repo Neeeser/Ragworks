@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Files, Gauge, Search } from "lucide-react";
+import { ArrowLeft, Files, Gauge, ScatterChart, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { GlassCard } from "@/components/ui/panel";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 import type { Collection } from "@/lib/types";
 
-type CollectionView = "overview" | "search" | "documents";
+type CollectionView = "overview" | "search" | "documents" | "visualize";
 
 type CollectionSidebarProps = {
   collection: Collection | null;
@@ -39,6 +39,12 @@ const navItems: Array<{
     label: "Documents",
     description: "Inspect ingested sources.",
     icon: Files,
+  },
+  {
+    id: "visualize",
+    label: "Visualize",
+    description: "Explore the embedding map.",
+    icon: ScatterChart,
   },
 ];
 

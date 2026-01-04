@@ -19,6 +19,7 @@ from app.api.routes import (
     pipelines,
     search,
     traces,
+    visualizations,
 )
 from app.db.session import init_db, session_scope
 from app.services.pipelines import backfill_default_pipelines
@@ -71,3 +72,4 @@ app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(traces.router)
 app.include_router(chat.router)
+app.include_router(visualizations.router)

@@ -11,7 +11,13 @@ from sqlmodel import Session
 from app.api.dependencies import get_session, require_user_api_keys
 from app.db import models
 from app.db.repositories import ChunkRepository, DocumentRepository
-from app.schemas.documents import ChunkRead, ChunkVisualization, DocumentRead, IngestionResponse
+from app.schemas.documents import (
+    ChunkDetailRead,
+    ChunkRead,
+    ChunkVisualization,
+    DocumentRead,
+    IngestionResponse,
+)
 from app.services.ingestion import IngestionService
 from app.api.routes.utils import get_collection_or_404
 
@@ -88,3 +94,38 @@ def get_document_chunks(
         for chunk in chunks
     ]
     return ChunkVisualization(document=DocumentRead.from_model(document), chunks=chunk_schemas)
+
+
+@router.get("/chunks/{chunk_id}", response_model=ChunkDetailRead)
+def get_chunk_detail(
+    chunk_id: UUID,
+    current_user: models.User = Depends(require_user_api_keys),
+    session: Session = Depends(get_session),
+) -> ChunkDetailRead:
+    """Return details for a single chunk."""
+    chunk = session.get(models.DocumentChunkRecord, chunk_id)
+    if not chunk:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chunk not found",
+        )
+    document = session.get(models.Document, chunk.document_id)
+    if not document or document.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chunk not found",
+        )
+    chunk_schema = ChunkRead(
+        id=chunk.id,
+        document_id=chunk.document_id,
+        chunk_index=chunk.chunk_index,
+        text=chunk.text,
+        metadata=chunk.chunk_metadata,
+        chunk_size=chunk.chunk_size,
+        chunk_strategy=chunk.chunk_strategy,
+        created_at=chunk.created_at,
+    )
+    return ChunkDetailRead(
+        document=DocumentRead.from_model(document),
+        chunk=chunk_schema,
+    )

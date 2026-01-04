@@ -15,6 +15,7 @@ import type {
   IngestionResponse,
   User,
   ChunkVisualization,
+  ChunkDetail,
   ModelInfo,
   ListModelEndpointsResponse,
   ReasoningTraceSegment,
@@ -26,6 +27,8 @@ import type {
   NodeSpec,
   UserKeyValidation,
   PipelineTraceResponse,
+  UmapComputePayload,
+  UmapVisualization,
 } from "@/lib/types";
 
 const API_BASE_URL =
@@ -316,6 +319,31 @@ export async function fetchDocumentChunks(
   token: string,
 ): Promise<ChunkVisualization> {
   return apiFetch<ChunkVisualization>(`/api/documents/${documentId}/chunks`, { token });
+}
+
+export async function fetchChunkDetail(chunkId: string, token: string): Promise<ChunkDetail> {
+  return apiFetch<ChunkDetail>(`/api/chunks/${chunkId}`, { token });
+}
+
+export async function fetchCollectionUmap(
+  collectionId: string,
+  token: string,
+): Promise<UmapVisualization> {
+  return apiFetch<UmapVisualization>(`/api/collections/${collectionId}/visualizations/umap`, {
+    token,
+  });
+}
+
+export async function computeCollectionUmap(
+  collectionId: string,
+  token: string,
+  payload: UmapComputePayload = {},
+): Promise<UmapVisualization> {
+  return apiFetch<UmapVisualization>(`/api/collections/${collectionId}/visualizations/umap`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function runCollectionQuery(

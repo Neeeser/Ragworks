@@ -9,6 +9,7 @@ import {
   CollectionSidebar,
   type CollectionView,
 } from "@/components/collections/detail/CollectionSidebar";
+import { CollectionVisualization } from "@/components/collections/detail/visualize/CollectionVisualization";
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollection, fetchCollectionStatsById, fetchPipelines } from "@/lib/api";
@@ -113,6 +114,9 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         {activeView === "search" && <CollectionSearch collectionId={collection.id} token={token} />}
         {activeView === "documents" && (
           <CollectionDocuments collectionId={collection.id} token={token} />
+        )}
+        {activeView === "visualize" && (
+          <CollectionVisualization collectionId={collection.id} token={token} />
         )}
       </div>
     </div>
