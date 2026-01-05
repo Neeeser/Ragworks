@@ -23,9 +23,44 @@ const resolvePortType = (
   return ports.find((port) => port.key === handleId)?.data_type;
 };
 
+const resolveNodeConfig = (
+  node: Node<PipelineNodeData> | undefined,
+  configOverrides?: Record<string, Record<string, unknown>>,
+) => {
+  if (!node) return {};
+  return configOverrides?.[node.id] ?? node.data.config ?? {};
+};
+
+const resolveDimension = (config: Record<string, unknown>) => {
+  const value = config.dimension;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  return undefined;
+};
+
+const validateDimensionConnection = (
+  sourceNode: Node<PipelineNodeData> | undefined,
+  targetNode: Node<PipelineNodeData> | undefined,
+  configOverrides?: Record<string, Record<string, unknown>>,
+) => {
+  if (!sourceNode || !targetNode) return null;
+  if (sourceNode.data.nodeType !== "embedder.openrouter") return null;
+  if (targetNode.data.nodeType !== "indexer.pinecone") return null;
+  const sourceConfig = resolveNodeConfig(sourceNode, configOverrides);
+  const targetConfig = resolveNodeConfig(targetNode, configOverrides);
+  const sourceDim = resolveDimension(sourceConfig);
+  const targetDim = resolveDimension(targetConfig);
+  if (sourceDim && targetDim && sourceDim !== targetDim) {
+    return `Embedding dimension ${sourceDim} does not match index dimension ${targetDim}.`;
+  }
+  return null;
+};
+
 export const validatePipelineConnection = (
   connection: Connection,
   nodes: Node<PipelineNodeData>[],
+  configOverrides?: Record<string, Record<string, unknown>>,
 ) => {
   if (!connection.source || !connection.target) {
     return { valid: false, reason: "Connections must have both a source and a target." };
@@ -50,5 +85,33 @@ export const validatePipelineConnection = (
     };
   }
 
+  const dimensionError = validateDimensionConnection(sourceNode, targetNode, configOverrides);
+  if (dimensionError) {
+    return { valid: false, reason: dimensionError };
+  }
+
   return { valid: true };
+};
+
+export const validatePipelineEdges = (
+  nodes: Node<PipelineNodeData>[],
+  edges: Array<{ id: string; source: string; target: string }>,
+  configOverrides?: Record<string, Record<string, unknown>>,
+) => {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const edgeErrors: Record<string, string> = {};
+  const nodeErrors: Record<string, string[]> = {};
+
+  edges.forEach((edge) => {
+    const sourceNode = nodeMap.get(edge.source);
+    const targetNode = nodeMap.get(edge.target);
+    const dimensionError = validateDimensionConnection(sourceNode, targetNode, configOverrides);
+    if (!dimensionError) return;
+    edgeErrors[edge.id] = dimensionError;
+    if (targetNode) {
+      nodeErrors[targetNode.id] = [...(nodeErrors[targetNode.id] ?? []), dimensionError];
+    }
+  });
+
+  return { edgeErrors, nodeErrors };
 };

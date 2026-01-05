@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Type, TypeVar
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Type, TypeVar, Literal
 
 from pydantic import BaseModel, Field
 
@@ -46,6 +46,13 @@ class NodeSpec(BaseModel):
     default_config: Dict[str, object] = Field(default_factory=dict)
 
 
+class PipelineValidationIssue(BaseModel):
+    """Structured validation issue for pipeline definitions."""
+
+    message: str
+    severity: Literal["error", "warning"] = "error"
+
+
 class EmptyConfig(BaseModel):
     """Empty configuration payload for nodes with no options."""
 
@@ -81,6 +88,16 @@ class PipelineNodeBase:
     ) -> NodeTraceSummary:
         """Return a summary of the node's key inputs and outputs."""
         raise NotImplementedError
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        _node: PipelineNodeDefinition,
+        _definition: PipelineDefinition,
+        _registry: "NodeRegistry",
+    ) -> List[PipelineValidationIssue]:
+        """Return validation issues for a node within a definition."""
+        return []
 
     @classmethod
     def spec(cls) -> NodeSpec:
@@ -132,12 +149,17 @@ class NodeRegistry:
         node_cls = self._nodes.get(node_type)
         return node_cls.spec() if node_cls else None
 
+    def get_node_class(self, node_type: str) -> Optional[type[PipelineNodeBase]]:
+        """Return the registered node class for the requested type."""
+        return self._nodes.get(node_type)
+
 
 class PipelineValidationResult(BaseModel):
     """Validation output for pipeline definitions."""
 
     valid: bool
     errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
 
 
 class PipelineExecutionError(RuntimeError):
@@ -197,6 +219,7 @@ class PipelineValidator:  # pylint: disable=too-few-public-methods
     def validate(self, definition: PipelineDefinition) -> PipelineValidationResult:
         """Validate the pipeline definition and return any errors."""
         errors: List[str] = []
+        warnings: List[str] = []
         node_map = definition.node_map()
         node_ids = {node.id for node in definition.nodes}
         if len(node_ids) != len(definition.nodes):
@@ -265,7 +288,18 @@ class PipelineValidator:  # pylint: disable=too-few-public-methods
         if self._has_cycle(definition):
             errors.append("Pipeline contains at least one cycle.")
 
-        return PipelineValidationResult(valid=not errors, errors=errors)
+        for node in definition.nodes:
+            node_cls = self._registry.get_node_class(node.type)
+            if not node_cls:
+                continue
+            issues = node_cls.validation_issues_for_node(node, definition, self._registry)
+            for issue in issues:
+                if issue.severity == "warning":
+                    warnings.append(issue.message)
+                else:
+                    errors.append(issue.message)
+
+        return PipelineValidationResult(valid=not errors, errors=errors, warnings=warnings)
 
     def _has_cycle(self, definition: PipelineDefinition) -> bool:
         """Detect cycles using depth-first traversal."""

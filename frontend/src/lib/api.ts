@@ -18,6 +18,8 @@ import type {
   ChunkDetail,
   ModelInfo,
   ListModelEndpointsResponse,
+  EmbeddingDimensionResponse,
+  EmbeddingModelInfo,
   ReasoningTraceSegment,
   Pipeline,
   PipelineDefinition,
@@ -220,6 +222,24 @@ export async function fetchPipeline(pipelineId: string, token: string): Promise<
 export async function fetchPipelineNodes(token: string): Promise<NodeSpec[]> {
   const response = await apiFetch<{ nodes: NodeSpec[] }>("/api/pipelines/nodes", { token });
   return response.nodes;
+}
+
+export async function fetchEmbeddingModels(
+  token: string,
+  refresh?: boolean,
+): Promise<EmbeddingModelInfo[]> {
+  const params = refresh ? "?refresh=true" : "";
+  return apiFetch<EmbeddingModelInfo[]>(`/api/models/embeddings${params}`, { token });
+}
+
+export async function fetchEmbeddingDimension(
+  token: string,
+  model: string,
+): Promise<EmbeddingDimensionResponse> {
+  const params = new URLSearchParams({ model });
+  return apiFetch<EmbeddingDimensionResponse>(`/api/models/embeddings/dimension?${params}`, {
+    token,
+  });
 }
 
 export async function validatePipeline(

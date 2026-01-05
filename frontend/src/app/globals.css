@@ -180,3 +180,7 @@ body {
 .pipeline-controls .react-flow__controls-button svg {
   fill: currentColor;
 }
+
+.react-flow__edge.pipeline-edge-error .react-flow__edge-path {
+  stroke: #f87171;
+}

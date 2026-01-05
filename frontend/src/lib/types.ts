@@ -84,6 +84,19 @@ export interface ModelInfo {
   default_parameters?: Record<string, unknown> | null;
 }
 
+export interface EmbeddingModelInfo {
+  id: string;
+  name: string;
+  description?: string | null;
+  context_length?: number | null;
+  pricing?: ModelPricing | null;
+}
+
+export interface EmbeddingDimensionResponse {
+  model: string;
+  dimension: number;
+}
+
 export interface CollectionCreatePayload {
   name: string;
   description?: string;
@@ -448,6 +461,7 @@ export interface NodeSpec {
 export interface PipelineValidationResult {
   valid: boolean;
   errors: string[];
+  warnings: string[];
 }
 
 export interface ModelEndpointDirectory {

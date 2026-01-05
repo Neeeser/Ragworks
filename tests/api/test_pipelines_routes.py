@@ -104,6 +104,7 @@ def test_validate_pipeline_returns_success() -> None:
 
     assert response.valid is True
     assert response.errors == []
+    assert response.warnings == []
 
 
 def test_validate_definition_rejects_invalid(monkeypatch) -> None:

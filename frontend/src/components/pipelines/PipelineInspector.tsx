@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 
+import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
 import { buildPipelineConfigFields, formatConfigValue } from "./pipeline-config";
 
 import type { PipelineConfigField } from "./pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
+import type { EmbeddingModelInfo } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 type PipelineInspectorProps = {
@@ -19,6 +21,17 @@ type PipelineInspectorProps = {
   onLabelChange: (value: string) => void;
   onApplyConfig: () => void;
   isPreview?: boolean;
+  validationErrors?: string[];
+  applyDisabled?: boolean;
+  embeddingModels?: EmbeddingModelInfo[];
+  filteredEmbeddingModels?: EmbeddingModelInfo[];
+  embeddingModelSearchTerm?: string;
+  embeddingModelsLoading?: boolean;
+  embeddingModelsError?: string | null;
+  embeddingDimension?: number | null;
+  embeddingDimensionLoading?: boolean;
+  onEmbeddingSearchChange?: (value: string) => void;
+  onSelectEmbeddingModel?: (modelId: string) => void;
 };
 
 const getInputValue = (field: PipelineConfigField, draft: Record<string, unknown>) => {
@@ -35,10 +48,30 @@ export function PipelineInspector({
   onLabelChange,
   onApplyConfig,
   isPreview = false,
+  validationErrors = [],
+  applyDisabled = false,
+  embeddingModels = [],
+  filteredEmbeddingModels,
+  embeddingModelSearchTerm = "",
+  embeddingModelsLoading = false,
+  embeddingModelsError = null,
+  embeddingDimension = null,
+  embeddingDimensionLoading = false,
+  onEmbeddingSearchChange,
+  onSelectEmbeddingModel,
 }: PipelineInspectorProps) {
+  const isEmbedder = selectedNode?.data.nodeType === "embedder.openrouter";
   const fields = selectedNode?.data.configSchema
     ? buildPipelineConfigFields(selectedNode.data.configSchema)
     : [];
+  const filteredFields = isEmbedder
+    ? fields.filter((field) => !["model_name", "dimension"].includes(field.key))
+    : fields;
+  const selectedEmbeddingModelKey =
+    typeof configDraft.model_name === "string" ? configDraft.model_name : "";
+  const selectedEmbeddingModel =
+    embeddingModels.find((model) => model.id === selectedEmbeddingModelKey) ?? null;
+  const visibleEmbeddingModels = filteredEmbeddingModels ?? embeddingModels;
 
   const handleConfigChange = (field: PipelineConfigField, rawValue: string | boolean) => {
     let nextValue: unknown = rawValue;
@@ -129,9 +162,25 @@ export function PipelineInspector({
           </div>
           <div>
             <p className="text-xs text-slate-400">Config</p>
-            {fields.length > 0 ? (
+            {isEmbedder ? (
               <div className="mt-2 space-y-3">
-                {fields.map((field) => {
+                <EmbeddingModelSelectorCard
+                  currentModelInfo={selectedEmbeddingModel}
+                  selectedModelKey={selectedEmbeddingModelKey}
+                  filteredModelCatalog={visibleEmbeddingModels}
+                  modelSearchTerm={embeddingModelSearchTerm}
+                  onSearchChange={onEmbeddingSearchChange ?? (() => undefined)}
+                  modelsLoading={embeddingModelsLoading}
+                  modelsError={embeddingModelsError}
+                  onSelectModel={onSelectEmbeddingModel ?? (() => undefined)}
+                  dimension={embeddingDimension}
+                  dimensionLoading={embeddingDimensionLoading}
+                />
+              </div>
+            ) : null}
+            {filteredFields.length > 0 ? (
+              <div className="mt-2 space-y-3">
+                {filteredFields.map((field) => {
                   const value = getInputValue(field, configDraft);
                   const helper =
                     field.defaultValue !== undefined
@@ -162,14 +211,21 @@ export function PipelineInspector({
                   );
                 })}
               </div>
-            ) : (
+            ) : !isEmbedder ? (
               <p className="mt-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
                 This node has no configurable settings.
               </p>
-            )}
+            ) : null}
           </div>
+          {validationErrors.length > 0 ? (
+            <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              {validationErrors.map((error) => (
+                <p key={error}>{error}</p>
+              ))}
+            </div>
+          ) : null}
           {!isPreview ? (
-            <Button variant="secondary" onClick={onApplyConfig}>
+            <Button variant="secondary" onClick={onApplyConfig} disabled={applyDisabled}>
               Apply config
             </Button>
           ) : null}

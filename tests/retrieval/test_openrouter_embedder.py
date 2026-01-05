@@ -17,8 +17,21 @@ class StubOpenRouterClient:
     responses: List[dict[str, Any]]
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def embed(self, texts: Iterable[str], model: str | None = None, extra_headers: dict[str, str] | None = None) -> dict[str, Any]:
-        self.calls.append({"texts": list(texts), "model": model, "extra_headers": extra_headers})
+    def embed(
+        self,
+        texts: Iterable[str],
+        model: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+        dimensions: int | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "texts": list(texts),
+                "model": model,
+                "extra_headers": extra_headers,
+                "dimensions": dimensions,
+            }
+        )
         if not self.responses:
             raise AssertionError("No stub responses remaining for embed call.")
         return self.responses.pop(0)

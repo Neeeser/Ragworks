@@ -219,7 +219,13 @@ def test_default_ingestion_pipeline_executes(monkeypatch, session: Session, tmp_
     class _StubEmbedder:
         usage = {"prompt_tokens": 3}
 
-        def __init__(self, _client: object, _model_name: str) -> None:
+        def __init__(
+            self,
+            _client: object,
+            _model_name: str,
+            *,
+            dimensions: int | None = None,
+        ) -> None:
             pass
 
         def embed_documents(self, chunks: list[DocumentChunk]) -> list[list[float]]:
@@ -269,7 +275,13 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     class _StubEmbedder:
         usage = {"prompt_tokens": 2}
 
-        def __init__(self, _client: object, _model_name: str) -> None:
+        def __init__(
+            self,
+            _client: object,
+            _model_name: str,
+            *,
+            dimensions: int | None = None,
+        ) -> None:
             pass
 
         def embed_query(self, _query: str) -> list[float]:
@@ -479,7 +491,13 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
     class _StubEmbedder:
         usage = {}
 
-        def __init__(self, _client: object, _model_name: str) -> None:
+        def __init__(
+            self,
+            _client: object,
+            _model_name: str,
+            *,
+            dimensions: int | None = None,
+        ) -> None:
             pass
 
         def embed_documents(self, _chunks):

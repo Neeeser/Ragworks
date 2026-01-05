@@ -14,6 +14,8 @@ import {
   fetchCollections,
   fetchPipelineNodes,
   fetchPipelines,
+  fetchEmbeddingDimension,
+  fetchEmbeddingModels,
   listPipelineVersions,
   updatePipeline,
   validatePipeline,
@@ -21,7 +23,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
-import { validatePipelineConnection } from "./pipeline-io";
+import { validatePipelineConnection, validatePipelineEdges } from "./pipeline-io";
 import { PIPELINE_KIND_STORAGE_KEY } from "./pipeline-kinds";
 import {
   buildDefaultDefinition,
@@ -40,7 +42,14 @@ import { PipelineSavePanel } from "./PipelineSavePanel";
 import { PipelineSidebar } from "./PipelineSidebar";
 
 import type { PipelineNodeData } from "./PipelineNode";
-import type { Collection, NodeSpec, Pipeline, PipelineKind, PipelineVersion } from "@/lib/types";
+import type {
+  Collection,
+  EmbeddingModelInfo,
+  NodeSpec,
+  Pipeline,
+  PipelineKind,
+  PipelineVersion,
+} from "@/lib/types";
 import type { Connection, Edge, Node, ReactFlowInstance } from "@xyflow/react";
 
 type PipelineBuilderProps = {
@@ -55,6 +64,12 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [nodeSpecs, setNodeSpecs] = useState<NodeSpec[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModelInfo[]>([]);
+  const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false);
+  const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null);
+  const [embeddingModelSearchTerm, setEmbeddingModelSearchTerm] = useState("");
+  const [embeddingDimensions, setEmbeddingDimensions] = useState<Record<string, number>>({});
+  const [embeddingDimensionLoading, setEmbeddingDimensionLoading] = useState(false);
   const [versions, setVersions] = useState<PipelineVersion[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<PipelineNodeData>([]);
@@ -152,6 +167,34 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   }, [token, kind]);
 
   useEffect(() => {
+    const authToken = token ?? "";
+    if (!authToken) return;
+    let cancelled = false;
+    async function loadEmbeddingModels() {
+      setEmbeddingModelsLoading(true);
+      setEmbeddingModelsError(null);
+      try {
+        const models = await fetchEmbeddingModels(authToken);
+        if (!cancelled) {
+          setEmbeddingModels(models);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEmbeddingModelsError(
+            error instanceof Error ? error.message : "Unable to load embedding models.",
+          );
+        }
+      } finally {
+        if (!cancelled) setEmbeddingModelsLoading(false);
+      }
+    }
+    loadEmbeddingModels();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem(PIPELINE_KIND_STORAGE_KEY, kind);
   }, [kind]);
@@ -203,8 +246,18 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     setConfigDraft({ ...(inspectedNode.data.config ?? {}) });
   }, [inspectedNode]);
 
+  const configOverrides = useMemo(() => {
+    if (!selectedNode) return undefined;
+    return { [selectedNode.id]: configDraft };
+  }, [selectedNode, configDraft]);
+
+  const { edgeErrors, nodeErrors } = useMemo(
+    () => validatePipelineEdges(nodes, edges, configOverrides),
+    [nodes, edges, configOverrides],
+  );
+
   const validateConnection = (connection: Connection) =>
-    validatePipelineConnection(connection, nodes);
+    validatePipelineConnection(connection, nodes, configOverrides);
 
   const handleConnect = (connection: Connection) => {
     const validation = validateConnection(connection);
@@ -252,6 +305,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const handleApplyConfig = () => {
     if (!selectedNode) return;
+    const selectedErrors = nodeErrors[selectedNode.id] ?? [];
+    if (selectedErrors.length > 0) {
+      setMessage(selectedErrors[0]);
+      return;
+    }
     const nextConfig = { ...configDraft };
     setNodes((prev) =>
       prev.map((node) =>
@@ -275,6 +333,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         setMessage(`Validation failed: ${validation.errors.join(" ")}`);
         return;
       }
+      const warningText = validation.warnings?.length
+        ? `Warnings: ${validation.warnings.join(" ")}`
+        : "";
       setSaving(true);
       const updated = await updatePipeline(selectedPipeline.id, authToken, {
         definition,
@@ -285,7 +346,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       );
       setSelectedPipeline(updated);
       setChangeSummary("");
-      setMessage("Pipeline saved as a new version.");
+      setMessage(
+        warningText
+          ? `Pipeline saved as a new version. ${warningText}`
+          : "Pipeline saved as a new version.",
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save pipeline.");
     } finally {
@@ -398,6 +463,95 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     );
   };
 
+  const filteredEmbeddingModels = useMemo(() => {
+    const term = embeddingModelSearchTerm.trim().toLowerCase();
+    if (!term) return embeddingModels;
+    return embeddingModels.filter((model) => {
+      const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [embeddingModels, embeddingModelSearchTerm]);
+
+  const handleSelectEmbeddingModel = async (modelId: string) => {
+    if (!selectedNode || selectedNode.data.nodeType !== "embedder.openrouter") return;
+    setConfigDraft((prev) => ({ ...prev, model_name: modelId }));
+    const cached = embeddingDimensions[modelId];
+    if (cached) {
+      setConfigDraft((prev) => ({ ...prev, model_name: modelId, dimension: cached }));
+      return;
+    }
+    const authToken = token ?? "";
+    if (!authToken) return;
+    setEmbeddingDimensionLoading(true);
+    try {
+      const response = await fetchEmbeddingDimension(authToken, modelId);
+      setEmbeddingDimensions((prev) => ({ ...prev, [modelId]: response.dimension }));
+      setConfigDraft((prev) => ({
+        ...prev,
+        model_name: modelId,
+        dimension: response.dimension,
+      }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to resolve embedding dimension.");
+    } finally {
+      setEmbeddingDimensionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedNode || selectedNode.data.nodeType !== "embedder.openrouter") return;
+    const modelId = typeof configDraft.model_name === "string" ? configDraft.model_name : "";
+    const hasDimension = typeof configDraft.dimension === "number";
+    if (!modelId || hasDimension || embeddingDimensionLoading) return;
+    const cached = embeddingDimensions[modelId];
+    if (cached) {
+      setConfigDraft((prev) => ({ ...prev, dimension: cached }));
+      return;
+    }
+    const authToken = token ?? "";
+    if (!authToken) return;
+    let cancelled = false;
+    async function resolveDimension() {
+      setEmbeddingDimensionLoading(true);
+      try {
+        const response = await fetchEmbeddingDimension(authToken, modelId);
+        if (cancelled) return;
+        setEmbeddingDimensions((prev) => ({ ...prev, [modelId]: response.dimension }));
+        setConfigDraft((prev) => ({ ...prev, dimension: response.dimension }));
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error ? error.message : "Unable to resolve embedding dimension.",
+          );
+        }
+      } finally {
+        if (!cancelled) setEmbeddingDimensionLoading(false);
+      }
+    }
+    resolveDimension();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedNode,
+    configDraft.model_name,
+    configDraft.dimension,
+    embeddingDimensionLoading,
+    embeddingDimensions,
+    token,
+  ]);
+
+  const selectedEmbeddingModelId =
+    selectedNode?.data.nodeType === "embedder.openrouter" && typeof configDraft.model_name === "string"
+      ? configDraft.model_name
+      : "";
+  const selectedEmbeddingDimension =
+    selectedEmbeddingModelId && embeddingDimensions[selectedEmbeddingModelId]
+      ? embeddingDimensions[selectedEmbeddingModelId]
+      : typeof configDraft.dimension === "number"
+        ? configDraft.dimension
+        : null;
+
   const catalogSpecs = useMemo(
     () => nodeSpecs.filter((spec) => spec.category === kind && !HIDDEN_NODE_TYPES.has(spec.type)),
     [nodeSpecs, kind],
@@ -469,6 +623,26 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     setDropPreviewLabel(null);
   };
 
+  const selectedNodeErrors = selectedNode ? nodeErrors[selectedNode.id] ?? [] : [];
+  const applyDisabled = selectedNodeErrors.length > 0;
+  const edgesWithValidation = useMemo(
+    () =>
+      edges.map((edge) => {
+        const error = edgeErrors[edge.id];
+        if (!error) return edge;
+        return {
+          ...edge,
+          className: `${edge.className ?? ""} pipeline-edge-error`.trim(),
+          style: {
+            ...edge.style,
+            stroke: "#f87171",
+            strokeWidth: 2,
+          },
+        };
+      }),
+    [edges, edgeErrors],
+  );
+
   return (
     <div className="flex h-full flex-col gap-6">
       <ConfirmDialog
@@ -509,7 +683,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
           <PipelineCanvas
             nodes={nodesWithPreview}
-            edges={edges}
+            edges={edgesWithValidation}
             selectedPipeline={selectedPipeline}
             notice={message}
             onNoticeDismiss={() => setMessage(null)}
@@ -535,6 +709,17 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
               onLabelChange={isPreview ? () => undefined : handleLabelChange}
               onApplyConfig={isPreview ? () => undefined : handleApplyConfig}
               isPreview={isPreview}
+              validationErrors={selectedNodeErrors}
+              applyDisabled={applyDisabled}
+              embeddingModels={embeddingModels}
+              filteredEmbeddingModels={filteredEmbeddingModels}
+              embeddingModelSearchTerm={embeddingModelSearchTerm}
+              embeddingModelsLoading={embeddingModelsLoading}
+              embeddingModelsError={embeddingModelsError}
+              embeddingDimension={selectedEmbeddingDimension}
+              embeddingDimensionLoading={embeddingDimensionLoading}
+              onEmbeddingSearchChange={setEmbeddingModelSearchTerm}
+              onSelectEmbeddingModel={handleSelectEmbeddingModel}
             />
 
             <PipelineSavePanel

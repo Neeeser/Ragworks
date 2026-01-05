@@ -7,6 +7,7 @@ from sqlmodel import Session
 
 from app.db import models
 from app.pipelines.models import PipelineDefinition, PipelineEdgeDefinition, PipelineNodeDefinition
+from app.pipelines.nodes.ingestion import EmbedderNode, IndexerNode
 from app.pipelines.runtime import (
     EmptyConfig,
     NodePort,
@@ -86,6 +87,22 @@ class _NumberSinkNode(PipelineNodeBase):
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {}
+
+    def summarize_io(self, inputs: dict[str, object], outputs: dict[str, object]):
+        return None
+
+
+class _ChunkSourceNode(PipelineNodeBase):
+    type = "test.chunks"
+    label = "Chunk Source"
+    category = "test"
+    description = "Outputs a chunk batch."
+    example = "Input -> Chunks."
+    input_ports = []
+    output_ports = [NodePort(key="chunks", label="Chunks", data_type="chunk_batch")]
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        return {"chunks": []}
 
     def summarize_io(self, inputs: dict[str, object], outputs: dict[str, object]):
         return None
@@ -301,6 +318,88 @@ def test_pipeline_validator_detects_incompatible_port_types() -> None:
 
     assert result.valid is False
     assert any("incompatible port types" in error for error in result.errors)
+
+
+def test_pipeline_validator_reports_dimension_mismatch() -> None:
+    registry = NodeRegistry([_ChunkSourceNode, EmbedderNode, IndexerNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
+            PipelineNodeDefinition(
+                id="embedder",
+                type="embedder.openrouter",
+                name="Embedder",
+                config={"dimension": 512},
+            ),
+            PipelineNodeDefinition(
+                id="indexer",
+                type="indexer.pinecone",
+                name="Indexer",
+                config={"dimension": 768},
+            ),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge-source-embedder",
+                source="source",
+                target="embedder",
+                source_port="chunks",
+                target_port="chunks",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-embedder-indexer",
+                source="embedder",
+                target="indexer",
+                source_port="embedded",
+                target_port="embedded",
+            ),
+        ],
+    )
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    assert any("dimension 768" in error and "dimension 512" in error for error in result.errors)
+
+
+def test_pipeline_validator_warns_when_dimension_missing() -> None:
+    registry = NodeRegistry([_ChunkSourceNode, EmbedderNode, IndexerNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
+            PipelineNodeDefinition(
+                id="embedder",
+                type="embedder.openrouter",
+                name="Embedder",
+                config={"dimension": 512},
+            ),
+            PipelineNodeDefinition(
+                id="indexer",
+                type="indexer.pinecone",
+                name="Indexer",
+                config={},
+            ),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge-source-embedder",
+                source="source",
+                target="embedder",
+                source_port="chunks",
+                target_port="chunks",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-embedder-indexer",
+                source="embedder",
+                target="indexer",
+                source_port="embedded",
+                target_port="embedded",
+            ),
+        ],
+    )
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is True
+    assert any("no dimension configured" in warning for warning in result.warnings)
 
 
 def test_pipeline_validator_detects_cycles() -> None:

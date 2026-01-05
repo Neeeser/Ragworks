@@ -19,10 +19,17 @@ logger = logging.getLogger(__name__)
 class OpenRouterEmbedder(Embedder):
     """Embedder that delegates to OpenRouter's embeddings endpoint."""
 
-    def __init__(self, client: OpenRouterClient, model_name: str) -> None:
+    def __init__(
+        self,
+        client: OpenRouterClient,
+        model_name: str,
+        *,
+        dimensions: Optional[int] = None,
+    ) -> None:
         """Initialize the embedder with an OpenRouter client and model."""
         self._client = client
         self.model_name = model_name
+        self.dimensions = dimensions
         self._last_usage: Optional[dict[str, int]] = None
 
     @property
@@ -100,12 +107,16 @@ class OpenRouterEmbedder(Embedder):
             "Embedding chunk ids preview=%s",
             [chunk.chunk_id for chunk in chunks[:5]],
         )
-        payload = self._client.embed([chunk.text for chunk in chunks], model=self.model_name)
+        payload = self._client.embed(
+            [chunk.text for chunk in chunks],
+            model=self.model_name,
+            dimensions=self.dimensions,
+        )
         logger.debug("OpenRouter embeddings response keys=%s", list(payload.keys()))
         return self._extract_vectors(payload)
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a single query string using OpenRouter."""
-        payload = self._client.embed([query], model=self.model_name)
+        payload = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(payload)
         return vectors[0] if vectors else []

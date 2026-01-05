@@ -25,7 +25,13 @@ from app.pipelines.nodes.trace_utils import (
     summarize_source,
     summarize_text,
 )
-from app.pipelines.runtime import NodePort, PipelineNodeBase, PipelineRunContext
+from app.pipelines.models import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.runtime import (
+    NodePort,
+    PipelineNodeBase,
+    PipelineRunContext,
+    PipelineValidationIssue,
+)
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig, PineconeIndexer
@@ -413,6 +419,11 @@ class EmbedderConfig(BaseModel):
     """Configuration for embedding nodes."""
 
     model_name: str = Field(default_factory=lambda: settings.default_embedding_model)
+    dimension: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Optional override for the embedding vector dimension.",
+    )
 
 
 class EmbedderNode(PipelineNodeBase):
@@ -436,7 +447,11 @@ class EmbedderNode(PipelineNodeBase):
         document = payload.document
         chunks = payload.chunks
 
-        embedder = OpenRouterEmbedder(context.openrouter, self.config.model_name)
+        embedder = OpenRouterEmbedder(
+            context.openrouter,
+            self.config.model_name,
+            dimensions=self.config.dimension,
+        )
         embeddings = embedder.embed_documents(chunks)
         if len(embeddings) != len(chunks):
             raise ValueError("Embedder returned mismatched embeddings.")
@@ -502,6 +517,59 @@ class IndexerNode(PipelineNodeBase):
     input_ports = [NodePort(key="embedded", label="Embedded", data_type="embedded_batch")]
     output_ports = [NodePort(key="indexed", label="Indexed", data_type="indexed_batch")]
     config_model = IndexerConfig
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        node: PipelineNodeDefinition,
+        definition: PipelineDefinition,
+        _registry: "NodeRegistry",
+    ) -> list[PipelineValidationIssue]:
+        """Validate embedder/indexer dimension compatibility."""
+        issues: list[PipelineValidationIssue] = []
+        incoming_edges = definition.incoming_edges().get(node.id, [])
+        if not incoming_edges:
+            return issues
+        node_map = definition.node_map()
+        indexer_config = IndexerConfig.model_validate(node.config or {})
+        for edge in incoming_edges:
+            source_def = node_map.get(edge.source)
+            if not source_def or source_def.type != "embedder.openrouter":
+                continue
+            embedder_config = EmbedderConfig.model_validate(source_def.config or {})
+            embedder_dim = embedder_config.dimension
+            indexer_dim = indexer_config.dimension
+            if embedder_dim and indexer_dim and embedder_dim != indexer_dim:
+                issues.append(
+                    PipelineValidationIssue(
+                        message=(
+                            f"Indexer node '{node.id}' dimension {indexer_dim} does not "
+                            f"match embedder '{source_def.id}' dimension {embedder_dim}."
+                        ),
+                        severity="error",
+                    )
+                )
+            elif embedder_dim and not indexer_dim:
+                issues.append(
+                    PipelineValidationIssue(
+                        message=(
+                            f"Indexer node '{node.id}' has no dimension configured; ensure it "
+                            f"matches embedder '{source_def.id}' dimension {embedder_dim}."
+                        ),
+                        severity="warning",
+                    )
+                )
+            elif indexer_dim and not embedder_dim:
+                issues.append(
+                    PipelineValidationIssue(
+                        message=(
+                            f"Embedder node '{source_def.id}' has no dimension configured; "
+                            f"ensure it matches indexer '{node.id}' dimension {indexer_dim}."
+                        ),
+                        severity="warning",
+                    )
+                )
+        return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Upsert embedded chunks into Pinecone."""

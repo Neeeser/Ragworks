@@ -38,6 +38,7 @@ class OpenRouterClient:
             api_key=self.api_key,
         )
         self._model_cache: dict[str, Any] = {"ts": 0.0, "data": []}
+        self._embedding_model_cache: dict[str, Any] = {"ts": 0.0, "data": []}
 
     def _build_app_headers(self) -> Dict[str, str]:
         """Build static headers required by OpenRouter."""
@@ -69,6 +70,40 @@ class OpenRouterClient:
         models = [ModelInfo(**item) for item in payload.get("data", [])]
         self._model_cache = {"ts": now, "data": models}
         return models
+
+    def list_embedding_models(self, force_refresh: bool = False) -> List[dict[str, Any]]:
+        """Return available embedding models, caching for a short period."""
+        now = time.time()
+        if (
+            not force_refresh
+            and now - self._embedding_model_cache["ts"] < 300
+            and self._embedding_model_cache["data"]
+        ):
+            return self._embedding_model_cache["data"]
+        response = self._http.get("/embeddings/models")
+        response.raise_for_status()
+        payload = response.json()
+        models = payload.get("data") or []
+        if not isinstance(models, list):
+            models = []
+        self._embedding_model_cache = {"ts": now, "data": models}
+        return models
+
+    def get_embedding_dimension(self, model_id: str) -> int:
+        """Return embedding dimension for the requested model."""
+        if not model_id:
+            raise ValueError("Embedding model id must be provided.")
+        payload = self.embed(["dimension_probe"], model=model_id)
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            raise ValueError("OpenRouter embeddings response missing data array.")
+        first = data[0]
+        if not isinstance(first, dict):
+            raise ValueError("OpenRouter embeddings response entry is invalid.")
+        embedding = first.get("embedding")
+        if not isinstance(embedding, Iterable) or isinstance(embedding, (str, bytes)):
+            raise ValueError("OpenRouter embeddings response missing embedding values.")
+        return len(list(embedding))
 
     def get_current_key(self) -> dict[str, Any]:
         """Return metadata for the currently authenticated API key."""
@@ -116,15 +151,19 @@ class OpenRouterClient:
         texts: Iterable[str],
         model: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
+        dimensions: Optional[int] = None,
     ) -> dict[str, Any]:
         """Create embeddings for the provided texts."""
         headers = self._merge_extra_headers(extra_headers)
-        embeddings = self._client.embeddings.create(
-            model=model or self.settings.default_embedding_model,
-            input=list(texts),
-            encoding_format="float",
-            extra_headers=headers,
-        )
+        kwargs: Dict[str, Any] = {
+            "model": model or self.settings.default_embedding_model,
+            "input": list(texts),
+            "encoding_format": "float",
+            "extra_headers": headers,
+        }
+        if dimensions is not None:
+            kwargs["dimensions"] = dimensions
+        embeddings = self._client.embeddings.create(**kwargs)
         return embeddings.model_dump()
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments
