@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete as sa_delete, func
+from sqlalchemy import delete as sa_delete, func, update as sa_update
 from sqlmodel import Session, select
 
 from app.api.dependencies import get_session, require_user_api_keys
@@ -30,7 +30,9 @@ from app.retrieval.pinecone import get_pinecone_client
 from app.services.prompts import (
     SYSTEM_PROMPT_METADATA_KEY,
     apply_prompt_template,
+    collection_tool_name,
     get_system_prompt_template,
+    is_collection_prompt_custom,
     prompt_variables_payload,
     system_prompt_context,
 )
@@ -85,13 +87,15 @@ def _prompt_read(  # pylint: disable=too-many-locals
         user,
         ingestion_settings=ingestion_settings,
         retrieval_settings=retrieval_settings,
+        tool_name=collection_tool_name(collection.id),
     )
     rendered = apply_prompt_template(template, context)
     return CollectionPromptRead(
         template=template,
         rendered=rendered,
         context=context,
-        variables=prompt_variables_payload(),
+        variables=prompt_variables_payload(scope="collection"),
+        is_custom=is_collection_prompt_custom(collection),
     )
 
 
@@ -431,10 +435,11 @@ def delete_collection(  # pylint: disable=too-many-locals
     ).all()
     doc_ids = [doc.id for doc in documents]
 
-    sessions = session.exec(
-        select(models.ChatSession).where(models.ChatSession.collection_id == collection.id)
+    session_ids = session.exec(
+        select(models.ChatSessionCollection.session_id).where(
+            models.ChatSessionCollection.collection_id == collection.id,
+        )
     ).all()
-    session_ids = [chat_session.id for chat_session in sessions]
 
     try:
         index = pinecone_client.Index(ingestion_settings.index_name)
@@ -497,16 +502,14 @@ def delete_collection(  # pylint: disable=too-many-locals
         )
     if session_ids:
         session.exec(
-            sa_delete(models.ChatMessage).where(
-                models.ChatMessage.session_id.in_(  # pylint: disable=no-member
-                    session_ids
-                ),
+            sa_delete(models.ChatSessionCollection).where(
+                models.ChatSessionCollection.collection_id == collection.id,
             )
         )
     session.exec(
-        sa_delete(models.ChatSession).where(
-            models.ChatSession.collection_id == collection.id,
-        )
+        sa_update(models.ChatSession)
+        .where(models.ChatSession.collection_id == collection.id)
+        .values(collection_id=None)
     )
 
     session.delete(collection)

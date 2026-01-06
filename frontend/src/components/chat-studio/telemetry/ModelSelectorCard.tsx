@@ -18,6 +18,7 @@ interface ModelSelectorCardProps {
   onSortChange: (value: ChatModelSortOption) => void;
   modelsLoading: boolean;
   modelsError: string | null;
+  toolsEnabled: boolean;
   onSelectModel: (id: string) => void;
 }
 
@@ -90,6 +91,7 @@ export const ModelSelectorCard = ({
   onSortChange,
   modelsLoading,
   modelsError,
+  toolsEnabled,
   onSelectModel,
 }: ModelSelectorCardProps) => {
   const visibleModels = filteredModelCatalog.slice(0, 50);
@@ -117,8 +119,9 @@ export const ModelSelectorCard = ({
         </div>
       </div>
       <p className="text-xs text-slate-400">
-        Only models with OpenAI-compatible tool calling are available. Pick any option to apply it
-        to the current or next turn.
+        {toolsEnabled
+          ? "Tool-enabled models are required when collection tools are active."
+          : "All OpenRouter chat models are available for standalone conversations."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1">

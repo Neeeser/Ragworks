@@ -11,6 +11,9 @@ from app.chat.service import ChatService
 
 
 class _NoOpSession:
+    def __init__(self, collections: List[models.Collection] | None = None) -> None:
+        self._collections = list(collections or [])
+
     def add(self, *args: Any, **kwargs: Any) -> None:
         return None
 
@@ -19,6 +22,16 @@ class _NoOpSession:
 
     def flush(self, *args: Any, **kwargs: Any) -> None:
         return None
+
+    def exec(self, *_args: Any, **_kwargs: Any):
+        class _Result:
+            def __init__(self, collections: List[models.Collection]) -> None:
+                self._collections = collections
+
+            def all(self) -> List[models.Collection]:
+                return list(self._collections)
+
+        return _Result(self._collections)
 
 
 class _StubChatRepository:
@@ -52,6 +65,9 @@ class _StubChatRepository:
         return None
 
     def get_last_user_message_before(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    def replace_session_collections(self, *args: Any, **kwargs: Any) -> None:
         return None
 
 
@@ -188,24 +204,31 @@ def test_tool_call_history_replayed_for_follow_up() -> None:
     }
 
     service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    service.session = _NoOpSession()
     service.chat_repo = _StubChatRepository()
     service.openrouter = _StubOpenRouter([first_response, final_response])
     service.retrieval = _StubRetrieval()
     service.reasoning_effort = None
-    service.settings = SimpleNamespace(openrouter_reasoning_effort=None)
+    service.settings = SimpleNamespace(
+        openrouter_reasoning_effort=None,
+        default_chat_model="openrouter/test-model",
+    )
     _stub_pipeline_helpers()
 
-    user = models.User(email="history@example.com", hashed_password="secret")
+    user = models.User(
+        email="history@example.com",
+        hashed_password="secret",
+        pinecone_api_key="pinecone-key",
+    )
     collection = models.Collection(
         user_id=user.id,
         name="History Collection",
         description="Tracks tool calls",
         extra_metadata={},
     )
-    payload = ChatMessageCreate(content="Lookup docs")
+    service.session = _NoOpSession([collection])
+    payload = ChatMessageCreate(content="Lookup docs", tool_collection_ids=[collection.id])
 
-    service.send_message(user=user, collection=collection, payload=payload)
+    service.send_message(user=user, payload=payload)
 
     assert len(service.openrouter.calls) == 2
     second_messages = service.openrouter.calls[1]["messages"]

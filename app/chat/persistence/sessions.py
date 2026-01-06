@@ -22,9 +22,9 @@ class SessionRequest:
     chat_repo: ChatRepository
     session: Session
     user: models.User
-    collection: models.Collection
     payload: ChatMessageCreate
     default_chat_model: str
+    primary_collection_id: Optional[UUID] = None
 
 
 def ensure_session(request: SessionRequest) -> models.ChatSession:
@@ -33,8 +33,6 @@ def ensure_session(request: SessionRequest) -> models.ChatSession:
     if payload.session_id:
         existing = request.chat_repo.get_session(payload.session_id, user_id=request.user.id)
         if existing:
-            if existing.collection_id != request.collection.id:
-                raise ValueError("Session does not belong to this collection.")
             return existing
         return create_session(
             request=request,
@@ -58,7 +56,7 @@ def create_session(
     session_model = models.ChatSession(
         id=session_id or uuid4(),
         user_id=request.user.id,
-        collection_id=request.collection.id,
+        collection_id=request.primary_collection_id,
         title=base_title or fallback_title,
         mode=payload.mode,
         chat_model=preferred_model,

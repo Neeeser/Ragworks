@@ -46,6 +46,8 @@ def _create_session(session: Session, user: models.User, collection: models.Coll
     repo.add_session(chat_session)
     session.commit()
     session.refresh(chat_session)
+    repo.replace_session_collections(session_id=chat_session.id, collection_ids=[collection.id])
+    session.commit()
     return chat_session
 
 
@@ -83,7 +85,17 @@ def test_chat_repository_filters_sessions_by_user(session: Session) -> None:
 
     assert repo.get_session(session_a.id, user_id=user_a.id)
     assert repo.get_session(session_b.id, user_id=user_a.id) is None
-    assert len(list(repo.list_sessions(collection_id=collection_a.id, user_id=user_a.id))) == 1
+    assert (
+        len(
+            list(
+                repo.list_sessions(
+                    collection_ids=[collection_a.id],
+                    user_id=user_a.id,
+                )
+            )
+        )
+        == 1
+    )
 
 
 def test_chat_repository_filters_messages_by_user(session: Session) -> None:
@@ -157,3 +169,4 @@ def test_chat_repository_delete_session_removes_messages(session: Session) -> No
 
     assert repo.get_session(chat_session.id) is None
     assert list(repo.list_messages(chat_session.id)) == []
+    assert repo.list_session_collection_ids(chat_session.id) == []

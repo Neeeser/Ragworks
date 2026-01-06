@@ -10,6 +10,7 @@ import type {
   CollectionUpdatePayload,
   CollectionStats,
   CollectionPromptDetails,
+  PromptDetails,
   CollectionQueryResult,
   Document,
   IngestionResponse,
@@ -166,12 +167,24 @@ export async function getCollectionPrompt(
   return apiFetch<CollectionPromptDetails>(`/api/collections/${collectionId}/prompt`, { token });
 }
 
+export async function getBasePrompt(token: string): Promise<PromptDetails> {
+  return apiFetch<PromptDetails>("/api/chat/prompt", { token });
+}
+
 export async function updateCollectionPrompt(
   collectionId: string,
   template: string,
   token: string,
 ): Promise<CollectionPromptDetails> {
   return apiFetch<CollectionPromptDetails>(`/api/collections/${collectionId}/prompt`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ template }),
+  });
+}
+
+export async function updateBasePrompt(template: string, token: string): Promise<PromptDetails> {
+  return apiFetch<PromptDetails>("/api/chat/prompt", {
     method: "PATCH",
     token,
     body: JSON.stringify({ template }),
@@ -424,10 +437,26 @@ export async function fetchQueryEventTrace(
 }
 
 export async function listChatSessions(
-  collectionId: string,
   token: string,
+  options?: {
+    collectionIds?: string[];
+    includeUnassigned?: boolean;
+  },
 ): Promise<ChatSession[]> {
-  return apiFetch<ChatSession[]>(`/api/collections/${collectionId}/sessions`, { token });
+  const params = new URLSearchParams();
+  if (options?.collectionIds?.length) {
+    options.collectionIds.forEach((collectionId) => {
+      params.append("collection_ids", collectionId);
+    });
+  }
+  if (options?.includeUnassigned) {
+    params.set("include_unassigned", "true");
+  }
+  const query = params.toString();
+  const path = query ? `/api/chat/sessions?${query}` : "/api/chat/sessions";
+  return apiFetch<ChatSession[]>(path, {
+    token,
+  });
 }
 
 export async function getChatHistory(sessionId: string, token: string): Promise<ChatMessage[]> {
@@ -441,13 +470,12 @@ export async function deleteChatSession(sessionId: string, token: string): Promi
   });
 }
 
-export async function chatWithCollection(
-  collectionId: string,
+export async function chat(
   payload: ChatRequestPayload,
   token: string,
   signal?: AbortSignal,
 ): Promise<ChatCompletionPayload> {
-  return apiFetch<ChatCompletionPayload>(`/api/collections/${collectionId}/chat`, {
+  return apiFetch<ChatCompletionPayload>("/api/chat", {
     method: "POST",
     body: JSON.stringify(payload),
     token,
@@ -473,6 +501,8 @@ type ChatStreamEvent =
       name?: string;
       arguments?: Record<string, unknown>;
       reasoning?: unknown;
+      collection_id?: string;
+      collection_name?: string;
     }
   | {
       type: "tool_result";
@@ -481,6 +511,8 @@ type ChatStreamEvent =
       arguments?: Record<string, unknown>;
       response?: Record<string, unknown>;
       reasoning?: unknown;
+      collection_id?: string;
+      collection_name?: string;
     }
   | { type: "final"; payload: ChatCompletionPayload }
   | { type: "error"; message?: string };
@@ -494,15 +526,16 @@ export interface ToolStreamEvent {
   arguments?: Record<string, unknown>;
   response?: Record<string, unknown>;
   reasoning?: unknown;
+  collection_id?: string;
+  collection_name?: string;
 }
 
-export async function streamChatWithCollection(
-  collectionId: string,
+export async function streamChat(
   payload: ChatRequestPayload,
   token: string,
   handlers?: ChatStreamHandlers,
 ): Promise<ChatCompletionPayload | null> {
-  const response = await fetch(`${API_BASE_URL}/api/collections/${collectionId}/chat/stream`, {
+  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -574,6 +607,8 @@ export async function streamChatWithCollection(
             name: parsed.name,
             arguments: parsed.arguments,
             reasoning: parsed.reasoning,
+            collection_id: parsed.collection_id,
+            collection_name: parsed.collection_name,
           });
         } else if (parsed.type === "tool_result") {
           handlers?.onToolResult?.({
@@ -582,6 +617,8 @@ export async function streamChatWithCollection(
             arguments: parsed.arguments,
             response: parsed.response,
             reasoning: parsed.reasoning,
+            collection_id: parsed.collection_id,
+            collection_name: parsed.collection_name,
           });
         } else if (parsed.type === "final" && parsed.payload) {
           finalPayload = parsed.payload;

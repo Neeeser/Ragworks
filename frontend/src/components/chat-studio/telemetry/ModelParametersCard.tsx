@@ -7,10 +7,9 @@ import type {
   ParameterDefinition,
   ParameterOverrides,
 } from "@/lib/chat-parameters";
-import type { Collection, ModelInfo } from "@/lib/types";
+import type { ModelInfo } from "@/lib/types";
 
 interface ModelParametersCardProps {
-  collection: Collection | null;
   currentModelInfo: ModelInfo | null;
   visibleParameterDefinitions: ParameterDefinition[];
   parameterOverrides: ParameterOverrides;
@@ -31,7 +30,6 @@ interface ModelParametersCardProps {
 }
 
 export const ModelParametersCard = ({
-  collection,
   currentModelInfo,
   visibleParameterDefinitions,
   parameterOverrides,
@@ -53,9 +51,6 @@ export const ModelParametersCard = ({
   }
   if (modelsLoading && !currentModelInfo) {
     return <p className="text-sm text-slate-400">Loading model catalog…</p>;
-  }
-  if (!collection) {
-    return <p className="text-sm text-slate-400">Select a collection to view model controls.</p>;
   }
   if (!currentModelInfo) {
     return (

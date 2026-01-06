@@ -9,7 +9,7 @@ import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
 import { TypingAnimation } from "@/components/ui/typing-animation";
 import { cn } from "@/lib/utils";
 
-import type { ChatEntry } from "../chat-types";
+import type { ChatEntry } from "./chat-types";
 import type { ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
 import type { Components } from "react-markdown";
 
@@ -35,7 +35,8 @@ const roleVariants: Record<string, string> = {
 };
 
 type ChatTimelineProps = {
-  collectionName: string | null;
+  collectionLabel: string;
+  toolsEnabled: boolean;
   chatEntryOrder: string[];
   chatEntryMap: Map<string, ChatEntry>;
   finalStreamAssistantId: string | null;
@@ -69,7 +70,8 @@ type ChatTimelineProps = {
 };
 
 export function ChatTimeline({
-  collectionName,
+  collectionLabel,
+  toolsEnabled,
   chatEntryOrder,
   chatEntryMap,
   finalStreamAssistantId,
@@ -119,16 +121,16 @@ export function ChatTimeline({
   }, [timelineEntries]);
 
   if (timelineEntries.length === 0) {
+    const title = toolsEnabled ? collectionLabel : "Chat studio";
+    const description = toolsEnabled
+      ? "Ask anything about the selected collections and we will cite the chunks that back it up."
+      : "Start a conversation now, or enable collection tools in Run settings to ground answers.";
     return (
       <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
         <div className="space-y-2">
           <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
-          <h3 className="text-3xl font-semibold text-white">
-            {collectionName ? collectionName : "Select a collection"}
-          </h3>
-          <p className="text-sm text-slate-400">
-            Ask anything about this dataset and we will cite the chunks that back it up.
-          </p>
+          <h3 className="text-3xl font-semibold text-white">{title}</h3>
+          <p className="text-sm text-slate-400">{description}</p>
         </div>
         <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
           {samplePrompts.map((prompt) => (

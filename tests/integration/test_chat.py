@@ -19,7 +19,7 @@ def test_chat_history_and_listing_reflect_session(
 ) -> None:
     session_id = chat_session["session"]["id"]
     list_resp = client.get(
-        f"/api/collections/{primary_collection['id']}/sessions",
+        f"/api/chat/sessions?collection_ids={primary_collection['id']}",
         headers=user_context["headers"],
     )
     assert list_resp.status_code == 200, list_resp.text
@@ -43,9 +43,10 @@ def test_delete_chat_session_removes_history(
     payload = {
         "content": "Tell me about the TransparentRAG setup.",
         "title": "Disposable Chat",
+        "tool_collection_ids": [primary_collection["id"]],
     }
     create_resp = client.post(
-        f"/api/collections/{primary_collection['id']}/chat",
+        "/api/chat",
         headers=user_context["headers"],
         json=payload,
     )
@@ -59,7 +60,7 @@ def test_delete_chat_session_removes_history(
     assert delete_resp.status_code == 204, delete_resp.text
 
     list_resp = client.get(
-        f"/api/collections/{primary_collection['id']}/sessions",
+        f"/api/chat/sessions?collection_ids={primary_collection['id']}",
         headers=user_context["headers"],
     )
     assert list_resp.status_code == 200, list_resp.text

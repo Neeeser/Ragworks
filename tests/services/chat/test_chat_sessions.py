@@ -38,9 +38,9 @@ def test_ensure_session_returns_existing_session() -> None:
         chat_repo=chat_repo,
         session=_StubSession(),
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=collection_id),
         payload=payload,
         default_chat_model="model",
+        primary_collection_id=collection_id,
     )
 
     resolved = ensure_session(request)
@@ -59,9 +59,9 @@ def test_ensure_session_creates_session_with_requested_id() -> None:
         chat_repo=chat_repo,
         session=session,
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=uuid4()),
         payload=payload,
         default_chat_model="model",
+        primary_collection_id=uuid4(),
     )
 
     created = ensure_session(request)

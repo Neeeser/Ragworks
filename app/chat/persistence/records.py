@@ -146,9 +146,16 @@ def record_partial_assistant_message(
     context.session.flush()
 
 
-def convert_session(session_model: models.ChatSession) -> ChatSessionRead:
+def convert_session(
+    session_model: models.ChatSession,
+    *,
+    tool_collection_ids: Optional[List[UUID]] = None,
+) -> ChatSessionRead:
     """Convert a session model into a response schema."""
-    return ChatSessionRead.from_model(session_model)
+    return ChatSessionRead.from_model(
+        session_model,
+        tool_collection_ids=tool_collection_ids,
+    )
 
 
 def convert_messages(

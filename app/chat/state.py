@@ -20,6 +20,16 @@ class PipelineContext:
 
 
 @dataclass(frozen=True)
+class ToolCollectionContext:
+    """Resolved tool context for a collection."""
+
+    collection: models.Collection
+    tool_name: str
+    ingestion_settings: IngestionPipelineSettings
+    retrieval_settings: RetrievalPipelineSettings
+
+
+@dataclass(frozen=True)
 class ModelSettings:
     """Resolved model settings and supported parameters."""
 
@@ -39,7 +49,9 @@ class ChatSetup:
     session_model: models.ChatSession
     messages: List[Dict[str, Any]]
     tools: List[Dict[str, Any]]
-    pipeline: PipelineContext
+    tool_collections: List[ToolCollectionContext]
+    tool_collection_map: Dict[str, models.Collection]
+    pipeline: Optional[PipelineContext]
     model: ModelSettings
 
 
@@ -72,7 +84,6 @@ class StreamToolCallContext:
     setup: ChatSetup
     run_state: RunState
     user: models.User
-    collection: models.Collection
     payload: ChatMessageCreate
 
 
@@ -81,12 +92,12 @@ class ToolExecutionContext:
     """Execution context for running tool calls."""
 
     user: models.User
-    collection: models.Collection
     payload: ChatMessageCreate
     session_model: models.ChatSession
     messages: List[Dict[str, Any]]
     run_state: RunState
     shared_tool_reasoning: Optional[Dict[str, Any]]
+    tool_collection_map: Dict[str, models.Collection]
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.base import DateTimeConfigMixin
+from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 
 
 class CollectionBase(BaseModel):
@@ -66,28 +67,12 @@ class CollectionDeleteResponse(BaseModel):
     status: str = "deleted"
 
 
-class PromptVariable(BaseModel):
-    """Template variable used in prompts."""
-
-    name: str
-    description: str
-    example: Optional[str] = None
-
-
-class CollectionPromptRead(BaseModel):
+class CollectionPromptRead(PromptTemplateRead):
     """Prompt template data returned to clients."""
 
-    template: str
-    rendered: str
-    context: Dict[str, str]
-    variables: List[PromptVariable]
-    is_custom: bool = False
 
-
-class CollectionPromptUpdate(BaseModel):
+class CollectionPromptUpdate(PromptTemplateUpdate):
     """Payload for updating a collection prompt."""
-
-    template: Optional[str] = None
 
 
 class CollectionStatsRead(BaseModel):

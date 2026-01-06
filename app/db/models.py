@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, Float, String, Text
+from sqlalchemy import JSON, Column, Float, Index, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.utils.time import utc_now
@@ -87,6 +87,10 @@ class User(SQLModel, TimestampMixin, table=True):
     hashed_password: str = Field(sa_column=Column(String, nullable=False))
     openrouter_api_key: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     pinecone_api_key: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    system_prompt_template: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
     is_active: bool = Field(default=True, nullable=False)
 
 
@@ -339,11 +343,34 @@ class ChatSession(SQLModel, TimestampMixin, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     user_id: UUID = Field(foreign_key="users.id", nullable=False, index=True)
-    collection_id: UUID = Field(foreign_key="collections.id", nullable=False, index=True)
+    collection_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="collections.id",
+        nullable=True,
+        index=True,
+    )
     title: str = Field(sa_column=Column(String, nullable=False))
     mode: ChatMode = Field(default=ChatMode.CHAT, sa_column=Column(String, nullable=False))
     chat_model: str = Field(sa_column=Column(String, nullable=False))
     context_tokens: int = Field(default=0, nullable=False)
+
+
+class ChatSessionCollection(SQLModel, TimestampMixin, table=True):
+    """Tool collection associations for chat sessions."""
+
+    __tablename__ = "chat_session_collections"
+    __table_args__ = (
+        Index("ix_chat_session_collections_collection_id", "collection_id"),
+    )
+
+    session_id: UUID = Field(
+        foreign_key="chat_sessions.id",
+        primary_key=True,
+    )
+    collection_id: UUID = Field(
+        foreign_key="collections.id",
+        primary_key=True,
+    )
 
 
 class ChatMessage(SQLModel, TimestampMixin, table=True):
