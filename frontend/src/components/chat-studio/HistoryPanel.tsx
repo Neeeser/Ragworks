@@ -79,17 +79,27 @@ export const HistoryPanel = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-500">History</p>
-          <h2 className="text-xl font-semibold text-white">Chat sessions</h2>
+      <div className="border-b border-white/5 px-5 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-500">History</p>
+            <h2 className="text-xl font-semibold text-white">Chat sessions</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 p-0 text-slate-300"
+            onClick={onClose}
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-4 flex items-center">
           <div className="relative" ref={filterRef}>
             <button
               type="button"
               className={cn(
-                "flex h-9 items-center gap-2 rounded-full border px-3 text-[11px] uppercase tracking-[0.3em] transition",
+                "flex h-9 items-center gap-2 whitespace-nowrap rounded-full border px-3 text-[11px] uppercase tracking-[0.3em] transition",
                 filterActive
                   ? "border-violet-400/60 bg-violet-500/10 text-white"
                   : "border-white/10 text-slate-300 hover:border-white/30 hover:text-white",
@@ -99,7 +109,7 @@ export const HistoryPanel = ({
               aria-expanded={filterOpen}
             >
               <Filter className="h-3.5 w-3.5" />
-              {filterActive ? `Filter (${filterCount})` : "Filter"}
+              {filterActive ? `${filterCount}` : "Filter"}
             </button>
             {filterOpen && (
               <div className="absolute left-0 z-30 mt-2 w-72 rounded-2xl border border-white/10 bg-slate-950/95 p-3 text-xs text-slate-200 shadow-xl">
@@ -166,14 +176,6 @@ export const HistoryPanel = ({
               </div>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 p-0 text-slate-300"
-            onClick={onClose}
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </Button>
         </div>
       </div>
       <div className="border-b border-white/5 px-5 py-3">
