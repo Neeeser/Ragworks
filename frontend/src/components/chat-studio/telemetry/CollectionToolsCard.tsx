@@ -44,9 +44,10 @@ export const CollectionToolsCard = ({
 
   const noneSelected = selectedCollectionIds.length === 0;
   const collectionMap = new Map(collections.map((collection) => [collection.id, collection]));
-  const selectedLabels = selectedCollectionIds.map(
-    (collectionId) => collectionMap.get(collectionId)?.name ?? "Unknown",
-  );
+  const selectedEntries = selectedCollectionIds.map((collectionId) => ({
+    id: collectionId,
+    label: collectionMap.get(collectionId)?.name ?? "Unknown",
+  }));
 
   return (
     <div className="space-y-3">
@@ -75,10 +76,10 @@ export const CollectionToolsCard = ({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {selectedLabels.length > 0 ? (
-          selectedLabels.map((label) => (
-            <span key={label} className={chipClass}>
-              {label}
+        {selectedEntries.length > 0 ? (
+          selectedEntries.map((entry) => (
+            <span key={entry.id} className={chipClass}>
+              {entry.label}
             </span>
           ))
         ) : (

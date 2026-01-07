@@ -121,31 +121,34 @@ export function ChatTimeline({
   }, [timelineEntries]);
 
   if (timelineEntries.length === 0) {
-    const title = toolsEnabled ? collectionLabel : "Chat studio";
-    const description = toolsEnabled
-      ? "Ask anything about the selected collections and we will cite the chunks that back it up."
-      : "Start a conversation now, or enable collection tools in Run settings to ground answers.";
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
-        <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
-          <h3 className="text-3xl font-semibold text-white">{title}</h3>
-          <p className="text-sm text-slate-400">{description}</p>
+    if (!selectedSessionId) {
+      const title = toolsEnabled ? collectionLabel : "Chat studio";
+      const description = toolsEnabled
+        ? "Ask anything about the selected collections and we will cite the chunks that back it up."
+        : "Start a conversation now, or enable collection tools in Run settings to ground answers.";
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
+          <div className="space-y-2">
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
+            <h3 className="text-3xl font-semibold text-white">{title}</h3>
+            <p className="text-sm text-slate-400">{description}</p>
+          </div>
+          <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
+            {samplePrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-slate-300 transition hover:border-white/30 hover:text-white"
+                onClick={() => onSamplePromptSelect(prompt)}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
-          {samplePrompts.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-slate-300 transition hover:border-white/30 hover:text-white"
-              onClick={() => onSamplePromptSelect(prompt)}
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
+      );
+    }
+    return <div className="h-full" />;
   }
 
   const liveStreamBubbleKey = activeStreamEntryKey ?? "typing-indicator";

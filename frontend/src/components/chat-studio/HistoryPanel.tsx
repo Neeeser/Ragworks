@@ -194,13 +194,13 @@ export const HistoryPanel = ({
             {sessions.map((session) => {
               const isSelected = selectedSessionId === session.id;
               const toolCollections = session.tool_collection_ids || [];
-              const toolLabels =
+              const toolLabelEntries =
                 toolCollections.length > 0
-                  ? toolCollections.map(
-                      (collectionId) =>
-                        collectionMap.get(collectionId)?.name ?? "Unknown collection",
-                    )
-                  : ["No collections"];
+                  ? toolCollections.map((collectionId) => ({
+                      key: collectionId,
+                      label: collectionMap.get(collectionId)?.name ?? "Unknown collection",
+                    }))
+                  : [{ key: "none", label: "No collections" }];
               return (
                 <div
                   key={session.id}
@@ -229,9 +229,9 @@ export const HistoryPanel = ({
                       {session.chat_model} • {timeAgo(session.updated_at)}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {toolLabels.map((label) => (
-                        <span key={`${session.id}-${label}`} className={chipClass}>
-                          {label}
+                      {toolLabelEntries.map((entry) => (
+                        <span key={`${session.id}-${entry.key}`} className={chipClass}>
+                          {entry.label}
                         </span>
                       ))}
                     </div>

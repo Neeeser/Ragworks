@@ -105,7 +105,9 @@ export function CollectionSidebar({
       <div className="mt-6">
         <button
           type="button"
-          onClick={() => collection && router.push(`/chat/${collection.id}`)}
+          onClick={() =>
+            collection && router.push(`/chat?collections=${encodeURIComponent(collection.id)}`)
+          }
           disabled={!collection}
           className={cn(
             "flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition",
