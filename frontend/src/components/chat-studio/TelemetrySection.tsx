@@ -10,6 +10,8 @@ interface TelemetrySectionProps {
   icon?: ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  sectionId?: string;
+  overrideActive?: boolean;
   children: ReactNode;
 }
 
@@ -19,9 +21,11 @@ export const TelemetrySection = ({
   icon,
   isOpen,
   onToggle,
+  sectionId,
+  overrideActive,
   children,
 }: TelemetrySectionProps) => (
-  <div className="rounded-2xl border border-white/10 bg-white/5">
+  <div id={sectionId} className="rounded-2xl border border-white/10 bg-white/5">
     <button
       type="button"
       onClick={onToggle}
@@ -31,7 +35,12 @@ export const TelemetrySection = ({
       <div className="flex flex-1 items-center gap-2">
         {icon && <span className="text-slate-300">{icon}</span>}
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{title}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{title}</p>
+            {overrideActive && (
+              <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+            )}
+          </div>
           {description && <p className="text-[11px] text-slate-300">{description}</p>}
         </div>
       </div>

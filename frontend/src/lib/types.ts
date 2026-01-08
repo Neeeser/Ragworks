@@ -17,6 +17,11 @@ export interface User {
   is_active: boolean;
   openrouter_configured: boolean;
   pinecone_configured: boolean;
+  last_used_chat_model?: string | null;
+  last_used_parameters?: Record<string, unknown> | null;
+  last_used_provider?: ProviderPreferences | null;
+  last_used_stream?: boolean | null;
+  last_used_tool_collection_ids?: UUID[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -227,6 +232,9 @@ export interface ChatSession {
   chat_model: string;
   context_tokens: number;
   tool_collection_ids: UUID[];
+  parameter_overrides?: Record<string, unknown> | null;
+  provider_preferences?: ProviderPreferences | null;
+  stream?: boolean;
   created_at: string;
   updated_at: string;
 }

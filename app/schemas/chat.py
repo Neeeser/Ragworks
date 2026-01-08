@@ -72,6 +72,9 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
     chat_model: str
     context_tokens: int
     tool_collection_ids: List[UUID] = Field(default_factory=list)
+    parameter_overrides: Optional[Dict[str, Any]] = None
+    provider_preferences: Optional[Dict[str, Any]] = None
+    stream: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 
@@ -91,6 +94,9 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
             chat_model=session.chat_model,
             context_tokens=session.context_tokens,
             tool_collection_ids=tool_collection_ids or [],
+            parameter_overrides=session.parameter_overrides,
+            provider_preferences=session.provider_preferences,
+            stream=session.stream,
             created_at=session.created_at,
             updated_at=session.updated_at,
         )

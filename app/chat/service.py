@@ -83,6 +83,16 @@ class StreamCapture:
     reasoning_segments: List[Dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class SessionPreferencesUpdate:
+    """Normalized run settings persisted for sessions and users."""
+
+    parameter_overrides: Optional[Dict[str, Any]]
+    provider_preferences: Optional[Dict[str, Any]]
+    stream_enabled: bool
+    tool_collection_ids: List[UUID]
+
+
 class ChatService:
     """Manage chat sessions, tool calls, and provider interactions."""
 
@@ -269,6 +279,30 @@ class ChatService:
             self.session.add(session_model)
             self.session.flush()
 
+    def _persist_session_preferences(
+        self,
+        *,
+        session_model: models.ChatSession,
+        user: models.User,
+        preferences: SessionPreferencesUpdate,
+    ) -> None:
+        """Persist session and user-level run settings for future chats."""
+        parameter_overrides = preferences.parameter_overrides or None
+        provider_preferences = preferences.provider_preferences or None
+        session_model.parameter_overrides = parameter_overrides
+        session_model.provider_preferences = provider_preferences
+        session_model.stream = preferences.stream_enabled
+        user.last_used_chat_model = session_model.chat_model
+        user.last_used_parameters = parameter_overrides
+        user.last_used_provider = provider_preferences
+        user.last_used_stream = preferences.stream_enabled
+        user.last_used_tool_collection_ids = [
+            str(collection_id) for collection_id in preferences.tool_collection_ids
+        ]
+        self.session.add(session_model)
+        self.session.add(user)
+        self.session.flush()
+
     def _build_message_history(
         self,
         *,
@@ -416,6 +450,16 @@ class ChatService:
             default_chat_model=default_chat_model,
             fallback_context_window=fallback_context_window,
             tools_enabled=bool(tool_collections),
+        )
+        self._persist_session_preferences(
+            session_model=session_model,
+            user=user,
+            preferences=SessionPreferencesUpdate(
+                parameter_overrides=model_settings.parameter_overrides or None,
+                provider_preferences=model_settings.provider_preferences or None,
+                stream_enabled=bool(payload.stream),
+                tool_collection_ids=tool_collection_ids,
+            ),
         )
         return ChatSetup(
             session_model=session_model,

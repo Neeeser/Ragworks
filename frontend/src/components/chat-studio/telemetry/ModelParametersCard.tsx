@@ -95,6 +95,7 @@ export const ModelParametersCard = ({
         label={definition.label}
         description={definition.description}
         helper={defaultDisplay ? `Default: ${defaultDisplay}` : null}
+        overrideActive={hasOverride}
         actionLabel="Clear"
         actionDisabled={!hasOverride}
         onAction={() => handleClearParameter(definition.key)}

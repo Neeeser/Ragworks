@@ -52,7 +52,10 @@ def create_session(
     payload = request.payload
     base_title = payload.title or (payload.content[:60] if payload.content else None)
     fallback_title = f"Chat {utc_now().strftime('%H:%M:%S')}"
-    preferred_model = (payload.chat_model or "").strip() or request.default_chat_model
+    last_used_model = (getattr(request.user, "last_used_chat_model", None) or "").strip()
+    preferred_model = (
+        (payload.chat_model or "").strip() or last_used_model or request.default_chat_model
+    )
     session_model = models.ChatSession(
         id=session_id or uuid4(),
         user_id=request.user.id,

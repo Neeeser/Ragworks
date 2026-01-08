@@ -73,6 +73,23 @@ export const HistoryPanel = ({
     onFilterChange(filterCollectionIds, !filterIncludeUnassigned);
   };
 
+  const formatSessionTitle = (session: ChatSession) => {
+    const defaultTitlePattern = /^Chat\s+\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?$/i;
+    if (!defaultTitlePattern.test(session.title)) {
+      return session.title;
+    }
+    const createdAt = new Date(session.created_at);
+    if (Number.isNaN(createdAt.getTime())) {
+      return session.title;
+    }
+    const timeLabel = new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(createdAt);
+    return `Chat ${timeLabel}`;
+  };
+
   const clearFilters = () => {
     onFilterChange([], false);
   };
@@ -221,7 +238,7 @@ export const HistoryPanel = ({
                       isSelected ? "text-white" : "text-slate-300 group-hover:text-white",
                     )}
                   >
-                    <p className="text-base font-semibold">{session.title}</p>
+                    <p className="text-base font-semibold">{formatSessionTitle(session)}</p>
                     <p
                       className={cn(
                         "text-xs",

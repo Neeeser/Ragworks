@@ -31,8 +31,21 @@ import type { ChatModelSortOption } from "@/lib/model-sorting";
 import type { Collection, ModelEndpointDirectory, ModelInfo, UsageBreakdown } from "@/lib/types";
 import type { Components } from "react-markdown";
 
+const DEFAULT_STREAMING_ENABLED = true;
+
 interface TelemetryPanelProps {
   onClose: () => void;
+  sectionIds: {
+    systemPrompt: string;
+    collectionTools: string;
+    streaming: string;
+    modelRouting: string;
+    providerRouting: string;
+    modelParameters: string;
+    vitals: string;
+    usage: string;
+  };
+  systemPromptCustom: boolean;
   promptSections: Array<{
     id: string;
     label: string;
@@ -117,6 +130,8 @@ interface TelemetryPanelProps {
 
 export const TelemetryPanel = ({
   onClose,
+  sectionIds,
+  systemPromptCustom,
   promptSections,
   promptPreviewMarkdown,
   promptLoading,
@@ -189,6 +204,7 @@ export const TelemetryPanel = ({
   onExportChatHistory,
   markdownComponents,
 }: TelemetryPanelProps) => {
+  const streamingOverrideActive = streamingEnabled !== DEFAULT_STREAMING_ENABLED;
   const promptDescription = promptLoading
     ? "Loading prompt..."
     : promptError
@@ -224,6 +240,8 @@ export const TelemetryPanel = ({
           icon={<NotebookPen className="h-4 w-4 text-amber-300" />}
           isOpen={systemPromptOpen}
           onToggle={onSystemPromptToggle}
+          sectionId={sectionIds.systemPrompt}
+          overrideActive={systemPromptCustom}
         >
           <SystemPromptCard
             promptPreviewMarkdown={promptPreviewMarkdown}
@@ -242,6 +260,8 @@ export const TelemetryPanel = ({
           icon={<Layers className="h-4 w-4 text-cyan-300" />}
           isOpen={collectionToolsOpen}
           onToggle={onCollectionToolsToggle}
+          sectionId={sectionIds.collectionTools}
+          overrideActive={selectedToolCollectionIds.length > 0}
         >
           <CollectionToolsCard
             collections={collections}
@@ -262,6 +282,8 @@ export const TelemetryPanel = ({
           icon={<Share2 className="h-4 w-4 text-emerald-300" />}
           isOpen={streamingOptionsOpen}
           onToggle={onStreamingOptionsToggle}
+          sectionId={sectionIds.streaming}
+          overrideActive={streamingOverrideActive}
         >
           <StreamingSettingsCard streamingEnabled={streamingEnabled} onToggle={onStreamingToggle} />
         </TelemetrySection>
@@ -272,6 +294,7 @@ export const TelemetryPanel = ({
           icon={<RotateCcw className="h-4 w-4 text-violet-300" />}
           isOpen={modelSelectorOpen}
           onToggle={onModelSelectorToggle}
+          sectionId={sectionIds.modelRouting}
         >
           <ModelSelectorCard
             currentModelInfo={currentModelInfo}
@@ -299,6 +322,8 @@ export const TelemetryPanel = ({
           icon={<Share2 className="h-4 w-4 text-emerald-300" />}
           isOpen={providerPreferencesOpen}
           onToggle={onProviderPreferencesToggle}
+          sectionId={sectionIds.providerRouting}
+          overrideActive={providerRuleCount > 0}
         >
           <ProviderRoutingCard
             providerForm={providerForm}
@@ -320,6 +345,7 @@ export const TelemetryPanel = ({
           icon={<MessageCircle className="h-4 w-4 text-cyan-300" />}
           isOpen={vitalsOpen}
           onToggle={onVitalsToggle}
+          sectionId={sectionIds.vitals}
         >
           <CollectionVitalsCard
             collection={collection}
@@ -338,6 +364,8 @@ export const TelemetryPanel = ({
           icon={<SlidersHorizontal className="h-4 w-4 text-violet-300" />}
           isOpen={modelParametersOpen}
           onToggle={onModelParametersToggle}
+          sectionId={sectionIds.modelParameters}
+          overrideActive={activeParameterCount > 0}
         >
           <ModelParametersCard
             currentModelInfo={currentModelInfo}
@@ -365,6 +393,7 @@ export const TelemetryPanel = ({
           }
           isOpen={usageOpen}
           onToggle={onUsageToggle}
+          sectionId={sectionIds.usage}
         >
           <UsageCard
             usage={usage}

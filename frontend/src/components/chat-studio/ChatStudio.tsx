@@ -49,7 +49,6 @@ import {
   parsePriceInput,
   sanitizeFileName,
   sanitizeModelSlug,
-  safeParseJSON,
 } from "./chat-utils";
 
 import type { ChatEntry } from "./chat-types";
@@ -78,14 +77,18 @@ import type {
   UsageBreakdown,
 } from "@/lib/types";
 
-const samplePrompts = [
-  "Give me the latest ingestion summary with citations.",
-  "What changed in the newest document batch?",
-  "Draft next steps using the last three answers.",
-  "List any flagged chunks that might need review.",
-];
 const PINECONE_KEY_REQUIRED_MESSAGE =
   "Add your Pinecone API key in Settings to enable collection tools.";
+const TELEMETRY_SECTION_IDS = {
+  systemPrompt: "telemetry-system-prompt",
+  collectionTools: "telemetry-collection-tools",
+  streaming: "telemetry-streaming",
+  modelRouting: "telemetry-model-routing",
+  providerRouting: "telemetry-provider-routing",
+  modelParameters: "telemetry-model-parameters",
+  vitals: "telemetry-collection-vitals",
+  usage: "telemetry-usage",
+} as const;
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -131,6 +134,33 @@ const createDefaultProviderForm = (): ProviderFormState => ({
   maxRequest: "",
   maxImage: "",
 });
+
+const createProviderFormFromPreferences = (
+  preferences?: ProviderPreferences | null,
+): ProviderFormState => {
+  const defaults = createDefaultProviderForm();
+  if (!preferences) {
+    return defaults;
+  }
+  const maxPrice = preferences.max_price ?? {};
+  return {
+    ...defaults,
+    order: preferences.order ?? [],
+    only: preferences.only ?? [],
+    ignore: preferences.ignore ?? [],
+    quantizations: preferences.quantizations ?? [],
+    sort: preferences.sort ?? "",
+    allowFallbacks: preferences.allow_fallbacks ?? true,
+    requireParameters: preferences.require_parameters ?? false,
+    dataCollection: preferences.data_collection ?? "allow",
+    zdr: preferences.zdr ?? false,
+    enforceDistillableText: preferences.enforce_distillable_text ?? false,
+    maxPrompt: maxPrice.prompt != null ? String(maxPrice.prompt) : "",
+    maxCompletion: maxPrice.completion != null ? String(maxPrice.completion) : "",
+    maxRequest: maxPrice.request != null ? String(maxPrice.request) : "",
+    maxImage: maxPrice.image != null ? String(maxPrice.image) : "",
+  };
+};
 
 const deriveToolTracesFromMessages = (items: ChatMessage[]): ToolCallTrace[] =>
   items
@@ -250,7 +280,8 @@ const generateClientMessageId = () => {
 const CHAT_INPUT_MIN_HEIGHT = 40;
 const CHAT_INPUT_MAX_HEIGHT = 160;
 const PROGRESS_POLL_INTERVAL = 800;
-const OPTIMISTIC_DEDUPE_WINDOW_MS = 15_000;
+const OPTIMISTIC_CLOCK_SKEW_MS = 5_000;
+const DEFAULT_STREAMING_ENABLED = true;
 
 const ensureMessageOrder = (
   map: Map<string, number>,
@@ -340,6 +371,33 @@ const pruneHistoryForEdit = (
   return sorted.slice(0, anchorIndex);
 };
 
+const isOptimisticDuplicate = (
+  optimistic: ChatMessage,
+  message: ChatMessage,
+  messageOrder: Map<string, number>,
+): boolean => {
+  if (message.session_id !== optimistic.session_id) {
+    return false;
+  }
+  if (message.role !== "user") {
+    return false;
+  }
+  if (message.content.trim() !== optimistic.content.trim()) {
+    return false;
+  }
+  const optimisticOrder = messageOrder.get(optimistic.id);
+  const persistedOrder = messageOrder.get(message.id);
+  if (optimisticOrder !== undefined && persistedOrder !== undefined) {
+    return persistedOrder >= optimisticOrder;
+  }
+  const optimisticTimestamp = Date.parse(optimistic.created_at);
+  const persistedTimestamp = Date.parse(message.created_at);
+  if (!Number.isNaN(optimisticTimestamp) && !Number.isNaN(persistedTimestamp)) {
+    return Math.abs(persistedTimestamp - optimisticTimestamp) <= OPTIMISTIC_CLOCK_SKEW_MS;
+  }
+  return true;
+};
+
 const parseCollectionIdsParam = (value: string | null): string[] => {
   if (!value) {
     return [];
@@ -375,8 +433,11 @@ export function ChatStudio() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const params = useParams<{ sessionId?: string }>();
-  const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : null;
+  const params = useParams<{ sessionId?: string | string[] }>();
+  const rawSessionId = params.sessionId;
+  const sessionIdParam = Array.isArray(rawSessionId)
+    ? (rawSessionId[0] ?? null)
+    : (rawSessionId ?? null);
   const urlCollectionsValue = searchParams.get("collections");
   const urlCollectionIds = useMemo(
     () => parseCollectionIdsParam(urlCollectionsValue),
@@ -398,7 +459,6 @@ export function ChatStudio() {
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageBreakdown | null>(null);
   const [contextWindow, setContextWindow] = useState<number>(0);
-  const [defaultChatModel, setDefaultChatModel] = useState<string | null>(null);
   const [contextConsumed, setContextConsumed] = useState<number>(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -443,10 +503,7 @@ export function ChatStudio() {
     "chat.telemetry.streamingOpen",
     true,
   );
-  const [streamingEnabled, setStreamingEnabled] = usePersistentToggle(
-    "chat.streamingEnabled",
-    false,
-  );
+  const [streamingEnabled, setStreamingEnabled] = useState(DEFAULT_STREAMING_ENABLED);
   const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -457,10 +514,12 @@ export function ChatStudio() {
   const [providerForm, setProviderForm] = useState<ProviderFormState>(() =>
     createDefaultProviderForm(),
   );
+  const previousModelIdRef = useRef<string | null>(null);
   const [providerDirectory, setProviderDirectory] = useState<ModelEndpointDirectory | null>(null);
   const [providerDirectoryLoading, setProviderDirectoryLoading] = useState(false);
   const [providerDirectoryError, setProviderDirectoryError] = useState<string | null>(null);
   const [providerSearchTerm, setProviderSearchTerm] = useState("");
+  const applyNewChatDefaultsRef = useRef(true);
   const [basePromptDetails, setBasePromptDetails] = useState<PromptDetails | null>(null);
   const [basePromptLoading, setBasePromptLoading] = useState(false);
   const [basePromptError, setBasePromptError] = useState<string | null>(null);
@@ -507,6 +566,14 @@ export function ChatStudio() {
   const pollIntervalRef = useRef<number | null>(null);
   const activePollingSession = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
+  const toolCollectionsDirtyRef = useRef(false);
+  const newChatDefaultsRef = useRef<{
+    activeModelId: string | null;
+    parameterOverrides: ParameterOverrides;
+    providerForm: ProviderFormState;
+    streamingEnabled: boolean;
+    toolCollectionIds: string[];
+  } | null>(null);
   const chatHydrationPendingRef = useRef(false);
   const historyFilterTouchedRef = useRef(false);
   const reasoningCacheRef = useRef<Map<string, ReasoningTraceSegment[]>>(new Map());
@@ -517,6 +584,18 @@ export function ChatStudio() {
   const collectionMap = useMemo(() => {
     return new Map(collections.map((collection) => [collection.id, collection]));
   }, [collections]);
+  const resolveValidToolCollectionIds = useCallback(
+    (collectionIds: string[]) => {
+      if (collectionIds.length === 0) {
+        return [];
+      }
+      if (collectionMap.size === 0) {
+        return collectionIds;
+      }
+      return collectionIds.filter((collectionId) => collectionMap.has(collectionId));
+    },
+    [collectionMap],
+  );
   const selectedToolCollections = useMemo(() => {
     return selectedToolCollectionIds
       .map((collectionId) => collectionMap.get(collectionId))
@@ -582,39 +661,19 @@ export function ChatStudio() {
   }, [sessionIdParam]);
 
   useEffect(() => {
+    toolCollectionsDirtyRef.current = false;
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return;
+    }
     if (urlCollectionsValue === null) {
-      setSelectedToolCollectionIds((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
     const parsed = parseCollectionIdsParam(urlCollectionsValue);
     setSelectedToolCollectionIds((prev) => (areArraysEqual(prev, parsed) ? prev : parsed));
-  }, [urlCollectionsValue]);
-
-  useEffect(() => {
-    if (historyFilterTouchedRef.current) {
-      return;
-    }
-    if (urlCollectionsValue === null || selectedSessionId) {
-      historyFilterTouchedRef.current = true;
-      return;
-    }
-    if (historyFilterCollectionIds.length > 0 || historyFilterIncludeUnassigned) {
-      historyFilterTouchedRef.current = true;
-      return;
-    }
-    if (urlCollectionIds.length === 0) {
-      historyFilterTouchedRef.current = true;
-      return;
-    }
-    setHistoryFilterCollectionIds(urlCollectionIds);
-    historyFilterTouchedRef.current = true;
-  }, [
-    historyFilterCollectionIds,
-    historyFilterIncludeUnassigned,
-    selectedSessionId,
-    urlCollectionIds,
-    urlCollectionsValue,
-  ]);
+  }, [selectedSessionId, urlCollectionsValue]);
 
   const isPendingSession = useMemo(() => {
     if (!selectedSessionId) {
@@ -871,12 +930,10 @@ export function ChatStudio() {
 
   useEffect(() => {
     if (!authToken || !primaryCollection) {
-      setDefaultChatModel(null);
       setContextWindow(0);
       return;
     }
     if (!primaryCollection.retrieval_pipeline_id) {
-      setDefaultChatModel(null);
       setContextWindow(0);
       return;
     }
@@ -885,13 +942,11 @@ export function ChatStudio() {
       .then((pipeline) => {
         if (!cancelled) {
           const settings = resolveChatSettings(pipeline);
-          setDefaultChatModel(settings.chatModel);
           setContextWindow(settings.contextWindow);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setDefaultChatModel(null);
           setContextWindow(0);
         }
       });
@@ -1059,13 +1114,6 @@ export function ChatStudio() {
   }, [authLoading, authToken, openrouterConfigured]);
 
   useEffect(() => {
-    if (!defaultChatModel) {
-      return;
-    }
-    setActiveModelId((current) => current ?? defaultChatModel ?? null);
-  }, [defaultChatModel]);
-
-  useEffect(() => {
     if (!selectedSessionId) {
       return;
     }
@@ -1076,6 +1124,74 @@ export function ChatStudio() {
       );
     }
   }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!activeModelId) {
+      previousModelIdRef.current = null;
+      return;
+    }
+    const previous = previousModelIdRef.current;
+    if (previous && previous !== activeModelId) {
+      setParameterOverrides({});
+      setProviderForm(createDefaultProviderForm());
+    }
+    previousModelIdRef.current = activeModelId;
+  }, [activeModelId]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      return;
+    }
+    const session = sessions.find((item) => item.id === selectedSessionId);
+    if (!session) {
+      return;
+    }
+    setSelectedToolCollectionIds(session.tool_collection_ids ?? []);
+    setParameterOverrides(session.parameter_overrides ?? {});
+    setProviderForm(createProviderFormFromPreferences(session.provider_preferences));
+    setStreamingEnabled(session.stream ?? DEFAULT_STREAMING_ENABLED);
+  }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      applyNewChatDefaultsRef.current = true;
+    }
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (loading || selectedSessionId || !applyNewChatDefaultsRef.current) {
+      return;
+    }
+    if (newChatDefaultsRef.current) {
+      const snapshot = newChatDefaultsRef.current;
+      setActiveModelId(snapshot.activeModelId);
+      setParameterOverrides(snapshot.parameterOverrides);
+      setProviderForm(snapshot.providerForm);
+      setStreamingEnabled(snapshot.streamingEnabled);
+      setSelectedToolCollectionIds(snapshot.toolCollectionIds);
+      newChatDefaultsRef.current = null;
+      applyNewChatDefaultsRef.current = false;
+      return;
+    }
+    const pendingIds = pendingSessionIdsRef.current;
+    const latestSession = sessions.find((session) => !pendingIds.has(session.id)) ?? null;
+    if (latestSession) {
+      setActiveModelId(latestSession.chat_model);
+      setParameterOverrides(latestSession.parameter_overrides ?? {});
+      setProviderForm(createProviderFormFromPreferences(latestSession.provider_preferences));
+      setStreamingEnabled(latestSession.stream ?? DEFAULT_STREAMING_ENABLED);
+      setSelectedToolCollectionIds(latestSession.tool_collection_ids ?? []);
+    } else if (user) {
+      setActiveModelId(user.last_used_chat_model ?? null);
+      setParameterOverrides(user.last_used_parameters ?? {});
+      setProviderForm(createProviderFormFromPreferences(user.last_used_provider));
+      setStreamingEnabled(user.last_used_stream ?? DEFAULT_STREAMING_ENABLED);
+      setSelectedToolCollectionIds(
+        resolveValidToolCollectionIds(user.last_used_tool_collection_ids ?? []),
+      );
+    }
+    applyNewChatDefaultsRef.current = false;
+  }, [loading, resolveValidToolCollectionIds, selectedSessionId, sessions, user]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -1091,7 +1207,6 @@ export function ChatStudio() {
     if (pendingSessionIdsRef.current.has(selectedSessionId)) {
       setMessages([]);
       setToolTraces([]);
-      setChatEntryOrder([]);
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
@@ -1138,22 +1253,11 @@ export function ChatStudio() {
         if (!trimmedOptimistic) {
           return false;
         }
-        const optimisticTimestamp = Date.parse(optimistic.created_at) || Date.now();
         const duplicate = messages.some((message) => {
-          if (message.session_id !== optimistic.session_id) {
-            return false;
-          }
-          if (message.role !== "user") {
-            return false;
-          }
-          if (message.content.trim() !== trimmedOptimistic) {
-            return false;
-          }
           if (message.id === optimistic.id) {
             return false;
           }
-          const persistedTimestamp = Date.parse(message.created_at) || 0;
-          return Math.abs(persistedTimestamp - optimisticTimestamp) < OPTIMISTIC_DEDUPE_WINDOW_MS;
+          return isOptimisticDuplicate(optimistic, message, messageOrderRef.current);
         });
         return !duplicate;
       });
@@ -1171,24 +1275,19 @@ export function ChatStudio() {
     }
   }, [selectedSessionId, sessions]);
 
-  useEffect(() => {
-    setParameterOverrides({});
-  }, [activeModelId]);
-
   const currentModelInfo = useMemo(() => {
-    const lookupId = activeModelId || defaultChatModel;
+    const lookupId = activeModelId;
     if (!lookupId) return null;
     return (
       modelCatalog.find((model) => model.id === lookupId || model.canonical_slug === lookupId) ??
       null
     );
-  }, [activeModelId, defaultChatModel, modelCatalog]);
+  }, [activeModelId, modelCatalog]);
 
   const providerModelSlug = useMemo(() => {
-    const slugSource =
-      currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? defaultChatModel ?? null;
+    const slugSource = currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? null;
     return sanitizeModelSlug(slugSource);
-  }, [defaultChatModel, currentModelInfo?.canonical_slug, currentModelInfo?.id]);
+  }, [currentModelInfo?.canonical_slug, currentModelInfo?.id]);
 
   const supportedParameterKeys = useMemo(() => {
     const supported = new Set<ModelParameterKey>();
@@ -1271,6 +1370,32 @@ export function ChatStudio() {
   }, [providerForm]);
 
   const providerRuleCount = useMemo(() => Object.keys(providerPayload).length, [providerPayload]);
+
+  const overrideSections = useMemo(() => {
+    const sections: Array<{ id: string; label: string }> = [];
+    if (basePromptDetails?.is_custom) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.systemPrompt, label: "System prompt" });
+    }
+    if (selectedToolCollectionIds.length > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.collectionTools, label: "Collection tools" });
+    }
+    if (streamingEnabled !== DEFAULT_STREAMING_ENABLED) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.streaming, label: "Streaming" });
+    }
+    if (providerRuleCount > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.providerRouting, label: "Provider routing" });
+    }
+    if (activeParameterCount > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.modelParameters, label: "Model parameters" });
+    }
+    return sections;
+  }, [
+    activeParameterCount,
+    basePromptDetails?.is_custom,
+    providerRuleCount,
+    selectedToolCollectionIds.length,
+    streamingEnabled,
+  ]);
 
   useEffect(() => {
     if (!providerModelSlug) {
@@ -1381,11 +1506,6 @@ export function ChatStudio() {
 
   useEffect(() => {
     reasoningCacheRef.current.clear();
-  }, [selectedSessionId]);
-
-  useEffect(() => {
-    setChatEntryOrder([]);
-    chatHydrationPendingRef.current = true;
   }, [selectedSessionId]);
 
   const handleReasoningToggle = useCallback(() => {}, []);
@@ -1551,20 +1671,9 @@ export function ChatStudio() {
       if (!trimmedOptimistic) {
         return false;
       }
-      const optimisticTimestamp = Date.parse(optimistic.created_at) || Date.now();
-      return !messages.some((message) => {
-        if (message.session_id !== optimistic.session_id) {
-          return false;
-        }
-        if (message.role !== "user") {
-          return false;
-        }
-        if (message.content.trim() !== trimmedOptimistic) {
-          return false;
-        }
-        const persistedTimestamp = Date.parse(message.created_at) || 0;
-        return Math.abs(persistedTimestamp - optimisticTimestamp) < OPTIMISTIC_DEDUPE_WINDOW_MS;
-      });
+      return !messages.some((message) =>
+        isOptimisticDuplicate(optimistic, message, messageOrderRef.current),
+      );
     });
     const combined = [...messages, ...dedupedOptimistic].sort((a, b) => {
       const aOrder = messageOrderRef.current.get(a.id);
@@ -1746,10 +1855,7 @@ export function ChatStudio() {
     [filteredModelCatalog, modelSortOption],
   );
 
-  const selectedModelKey = useMemo(
-    () => activeModelId || defaultChatModel || "",
-    [activeModelId, defaultChatModel],
-  );
+  const selectedModelKey = useMemo(() => activeModelId || "", [activeModelId]);
 
   const substitutePromptVariables = useCallback(
     (templateValue: string, context?: Record<string, string>) => {
@@ -1987,13 +2093,30 @@ export function ChatStudio() {
       setContextWindow(response.context_window || contextWindow || 0);
       setSelectedSessionId(response.session.id);
       setActiveModelId(response.session.chat_model);
+      const resolvedSession =
+        toolCollectionsDirtyRef.current && response.session.tool_collection_ids
+          ? { ...response.session, tool_collection_ids: selectedToolCollectionIds }
+          : response.session;
+      if (response.session.tool_collection_ids) {
+        setSelectedToolCollectionIds((prev) => {
+          if (toolCollectionsDirtyRef.current) {
+            return prev;
+          }
+          return areArraysEqual(prev, response.session.tool_collection_ids)
+            ? prev
+            : response.session.tool_collection_ids;
+        });
+      }
+      setParameterOverrides(response.session.parameter_overrides ?? {});
+      setProviderForm(createProviderFormFromPreferences(response.session.provider_preferences));
+      setStreamingEnabled(response.session.stream ?? DEFAULT_STREAMING_ENABLED);
       setSessions((prev) => {
         const next = [...prev];
         const idx = next.findIndex((session) => session.id === response.session.id);
         if (idx >= 0) {
-          next[idx] = response.session;
+          next[idx] = resolvedSession;
         } else {
-          next.push(response.session);
+          next.push(resolvedSession);
         }
         return sortSessions(next);
       });
@@ -2018,13 +2141,16 @@ export function ChatStudio() {
       setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
       return;
     }
-    const targetModelId = activeModelId || defaultChatModel;
+    const targetModelId = activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
     }
     const trimmed = draft.trim();
     if (!trimmed) return;
+    const parameterPayload = buildParameterPayload();
+    const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
+    const provider = providerRuleCount > 0 ? providerPayload : undefined;
     let sessionId = selectedSessionId;
     const isNewSession = !sessionId;
     if (!sessionId) {
@@ -2038,11 +2164,29 @@ export function ChatStudio() {
         chat_model: targetModelId,
         context_tokens: 0,
         tool_collection_ids: selectedToolCollectionIds,
+        parameter_overrides: parameters ?? {},
+        provider_preferences: provider ?? {},
+        stream: streamingEnabled,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       setSessions((prev) => sortSessions([...prev, placeholderSession]));
       pendingSessionIdsRef.current.add(sessionId);
+      setMessages([]);
+      setToolTraces([]);
+      setChatEntryOrder([]);
+      chatHydrationPendingRef.current = true;
+      setUsage(null);
+      setContextConsumed(0);
+      setOptimisticMessages([]);
+      navigateToChat(sessionId, selectedToolCollectionIds);
+      await new Promise<void>((resolve) => {
+        if (typeof window === "undefined") {
+          resolve();
+          return;
+        }
+        window.requestAnimationFrame(() => resolve());
+      });
     }
     if (!sessionId) return;
 
@@ -2057,10 +2201,13 @@ export function ChatStudio() {
     };
     ensureMessageOrder(messageOrderRef.current, nextMessageOrderRef, [placeholderMessage]);
     setOptimisticMessages((prev) => [...prev, placeholderMessage]);
+    setChatEntryOrder((prev) => {
+      if (prev.includes(placeholderMessageId)) {
+        return prev;
+      }
+      return isNewSession ? [placeholderMessageId] : [...prev, placeholderMessageId];
+    });
 
-    const parameterPayload = buildParameterPayload();
-    const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
-    const provider = providerRuleCount > 0 ? providerPayload : undefined;
     setLiveResponse("");
     setIsStreamingResponse(false);
     resetLiveReasoningState();
@@ -2113,7 +2260,7 @@ export function ChatStudio() {
       setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
       return;
     }
-    const targetModelId = activeModelId || defaultChatModel;
+    const targetModelId = activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
@@ -2160,8 +2307,17 @@ export function ChatStudio() {
 
   const handleStartNewChat = () => {
     stopProgressPolling();
+    newChatDefaultsRef.current = {
+      activeModelId,
+      parameterOverrides,
+      providerForm,
+      streamingEnabled,
+      toolCollectionIds: selectedToolCollectionIds,
+    };
     setSelectedSessionId(null);
+    applyNewChatDefaultsRef.current = true;
     pendingSessionIdsRef.current.clear();
+    toolCollectionsDirtyRef.current = false;
     setMessages([]);
     setToolTraces([]);
     setChatEntryOrder([]);
@@ -2184,6 +2340,7 @@ export function ChatStudio() {
 
   const toggleToolCollection = useCallback(
     (collectionId: string) => {
+      toolCollectionsDirtyRef.current = true;
       setSelectedToolCollectionIds((prev) => {
         const next = prev.includes(collectionId)
           ? prev.filter((id) => id !== collectionId)
@@ -2204,6 +2361,7 @@ export function ChatStudio() {
   );
 
   const clearToolCollections = useCallback(() => {
+    toolCollectionsDirtyRef.current = true;
     setSelectedToolCollectionIds([]);
     if (selectedSessionId) {
       setSessions((sessionsPrev) =>
@@ -2243,6 +2401,54 @@ export function ChatStudio() {
     anchor.click();
     URL.revokeObjectURL(url);
   }, [messages, selectedSessionId, sessions]);
+
+  const handleOverrideSelect = useCallback(
+    (sectionId: string) => {
+      setTelemetryOpen(true);
+      switch (sectionId) {
+        case TELEMETRY_SECTION_IDS.systemPrompt:
+          setSystemPromptOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.collectionTools:
+          setCollectionToolsOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.streaming:
+          setStreamingOptionsOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.modelRouting:
+          setModelSelectorOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.providerRouting:
+          setProviderPreferencesOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.modelParameters:
+          setModelParametersOpen(true);
+          break;
+        default:
+          break;
+      }
+      if (typeof document === "undefined") {
+        return;
+      }
+      const scrollToSection = () => {
+        const target = document.getElementById(sectionId);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+      window.requestAnimationFrame(scrollToSection);
+      window.setTimeout(scrollToSection, 80);
+    },
+    [
+      setCollectionToolsOpen,
+      setModelParametersOpen,
+      setModelSelectorOpen,
+      setProviderPreferencesOpen,
+      setStreamingOptionsOpen,
+      setSystemPromptOpen,
+      setTelemetryOpen,
+    ],
+  );
 
   const handleSelectSession = useCallback(
     (sessionId: string) => {
@@ -2561,6 +2767,7 @@ export function ChatStudio() {
       setLiveResponse("");
       setIsStreamingResponse(false);
       isStreamingResponseRef.current = false;
+      toolCollectionsDirtyRef.current = false;
       setFinalStreamAssistantId(null);
       setLiveToolEvents([]);
       setLiveToolOrder([]);
@@ -2755,6 +2962,18 @@ export function ChatStudio() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)}
+                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white"
+                    >
+                      <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                        Model
+                      </span>
+                      <span className="text-sm font-semibold text-white">
+                        {currentModelInfo?.name || activeModelId || "Select model"}
+                      </span>
+                    </button>
                     {!historyOpen && (
                       <Button
                         variant="secondary"
@@ -2801,8 +3020,8 @@ export function ChatStudio() {
                         onRetryAssistant={handleRetryAssistant}
                         onReasoningToggle={handleReasoningToggle}
                         markdownComponents={markdownComponents}
-                        samplePrompts={samplePrompts}
-                        onSamplePromptSelect={setDraft}
+                        overrideSections={overrideSections}
+                        onOverrideSelect={handleOverrideSelect}
                         liveResponse={liveResponse}
                         hasLiveText={hasLiveText}
                         liveResponseAnimationKey={liveResponseAnimationKey}
@@ -2848,6 +3067,8 @@ export function ChatStudio() {
                 <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
                   <TelemetryPanel
                     onClose={() => setTelemetryOpen(false)}
+                    sectionIds={TELEMETRY_SECTION_IDS}
+                    systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
                     promptSections={promptSectionsSummary}
                     promptPreviewMarkdown={promptPreviewMarkdown}
                     promptLoading={promptLoading}

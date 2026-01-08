@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, Float, Index, String, Text
+from sqlalchemy import JSON, Boolean, Column, Float, Index, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.utils.time import utc_now
@@ -90,6 +90,26 @@ class User(SQLModel, TimestampMixin, table=True):
     system_prompt_template: Optional[str] = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
+    )
+    last_used_chat_model: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String, nullable=True),
+    )
+    last_used_parameters: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    last_used_provider: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    last_used_stream: Optional[bool] = Field(
+        default=None,
+        sa_column=Column(Boolean, nullable=True),
+    )
+    last_used_tool_collection_ids: Optional[List[str]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
     )
     is_active: bool = Field(default=True, nullable=False)
 
@@ -353,6 +373,15 @@ class ChatSession(SQLModel, TimestampMixin, table=True):
     mode: ChatMode = Field(default=ChatMode.CHAT, sa_column=Column(String, nullable=False))
     chat_model: str = Field(sa_column=Column(String, nullable=False))
     context_tokens: int = Field(default=0, nullable=False)
+    parameter_overrides: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    provider_preferences: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    stream: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
 
 
 class ChatSessionCollection(SQLModel, TimestampMixin, table=True):

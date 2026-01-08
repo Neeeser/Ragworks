@@ -37,6 +37,11 @@ def _build_user_read(user: models.User) -> UserRead:
         is_active=user.is_active,
         openrouter_configured=bool((user.openrouter_api_key or "").strip()),
         pinecone_configured=bool((user.pinecone_api_key or "").strip()),
+        last_used_chat_model=user.last_used_chat_model,
+        last_used_parameters=user.last_used_parameters,
+        last_used_provider=user.last_used_provider,
+        last_used_stream=user.last_used_stream,
+        last_used_tool_collection_ids=user.last_used_tool_collection_ids,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
