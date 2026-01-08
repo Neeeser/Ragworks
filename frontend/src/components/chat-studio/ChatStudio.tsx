@@ -1142,6 +1142,9 @@ export function ChatStudio() {
     if (!selectedSessionId) {
       return;
     }
+    if (pendingSessionIdsRef.current.has(selectedSessionId)) {
+      return;
+    }
     const session = sessions.find((item) => item.id === selectedSessionId);
     if (!session) {
       return;
