@@ -3010,23 +3010,23 @@ export function ChatStudio() {
                     <button
                       type="button"
                       onClick={() => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)}
-                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white"
+                      className="hidden min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white sm:flex"
                     >
                       <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
                         Model
                       </span>
-                      <span className="text-sm font-semibold text-white">
+                      <span className="min-w-0 truncate text-sm font-semibold text-white">
                         {currentModelInfo?.name || activeModelId || "Select model"}
                       </span>
                     </button>
                     {!historyOpen && (
                       <Button
                         variant="secondary"
-                        className="flex h-10 items-center justify-center gap-2"
+                        className="flex h-10 items-center justify-center gap-2 px-3"
                         onClick={handleStartNewChat}
                       >
                         <PlusCircle className="h-4 w-4" />
-                        <span>New chat</span>
+                        <span className="hidden sm:inline">New chat</span>
                       </Button>
                     )}
                   </div>
@@ -3067,8 +3067,10 @@ export function ChatStudio() {
                     )}
                     <div className="flex h-full flex-col gap-4">
                       <ChatTimeline
-                        collectionLabel={collectionLabel}
-                        toolsEnabled={toolsEnabled}
+                        modelLabel={currentModelInfo?.name || activeModelId || "Select model"}
+                        onModelSelect={() =>
+                          handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)
+                        }
                         chatEntryOrder={chatEntryOrder}
                         chatEntryMap={chatEntryMap}
                         finalStreamAssistantId={finalStreamAssistantId}

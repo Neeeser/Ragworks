@@ -35,8 +35,8 @@ const roleVariants: Record<string, string> = {
 };
 
 type ChatTimelineProps = {
-  collectionLabel: string;
-  toolsEnabled: boolean;
+  modelLabel: string;
+  onModelSelect: () => void;
   chatEntryOrder: string[];
   chatEntryMap: Map<string, ChatEntry>;
   finalStreamAssistantId: string | null;
@@ -73,8 +73,8 @@ type ChatTimelineProps = {
 };
 
 export function ChatTimeline({
-  collectionLabel,
-  toolsEnabled,
+  modelLabel,
+  onModelSelect,
   chatEntryOrder,
   chatEntryMap,
   finalStreamAssistantId,
@@ -125,16 +125,21 @@ export function ChatTimeline({
 
   if (timelineEntries.length === 0) {
     if (!selectedSessionId) {
-      const title = toolsEnabled ? collectionLabel : "Chat studio";
-      const description = toolsEnabled
-        ? "Ask anything about the selected collections and we will cite the chunks that back it up."
-        : "Start a conversation now, or enable collection tools in Run settings to ground answers.";
       return (
         <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
-          <div className="space-y-2">
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
-            <h3 className="text-3xl font-semibold text-white">{title}</h3>
-            <p className="text-sm text-slate-400">{description}</p>
+          <div className="flex w-full max-w-md flex-col items-center">
+            <button
+              type="button"
+              onClick={onModelSelect}
+              className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white"
+            >
+              <span className="shrink-0 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                Model
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold text-white">
+                {modelLabel}
+              </span>
+            </button>
           </div>
           <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/40 to-cyan-950/30 p-6 text-left shadow-[0_30px_80px_-50px_rgba(56,189,248,0.35)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
