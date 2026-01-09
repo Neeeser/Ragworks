@@ -41,6 +41,10 @@ body {
     sans-serif;
 }
 
+html {
+  font-size: 14.5px;
+}
+
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--border);
