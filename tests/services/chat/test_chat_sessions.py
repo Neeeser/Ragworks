@@ -38,9 +38,9 @@ def test_ensure_session_returns_existing_session() -> None:
         chat_repo=chat_repo,
         session=_StubSession(),
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=collection_id),
         payload=payload,
         default_chat_model="model",
+        primary_collection_id=collection_id,
     )
 
     resolved = ensure_session(request)
@@ -59,9 +59,9 @@ def test_ensure_session_creates_session_with_requested_id() -> None:
         chat_repo=chat_repo,
         session=session,
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=uuid4()),
         payload=payload,
         default_chat_model="model",
+        primary_collection_id=uuid4(),
     )
 
     created = ensure_session(request)
@@ -69,3 +69,23 @@ def test_ensure_session_creates_session_with_requested_id() -> None:
     assert created.id == session_id
     assert chat_repo.added is created
     assert session.commits == 1
+
+
+def test_ensure_session_prefers_user_last_used_model() -> None:
+    chat_repo = _StubChatRepo(existing=None)
+    session = _StubSession()
+    user = SimpleNamespace(id=uuid4(), last_used_chat_model="last-used-model")
+    payload = ChatMessageCreate(content="Hello")
+
+    request = SessionRequest(
+        chat_repo=chat_repo,
+        session=session,
+        user=user,
+        payload=payload,
+        default_chat_model="default-model",
+        primary_collection_id=None,
+    )
+
+    created = ensure_session(request)
+
+    assert created.chat_model == "last-used-model"

@@ -6,23 +6,33 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-import type { CollectionPromptDetails } from "@/lib/types";
+import type { PromptDetails } from "@/lib/types";
 import type { Components } from "react-markdown";
+
+type PromptEditorSection = {
+  id: string;
+  label: string;
+  scope: "base" | "collection";
+  details: PromptDetails | null;
+  draft: string;
+  hasChanges: boolean;
+  saving: boolean;
+  error: string | null;
+};
 
 interface PromptEditorOverlayProps {
   isOpen: boolean;
   onClose: () => void;
-  promptDetails: CollectionPromptDetails | null;
-  promptDraft: string;
-  setPromptDraft: (value: string) => void;
-  promptSaving: boolean;
-  promptError: string | null;
-  promptHasChanges: boolean;
+  sections: PromptEditorSection[];
+  activeSectionId: string | null;
+  onSelectSection: (sectionId: string) => void;
+  onDraftChange: (sectionId: string, value: string) => void;
+  onSave: (sectionId: string) => void;
+  onReset: (sectionId: string) => void;
+  onInsertVariable: (sectionId: string, varName: string) => void;
   promptPreviewMarkdown: string;
-  onSave: () => void;
-  onReset: () => void;
-  onInsertVariable: (varName: string) => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   markdownComponents: Components;
 }
@@ -30,26 +40,26 @@ interface PromptEditorOverlayProps {
 export const PromptEditorOverlay = ({
   isOpen,
   onClose,
-  promptDetails,
-  promptDraft,
-  setPromptDraft,
-  promptSaving,
-  promptError,
-  promptHasChanges,
-  promptPreviewMarkdown,
+  sections,
+  activeSectionId,
+  onSelectSection,
+  onDraftChange,
   onSave,
   onReset,
   onInsertVariable,
+  promptPreviewMarkdown,
   inputRef,
   markdownComponents,
 }: PromptEditorOverlayProps) => {
-  if (!isOpen || !promptDetails) {
+  if (!isOpen || sections.length === 0) {
     return null;
   }
 
-  const variables = promptDetails.variables ?? [];
-  const contextEntries = Object.entries(promptDetails.context ?? {});
+  const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
+  const variables = activeSection.details?.variables ?? [];
+  const contextEntries = Object.entries(activeSection.details?.context ?? {});
   const previewSource = promptPreviewMarkdown?.trim() ? promptPreviewMarkdown : "_No content yet._";
+  const headerLabel = activeSection.scope === "base" ? "Base prompt" : "Tool prompt";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -58,10 +68,10 @@ export const PromptEditorOverlay = ({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-slate-500">System prompt</p>
-            <h2 className="text-2xl font-semibold text-white">Edit collection instructions</h2>
+            <h2 className="text-2xl font-semibold text-white">Edit prompt sections</h2>
             <p className="text-sm text-slate-400">
-              Craft Markdown guidance for this collection. Variables inject metadata, letting the
-              prompt stay fresh as the context changes.
+              Tune the base instructions and tool snippets. The preview shows the full prompt that
+              the model will see.
             </p>
           </div>
           <Button
@@ -73,17 +83,40 @@ export const PromptEditorOverlay = ({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="mt-5 flex flex-1 flex-col gap-4 overflow-y-auto">
+        <div className="mt-4 flex flex-wrap gap-2">
+          {sections.map((section) => {
+            const isActive = section.id === activeSection.id;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => onSelectSection(section.id)}
+                className={cn(
+                  "rounded-full border px-4 py-1.5 text-xs uppercase tracking-[0.3em] transition",
+                  isActive
+                    ? "border-violet-400 bg-violet-500/20 text-white"
+                    : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30 hover:text-white",
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  {section.label}
+                  {section.hasChanges && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 flex flex-1 flex-col gap-4 overflow-y-auto">
           <div className="flex flex-col gap-4 lg:flex-row">
             <div className="flex w-full flex-1 flex-col rounded-2xl border border-white/10 bg-black/30 p-4 lg:w-1/2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-white" htmlFor="system-prompt-editor">
-                  Markdown template
+                  {headerLabel} template
                 </label>
                 <button
                   type="button"
                   className="text-xs text-violet-300 hover:text-violet-200"
-                  onClick={onReset}
+                  onClick={() => onReset(activeSection.id)}
                 >
                   Revert to default
                 </button>
@@ -92,9 +125,9 @@ export const PromptEditorOverlay = ({
                 id="system-prompt-editor"
                 ref={inputRef}
                 className="mt-3 min-h-[300px] flex-1 resize-none rounded-2xl border border-white/15 bg-black/60 px-4 py-3 font-mono text-sm text-white outline-none focus:border-violet-400"
-                value={promptDraft}
-                onChange={(event) => setPromptDraft(event.target.value)}
-                placeholder="Write instructions with Markdown. Use {{collection.name}} style variables."
+                value={activeSection.draft}
+                onChange={(event) => onDraftChange(activeSection.id, event.target.value)}
+                placeholder="Write instructions with Markdown. Use {{variable}} placeholders."
               />
               <p className="mt-3 text-xs text-slate-500">
                 Leave blank to fall back to the default prompt shipped with TransparentRAG.
@@ -104,7 +137,7 @@ export const PromptEditorOverlay = ({
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-white">Rendered preview</p>
                 <span className="text-xs text-slate-500">
-                  {promptDetails.is_custom ? "Custom template" : "Default template"}
+                  {activeSection.details?.is_custom ? "Custom template" : "Default template"}
                 </span>
               </div>
               <div className="mt-3 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-4">
@@ -128,7 +161,7 @@ export const PromptEditorOverlay = ({
                     key={variable.name}
                     type="button"
                     className="w-full rounded-2xl border border-white/5 bg-black/30 px-3 py-2 text-left transition hover:border-violet-400/60 hover:bg-black/60"
-                    onClick={() => onInsertVariable(variable.name)}
+                    onClick={() => onInsertVariable(activeSection.id, variable.name)}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <code className="rounded bg-white/10 px-2 py-0.5 text-[12px] text-violet-200">
@@ -170,15 +203,15 @@ export const PromptEditorOverlay = ({
           </div>
         </div>
         <div className="mt-5 flex flex-col gap-3 border-t border-white/5 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-          {isOpen && promptError && <p className="text-sm text-rose-300">{promptError}</p>}
+          {activeSection.error && <p className="text-sm text-rose-300">{activeSection.error}</p>}
           <div className="flex flex-1 justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
             <Button
-              onClick={onSave}
-              loading={promptSaving}
-              disabled={!promptHasChanges || promptSaving}
+              onClick={() => onSave(activeSection.id)}
+              loading={activeSection.saving}
+              disabled={!activeSection.hasChanges || activeSection.saving}
               className="px-5"
             >
               Save prompt

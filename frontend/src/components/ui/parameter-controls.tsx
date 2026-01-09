@@ -20,6 +20,7 @@ type ParameterFieldCardProps = {
   label: string;
   description?: string | null;
   helper?: string | null;
+  overrideActive?: boolean;
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
@@ -30,6 +31,7 @@ export function ParameterFieldCard({
   label,
   description,
   helper,
+  overrideActive,
   actionLabel,
   actionDisabled,
   onAction,
@@ -39,7 +41,12 @@ export function ParameterFieldCard({
     <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-white">{label}</p>
+            {overrideActive && (
+              <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+            )}
+          </div>
           {description ? <p className="text-xs text-slate-400">{description}</p> : null}
           {helper ? <p className="text-[11px] text-slate-500">{helper}</p> : null}
         </div>

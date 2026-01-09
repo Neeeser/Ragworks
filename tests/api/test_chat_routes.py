@@ -36,11 +36,11 @@ def _create_user(session: Session) -> models.User:
     return user
 
 
-def _create_collection(session: Session, user: models.User) -> models.Collection:
+def _create_collection(session: Session, user: models.User, name: str) -> models.Collection:
     repo = CollectionRepository(session)
     collection = models.Collection(
         user_id=user.id,
-        name="Collection",
+        name=name,
         description="",
         extra_metadata={},
     )
@@ -50,10 +50,15 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     return collection
 
 
-def _create_chat_session(session: Session, user: models.User, collection: models.Collection) -> models.ChatSession:
+def _create_chat_session(
+    session: Session,
+    user: models.User,
+    *,
+    collection: models.Collection | None = None,
+) -> models.ChatSession:
     chat_session = models.ChatSession(
         user_id=user.id,
-        collection_id=collection.id,
+        collection_id=collection.id if collection else None,
         title="Session",
         mode=models.ChatMode.CHAT,
         chat_model="chat",
@@ -63,10 +68,18 @@ def _create_chat_session(session: Session, user: models.User, collection: models
     repo.add_session(chat_session)
     session.commit()
     session.refresh(chat_session)
+    if collection:
+        repo.replace_session_collections(session_id=chat_session.id, collection_ids=[collection.id])
+        session.commit()
     return chat_session
 
 
-def _add_message(session: Session, chat_session: models.ChatSession, role: ChatRole, content: str) -> models.ChatMessage:
+def _add_message(
+    session: Session,
+    chat_session: models.ChatSession,
+    role: ChatRole,
+    content: str,
+) -> models.ChatMessage:
     message = models.ChatMessage(
         session_id=chat_session.id,
         role=role,
@@ -81,18 +94,8 @@ def _add_message(session: Session, chat_session: models.ChatSession, role: ChatR
     return message
 
 
-def test_chat_with_collection_raises_when_missing(session: Session) -> None:
+def test_chat_maps_value_error(monkeypatch, session: Session) -> None:
     user = _create_user(session)
-
-    with pytest.raises(HTTPException) as excinfo:
-        chat_routes.chat_with_collection(uuid4(), ChatMessageCreate(content="hi"), current_user=user, session=session)
-
-    assert excinfo.value.status_code == 404
-
-
-def test_chat_with_collection_maps_value_error(monkeypatch, session: Session) -> None:
-    user = _create_user(session)
-    collection = _create_collection(session, user)
 
     class _StubChatService:
         def __init__(self, _session: Session) -> None:
@@ -104,24 +107,19 @@ def test_chat_with_collection_maps_value_error(monkeypatch, session: Session) ->
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
 
     with pytest.raises(HTTPException) as excinfo:
-        chat_routes.chat_with_collection(
-            collection.id,
-            ChatMessageCreate(content="hi"),
-            current_user=user,
-            session=session,
-        )
+        chat_routes.chat(ChatMessageCreate(content="hi"), current_user=user, session=session)
 
     assert excinfo.value.status_code == 400
 
 
-def test_chat_with_collection_returns_response(monkeypatch, session: Session) -> None:
+def test_chat_returns_response(monkeypatch, session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
-    chat_session = _create_chat_session(session, user, collection)
+    collection = _create_collection(session, user, "Collection")
+    chat_session = _create_chat_session(session, user, collection=collection)
     message = _add_message(session, chat_session, ChatRole.USER, "hi")
 
     response = ChatCompletionResponse(
-        session=ChatSessionRead.from_model(chat_session),
+        session=ChatSessionRead.from_model(chat_session, tool_collection_ids=[collection.id]),
         messages=[ChatMessageRead.from_model(message)],
         tool_traces=[],
         usage={"prompt_tokens": 1},
@@ -139,35 +137,69 @@ def test_chat_with_collection_returns_response(monkeypatch, session: Session) ->
 
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
 
-    result = chat_routes.chat_with_collection(
-        collection.id,
-        ChatMessageCreate(content="hi"),
-        current_user=user,
-        session=session,
-    )
+    result = chat_routes.chat(ChatMessageCreate(content="hi"), current_user=user, session=session)
 
     assert result.provider == "openrouter"
 
 
 def test_list_sessions_and_history_paths(session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
-    chat_session = _create_chat_session(session, user, collection)
+    collection = _create_collection(session, user, "Collection")
+    chat_session = _create_chat_session(session, user, collection=collection)
     _add_message(session, chat_session, ChatRole.USER, "hi")
 
-    sessions = chat_routes.list_sessions(collection.id, current_user=user, session=session)
+    sessions = chat_routes.list_sessions(
+        current_user=user,
+        session=session,
+        collection_ids=None,
+        include_unassigned=False,
+    )
     history = chat_routes.get_chat_history(chat_session.id, current_user=user, session=session)
 
     assert sessions[0].id == chat_session.id
+    assert sessions[0].tool_collection_ids == [collection.id]
     assert history[0].content == "hi"
 
 
-def test_list_sessions_and_history_missing_records(session: Session) -> None:
+def test_list_sessions_filters_by_collection(session: Session) -> None:
     user = _create_user(session)
+    collection_a = _create_collection(session, user, "Alpha")
+    collection_b = _create_collection(session, user, "Beta")
+    session_a = _create_chat_session(session, user, collection=collection_a)
+    session_b = _create_chat_session(session, user, collection=collection_b)
+    unassigned = _create_chat_session(session, user, collection=None)
 
-    with pytest.raises(HTTPException) as excinfo:
-        chat_routes.list_sessions(uuid4(), current_user=user, session=session)
-    assert excinfo.value.status_code == 404
+    filtered = chat_routes.list_sessions(
+        current_user=user,
+        session=session,
+        collection_ids=[collection_a.id],
+        include_unassigned=False,
+    )
+    filtered_ids = {entry.id for entry in filtered}
+    assert session_a.id in filtered_ids
+    assert session_b.id not in filtered_ids
+    assert unassigned.id not in filtered_ids
+
+
+def test_list_sessions_filters_include_unassigned(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user, "Alpha")
+    session_a = _create_chat_session(session, user, collection=collection)
+    unassigned = _create_chat_session(session, user, collection=None)
+
+    filtered = chat_routes.list_sessions(
+        current_user=user,
+        session=session,
+        collection_ids=[collection.id],
+        include_unassigned=True,
+    )
+    filtered_ids = {entry.id for entry in filtered}
+    assert session_a.id in filtered_ids
+    assert unassigned.id in filtered_ids
+
+
+def test_get_chat_history_missing_records(session: Session) -> None:
+    user = _create_user(session)
 
     with pytest.raises(HTTPException) as excinfo:
         chat_routes.get_chat_history(uuid4(), current_user=user, session=session)
@@ -176,8 +208,8 @@ def test_list_sessions_and_history_missing_records(session: Session) -> None:
 
 def test_delete_chat_session_paths(session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
-    chat_session = _create_chat_session(session, user, collection)
+    collection = _create_collection(session, user, "Collection")
+    chat_session = _create_chat_session(session, user, collection=collection)
 
     response = chat_routes.delete_chat_session(chat_session.id, current_user=user, session=session)
     assert response.status_code == 204
@@ -187,13 +219,11 @@ def test_delete_chat_session_paths(session: Session) -> None:
     assert excinfo.value.status_code == 404
 
 
-def test_stream_chat_with_collection_yields_events(monkeypatch) -> None:
+def test_stream_chat_yields_events(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
         openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
-    collection = SimpleNamespace(id=uuid4())
 
     class _StubChatService:
         def __init__(self, _session: Session) -> None:
@@ -204,11 +234,9 @@ def test_stream_chat_with_collection_yields_events(monkeypatch) -> None:
             yield {"type": "final", "payload": {"ok": True}}
 
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
-    monkeypatch.setattr(chat_routes, "get_collection_or_404", lambda **_kwargs: collection)
     monkeypatch.setattr(chat_routes, "get_current_user", lambda token, session: user)
 
-    response = chat_routes.stream_chat_with_collection(
-        collection.id,
+    response = chat_routes.stream_chat(
         ChatMessageCreate(content="hi"),
         _DummyRequest(),
         token="token",
@@ -225,13 +253,11 @@ def test_stream_chat_with_collection_yields_events(monkeypatch) -> None:
     assert last == "data: [DONE]\n\n"
 
 
-def test_stream_chat_with_collection_handles_errors(monkeypatch) -> None:
+def test_stream_chat_handles_errors(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
         openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
-    collection = SimpleNamespace(id=uuid4())
 
     class _StubChatService:
         def __init__(self, _session: Session) -> None:
@@ -242,11 +268,9 @@ def test_stream_chat_with_collection_handles_errors(monkeypatch) -> None:
             raise RuntimeError("boom")
 
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
-    monkeypatch.setattr(chat_routes, "get_collection_or_404", lambda **_kwargs: collection)
     monkeypatch.setattr(chat_routes, "get_current_user", lambda token, session: user)
 
-    response = chat_routes.stream_chat_with_collection(
-        collection.id,
+    response = chat_routes.stream_chat(
         ChatMessageCreate(content="hi"),
         _DummyRequest(),
         token="token",
@@ -261,42 +285,11 @@ def test_stream_chat_with_collection_handles_errors(monkeypatch) -> None:
     assert any("error" in chunk for chunk in materialized)
 
 
-def test_stream_chat_with_collection_rejects_missing_collection(monkeypatch) -> None:
+def test_stream_chat_closes_on_disconnect(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
         openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
-
-    class _StubChatService:
-        def __init__(self, _session: Session) -> None:
-            return None
-
-    monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
-    def _missing_collection(**_kwargs):
-        raise HTTPException(status_code=404, detail="Collection not found")
-
-    monkeypatch.setattr(chat_routes, "get_collection_or_404", _missing_collection)
-    monkeypatch.setattr(chat_routes, "get_current_user", lambda token, session: user)
-
-    with pytest.raises(HTTPException) as excinfo:
-        chat_routes.stream_chat_with_collection(
-            uuid4(),
-            ChatMessageCreate(content="hi"),
-            _DummyRequest(),
-            token="token",
-        )
-
-    assert excinfo.value.status_code == 404
-
-
-def test_stream_chat_with_collection_closes_on_disconnect(monkeypatch) -> None:
-    user = SimpleNamespace(
-        id=uuid4(),
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
-    )
-    collection = SimpleNamespace(id=uuid4())
 
     class _DisconnectingRequest:
         def __init__(self) -> None:
@@ -316,11 +309,9 @@ def test_stream_chat_with_collection_closes_on_disconnect(monkeypatch) -> None:
             yield {"type": "token", "content": "hi"}
 
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
-    monkeypatch.setattr(chat_routes, "get_collection_or_404", lambda **_kwargs: collection)
     monkeypatch.setattr(chat_routes, "get_current_user", lambda token, session: user)
 
-    response = chat_routes.stream_chat_with_collection(
-        collection.id,
+    response = chat_routes.stream_chat(
         ChatMessageCreate(content="hi"),
         _DisconnectingRequest(),
         token="token",

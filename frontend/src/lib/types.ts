@@ -17,6 +17,11 @@ export interface User {
   is_active: boolean;
   openrouter_configured: boolean;
   pinecone_configured: boolean;
+  last_used_chat_model?: string | null;
+  last_used_parameters?: Record<string, unknown> | null;
+  last_used_provider?: ProviderPreferences | null;
+  last_used_stream?: boolean | null;
+  last_used_tool_collection_ids?: UUID[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,13 +63,15 @@ export interface PromptVariable {
   example?: string | null;
 }
 
-export interface CollectionPromptDetails {
+export interface PromptDetails {
   template: string;
   rendered: string;
   context: Record<string, string>;
   variables: PromptVariable[];
   is_custom: boolean;
 }
+
+export type CollectionPromptDetails = PromptDetails;
 
 export interface ModelPricing {
   prompt?: number | string | null;
@@ -219,12 +226,15 @@ export interface UmapComputePayload {
 
 export interface ChatSession {
   id: UUID;
-  collection_id: UUID;
   user_id: UUID;
   title: string;
   mode: ChatMode;
   chat_model: string;
   context_tokens: number;
+  tool_collection_ids: UUID[];
+  parameter_overrides?: Record<string, unknown> | null;
+  provider_preferences?: ProviderPreferences | null;
+  stream?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -262,6 +272,8 @@ export interface ToolCallTrace {
   arguments: Record<string, unknown>;
   response?: Record<string, unknown> | null;
   reasoning?: ReasoningTraceSegment | null;
+  collection_id?: string | null;
+  collection_name?: string | null;
 }
 
 export interface UsageBreakdown {
@@ -504,6 +516,7 @@ export interface ChatRequestPayload {
   title?: string;
   edit_message_id?: string;
   chat_model?: string;
+  tool_collection_ids?: string[];
   generation?: ChatGenerationConfig;
   parameters?: Record<string, unknown>;
   provider?: ProviderPreferences;

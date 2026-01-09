@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -33,6 +33,11 @@ class UserRead(UserBase):
     is_active: bool
     openrouter_configured: bool
     pinecone_configured: bool
+    last_used_chat_model: Optional[str] = None
+    last_used_parameters: Optional[Dict[str, Any]] = None
+    last_used_provider: Optional[Dict[str, Any]] = None
+    last_used_stream: Optional[bool] = None
+    last_used_tool_collection_ids: Optional[List[UUID]] = None
     created_at: datetime
     updated_at: datetime
 

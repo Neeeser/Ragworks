@@ -50,6 +50,8 @@ def _build_setup() -> ChatSetup:
         session_model=session_model,
         messages=[],
         tools=[],
+        tool_collections=[],
+        tool_collection_map={},
         pipeline=pipeline,
         model=model_settings,
     )
@@ -111,9 +113,9 @@ def test_resolve_session_model_returns_edit_target() -> None:
 
     resolved_session, target = service._resolve_session_model(
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=collection_id),
         payload=payload,
         default_chat_model="model",
+        primary_collection_id=collection_id,
     )
 
     assert resolved_session is session_model
@@ -273,7 +275,6 @@ def test_stream_tool_calls_if_needed_serializes_list_content() -> None:
         setup=setup,
         run_state=RunState(provider="openrouter"),
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=uuid4()),
         payload=ChatMessageCreate(content="hi"),
     )
 
@@ -302,12 +303,12 @@ def test_finalize_response_applies_usage_aggregate(monkeypatch) -> None:
     monkeypatch.setattr(chat_service_module, "serialize_message", lambda *_args, **_kwargs: {"role": "assistant"})
     session_payload = {
         "id": uuid4(),
-        "collection_id": uuid4(),
         "user_id": uuid4(),
         "title": "Session",
         "mode": models.ChatMode.CHAT,
         "chat_model": "model",
         "context_tokens": 0,
+        "tool_collection_ids": [],
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -349,12 +350,12 @@ def test_finalize_response_without_usage_aggregate(monkeypatch) -> None:
         "convert_session",
         lambda *_args, **_kwargs: {
             "id": uuid4(),
-            "collection_id": uuid4(),
             "user_id": uuid4(),
             "title": "Session",
             "mode": models.ChatMode.CHAT,
             "chat_model": "model",
             "context_tokens": 0,
+            "tool_collection_ids": [],
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         },
@@ -462,7 +463,6 @@ def test_stream_message_updates_usage() -> None:
     events = list(
         service.stream_message(
             user=SimpleNamespace(id=uuid4()),
-            collection=SimpleNamespace(id=uuid4()),
             payload=ChatMessageCreate(content="hi"),
         )
     )
@@ -497,7 +497,6 @@ def test_stream_message_raises_after_max_iterations() -> None:
         list(
             service.stream_message(
                 user=SimpleNamespace(id=uuid4()),
-                collection=SimpleNamespace(id=uuid4()),
                 payload=ChatMessageCreate(content="hi"),
             )
         )
@@ -543,7 +542,6 @@ def test_send_message_handles_usage_and_tool_calls() -> None:
 
     service.send_message(
         user=SimpleNamespace(id=uuid4()),
-        collection=SimpleNamespace(id=uuid4()),
         payload=ChatMessageCreate(content="hi"),
     )
 
@@ -578,6 +576,5 @@ def test_send_message_raises_after_max_iterations() -> None:
     with pytest.raises(RuntimeError, match="tool iteration limit"):
         service.send_message(
             user=SimpleNamespace(id=uuid4()),
-            collection=SimpleNamespace(id=uuid4()),
             payload=ChatMessageCreate(content="hi"),
         )

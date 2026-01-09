@@ -171,9 +171,9 @@ def test_send_message_records_response(monkeypatch, session: Session) -> None:
     _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)
-    payload = ChatMessageCreate(content="hello")
+    payload = ChatMessageCreate(content="hello", tool_collection_ids=[collection.id])
 
-    result = service.send_message(user=user, collection=collection, payload=payload)
+    result = service.send_message(user=user, payload=payload)
 
     assert result.provider == "openrouter"
     assert result.messages[-1].content == "Answer"
@@ -197,7 +197,10 @@ def test_send_message_raises_for_missing_model(monkeypatch, session: Session) ->
     service = ChatService(session)
 
     with pytest.raises(ValueError, match="Selected model is not available"):
-        service.send_message(user=user, collection=collection, payload=ChatMessageCreate(content="hi"))
+        service.send_message(
+            user=user,
+            payload=ChatMessageCreate(content="hi", tool_collection_ids=[collection.id]),
+        )
 
 
 def test_send_message_requires_tool_support(monkeypatch, session: Session) -> None:
@@ -222,7 +225,10 @@ def test_send_message_requires_tool_support(monkeypatch, session: Session) -> No
     service = ChatService(session)
 
     with pytest.raises(ValueError, match="does not support tool calls"):
-        service.send_message(user=user, collection=collection, payload=ChatMessageCreate(content="hi"))
+        service.send_message(
+            user=user,
+            payload=ChatMessageCreate(content="hi", tool_collection_ids=[collection.id]),
+        )
 
 
 def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
@@ -302,7 +308,10 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
 
     service = ChatService(session)
 
-    result = service.send_message(user=user, collection=collection, payload=ChatMessageCreate(content="hi"))
+    result = service.send_message(
+        user=user,
+        payload=ChatMessageCreate(content="hi", tool_collection_ids=[collection.id]),
+    )
 
     assert result.messages[-1].content == "Final answer"
     assert result.tool_traces[0].name == "pinecone_query"
@@ -395,8 +404,8 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Sessi
 
     service = ChatService(session)
 
-    payload = ChatMessageCreate(content="hi")
-    events = list(service.stream_message(user=user, collection=collection, payload=payload))
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
+    events = list(service.stream_message(user=user, payload=payload))
 
     assert any(event.get("type") == "tool_call" for event in events if isinstance(event, dict))
     assert any(event.get("type") == "tool_result" for event in events if isinstance(event, dict))
@@ -440,9 +449,9 @@ def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypat
     _stub_pipeline_settings(monkeypatch, chat_model="test-model")
 
     service = ChatService(session)
-    payload = ChatMessageCreate(content="hello")
+    payload = ChatMessageCreate(content="hello", tool_collection_ids=[collection.id])
 
-    result = service.send_message(user=user, collection=collection, payload=payload)
+    result = service.send_message(user=user, payload=payload)
 
     assert result.messages[-1].content == '[{"text": "Hello"}]'
     assert result.usage["total_tokens"] == 2

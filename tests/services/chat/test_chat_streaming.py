@@ -370,6 +370,9 @@ class _StubChatRepo:
     def delete_tool_messages_since(self, *args: object, **kwargs: object) -> None:
         return
 
+    def list_session_collection_ids(self, *args: object, **kwargs: object) -> List[Any]:
+        return []
+
 
 def _stub_pipeline_helpers(monkeypatch, *, chat_model: str, context_window: int) -> None:
     class _StubPipelineService:
@@ -436,6 +439,10 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
     service.chat_repo = _StubChatRepo()
     service.session = SimpleNamespace(add=lambda *args, **kwargs: None, commit=lambda: None, flush=lambda: None)
     service.reasoning_effort = None
+    service.settings = SimpleNamespace(
+        default_chat_model="openrouter/test",
+        openrouter_reasoning_effort=None,
+    )
     monkeypatch.setattr(chat_service_module, "ensure_session", lambda *_args, **_kwargs: session_model)
     service.openrouter = SimpleNamespace(
         get_model=lambda model_name: SimpleNamespace(
@@ -456,16 +463,14 @@ def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
 
     monkeypatch.setattr(chat_service_module, "stream_model_completion", fake_stream)
 
-    collection = SimpleNamespace(
-        id="collection-x",
-        name="Test Collection",
-        description="Just testing",
-        extra_metadata={},
+    user = SimpleNamespace(
+        id="user-x",
+        email="tester@example.com",
+        full_name="Tester",
+        system_prompt_template=None,
     )
-
-    user = SimpleNamespace(id="user-x", email="tester@example.com", full_name="Tester")
     payload = ChatMessageCreate(content="Truncate me", stream=True)
-    stream_gen = service.stream_message(user=user, collection=collection, payload=payload)
+    stream_gen = service.stream_message(user=user, payload=payload)
 
     assert next(stream_gen)["type"] == "token"
     assert next(stream_gen)["type"] == "reasoning"

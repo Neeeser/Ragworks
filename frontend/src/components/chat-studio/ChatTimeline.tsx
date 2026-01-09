@@ -9,7 +9,7 @@ import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
 import { TypingAnimation } from "@/components/ui/typing-animation";
 import { cn } from "@/lib/utils";
 
-import type { ChatEntry } from "../chat-types";
+import type { ChatEntry } from "./chat-types";
 import type { ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
 import type { Components } from "react-markdown";
 
@@ -35,7 +35,8 @@ const roleVariants: Record<string, string> = {
 };
 
 type ChatTimelineProps = {
-  collectionName: string | null;
+  modelLabel: string;
+  onModelSelect: () => void;
   chatEntryOrder: string[];
   chatEntryMap: Map<string, ChatEntry>;
   finalStreamAssistantId: string | null;
@@ -52,8 +53,11 @@ type ChatTimelineProps = {
   onRetryAssistant: (messageId: string) => void;
   onReasoningToggle: (messageId: string, isOpen: boolean) => void;
   markdownComponents: Components;
-  samplePrompts: string[];
-  onSamplePromptSelect: (value: string) => void;
+  overrideSections: Array<{
+    id: string;
+    label: string;
+  }>;
+  onOverrideSelect: (sectionId: string) => void;
   liveResponse: string;
   hasLiveText: boolean;
   liveResponseAnimationKey: number;
@@ -69,7 +73,8 @@ type ChatTimelineProps = {
 };
 
 export function ChatTimeline({
-  collectionName,
+  modelLabel,
+  onModelSelect,
   chatEntryOrder,
   chatEntryMap,
   finalStreamAssistantId,
@@ -86,8 +91,8 @@ export function ChatTimeline({
   onRetryAssistant,
   onReasoningToggle,
   markdownComponents,
-  samplePrompts,
-  onSamplePromptSelect,
+  overrideSections,
+  onOverrideSelect,
   liveResponse,
   hasLiveText,
   liveResponseAnimationKey,
@@ -119,31 +124,58 @@ export function ChatTimeline({
   }, [timelineEntries]);
 
   if (timelineEntries.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
-        <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.35em] text-slate-500">Ready to chat</p>
-          <h3 className="text-3xl font-semibold text-white">
-            {collectionName ? collectionName : "Select a collection"}
-          </h3>
-          <p className="text-sm text-slate-400">
-            Ask anything about this dataset and we will cite the chunks that back it up.
-          </p>
-        </div>
-        <div className="grid w-full max-w-3xl gap-3 md:grid-cols-2">
-          {samplePrompts.map((prompt) => (
+    if (!selectedSessionId) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
+          <div className="flex w-full max-w-md flex-col items-center">
             <button
-              key={prompt}
               type="button"
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left text-sm text-slate-300 transition hover:border-white/30 hover:text-white"
-              onClick={() => onSamplePromptSelect(prompt)}
+              onClick={onModelSelect}
+              className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white"
             >
-              {prompt}
+              <span className="shrink-0 text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                Model
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold text-white">
+                {modelLabel}
+              </span>
             </button>
-          ))}
+          </div>
+          <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/40 to-cyan-950/30 p-6 text-left shadow-[0_30px_80px_-50px_rgba(56,189,248,0.35)]">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Overrides</p>
+                <h4 className="text-lg font-semibold text-white">Run settings active</h4>
+                <p className="text-sm text-slate-400">Tap a section to open it in Run settings.</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.4em] text-cyan-300">
+                <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.85)]" />
+                Live
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {overrideSections.length > 0 ? (
+                overrideSections.map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => onOverrideSelect(section.id)}
+                    className="rounded-full border border-cyan-200/30 bg-cyan-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-400/20"
+                  >
+                    {section.label}
+                  </button>
+                ))
+              ) : (
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                  No overrides yet
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    return <div className="h-full" />;
   }
 
   const liveStreamBubbleKey = activeStreamEntryKey ?? "typing-indicator";

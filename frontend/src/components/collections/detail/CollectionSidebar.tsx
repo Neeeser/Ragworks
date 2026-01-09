@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Files, Gauge, ScatterChart, Search } from "lucide-react";
+import { ArrowLeft, Files, Gauge, MessageSquare, ScatterChart, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { GlassCard } from "@/components/ui/panel";
@@ -100,6 +100,28 @@ export function CollectionSidebar({
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={() =>
+            collection && router.push(`/chat?collections=${encodeURIComponent(collection.id)}`)
+          }
+          disabled={!collection}
+          className={cn(
+            "flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition",
+            collection
+              ? "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
+              : "cursor-not-allowed border-white/5 bg-white/5 text-slate-500",
+          )}
+        >
+          <MessageSquare className="mt-0.5 h-4 w-4 text-violet-300" />
+          <div>
+            <p className="text-sm font-semibold">Chat studio</p>
+            <p className="text-xs text-slate-400">Open with this collection pre-selected.</p>
+          </div>
+        </button>
       </div>
     </GlassCard>
   );

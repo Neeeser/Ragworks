@@ -100,10 +100,11 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-violet-300">
               <Bot className="h-6 w-6" />
             </div>
-            <div>
+            <div className="hidden lg:block">
               <p className="text-xs uppercase tracking-[0.35em] text-slate-400">TransparentRAG</p>
               <p className="text-lg font-semibold">Control Room</p>
             </div>
+            <span className="sr-only">TransparentRAG Control Room</span>
           </Link>
           <nav className="flex flex-1 justify-center gap-2 text-sm">
             {navLinks.map((link) => {
@@ -113,7 +114,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "rounded-full px-4 py-2 font-medium transition",
+                    "rounded-full px-4 py-2 font-medium transition whitespace-nowrap",
                     isActive
                       ? "bg-white/15 text-white shadow shadow-violet-500/40"
                       : "text-slate-400 hover:bg-white/5 hover:text-white",
@@ -125,7 +126,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
             })}
           </nav>
           <div className="flex items-center gap-3">
-            <div className="text-right text-xs">
+            <div className="hidden text-right text-xs lg:block">
               <p className="font-semibold text-white">{user.full_name || user.email}</p>
               <p className="text-slate-400">{user.email}</p>
             </div>

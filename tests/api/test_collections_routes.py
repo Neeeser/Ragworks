@@ -9,7 +9,7 @@ from sqlmodel import Session
 
 from app.api.routes import collections as collections_routes
 from app.db import models
-from app.db.repositories import CollectionRepository, UserRepository
+from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
 from app.schemas.collections import (
     CollectionCreate,
     CollectionPipelineOverrides,
@@ -337,7 +337,7 @@ def test_update_collection_prompt_sets_and_clears_template(session: Session) -> 
         current_user=user,
         session=session,
     )
-    assert "TransparentRAG" in updated.rendered
+    assert "Tool context" in updated.rendered
 
 
 def test_delete_collection_removes_records(monkeypatch, session: Session) -> None:
@@ -370,6 +370,10 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
     )
     session.add(chat_session)
     session.flush()
+    ChatRepository(session).replace_session_collections(
+        session_id=chat_session.id,
+        collection_ids=[collection.id],
+    )
 
     session.add(
         models.ChatMessage(
@@ -393,6 +397,12 @@ def test_delete_collection_removes_records(monkeypatch, session: Session) -> Non
     assert response.status == "deleted"
     assert storage.deleted == ["/tmp/doc.txt"]
     assert session.get(models.Collection, collection.id) is None
+    remaining_session = session.get(models.ChatSession, chat_session.id)
+    assert remaining_session is not None
+    assert remaining_session.collection_id is None
+    repo = ChatRepository(session)
+    assert repo.list_session_collection_ids(chat_session.id) == []
+    assert repo.list_messages(chat_session.id)
 
 
 def test_delete_collection_ignores_missing_namespace(monkeypatch, session: Session) -> None:

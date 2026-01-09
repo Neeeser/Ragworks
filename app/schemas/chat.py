@@ -21,6 +21,8 @@ class ToolCallTrace(BaseModel):
     arguments: Dict[str, Any]
     response: Optional[Dict[str, Any]] = None
     reasoning: Optional[Dict[str, Any]] = None
+    collection_id: Optional[UUID] = None
+    collection_name: Optional[str] = None
 
 
 class ChatMessageRead(DateTimeConfigMixin, BaseModel):
@@ -64,26 +66,37 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
     """Chat session record returned to clients."""
 
     id: UUID
-    collection_id: UUID
     user_id: UUID
     title: str
     mode: ChatMode
     chat_model: str
     context_tokens: int
+    tool_collection_ids: List[UUID] = Field(default_factory=list)
+    parameter_overrides: Optional[Dict[str, Any]] = None
+    provider_preferences: Optional[Dict[str, Any]] = None
+    stream: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, session: models.ChatSession) -> "ChatSessionRead":
+    def from_model(
+        cls,
+        session: models.ChatSession,
+        *,
+        tool_collection_ids: Optional[List[UUID]] = None,
+    ) -> "ChatSessionRead":
         """Build a schema instance from a chat session model."""
         return cls(
             id=session.id,
-            collection_id=session.collection_id,
             user_id=session.user_id,
             title=session.title,
             mode=session.mode,
             chat_model=session.chat_model,
             context_tokens=session.context_tokens,
+            tool_collection_ids=tool_collection_ids or [],
+            parameter_overrides=session.parameter_overrides,
+            provider_preferences=session.provider_preferences,
+            stream=session.stream,
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
@@ -98,6 +111,7 @@ class ChatMessageCreate(BaseModel):
     title: Optional[str] = None
     edit_message_id: Optional[UUID] = None
     chat_model: Optional[str] = None
+    tool_collection_ids: Optional[List[UUID]] = None
     parameters: Optional[Dict[str, Any]] = None
     provider: Optional[Dict[str, Any]] = None
     stream: Optional[bool] = False

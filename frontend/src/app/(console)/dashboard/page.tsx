@@ -54,17 +54,15 @@ export default function DashboardPage() {
         const flattenedDocs = docResults.flat();
         setDocuments(flattenedDocs);
 
-        const sessionResults = await Promise.all(
-          cols.map(async (collection) => {
-            try {
-              return await listChatSessions(collection.id, authToken);
-            } catch {
-              return [];
-            }
-          }),
-        );
-        if (!cancelled) {
-          setSessions(sessionResults.flat());
+        try {
+          const sessionResults = await listChatSessions(authToken);
+          if (!cancelled) {
+            setSessions(sessionResults);
+          }
+        } catch {
+          if (!cancelled) {
+            setSessions([]);
+          }
         }
       } catch (err) {
         if (!cancelled) {

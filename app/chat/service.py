@@ -1,14 +1,16 @@
 """Chat service orchestration for sessions, tools, and streaming."""
 
+# pylint: disable=too-many-lines
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional, Tuple, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.encoders import jsonable_encoder
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.config import get_settings
 from app.db import models
@@ -45,6 +47,7 @@ from app.chat.state import (
     StreamIterationResult,
     StreamToolCallContext,
     ToolCallResolution,
+    ToolCollectionContext,
     ToolExecutionContext,
 )
 from app.chat.persistence.sessions import SessionRequest, apply_edit, ensure_session
@@ -62,7 +65,12 @@ from app.chat.processing.usage import (
 )
 from app.services.openrouter import OpenRouterClient, get_openrouter_client
 from app.services.pipelines import PipelineService
-from app.services.prompts import render_system_prompt
+from app.services.prompts import (
+    collection_tool_name,
+    get_system_prompt_template,
+    render_system_prompt,
+    system_prompt_context,
+)
 from app.services.retrieval import RetrievalService
 from app.utils.time import utc_now
 
@@ -73,6 +81,16 @@ class StreamCapture:
 
     content_parts: List[str] = field(default_factory=list)
     reasoning_segments: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SessionPreferencesUpdate:
+    """Normalized run settings persisted for sessions and users."""
+
+    parameter_overrides: Optional[Dict[str, Any]]
+    provider_preferences: Optional[Dict[str, Any]]
+    stream_enabled: bool
+    tool_collection_ids: List[UUID]
 
 
 class ChatService:
@@ -128,13 +146,74 @@ class ChatService:
             retrieval_settings=retrieval_settings,
         )
 
+    def _build_tool_collection_context(
+        self,
+        user: models.User,
+        collection: models.Collection,
+    ) -> ToolCollectionContext:
+        """Build tool context for a collection."""
+        pipeline = self._resolve_pipeline_context(user, collection)
+        return ToolCollectionContext(
+            collection=collection,
+            tool_name=collection_tool_name(collection.id),
+            ingestion_settings=pipeline.ingestion_settings,
+            retrieval_settings=pipeline.retrieval_settings,
+        )
+
+    def _resolve_tool_collections(
+        self,
+        *,
+        user: models.User,
+        payload: ChatMessageCreate,
+        session_model: Optional[models.ChatSession],
+    ) -> Tuple[List[ToolCollectionContext], List[UUID]]:
+        """Resolve tool collections for the request payload."""
+        if payload.tool_collection_ids is None:
+            if not session_model:
+                collection_ids: List[UUID] = []
+            else:
+                collection_ids = self.chat_repo.list_session_collection_ids(session_model.id)
+        else:
+            seen: set[UUID] = set()
+            collection_ids = []
+            for raw_id in payload.tool_collection_ids:
+                if raw_id in seen:
+                    continue
+                seen.add(raw_id)
+                collection_ids.append(raw_id)
+
+        if not collection_ids:
+            return [], []
+
+        if not (user.pinecone_api_key or "").strip():
+            raise ValueError(
+                "Pinecone API key is not configured. Update it in Settings to enable tools."
+            )
+
+        statement = select(models.Collection).where(
+            models.Collection.user_id == user.id,
+            models.Collection.id.in_(collection_ids),  # pylint: disable=no-member
+        )
+        collections = self.session.exec(statement).all()
+        collection_map = {collection.id: collection for collection in collections}
+        missing = [
+            str(collection_id)
+            for collection_id in collection_ids
+            if collection_id not in collection_map
+        ]
+        if missing:
+            raise ValueError("Selected collections are not available.")
+        ordered = [collection_map[collection_id] for collection_id in collection_ids]
+        contexts = [self._build_tool_collection_context(user, collection) for collection in ordered]
+        return contexts, collection_ids
+
     def _resolve_session_model(
         self,
         *,
         user: models.User,
-        collection: models.Collection,
         payload: ChatMessageCreate,
         default_chat_model: str,
+        primary_collection_id: Optional[UUID],
     ) -> Tuple[models.ChatSession, Optional[models.ChatMessage]]:
         """Resolve the chat session for the request payload."""
         if payload.edit_message_id:
@@ -144,17 +223,15 @@ class ChatService:
             session_model = self.chat_repo.get_session(edit_target.session_id, user_id=user.id)
             if not session_model:
                 raise ValueError("Chat session not found for edit.")
-            if session_model.collection_id != collection.id:
-                raise ValueError("Message belongs to a different collection.")
             return session_model, edit_target
 
         session_request = SessionRequest(
             chat_repo=self.chat_repo,
             session=self.session,
             user=user,
-            collection=collection,
             payload=payload,
             default_chat_model=default_chat_model,
+            primary_collection_id=primary_collection_id,
         )
         session_model = ensure_session(session_request)
         return session_model, None
@@ -202,22 +279,51 @@ class ChatService:
             self.session.add(session_model)
             self.session.flush()
 
+    def _persist_session_preferences(
+        self,
+        *,
+        session_model: models.ChatSession,
+        user: models.User,
+        preferences: SessionPreferencesUpdate,
+    ) -> None:
+        """Persist session and user-level run settings for future chats."""
+        parameter_overrides = preferences.parameter_overrides or None
+        provider_preferences = preferences.provider_preferences or None
+        session_model.parameter_overrides = parameter_overrides
+        session_model.provider_preferences = provider_preferences
+        session_model.stream = preferences.stream_enabled
+        user.last_used_chat_model = session_model.chat_model
+        user.last_used_parameters = parameter_overrides
+        user.last_used_provider = provider_preferences
+        user.last_used_stream = preferences.stream_enabled
+        user.last_used_tool_collection_ids = [
+            str(collection_id) for collection_id in preferences.tool_collection_ids
+        ]
+        self.session.add(session_model)
+        self.session.add(user)
+        self.session.flush()
+
     def _build_message_history(
         self,
         *,
-        collection: models.Collection,
         user: models.User,
         session_model: models.ChatSession,
-        pipeline: PipelineContext,
+        tool_collections: List[ToolCollectionContext],
     ) -> List[Dict[str, Any]]:
         """Build the message history with the system prompt."""
         history = self.chat_repo.list_messages(session_model.id)
-        system_prompt = render_system_prompt(
-            collection,
-            user,
-            ingestion_settings=pipeline.ingestion_settings,
-            retrieval_settings=pipeline.retrieval_settings,
-        )
+        tool_contexts: List[Dict[str, object]] = []
+        for tool_context in tool_collections:
+            template = get_system_prompt_template(tool_context.collection)
+            context = system_prompt_context(
+                tool_context.collection,
+                user,
+                ingestion_settings=tool_context.ingestion_settings,
+                retrieval_settings=tool_context.retrieval_settings,
+                tool_name=tool_context.tool_name,
+            )
+            tool_contexts.append({"template": template, "context": context})
+        system_prompt = render_system_prompt(tool_contexts, user)
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(serialize_message(msg))
@@ -238,24 +344,27 @@ class ChatService:
             options["reasoning"].update(reasoning_override)
         return options
 
+    # pylint: disable=too-many-arguments,too-many-locals
     def _prepare_model_settings(
         self,
         *,
         provider: ChatProvider,
         payload: ChatMessageCreate,
         session_model: models.ChatSession,
-        pipeline: PipelineContext,
+        default_chat_model: str,
+        fallback_context_window: int,
+        tools_enabled: bool,
     ) -> ModelSettings:
         """Resolve model settings, parameters, and preferences."""
-        active_model_name = session_model.chat_model or pipeline.retrieval_settings.chat_model
+        active_model_name = session_model.chat_model or default_chat_model
         if not active_model_name:
-            raise ValueError("This collection does not have a chat model configured.")
+            raise ValueError("No chat model is configured for this session.")
         model_info = provider.get_model(active_model_name)
         if not model_info:
             raise ValueError("Selected model is not available on OpenRouter.")
         supported_parameters = model_info.supported_parameters or []
         tool_supported = any(param.lower() == "tools" for param in supported_parameters)
-        if not tool_supported:
+        if tools_enabled and not tool_supported:
             raise ValueError("Selected model does not support tool calls required for retrieval.")
         parameter_overrides = sanitize_parameter_overrides(
             payload.parameters,
@@ -267,7 +376,7 @@ class ChatService:
             reasoning_override,
         )
         provider_preferences = sanitize_provider_preferences(payload.provider)
-        context_window = model_info.context_length or pipeline.retrieval_settings.context_window
+        context_window = model_info.context_length or fallback_context_window
         return ModelSettings(
             active_model_name=active_model_name,
             model_info=model_info,
@@ -278,22 +387,50 @@ class ChatService:
             context_window=context_window,
         )
 
+    # pylint: disable=too-many-locals
     def _prepare_chat_setup(
         self,
         *,
         user: models.User,
-        collection: models.Collection,
         payload: ChatMessageCreate,
         provider: ChatProvider,
     ) -> ChatSetup:
         """Prepare shared context needed for chat execution."""
-        pipeline = self._resolve_pipeline_context(user, collection)
+        seed_tool_contexts, _ = self._resolve_tool_collections(
+            user=user,
+            payload=payload,
+            session_model=None,
+        )
+        primary_context = seed_tool_contexts[0] if seed_tool_contexts else None
+        default_chat_model = (
+            primary_context.retrieval_settings.chat_model
+            if primary_context and primary_context.retrieval_settings.chat_model
+            else self.settings.default_chat_model
+        )
+        fallback_context_window = (
+            primary_context.retrieval_settings.context_window if primary_context else 0
+        )
         session_model, edit_target = self._resolve_session_model(
             user=user,
-            collection=collection,
             payload=payload,
-            default_chat_model=pipeline.retrieval_settings.chat_model,
+            default_chat_model=default_chat_model,
+            primary_collection_id=primary_context.collection.id if primary_context else None,
         )
+        tool_collections, tool_collection_ids = self._resolve_tool_collections(
+            user=user,
+            payload=payload,
+            session_model=session_model,
+        )
+        if not seed_tool_contexts and tool_collections:
+            fallback_context_window = tool_collections[0].retrieval_settings.context_window
+        if payload.tool_collection_ids is not None:
+            self.chat_repo.replace_session_collections(
+                session_id=session_model.id,
+                collection_ids=tool_collection_ids,
+            )
+            session_model.collection_id = tool_collection_ids[0] if tool_collection_ids else None
+            self.session.add(session_model)
+            self.session.flush()
         self._apply_payload_to_session(
             session_model=session_model,
             edit_target=edit_target,
@@ -301,23 +438,40 @@ class ChatService:
         )
         self._maybe_update_session_model(session_model=session_model, payload=payload)
         messages = self._build_message_history(
-            collection=collection,
             user=user,
             session_model=session_model,
-            pipeline=pipeline,
+            tool_collections=tool_collections,
         )
-        tools = self._tool_spec(collection)
+        tools, tool_collection_map = self._tool_specs(tool_collections)
         model_settings = self._prepare_model_settings(
             provider=provider,
             payload=payload,
             session_model=session_model,
-            pipeline=pipeline,
+            default_chat_model=default_chat_model,
+            fallback_context_window=fallback_context_window,
+            tools_enabled=bool(tool_collections),
+        )
+        self._persist_session_preferences(
+            session_model=session_model,
+            user=user,
+            preferences=SessionPreferencesUpdate(
+                parameter_overrides=model_settings.parameter_overrides or None,
+                provider_preferences=model_settings.provider_preferences or None,
+                stream_enabled=bool(payload.stream),
+                tool_collection_ids=tool_collection_ids,
+            ),
         )
         return ChatSetup(
             session_model=session_model,
             messages=messages,
             tools=tools,
-            pipeline=pipeline,
+            tool_collections=tool_collections,
+            tool_collection_map=tool_collection_map,
+            pipeline=primary_context
+            and PipelineContext(
+                ingestion_settings=primary_context.ingestion_settings,
+                retrieval_settings=primary_context.retrieval_settings,
+            ),
             model=model_settings,
         )
 
@@ -491,12 +645,12 @@ class ChatService:
         )
         tool_context = ToolExecutionContext(
             user=context.user,
-            collection=context.collection,
             payload=context.payload,
             session_model=context.setup.session_model,
             messages=context.setup.messages,
             run_state=context.run_state,
             shared_tool_reasoning=resolution.shared_tool_reasoning,
+            tool_collection_map=context.setup.tool_collection_map,
         )
         yield from self._stream_tool_calls(
             tool_calls=resolution.pending_tool_calls,
@@ -517,14 +671,20 @@ class ChatService:
                 context.payload,
                 use_fallback_id=False,
             )
+            collection = self._select_tool_collection(
+                tool_name=name,
+                tool_map=context.tool_collection_map,
+            )
             retrieval_response = self.retrieval.query_collection(
                 context.user,
-                context.collection,
+                collection,
                 query_text,
                 top_k=top_k,
             )
             response_payload = jsonable_encoder(retrieval_response)
             tool_payload = {
+                "collection_id": str(collection.id),
+                "collection_name": collection.name,
                 "arguments": arguments,
                 "response": response_payload,
             }
@@ -548,6 +708,8 @@ class ChatService:
                     arguments=arguments,
                     response=response_payload,
                     reasoning=reasoning_payload,
+                    collection_id=collection.id,
+                    collection_name=collection.name,
                 )
             )
             record_message(
@@ -565,6 +727,7 @@ class ChatService:
                 ),
             )
 
+    # pylint: disable=too-many-locals
     def _stream_tool_calls(
         self,
         *,
@@ -578,6 +741,10 @@ class ChatService:
                 context.payload,
                 use_fallback_id=True,
             )
+            collection = self._select_tool_collection(
+                tool_name=name,
+                tool_map=context.tool_collection_map,
+            )
             reasoning_entry = self._select_tool_reasoning(
                 call_id=call_id,
                 run_state=context.run_state,
@@ -589,15 +756,19 @@ class ChatService:
                 "name": name,
                 "arguments": arguments,
                 "reasoning": reasoning_entry,
+                "collection_id": str(collection.id),
+                "collection_name": collection.name,
             }
             retrieval_response = self.retrieval.query_collection(
                 context.user,
-                context.collection,
+                collection,
                 query_text,
                 top_k=top_k,
             )
             response_payload = jsonable_encoder(retrieval_response)
             tool_payload = {
+                "collection_id": str(collection.id),
+                "collection_name": collection.name,
                 "arguments": arguments,
                 "response": response_payload,
             }
@@ -614,6 +785,8 @@ class ChatService:
                 "arguments": arguments,
                 "response": retrieval_response,
                 "reasoning": reasoning_payload,
+                "collection_id": str(collection.id),
+                "collection_name": collection.name,
             }
             context.messages.append(
                 {
@@ -629,6 +802,8 @@ class ChatService:
                     arguments=arguments,
                     response=response_payload,
                     reasoning=reasoning_payload,
+                    collection_id=collection.id,
+                    collection_name=collection.name,
                 )
             )
             record_message(
@@ -693,8 +868,12 @@ class ChatService:
         setup.session_model.updated_at = utc_now()
         self.session.add(setup.session_model)
         self.session.commit()
+        tool_collection_ids = [context.collection.id for context in setup.tool_collections]
         return ChatCompletionResponse(
-            session=convert_session(setup.session_model),
+            session=convert_session(
+                setup.session_model,
+                tool_collection_ids=tool_collection_ids,
+            ),
             messages=convert_messages(chat_repo=self.chat_repo, session_id=setup.session_model.id),
             tool_traces=run_state.tool_traces,
             usage=final_usage,
@@ -717,7 +896,7 @@ class ChatService:
         """Run one streaming iteration and yield events."""
         request = ChatRequest(
             messages=setup.messages,
-            tools=setup.tools,
+            tools=setup.tools or None,
             model=setup.model.active_model_name,
             extra_body=build_openrouter_body(
                 setup.model.reasoning_options,
@@ -743,51 +922,73 @@ class ChatService:
                         capture.reasoning_segments = segments
             yield event
 
-    def _tool_spec(self, _collection: models.Collection) -> List[Dict[str, object]]:
-        """Return tool schemas for chat completion requests."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "pinecone_query",
-                    "description": (
-                        "Search the Pinecone namespace for this collection to gather grounded "
-                        "context. Always call this tool before answering user questions about "
-                        "the documents."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Natural language search query.",
+    def _tool_specs(
+        self, tool_collections: List[ToolCollectionContext]
+    ) -> Tuple[List[Dict[str, object]], Dict[str, models.Collection]]:
+        """Return tool schemas and collection mappings for chat completion requests."""
+        if not tool_collections:
+            return [], {}
+        tools: List[Dict[str, object]] = []
+        tool_map: Dict[str, models.Collection] = {}
+        for tool_context in tool_collections:
+            tool_name = tool_context.tool_name
+            tool_map[tool_name] = tool_context.collection
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": (
+                            "Search the Pinecone namespace for the collection "
+                            f"'{tool_context.collection.name}' to gather grounded context. "
+                            "Always call this tool before answering questions about "
+                            "documents in this collection."
+                        ),
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Natural language search query.",
+                                },
+                                "top_k": {
+                                    "type": "integer",
+                                    "description": "How many chunks to retrieve (max 10).",
+                                    "default": 5,
+                                    "minimum": 1,
+                                    "maximum": 10,
+                                },
                             },
-                            "top_k": {
-                                "type": "integer",
-                                "description": "How many chunks to retrieve (max 10).",
-                                "default": 5,
-                                "minimum": 1,
-                                "maximum": 10,
-                            },
+                            "required": ["query"],
                         },
-                        "required": ["query"],
                     },
-                },
-            }
-        ]
+                }
+            )
+        return tools, tool_map
+
+    @staticmethod
+    def _select_tool_collection(
+        *,
+        tool_name: str,
+        tool_map: Dict[str, models.Collection],
+    ) -> models.Collection:
+        """Return the collection for a tool call name."""
+        if tool_name in tool_map:
+            return tool_map[tool_name]
+        if tool_name == "pinecone_query" and len(tool_map) == 1:
+            return next(iter(tool_map.values()))
+        raise ValueError("Tool call does not match an enabled collection.")
 
     def stream_message(
         self,
         *,
         user: models.User,
-        collection: models.Collection,
         payload: ChatMessageCreate,
     ) -> Generator[Dict[str, Any], None, None]:
         """Stream a chat response while yielding intermediate events."""
         provider = self._ensure_provider(user)
         setup = self._prepare_chat_setup(
             user=user,
-            collection=collection,
             payload=payload,
             provider=provider,
         )
@@ -821,7 +1022,6 @@ class ChatService:
                     setup=setup,
                     run_state=run_state,
                     user=user,
-                    collection=collection,
                     payload=payload,
                 )
             )
@@ -846,14 +1046,12 @@ class ChatService:
         self,
         *,
         user: models.User,
-        collection: models.Collection,
         payload: ChatMessageCreate,
     ) -> ChatCompletionResponse:
         """Send a chat message and return the final response."""
         provider = self._ensure_provider(user)
         setup = self._prepare_chat_setup(
             user=user,
-            collection=collection,
             payload=payload,
             provider=provider,
         )
@@ -865,7 +1063,7 @@ class ChatService:
             iteration += 1
             request = ChatRequest(
                 messages=setup.messages,
-                tools=setup.tools,
+                tools=setup.tools or None,
                 model=setup.model.active_model_name,
                 extra_body=build_openrouter_body(
                     setup.model.reasoning_options,
@@ -897,12 +1095,12 @@ class ChatService:
                 )
                 tool_context = ToolExecutionContext(
                     user=user,
-                    collection=collection,
                     payload=payload,
                     session_model=setup.session_model,
                     messages=setup.messages,
                     run_state=run_state,
                     shared_tool_reasoning=resolution.shared_tool_reasoning,
+                    tool_collection_map=setup.tool_collection_map,
                 )
                 self._execute_tool_calls(
                     tool_calls=resolution.pending_tool_calls,

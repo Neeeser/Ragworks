@@ -217,8 +217,7 @@ export default function SettingsPage() {
                 }}
               />
               <p className="mt-2 text-xs text-slate-400">
-                Used for embeddings, chat, and provider metadata. Keys are only transmitted when you
-                save.
+                Used for embeddings, chat, and provider metadata.
               </p>
               {pendingClear.openrouter && (
                 <p className="mt-2 text-xs text-amber-300">Will remove on save.</p>
@@ -261,8 +260,7 @@ export default function SettingsPage() {
                 }}
               />
               <p className="mt-2 text-xs text-slate-400">
-                Powers vector indexing, retrieval, and namespace cleanup. Keys are only transmitted
-                when you save.
+                Powers vector indexing, retrieval, and namespace cleanup.
               </p>
               {pendingClear.pinecone && (
                 <p className="mt-2 text-xs text-amber-300">Will remove on save.</p>

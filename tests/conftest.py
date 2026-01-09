@@ -285,9 +285,10 @@ def chat_session(
     payload = {
         "content": "Summarize the uploaded TransparentRAG documents with citations.",
         "title": "Integration Chat",
+        "tool_collection_ids": [primary_collection["id"]],
     }
     response = client.post(
-        f"/api/collections/{primary_collection['id']}/chat",
+        "/api/chat",
         headers=user_context["headers"],
         json=payload,
     )

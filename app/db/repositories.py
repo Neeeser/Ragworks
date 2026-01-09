@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import asc, delete as sa_delete, desc
+from sqlalchemy import asc, delete as sa_delete, desc, exists
 from sqlmodel import Session, select
 
 from app.db import models
@@ -136,13 +136,100 @@ class ChatRepository:
             statement = statement.where(models.ChatSession.user_id == user_id)
         return self.session.exec(statement).first()
 
-    def list_sessions(self, collection_id: UUID, user_id: UUID) -> Iterable[models.ChatSession]:
-        """List chat sessions for a collection and user."""
-        statement = select(models.ChatSession).where(
-            models.ChatSession.collection_id == collection_id,
-            models.ChatSession.user_id == user_id,
+    def list_sessions(
+        self,
+        *,
+        user_id: UUID,
+        collection_ids: Optional[Sequence[UUID]] = None,
+        include_unassigned: bool = False,
+    ) -> Iterable[models.ChatSession]:
+        """List chat sessions for a user, optionally filtered by tool collections."""
+        base_statement = select(models.ChatSession).where(models.ChatSession.user_id == user_id)
+        if not collection_ids and not include_unassigned:
+            return self.session.exec(base_statement).all()
+
+        session_ids: set[UUID] = set()
+        if collection_ids:
+            assoc_statement = (
+                select(models.ChatSessionCollection.session_id)
+                .join(
+                    models.ChatSession,
+                    models.ChatSession.id == models.ChatSessionCollection.session_id,
+                )
+                .where(
+                    models.ChatSession.user_id == user_id,
+                    models.ChatSessionCollection.collection_id.in_(collection_ids),  # pylint: disable=no-member
+                )
+            )
+            session_ids.update(self.session.exec(assoc_statement).all())
+
+        if include_unassigned:
+            unassigned_statement = (
+                select(models.ChatSession.id)
+                .where(models.ChatSession.user_id == user_id)
+                .where(
+                    ~exists().where(
+                        models.ChatSessionCollection.session_id == models.ChatSession.id
+                    )
+                )
+            )
+            session_ids.update(self.session.exec(unassigned_statement).all())
+
+        if not session_ids:
+            return []
+        filtered_statement = base_statement.where(
+            models.ChatSession.id.in_(session_ids)  # pylint: disable=no-member
         )
-        return self.session.exec(statement).all()
+        return self.session.exec(filtered_statement).all()
+
+    def list_session_collection_ids(self, session_id: UUID) -> List[UUID]:
+        """List tool collection ids for a chat session."""
+        statement = (
+            select(models.ChatSessionCollection.collection_id)
+            .where(models.ChatSessionCollection.session_id == session_id)
+            .order_by(asc(models.ChatSessionCollection.created_at))
+        )
+        return list(self.session.exec(statement).all())
+
+    def list_session_collection_ids_for_sessions(
+        self,
+        session_ids: Sequence[UUID],
+    ) -> dict[UUID, List[UUID]]:
+        """Return tool collection ids grouped by session."""
+        if not session_ids:
+            return {}
+        statement = (
+            select(
+                models.ChatSessionCollection.session_id,
+                models.ChatSessionCollection.collection_id,
+            )
+            .where(models.ChatSessionCollection.session_id.in_(session_ids))  # pylint: disable=no-member
+            .order_by(asc(models.ChatSessionCollection.created_at))
+        )
+        mapping: dict[UUID, List[UUID]] = {session_id: [] for session_id in session_ids}
+        for session_id, collection_id in self.session.exec(statement).all():
+            mapping.setdefault(session_id, []).append(collection_id)
+        return mapping
+
+    def replace_session_collections(
+        self,
+        *,
+        session_id: UUID,
+        collection_ids: Sequence[UUID],
+    ) -> None:
+        """Replace tool collection associations for a session."""
+        self.session.exec(
+            sa_delete(models.ChatSessionCollection).where(
+                models.ChatSessionCollection.session_id == session_id
+            )
+        )
+        if collection_ids:
+            associations = [
+                models.ChatSessionCollection(session_id=session_id, collection_id=collection_id)
+                for collection_id in collection_ids
+            ]
+            self.session.add_all(associations)
+        self.session.flush()
 
     def add_message(self, message: models.ChatMessage) -> models.ChatMessage:
         """Persist a chat message and return it."""
@@ -224,6 +311,11 @@ class ChatRepository:
 
     def delete_session(self, session_model: models.ChatSession) -> None:
         """Delete a session and its associated messages."""
+        self.session.exec(
+            sa_delete(models.ChatSessionCollection).where(
+                models.ChatSessionCollection.session_id == session_model.id,
+            )
+        )
         self.session.exec(
             sa_delete(models.ChatMessage).where(
                 models.ChatMessage.session_id == session_model.id,

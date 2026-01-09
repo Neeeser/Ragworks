@@ -15,6 +15,7 @@ interface ChatInputProps {
   onSend: () => void;
   onStop: () => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  placeholder?: string;
 }
 
 export const ChatInput = ({
@@ -25,6 +26,7 @@ export const ChatInput = ({
   onSend,
   onStop,
   inputRef,
+  placeholder = "Ask anything…",
 }: ChatInputProps) => {
   return (
     <div className="border-t border-white/5 bg-black/30 px-6 py-4">
@@ -33,7 +35,7 @@ export const ChatInput = ({
           ref={inputRef}
           rows={1}
           className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-violet-400"
-          placeholder="Ask anything about this collection…"
+          placeholder={placeholder}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           style={{

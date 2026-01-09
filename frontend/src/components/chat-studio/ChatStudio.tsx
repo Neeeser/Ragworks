@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, PanelLeftOpen, PanelRightOpen, PlusCircle } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Fragment,
   useCallback,
@@ -12,8 +12,10 @@ import {
   useState,
 } from "react";
 
-import { ChatInput, PromptEditorOverlay } from "@/components/chat-studio";
+import { ChatInput } from "@/components/chat-studio";
+import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
 import { HistoryPanel } from "@/components/chat-studio/HistoryPanel";
+import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
 import { formatToolLabel } from "@/components/chat-studio/Tooling";
 import { Button } from "@/components/ui/button";
@@ -21,17 +23,19 @@ import { Loader } from "@/components/ui/loader";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import {
-  chatWithCollection,
+  chat,
   deleteChatSession,
   fetchCollections,
   fetchDocuments,
   fetchPipeline,
+  getBasePrompt,
   getChatHistory,
   getCollectionPrompt,
   listChatSessions,
   listModelEndpoints,
   listModels,
-  streamChatWithCollection,
+  streamChat,
+  updateBasePrompt,
   updateCollectionPrompt,
 } from "@/lib/api";
 import { PARAMETER_DEFINITIONS } from "@/lib/chat-parameters";
@@ -45,9 +49,7 @@ import {
   parsePriceInput,
   sanitizeFileName,
   sanitizeModelSlug,
-  safeParseJSON,
 } from "./chat-utils";
-import { ChatTimeline } from "./components/ChatTimeline";
 
 import type { ChatEntry } from "./chat-types";
 import type { ProviderFormState } from "@/components/chat-studio/types";
@@ -64,10 +66,10 @@ import type {
   ChatRequestPayload,
   ChatSession,
   Collection,
-  CollectionPromptDetails,
   ModelEndpointDirectory,
   ModelInfo,
   Pipeline,
+  PromptDetails,
   ProviderPreferences,
   ProviderSortOption,
   ReasoningTraceSegment,
@@ -75,12 +77,23 @@ import type {
   UsageBreakdown,
 } from "@/lib/types";
 
-const samplePrompts = [
-  "Give me the latest ingestion summary with citations.",
-  "What changed in the newest document batch?",
-  "Draft next steps using the last three answers.",
-  "List any flagged chunks that might need review.",
-];
+const PINECONE_KEY_REQUIRED_MESSAGE =
+  "Add your Pinecone API key in Settings to enable collection tools.";
+const TELEMETRY_SECTION_IDS = {
+  systemPrompt: "telemetry-system-prompt",
+  collectionTools: "telemetry-collection-tools",
+  streaming: "telemetry-streaming",
+  modelRouting: "telemetry-model-routing",
+  providerRouting: "telemetry-provider-routing",
+  modelParameters: "telemetry-model-parameters",
+  vitals: "telemetry-collection-vitals",
+  usage: "telemetry-usage",
+} as const;
+const HISTORY_PANEL_WIDTH_PX = 288;
+const TELEMETRY_PANEL_WIDTH_PX = 416;
+const MIN_CENTER_PANEL_WIDTH_PX = 720;
+const OVERLAY_TRIGGER_WIDTH_PX =
+  HISTORY_PANEL_WIDTH_PX + TELEMETRY_PANEL_WIDTH_PX + MIN_CENTER_PANEL_WIDTH_PX;
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -126,6 +139,33 @@ const createDefaultProviderForm = (): ProviderFormState => ({
   maxRequest: "",
   maxImage: "",
 });
+
+const createProviderFormFromPreferences = (
+  preferences?: ProviderPreferences | null,
+): ProviderFormState => {
+  const defaults = createDefaultProviderForm();
+  if (!preferences) {
+    return defaults;
+  }
+  const maxPrice = preferences.max_price ?? {};
+  return {
+    ...defaults,
+    order: preferences.order ?? [],
+    only: preferences.only ?? [],
+    ignore: preferences.ignore ?? [],
+    quantizations: preferences.quantizations ?? [],
+    sort: preferences.sort ?? "",
+    allowFallbacks: preferences.allow_fallbacks ?? true,
+    requireParameters: preferences.require_parameters ?? false,
+    dataCollection: preferences.data_collection ?? "allow",
+    zdr: preferences.zdr ?? false,
+    enforceDistillableText: preferences.enforce_distillable_text ?? false,
+    maxPrompt: maxPrice.prompt != null ? String(maxPrice.prompt) : "",
+    maxCompletion: maxPrice.completion != null ? String(maxPrice.completion) : "",
+    maxRequest: maxPrice.request != null ? String(maxPrice.request) : "",
+    maxImage: maxPrice.image != null ? String(maxPrice.image) : "",
+  };
+};
 
 const deriveToolTracesFromMessages = (items: ChatMessage[]): ToolCallTrace[] =>
   items
@@ -245,7 +285,8 @@ const generateClientMessageId = () => {
 const CHAT_INPUT_MIN_HEIGHT = 40;
 const CHAT_INPUT_MAX_HEIGHT = 160;
 const PROGRESS_POLL_INTERVAL = 800;
-const OPTIMISTIC_DEDUPE_WINDOW_MS = 15_000;
+const OPTIMISTIC_CLOCK_SKEW_MS = 5_000;
+const DEFAULT_STREAMING_ENABLED = true;
 
 const ensureMessageOrder = (
   map: Map<string, number>,
@@ -335,24 +376,103 @@ const pruneHistoryForEdit = (
   return sorted.slice(0, anchorIndex);
 };
 
-export default function ChatStudioExperience() {
-  const params = useParams<{ collectionId: string }>();
-  const collectionId = params?.collectionId ?? "";
+const isOptimisticDuplicate = (
+  optimistic: ChatMessage,
+  message: ChatMessage,
+  messageOrder: Map<string, number>,
+): boolean => {
+  if (message.session_id !== optimistic.session_id) {
+    return false;
+  }
+  if (message.role !== "user") {
+    return false;
+  }
+  if (message.content.trim() !== optimistic.content.trim()) {
+    return false;
+  }
+  const optimisticOrder = messageOrder.get(optimistic.id);
+  const persistedOrder = messageOrder.get(message.id);
+  if (optimisticOrder !== undefined && persistedOrder !== undefined) {
+    return persistedOrder >= optimisticOrder;
+  }
+  const optimisticTimestamp = Date.parse(optimistic.created_at);
+  const persistedTimestamp = Date.parse(message.created_at);
+  if (!Number.isNaN(optimisticTimestamp) && !Number.isNaN(persistedTimestamp)) {
+    return Math.abs(persistedTimestamp - optimisticTimestamp) <= OPTIMISTIC_CLOCK_SKEW_MS;
+  }
+  return true;
+};
+
+const parseCollectionIdsParam = (value: string | null): string[] => {
+  if (!value) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return value.split(",").reduce<string[]>((acc, raw) => {
+    const decoded = decodeURIComponent(raw.trim());
+    if (!decoded || seen.has(decoded)) {
+      return acc;
+    }
+    seen.add(decoded);
+    acc.push(decoded);
+    return acc;
+  }, []);
+};
+
+const areArraysEqual = (left: string[], right: string[]): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+};
+
+const buildCollectionsQuery = (collectionIds: string[]): string => {
+  if (collectionIds.length === 0) {
+    return "";
+  }
+  const encoded = collectionIds.map((collectionId) => encodeURIComponent(collectionId));
+  return `collections=${encoded.join(",")}`;
+};
+
+export function ChatStudio() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const params = useParams<{ sessionId?: string | string[] }>();
+  const rawSessionId = params.sessionId;
+  const sessionIdParam = Array.isArray(rawSessionId)
+    ? (rawSessionId[0] ?? null)
+    : (rawSessionId ?? null);
+  const urlCollectionsValue = searchParams.get("collections");
+  const urlCollectionIds = useMemo(
+    () => parseCollectionIdsParam(urlCollectionsValue),
+    [urlCollectionsValue],
+  );
   const { token, user, loading: authLoading } = useAuth();
-  const [collection, setCollection] = useState<Collection | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
+  const [selectedToolCollectionIds, setSelectedToolCollectionIds] =
+    useState<string[]>(urlCollectionIds);
+  const [historyFilterCollectionIds, setHistoryFilterCollectionIds] = useState<string[]>([]);
+  const [historyFilterIncludeUnassigned, setHistoryFilterIncludeUnassigned] = useState(false);
   const [documentCount, setDocumentCount] = useState(0);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(sessionIdParam);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolTraces, setToolTraces] = useState<ToolCallTrace[]>([]);
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageBreakdown | null>(null);
   const [contextWindow, setContextWindow] = useState<number>(0);
-  const [defaultChatModel, setDefaultChatModel] = useState<string | null>(null);
   const [contextConsumed, setContextConsumed] = useState<number>(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.sessionStorage.getItem("chatStudio.loaded") !== "true";
+  });
   const [sending, setSending] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [isStopping, setIsStopping] = useState(false);
@@ -370,6 +490,10 @@ export default function ChatStudioExperience() {
     "chat.telemetry.promptOpen",
     true,
   );
+  const [collectionToolsOpen, setCollectionToolsOpen] = usePersistentToggle(
+    "chat.telemetry.toolsOpen",
+    true,
+  );
   const [vitalsOpen, setVitalsOpen] = usePersistentToggle("chat.telemetry.vitalsOpen", true);
   const [usageOpen, setUsageOpen] = usePersistentToggle("chat.telemetry.usageOpen", true);
   const [modelParametersOpen, setModelParametersOpen] = usePersistentToggle(
@@ -384,10 +508,7 @@ export default function ChatStudioExperience() {
     "chat.telemetry.streamingOpen",
     true,
   );
-  const [streamingEnabled, setStreamingEnabled] = usePersistentToggle(
-    "chat.streamingEnabled",
-    false,
-  );
+  const [streamingEnabled, setStreamingEnabled] = useState(DEFAULT_STREAMING_ENABLED);
   const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -398,16 +519,29 @@ export default function ChatStudioExperience() {
   const [providerForm, setProviderForm] = useState<ProviderFormState>(() =>
     createDefaultProviderForm(),
   );
+  const previousModelIdRef = useRef<string | null>(null);
   const [providerDirectory, setProviderDirectory] = useState<ModelEndpointDirectory | null>(null);
   const [providerDirectoryLoading, setProviderDirectoryLoading] = useState(false);
   const [providerDirectoryError, setProviderDirectoryError] = useState<string | null>(null);
   const [providerSearchTerm, setProviderSearchTerm] = useState("");
-  const [promptDetails, setPromptDetails] = useState<CollectionPromptDetails | null>(null);
-  const [promptLoading, setPromptLoading] = useState(false);
-  const [promptError, setPromptError] = useState<string | null>(null);
+  const applyNewChatDefaultsRef = useRef(true);
+  const [basePromptDetails, setBasePromptDetails] = useState<PromptDetails | null>(null);
+  const [basePromptLoading, setBasePromptLoading] = useState(false);
+  const [basePromptError, setBasePromptError] = useState<string | null>(null);
+  const [basePromptDraft, setBasePromptDraft] = useState("");
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
-  const [promptDraft, setPromptDraft] = useState("");
-  const [promptSaving, setPromptSaving] = useState(false);
+  const [activePromptSectionId, setActivePromptSectionId] = useState("base");
+  const [collectionPromptDetails, setCollectionPromptDetails] = useState<
+    Record<string, PromptDetails>
+  >({});
+  const [collectionPromptDrafts, setCollectionPromptDrafts] = useState<Record<string, string>>({});
+  const [collectionPromptLoading, setCollectionPromptLoading] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [collectionPromptErrors, setCollectionPromptErrors] = useState<
+    Record<string, string | null>
+  >({});
+  const [promptSavingBySection, setPromptSavingBySection] = useState<Record<string, boolean>>({});
   const [liveResponse, setLiveResponse] = useState("");
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
   const [liveReasoningSegments, setLiveReasoningSegments] = useState<ReasoningTraceSegment[]>([]);
@@ -429,6 +563,14 @@ export default function ChatStudioExperience() {
   const [liveReasoningAnimationKey, setLiveReasoningAnimationKey] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatPanelRef = useRef<HTMLDivElement | null>(null);
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 0;
+    }
+    return window.innerWidth;
+  });
+  const isOverlayMode = chatPanelWidth > 0 && chatPanelWidth < OVERLAY_TRIGGER_WIDTH_PX;
   const scrollAnimationFrameRef = useRef<number | null>(null);
   const programmaticScrollRef = useRef(false);
   const programmaticScrollTimeoutRef = useRef<number | null>(null);
@@ -437,10 +579,60 @@ export default function ChatStudioExperience() {
   const pollIntervalRef = useRef<number | null>(null);
   const activePollingSession = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
+  const toolCollectionsDirtyRef = useRef(false);
+  const newChatDefaultsRef = useRef<{
+    activeModelId: string | null;
+    parameterOverrides: ParameterOverrides;
+    providerForm: ProviderFormState;
+    streamingEnabled: boolean;
+    toolCollectionIds: string[];
+  } | null>(null);
   const chatHydrationPendingRef = useRef(false);
+  const historyFilterTouchedRef = useRef(false);
   const reasoningCacheRef = useRef<Map<string, ReasoningTraceSegment[]>>(new Map());
   const messageOrderRef = useRef<Map<string, number>>(new Map());
   const nextMessageOrderRef = useRef(1);
+  const historyFilterActive =
+    historyFilterCollectionIds.length > 0 || historyFilterIncludeUnassigned;
+  const collectionMap = useMemo(() => {
+    return new Map(collections.map((collection) => [collection.id, collection]));
+  }, [collections]);
+  const resolveValidToolCollectionIds = useCallback(
+    (collectionIds: string[]) => {
+      if (collectionIds.length === 0) {
+        return [];
+      }
+      if (collectionMap.size === 0) {
+        return collectionIds;
+      }
+      return collectionIds.filter((collectionId) => collectionMap.has(collectionId));
+    },
+    [collectionMap],
+  );
+  const selectedToolCollections = useMemo(() => {
+    return selectedToolCollectionIds
+      .map((collectionId) => collectionMap.get(collectionId))
+      .filter(Boolean) as Collection[];
+  }, [collectionMap, selectedToolCollectionIds]);
+  const primaryCollection = selectedToolCollections[0] ?? null;
+  const collectionLabel = useMemo(() => {
+    if (selectedToolCollections.length === 0) {
+      return "No collections selected";
+    }
+    if (selectedToolCollections.length === 1) {
+      return selectedToolCollections[0].name;
+    }
+    return `${selectedToolCollections.length} collections selected`;
+  }, [selectedToolCollections]);
+  const collectionMetaLabel = useMemo(() => {
+    if (selectedToolCollections.length === 0) {
+      return "No collection tools enabled";
+    }
+    if (selectedToolCollections.length === 1) {
+      return `${documentCount} documents`;
+    }
+    return `${selectedToolCollections.length} tools enabled`;
+  }, [documentCount, selectedToolCollections]);
 
   const hasLiveText = liveResponse.trim().length > 0;
   const hasLiveReasoning = liveReasoningSegments.length > 0;
@@ -455,6 +647,70 @@ export default function ChatStudioExperience() {
     Boolean(activeStreamEntryKey) && hasDisplayedLiveReasoning;
   const hadLiveTextRef = useRef(false);
   const hadLiveReasoningRef = useRef(false);
+
+  const buildChatUrl = useCallback((sessionId: string | null, collectionIds: string[]) => {
+    const basePath = sessionId ? `/chat/${sessionId}` : "/chat";
+    const query = buildCollectionsQuery(collectionIds);
+    return query ? `${basePath}?${query}` : basePath;
+  }, []);
+
+  const currentUrl = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
+
+  const navigateToChat = useCallback(
+    (sessionId: string | null, collectionIds: string[]) => {
+      const target = buildChatUrl(sessionId, collectionIds);
+      if (target !== currentUrl) {
+        router.push(target);
+      }
+    },
+    [buildChatUrl, currentUrl, router],
+  );
+
+  useEffect(() => {
+    setSelectedSessionId(sessionIdParam);
+  }, [sessionIdParam]);
+
+  useEffect(() => {
+    toolCollectionsDirtyRef.current = false;
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return;
+    }
+    if (urlCollectionsValue === null) {
+      return;
+    }
+    const parsed = parseCollectionIdsParam(urlCollectionsValue);
+    setSelectedToolCollectionIds((prev) => (areArraysEqual(prev, parsed) ? prev : parsed));
+  }, [selectedSessionId, urlCollectionsValue]);
+
+  const isPendingSession = useMemo(() => {
+    if (!selectedSessionId) {
+      return false;
+    }
+    return pendingSessionIdsRef.current.has(selectedSessionId);
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (isPendingSession) {
+      return;
+    }
+    const target = buildChatUrl(selectedSessionId, selectedToolCollectionIds);
+    if (target !== currentUrl) {
+      router.replace(target);
+    }
+  }, [
+    buildChatUrl,
+    currentUrl,
+    isPendingSession,
+    router,
+    selectedSessionId,
+    selectedToolCollectionIds,
+  ]);
 
   useEffect(() => {
     isStreamingResponseRef.current = isStreamingResponse;
@@ -497,6 +753,8 @@ export default function ChatStudioExperience() {
       arguments?: Record<string, unknown>;
       response?: Record<string, unknown>;
       reasoning?: unknown;
+      collection_id?: string;
+      collection_name?: string;
     }) => {
       const generatedId = `tool-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const eventId = update.id || generatedId;
@@ -514,12 +772,16 @@ export default function ChatStudioExperience() {
                 arguments: {},
                 response: {},
                 reasoning: null as ToolCallTrace["reasoning"],
+                collection_id: update.collection_id ?? null,
+                collection_name: update.collection_name ?? null,
               };
         const merged = {
           ...base,
           name: update.name || base.name,
           arguments: { ...base.arguments, ...(update.arguments || {}) },
           response: update.response !== undefined ? update.response || {} : base.response || {},
+          collection_id: update.collection_id ?? base.collection_id ?? null,
+          collection_name: update.collection_name ?? base.collection_name ?? null,
           reasoning:
             reasoningSegments && reasoningSegments.length > 0
               ? { segments: reasoningSegments }
@@ -568,19 +830,8 @@ export default function ChatStudioExperience() {
   );
 
   const authToken = token ?? "";
-  const missingKeys = useMemo(() => {
-    if (authLoading || !user) {
-      return [];
-    }
-    const missing: string[] = [];
-    if (!user?.openrouter_configured) {
-      missing.push("OpenRouter");
-    }
-    if (!user?.pinecone_configured) {
-      missing.push("Pinecone");
-    }
-    return missing;
-  }, [authLoading, user]);
+  const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
+  const pineconeConfigured = Boolean(!authLoading && user?.pinecone_configured);
 
   const sortSessions = useCallback((items: ChatSession[]) => {
     const pendingIds = pendingSessionIdsRef.current;
@@ -610,104 +861,229 @@ export default function ChatStudioExperience() {
     if (authLoading) {
       return;
     }
-    if (!authToken || !collectionId) {
+    if (!authToken) {
       setLoading(false);
-      setStatus(collectionId ? "Sign in to access this collection." : "Missing collection id.");
+      setStatus("Sign in to access the chat studio.");
       return;
     }
-    if (missingKeys.length) {
-      const noun = missingKeys.length === 1 ? "key is" : "keys are";
-      const pronoun = missingKeys.length === 1 ? "it" : "them";
+    if (!openrouterConfigured) {
       setLoading(false);
-      setStatus(
-        `${missingKeys.join(" and ")} API ${noun} not configured. Update ${pronoun} in Settings to continue.`,
-      );
+      setStatus("OpenRouter API key is not configured. Update it in Settings to continue.");
       return;
     }
-    let cancelled = false;
-
-    async function bootstrap() {
-      setLoading(true);
-      setStatus(null);
-      try {
-        const allCollections = await fetchCollections(authToken);
-        if (cancelled) return;
-        const active = allCollections.find((col) => col.id === collectionId);
-        if (!active) {
-          setStatus("Collection not found.");
-          setCollection(null);
-          return;
-        }
-        setCollection(active);
-        if (active.retrieval_pipeline_id) {
-          const pipeline = await fetchPipeline(active.retrieval_pipeline_id, authToken);
-          if (!cancelled) {
-            const settings = resolveChatSettings(pipeline);
-            setDefaultChatModel(settings.chatModel);
-            setContextWindow(settings.contextWindow);
-          }
-        } else {
-          setDefaultChatModel(null);
-          setContextWindow(0);
-        }
-        const [documents, sessionList] = await Promise.all([
-          fetchDocuments(active.id, authToken).catch(() => []),
-          listChatSessions(active.id, authToken).catch(() => []),
-        ]);
-        if (cancelled) return;
-        setDocumentCount(documents.length);
-        const sorted = sortSessions(sessionList);
-        setSessions(sorted);
-        setSelectedSessionId(sorted[0]?.id ?? null);
-      } catch (error) {
-        if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : "Unable to load chat studio.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, authToken, collectionId, missingKeys, resolveChatSettings, sortSessions]);
+    setStatus(null);
+  }, [authLoading, authToken, openrouterConfigured]);
 
   useEffect(() => {
-    if (authLoading || !authToken || !collectionId || missingKeys.length) {
-      setPromptDetails(null);
-      setPromptDraft("");
+    if (authLoading) {
+      return;
+    }
+    if (!authToken || !pineconeConfigured) {
+      setCollections([]);
+      setCollectionsLoading(false);
+      setCollectionsError(pineconeConfigured ? null : PINECONE_KEY_REQUIRED_MESSAGE);
       return;
     }
     let cancelled = false;
-    async function loadPrompt() {
-      setPromptLoading(true);
-      setPromptError(null);
-      try {
-        const details = await getCollectionPrompt(collectionId, authToken);
-        if (cancelled) return;
-        setPromptDetails(details);
-        if (!promptEditorOpen) {
-          setPromptDraft(details.template ?? "");
-        }
-      } catch (error) {
+    setCollectionsLoading(true);
+    setCollectionsError(null);
+    fetchCollections(authToken)
+      .then((items) => {
         if (!cancelled) {
-          setPromptError(error instanceof Error ? error.message : "Unable to load system prompt.");
+          setCollections(items);
         }
-      } finally {
+      })
+      .catch((error: unknown) => {
         if (!cancelled) {
-          setPromptLoading(false);
+          const message = error instanceof Error ? error.message : "Unable to load collections.";
+          setCollectionsError(message);
+          setCollections([]);
         }
-      }
-    }
-    loadPrompt();
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCollectionsLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, collectionId, missingKeys, promptEditorOpen]);
+  }, [authLoading, authToken, pineconeConfigured]);
+
+  useEffect(() => {
+    if (collections.length === 0) {
+      return;
+    }
+    const validIds = new Set(collections.map((collection) => collection.id));
+    setSelectedToolCollectionIds((prev) => prev.filter((id) => validIds.has(id)));
+    setHistoryFilterCollectionIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [collections]);
+
+  useEffect(() => {
+    if (!authToken || !primaryCollection) {
+      setDocumentCount(0);
+      return;
+    }
+    let cancelled = false;
+    fetchDocuments(primaryCollection.id, authToken)
+      .then((docs) => {
+        if (!cancelled) {
+          setDocumentCount(docs.length);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDocumentCount(0);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, primaryCollection]);
+
+  useEffect(() => {
+    if (!authToken || !primaryCollection) {
+      setContextWindow(0);
+      return;
+    }
+    if (!primaryCollection.retrieval_pipeline_id) {
+      setContextWindow(0);
+      return;
+    }
+    let cancelled = false;
+    fetchPipeline(primaryCollection.retrieval_pipeline_id, authToken)
+      .then((pipeline) => {
+        if (!cancelled) {
+          const settings = resolveChatSettings(pipeline);
+          setContextWindow(settings.contextWindow);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setContextWindow(0);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, primaryCollection, resolveChatSettings]);
+
+  useEffect(() => {
+    if (authLoading || !authToken || !openrouterConfigured) {
+      setSessions([]);
+      setSelectedSessionId(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setStatus(null);
+    const options = historyFilterActive
+      ? {
+          collectionIds: historyFilterCollectionIds,
+          includeUnassigned: historyFilterIncludeUnassigned,
+        }
+      : undefined;
+    listChatSessions(authToken, options)
+      .then((sessionList) => {
+        if (cancelled) return;
+        const sorted = sortSessions(sessionList);
+        setSessions(sorted);
+        setSelectedSessionId((current) => {
+          if (current && sorted.some((session) => session.id === current)) {
+            return current;
+          }
+          return sessionIdParam ? sessionIdParam : null;
+        });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setStatus(error instanceof Error ? error.message : "Unable to load chat sessions.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem("chatStudio.loaded", "true");
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    authToken,
+    historyFilterActive,
+    historyFilterCollectionIds,
+    historyFilterIncludeUnassigned,
+    openrouterConfigured,
+    sessionIdParam,
+    sortSessions,
+  ]);
+
+  useEffect(() => {
+    if (authLoading || !authToken) {
+      setBasePromptDetails(null);
+      setBasePromptDraft("");
+      return;
+    }
+    let cancelled = false;
+    setBasePromptLoading(true);
+    setBasePromptError(null);
+    getBasePrompt(authToken)
+      .then((details) => {
+        if (cancelled) return;
+        setBasePromptDetails(details);
+        setBasePromptDraft((prev) => (prev ? prev : (details.template ?? "")));
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          const message =
+            error instanceof Error ? error.message : "Unable to load the base prompt.";
+          setBasePromptError(message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBasePromptLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, authToken]);
+
+  useEffect(() => {
+    if (authLoading || !authToken || selectedToolCollectionIds.length === 0) {
+      return;
+    }
+    selectedToolCollectionIds.forEach((collectionId) => {
+      if (collectionPromptDetails[collectionId]) {
+        return;
+      }
+      setCollectionPromptLoading((prev) => ({ ...prev, [collectionId]: true }));
+      setCollectionPromptErrors((prev) => ({ ...prev, [collectionId]: null }));
+      getCollectionPrompt(collectionId, authToken)
+        .then((details) => {
+          setCollectionPromptDetails((prev) => ({ ...prev, [collectionId]: details }));
+          setCollectionPromptDrafts((prev) => {
+            if (prev[collectionId] !== undefined) {
+              return prev;
+            }
+            return { ...prev, [collectionId]: details.template ?? "" };
+          });
+        })
+        .catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : "Unable to load the tool prompt.";
+          setCollectionPromptErrors((prev) => ({ ...prev, [collectionId]: message }));
+        })
+        .finally(() => {
+          setCollectionPromptLoading((prev) => ({ ...prev, [collectionId]: false }));
+        });
+    });
+  }, [authLoading, authToken, collectionPromptDetails, selectedToolCollectionIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -721,7 +1097,7 @@ export default function ChatStudioExperience() {
         setModelsError("Sign in to load models.");
         return;
       }
-      if (missingKeys.includes("OpenRouter")) {
+      if (!openrouterConfigured) {
         setModelCatalog([]);
         setModelsLoading(false);
         setModelsError("Add your OpenRouter API key in Settings to load models.");
@@ -748,15 +1124,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, missingKeys]);
-
-  useEffect(() => {
-    if (!collection) {
-      setActiveModelId(null);
-      return;
-    }
-    setActiveModelId((current) => current ?? defaultChatModel ?? null);
-  }, [collection, defaultChatModel]);
+  }, [authLoading, authToken, openrouterConfigured]);
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -769,6 +1137,77 @@ export default function ChatStudioExperience() {
       );
     }
   }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!activeModelId) {
+      previousModelIdRef.current = null;
+      return;
+    }
+    const previous = previousModelIdRef.current;
+    if (previous && previous !== activeModelId) {
+      setParameterOverrides({});
+      setProviderForm(createDefaultProviderForm());
+    }
+    previousModelIdRef.current = activeModelId;
+  }, [activeModelId]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      return;
+    }
+    if (pendingSessionIdsRef.current.has(selectedSessionId)) {
+      return;
+    }
+    const session = sessions.find((item) => item.id === selectedSessionId);
+    if (!session) {
+      return;
+    }
+    setSelectedToolCollectionIds(session.tool_collection_ids ?? []);
+    setParameterOverrides(session.parameter_overrides ?? {});
+    setProviderForm(createProviderFormFromPreferences(session.provider_preferences));
+    setStreamingEnabled(session.stream ?? DEFAULT_STREAMING_ENABLED);
+  }, [selectedSessionId, sessions]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      applyNewChatDefaultsRef.current = true;
+    }
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (loading || selectedSessionId || !applyNewChatDefaultsRef.current) {
+      return;
+    }
+    if (newChatDefaultsRef.current) {
+      const snapshot = newChatDefaultsRef.current;
+      setActiveModelId(snapshot.activeModelId);
+      setParameterOverrides(snapshot.parameterOverrides);
+      setProviderForm(snapshot.providerForm);
+      setStreamingEnabled(snapshot.streamingEnabled);
+      setSelectedToolCollectionIds(snapshot.toolCollectionIds);
+      newChatDefaultsRef.current = null;
+      applyNewChatDefaultsRef.current = false;
+      return;
+    }
+    const pendingIds = pendingSessionIdsRef.current;
+    const latestSession = sessions.find((session) => !pendingIds.has(session.id)) ?? null;
+    if (latestSession) {
+      setActiveModelId(latestSession.chat_model);
+      setParameterOverrides(latestSession.parameter_overrides ?? {});
+      setProviderForm(createProviderFormFromPreferences(latestSession.provider_preferences));
+      setStreamingEnabled(latestSession.stream ?? DEFAULT_STREAMING_ENABLED);
+      setSelectedToolCollectionIds(latestSession.tool_collection_ids ?? []);
+    } else if (user) {
+      setActiveModelId(user.last_used_chat_model ?? null);
+      setParameterOverrides(user.last_used_parameters ?? {});
+      setProviderForm(createProviderFormFromPreferences(user.last_used_provider));
+      setStreamingEnabled(user.last_used_stream ?? DEFAULT_STREAMING_ENABLED);
+      setSelectedToolCollectionIds(
+        resolveValidToolCollectionIds(user.last_used_tool_collection_ids ?? []),
+      );
+    }
+    applyNewChatDefaultsRef.current = false;
+  }, [loading, resolveValidToolCollectionIds, selectedSessionId, sessions, user]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -784,7 +1223,6 @@ export default function ChatStudioExperience() {
     if (pendingSessionIdsRef.current.has(selectedSessionId)) {
       setMessages([]);
       setToolTraces([]);
-      setChatEntryOrder([]);
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
@@ -831,22 +1269,11 @@ export default function ChatStudioExperience() {
         if (!trimmedOptimistic) {
           return false;
         }
-        const optimisticTimestamp = Date.parse(optimistic.created_at) || Date.now();
         const duplicate = messages.some((message) => {
-          if (message.session_id !== optimistic.session_id) {
-            return false;
-          }
-          if (message.role !== "user") {
-            return false;
-          }
-          if (message.content.trim() !== trimmedOptimistic) {
-            return false;
-          }
           if (message.id === optimistic.id) {
             return false;
           }
-          const persistedTimestamp = Date.parse(message.created_at) || 0;
-          return Math.abs(persistedTimestamp - optimisticTimestamp) < OPTIMISTIC_DEDUPE_WINDOW_MS;
+          return isOptimisticDuplicate(optimistic, message, messageOrderRef.current);
         });
         return !duplicate;
       });
@@ -864,24 +1291,19 @@ export default function ChatStudioExperience() {
     }
   }, [selectedSessionId, sessions]);
 
-  useEffect(() => {
-    setParameterOverrides({});
-  }, [activeModelId]);
-
   const currentModelInfo = useMemo(() => {
-    const lookupId = activeModelId || defaultChatModel;
+    const lookupId = activeModelId;
     if (!lookupId) return null;
     return (
       modelCatalog.find((model) => model.id === lookupId || model.canonical_slug === lookupId) ??
       null
     );
-  }, [activeModelId, defaultChatModel, modelCatalog]);
+  }, [activeModelId, modelCatalog]);
 
   const providerModelSlug = useMemo(() => {
-    const slugSource =
-      currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? defaultChatModel ?? null;
+    const slugSource = currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? null;
     return sanitizeModelSlug(slugSource);
-  }, [defaultChatModel, currentModelInfo?.canonical_slug, currentModelInfo?.id]);
+  }, [currentModelInfo?.canonical_slug, currentModelInfo?.id]);
 
   const supportedParameterKeys = useMemo(() => {
     const supported = new Set<ModelParameterKey>();
@@ -965,6 +1387,32 @@ export default function ChatStudioExperience() {
 
   const providerRuleCount = useMemo(() => Object.keys(providerPayload).length, [providerPayload]);
 
+  const overrideSections = useMemo(() => {
+    const sections: Array<{ id: string; label: string }> = [];
+    if (basePromptDetails?.is_custom) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.systemPrompt, label: "System prompt" });
+    }
+    if (selectedToolCollectionIds.length > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.collectionTools, label: "Collection tools" });
+    }
+    if (streamingEnabled !== DEFAULT_STREAMING_ENABLED) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.streaming, label: "Streaming" });
+    }
+    if (providerRuleCount > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.providerRouting, label: "Provider routing" });
+    }
+    if (activeParameterCount > 0) {
+      sections.push({ id: TELEMETRY_SECTION_IDS.modelParameters, label: "Model parameters" });
+    }
+    return sections;
+  }, [
+    activeParameterCount,
+    basePromptDetails?.is_custom,
+    providerRuleCount,
+    selectedToolCollectionIds.length,
+    streamingEnabled,
+  ]);
+
   useEffect(() => {
     if (!providerModelSlug) {
       setProviderDirectory(null);
@@ -981,7 +1429,7 @@ export default function ChatStudioExperience() {
       setProviderDirectoryLoading(false);
       return;
     }
-    if (missingKeys.includes("OpenRouter")) {
+    if (!openrouterConfigured) {
       setProviderDirectory(null);
       setProviderDirectoryError("Add your OpenRouter API key in Settings to load providers.");
       setProviderDirectoryLoading(false);
@@ -1015,7 +1463,7 @@ export default function ChatStudioExperience() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, missingKeys, providerModelSlug]);
+  }, [authLoading, authToken, openrouterConfigured, providerModelSlug]);
 
   useEffect(() => {
     setProviderSearchTerm("");
@@ -1077,9 +1525,29 @@ export default function ChatStudioExperience() {
   }, [selectedSessionId]);
 
   useEffect(() => {
-    setChatEntryOrder([]);
-    chatHydrationPendingRef.current = true;
-  }, [selectedSessionId]);
+    const element = chatPanelRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      setChatPanelWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isOverlayMode) {
+      return;
+    }
+    if (historyOpen && telemetryOpen) {
+      setTelemetryOpen(false);
+    }
+  }, [historyOpen, isOverlayMode, telemetryOpen, setTelemetryOpen]);
 
   const handleReasoningToggle = useCallback(() => {}, []);
 
@@ -1244,20 +1712,9 @@ export default function ChatStudioExperience() {
       if (!trimmedOptimistic) {
         return false;
       }
-      const optimisticTimestamp = Date.parse(optimistic.created_at) || Date.now();
-      return !messages.some((message) => {
-        if (message.session_id !== optimistic.session_id) {
-          return false;
-        }
-        if (message.role !== "user") {
-          return false;
-        }
-        if (message.content.trim() !== trimmedOptimistic) {
-          return false;
-        }
-        const persistedTimestamp = Date.parse(message.created_at) || 0;
-        return Math.abs(persistedTimestamp - optimisticTimestamp) < OPTIMISTIC_DEDUPE_WINDOW_MS;
-      });
+      return !messages.some((message) =>
+        isOptimisticDuplicate(optimistic, message, messageOrderRef.current),
+      );
     });
     const combined = [...messages, ...dedupedOptimistic].sort((a, b) => {
       const aOrder = messageOrderRef.current.get(a.id);
@@ -1323,20 +1780,6 @@ export default function ChatStudioExperience() {
             ? normalizeReasoningSegments(trace.reasoning)
             : normalizeReasoningSegments(message.reasoning_trace),
         );
-        const toolLabel = formatToolLabel(trace?.name || message.tool_name || "Tool");
-        if (toolSegments.length > 0) {
-          entryList.push({
-            id: `${message.id}:reasoning:tool`,
-            type: "reasoning",
-            messageId: message.id,
-            source: "tool",
-            title: "Reasoning",
-            subtitle: toolLabel,
-            segments: toolSegments,
-            relatedToolLabel: toolLabel,
-            createdAt,
-          });
-        }
         const rawPayload =
           (message.tool_payload as Record<string, unknown> | null) ??
           safeParseJSON(message.content) ??
@@ -1350,6 +1793,26 @@ export default function ChatStudioExperience() {
               }
             : {}),
         };
+        const collectionName =
+          trace?.collection_name ||
+          (typeof payloadRecord.collection_name === "string"
+            ? payloadRecord.collection_name
+            : null);
+        const baseToolLabel = formatToolLabel(trace?.name || message.tool_name || "Tool");
+        const toolLabel = collectionName ? `${baseToolLabel} · ${collectionName}` : baseToolLabel;
+        if (toolSegments.length > 0) {
+          entryList.push({
+            id: `${message.id}:reasoning:tool`,
+            type: "reasoning",
+            messageId: message.id,
+            source: "tool",
+            title: "Reasoning",
+            subtitle: toolLabel,
+            segments: toolSegments,
+            relatedToolLabel: toolLabel,
+            createdAt,
+          });
+        }
         const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
         const responseRecord = coerceRecord(payloadRecord.response ?? payloadRecord);
         entryList.push({
@@ -1403,13 +1866,18 @@ export default function ChatStudioExperience() {
     chatHydrationPendingRef.current = false;
   }, [normalizedChatEntryIds]);
 
-  const toolReadyModels = useMemo(
-    () =>
-      modelCatalog.filter((model) =>
-        (model.supported_parameters || []).some((param) => param.toLowerCase() === "tools"),
-      ),
-    [modelCatalog],
-  );
+  const toolsEnabled = selectedToolCollectionIds.length > 0;
+  const chatInputPlaceholder = toolsEnabled
+    ? "Ask about the selected collections…"
+    : "Ask anything…";
+  const toolReadyModels = useMemo(() => {
+    if (!toolsEnabled) {
+      return modelCatalog;
+    }
+    return modelCatalog.filter((model) =>
+      (model.supported_parameters || []).some((param) => param.toLowerCase() === "tools"),
+    );
+  }, [modelCatalog, toolsEnabled]);
 
   const filteredModelCatalog = useMemo(() => {
     const query = modelSearchTerm.trim().toLowerCase();
@@ -1428,40 +1896,126 @@ export default function ChatStudioExperience() {
     [filteredModelCatalog, modelSortOption],
   );
 
-  const selectedModelKey = useMemo(
-    () => activeModelId || defaultChatModel || "",
-    [activeModelId, defaultChatModel],
-  );
+  const selectedModelKey = useMemo(() => activeModelId || "", [activeModelId]);
 
   const substitutePromptVariables = useCallback(
-    (templateValue: string) => {
+    (templateValue: string, context?: Record<string, string>) => {
       if (!templateValue) return "";
-      if (!promptDetails) return templateValue;
+      if (!context) return templateValue;
       return templateValue.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, rawKey) => {
         const key = String(rawKey).trim();
-        return promptDetails.context?.[key] ?? `{{${key}}}`;
+        return context?.[key] ?? `{{${key}}}`;
       });
     },
-    [promptDetails],
+    [],
   );
 
-  const promptPreviewMarkdown = useMemo(() => {
-    if (promptDraft) {
-      return substitutePromptVariables(promptDraft);
-    }
-    if (promptDetails?.template) {
-      return substitutePromptVariables(promptDetails.template);
-    }
-    return promptDetails?.rendered ?? "";
-  }, [promptDraft, promptDetails, substitutePromptVariables]);
+  const basePromptTemplate = useMemo(() => {
+    return basePromptDraft || basePromptDetails?.template || "";
+  }, [basePromptDetails?.template, basePromptDraft]);
 
-  const promptHasChanges = useMemo(() => {
-    if (!promptDetails) {
-      return Boolean(promptDraft);
+  const basePromptPreview = useMemo(() => {
+    return substitutePromptVariables(basePromptTemplate, basePromptDetails?.context);
+  }, [basePromptDetails?.context, basePromptTemplate, substitutePromptVariables]);
+
+  const toolPromptPreviews = useMemo(() => {
+    return selectedToolCollections
+      .map((collection) => {
+        const details = collectionPromptDetails[collection.id];
+        const draft = collectionPromptDrafts[collection.id] ?? details?.template ?? "";
+        return substitutePromptVariables(draft, details?.context);
+      })
+      .filter((section) => section.trim().length > 0);
+  }, [
+    collectionPromptDetails,
+    collectionPromptDrafts,
+    selectedToolCollections,
+    substitutePromptVariables,
+  ]);
+
+  const promptPreviewMarkdown = useMemo(() => {
+    return [basePromptPreview, ...toolPromptPreviews]
+      .map((section) => section.trim())
+      .filter(Boolean)
+      .join("\n\n");
+  }, [basePromptPreview, toolPromptPreviews]);
+
+  const basePromptHasChanges = useMemo(() => {
+    if (!basePromptDetails) {
+      return Boolean(basePromptDraft);
     }
-    const original = promptDetails.template ?? "";
-    return promptDraft !== original;
-  }, [promptDetails, promptDraft]);
+    return basePromptDraft !== (basePromptDetails.template ?? "");
+  }, [basePromptDetails, basePromptDraft]);
+
+  const promptSections = useMemo(() => {
+    const sections = [
+      {
+        id: "base",
+        label: "Base",
+        scope: "base" as const,
+        details: basePromptDetails,
+        draft: basePromptDraft,
+        hasChanges: basePromptHasChanges,
+        saving: Boolean(promptSavingBySection.base),
+        error: basePromptError,
+      },
+    ];
+    selectedToolCollections.forEach((collection) => {
+      const details = collectionPromptDetails[collection.id] ?? null;
+      const draft = collectionPromptDrafts[collection.id] ?? details?.template ?? "";
+      const hasChanges = details ? draft !== (details.template ?? "") : draft.trim().length > 0;
+      sections.push({
+        id: collection.id,
+        label: collection.name,
+        scope: "collection" as const,
+        details,
+        draft,
+        hasChanges,
+        saving: Boolean(promptSavingBySection[collection.id]),
+        error: collectionPromptErrors[collection.id] ?? null,
+      });
+    });
+    return sections;
+  }, [
+    basePromptDetails,
+    basePromptDraft,
+    basePromptError,
+    basePromptHasChanges,
+    collectionPromptDetails,
+    collectionPromptDrafts,
+    collectionPromptErrors,
+    promptSavingBySection,
+    selectedToolCollections,
+  ]);
+
+  const promptSectionsSummary = useMemo(() => {
+    return promptSections.map((section) => ({
+      id: section.id,
+      label: section.label,
+      scope: section.scope,
+      isCustom: Boolean(section.details?.is_custom),
+    }));
+  }, [promptSections]);
+
+  const promptLoading =
+    basePromptLoading ||
+    selectedToolCollectionIds.some((collectionId) => collectionPromptLoading[collectionId]);
+  const promptError =
+    basePromptError ??
+    selectedToolCollectionIds
+      .map((collectionId) => collectionPromptErrors[collectionId])
+      .find((value) => Boolean(value)) ??
+    null;
+  const promptGeneratedAt = basePromptDetails?.context?.["datetime.iso"] ?? null;
+
+  useEffect(() => {
+    if (
+      activePromptSectionId !== "base" &&
+      !selectedToolCollectionIds.includes(activePromptSectionId)
+    ) {
+      setActivePromptSectionId("base");
+    }
+  }, [activePromptSectionId, selectedToolCollectionIds]);
 
   const liveReasoningSegmentsRef = useRef<ReasoningTraceSegment[]>([]);
   const streamedReasoningAllRef = useRef<ReasoningTraceSegment[]>([]);
@@ -1530,7 +2084,11 @@ export default function ChatStudioExperience() {
       if (finalAssistant?.id && streamKey) {
         setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: streamKey }));
       }
+      const wasPending = pendingSessionIdsRef.current.has(response.session.id);
       pendingSessionIdsRef.current.delete(response.session.id);
+      if (wasPending) {
+        navigateToChat(response.session.id, selectedToolCollectionIds);
+      }
 
       // Check if we need to inject persisted reasoning into the final assistant message
       // This handles the case where the tool call response doesn't include the reasoning trace
@@ -1576,32 +2134,64 @@ export default function ChatStudioExperience() {
       setContextWindow(response.context_window || contextWindow || 0);
       setSelectedSessionId(response.session.id);
       setActiveModelId(response.session.chat_model);
+      const resolvedSession =
+        toolCollectionsDirtyRef.current && response.session.tool_collection_ids
+          ? { ...response.session, tool_collection_ids: selectedToolCollectionIds }
+          : response.session;
+      if (response.session.tool_collection_ids) {
+        setSelectedToolCollectionIds((prev) => {
+          if (toolCollectionsDirtyRef.current) {
+            return prev;
+          }
+          return areArraysEqual(prev, response.session.tool_collection_ids)
+            ? prev
+            : response.session.tool_collection_ids;
+        });
+      }
+      setParameterOverrides(response.session.parameter_overrides ?? {});
+      setProviderForm(createProviderFormFromPreferences(response.session.provider_preferences));
+      setStreamingEnabled(response.session.stream ?? DEFAULT_STREAMING_ENABLED);
       setSessions((prev) => {
         const next = [...prev];
         const idx = next.findIndex((session) => session.id === response.session.id);
         if (idx >= 0) {
-          next[idx] = response.session;
+          next[idx] = resolvedSession;
         } else {
-          next.push(response.session);
+          next.push(resolvedSession);
         }
         return sortSessions(next);
       });
     },
-    [contextWindow, deriveToolTraces, finalizeLiveReasoningBlock, sortSessions, syncMessages],
+    [
+      contextWindow,
+      deriveToolTraces,
+      finalizeLiveReasoningBlock,
+      navigateToChat,
+      selectedToolCollectionIds,
+      sortSessions,
+      syncMessages,
+    ],
   );
 
   const isAbortError = (value: unknown): value is DOMException =>
     value instanceof DOMException && value.name === "AbortError";
 
   const handleSend = async () => {
-    if (!authToken || !collection) return;
-    const targetModelId = activeModelId || defaultChatModel;
+    if (!authToken || !user) return;
+    if (toolsEnabled && !pineconeConfigured) {
+      setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
+      return;
+    }
+    const targetModelId = activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
     }
     const trimmed = draft.trim();
     if (!trimmed) return;
+    const parameterPayload = buildParameterPayload();
+    const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
+    const provider = providerRuleCount > 0 ? providerPayload : undefined;
     let sessionId = selectedSessionId;
     const isNewSession = !sessionId;
     if (!sessionId) {
@@ -1609,17 +2199,35 @@ export default function ChatStudioExperience() {
       setSelectedSessionId(sessionId);
       const placeholderSession: ChatSession = {
         id: sessionId,
-        collection_id: collection.id,
-        user_id: collection.user_id,
+        user_id: user.id,
         title: `Chat ${new Date().toLocaleTimeString()}`,
         mode: "chat",
         chat_model: targetModelId,
         context_tokens: 0,
+        tool_collection_ids: selectedToolCollectionIds,
+        parameter_overrides: parameters ?? {},
+        provider_preferences: provider ?? {},
+        stream: streamingEnabled,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       setSessions((prev) => sortSessions([...prev, placeholderSession]));
       pendingSessionIdsRef.current.add(sessionId);
+      setMessages([]);
+      setToolTraces([]);
+      setChatEntryOrder([]);
+      chatHydrationPendingRef.current = true;
+      setUsage(null);
+      setContextConsumed(0);
+      setOptimisticMessages([]);
+      navigateToChat(sessionId, selectedToolCollectionIds);
+      await new Promise<void>((resolve) => {
+        if (typeof window === "undefined") {
+          resolve();
+          return;
+        }
+        window.requestAnimationFrame(() => resolve());
+      });
     }
     if (!sessionId) return;
 
@@ -1634,10 +2242,13 @@ export default function ChatStudioExperience() {
     };
     ensureMessageOrder(messageOrderRef.current, nextMessageOrderRef, [placeholderMessage]);
     setOptimisticMessages((prev) => [...prev, placeholderMessage]);
+    setChatEntryOrder((prev) => {
+      if (prev.includes(placeholderMessageId)) {
+        return prev;
+      }
+      return isNewSession ? [placeholderMessageId] : [...prev, placeholderMessageId];
+    });
 
-    const parameterPayload = buildParameterPayload();
-    const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
-    const provider = providerRuleCount > 0 ? providerPayload : undefined;
     setLiveResponse("");
     setIsStreamingResponse(false);
     resetLiveReasoningState();
@@ -1685,8 +2296,12 @@ export default function ChatStudioExperience() {
   }, [sending, stopProgressPolling]);
 
   const runEditMutation = async (messageId: string, newContent: string) => {
-    if (!authToken || !collection || !selectedSessionId) return;
-    const targetModelId = activeModelId || defaultChatModel;
+    if (!authToken || !selectedSessionId) return;
+    if (toolsEnabled && !pineconeConfigured) {
+      setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
+      return;
+    }
+    const targetModelId = activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
@@ -1733,8 +2348,17 @@ export default function ChatStudioExperience() {
 
   const handleStartNewChat = () => {
     stopProgressPolling();
+    newChatDefaultsRef.current = {
+      activeModelId,
+      parameterOverrides,
+      providerForm,
+      streamingEnabled,
+      toolCollectionIds: selectedToolCollectionIds,
+    };
     setSelectedSessionId(null);
+    applyNewChatDefaultsRef.current = true;
     pendingSessionIdsRef.current.clear();
+    toolCollectionsDirtyRef.current = false;
     setMessages([]);
     setToolTraces([]);
     setChatEntryOrder([]);
@@ -1752,7 +2376,51 @@ export default function ChatStudioExperience() {
     setEditingMessageId(null);
     setEditingDraft("");
     setOptimisticMessages([]);
+    navigateToChat(null, selectedToolCollectionIds);
   };
+
+  const toggleToolCollection = useCallback(
+    (collectionId: string) => {
+      toolCollectionsDirtyRef.current = true;
+      setSelectedToolCollectionIds((prev) => {
+        const next = prev.includes(collectionId)
+          ? prev.filter((id) => id !== collectionId)
+          : [...prev, collectionId];
+        if (selectedSessionId) {
+          setSessions((sessionsPrev) =>
+            sessionsPrev.map((session) =>
+              session.id === selectedSessionId
+                ? { ...session, tool_collection_ids: next }
+                : session,
+            ),
+          );
+        }
+        return next;
+      });
+    },
+    [selectedSessionId],
+  );
+
+  const clearToolCollections = useCallback(() => {
+    toolCollectionsDirtyRef.current = true;
+    setSelectedToolCollectionIds([]);
+    if (selectedSessionId) {
+      setSessions((sessionsPrev) =>
+        sessionsPrev.map((session) =>
+          session.id === selectedSessionId ? { ...session, tool_collection_ids: [] } : session,
+        ),
+      );
+    }
+  }, [selectedSessionId]);
+
+  const handleHistoryFilterChange = useCallback(
+    (collectionIds: string[], includeUnassigned: boolean) => {
+      historyFilterTouchedRef.current = true;
+      setHistoryFilterCollectionIds(collectionIds);
+      setHistoryFilterIncludeUnassigned(includeUnassigned);
+    },
+    [],
+  );
 
   const handleExportChatHistory = useCallback(() => {
     if (typeof document === "undefined") {
@@ -1775,68 +2443,191 @@ export default function ChatStudioExperience() {
     URL.revokeObjectURL(url);
   }, [messages, selectedSessionId, sessions]);
 
+  const handleOverrideSelect = useCallback(
+    (sectionId: string) => {
+      setTelemetryOpen(true);
+      switch (sectionId) {
+        case TELEMETRY_SECTION_IDS.systemPrompt:
+          setSystemPromptOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.collectionTools:
+          setCollectionToolsOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.streaming:
+          setStreamingOptionsOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.modelRouting:
+          setModelSelectorOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.providerRouting:
+          setProviderPreferencesOpen(true);
+          break;
+        case TELEMETRY_SECTION_IDS.modelParameters:
+          setModelParametersOpen(true);
+          break;
+        default:
+          break;
+      }
+      if (typeof document === "undefined") {
+        return;
+      }
+      const scrollToSection = () => {
+        const target = document.getElementById(sectionId);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+      window.requestAnimationFrame(scrollToSection);
+      window.setTimeout(scrollToSection, 80);
+    },
+    [
+      setCollectionToolsOpen,
+      setModelParametersOpen,
+      setModelSelectorOpen,
+      setProviderPreferencesOpen,
+      setStreamingOptionsOpen,
+      setSystemPromptOpen,
+      setTelemetryOpen,
+    ],
+  );
+
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      const session = sessions.find((item) => item.id === sessionId);
+      navigateToChat(sessionId, session?.tool_collection_ids ?? []);
+    },
+    [navigateToChat, sessions],
+  );
+
   const handlePromptEditorOpen = useCallback(() => {
-    if (promptDetails) {
-      setPromptDraft(promptDetails.template ?? "");
+    if (promptSections.length > 0) {
+      const isActiveValid = promptSections.some((section) => section.id === activePromptSectionId);
+      if (!isActiveValid) {
+        setActivePromptSectionId("base");
+      }
     }
     setPromptEditorOpen(true);
     window.setTimeout(() => {
       promptEditorRef.current?.focus();
     }, 20);
-  }, [promptDetails]);
+  }, [activePromptSectionId, promptSections]);
 
   const handlePromptEditorClose = useCallback(() => {
     setPromptEditorOpen(false);
   }, []);
 
-  const handleInsertPromptVariable = useCallback((variableName: string) => {
-    const insertion = `{{${variableName}}}`;
-    setPromptDraft((prev) => {
-      const textarea = promptEditorRef.current;
-      if (textarea) {
-        const start = textarea.selectionStart ?? prev.length;
-        const end = textarea.selectionEnd ?? prev.length;
-        const next = prev.slice(0, start) + insertion + prev.slice(end);
-        window.requestAnimationFrame(() => {
-          const cursor = start + insertion.length;
-          textarea.selectionStart = cursor;
-          textarea.selectionEnd = cursor;
-          textarea.focus();
-        });
-        return next;
-      }
-      const spacer = prev.endsWith(" ") || prev.endsWith("\n") || prev.length === 0 ? "" : " ";
-      return `${prev}${spacer}${insertion}`;
-    });
-  }, []);
-
-  const handlePromptReset = useCallback(() => {
-    setPromptDraft("");
-    window.requestAnimationFrame(() => {
-      promptEditorRef.current?.focus();
-    });
-  }, []);
-
-  const handlePromptSave = useCallback(async () => {
-    if (!authToken || !collectionId) {
-      setPromptError("Sign in to update the system prompt.");
+  const updatePromptDraft = useCallback((sectionId: string, updater: (value: string) => string) => {
+    if (sectionId === "base") {
+      setBasePromptDraft(updater);
       return;
     }
-    setPromptSaving(true);
-    setPromptError(null);
-    try {
-      const updated = await updateCollectionPrompt(collectionId, promptDraft, authToken);
-      setPromptDetails(updated);
-      setPromptDraft(updated.template ?? "");
-      setPromptEditorOpen(false);
-    } catch (error) {
-      setPromptError(
-        error instanceof Error ? error.message : "Unable to update the system prompt right now.",
-      );
-    } finally {
-      setPromptSaving(false);
-    }
-  }, [authToken, collectionId, promptDraft]);
+    setCollectionPromptDrafts((prev) => {
+      const current = prev[sectionId] ?? "";
+      return { ...prev, [sectionId]: updater(current) };
+    });
+  }, []);
+
+  const handleInsertPromptVariable = useCallback(
+    (sectionId: string, variableName: string) => {
+      const insertion = `{{${variableName}}}`;
+      updatePromptDraft(sectionId, (prev) => {
+        const textarea = promptEditorRef.current;
+        if (textarea) {
+          const start = textarea.selectionStart ?? prev.length;
+          const end = textarea.selectionEnd ?? prev.length;
+          const next = prev.slice(0, start) + insertion + prev.slice(end);
+          window.requestAnimationFrame(() => {
+            const cursor = start + insertion.length;
+            textarea.selectionStart = cursor;
+            textarea.selectionEnd = cursor;
+            textarea.focus();
+          });
+          return next;
+        }
+        const spacer = prev.endsWith(" ") || prev.endsWith("\n") || prev.length === 0 ? "" : " ";
+        return `${prev}${spacer}${insertion}`;
+      });
+    },
+    [updatePromptDraft],
+  );
+
+  const handlePromptReset = useCallback(
+    (sectionId: string) => {
+      updatePromptDraft(sectionId, () => "");
+      window.requestAnimationFrame(() => {
+        promptEditorRef.current?.focus();
+      });
+    },
+    [updatePromptDraft],
+  );
+
+  const handlePromptSave = useCallback(
+    async (sectionId: string) => {
+      if (!authToken) {
+        if (sectionId === "base") {
+          setBasePromptError("Sign in to update the system prompt.");
+        } else {
+          setCollectionPromptErrors((prev) => ({
+            ...prev,
+            [sectionId]: "Sign in to update the system prompt.",
+          }));
+        }
+        return;
+      }
+      setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: true }));
+      if (sectionId === "base") {
+        setBasePromptError(null);
+        try {
+          const updated = await updateBasePrompt(basePromptDraft, authToken);
+          setBasePromptDetails(updated);
+          setBasePromptDraft(updated.template ?? "");
+          setPromptEditorOpen(false);
+        } catch (error) {
+          setBasePromptError(
+            error instanceof Error
+              ? error.message
+              : "Unable to update the system prompt right now.",
+          );
+        } finally {
+          setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: false }));
+        }
+        return;
+      }
+      setCollectionPromptErrors((prev) => ({ ...prev, [sectionId]: null }));
+      try {
+        const draft = collectionPromptDrafts[sectionId] ?? "";
+        const updated = await updateCollectionPrompt(sectionId, draft, authToken);
+        setCollectionPromptDetails((prev) => ({ ...prev, [sectionId]: updated }));
+        setCollectionPromptDrafts((prev) => ({
+          ...prev,
+          [sectionId]: updated.template ?? "",
+        }));
+        setPromptEditorOpen(false);
+      } catch (error) {
+        setCollectionPromptErrors((prev) => ({
+          ...prev,
+          [sectionId]:
+            error instanceof Error
+              ? error.message
+              : "Unable to update the system prompt right now.",
+        }));
+      } finally {
+        setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: false }));
+      }
+    },
+    [authToken, basePromptDraft, collectionPromptDrafts],
+  );
+
+  const handlePromptSectionSelect = useCallback((sectionId: string) => {
+    setActivePromptSectionId(sectionId);
+  }, []);
+
+  const handlePromptDraftChange = useCallback(
+    (sectionId: string, value: string) => {
+      updatePromptDraft(sectionId, () => value);
+    },
+    [updatePromptDraft],
+  );
 
   const handleDeleteSession = async (sessionId: string) => {
     if (!authToken) return;
@@ -1996,8 +2787,12 @@ export default function ChatStudioExperience() {
 
   const performChatMutation = useCallback(
     async (sessionId: string, payload: Omit<ChatRequestPayload, "session_id">) => {
-      if (!authToken || !collection) {
+      if (!authToken) {
         throw new Error("Missing authentication context.");
+      }
+      if (toolsEnabled && !pineconeConfigured) {
+        setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
+        throw new Error("Pinecone API key is not configured.");
       }
       console.debug("[chat] performChatMutation start", {
         stream: payload.stream,
@@ -2013,6 +2808,7 @@ export default function ChatStudioExperience() {
       setLiveResponse("");
       setIsStreamingResponse(false);
       isStreamingResponseRef.current = false;
+      toolCollectionsDirtyRef.current = false;
       setFinalStreamAssistantId(null);
       setLiveToolEvents([]);
       setLiveToolOrder([]);
@@ -2028,6 +2824,7 @@ export default function ChatStudioExperience() {
         const requestPayload: ChatRequestPayload = {
           ...payload,
           session_id: sessionId,
+          tool_collection_ids: selectedToolCollectionIds,
         };
         let result: ChatCompletionPayload | null;
         if (payload.stream) {
@@ -2038,7 +2835,7 @@ export default function ChatStudioExperience() {
             .slice(2, 7)}`;
           setActiveStreamEntryKey(streamKey);
           activeStreamEntryKeyRef.current = streamKey;
-          result = await streamChatWithCollection(collection.id, requestPayload, authToken, {
+          result = await streamChat(requestPayload, authToken, {
             signal: controller.signal,
             onToken: (token) => {
               if (token) {
@@ -2067,6 +2864,8 @@ export default function ChatStudioExperience() {
                 name: event.name,
                 arguments: event.arguments,
                 reasoning: event.reasoning,
+                collection_id: event.collection_id,
+                collection_name: event.collection_name,
               });
             },
             onToolResult: (event) => {
@@ -2089,6 +2888,8 @@ export default function ChatStudioExperience() {
                 arguments: event.arguments,
                 response: event.response,
                 reasoning: event.reasoning,
+                collection_id: event.collection_id,
+                collection_name: event.collection_name,
               });
             },
             onError: (message) => {
@@ -2096,12 +2897,7 @@ export default function ChatStudioExperience() {
             },
           });
         } else {
-          result = await chatWithCollection(
-            collection.id,
-            requestPayload,
-            authToken,
-            controller.signal,
-          );
+          result = await chat(requestPayload, authToken, controller.signal);
         }
         if (!result) {
           throw new Error("Streaming response did not complete.");
@@ -2131,26 +2927,30 @@ export default function ChatStudioExperience() {
     [
       applyChatResponse,
       authToken,
-      collection,
       finalizeLiveReasoningBlock,
+      pineconeConfigured,
+      selectedToolCollectionIds,
       setActiveStreamEntryKey,
       resetLiveReasoningState,
       startProgressPolling,
       stopProgressPolling,
+      toolsEnabled,
       upsertLiveToolEvent,
     ],
   );
 
   return (
     <Fragment>
-      <div className="flex h-full flex-col gap-4">
+      <div className="relative flex h-full flex-col">
         {status && (
-          <Notification
-            title="Action required"
-            message={status}
-            onDismiss={() => setStatus(null)}
-            autoDismissMs={0}
-          />
+          <div className="pointer-events-none absolute left-1/2 top-4 z-40 w-full max-w-2xl -translate-x-1/2 px-4">
+            <Notification
+              title="Action required"
+              message={status}
+              onDismiss={() => setStatus(null)}
+              className="pointer-events-auto"
+            />
+          </div>
         )}
 
         <div className="flex flex-1 flex-col min-h-0">
@@ -2160,28 +2960,29 @@ export default function ChatStudioExperience() {
                 <Loader className="h-6 w-6" />
               </GlassCard>
             </div>
-          ) : !collection ? (
-            <div className="flex flex-1 items-center justify-center">
-              <GlassCard className="rounded-[2rem] p-10 text-center text-sm text-slate-300">
-                Unable to load this collection.
-              </GlassCard>
-            </div>
           ) : (
-            <div className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
-              {historyOpen && (
-                <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
+            <div
+              ref={chatPanelRef}
+              className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80"
+            >
+              {!isOverlayMode && historyOpen && (
+                <aside className="h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40">
                   <HistoryPanel
+                    collections={collections}
                     sessions={sessions}
                     selectedSessionId={selectedSessionId}
-                    onSelect={(sessionId) => setSelectedSessionId(sessionId)}
+                    onSelect={handleSelectSession}
                     onNewChat={handleStartNewChat}
+                    filterCollectionIds={historyFilterCollectionIds}
+                    filterIncludeUnassigned={historyFilterIncludeUnassigned}
+                    onFilterChange={handleHistoryFilterChange}
                     onDelete={handleDeleteSession}
                     deletingSessionId={deletingSessionId}
                     onClose={() => setHistoryOpen(false)}
                   />
                 </aside>
               )}
-              {!historyOpen && (
+              {!historyOpen && !isOverlayMode && (
                 <button
                   type="button"
                   className="absolute left-4 top-1/2 z-10 hidden -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 transition-all hover:border-white/40 hover:bg-black/60 lg:flex"
@@ -2190,29 +2991,42 @@ export default function ChatStudioExperience() {
                   <PanelLeftOpen className="h-4 w-4" />
                 </button>
               )}
-
               <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-slate-500">
-                      Conversation
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-semibold text-white">{collection.name}</h2>
-                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                        {documentCount} documents
-                      </span>
+                  <div className="flex items-start gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.35em] text-slate-500">
+                        Conversation
+                      </p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="text-2xl font-semibold text-white">{collectionLabel}</h2>
+                        <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          {collectionMetaLabel}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)}
+                      className="hidden min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white sm:flex"
+                    >
+                      <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                        Model
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-semibold text-white">
+                        {currentModelInfo?.name || activeModelId || "Select model"}
+                      </span>
+                    </button>
                     {!historyOpen && (
                       <Button
                         variant="secondary"
-                        className="flex h-10 items-center justify-center gap-2"
+                        className="flex h-10 items-center justify-center gap-2 px-3 whitespace-nowrap"
                         onClick={handleStartNewChat}
                       >
                         <PlusCircle className="h-4 w-4" />
-                        <span>New chat</span>
+                        <span className="hidden sm:inline">New chat</span>
                       </Button>
                     )}
                   </div>
@@ -2225,9 +3039,38 @@ export default function ChatStudioExperience() {
                     className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth !overflow-anchor-none"
                     style={{ overflowAnchor: "none" }}
                   >
+                    {isOverlayMode && !historyOpen && (
+                      <button
+                        type="button"
+                        aria-label="Open history"
+                        className="absolute left-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-white/40 hover:bg-black/80"
+                        onClick={() => {
+                          setHistoryOpen(true);
+                          setTelemetryOpen(false);
+                        }}
+                      >
+                        <PanelLeftOpen className="h-4 w-4" />
+                      </button>
+                    )}
+                    {isOverlayMode && !telemetryOpen && (
+                      <button
+                        type="button"
+                        aria-label="Open run settings"
+                        className="absolute right-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-white/40 hover:bg-black/80"
+                        onClick={() => {
+                          setTelemetryOpen(true);
+                          setHistoryOpen(false);
+                        }}
+                      >
+                        <PanelRightOpen className="h-4 w-4" />
+                      </button>
+                    )}
                     <div className="flex h-full flex-col gap-4">
                       <ChatTimeline
-                        collectionName={collection ? collection.name : null}
+                        modelLabel={currentModelInfo?.name || activeModelId || "Select model"}
+                        onModelSelect={() =>
+                          handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)
+                        }
                         chatEntryOrder={chatEntryOrder}
                         chatEntryMap={chatEntryMap}
                         finalStreamAssistantId={finalStreamAssistantId}
@@ -2250,8 +3093,8 @@ export default function ChatStudioExperience() {
                         onRetryAssistant={handleRetryAssistant}
                         onReasoningToggle={handleReasoningToggle}
                         markdownComponents={markdownComponents}
-                        samplePrompts={samplePrompts}
-                        onSamplePromptSelect={setDraft}
+                        overrideSections={overrideSections}
+                        onOverrideSelect={handleOverrideSelect}
                         liveResponse={liveResponse}
                         hasLiveText={hasLiveText}
                         liveResponseAnimationKey={liveResponseAnimationKey}
@@ -2288,20 +3131,34 @@ export default function ChatStudioExperience() {
                     onSend={handleSend}
                     onStop={handleStopGeneration}
                     inputRef={chatPromptRef}
+                    placeholder={chatInputPlaceholder}
                   />
                 </div>
               </div>
 
-              {telemetryOpen && (
-                <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
+              {!isOverlayMode && telemetryOpen && (
+                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6">
                   <TelemetryPanel
                     onClose={() => setTelemetryOpen(false)}
-                    promptDetails={promptDetails}
+                    sectionIds={TELEMETRY_SECTION_IDS}
+                    systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
+                    promptSections={promptSectionsSummary}
+                    promptPreviewMarkdown={promptPreviewMarkdown}
                     promptLoading={promptLoading}
                     promptError={promptError}
+                    promptGeneratedAt={promptGeneratedAt}
                     systemPromptOpen={systemPromptOpen}
                     onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
                     onPromptEdit={handlePromptEditorOpen}
+                    collections={collections}
+                    selectedToolCollectionIds={selectedToolCollectionIds}
+                    onToggleToolCollection={toggleToolCollection}
+                    onClearToolCollections={clearToolCollections}
+                    collectionsLoading={collectionsLoading}
+                    collectionsError={collectionsError}
+                    pineconeConfigured={pineconeConfigured}
+                    collectionToolsOpen={collectionToolsOpen}
+                    onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
                     streamingOptionsOpen={streamingOptionsOpen}
                     onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
                     streamingEnabled={streamingEnabled}
@@ -2319,6 +3176,7 @@ export default function ChatStudioExperience() {
                     selectedModelKey={selectedModelKey}
                     onSelectModel={setActiveModelId}
                     currentModelInfo={currentModelInfo}
+                    toolsEnabled={toolsEnabled}
                     providerPreferencesOpen={providerPreferencesOpen}
                     onProviderPreferencesToggle={() => setProviderPreferencesOpen((prev) => !prev)}
                     providerForm={providerForm}
@@ -2333,7 +3191,8 @@ export default function ChatStudioExperience() {
                     resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
                     vitalsOpen={vitalsOpen}
                     onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
-                    collection={collection}
+                    collection={primaryCollection}
+                    collectionCount={selectedToolCollectionIds.length}
                     documentCount={documentCount}
                     modelParametersOpen={modelParametersOpen}
                     onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
@@ -2357,7 +3216,7 @@ export default function ChatStudioExperience() {
                   />
                 </aside>
               )}
-              {!telemetryOpen && (
+              {!telemetryOpen && !isOverlayMode && (
                 <button
                   type="button"
                   className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
@@ -2366,6 +3225,121 @@ export default function ChatStudioExperience() {
                   <PanelRightOpen className="h-4 w-4" />
                 </button>
               )}
+              {isOverlayMode && historyOpen && (
+                <div className="absolute inset-0 z-40">
+                  <button
+                    type="button"
+                    aria-label="Close history"
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => setHistoryOpen(false)}
+                  />
+                  <aside className="relative z-10 h-full w-72 border-r border-white/5 bg-black/90">
+                    <HistoryPanel
+                      collections={collections}
+                      sessions={sessions}
+                      selectedSessionId={selectedSessionId}
+                      onSelect={handleSelectSession}
+                      onNewChat={handleStartNewChat}
+                      filterCollectionIds={historyFilterCollectionIds}
+                      filterIncludeUnassigned={historyFilterIncludeUnassigned}
+                      onFilterChange={handleHistoryFilterChange}
+                      onDelete={handleDeleteSession}
+                      deletingSessionId={deletingSessionId}
+                      onClose={() => setHistoryOpen(false)}
+                    />
+                  </aside>
+                </div>
+              )}
+              {isOverlayMode && telemetryOpen && (
+                <div className="absolute inset-0 z-40 flex justify-end">
+                  <button
+                    type="button"
+                    aria-label="Close run settings"
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => setTelemetryOpen(false)}
+                  />
+                  <aside className="relative z-10 h-full w-[26rem] border-l border-white/5 bg-black/90 p-6">
+                    <TelemetryPanel
+                      onClose={() => setTelemetryOpen(false)}
+                      sectionIds={TELEMETRY_SECTION_IDS}
+                      systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
+                      promptSections={promptSectionsSummary}
+                      promptPreviewMarkdown={promptPreviewMarkdown}
+                      promptLoading={promptLoading}
+                      promptError={promptError}
+                      promptGeneratedAt={promptGeneratedAt}
+                      systemPromptOpen={systemPromptOpen}
+                      onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
+                      onPromptEdit={handlePromptEditorOpen}
+                      collections={collections}
+                      selectedToolCollectionIds={selectedToolCollectionIds}
+                      onToggleToolCollection={toggleToolCollection}
+                      onClearToolCollections={clearToolCollections}
+                      collectionsLoading={collectionsLoading}
+                      collectionsError={collectionsError}
+                      pineconeConfigured={pineconeConfigured}
+                      collectionToolsOpen={collectionToolsOpen}
+                      onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
+                      streamingOptionsOpen={streamingOptionsOpen}
+                      onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
+                      streamingEnabled={streamingEnabled}
+                      onStreamingToggle={setStreamingEnabled}
+                      modelSelectorOpen={modelSelectorOpen}
+                      onModelSelectorToggle={() => setModelSelectorOpen((prev) => !prev)}
+                      modelSearchTerm={modelSearchTerm}
+                      onModelSearchChange={setModelSearchTerm}
+                      modelSortOption={modelSortOption}
+                      onModelSortChange={setModelSortOption}
+                      toolReadyModels={toolReadyModels}
+                      filteredModelCatalog={sortedModelCatalog}
+                      modelsLoading={modelsLoading}
+                      modelsError={modelsError}
+                      selectedModelKey={selectedModelKey}
+                      onSelectModel={setActiveModelId}
+                      currentModelInfo={currentModelInfo}
+                      toolsEnabled={toolsEnabled}
+                      providerPreferencesOpen={providerPreferencesOpen}
+                      onProviderPreferencesToggle={() =>
+                        setProviderPreferencesOpen((prev) => !prev)
+                      }
+                      providerForm={providerForm}
+                      setProviderForm={setProviderForm}
+                      providerDirectory={providerDirectory}
+                      providerDirectoryLoading={providerDirectoryLoading}
+                      providerDirectoryError={providerDirectoryError}
+                      providerModelSlug={providerModelSlug}
+                      providerSearchTerm={providerSearchTerm}
+                      onProviderSearchChange={setProviderSearchTerm}
+                      providerRuleCount={providerRuleCount}
+                      resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
+                      vitalsOpen={vitalsOpen}
+                      onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
+                      collection={primaryCollection}
+                      collectionCount={selectedToolCollectionIds.length}
+                      documentCount={documentCount}
+                      modelParametersOpen={modelParametersOpen}
+                      onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
+                      visibleParameterDefinitions={visibleParameterDefinitions}
+                      parameterOverrides={parameterOverrides}
+                      activeParameterCount={activeParameterCount}
+                      resetAllParameters={resetAllParameters}
+                      handleNumberParameterChange={handleNumberParameterChange}
+                      handleBooleanParameterChange={handleBooleanParameterChange}
+                      handleTextParameterChange={handleTextParameterChange}
+                      handleSelectParameterChange={handleSelectParameterChange}
+                      handleClearParameter={handleClearParameter}
+                      formatDefaultParameter={formatDefaultParameter}
+                      usageOpen={usageOpen}
+                      onUsageToggle={() => setUsageOpen((prev) => !prev)}
+                      usage={usage}
+                      contextWindow={contextWindow}
+                      contextConsumed={contextConsumed}
+                      onExportChatHistory={handleExportChatHistory}
+                      markdownComponents={markdownComponents}
+                    />
+                  </aside>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2373,12 +3347,10 @@ export default function ChatStudioExperience() {
       <PromptEditorOverlay
         isOpen={promptEditorOpen}
         onClose={handlePromptEditorClose}
-        promptDetails={promptDetails}
-        promptDraft={promptDraft}
-        setPromptDraft={setPromptDraft}
-        promptSaving={promptSaving}
-        promptError={promptError}
-        promptHasChanges={promptHasChanges}
+        sections={promptSections}
+        activeSectionId={activePromptSectionId}
+        onSelectSection={handlePromptSectionSelect}
+        onDraftChange={handlePromptDraftChange}
         promptPreviewMarkdown={promptPreviewMarkdown}
         onSave={handlePromptSave}
         onReset={handlePromptReset}

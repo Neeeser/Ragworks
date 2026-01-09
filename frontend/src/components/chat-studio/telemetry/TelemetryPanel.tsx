@@ -7,8 +7,10 @@ import {
   SlidersHorizontal,
   MessageCircle,
   NotebookPen,
+  Layers,
 } from "lucide-react";
 
+import { CollectionToolsCard } from "@/components/chat-studio/telemetry/CollectionToolsCard";
 import { CollectionVitalsCard } from "@/components/chat-studio/telemetry/CollectionVitalsCard";
 import { ModelParametersCard } from "@/components/chat-studio/telemetry/ModelParametersCard";
 import { ModelSelectorCard } from "@/components/chat-studio/telemetry/ModelSelectorCard";
@@ -26,23 +28,46 @@ import type {
   ParameterOverrides,
 } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
-import type {
-  Collection,
-  CollectionPromptDetails,
-  ModelEndpointDirectory,
-  ModelInfo,
-  UsageBreakdown,
-} from "@/lib/types";
+import type { Collection, ModelEndpointDirectory, ModelInfo, UsageBreakdown } from "@/lib/types";
 import type { Components } from "react-markdown";
+
+const DEFAULT_STREAMING_ENABLED = true;
 
 interface TelemetryPanelProps {
   onClose: () => void;
-  promptDetails: CollectionPromptDetails | null;
+  sectionIds: {
+    systemPrompt: string;
+    collectionTools: string;
+    streaming: string;
+    modelRouting: string;
+    providerRouting: string;
+    modelParameters: string;
+    vitals: string;
+    usage: string;
+  };
+  systemPromptCustom: boolean;
+  promptSections: Array<{
+    id: string;
+    label: string;
+    scope: "base" | "collection";
+    isCustom: boolean;
+  }>;
+  promptPreviewMarkdown: string;
   promptLoading: boolean;
   promptError: string | null;
+  promptGeneratedAt?: string | null;
   systemPromptOpen: boolean;
   onSystemPromptToggle: () => void;
   onPromptEdit: () => void;
+  collections: Collection[];
+  selectedToolCollectionIds: string[];
+  onToggleToolCollection: (collectionId: string) => void;
+  onClearToolCollections: () => void;
+  collectionsLoading: boolean;
+  collectionsError: string | null;
+  pineconeConfigured: boolean;
+  collectionToolsOpen: boolean;
+  onCollectionToolsToggle: () => void;
   streamingOptionsOpen: boolean;
   onStreamingOptionsToggle: () => void;
   streamingEnabled: boolean;
@@ -60,6 +85,7 @@ interface TelemetryPanelProps {
   selectedModelKey: string;
   onSelectModel: (id: string) => void;
   currentModelInfo: ModelInfo | null;
+  toolsEnabled: boolean;
   providerPreferencesOpen: boolean;
   onProviderPreferencesToggle: () => void;
   providerForm: ProviderFormState;
@@ -75,6 +101,7 @@ interface TelemetryPanelProps {
   vitalsOpen: boolean;
   onVitalsToggle: () => void;
   collection: Collection | null;
+  collectionCount: number;
   documentCount: number;
   modelParametersOpen: boolean;
   onModelParametersToggle: () => void;
@@ -103,12 +130,25 @@ interface TelemetryPanelProps {
 
 export const TelemetryPanel = ({
   onClose,
-  promptDetails,
+  sectionIds,
+  systemPromptCustom,
+  promptSections,
+  promptPreviewMarkdown,
   promptLoading,
   promptError,
+  promptGeneratedAt,
   systemPromptOpen,
   onSystemPromptToggle,
   onPromptEdit,
+  collections,
+  selectedToolCollectionIds,
+  onToggleToolCollection,
+  onClearToolCollections,
+  collectionsLoading,
+  collectionsError,
+  pineconeConfigured,
+  collectionToolsOpen,
+  onCollectionToolsToggle,
   streamingOptionsOpen,
   onStreamingOptionsToggle,
   streamingEnabled,
@@ -126,6 +166,7 @@ export const TelemetryPanel = ({
   selectedModelKey,
   onSelectModel,
   currentModelInfo,
+  toolsEnabled,
   providerPreferencesOpen,
   onProviderPreferencesToggle,
   providerForm,
@@ -141,6 +182,7 @@ export const TelemetryPanel = ({
   vitalsOpen,
   onVitalsToggle,
   collection,
+  collectionCount,
   documentCount,
   modelParametersOpen,
   onModelParametersToggle,
@@ -162,6 +204,19 @@ export const TelemetryPanel = ({
   onExportChatHistory,
   markdownComponents,
 }: TelemetryPanelProps) => {
+  const streamingOverrideActive = streamingEnabled !== DEFAULT_STREAMING_ENABLED;
+  const promptDescription = promptLoading
+    ? "Loading prompt..."
+    : promptError
+      ? "Prompt unavailable"
+      : `${promptSections.length} section${promptSections.length === 1 ? "" : "s"} ready`;
+  const toolsDescription =
+    selectedToolCollectionIds.length === 0
+      ? "No collections enabled"
+      : `${selectedToolCollectionIds.length} collection${
+          selectedToolCollectionIds.length === 1 ? "" : "s"
+        } active`;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
@@ -181,25 +236,41 @@ export const TelemetryPanel = ({
       <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto">
         <TelemetrySection
           title="System prompt"
-          description={
-            promptLoading
-              ? "Loading prompt..."
-              : promptDetails
-                ? promptDetails.is_custom
-                  ? "Custom template active"
-                  : "Using default template"
-                : promptError || "Define per-collection instructions"
-          }
+          description={promptDescription}
           icon={<NotebookPen className="h-4 w-4 text-amber-300" />}
           isOpen={systemPromptOpen}
           onToggle={onSystemPromptToggle}
+          sectionId={sectionIds.systemPrompt}
+          overrideActive={systemPromptCustom}
         >
           <SystemPromptCard
-            promptDetails={promptDetails}
+            promptPreviewMarkdown={promptPreviewMarkdown}
+            promptSections={promptSections}
             promptLoading={promptLoading}
             promptError={promptError}
+            generatedAt={promptGeneratedAt}
             onEdit={onPromptEdit}
             markdownComponents={markdownComponents}
+          />
+        </TelemetrySection>
+
+        <TelemetrySection
+          title="Collection tools"
+          description={toolsDescription}
+          icon={<Layers className="h-4 w-4 text-cyan-300" />}
+          isOpen={collectionToolsOpen}
+          onToggle={onCollectionToolsToggle}
+          sectionId={sectionIds.collectionTools}
+          overrideActive={selectedToolCollectionIds.length > 0}
+        >
+          <CollectionToolsCard
+            collections={collections}
+            selectedCollectionIds={selectedToolCollectionIds}
+            onToggle={onToggleToolCollection}
+            onClear={onClearToolCollections}
+            pineconeConfigured={pineconeConfigured}
+            collectionsLoading={collectionsLoading}
+            collectionsError={collectionsError}
           />
         </TelemetrySection>
 
@@ -211,16 +282,19 @@ export const TelemetryPanel = ({
           icon={<Share2 className="h-4 w-4 text-emerald-300" />}
           isOpen={streamingOptionsOpen}
           onToggle={onStreamingOptionsToggle}
+          sectionId={sectionIds.streaming}
+          overrideActive={streamingOverrideActive}
         >
           <StreamingSettingsCard streamingEnabled={streamingEnabled} onToggle={onStreamingToggle} />
         </TelemetrySection>
 
         <TelemetrySection
           title="Model routing"
-          description={currentModelInfo?.name || selectedModelKey || "Select a tool-enabled model"}
+          description={currentModelInfo?.name || selectedModelKey || "Select a chat model"}
           icon={<RotateCcw className="h-4 w-4 text-violet-300" />}
           isOpen={modelSelectorOpen}
           onToggle={onModelSelectorToggle}
+          sectionId={sectionIds.modelRouting}
         >
           <ModelSelectorCard
             currentModelInfo={currentModelInfo}
@@ -233,6 +307,7 @@ export const TelemetryPanel = ({
             onSortChange={onModelSortChange}
             modelsLoading={modelsLoading}
             modelsError={modelsError}
+            toolsEnabled={toolsEnabled}
             onSelectModel={onSelectModel}
           />
         </TelemetrySection>
@@ -247,6 +322,8 @@ export const TelemetryPanel = ({
           icon={<Share2 className="h-4 w-4 text-emerald-300" />}
           isOpen={providerPreferencesOpen}
           onToggle={onProviderPreferencesToggle}
+          sectionId={sectionIds.providerRouting}
+          overrideActive={providerRuleCount > 0}
         >
           <ProviderRoutingCard
             providerForm={providerForm}
@@ -268,8 +345,13 @@ export const TelemetryPanel = ({
           icon={<MessageCircle className="h-4 w-4 text-cyan-300" />}
           isOpen={vitalsOpen}
           onToggle={onVitalsToggle}
+          sectionId={sectionIds.vitals}
         >
-          <CollectionVitalsCard collection={collection} documentCount={documentCount} />
+          <CollectionVitalsCard
+            collection={collection}
+            collectionCount={collectionCount}
+            documentCount={documentCount}
+          />
         </TelemetrySection>
 
         <TelemetrySection
@@ -282,9 +364,10 @@ export const TelemetryPanel = ({
           icon={<SlidersHorizontal className="h-4 w-4 text-violet-300" />}
           isOpen={modelParametersOpen}
           onToggle={onModelParametersToggle}
+          sectionId={sectionIds.modelParameters}
+          overrideActive={activeParameterCount > 0}
         >
           <ModelParametersCard
-            collection={collection}
             currentModelInfo={currentModelInfo}
             visibleParameterDefinitions={visibleParameterDefinitions}
             parameterOverrides={parameterOverrides}
@@ -310,6 +393,7 @@ export const TelemetryPanel = ({
           }
           isOpen={usageOpen}
           onToggle={onUsageToggle}
+          sectionId={sectionIds.usage}
         >
           <UsageCard
             usage={usage}
