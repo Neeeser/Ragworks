@@ -89,6 +89,11 @@ const TELEMETRY_SECTION_IDS = {
   vitals: "telemetry-collection-vitals",
   usage: "telemetry-usage",
 } as const;
+const HISTORY_PANEL_WIDTH_PX = 288;
+const TELEMETRY_PANEL_WIDTH_PX = 416;
+const MIN_CENTER_PANEL_WIDTH_PX = 720;
+const OVERLAY_TRIGGER_WIDTH_PX =
+  HISTORY_PANEL_WIDTH_PX + TELEMETRY_PANEL_WIDTH_PX + MIN_CENTER_PANEL_WIDTH_PX;
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -558,6 +563,14 @@ export function ChatStudio() {
   const [liveReasoningAnimationKey, setLiveReasoningAnimationKey] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatPanelRef = useRef<HTMLDivElement | null>(null);
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 0;
+    }
+    return window.innerWidth;
+  });
+  const isOverlayMode = chatPanelWidth > 0 && chatPanelWidth < OVERLAY_TRIGGER_WIDTH_PX;
   const scrollAnimationFrameRef = useRef<number | null>(null);
   const programmaticScrollRef = useRef(false);
   const programmaticScrollTimeoutRef = useRef<number | null>(null);
@@ -1510,6 +1523,31 @@ export function ChatStudio() {
   useEffect(() => {
     reasoningCacheRef.current.clear();
   }, [selectedSessionId]);
+
+  useEffect(() => {
+    const element = chatPanelRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      setChatPanelWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isOverlayMode) {
+      return;
+    }
+    if (historyOpen && telemetryOpen) {
+      setTelemetryOpen(false);
+    }
+  }, [historyOpen, isOverlayMode, telemetryOpen, setTelemetryOpen]);
 
   const handleReasoningToggle = useCallback(() => {}, []);
 
@@ -2923,9 +2961,12 @@ export function ChatStudio() {
               </GlassCard>
             </div>
           ) : (
-            <div className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80">
-              {historyOpen && (
-                <aside className="hidden h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40 lg:block">
+            <div
+              ref={chatPanelRef}
+              className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80"
+            >
+              {!isOverlayMode && historyOpen && (
+                <aside className="h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40">
                   <HistoryPanel
                     collections={collections}
                     sessions={sessions}
@@ -2941,7 +2982,7 @@ export function ChatStudio() {
                   />
                 </aside>
               )}
-              {!historyOpen && (
+              {!historyOpen && !isOverlayMode && (
                 <button
                   type="button"
                   className="absolute left-4 top-1/2 z-10 hidden -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 transition-all hover:border-white/40 hover:bg-black/60 lg:flex"
@@ -2950,18 +2991,19 @@ export function ChatStudio() {
                   <PanelLeftOpen className="h-4 w-4" />
                 </button>
               )}
-
               <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-slate-500">
-                      Conversation
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-semibold text-white">{collectionLabel}</h2>
-                      <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                        {collectionMetaLabel}
-                      </span>
+                  <div className="flex items-start gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.35em] text-slate-500">
+                        Conversation
+                      </p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="text-2xl font-semibold text-white">{collectionLabel}</h2>
+                        <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          {collectionMetaLabel}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2997,6 +3039,32 @@ export function ChatStudio() {
                     className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth !overflow-anchor-none"
                     style={{ overflowAnchor: "none" }}
                   >
+                    {isOverlayMode && !historyOpen && (
+                      <button
+                        type="button"
+                        aria-label="Open history"
+                        className="absolute left-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-white/40 hover:bg-black/80"
+                        onClick={() => {
+                          setHistoryOpen(true);
+                          setTelemetryOpen(false);
+                        }}
+                      >
+                        <PanelLeftOpen className="h-4 w-4" />
+                      </button>
+                    )}
+                    {isOverlayMode && !telemetryOpen && (
+                      <button
+                        type="button"
+                        aria-label="Open run settings"
+                        className="absolute right-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-white/40 hover:bg-black/80"
+                        onClick={() => {
+                          setTelemetryOpen(true);
+                          setHistoryOpen(false);
+                        }}
+                      >
+                        <PanelRightOpen className="h-4 w-4" />
+                      </button>
+                    )}
                     <div className="flex h-full flex-col gap-4">
                       <ChatTimeline
                         collectionLabel={collectionLabel}
@@ -3066,8 +3134,8 @@ export function ChatStudio() {
                 </div>
               </div>
 
-              {telemetryOpen && (
-                <aside className="hidden h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6 lg:block">
+              {!isOverlayMode && telemetryOpen && (
+                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6">
                   <TelemetryPanel
                     onClose={() => setTelemetryOpen(false)}
                     sectionIds={TELEMETRY_SECTION_IDS}
@@ -3146,7 +3214,7 @@ export function ChatStudio() {
                   />
                 </aside>
               )}
-              {!telemetryOpen && (
+              {!telemetryOpen && !isOverlayMode && (
                 <button
                   type="button"
                   className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40 lg:flex"
@@ -3154,6 +3222,121 @@ export function ChatStudio() {
                 >
                   <PanelRightOpen className="h-4 w-4" />
                 </button>
+              )}
+              {isOverlayMode && historyOpen && (
+                <div className="absolute inset-0 z-40">
+                  <button
+                    type="button"
+                    aria-label="Close history"
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => setHistoryOpen(false)}
+                  />
+                  <aside className="relative z-10 h-full w-72 border-r border-white/5 bg-black/90">
+                    <HistoryPanel
+                      collections={collections}
+                      sessions={sessions}
+                      selectedSessionId={selectedSessionId}
+                      onSelect={handleSelectSession}
+                      onNewChat={handleStartNewChat}
+                      filterCollectionIds={historyFilterCollectionIds}
+                      filterIncludeUnassigned={historyFilterIncludeUnassigned}
+                      onFilterChange={handleHistoryFilterChange}
+                      onDelete={handleDeleteSession}
+                      deletingSessionId={deletingSessionId}
+                      onClose={() => setHistoryOpen(false)}
+                    />
+                  </aside>
+                </div>
+              )}
+              {isOverlayMode && telemetryOpen && (
+                <div className="absolute inset-0 z-40 flex justify-end">
+                  <button
+                    type="button"
+                    aria-label="Close run settings"
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => setTelemetryOpen(false)}
+                  />
+                  <aside className="relative z-10 h-full w-[26rem] border-l border-white/5 bg-black/90 p-6">
+                    <TelemetryPanel
+                      onClose={() => setTelemetryOpen(false)}
+                      sectionIds={TELEMETRY_SECTION_IDS}
+                      systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
+                      promptSections={promptSectionsSummary}
+                      promptPreviewMarkdown={promptPreviewMarkdown}
+                      promptLoading={promptLoading}
+                      promptError={promptError}
+                      promptGeneratedAt={promptGeneratedAt}
+                      systemPromptOpen={systemPromptOpen}
+                      onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
+                      onPromptEdit={handlePromptEditorOpen}
+                      collections={collections}
+                      selectedToolCollectionIds={selectedToolCollectionIds}
+                      onToggleToolCollection={toggleToolCollection}
+                      onClearToolCollections={clearToolCollections}
+                      collectionsLoading={collectionsLoading}
+                      collectionsError={collectionsError}
+                      pineconeConfigured={pineconeConfigured}
+                      collectionToolsOpen={collectionToolsOpen}
+                      onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
+                      streamingOptionsOpen={streamingOptionsOpen}
+                      onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
+                      streamingEnabled={streamingEnabled}
+                      onStreamingToggle={setStreamingEnabled}
+                      modelSelectorOpen={modelSelectorOpen}
+                      onModelSelectorToggle={() => setModelSelectorOpen((prev) => !prev)}
+                      modelSearchTerm={modelSearchTerm}
+                      onModelSearchChange={setModelSearchTerm}
+                      modelSortOption={modelSortOption}
+                      onModelSortChange={setModelSortOption}
+                      toolReadyModels={toolReadyModels}
+                      filteredModelCatalog={sortedModelCatalog}
+                      modelsLoading={modelsLoading}
+                      modelsError={modelsError}
+                      selectedModelKey={selectedModelKey}
+                      onSelectModel={setActiveModelId}
+                      currentModelInfo={currentModelInfo}
+                      toolsEnabled={toolsEnabled}
+                      providerPreferencesOpen={providerPreferencesOpen}
+                      onProviderPreferencesToggle={() =>
+                        setProviderPreferencesOpen((prev) => !prev)
+                      }
+                      providerForm={providerForm}
+                      setProviderForm={setProviderForm}
+                      providerDirectory={providerDirectory}
+                      providerDirectoryLoading={providerDirectoryLoading}
+                      providerDirectoryError={providerDirectoryError}
+                      providerModelSlug={providerModelSlug}
+                      providerSearchTerm={providerSearchTerm}
+                      onProviderSearchChange={setProviderSearchTerm}
+                      providerRuleCount={providerRuleCount}
+                      resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
+                      vitalsOpen={vitalsOpen}
+                      onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
+                      collection={primaryCollection}
+                      collectionCount={selectedToolCollectionIds.length}
+                      documentCount={documentCount}
+                      modelParametersOpen={modelParametersOpen}
+                      onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
+                      visibleParameterDefinitions={visibleParameterDefinitions}
+                      parameterOverrides={parameterOverrides}
+                      activeParameterCount={activeParameterCount}
+                      resetAllParameters={resetAllParameters}
+                      handleNumberParameterChange={handleNumberParameterChange}
+                      handleBooleanParameterChange={handleBooleanParameterChange}
+                      handleTextParameterChange={handleTextParameterChange}
+                      handleSelectParameterChange={handleSelectParameterChange}
+                      handleClearParameter={handleClearParameter}
+                      formatDefaultParameter={formatDefaultParameter}
+                      usageOpen={usageOpen}
+                      onUsageToggle={() => setUsageOpen((prev) => !prev)}
+                      usage={usage}
+                      contextWindow={contextWindow}
+                      contextConsumed={contextConsumed}
+                      onExportChatHistory={handleExportChatHistory}
+                      markdownComponents={markdownComponents}
+                    />
+                  </aside>
+                </div>
               )}
             </div>
           )}
