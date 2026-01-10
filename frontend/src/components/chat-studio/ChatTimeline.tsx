@@ -399,8 +399,6 @@ export function ChatTimeline({
         entry.message.tool_call_id ||
         entry.messageId ||
         entry.id;
-      const branchFooter =
-        selectedSessionId && entry.message.id ? renderBranchRow(entry.message.id, null) : null;
       const shouldShowBranchedFrom =
         Boolean(branchedFromSessionId) &&
         Boolean(branchedFromMessageId) &&
@@ -433,14 +431,7 @@ export function ChatTimeline({
             response={entry.response}
             rawPayload={entry.rawPayload}
             className="chat-bubble"
-            footer={
-              branchFooter || branchBanner ? (
-                <>
-                  {branchBanner}
-                  {branchFooter}
-                </>
-              ) : null
-            }
+            footer={branchBanner}
           />
         </Fragment>
       );
@@ -480,6 +471,7 @@ export function ChatTimeline({
     const bubbleKey = entry.id;
 
     const branchFooter = selectedSessionId ? renderBranchRow(entry.message.id, usage) : null;
+    const hasBranchFooter = Boolean(branchFooter);
 
     const shouldShowBranchedFrom =
       Boolean(branchedFromSessionId) &&
@@ -504,7 +496,7 @@ export function ChatTimeline({
     ) : null;
 
     return (
-      <div key={bubbleKey} className={cn("flex", alignClass)}>
+      <div key={bubbleKey} className={cn("flex", alignClass, hasBranchFooter && "mb-5")}>
         <div className="group relative max-w-[75%]">
           <div
             className={cn(
