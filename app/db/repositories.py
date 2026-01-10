@@ -245,9 +245,10 @@ class ChatRepository:
         """Return a chat message by id, optionally scoped to a user."""
         statement = select(models.ChatMessage).where(models.ChatMessage.id == message_id)
         if user_id:
-            statement = statement.join(models.ChatSession).where(
-                models.ChatSession.user_id == user_id,
-            )
+            statement = statement.join(
+                models.ChatSession,
+                models.ChatMessage.session_id == models.ChatSession.id,
+            ).where(models.ChatSession.user_id == user_id)
         return self.session.exec(statement).first()
 
     def delete_messages_after(
@@ -307,6 +308,15 @@ class ChatRepository:
         )
         if limit:
             statement = statement.limit(limit)
+        return self.session.exec(statement).all()
+
+    def list_all_messages(self, session_id: UUID) -> Iterable[models.ChatMessage]:
+        """List all messages for a chat session."""
+        statement = (
+            select(models.ChatMessage)
+            .where(models.ChatMessage.session_id == session_id)
+            .order_by(asc(models.ChatMessage.created_at))
+        )
         return self.session.exec(statement).all()
 
     def delete_session(self, session_model: models.ChatSession) -> None:

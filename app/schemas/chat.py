@@ -40,6 +40,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
     usage: Optional[Dict[str, Any]] = None
+    source_message_id: Optional[UUID] = None
     created_at: datetime
 
     @classmethod
@@ -58,6 +59,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             prompt_tokens=message.prompt_tokens,
             completion_tokens=message.completion_tokens,
             usage=message.usage,
+            source_message_id=message.source_message_id,
             created_at=message.created_at,
         )
 
@@ -75,6 +77,8 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
     parameter_overrides: Optional[Dict[str, Any]] = None
     provider_preferences: Optional[Dict[str, Any]] = None
     stream: Optional[bool] = False
+    branched_from_session_id: Optional[UUID] = None
+    branched_from_message_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 
@@ -97,6 +101,8 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
             parameter_overrides=session.parameter_overrides,
             provider_preferences=session.provider_preferences,
             stream=session.stream,
+            branched_from_session_id=session.branched_from_session_id,
+            branched_from_message_id=session.branched_from_message_id,
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
@@ -127,3 +133,17 @@ class ChatCompletionResponse(BaseModel):
     provider: str
     context_window: int
     context_consumed: int
+
+
+class ChatBranchCreate(BaseModel):
+    """Payload for branching a chat session."""
+
+    message_id: UUID
+    title: Optional[str] = None
+
+
+class ChatBranchResponse(BaseModel):
+    """Response payload for a branched chat."""
+
+    session: ChatSessionRead
+    messages: List[ChatMessageRead]

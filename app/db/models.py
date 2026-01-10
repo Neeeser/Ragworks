@@ -7,7 +7,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Boolean, Column, Float, Index, String, Text
+from sqlalchemy import JSON, Boolean, Column, Float, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
 from app.utils.time import utc_now
@@ -386,6 +387,25 @@ class ChatSession(SQLModel, TimestampMixin, table=True):
         sa_column=Column(JSON, nullable=True),
     )
     stream: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
+    branched_from_session_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="chat_sessions.id",
+        nullable=True,
+        index=True,
+    )
+    branched_from_message_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey(
+                "chat_messages.id",
+                name="fk_chat_sessions_branched_from_message_id",
+                use_alter=True,
+            ),
+            nullable=True,
+            index=True,
+        ),
+    )
 
 
 class ChatSessionCollection(SQLModel, TimestampMixin, table=True):
@@ -431,6 +451,19 @@ class ChatMessage(SQLModel, TimestampMixin, table=True):
     usage: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSON, nullable=True),
+    )
+    source_message_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey(
+                "chat_messages.id",
+                name="fk_chat_messages_source_message_id",
+                use_alter=True,
+            ),
+            nullable=True,
+            index=True,
+        ),
     )
 
 

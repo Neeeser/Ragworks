@@ -286,6 +286,7 @@ interface ToolCallBubbleProps {
   rawPayload: Record<string, unknown>;
   className?: string;
   status?: "pending" | "complete";
+  footer?: ReactNode;
 }
 
 export const formatToolLabel = (label: string): string => {
@@ -314,6 +315,7 @@ export const ToolCallBubble = ({
   rawPayload,
   className,
   status = "complete",
+  footer,
 }: ToolCallBubbleProps) => {
   const { token } = useAuth();
   const [trace, setTrace] = useState<PipelineTraceResponse | null>(null);
@@ -374,105 +376,104 @@ export const ToolCallBubble = ({
 
   return (
     <div className="flex justify-start">
-      <div
-        className={cn(
-          "max-w-[75%] rounded-2xl border px-4 py-3 text-sm shadow-2xl",
-          variantClass,
-          className,
-        )}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200">Tool Call</p>
-            <p className="text-base font-semibold text-white">{formatToolLabel(label)}</p>
-          </div>
-          <span
-            className={cn(
-              "rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.3em]",
-              statusClass,
-            )}
-          >
-            {statusLabel}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="mt-3 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-slate-200 transition hover:border-cyan-300/40"
-          aria-expanded={expanded}
+      <div className="group relative max-w-[75%]">
+        <div
+          className={cn("rounded-2xl border px-4 py-3 text-sm shadow-2xl", variantClass, className)}
         >
-          <div className="flex-1 pr-3">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Summary</p>
-            <p className="line-clamp-2 text-sm text-white">{summary}</p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200">Tool Call</p>
+              <p className="text-base font-semibold text-white">{formatToolLabel(label)}</p>
+            </div>
+            <span
+              className={cn(
+                "rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.3em]",
+                statusClass,
+              )}
+            >
+              {statusLabel}
+            </span>
           </div>
-          <ChevronDown
-            className={cn("h-4 w-4 text-cyan-200 transition", expanded ? "rotate-180" : "")}
-          />
-        </button>
-        {expanded && (
-          <div className="mt-4 space-y-4">
-            <ToolPayloadSection title="Invocation" description="Parameters sent with this call.">
-              <ToolKeyValueGrid data={args} emptyLabel="No arguments were provided." />
-            </ToolPayloadSection>
-            {chunkList && chunkList.length > 0 ? (
-              <>
-                <ToolPayloadSection
-                  title={`Retrieved chunks (${chunkList.length})`}
-                  description="Top matches returned by the retriever."
-                  collapsible
-                  defaultOpen={false}
-                >
-                  <ToolChunkList
-                    chunks={chunkList}
-                    activeChunkId={traceChunkId}
-                    onSelectChunk={(chunkId) => loadTrace(chunkId)}
-                  />
-                </ToolPayloadSection>
-                {hasResponseMeta && (
-                  <ToolPayloadSection title="Response metadata" collapsible defaultOpen={false}>
-                    <ToolKeyValueGrid data={responseMeta} emptyLabel="No metadata returned." />
-                  </ToolPayloadSection>
-                )}
-                {traceAvailable && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="mt-3 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-slate-200 transition hover:border-cyan-300/40"
+            aria-expanded={expanded}
+          >
+            <div className="flex-1 pr-3">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Summary</p>
+              <p className="line-clamp-2 text-sm text-white">{summary}</p>
+            </div>
+            <ChevronDown
+              className={cn("h-4 w-4 text-cyan-200 transition", expanded ? "rotate-180" : "")}
+            />
+          </button>
+          {expanded && (
+            <div className="mt-4 space-y-4">
+              <ToolPayloadSection title="Invocation" description="Parameters sent with this call.">
+                <ToolKeyValueGrid data={args} emptyLabel="No arguments were provided." />
+              </ToolPayloadSection>
+              {chunkList && chunkList.length > 0 ? (
+                <>
                   <ToolPayloadSection
-                    title="Retrieval trace"
-                    description="Replay the retrieval pipeline for this tool call."
+                    title={`Retrieved chunks (${chunkList.length})`}
+                    description="Top matches returned by the retriever."
                     collapsible
                     defaultOpen={false}
                   >
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={traceLoading}
-                      onClick={() => loadTrace()}
-                      className="mb-3"
-                    >
-                      {trace ? "Refresh trace" : "Open trace"}
-                    </Button>
-                    {!trace && (
-                      <p className="text-xs text-slate-400">
-                        Load the trace to inspect node inputs and outputs.
-                      </p>
-                    )}
+                    <ToolChunkList
+                      chunks={chunkList}
+                      activeChunkId={traceChunkId}
+                      onSelectChunk={(chunkId) => loadTrace(chunkId)}
+                    />
                   </ToolPayloadSection>
-                )}
-              </>
-            ) : (
-              <ToolPayloadSection title="Response" collapsible defaultOpen={false}>
-                <ToolKeyValueGrid
-                  data={responseMeta}
-                  emptyLabel="Tool did not return structured data."
-                />
-              </ToolPayloadSection>
-            )}
-            <details className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-100">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-100">
-                Raw payload
-              </summary>
-              <JsonBlock data={rawPayload} className="mt-3" />
-            </details>
-          </div>
-        )}
+                  {hasResponseMeta && (
+                    <ToolPayloadSection title="Response metadata" collapsible defaultOpen={false}>
+                      <ToolKeyValueGrid data={responseMeta} emptyLabel="No metadata returned." />
+                    </ToolPayloadSection>
+                  )}
+                  {traceAvailable && (
+                    <ToolPayloadSection
+                      title="Retrieval trace"
+                      description="Replay the retrieval pipeline for this tool call."
+                      collapsible
+                      defaultOpen={false}
+                    >
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={traceLoading}
+                        onClick={() => loadTrace()}
+                        className="mb-3"
+                      >
+                        {trace ? "Refresh trace" : "Open trace"}
+                      </Button>
+                      {!trace && (
+                        <p className="text-xs text-slate-400">
+                          Load the trace to inspect node inputs and outputs.
+                        </p>
+                      )}
+                    </ToolPayloadSection>
+                  )}
+                </>
+              ) : (
+                <ToolPayloadSection title="Response" collapsible defaultOpen={false}>
+                  <ToolKeyValueGrid
+                    data={responseMeta}
+                    emptyLabel="Tool did not return structured data."
+                  />
+                </ToolPayloadSection>
+              )}
+              <details className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-100">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-100">
+                  Raw payload
+                </summary>
+                <JsonBlock data={rawPayload} className="mt-3" />
+              </details>
+            </div>
+          )}
+        </div>
+        {footer}
       </div>
       <PipelineTraceViewer
         key={trace?.run.id ?? "trace"}

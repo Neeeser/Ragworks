@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  ChatBranchPayload,
+  ChatBranchResponse,
   ChatCompletionPayload,
   ChatMessage,
   ChatRequestPayload,
@@ -475,6 +477,18 @@ export async function getChatHistory(sessionId: string, token: string): Promise<
 export async function deleteChatSession(sessionId: string, token: string): Promise<void> {
   return apiFetch<void>(`/api/chat/sessions/${sessionId}`, {
     method: "DELETE",
+    token,
+  });
+}
+
+export async function branchChatSession(
+  sessionId: string,
+  payload: ChatBranchPayload,
+  token: string,
+): Promise<ChatBranchResponse> {
+  return apiFetch<ChatBranchResponse>(`/api/chat/sessions/${sessionId}/branch`, {
+    method: "POST",
+    body: JSON.stringify(payload),
     token,
   });
 }

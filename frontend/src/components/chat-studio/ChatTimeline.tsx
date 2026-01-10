@@ -1,4 +1,4 @@
-import { Edit3, RotateCcw } from "lucide-react";
+import { Edit3, GitBranch, RotateCcw } from "lucide-react";
 import React, { Fragment, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,7 +10,7 @@ import { TypingAnimation } from "@/components/ui/typing-animation";
 import { cn } from "@/lib/utils";
 
 import type { ChatEntry } from "./chat-types";
-import type { ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
+import type { ReasoningTraceSegment, ToolCallTrace, UsageBreakdown } from "@/lib/types";
 import type { Components } from "react-markdown";
 
 const TOOL_REASONING_TYPES = new Set([
@@ -34,6 +34,26 @@ const roleVariants: Record<string, string> = {
   reasoning: "border-amber-400/50 bg-amber-500/15 text-amber-50 backdrop-blur-sm",
 };
 
+const UsageInline = ({ usage }: { usage: UsageBreakdown }) => (
+  <>
+    {usage.total_tokens != null && <span>{usage.total_tokens.toLocaleString()} tok</span>}
+    {usage.prompt_tokens != null && <span>{usage.prompt_tokens.toLocaleString()} in</span>}
+    {usage.completion_tokens != null && <span>{usage.completion_tokens.toLocaleString()} out</span>}
+    {usage.reasoning_tokens != null && usage.reasoning_tokens > 0 && (
+      <span>{usage.reasoning_tokens.toLocaleString()} reasoning</span>
+    )}
+    {usage.cost != null && (
+      <span className="text-slate-100/80">
+        $
+        {usage.cost.toLocaleString(undefined, {
+          minimumFractionDigits: 4,
+          maximumFractionDigits: 6,
+        })}
+      </span>
+    )}
+  </>
+);
+
 type ChatTimelineProps = {
   modelLabel: string;
   onModelSelect: () => void;
@@ -51,6 +71,7 @@ type ChatTimelineProps = {
   onEditCancel: () => void;
   onEditSubmit: () => void;
   onRetryAssistant: (messageId: string) => void;
+  onBranchMessage: (messageId: string) => void;
   onReasoningToggle: (messageId: string, isOpen: boolean) => void;
   markdownComponents: Components;
   overrideSections: Array<{
@@ -70,6 +91,10 @@ type ChatTimelineProps = {
   liveToolPhaseById: Record<string, number>;
   liveReasoningDisplaySegments: ReasoningTraceSegment[];
   showStreamingBubble: boolean;
+  branchedFromSessionId: string | null;
+  branchedFromSessionTitle: string | null;
+  branchedFromMessageId: string | null;
+  onNavigateToSession: (sessionId: string) => void;
 };
 
 export function ChatTimeline({
@@ -89,6 +114,7 @@ export function ChatTimeline({
   onEditCancel,
   onEditSubmit,
   onRetryAssistant,
+  onBranchMessage,
   onReasoningToggle,
   markdownComponents,
   overrideSections,
@@ -105,7 +131,26 @@ export function ChatTimeline({
   liveToolPhaseById,
   liveReasoningDisplaySegments,
   showStreamingBubble,
+  branchedFromSessionId,
+  branchedFromSessionTitle,
+  branchedFromMessageId,
+  onNavigateToSession,
 }: ChatTimelineProps) {
+  const renderBranchRow = (messageId: string, usage?: UsageBreakdown | null) => (
+    <div className="absolute left-0 right-0 top-full mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+      {usage && <UsageInline usage={usage} />}
+      <button
+        type="button"
+        className="pointer-events-auto inline-flex items-center justify-center rounded-full border border-white/20 p-1 text-white/80 hover:border-white/60"
+        onClick={() => onBranchMessage(messageId)}
+        disabled={sending}
+        aria-label="Branch chat"
+      >
+        <GitBranch className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+
   const timelineEntries = chatEntryOrder
     .map((entryId) => chatEntryMap.get(entryId))
     .filter((entry): entry is ChatEntry => Boolean(entry));
@@ -354,6 +399,31 @@ export function ChatTimeline({
         entry.message.tool_call_id ||
         entry.messageId ||
         entry.id;
+      const branchFooter =
+        selectedSessionId && entry.message.id ? renderBranchRow(entry.message.id, null) : null;
+      const shouldShowBranchedFrom =
+        Boolean(branchedFromSessionId) &&
+        Boolean(branchedFromMessageId) &&
+        entry.message.source_message_id === branchedFromMessageId;
+      const branchedFromLabel = branchedFromSessionTitle || "Original chat";
+      const branchBanner = shouldShowBranchedFrom ? (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
+          <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">
+            Branched from
+          </span>
+          {branchedFromSessionId ? (
+            <button
+              type="button"
+              onClick={() => onNavigateToSession(branchedFromSessionId)}
+              className="text-slate-100 underline-offset-4 hover:underline"
+            >
+              {branchedFromLabel}
+            </button>
+          ) : (
+            <span>{branchedFromLabel}</span>
+          )}
+        </div>
+      ) : null;
       return (
         <Fragment key={toolKey}>
           <ToolCallBubble
@@ -363,6 +433,14 @@ export function ChatTimeline({
             response={entry.response}
             rawPayload={entry.rawPayload}
             className="chat-bubble"
+            footer={
+              branchFooter || branchBanner ? (
+                <>
+                  {branchBanner}
+                  {branchFooter}
+                </>
+              ) : null
+            }
           />
         </Fragment>
       );
@@ -376,16 +454,18 @@ export function ChatTimeline({
       const bubbleKey = mappedKey || entry.id;
       return (
         <div key={bubbleKey} className="flex justify-start">
-          <CollapsibleReasoning
-            segments={entry.segments}
-            messageId={entry.id}
-            title={entry.title}
-            subtitle={entry.subtitle}
-            isAutoOpen={false}
-            preventAutoClose
-            onManualToggle={onReasoningToggle}
-            className={cn("chat-bubble max-w-[75%]", roleVariants.reasoning)}
-          />
+          <div className="max-w-[75%]">
+            <CollapsibleReasoning
+              segments={entry.segments}
+              messageId={entry.id}
+              title={entry.title}
+              subtitle={entry.subtitle}
+              isAutoOpen={false}
+              preventAutoClose
+              onManualToggle={onReasoningToggle}
+              className={cn("chat-bubble", roleVariants.reasoning)}
+            />
+          </div>
         </div>
       );
     }
@@ -398,6 +478,30 @@ export function ChatTimeline({
     const usage = entry.message.usage;
     const headerLabel = entry.message.role === "user" ? "You" : entry.message.role.toUpperCase();
     const bubbleKey = entry.id;
+
+    const branchFooter = selectedSessionId ? renderBranchRow(entry.message.id, usage) : null;
+
+    const shouldShowBranchedFrom =
+      Boolean(branchedFromSessionId) &&
+      Boolean(branchedFromMessageId) &&
+      entry.message.source_message_id === branchedFromMessageId;
+    const branchedFromLabel = branchedFromSessionTitle || "Original chat";
+    const branchBanner = shouldShowBranchedFrom ? (
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
+        <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">Branched from</span>
+        {branchedFromSessionId ? (
+          <button
+            type="button"
+            onClick={() => onNavigateToSession(branchedFromSessionId)}
+            className="text-slate-100 underline-offset-4 hover:underline"
+          >
+            {branchedFromLabel}
+          </button>
+        ) : (
+          <span>{branchedFromLabel}</span>
+        )}
+      </div>
+    ) : null;
 
     return (
       <div key={bubbleKey} className={cn("flex", alignClass)}>
@@ -466,33 +570,8 @@ export function ChatTimeline({
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
             )}
           </div>
-          {usage && (
-            <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70">
-                {usage.total_tokens != null && (
-                  <span>{usage.total_tokens.toLocaleString()} tok</span>
-                )}
-                {usage.prompt_tokens != null && (
-                  <span>{usage.prompt_tokens.toLocaleString()} in</span>
-                )}
-                {usage.completion_tokens != null && (
-                  <span>{usage.completion_tokens.toLocaleString()} out</span>
-                )}
-                {usage.reasoning_tokens != null && usage.reasoning_tokens > 0 && (
-                  <span>{usage.reasoning_tokens.toLocaleString()} reasoning</span>
-                )}
-                {usage.cost != null && (
-                  <span className="text-slate-100/80">
-                    $
-                    {usage.cost.toLocaleString(undefined, {
-                      minimumFractionDigits: 4,
-                      maximumFractionDigits: 6,
-                    })}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+          {branchBanner}
+          {branchFooter}
         </div>
       </div>
     );

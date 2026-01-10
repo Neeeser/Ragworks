@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Iterator
 
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -25,7 +26,9 @@ def create_test_engine() -> Engine:
 
 def reset_database(engine: Engine) -> None:
     """Drop and recreate all tables for a clean test database."""
-    SQLModel.metadata.drop_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
     SQLModel.metadata.create_all(engine)
 
 

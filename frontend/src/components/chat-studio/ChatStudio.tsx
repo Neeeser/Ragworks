@@ -23,6 +23,7 @@ import { Loader } from "@/components/ui/loader";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import {
+  branchChatSession,
   chat,
   deleteChatSession,
   fetchCollections,
@@ -739,6 +740,9 @@ export function ChatStudio() {
     if (isPendingSession) {
       return;
     }
+    if (sessionIdParam !== selectedSessionId) {
+      return;
+    }
     const target = buildChatUrl(selectedSessionId, selectedToolCollectionIds);
     if (target !== currentUrl) {
       router.replace(target);
@@ -749,6 +753,7 @@ export function ChatStudio() {
     isPendingSession,
     router,
     selectedSessionId,
+    sessionIdParam,
     selectedToolCollectionIds,
   ]);
 
@@ -1065,10 +1070,13 @@ export function ChatStudio() {
         const sorted = sortSessions(sessionList);
         setSessions(sorted);
         setSelectedSessionId((current) => {
+          if (sessionIdParam && sorted.some((session) => session.id === sessionIdParam)) {
+            return sessionIdParam;
+          }
           if (current && sorted.some((session) => session.id === current)) {
             return current;
           }
-          return sessionIdParam ? sessionIdParam : null;
+          return null;
         });
       })
       .catch((error: unknown) => {
@@ -1366,6 +1374,20 @@ export function ChatStudio() {
       setContextConsumed(activeSession.context_tokens);
     }
   }, [selectedSessionId, sessions]);
+
+  const activeSession = useMemo(
+    () => sessions.find((session) => session.id === selectedSessionId) ?? null,
+    [selectedSessionId, sessions],
+  );
+
+  const branchedFromSession = useMemo(() => {
+    if (!activeSession?.branched_from_session_id) {
+      return null;
+    }
+    return (
+      sessions.find((session) => session.id === activeSession.branched_from_session_id) ?? null
+    );
+  }, [activeSession, sessions]);
 
   const currentModelInfo = useMemo(() => {
     const lookupId = activeModelId;
@@ -2422,6 +2444,63 @@ export function ChatStudio() {
     await runEditMutation(messageId, "");
   };
 
+  const handleBranchMessage = useCallback(
+    async (messageId: string) => {
+      if (!authToken || !selectedSessionId) {
+        return;
+      }
+      try {
+        const response = await branchChatSession(
+          selectedSessionId,
+          { message_id: messageId },
+          authToken,
+        );
+        const branchedSession = response.session;
+        const branchedMessages = response.messages;
+        setSessions((prev) => {
+          const next = prev.filter((session) => session.id !== branchedSession.id);
+          next.push(branchedSession);
+          return sortSessions(next);
+        });
+        setSelectedSessionId(branchedSession.id);
+        setActiveModelId(branchedSession.chat_model);
+        setSelectedToolCollectionIds(branchedSession.tool_collection_ids ?? []);
+        setParameterOverrides(branchedSession.parameter_overrides ?? {});
+        setProviderForm(createProviderFormFromPreferences(branchedSession.provider_preferences));
+        setStreamingEnabled(branchedSession.stream ?? DEFAULT_STREAMING_ENABLED);
+        setUsage(calculateSessionUsage(branchedMessages));
+        setContextConsumed(branchedSession.context_tokens ?? 0);
+        setToolTraces(deriveToolTraces(branchedMessages));
+        setChatEntryOrder([]);
+        chatHydrationPendingRef.current = true;
+        setFinalStreamAssistantId(null);
+        setStreamEntryKeyMap({});
+        setLiveResponse("");
+        setIsStreamingResponse(false);
+        setActiveStreamEntryKey(null);
+        activeStreamEntryKeyRef.current = null;
+        resetLiveReasoningState();
+        setEditingMessageId(null);
+        setEditingDraft("");
+        setOptimisticMessages([]);
+        toolCollectionsDirtyRef.current = false;
+        syncMessages(branchedMessages, { hydrate: true, resetStreamKeys: true });
+        navigateToChat(branchedSession.id, branchedSession.tool_collection_ids ?? []);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Unable to branch this message.");
+      }
+    },
+    [
+      authToken,
+      deriveToolTraces,
+      navigateToChat,
+      resetLiveReasoningState,
+      selectedSessionId,
+      sortSessions,
+      syncMessages,
+    ],
+  );
+
   const handleStartNewChat = () => {
     stopProgressPolling();
     newChatDefaultsRef.current = {
@@ -3146,6 +3225,7 @@ export function ChatStudio() {
                         }}
                         onEditSubmit={handleEditSubmit}
                         onRetryAssistant={handleRetryAssistant}
+                        onBranchMessage={handleBranchMessage}
                         onReasoningToggle={handleReasoningToggle}
                         markdownComponents={markdownComponents}
                         overrideSections={overrideSections}
@@ -3162,6 +3242,13 @@ export function ChatStudio() {
                         liveToolPhaseById={liveToolPhaseById}
                         liveReasoningDisplaySegments={liveReasoningDisplaySegments}
                         showStreamingBubble={showStreamingBubble}
+                        branchedFromSessionId={activeSession?.branched_from_session_id ?? null}
+                        branchedFromSessionTitle={branchedFromSession?.title ?? null}
+                        branchedFromMessageId={activeSession?.branched_from_message_id ?? null}
+                        onNavigateToSession={(sessionId) => {
+                          const session = sessions.find((item) => item.id === sessionId);
+                          navigateToChat(sessionId, session?.tool_collection_ids ?? []);
+                        }}
                       />
                       <div ref={endRef} />
                     </div>

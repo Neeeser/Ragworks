@@ -13,7 +13,14 @@ from app.api.routes import chat as chat_routes
 from app.db import models
 from app.db.models import ChatRole
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
-from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate, ChatMessageRead, ChatSessionRead
+from app.schemas.chat import (
+    ChatBranchCreate,
+    ChatBranchResponse,
+    ChatCompletionResponse,
+    ChatMessageCreate,
+    ChatMessageRead,
+    ChatSessionRead,
+)
 
 
 class _DummyRequest:
@@ -159,6 +166,48 @@ def test_list_sessions_and_history_paths(session: Session) -> None:
     assert sessions[0].id == chat_session.id
     assert sessions[0].tool_collection_ids == [collection.id]
     assert history[0].content == "hi"
+
+
+def test_branch_session_route(monkeypatch, session: Session) -> None:
+    user = _create_user(session)
+    session_id = uuid4()
+    message_id = uuid4()
+    chat_session = models.ChatSession(
+        id=session_id,
+        user_id=user.id,
+        title="Session",
+        mode=models.ChatMode.CHAT,
+        chat_model="chat",
+        context_tokens=0,
+    )
+    message = models.ChatMessage(
+        id=message_id,
+        session_id=session_id,
+        role=ChatRole.USER,
+        content="hi",
+    )
+    response = ChatBranchResponse(
+        session=ChatSessionRead.from_model(chat_session, tool_collection_ids=[]),
+        messages=[ChatMessageRead.from_model(message)],
+    )
+
+    class _StubChatService:
+        def __init__(self, _session: Session) -> None:
+            return None
+
+        def branch_session(self, **_kwargs):
+            return response
+
+    monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
+
+    result = chat_routes.branch_chat_session(
+        session_id,
+        ChatBranchCreate(message_id=message_id),
+        current_user=user,
+        session=session,
+    )
+
+    assert result.session.id == session_id
 
 
 def test_list_sessions_filters_by_collection(session: Session) -> None:

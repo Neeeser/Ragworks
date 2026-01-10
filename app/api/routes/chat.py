@@ -21,6 +21,8 @@ from app.db import models
 from app.db.repositories import ChatRepository
 from app.db.session import engine
 from app.schemas.chat import (
+    ChatBranchCreate,
+    ChatBranchResponse,
     ChatCompletionResponse,
     ChatMessageCreate,
     ChatMessageRead,
@@ -187,6 +189,26 @@ def get_chat_history(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
     messages = repo.list_messages(session_id)
     return [ChatMessageRead.from_model(message) for message in messages]
+
+
+@router.post("/chat/sessions/{session_id}/branch", response_model=ChatBranchResponse)
+def branch_chat_session(
+    session_id: UUID,
+    payload: ChatBranchCreate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ChatBranchResponse:
+    """Create a new chat session branched from a selected message."""
+    chat_service = ChatService(session)
+    try:
+        return chat_service.branch_session(
+            user=current_user,
+            session_id=session_id,
+            message_id=payload.message_id,
+            title=payload.title,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

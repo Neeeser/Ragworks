@@ -16,7 +16,14 @@ from app.api.config import get_settings
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
-from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate, ToolCallTrace
+from app.schemas.chat import (
+    ChatBranchResponse,
+    ChatCompletionResponse,
+    ChatMessageCreate,
+    ChatMessageRead,
+    ChatSessionRead,
+    ToolCallTrace,
+)
 from app.chat.processing.parameters import (
     build_openrouter_body,
     build_reasoning_options,
@@ -235,6 +242,107 @@ class ChatService:
         )
         session_model = ensure_session(session_request)
         return session_model, None
+
+    @staticmethod
+    def _resolve_branch_title(session_title: str, requested_title: Optional[str]) -> str:
+        """Return the new session title for a branched chat."""
+        trimmed_title = (requested_title or "").strip()
+        if trimmed_title:
+            return trimmed_title
+        base_title = session_title or "Chat"
+        return f"Branch of {base_title}"
+
+    def _copy_branch_messages(
+        self,
+        *,
+        branch_session_id: UUID,
+        messages: List[models.ChatMessage],
+    ) -> List[models.ChatMessage]:
+        """Copy messages into a branched session, preserving source links."""
+        branched_messages: List[models.ChatMessage] = []
+        for message in messages:
+            branched_message = models.ChatMessage(
+                session_id=branch_session_id,
+                role=message.role,
+                content=message.content,
+                model=message.model,
+                tool_name=message.tool_name,
+                tool_call_id=message.tool_call_id,
+                tool_payload=message.tool_payload,
+                reasoning_trace=message.reasoning_trace,
+                prompt_tokens=message.prompt_tokens,
+                completion_tokens=message.completion_tokens,
+                usage=message.usage,
+                source_message_id=message.id,
+                created_at=message.created_at,
+                updated_at=message.updated_at,
+            )
+            self.chat_repo.add_message(branched_message)
+            branched_messages.append(branched_message)
+        return branched_messages
+
+    def branch_session(
+        self,
+        *,
+        user: models.User,
+        session_id: UUID,
+        message_id: UUID,
+        title: Optional[str],
+    ) -> ChatBranchResponse:
+        """Create a new chat session branched from a specific message."""
+        session_model = self.chat_repo.get_session(session_id, user_id=user.id)
+        if not session_model:
+            raise ValueError("Chat session not found.")
+        target_message = self.chat_repo.get_message(message_id, user_id=user.id)
+        if not target_message:
+            raise ValueError("Message not found for branching.")
+        if target_message.session_id != session_model.id:
+            raise ValueError("Message does not belong to this session.")
+
+        messages = list(self.chat_repo.list_all_messages(session_model.id))
+        target_index = next(
+            (index for index, message in enumerate(messages) if message.id == target_message.id),
+            -1,
+        )
+        if target_index < 0:
+            raise ValueError("Message not found in session history.")
+        branch_title = self._resolve_branch_title(session_model.title, title)
+        branched_session = models.ChatSession(
+            user_id=user.id,
+            collection_id=session_model.collection_id,
+            title=branch_title,
+            mode=session_model.mode,
+            chat_model=session_model.chat_model,
+            context_tokens=0,
+            parameter_overrides=session_model.parameter_overrides,
+            provider_preferences=session_model.provider_preferences,
+            stream=session_model.stream,
+            branched_from_session_id=session_model.id,
+            branched_from_message_id=target_message.id,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        self.chat_repo.add_session(branched_session)
+        tool_collection_ids = self.chat_repo.list_session_collection_ids(session_model.id)
+        if tool_collection_ids:
+            self.chat_repo.replace_session_collections(
+                session_id=branched_session.id,
+                collection_ids=tool_collection_ids,
+            )
+
+        branched_messages = self._copy_branch_messages(
+            branch_session_id=branched_session.id,
+            messages=messages[: target_index + 1],
+        )
+
+        self.session.commit()
+        return ChatBranchResponse(
+            session=ChatSessionRead.from_model(
+                branched_session,
+                tool_collection_ids=tool_collection_ids,
+            ),
+            messages=[ChatMessageRead.from_model(msg) for msg in branched_messages],
+        )
 
     def _apply_payload_to_session(
         self,

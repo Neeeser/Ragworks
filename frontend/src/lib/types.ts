@@ -245,6 +245,8 @@ export interface ChatSession {
   parameter_overrides?: Record<string, unknown> | null;
   provider_preferences?: ProviderPreferences | null;
   stream?: boolean;
+  branched_from_session_id?: UUID | null;
+  branched_from_message_id?: UUID | null;
   created_at: string;
   updated_at: string;
 }
@@ -273,6 +275,7 @@ export interface ChatMessage {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   usage?: UsageBreakdown | null;
+  source_message_id?: UUID | null;
   created_at: string;
 }
 
@@ -541,6 +544,16 @@ export interface ChatCompletionPayload {
   provider: string;
   context_window: number;
   context_consumed: number;
+}
+
+export interface ChatBranchPayload {
+  message_id: string;
+  title?: string;
+}
+
+export interface ChatBranchResponse {
+  session: ChatSession;
+  messages: ChatMessage[];
 }
 
 export interface QueryChunk {
