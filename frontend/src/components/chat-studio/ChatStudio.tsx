@@ -480,6 +480,11 @@ export function ChatStudio() {
   const sessionIdParam = Array.isArray(rawSessionId)
     ? (rawSessionId[0] ?? null)
     : (rawSessionId ?? null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionIdParam);
+  const pendingUrlSessionRef = useRef<{ value: string | null; active: boolean }>({
+    value: null,
+    active: false,
+  });
   const urlCollectionsValue = searchParams.get("collections");
   const urlCollectionIds = useMemo(
     () => parseCollectionIdsParam(urlCollectionsValue),
@@ -495,7 +500,7 @@ export function ChatStudio() {
   const [historyFilterIncludeUnassigned, setHistoryFilterIncludeUnassigned] = useState(false);
   const [documentCount, setDocumentCount] = useState(0);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const selectedSessionId = sessionIdParam;
+  const selectedSessionId = activeSessionId;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolTraces, setToolTraces] = useState<ToolCallTrace[]>([]);
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
@@ -518,6 +523,7 @@ export function ChatStudio() {
   const editScrollSnapshotRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const editAutoScrollRef = useRef<boolean | null>(null);
   const branchedSessionOriginRef = useRef(new Map<string, "edit" | "manual">());
+  const skipHistoryFetchSessionRef = useRef<string | null>(null);
   const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = usePersistentToggle("chat.historyOpen", true);
@@ -707,11 +713,31 @@ export function ChatStudio() {
     (sessionId: string | null, collectionIds: string[]) => {
       const target = buildChatUrl(sessionId, collectionIds);
       if (target !== currentUrl) {
+        pendingUrlSessionRef.current = { value: sessionId, active: true };
+        setActiveSessionId(sessionId);
         router.push(target);
+        return;
+      }
+      if (sessionId !== activeSessionId) {
+        setActiveSessionId(sessionId);
       }
     },
-    [buildChatUrl, currentUrl, router],
+    [activeSessionId, buildChatUrl, currentUrl, router],
   );
+
+  useEffect(() => {
+    const pending = pendingUrlSessionRef.current;
+    if (pending.active) {
+      if (sessionIdParam === pending.value) {
+        pendingUrlSessionRef.current = { value: null, active: false };
+      } else {
+        return;
+      }
+    }
+    if (sessionIdParam !== activeSessionId) {
+      setActiveSessionId(sessionIdParam);
+    }
+  }, [activeSessionId, sessionIdParam]);
 
   useEffect(() => {
     toolCollectionsDirtyRef.current = false;
@@ -1299,6 +1325,9 @@ export function ChatStudio() {
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
+      return;
+    }
+    if (skipHistoryFetchSessionRef.current === selectedSessionId) {
       return;
     }
     let cancelled = false;
@@ -2453,6 +2482,10 @@ export function ChatStudio() {
       setEditingDraft("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to edit this turn.");
+    } finally {
+      if (skipHistoryFetchSessionRef.current === sessionId) {
+        skipHistoryFetchSessionRef.current = null;
+      }
     }
   };
 
@@ -2533,6 +2566,9 @@ export function ChatStudio() {
         setOptimisticMessages([]);
         toolCollectionsDirtyRef.current = false;
         branchedSessionOriginRef.current.set(branchedSession.id, origin);
+        if (origin === "edit") {
+          skipHistoryFetchSessionRef.current = branchedSession.id;
+        }
         syncMessages(branchedMessages, { hydrate: true, resetStreamKeys: true });
         navigateToChat(branchedSession.id, branchedSession.tool_collection_ids ?? []);
         return { session: branchedSession, messages: branchedMessages };
