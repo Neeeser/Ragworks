@@ -94,6 +94,7 @@ type ChatTimelineProps = {
   branchedFromSessionId: string | null;
   branchedFromSessionTitle: string | null;
   branchedFromMessageId: string | null;
+  branchedFromOrigin: "edit" | "manual";
   onNavigateToSession: (sessionId: string) => void;
 };
 
@@ -134,6 +135,7 @@ export function ChatTimeline({
   branchedFromSessionId,
   branchedFromSessionTitle,
   branchedFromMessageId,
+  branchedFromOrigin,
   onNavigateToSession,
 }: ChatTimelineProps) {
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -410,29 +412,6 @@ export function ChatTimeline({
         entry.message.tool_call_id ||
         entry.messageId ||
         entry.id;
-      const shouldShowBranchedFrom =
-        Boolean(branchedFromSessionId) &&
-        Boolean(branchedFromMessageId) &&
-        entry.message.source_message_id === branchedFromMessageId;
-      const branchedFromLabel = branchedFromSessionTitle || "Original chat";
-      const branchBanner = shouldShowBranchedFrom ? (
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
-          <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">
-            Branched from
-          </span>
-          {branchedFromSessionId ? (
-            <button
-              type="button"
-              onClick={() => onNavigateToSession(branchedFromSessionId)}
-              className="text-slate-100 underline-offset-4 hover:underline"
-            >
-              {branchedFromLabel}
-            </button>
-          ) : (
-            <span>{branchedFromLabel}</span>
-          )}
-        </div>
-      ) : null;
       return (
         <Fragment key={toolKey}>
           <ToolCallBubble
@@ -442,7 +421,6 @@ export function ChatTimeline({
             response={entry.response}
             rawPayload={entry.rawPayload}
             className="chat-bubble"
-            footer={branchBanner}
           />
         </Fragment>
       );
@@ -490,7 +468,7 @@ export function ChatTimeline({
       entry.message.source_message_id === branchedFromMessageId;
     const branchedFromLabel = branchedFromSessionTitle || "Original chat";
     const branchBanner = shouldShowBranchedFrom ? (
-      <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
+      <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-300/80">
         <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">Branched from</span>
         {branchedFromSessionId ? (
           <button
@@ -505,6 +483,9 @@ export function ChatTimeline({
         )}
       </div>
     ) : null;
+    const shouldShowBannerAbove =
+      shouldShowBranchedFrom && entry.message.role === "user" && branchedFromOrigin === "edit";
+    const shouldShowBannerBelow = shouldShowBranchedFrom && !shouldShowBannerAbove;
 
     const isEditing = isUser && editingMessageId === entry.message.id;
     const editHighlight = isEditing
@@ -514,6 +495,7 @@ export function ChatTimeline({
     return (
       <div key={bubbleKey} className={cn("flex", alignClass, hasBranchFooter && "mb-5")}>
         <div className={cn("group relative max-w-[75%]", isEditing && "w-full")}>
+          {shouldShowBannerAbove ? branchBanner : null}
           <div
             className={cn(
               "chat-bubble rounded-2xl border px-4 py-3 text-sm shadow-2xl transition",
@@ -581,7 +563,7 @@ export function ChatTimeline({
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
             )}
           </div>
-          {branchBanner}
+          {shouldShowBannerBelow ? branchBanner : null}
           {branchFooter}
         </div>
       </div>

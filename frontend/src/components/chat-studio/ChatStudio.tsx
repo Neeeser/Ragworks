@@ -480,6 +480,11 @@ export function ChatStudio() {
   const sessionIdParam = Array.isArray(rawSessionId)
     ? (rawSessionId[0] ?? null)
     : (rawSessionId ?? null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionIdParam);
+  const pendingUrlSessionRef = useRef<{ value: string | null; active: boolean }>({
+    value: null,
+    active: false,
+  });
   const urlCollectionsValue = searchParams.get("collections");
   const urlCollectionIds = useMemo(
     () => parseCollectionIdsParam(urlCollectionsValue),
@@ -495,7 +500,7 @@ export function ChatStudio() {
   const [historyFilterIncludeUnassigned, setHistoryFilterIncludeUnassigned] = useState(false);
   const [documentCount, setDocumentCount] = useState(0);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const selectedSessionId = sessionIdParam;
+  const selectedSessionId = activeSessionId;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolTraces, setToolTraces] = useState<ToolCallTrace[]>([]);
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
@@ -517,6 +522,8 @@ export function ChatStudio() {
   const [editingDraft, setEditingDraft] = useState("");
   const editScrollSnapshotRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const editAutoScrollRef = useRef<boolean | null>(null);
+  const branchedSessionOriginRef = useRef(new Map<string, "edit" | "manual">());
+  const skipHistoryFetchSessionRef = useRef<string | null>(null);
   const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = usePersistentToggle("chat.historyOpen", true);
@@ -706,11 +713,31 @@ export function ChatStudio() {
     (sessionId: string | null, collectionIds: string[]) => {
       const target = buildChatUrl(sessionId, collectionIds);
       if (target !== currentUrl) {
+        pendingUrlSessionRef.current = { value: sessionId, active: true };
+        setActiveSessionId(sessionId);
         router.push(target);
+        return;
+      }
+      if (sessionId !== activeSessionId) {
+        setActiveSessionId(sessionId);
       }
     },
-    [buildChatUrl, currentUrl, router],
+    [activeSessionId, buildChatUrl, currentUrl, router],
   );
+
+  useEffect(() => {
+    const pending = pendingUrlSessionRef.current;
+    if (pending.active) {
+      if (sessionIdParam === pending.value) {
+        pendingUrlSessionRef.current = { value: null, active: false };
+      } else {
+        return;
+      }
+    }
+    if (sessionIdParam !== activeSessionId) {
+      setActiveSessionId(sessionIdParam);
+    }
+  }, [activeSessionId, sessionIdParam]);
 
   useEffect(() => {
     toolCollectionsDirtyRef.current = false;
@@ -1298,6 +1325,9 @@ export function ChatStudio() {
       chatHydrationPendingRef.current = true;
       setUsage(null);
       setContextConsumed(0);
+      return;
+    }
+    if (skipHistoryFetchSessionRef.current === selectedSessionId) {
       return;
     }
     let cancelled = false;
@@ -2400,40 +2430,62 @@ export function ChatStudio() {
     stopProgressPolling();
   }, [sending, stopProgressPolling]);
 
-  const runEditMutation = async (messageId: string, newContent: string) => {
-    if (!authToken || !selectedSessionId) return;
+  const runEditMutation = async (
+    messageId: string,
+    newContent: string,
+    overrides: {
+      sessionId?: string;
+      modelId?: string;
+      toolCollectionIds?: string[];
+      messages?: ChatMessage[];
+      parameterOverrides?: ParameterOverrides;
+      provider?: ProviderPreferences;
+      stream?: boolean;
+    } = {},
+  ) => {
+    const sessionId = overrides.sessionId ?? selectedSessionId;
+    if (!authToken || !sessionId) return;
     if (toolsEnabled && !pineconeConfigured) {
       setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
       return;
     }
-    const targetModelId = activeModelId;
+    const targetModelId = overrides.modelId ?? activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
     }
-    const parameterPayload = buildParameterPayload();
+    const parameterPayload = buildParameterPayload(overrides.parameterOverrides, overrides.modelId);
     const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
-    const provider = providerRuleCount > 0 ? providerPayload : undefined;
-    const prunedMessages = pruneHistoryForEdit(messages, messageId, newContent);
-    if (prunedMessages !== messages) {
+    const provider = overrides.provider ?? (providerRuleCount > 0 ? providerPayload : undefined);
+    const baseMessages = overrides.messages ?? messages;
+    const prunedMessages = pruneHistoryForEdit(baseMessages, messageId, newContent);
+    if (prunedMessages !== baseMessages) {
       syncMessages(prunedMessages, { hydrate: true });
       setToolTraces(deriveToolTraces(prunedMessages));
       setUsage(calculateSessionUsage(prunedMessages));
     }
     try {
-      await performChatMutation(selectedSessionId, {
-        content: newContent,
-        edit_message_id: messageId,
-        mode: "chat",
-        chat_model: targetModelId,
-        parameters,
-        provider,
-        stream: streamingEnabled,
-      });
+      await performChatMutation(
+        sessionId,
+        {
+          content: newContent,
+          edit_message_id: messageId,
+          mode: "chat",
+          chat_model: targetModelId,
+          parameters,
+          provider,
+          stream: overrides.stream ?? streamingEnabled,
+        },
+        overrides.toolCollectionIds,
+      );
       setEditingMessageId(null);
       setEditingDraft("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to edit this turn.");
+    } finally {
+      if (skipHistoryFetchSessionRef.current === sessionId) {
+        skipHistoryFetchSessionRef.current = null;
+      }
     }
   };
 
@@ -2444,17 +2496,40 @@ export function ChatStudio() {
       setStatus("Edited message cannot be empty.");
       return;
     }
-    await runEditMutation(editingMessageId, trimmed);
+    const branched = await branchSessionForEdit(editingMessageId, "edit");
+    if (!branched) {
+      return;
+    }
+    const targetMessage =
+      branched.messages.find(
+        (message) => message.source_message_id === editingMessageId && message.role === "user",
+      ) ??
+      branched.messages.find((message) => message.source_message_id === editingMessageId) ??
+      branched.messages.find((message) => message.id === editingMessageId) ??
+      null;
+    if (!targetMessage) {
+      setStatus("Unable to locate the branched message to edit.");
+      return;
+    }
+    await runEditMutation(targetMessage.id, trimmed, {
+      sessionId: branched.session.id,
+      modelId: branched.session.chat_model,
+      toolCollectionIds: branched.session.tool_collection_ids ?? [],
+      messages: branched.messages,
+      parameterOverrides: branched.session.parameter_overrides ?? {},
+      provider: branched.session.provider_preferences ?? undefined,
+      stream: branched.session.stream ?? DEFAULT_STREAMING_ENABLED,
+    });
   };
 
   const handleRetryAssistant = async (messageId: string) => {
     await runEditMutation(messageId, "");
   };
 
-  const handleBranchMessage = useCallback(
-    async (messageId: string) => {
+  const branchSessionForEdit = useCallback(
+    async (messageId: string, origin: "edit" | "manual") => {
       if (!authToken || !selectedSessionId) {
-        return;
+        return null;
       }
       try {
         const response = await branchChatSession(
@@ -2490,10 +2565,16 @@ export function ChatStudio() {
         setEditingDraft("");
         setOptimisticMessages([]);
         toolCollectionsDirtyRef.current = false;
+        branchedSessionOriginRef.current.set(branchedSession.id, origin);
+        if (origin === "edit") {
+          skipHistoryFetchSessionRef.current = branchedSession.id;
+        }
         syncMessages(branchedMessages, { hydrate: true, resetStreamKeys: true });
         navigateToChat(branchedSession.id, branchedSession.tool_collection_ids ?? []);
+        return { session: branchedSession, messages: branchedMessages };
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "Unable to branch this message.");
+        return null;
       }
     },
     [
@@ -2505,6 +2586,13 @@ export function ChatStudio() {
       sortSessions,
       syncMessages,
     ],
+  );
+
+  const handleBranchMessage = useCallback(
+    async (messageId: string) => {
+      await branchSessionForEdit(messageId, "manual");
+    },
+    [branchSessionForEdit],
   );
 
   const handleStartNewChat = () => {
@@ -2903,51 +2991,65 @@ export function ChatStudio() {
     [currentModelInfo],
   );
 
-  const buildParameterPayload = useCallback(() => {
-    if (!currentModelInfo) {
-      return {};
-    }
-    const supportedSet = new Set(
-      (currentModelInfo.supported_parameters || []).map((param) => param.toLowerCase()),
-    );
-    const payload: Record<string, unknown> = {};
-    Object.entries(parameterOverrides).forEach(([key, rawValue]) => {
-      const normalizedKey = key.toLowerCase();
-      if (!supportedSet.has(normalizedKey)) {
-        return;
+  const buildParameterPayload = useCallback(
+    (overrides: ParameterOverrides = parameterOverrides, modelIdOverride?: string | null) => {
+      const targetModelId = modelIdOverride ?? currentModelInfo?.id ?? null;
+      const modelInfo =
+        targetModelId === currentModelInfo?.id
+          ? currentModelInfo
+          : (modelCatalog.find(
+              (model) => model.id === targetModelId || model.canonical_slug === targetModelId,
+            ) ?? null);
+      if (!modelInfo) {
+        return {};
       }
-      if (rawValue === undefined || rawValue === null) {
-        return;
-      }
-      if (normalizedKey === "reasoning") {
-        if (typeof rawValue === "string") {
-          const trimmedReasoning = rawValue.trim().toLowerCase();
-          if (!trimmedReasoning) {
+      const supportedSet = new Set(
+        (modelInfo.supported_parameters || []).map((param) => param.toLowerCase()),
+      );
+      const payload: Record<string, unknown> = {};
+      Object.entries(overrides).forEach(([key, rawValue]) => {
+        const normalizedKey = key.toLowerCase();
+        if (!supportedSet.has(normalizedKey)) {
+          return;
+        }
+        if (rawValue === undefined || rawValue === null) {
+          return;
+        }
+        if (normalizedKey === "reasoning") {
+          if (typeof rawValue === "string") {
+            const trimmedReasoning = rawValue.trim().toLowerCase();
+            if (!trimmedReasoning) {
+              return;
+            }
+            payload[normalizedKey] = { effort: trimmedReasoning };
             return;
           }
-          payload[normalizedKey] = { effort: trimmedReasoning };
+          if (typeof rawValue === "object") {
+            payload[normalizedKey] = rawValue;
+          }
           return;
         }
-        if (typeof rawValue === "object") {
-          payload[normalizedKey] = rawValue;
-        }
-        return;
-      }
-      if (typeof rawValue === "string") {
-        const trimmed = rawValue.trim();
-        if (!trimmed) {
+        if (typeof rawValue === "string") {
+          const trimmed = rawValue.trim();
+          if (!trimmed) {
+            return;
+          }
+          payload[normalizedKey] = trimmed;
           return;
         }
-        payload[normalizedKey] = trimmed;
-        return;
-      }
-      payload[normalizedKey] = rawValue;
-    });
-    return payload;
-  }, [currentModelInfo, parameterOverrides]);
+        payload[normalizedKey] = rawValue;
+      });
+      return payload;
+    },
+    [currentModelInfo, modelCatalog, parameterOverrides],
+  );
 
   const performChatMutation = useCallback(
-    async (sessionId: string, payload: Omit<ChatRequestPayload, "session_id">) => {
+    async (
+      sessionId: string,
+      payload: Omit<ChatRequestPayload, "session_id">,
+      toolCollectionIdsOverride?: string[],
+    ) => {
       if (!authToken) {
         throw new Error("Missing authentication context.");
       }
@@ -2985,7 +3087,7 @@ export function ChatStudio() {
         const requestPayload: ChatRequestPayload = {
           ...payload,
           session_id: sessionId,
-          tool_collection_ids: selectedToolCollectionIds,
+          tool_collection_ids: toolCollectionIdsOverride ?? selectedToolCollectionIds,
         };
         let result: ChatCompletionPayload | null;
         if (payload.stream) {
@@ -3266,6 +3368,11 @@ export function ChatStudio() {
                         branchedFromSessionId={activeSession?.branched_from_session_id ?? null}
                         branchedFromSessionTitle={branchedFromSession?.title ?? null}
                         branchedFromMessageId={activeSession?.branched_from_message_id ?? null}
+                        branchedFromOrigin={
+                          selectedSessionId
+                            ? (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
+                            : "manual"
+                        }
                         onNavigateToSession={(sessionId) => {
                           const session = sessions.find((item) => item.id === sessionId);
                           navigateToChat(sessionId, session?.tool_collection_ids ?? []);
