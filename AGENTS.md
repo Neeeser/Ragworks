@@ -79,7 +79,7 @@ to ensure the most up-to-date behavior and feature availability.
 - Always add/adjust tests alongside new frontend code.
 - Before finishing your work on a frontend change:
   - Run `make test-frontend`
-  - Run `make coverage-frontend` and ensure frontend updates are covered at 100%
+  - Run `make coverage-frontend` and ensure frontend updates meet coverage thresholds
   - Use `make coverage-report-frontend` while iterating if you need a non-blocking run
 
 ## Modularity and Structure
