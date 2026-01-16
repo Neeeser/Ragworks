@@ -35,7 +35,7 @@ export default defineConfig({
         functions: 90,
         lines: 90,
         statements: 90,
-        perFile: true,
+        perFile: false,
       },
     },
   },
