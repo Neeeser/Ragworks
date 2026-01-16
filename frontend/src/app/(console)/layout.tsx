@@ -73,7 +73,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     const label = (user?.full_name || user?.email || "U").trim();
     const parts = label.split(/\s+/);
     if (parts.length >= 2) {
-      return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
     }
     return label.slice(0, 1).toUpperCase();
   }, [user?.full_name, user?.email]);

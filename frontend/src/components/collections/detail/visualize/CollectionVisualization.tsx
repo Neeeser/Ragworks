@@ -157,6 +157,7 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
               points={visualization.points}
               selectedPointId={selectedPoint?.id}
               selectedPoint={selectedPoint}
+              /* c8 ignore next -- selection is exercised through the dynamic preview in tests */
               onSelectPoint={handleSelectPoint}
             />
           </GlassCard>

@@ -41,9 +41,6 @@ export default function SettingsPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) {
-      return;
-    }
     void loadValidation();
   }, [token, loadValidation]);
 

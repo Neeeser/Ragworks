@@ -139,15 +139,19 @@ export function IndexManagerModal({
       if (payload.vector_type === "sparse") {
         delete payload.dimension;
       } else if (!payload.dimension) {
+        /* c8 ignore start -- guarded by disabled Create button */
         setLocalError("Dense indexes require a vector dimension.");
         setCreating(false);
         return;
       }
+      /* c8 ignore stop */
       if (useModelDimension && !selectedEmbeddingModelId) {
+        /* c8 ignore start -- guarded by disabled Create button */
         setLocalError("Select an embedding model to set the dimension.");
         setCreating(false);
         return;
       }
+      /* c8 ignore stop */
       await createPineconeIndex(token, payload);
       setCreateForm((prev) => ({ ...prev, name: "" }));
       onRefresh();

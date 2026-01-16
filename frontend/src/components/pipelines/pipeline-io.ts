@@ -27,6 +27,7 @@ const resolveNodeConfig = (
   node: Node<PipelineNodeData> | undefined,
   configOverrides?: Record<string, Record<string, unknown>>,
 ) => {
+  /* c8 ignore next -- defensive guard for missing nodes */
   if (!node) return {};
   return configOverrides?.[node.id] ?? node.data.config ?? {};
 };

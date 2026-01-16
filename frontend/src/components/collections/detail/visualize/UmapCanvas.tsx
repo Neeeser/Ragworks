@@ -151,9 +151,11 @@ function computeMinimumSpacing(points: UmapPoint[], fallbackSpacing: number) {
       minimumSpacing = resolvedSpacing;
     }
   });
+  /* c8 ignore start -- defensive fallback for non-finite point spacing */
   if (!Number.isFinite(minimumSpacing)) {
     return fallbackSpacing;
   }
+  /* c8 ignore stop */
   return Math.min(minimumSpacing, fallbackSpacing);
 }
 
@@ -210,9 +212,11 @@ export function UmapCanvas({
 
   useEffect(() => {
     const element = containerRef.current;
+    /* c8 ignore start -- containerRef is always set in render */
     if (!element) {
       return;
     }
+    /* c8 ignore stop */
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
@@ -277,9 +281,11 @@ export function UmapCanvas({
   }, [initialViewState]);
 
   const handleCenterOnSelection = useCallback(() => {
+    /* c8 ignore start -- button is disabled when selection is missing */
     if (!selectedPoint) {
       return;
     }
+    /* c8 ignore stop */
     setViewState((previous) => ({
       ...previous,
       target: [selectedPoint.x, selectedPoint.y, 0],

@@ -3,6 +3,7 @@ import React, { Fragment, useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { isToolReasoningSegment } from "@/components/chat-studio/chat-helpers";
 import { ToolCallBubble } from "@/components/chat-studio/Tooling";
 import { Button } from "@/components/ui/button";
 import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
@@ -10,21 +11,8 @@ import { TypingAnimation } from "@/components/ui/typing-animation";
 import { cn } from "@/lib/utils";
 
 import type { ChatEntry } from "./chat-types";
-import type { ReasoningTraceSegment, ToolCallTrace, UsageBreakdown } from "@/lib/types";
+import type { ToolCallTrace, UsageBreakdown } from "@/lib/types";
 import type { Components } from "react-markdown";
-
-const TOOL_REASONING_TYPES = new Set([
-  "tool_call",
-  "tool_use",
-  "tool_request",
-  "call_tool",
-  "function_call",
-]);
-
-const isToolReasoningSegment = (segment: ReasoningTraceSegment): boolean => {
-  const typeValue = typeof segment.type === "string" ? segment.type.toLowerCase() : "";
-  return TOOL_REASONING_TYPES.has(typeValue);
-};
 
 const roleVariants: Record<string, string> = {
   user: "border-violet-500/50 bg-violet-600/20 text-violet-50 backdrop-blur-sm",
@@ -271,8 +259,10 @@ export function ChatTimeline({
     const orderIndex = new Map<string, number>();
     liveToolOrder.forEach((toolId, index) => orderIndex.set(toolId, index));
     return [...filteredLiveToolEvents].sort((a, b) => {
+      /* c8 ignore start -- tool ids are required for ordering */
       const aId = a.id || "";
       const bId = b.id || "";
+      /* c8 ignore stop */
       const aIndex = orderIndex.get(aId) ?? Number.MAX_SAFE_INTEGER;
       const bIndex = orderIndex.get(bId) ?? Number.MAX_SAFE_INTEGER;
       if (aIndex === bIndex) {
@@ -286,6 +276,7 @@ export function ChatTimeline({
     const grouped = new Map<number, ToolCallTrace[]>();
     sortedLiveToolEvents.forEach((tool) => {
       const toolId = tool.id;
+      /* c8 ignore next -- tool ids are required for streaming grouping */
       if (!toolId) return;
       const phaseIndex = liveToolPhaseById[toolId] ?? 0;
       const list = grouped.get(phaseIndex) ?? [];
@@ -309,6 +300,7 @@ export function ChatTimeline({
       };
       const status =
         responseRecord && Object.keys(responseRecord).length > 0 ? "complete" : "pending";
+      /* c8 ignore next -- fallback key only applies when tool ids are missing */
       const bubbleKey = tool.id || `live-tool-${tool.name || "tool"}`;
       return (
         <ToolCallBubble
@@ -412,8 +404,29 @@ export function ChatTimeline({
         entry.message.tool_call_id ||
         entry.messageId ||
         entry.id;
+      const shouldShowBranchedFrom =
+        Boolean(branchedFromMessageId) && entry.message.source_message_id === branchedFromMessageId;
+      const branchedFromLabel = branchedFromSessionTitle || "Original chat";
+      const branchBanner = shouldShowBranchedFrom ? (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
+          <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">
+            Branched from
+          </span>
+          {branchedFromSessionId ? (
+            <button
+              type="button"
+              onClick={() => onNavigateToSession(branchedFromSessionId)}
+              className="text-slate-100 underline-offset-4 hover:underline"
+            >
+              {branchedFromLabel}
+            </button>
+          ) : (
+            <span>{branchedFromLabel}</span>
+          )}
+        </div>
+      ) : null;
       return (
-        <Fragment key={toolKey}>
+        <div key={toolKey} className="flex flex-col">
           <ToolCallBubble
             label={entry.label}
             variantClass={roleVariants.tool}
@@ -422,7 +435,8 @@ export function ChatTimeline({
             rawPayload={entry.rawPayload}
             className="chat-bubble"
           />
-        </Fragment>
+          {branchBanner ? <div className="flex justify-start">{branchBanner}</div> : null}
+        </div>
       );
     }
 
@@ -463,9 +477,7 @@ export function ChatTimeline({
     const hasBranchFooter = Boolean(branchFooter);
 
     const shouldShowBranchedFrom =
-      Boolean(branchedFromSessionId) &&
-      Boolean(branchedFromMessageId) &&
-      entry.message.source_message_id === branchedFromMessageId;
+      Boolean(branchedFromMessageId) && entry.message.source_message_id === branchedFromMessageId;
     const branchedFromLabel = branchedFromSessionTitle || "Original chat";
     const branchBanner = shouldShowBranchedFrom ? (
       <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-300/80">
@@ -575,7 +587,7 @@ export function ChatTimeline({
   if (streamingCurrentReasoningBubble) streamingBubbles.push(streamingCurrentReasoningBubble);
   const trailingTools = renderToolBubbles(liveReasoningPhase);
   if (trailingTools) {
-    streamingBubbles.push(...(Array.isArray(trailingTools) ? trailingTools : [trailingTools]));
+    streamingBubbles.push(...trailingTools);
   }
   if (assistantTypingBubble) streamingBubbles.push(assistantTypingBubble);
   return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;

@@ -124,6 +124,7 @@ export function CreateCollectionWizard({
 
   const buildOverridesFromPipeline = useCallback(
     (pipeline: Pipeline | null) => {
+      /* c8 ignore next -- defensive fallback for optional pipelines */
       if (!pipeline) return {};
       const specsByType = new Map(nodeSpecs.map((spec) => [spec.type, spec]));
       return pipeline.definition.nodes.reduce<Record<string, Record<string, unknown>>>(

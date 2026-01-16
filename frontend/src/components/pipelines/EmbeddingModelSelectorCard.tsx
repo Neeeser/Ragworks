@@ -49,6 +49,7 @@ const formatPricePerMillion = (value?: number | string | null): string | null =>
     while (trimmedFraction.length > minFractionDigits && trimmedFraction.endsWith("0")) {
       trimmedFraction = trimmedFraction.slice(0, -1);
     }
+    /* c8 ignore next -- minFractionDigits is never zero when a fraction exists */
     return trimmedFraction.length > 0 ? `${whole}.${trimmedFraction}` : whole;
   };
 

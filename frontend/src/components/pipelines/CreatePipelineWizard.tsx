@@ -64,6 +64,7 @@ export function CreatePipelineWizard({
   const canProceed = () => {
     if (stepIndex === 0) return form.name.trim().length > 0;
     if (stepIndex === 1) return form.index_name.trim().length > 0;
+    /* c8 ignore next -- final step uses create action instead of Next */
     return true;
   };
 

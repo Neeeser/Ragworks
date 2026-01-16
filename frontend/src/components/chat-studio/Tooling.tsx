@@ -54,7 +54,7 @@ interface ToolValueProps {
   value: unknown;
 }
 
-const ToolValue = ({ value }: ToolValueProps) => {
+export const ToolValue = ({ value }: ToolValueProps) => {
   if (value === null || value === undefined) {
     return <span className="text-slate-400">N/A</span>;
   }

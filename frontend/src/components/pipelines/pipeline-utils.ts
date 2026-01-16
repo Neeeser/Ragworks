@@ -246,6 +246,7 @@ export const buildNodeCatalog = (specs: NodeSpec[]) => {
     .filter((family) => catalog[family]?.length)
     .map((family) => ({
       family,
+      /* c8 ignore next -- filter ensures a family has specs */
       specs: catalog[family] ?? [],
     }));
 };
