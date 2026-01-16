@@ -288,12 +288,12 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
             return [0.1, 0.2]
 
     class _StubRetriever:
-        def __init__(self, index_config: object, embedder: object, client: object) -> None:
+        def __init__(self, index_config: object, client: object) -> None:
             state["index_config"] = index_config
-            state["embedder"] = embedder
 
-        def retrieve(self, request: object) -> RetrievalResponse:
+        def retrieve(self, request: object, *, embedding: object) -> RetrievalResponse:
             state["request"] = request
+            state["embedding"] = embedding
             chunk = DocumentChunk(
                 document_id="doc",
                 chunk_id="doc:0",
@@ -304,7 +304,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
             scored = ScoredChunk(chunk=chunk, score=0.9)
             return RetrievalResponse(matches=[scored])
 
-    monkeypatch.setattr("app.pipelines.nodes.retrieval.OpenRouterEmbedder", _StubEmbedder)
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
     monkeypatch.setattr("app.pipelines.nodes.retrieval.PineconeRetriever", _StubRetriever)
 
     definition = build_default_retrieval_pipeline()
@@ -326,6 +326,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     assert getattr(index_config, "namespace", None) == expected_namespace
     request = state["request"]
     assert getattr(request, "namespace", None) == expected_namespace
+    assert state["embedding"] == [0.1, 0.2]
 
 
 def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
@@ -518,6 +519,42 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
 
     with pytest.raises(ValueError, match="mismatched embeddings"):
         node.run({"chunks": payload}, context)
+
+
+def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.ingestion import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import QueryEmbeddingPayload, RetrievalRequestPayload
+    from app.retrieval.models import QueryRequest
+
+    class _StubEmbedder:
+        usage = {"prompt_tokens": 4}
+
+        def __init__(
+            self,
+            _client: object,
+            _model_name: str,
+            *,
+            dimensions: int | None = None,
+        ) -> None:
+            pass
+
+        def embed_query(self, _query: str) -> list[float]:
+            return [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
+
+    payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
+    node = EmbedderNode(EmbedderConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    outputs = node.run({"request": payload}, context)
+    result = QueryEmbeddingPayload.model_validate(outputs["query_embedding"])
+
+    assert result.embedding == [0.1, 0.2, 0.3]
+    assert result.request.text == "hello"
+    assert result.usage == {"prompt_tokens": 4}
 
 
 def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:

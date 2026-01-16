@@ -96,6 +96,13 @@ def summarize_embeddings(
     }
 
 
+def summarize_query_embedding(
+    embedding: Optional[Sequence[float]],
+) -> dict[str, object]:
+    """Summarize a query embedding vector."""
+    return _embedding_preview(embedding) or {"preview": [], "total_values": 0}
+
+
 def summarize_matches(
     matches: Sequence[ScoredChunk],
     limit: int = 5,

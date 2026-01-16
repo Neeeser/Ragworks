@@ -110,22 +110,27 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             position={"x": 0, "y": 0},
         ),
         PipelineNodeDefinition(
+            id="embed-query",
+            type="embedder.openrouter",
+            name="Embedder",
+            position={"x": 280, "y": 0},
+            config={"model_name": settings.default_embedding_model},
+        ),
+        PipelineNodeDefinition(
             id="pinecone-retriever",
             type="retriever.pinecone",
             name="Pinecone Retriever",
-            position={"x": 280, "y": 0},
+            position={"x": 560, "y": 0},
             config={
-                "embedding_model": settings.default_embedding_model,
                 "index_name": settings.pinecone_index_name,
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
-                "metric": "cosine",
             },
         ),
         PipelineNodeDefinition(
             id="chat-settings",
             type="chat.settings",
             name="Chat Settings",
-            position={"x": 280, "y": 120},
+            position={"x": 560, "y": 120},
             config={
                 "chat_model": settings.default_chat_model,
                 "context_window": 8192,
@@ -135,16 +140,23 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             id="retrieval-output",
             type="retrieval.output",
             name="Retrieval Output",
-            position={"x": 560, "y": 0},
+            position={"x": 840, "y": 0},
         ),
     ]
     edges = [
         PipelineEdgeDefinition(
             id="edge-retrieval-input",
             source="query-input",
-            target="pinecone-retriever",
+            target="embed-query",
             source_port="request",
             target_port="request",
+        ),
+        PipelineEdgeDefinition(
+            id="edge-retrieval-embedder",
+            source="embed-query",
+            target="pinecone-retriever",
+            source_port="query_embedding",
+            target_port="query_embedding",
         ),
         PipelineEdgeDefinition(
             id="edge-retrieval-output",

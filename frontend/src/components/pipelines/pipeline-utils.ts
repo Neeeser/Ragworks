@@ -9,10 +9,12 @@ const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
 const PORT_CHUNKS = "chunks";
 const PORT_EMBEDDED = "embedded";
+const PORT_QUERY_EMBEDDING = "query_embedding";
 const PORT_INDEXED = "indexed";
 const PORT_REQUEST = "request";
 const PORT_RESULTS = "results";
 const NODE_QUERY_INPUT = "query-input";
+const NODE_EMBED_QUERY = "embed-query";
 const NODE_PINECONE_RETRIEVER = "pinecone-retriever";
 const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
@@ -54,27 +56,41 @@ export const buildDefaultDefinition = (
           position: { x: DEFAULT_NODE_X, y: 0 },
         },
         {
+          id: NODE_EMBED_QUERY,
+          type: "embedder.openrouter",
+          name: "Embedder",
+          config: {},
+          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING },
+        },
+        {
           id: NODE_PINECONE_RETRIEVER,
           type: "retriever.pinecone",
           name: "Pinecone Retriever",
           config: indexConfig,
-          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING },
+          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
         },
         {
           id: NODE_RETRIEVAL_OUTPUT,
           type: "retrieval.output",
           name: "Retrieval Output",
           config: {},
-          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
+          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 3 },
         },
       ],
       edges: [
         {
           id: "edge-retrieval-input",
           source: NODE_QUERY_INPUT,
-          target: NODE_PINECONE_RETRIEVER,
+          target: NODE_EMBED_QUERY,
           source_port: PORT_REQUEST,
           target_port: PORT_REQUEST,
+        },
+        {
+          id: "edge-retrieval-embedder",
+          source: NODE_EMBED_QUERY,
+          target: NODE_PINECONE_RETRIEVER,
+          source_port: PORT_QUERY_EMBEDDING,
+          target_port: PORT_QUERY_EMBEDDING,
         },
         {
           id: "edge-retrieval-output",

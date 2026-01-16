@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
 from app.api.config import get_settings
 from app.pipelines.nodes.trace_utils import summarize_match_order, summarize_matches, summarize_text
-from app.pipelines.payloads import RetrievalPayload, RetrievalRequestPayload
+from app.pipelines.payloads import (
+    QueryEmbeddingPayload,
+    RetrievalPayload,
+    RetrievalRequestPayload,
+)
 from app.pipelines.runtime import (
     NodePort,
     PipelineNodeBase,
@@ -20,7 +23,6 @@ from app.pipelines.runtime import (
 )
 from app.pipelines.models import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
 from app.retrieval.models import QueryRequest
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
@@ -85,11 +87,8 @@ class RetrievalInputNode(PipelineNodeBase):
 class RetrieverConfig(BaseModel):
     """Configuration for Pinecone retriever nodes."""
 
-    embedding_model: str = Field(default_factory=lambda: settings.default_embedding_model)
     index_name: str = Field(default_factory=lambda: settings.pinecone_index_name)
     namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
-    dimension: Optional[int] = Field(default=None, gt=0)
-    metric: str = "cosine"
 
 
 class PineconeRetrieverNode(PipelineNodeBase):
@@ -100,10 +99,12 @@ class PineconeRetrieverNode(PipelineNodeBase):
     category = "retrieval"
     description = "Retrieve chunks from Pinecone using embeddings."
     example = (
-        "QueryRequest(text='coffee') -> "
+        "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
         "RetrievalPayload(matches=[chunk_a, chunk_b])."
     )
-    input_ports = [NodePort(key="request", label="Request", data_type="query_request")]
+    input_ports = [
+        NodePort(key="query_embedding", label="Query Embedding", data_type="query_embedding")
+    ]
     output_ports = [NodePort(key="results", label="Results", data_type="retrieval_results")]
     config_model = RetrieverConfig
 
@@ -128,23 +129,19 @@ class PineconeRetrieverNode(PipelineNodeBase):
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve chunks for the query request."""
-        payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
         request = payload.request
+        embedding = payload.embedding
 
         namespace = resolve_collection_template(self.config.namespace, context.collection)
         index_name = resolve_collection_template(self.config.index_name, context.collection)
-        dimension = self.config.dimension or 1
 
-        embedder = OpenRouterEmbedder(context.openrouter, self.config.embedding_model)
         index_config = PineconeIndexConfig(
             name=index_name,
             namespace=namespace,
-            dimension=int(dimension),
-            metric=self.config.metric,
         )
         retriever = PineconeRetriever(
             index_config=index_config,
-            embedder=embedder,
             client=context.pinecone,
         )
         response = retriever.retrieve(
@@ -153,9 +150,10 @@ class PineconeRetrieverNode(PipelineNodeBase):
                 top_k=request.top_k,
                 namespace=namespace,
                 filter=request.filter,
-            )
+            ),
+            embedding=embedding,
         )
-        usage = embedder.usage or {}
+        usage = payload.usage or {}
         logger.info(
             "Pipeline retrieval returned %s matches for query.",
             len(response.matches),
@@ -168,7 +166,7 @@ class PineconeRetrieverNode(PipelineNodeBase):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize retrieval inputs and outputs."""
-        input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        input_payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
         output_payload = RetrievalPayload.model_validate(outputs.get("results"))
         return NodeTraceSummary(
             inputs=[

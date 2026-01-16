@@ -43,7 +43,6 @@ class RetrievalPipelineSettings:  # pylint: disable=too-many-instance-attributes
     index_name: str
     namespace: Optional[str]
     dimension: Optional[int]
-    metric: str
     chat_model: str
     context_window: int
 
@@ -112,6 +111,7 @@ def resolve_retrieval_settings(
 ) -> RetrievalPipelineSettings:
     """Resolve retrieval settings from a pipeline definition."""
     retriever = _resolve_node_config(definition, "retriever.pinecone", RetrieverConfig)
+    embedder = _resolve_node_config(definition, "embedder.openrouter", EmbedderConfig)
     chat_settings = _resolve_node_config(definition, "chat.settings", ChatSettingsConfig)
     index_name = (
         resolve_collection_template(retriever.index_name, collection)
@@ -119,11 +119,10 @@ def resolve_retrieval_settings(
     )
     namespace = resolve_collection_template(retriever.namespace, collection)
     return RetrievalPipelineSettings(
-        embedding_model=retriever.embedding_model,
+        embedding_model=embedder.model_name,
         index_name=index_name,
         namespace=namespace,
-        dimension=retriever.dimension,
-        metric=retriever.metric,
+        dimension=embedder.dimension,
         chat_model=chat_settings.chat_model,
         context_window=chat_settings.context_window,
     )

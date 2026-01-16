@@ -10,6 +10,7 @@ const PORT_COMPATIBILITY: PortCompatibilityMap = {
   embedded_batch: new Set(["embedded_batch"]),
   indexed_batch: new Set(["indexed_batch"]),
   query_request: new Set(["query_request"]),
+  query_embedding: new Set(["query_embedding"]),
   retrieval_results: new Set(["retrieval_results"]),
 };
 

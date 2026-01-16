@@ -6,7 +6,6 @@ from typing import Any, Optional, Sequence
 
 from pinecone import Pinecone
 
-from ..embedders.base import Embedder
 from ..indexers.pinecone_indexer import PineconeIndexConfig
 from ..models import DocumentChunk, DocumentMetadata, QueryRequest, RetrievalResponse, ScoredChunk
 from ..pinecone import get_pinecone_client
@@ -21,7 +20,6 @@ class PineconeRetriever(Retriever):  # pylint: disable=too-few-public-methods
     def __init__(
         self,
         index_config: PineconeIndexConfig,
-        embedder: Embedder,
         client: Optional[Pinecone] = None,
         api_key: Optional[str] = None,
         reranker: Optional[Reranker] = None,
@@ -29,17 +27,15 @@ class PineconeRetriever(Retriever):  # pylint: disable=too-few-public-methods
         """Initialize the retriever and Pinecone index handle."""
         self._client = get_pinecone_client(client=client, api_key=api_key)
         self._index_config = index_config
-        self._embedder = embedder
         self._reranker = reranker
         self._index = self._client.Index(index_config.name)
 
-    def retrieve(self, request: QueryRequest) -> RetrievalResponse:
+    def retrieve(self, request: QueryRequest, *, embedding: Sequence[float]) -> RetrievalResponse:
         """Retrieve the most relevant chunks for the query."""
-        query_vector = self._embedder.embed_query(request.text)
         namespace = request.namespace or self._index_config.namespace
 
         result = self._index.query(
-            vector=query_vector,
+            vector=embedding,
             top_k=request.top_k,
             include_metadata=True,
             include_values=False,

@@ -17,11 +17,14 @@ from app.pipelines.payloads import (
     EmbeddingPayload,
     IndexingPayload,
     ParsedDocumentPayload,
+    QueryEmbeddingPayload,
+    RetrievalRequestPayload,
     SourcePayload,
 )
 from app.pipelines.nodes.trace_utils import (
     summarize_chunks,
     summarize_embeddings,
+    summarize_query_embedding,
     summarize_source,
     summarize_text,
 )
@@ -437,36 +440,65 @@ class EmbedderNode(PipelineNodeBase):
         "ChunkPayload(chunks=['hello']) -> "
         "EmbeddingPayload(embeddings=[[0.12, 0.03, ...]])."
     )
-    input_ports = [NodePort(key="chunks", label="Chunks", data_type="chunk_batch")]
-    output_ports = [NodePort(key="embedded", label="Embedded", data_type="embedded_batch")]
+    input_ports = [
+        NodePort(key="chunks", label="Chunks", data_type="chunk_batch", required=False),
+        NodePort(key="request", label="Request", data_type="query_request", required=False),
+    ]
+    output_ports = [
+        NodePort(key="embedded", label="Embedded", data_type="embedded_batch", required=False),
+        NodePort(
+            key="query_embedding",
+            label="Query Embedding",
+            data_type="query_embedding",
+            required=False,
+        ),
+    ]
     config_model = EmbedderConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Embed chunk payloads with OpenRouter."""
-        payload = ChunkPayload.model_validate(inputs.get("chunks"))
-        document = payload.document
-        chunks = payload.chunks
+        chunks_input = inputs.get("chunks")
+        request_input = inputs.get("request")
+        if chunks_input is not None and request_input is not None:
+            raise ValueError("Embedder node cannot process both chunks and request payloads.")
 
         embedder = OpenRouterEmbedder(
             context.openrouter,
             self.config.model_name,
             dimensions=self.config.dimension,
         )
-        embeddings = embedder.embed_documents(chunks)
-        if len(embeddings) != len(chunks):
-            raise ValueError("Embedder returned mismatched embeddings.")
-        enriched_chunks = [
-            chunk.with_embedding(embedding)
-            for chunk, embedding in zip(chunks, embeddings)
-        ]
-        usage = embedder.usage or {}
-        return {
-            "embedded": EmbeddingPayload(
-                document=document,
-                chunks=enriched_chunks,
-                usage=usage,
-            )
-        }
+        if chunks_input is not None:
+            payload = ChunkPayload.model_validate(chunks_input)
+            document = payload.document
+            chunks = payload.chunks
+            embeddings = embedder.embed_documents(chunks)
+            if len(embeddings) != len(chunks):
+                raise ValueError("Embedder returned mismatched embeddings.")
+            enriched_chunks = [
+                chunk.with_embedding(embedding)
+                for chunk, embedding in zip(chunks, embeddings)
+            ]
+            usage = embedder.usage or {}
+            return {
+                "embedded": EmbeddingPayload(
+                    document=document,
+                    chunks=enriched_chunks,
+                    usage=usage,
+                )
+            }
+        if request_input is not None:
+            payload = RetrievalRequestPayload.model_validate(request_input)
+            request = payload.request
+            embedding = embedder.embed_query(request.text)
+            usage = embedder.usage or {}
+            return {
+                "query_embedding": QueryEmbeddingPayload(
+                    request=request,
+                    embedding=embedding,
+                    usage=usage,
+                )
+            }
+        raise ValueError("Embedder node requires a chunk batch or query request payload.")
 
     def summarize_io(
         self,
@@ -474,19 +506,38 @@ class EmbedderNode(PipelineNodeBase):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize embedding inputs and outputs."""
-        input_payload = ChunkPayload.model_validate(inputs.get("chunks"))
-        output_payload = EmbeddingPayload.model_validate(outputs.get("embedded"))
+        if "embedded" in outputs:
+            input_payload = ChunkPayload.model_validate(inputs.get("chunks"))
+            output_payload = EmbeddingPayload.model_validate(outputs.get("embedded"))
+            return NodeTraceSummary(
+                inputs=[
+                    NodeTraceValue(
+                        label="Chunk text",
+                        value=summarize_chunks(input_payload.chunks),
+                    )
+                ],
+                outputs=[
+                    NodeTraceValue(
+                        label="Embeddings",
+                        value=summarize_embeddings(output_payload.chunks),
+                        kind="embedding",
+                    )
+                ],
+            )
+        input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        output_payload = QueryEmbeddingPayload.model_validate(outputs.get("query_embedding"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Chunk text",
-                    value=summarize_chunks(input_payload.chunks),
+                    label="Query",
+                    value=summarize_text(input_payload.request.text),
+                    kind="text",
                 )
             ],
             outputs=[
                 NodeTraceValue(
-                    label="Embeddings",
-                    value=summarize_embeddings(output_payload.chunks),
+                    label="Embedding",
+                    value=summarize_query_embedding(output_payload.embedding),
                     kind="embedding",
                 )
             ],

@@ -173,6 +173,7 @@ PORT_COMPATIBILITY: Dict[str, Set[str]] = {
     "embedded_batch": {"embedded_batch"},
     "indexed_batch": {"indexed_batch"},
     "query_request": {"query_request"},
+    "query_embedding": {"query_embedding"},
     "retrieval_results": {"retrieval_results"},
 }
 
@@ -380,6 +381,8 @@ class PipelineExecutor:  # pylint: disable=too-few-public-methods
                 node_spec = self._registry.get_spec(node_def.type)
                 if node_spec is None:
                     raise PipelineExecutionError(f"Node type '{node_def.type}' not found.")
+                if node_spec.input_ports and not inputs[node_id]:
+                    continue
                 required_inputs = {
                     port.key for port in node_spec.input_ports if port.required
                 }
