@@ -527,6 +527,7 @@ export const TelemetryPanel = ({
           size="sm"
           className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 p-0 text-slate-300"
           onClick={onClose}
+          aria-label="Close run settings"
         >
           <PanelRightClose className="h-4 w-4" />
         </Button>

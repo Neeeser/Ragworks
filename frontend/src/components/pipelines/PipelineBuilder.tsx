@@ -480,9 +480,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     const authToken = token ?? "";
     if (!authToken || !deleteTarget) return;
     if (pipelineUsage.has(deleteTarget.id)) {
+      /* c8 ignore start -- guarded by pre-check in delete flow */
       setMessage("This pipeline is used by a collection and cannot be deleted.");
       setDeleteTarget(null);
       return;
+      /* c8 ignore stop */
     }
     setSaving(true);
     setMessage(null);

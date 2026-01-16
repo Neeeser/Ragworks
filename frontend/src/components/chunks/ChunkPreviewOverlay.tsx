@@ -54,6 +54,7 @@ export function ChunkPreviewOverlay({
             size="sm"
             className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 p-0 text-slate-300"
             onClick={onClose}
+            aria-label="Close preview"
           >
             <X className="h-4 w-4" />
           </Button>

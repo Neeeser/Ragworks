@@ -10,11 +10,13 @@ const normalizePrice = (value?: number | string | null): number | null => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-  const parsed = Number(
-    String(value)
-      .trim()
-      .replace(/[^0-9eE.+-]/g, ""),
-  );
+  const cleaned = String(value)
+    .trim()
+    .replace(/[^0-9eE.+-]/g, "");
+  if (!/[0-9]/.test(cleaned)) {
+    return null;
+  }
+  const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
 };
 

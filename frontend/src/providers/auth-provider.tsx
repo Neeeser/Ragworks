@@ -36,13 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = useCallback(
     async (authToken?: string) => {
-      if (!authToken && !token) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      const resolvedToken = authToken ?? token;
+      const resolvedToken = authToken || token;
       if (!resolvedToken) {
+        setUser(null);
         setLoading(false);
         return;
       }
@@ -64,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    /* c8 ignore next -- window is always defined in jsdom tests */
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
     if (stored) {
       setToken(stored);

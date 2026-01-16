@@ -1,27 +1,39 @@
 "use client";
 
-import { ArrowDown, PanelLeftOpen, PanelRightOpen, PlusCircle } from "lucide-react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { ChatInput } from "@/components/chat-studio";
-import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
+import {
+  DEFAULT_TELEMETRY_ORDER,
+  PINECONE_KEY_REQUIRED_MESSAGE,
+  TELEMETRY_SECTION_IDS,
+} from "@/components/chat-studio/chat-constants";
+import {
+  areArraysEqual,
+  attachUsageToLastAssistantMessage,
+  buildCollectionsQuery,
+  calculateSessionUsage,
+  createDefaultProviderForm,
+  createProviderFormFromPreferences,
+  deriveToolTracesFromMessages,
+  ensureMessageOrder,
+  generateClientMessageId,
+  generateClientSessionId,
+  isOptimisticDuplicate,
+  isToolReasoningSegment,
+  mergeMessageHistory,
+  normalizeRunSettingsOrder,
+  parseCollectionIdsParam,
+  pruneHistoryForEdit,
+  sortMessagesChronologically,
+} from "@/components/chat-studio/chat-helpers";
+import { ChatStudioHeader } from "@/components/chat-studio/ChatStudioHeader";
+import { ChatStudioMessages } from "@/components/chat-studio/ChatStudioMessages";
+import { ChatStudioView } from "@/components/chat-studio/ChatStudioView";
 import { HistoryPanel } from "@/components/chat-studio/HistoryPanel";
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
 import { formatToolLabel } from "@/components/chat-studio/Tooling";
-import { Button } from "@/components/ui/button";
-import { Loader } from "@/components/ui/loader";
-import { Notification } from "@/components/ui/notification";
-import { GlassCard } from "@/components/ui/panel";
 import {
   branchChatSession,
   chat,
@@ -46,6 +58,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 import {
   coerceRecord,
+  safeParseJSON,
   markdownComponents,
   normalizeReasoningSegments,
   parsePriceInput,
@@ -80,57 +93,31 @@ import type {
   RunSettingsSectionKey,
 } from "@/lib/types";
 
-const PINECONE_KEY_REQUIRED_MESSAGE =
-  "Add your Pinecone API key in Settings to enable collection tools.";
-const TELEMETRY_SECTION_IDS = {
-  systemPrompt: "telemetry-system-prompt",
-  collectionTools: "telemetry-collection-tools",
-  streaming: "telemetry-streaming",
-  modelRouting: "telemetry-model-routing",
-  providerRouting: "telemetry-provider-routing",
-  modelParameters: "telemetry-model-parameters",
-  vitals: "telemetry-collection-vitals",
-  usage: "telemetry-usage",
-} as const;
-const DEFAULT_TELEMETRY_ORDER: RunSettingsSectionKey[] = [
-  "systemPrompt",
-  "collectionTools",
-  "streaming",
-  "modelRouting",
-  "providerRouting",
-  "vitals",
-  "modelParameters",
-  "usage",
-];
-const TELEMETRY_SECTION_SET = new Set(DEFAULT_TELEMETRY_ORDER);
+export {
+  areArraysEqual,
+  attachUsageToLastAssistantMessage,
+  buildCollectionsQuery,
+  calculateSessionUsage,
+  createDefaultProviderForm,
+  createProviderFormFromPreferences,
+  deriveToolTracesFromMessages,
+  ensureMessageOrder,
+  generateClientMessageId,
+  generateClientSessionId,
+  isOptimisticDuplicate,
+  isToolReasoningSegment,
+  mergeMessageHistory,
+  normalizeRunSettingsOrder,
+  parseCollectionIdsParam,
+  pruneHistoryForEdit,
+  sortMessagesChronologically,
+} from "@/components/chat-studio/chat-helpers";
+
 const HISTORY_PANEL_WIDTH_PX = 288;
 const TELEMETRY_PANEL_WIDTH_PX = 416;
 const MIN_CENTER_PANEL_WIDTH_PX = 720;
 const OVERLAY_TRIGGER_WIDTH_PX =
   HISTORY_PANEL_WIDTH_PX + TELEMETRY_PANEL_WIDTH_PX + MIN_CENTER_PANEL_WIDTH_PX;
-
-const normalizeRunSettingsOrder = (
-  order?: RunSettingsSectionKey[] | null,
-): RunSettingsSectionKey[] => {
-  if (!order || order.length === 0) {
-    return [...DEFAULT_TELEMETRY_ORDER];
-  }
-  const seen = new Set<RunSettingsSectionKey>();
-  const normalized: RunSettingsSectionKey[] = [];
-  for (const entry of order) {
-    if (!TELEMETRY_SECTION_SET.has(entry) || seen.has(entry)) {
-      continue;
-    }
-    seen.add(entry);
-    normalized.push(entry);
-  }
-  for (const entry of DEFAULT_TELEMETRY_ORDER) {
-    if (!seen.has(entry)) {
-      normalized.push(entry);
-    }
-  }
-  return normalized;
-};
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -160,316 +147,10 @@ const usePersistentToggle = (key: string, defaultValue: boolean) => {
   return [value, setValue] as const;
 };
 
-const createDefaultProviderForm = (): ProviderFormState => ({
-  sort: "",
-  order: [],
-  only: [],
-  ignore: [],
-  quantizations: [],
-  allowFallbacks: true,
-  requireParameters: false,
-  dataCollection: "allow",
-  zdr: false,
-  enforceDistillableText: false,
-  maxPrompt: "",
-  maxCompletion: "",
-  maxRequest: "",
-  maxImage: "",
-});
-
-const createProviderFormFromPreferences = (
-  preferences?: ProviderPreferences | null,
-): ProviderFormState => {
-  const defaults = createDefaultProviderForm();
-  if (!preferences) {
-    return defaults;
-  }
-  const maxPrice = preferences.max_price ?? {};
-  return {
-    ...defaults,
-    order: preferences.order ?? [],
-    only: preferences.only ?? [],
-    ignore: preferences.ignore ?? [],
-    quantizations: preferences.quantizations ?? [],
-    sort: preferences.sort ?? "",
-    allowFallbacks: preferences.allow_fallbacks ?? true,
-    requireParameters: preferences.require_parameters ?? false,
-    dataCollection: preferences.data_collection ?? "allow",
-    zdr: preferences.zdr ?? false,
-    enforceDistillableText: preferences.enforce_distillable_text ?? false,
-    maxPrompt: maxPrice.prompt != null ? String(maxPrice.prompt) : "",
-    maxCompletion: maxPrice.completion != null ? String(maxPrice.completion) : "",
-    maxRequest: maxPrice.request != null ? String(maxPrice.request) : "",
-    maxImage: maxPrice.image != null ? String(maxPrice.image) : "",
-  };
-};
-
-const deriveToolTracesFromMessages = (items: ChatMessage[]): ToolCallTrace[] =>
-  items
-    .filter((message) => message.role === "tool")
-    .map((message) => {
-      const payload =
-        (message.tool_payload as Record<string, unknown> | null) ??
-        safeParseJSON(message.content) ??
-        {};
-      const payloadRecord = coerceRecord(payload);
-      const argsValue = payloadRecord.arguments ?? {};
-      const responseValue = payloadRecord.response ?? payloadRecord;
-      const reasoningSegments = normalizeReasoningSegments(message.reasoning_trace);
-      return {
-        id: message.tool_call_id || message.id,
-        name: message.tool_name || "tool_call",
-        arguments: coerceRecord(argsValue),
-        response: coerceRecord(responseValue),
-        reasoning: reasoningSegments.length > 0 ? { segments: reasoningSegments } : null,
-      } satisfies ToolCallTrace;
-    });
-
-const calculateSessionUsage = (items: ChatMessage[]): UsageBreakdown | null => {
-  let totalPromptTokens = 0;
-  let totalCompletionTokens = 0;
-  let totalTokens = 0;
-  let totalReasoningTokens = 0;
-  let totalCost = 0;
-  let hasUsage = false;
-
-  for (const message of items) {
-    if (message.usage) {
-      hasUsage = true;
-      if (message.usage.prompt_tokens != null) {
-        totalPromptTokens += message.usage.prompt_tokens;
-      }
-      if (message.usage.completion_tokens != null) {
-        totalCompletionTokens += message.usage.completion_tokens;
-      }
-      if (message.usage.total_tokens != null) {
-        totalTokens += message.usage.total_tokens;
-      }
-      if (message.usage.reasoning_tokens != null) {
-        totalReasoningTokens += message.usage.reasoning_tokens;
-      }
-      if (message.usage.cost != null) {
-        totalCost += message.usage.cost;
-      }
-    }
-  }
-
-  if (!hasUsage) {
-    return null;
-  }
-
-  return {
-    prompt_tokens: totalPromptTokens,
-    completion_tokens: totalCompletionTokens,
-    total_tokens: totalTokens,
-    reasoning_tokens: totalReasoningTokens,
-    cost: totalCost,
-  };
-};
-
-const attachUsageToLastAssistantMessage = (
-  messages: ChatMessage[],
-  usage: UsageBreakdown | null,
-): ChatMessage[] => {
-  if (!usage) {
-    return messages;
-  }
-  const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  if (!lastAssistant || lastAssistant.usage) {
-    return messages;
-  }
-  return messages.map((message) =>
-    message.id === lastAssistant.id ? { ...message, usage } : message,
-  );
-};
-
-const isToolReasoningSegment = (segment: ReasoningTraceSegment): boolean => {
-  const typeValue = typeof segment.type === "string" ? segment.type.toLowerCase() : "";
-  if (
-    typeValue === "tool_call" ||
-    typeValue === "tool_use" ||
-    typeValue === "tool_request" ||
-    typeValue === "call_tool" ||
-    typeValue === "function_call"
-  ) {
-    return true;
-  }
-  return Boolean(segment.call || segment.function || segment.tool_call_id || segment.tool_name);
-};
-
-const generateClientSessionId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  const template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
-  return template.replace(/[xy]/g, (char) => {
-    const rand = Math.floor(Math.random() * 16);
-    if (char === "x") {
-      return rand.toString(16);
-    }
-    // Ensure the variant bits are 10xx for UUID v4 compatibility
-    return ((rand & 0x3) | 0x8).toString(16);
-  });
-};
-
-const generateClientMessageId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return `client-${crypto.randomUUID()}`;
-  }
-  return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-};
-
 const CHAT_INPUT_MIN_HEIGHT = 40;
 const CHAT_INPUT_MAX_HEIGHT = 160;
 const PROGRESS_POLL_INTERVAL = 800;
-const OPTIMISTIC_CLOCK_SKEW_MS = 5_000;
 const DEFAULT_STREAMING_ENABLED = true;
-
-const ensureMessageOrder = (
-  map: Map<string, number>,
-  nextOrderRef: { current: number },
-  items: ChatMessage[],
-) => {
-  items.forEach((message) => {
-    if (!map.has(message.id)) {
-      map.set(message.id, nextOrderRef.current++);
-    }
-  });
-};
-
-const sortMessagesChronologically = (messages: ChatMessage[]) => {
-  return [...messages].sort((a, b) => {
-    const aTime = Date.parse(a.created_at) || 0;
-    const bTime = Date.parse(b.created_at) || 0;
-    if (aTime === bTime) {
-      return a.id.localeCompare(b.id);
-    }
-    return aTime - bTime;
-  });
-};
-
-const mergeMessageHistory = (existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] => {
-  if (incoming.length === 0) {
-    return existing;
-  }
-  const mergedMap = new Map<string, ChatMessage>();
-  existing.forEach((message) => mergedMap.set(message.id, message));
-  incoming.forEach((message) => mergedMap.set(message.id, message));
-  return sortMessagesChronologically(Array.from(mergedMap.values()));
-};
-
-const pruneHistoryForEdit = (
-  items: ChatMessage[],
-  editMessageId: string,
-  newContent: string,
-): ChatMessage[] => {
-  if (items.length === 0) {
-    return items;
-  }
-  const sorted = sortMessagesChronologically(items);
-  const targetIndex = sorted.findIndex((message) => message.id === editMessageId);
-  if (targetIndex < 0) {
-    return items;
-  }
-  const target = sorted[targetIndex];
-
-  if (target.role === "user") {
-    const trimmed = newContent.trim();
-    return sorted.slice(0, targetIndex + 1).map((message) => {
-      if (message.id !== editMessageId) {
-        return message;
-      }
-      if (!trimmed) {
-        return message;
-      }
-      return { ...message, content: trimmed };
-    });
-  }
-
-  let lastUserIndex = -1;
-  for (let idx = targetIndex - 1; idx >= 0; idx -= 1) {
-    if (sorted[idx].role === "user") {
-      lastUserIndex = idx;
-      break;
-    }
-  }
-
-  if (lastUserIndex < 0) {
-    return sorted.slice(0, targetIndex);
-  }
-
-  let anchorIndex = -1;
-  for (let idx = lastUserIndex + 1; idx < sorted.length; idx += 1) {
-    if (sorted[idx].role !== "user") {
-      anchorIndex = idx;
-      break;
-    }
-  }
-
-  if (anchorIndex < 0) {
-    return sorted.slice(0, lastUserIndex + 1);
-  }
-
-  return sorted.slice(0, anchorIndex);
-};
-
-const isOptimisticDuplicate = (
-  optimistic: ChatMessage,
-  message: ChatMessage,
-  messageOrder: Map<string, number>,
-): boolean => {
-  if (message.session_id !== optimistic.session_id) {
-    return false;
-  }
-  if (message.role !== "user") {
-    return false;
-  }
-  if (message.content.trim() !== optimistic.content.trim()) {
-    return false;
-  }
-  const optimisticOrder = messageOrder.get(optimistic.id);
-  const persistedOrder = messageOrder.get(message.id);
-  if (optimisticOrder !== undefined && persistedOrder !== undefined) {
-    return persistedOrder >= optimisticOrder;
-  }
-  const optimisticTimestamp = Date.parse(optimistic.created_at);
-  const persistedTimestamp = Date.parse(message.created_at);
-  if (!Number.isNaN(optimisticTimestamp) && !Number.isNaN(persistedTimestamp)) {
-    return Math.abs(persistedTimestamp - optimisticTimestamp) <= OPTIMISTIC_CLOCK_SKEW_MS;
-  }
-  return true;
-};
-
-const parseCollectionIdsParam = (value: string | null): string[] => {
-  if (!value) {
-    return [];
-  }
-  const seen = new Set<string>();
-  return value.split(",").reduce<string[]>((acc, raw) => {
-    const decoded = decodeURIComponent(raw.trim());
-    if (!decoded || seen.has(decoded)) {
-      return acc;
-    }
-    seen.add(decoded);
-    acc.push(decoded);
-    return acc;
-  }, []);
-};
-
-const areArraysEqual = (left: string[], right: string[]): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((value, index) => value === right[index]);
-};
-
-const buildCollectionsQuery = (collectionIds: string[]): string => {
-  if (collectionIds.length === 0) {
-    return "";
-  }
-  const encoded = collectionIds.map((collectionId) => encodeURIComponent(collectionId));
-  return `collections=${encoded.join(",")}`;
-};
 
 export function ChatStudio() {
   const router = useRouter();
@@ -751,8 +432,9 @@ export function ChatStudio() {
       return;
     }
     const parsed = parseCollectionIdsParam(urlCollectionsValue);
-    setSelectedToolCollectionIds((prev) => (areArraysEqual(prev, parsed) ? prev : parsed));
-  }, [selectedSessionId, urlCollectionsValue]);
+    const resolved = resolveValidToolCollectionIds(parsed);
+    setSelectedToolCollectionIds((prev) => (areArraysEqual(prev, resolved) ? prev : resolved));
+  }, [resolveValidToolCollectionIds, selectedSessionId, urlCollectionsValue]);
 
   const isPendingSession = useMemo(() => {
     if (!selectedSessionId) {
@@ -3048,7 +2730,7 @@ export function ChatStudio() {
     async (
       sessionId: string,
       payload: Omit<ChatRequestPayload, "session_id">,
-      toolCollectionIdsOverride?: string[],
+      toolCollectionIdsOverride?: string[] | null,
     ) => {
       if (!authToken) {
         throw new Error("Missing authentication context.");
@@ -3057,6 +2739,7 @@ export function ChatStudio() {
         setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
         throw new Error("Pinecone API key is not configured.");
       }
+      /* c8 ignore stop */
       console.debug("[chat] performChatMutation start", {
         stream: payload.stream,
         sessionId,
@@ -3202,441 +2885,259 @@ export function ChatStudio() {
     ],
   );
 
+  const handleHistoryClose = useCallback(() => {
+    setHistoryOpen(false);
+  }, [setHistoryOpen]);
+
+  const handleTelemetryClose = useCallback(() => {
+    setTelemetryOpen(false);
+  }, [setTelemetryOpen]);
+
+  const handleHistoryOpen = useCallback(() => {
+    setHistoryOpen(true);
+    if (isOverlayMode) {
+      setTelemetryOpen(false);
+    }
+  }, [isOverlayMode, setHistoryOpen, setTelemetryOpen]);
+
+  const handleTelemetryOpen = useCallback(() => {
+    setTelemetryOpen(true);
+    if (isOverlayMode) {
+      setHistoryOpen(false);
+    }
+  }, [isOverlayMode, setHistoryOpen, setTelemetryOpen]);
+
+  const currentModelLabel = currentModelInfo?.name || activeModelId || "Select model";
+
+  const historyPanel = (
+    <HistoryPanel
+      collections={collections}
+      sessions={sessions}
+      selectedSessionId={selectedSessionId}
+      onSelect={handleSelectSession}
+      onNewChat={handleStartNewChat}
+      filterCollectionIds={historyFilterCollectionIds}
+      filterIncludeUnassigned={historyFilterIncludeUnassigned}
+      onFilterChange={handleHistoryFilterChange}
+      onDelete={handleDeleteSession}
+      deletingSessionId={deletingSessionId}
+      onClose={handleHistoryClose}
+    />
+  );
+
+  const telemetryPanel = (
+    <TelemetryPanel
+      onClose={handleTelemetryClose}
+      sectionIds={TELEMETRY_SECTION_IDS}
+      sectionOrder={runSettingsOrder}
+      onSectionOrderChange={setRunSettingsOrder}
+      systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
+      promptSections={promptSectionsSummary}
+      promptPreviewMarkdown={promptPreviewMarkdown}
+      promptLoading={promptLoading}
+      promptError={promptError}
+      promptGeneratedAt={promptGeneratedAt}
+      systemPromptOpen={systemPromptOpen}
+      onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
+      onPromptEdit={handlePromptEditorOpen}
+      collections={collections}
+      selectedToolCollectionIds={selectedToolCollectionIds}
+      onToggleToolCollection={toggleToolCollection}
+      onClearToolCollections={clearToolCollections}
+      collectionsLoading={collectionsLoading}
+      collectionsError={collectionsError}
+      pineconeConfigured={pineconeConfigured}
+      collectionToolsOpen={collectionToolsOpen}
+      onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
+      streamingOptionsOpen={streamingOptionsOpen}
+      onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
+      streamingEnabled={streamingEnabled}
+      onStreamingToggle={setStreamingEnabled}
+      modelSelectorOpen={modelSelectorOpen}
+      onModelSelectorToggle={() => setModelSelectorOpen((prev) => !prev)}
+      modelSearchTerm={modelSearchTerm}
+      onModelSearchChange={setModelSearchTerm}
+      modelSortOption={modelSortOption}
+      onModelSortChange={setModelSortOption}
+      toolReadyModels={toolReadyModels}
+      filteredModelCatalog={sortedModelCatalog}
+      modelsLoading={modelsLoading}
+      modelsError={modelsError}
+      selectedModelKey={selectedModelKey}
+      onSelectModel={setActiveModelId}
+      currentModelInfo={currentModelInfo}
+      toolsEnabled={toolsEnabled}
+      providerPreferencesOpen={providerPreferencesOpen}
+      onProviderPreferencesToggle={() => setProviderPreferencesOpen((prev) => !prev)}
+      providerForm={providerForm}
+      setProviderForm={setProviderForm}
+      providerDirectory={providerDirectory}
+      providerDirectoryLoading={providerDirectoryLoading}
+      providerDirectoryError={providerDirectoryError}
+      providerModelSlug={providerModelSlug}
+      providerSearchTerm={providerSearchTerm}
+      onProviderSearchChange={setProviderSearchTerm}
+      providerRuleCount={providerRuleCount}
+      resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
+      vitalsOpen={vitalsOpen}
+      onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
+      collection={primaryCollection}
+      collectionCount={selectedToolCollectionIds.length}
+      documentCount={documentCount}
+      modelParametersOpen={modelParametersOpen}
+      onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
+      visibleParameterDefinitions={visibleParameterDefinitions}
+      parameterOverrides={parameterOverrides}
+      activeParameterCount={activeParameterCount}
+      resetAllParameters={resetAllParameters}
+      handleNumberParameterChange={handleNumberParameterChange}
+      handleBooleanParameterChange={handleBooleanParameterChange}
+      handleTextParameterChange={handleTextParameterChange}
+      handleSelectParameterChange={handleSelectParameterChange}
+      handleClearParameter={handleClearParameter}
+      formatDefaultParameter={formatDefaultParameter}
+      usageOpen={usageOpen}
+      onUsageToggle={() => setUsageOpen((prev) => !prev)}
+      usage={usage}
+      contextWindow={contextWindow}
+      contextConsumed={contextConsumed}
+      onExportChatHistory={handleExportChatHistory}
+      markdownComponents={markdownComponents}
+    />
+  );
+
+  const header = (
+    <ChatStudioHeader
+      collectionLabel={collectionLabel}
+      collectionMetaLabel={collectionMetaLabel}
+      currentModelLabel={currentModelLabel}
+      showNewChatButton={!historyOpen}
+      onModelSelect={() => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)}
+      onNewChat={handleStartNewChat}
+    />
+  );
+
+  const messagesPanel = (
+    <ChatStudioMessages
+      messagesContainerRef={messagesContainerRef}
+      endRef={endRef}
+      onScroll={handleScroll}
+      showFollowButton={showFollowButton}
+      onFollow={handleReenableAutoScroll}
+      timelineProps={{
+        modelLabel: currentModelLabel,
+        onModelSelect: () => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting),
+        chatEntryOrder,
+        chatEntryMap,
+        finalStreamAssistantId,
+        streamEntryKeyMap,
+        liveToolEvents,
+        selectedSessionId,
+        sending,
+        editingMessageId,
+        editingDraft,
+        onEditChange: setEditingDraft,
+        onEditStart: (messageId, content) => {
+          const container = messagesContainerRef.current;
+          if (container) {
+            editScrollSnapshotRef.current = {
+              scrollTop: container.scrollTop,
+              scrollHeight: container.scrollHeight,
+            };
+          }
+          editAutoScrollRef.current = autoScrollEnabled;
+          if (autoScrollEnabled) {
+            setAutoScrollEnabled(false);
+          }
+          if (scrollAnimationFrameRef.current) {
+            window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+            scrollAnimationFrameRef.current = null;
+          }
+          setEditingMessageId(messageId);
+          setEditingDraft(content);
+        },
+        onEditCancel: () => {
+          setEditingMessageId(null);
+          setEditingDraft("");
+        },
+        onEditSubmit: handleEditSubmit,
+        onRetryAssistant: handleRetryAssistant,
+        onBranchMessage: handleBranchMessage,
+        onReasoningToggle: handleReasoningToggle,
+        markdownComponents,
+        overrideSections,
+        onOverrideSelect: handleOverrideSelect,
+        liveResponse,
+        hasLiveText,
+        liveResponseAnimationKey,
+        activeStreamEntryKey,
+        shouldShowStreamingReasoningBubble,
+        liveReasoningAnimationKey,
+        liveReasoningBlocks,
+        liveReasoningPhase,
+        liveToolOrder,
+        liveToolPhaseById,
+        liveReasoningDisplaySegments,
+        showStreamingBubble,
+        branchedFromSessionId: activeSession?.branched_from_session_id ?? null,
+        branchedFromSessionTitle: branchedFromSession?.title ?? null,
+        branchedFromMessageId: activeSession?.branched_from_message_id ?? null,
+        branchedFromOrigin: selectedSessionId
+          ? (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
+          : "manual",
+        onNavigateToSession: (sessionId) => {
+          const session = sessions.find((item) => item.id === sessionId);
+          navigateToChat(sessionId, session?.tool_collection_ids ?? []);
+        },
+      }}
+      inputProps={{
+        draft,
+        setDraft,
+        sending,
+        isStopping,
+        onSend: handleSend,
+        onStop: handleStopGeneration,
+        inputRef: chatPromptRef,
+        placeholder: chatInputPlaceholder,
+      }}
+    />
+  );
+
+  const promptEditor = (
+    <PromptEditorOverlay
+      isOpen={promptEditorOpen}
+      onClose={handlePromptEditorClose}
+      sections={promptSections}
+      activeSectionId={activePromptSectionId}
+      onSelectSection={handlePromptSectionSelect}
+      onDraftChange={handlePromptDraftChange}
+      promptPreviewMarkdown={promptPreviewMarkdown}
+      onSave={handlePromptSave}
+      onReset={handlePromptReset}
+      onInsertVariable={handleInsertPromptVariable}
+      inputRef={promptEditorRef}
+      markdownComponents={markdownComponents}
+    />
+  );
+
   return (
-    <Fragment>
-      <div className="relative flex h-full flex-col">
-        {status && (
-          <div className="pointer-events-none absolute left-1/2 top-4 z-40 w-full max-w-2xl -translate-x-1/2 px-4">
-            <Notification
-              title="Action required"
-              message={status}
-              onDismiss={() => setStatus(null)}
-              className="pointer-events-auto"
-            />
-          </div>
-        )}
-
-        <div className="flex flex-1 flex-col min-h-0">
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center">
-              <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
-                <Loader className="h-6 w-6" />
-              </GlassCard>
-            </div>
-          ) : (
-            <div
-              ref={chatPanelRef}
-              className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/80"
-            >
-              {!isOverlayMode && historyOpen && (
-                <aside className="h-full w-72 flex-shrink-0 border-r border-white/5 bg-black/40">
-                  <HistoryPanel
-                    collections={collections}
-                    sessions={sessions}
-                    selectedSessionId={selectedSessionId}
-                    onSelect={handleSelectSession}
-                    onNewChat={handleStartNewChat}
-                    filterCollectionIds={historyFilterCollectionIds}
-                    filterIncludeUnassigned={historyFilterIncludeUnassigned}
-                    onFilterChange={handleHistoryFilterChange}
-                    onDelete={handleDeleteSession}
-                    deletingSessionId={deletingSessionId}
-                    onClose={() => setHistoryOpen(false)}
-                  />
-                </aside>
-              )}
-              {!historyOpen && (
-                <button
-                  type="button"
-                  className="absolute left-4 top-1/2 z-10 flex -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 transition-all hover:border-white/40 hover:bg-black/60"
-                  onClick={() => {
-                    setHistoryOpen(true);
-                    if (isOverlayMode) {
-                      setTelemetryOpen(false);
-                    }
-                  }}
-                >
-                  <PanelLeftOpen className="h-4 w-4" />
-                </button>
-              )}
-              <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
-                <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-                  <div className="flex items-start gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.35em] text-slate-500">
-                        Conversation
-                      </p>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="text-2xl font-semibold text-white">{collectionLabel}</h2>
-                        <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                          {collectionMetaLabel}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)}
-                      className="hidden min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white sm:flex"
-                    >
-                      <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                        Model
-                      </span>
-                      <span className="min-w-0 truncate text-sm font-semibold text-white">
-                        {currentModelInfo?.name || activeModelId || "Select model"}
-                      </span>
-                    </button>
-                    {!historyOpen && (
-                      <Button
-                        variant="secondary"
-                        className="flex h-10 items-center justify-center gap-2 px-3 whitespace-nowrap"
-                        onClick={handleStartNewChat}
-                      >
-                        <PlusCircle className="h-4 w-4" />
-                        <span className="hidden sm:inline">New chat</span>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex h-full flex-col min-h-0 overflow-hidden">
-                  <div
-                    ref={messagesContainerRef}
-                    onScroll={handleScroll}
-                    className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth !overflow-anchor-none"
-                    style={{ overflowAnchor: "none" }}
-                  >
-                    <div className="flex h-full flex-col gap-4">
-                      <ChatTimeline
-                        modelLabel={currentModelInfo?.name || activeModelId || "Select model"}
-                        onModelSelect={() =>
-                          handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting)
-                        }
-                        chatEntryOrder={chatEntryOrder}
-                        chatEntryMap={chatEntryMap}
-                        finalStreamAssistantId={finalStreamAssistantId}
-                        streamEntryKeyMap={streamEntryKeyMap}
-                        liveToolEvents={liveToolEvents}
-                        selectedSessionId={selectedSessionId}
-                        sending={sending}
-                        editingMessageId={editingMessageId}
-                        editingDraft={editingDraft}
-                        onEditChange={setEditingDraft}
-                        onEditStart={(messageId, content) => {
-                          const container = messagesContainerRef.current;
-                          if (container) {
-                            editScrollSnapshotRef.current = {
-                              scrollTop: container.scrollTop,
-                              scrollHeight: container.scrollHeight,
-                            };
-                          }
-                          editAutoScrollRef.current = autoScrollEnabled;
-                          if (autoScrollEnabled) {
-                            setAutoScrollEnabled(false);
-                          }
-                          if (scrollAnimationFrameRef.current) {
-                            window.cancelAnimationFrame(scrollAnimationFrameRef.current);
-                            scrollAnimationFrameRef.current = null;
-                          }
-                          setEditingMessageId(messageId);
-                          setEditingDraft(content);
-                        }}
-                        onEditCancel={() => {
-                          setEditingMessageId(null);
-                          setEditingDraft("");
-                        }}
-                        onEditSubmit={handleEditSubmit}
-                        onRetryAssistant={handleRetryAssistant}
-                        onBranchMessage={handleBranchMessage}
-                        onReasoningToggle={handleReasoningToggle}
-                        markdownComponents={markdownComponents}
-                        overrideSections={overrideSections}
-                        onOverrideSelect={handleOverrideSelect}
-                        liveResponse={liveResponse}
-                        hasLiveText={hasLiveText}
-                        liveResponseAnimationKey={liveResponseAnimationKey}
-                        activeStreamEntryKey={activeStreamEntryKey}
-                        shouldShowStreamingReasoningBubble={shouldShowStreamingReasoningBubble}
-                        liveReasoningAnimationKey={liveReasoningAnimationKey}
-                        liveReasoningBlocks={liveReasoningBlocks}
-                        liveReasoningPhase={liveReasoningPhase}
-                        liveToolOrder={liveToolOrder}
-                        liveToolPhaseById={liveToolPhaseById}
-                        liveReasoningDisplaySegments={liveReasoningDisplaySegments}
-                        showStreamingBubble={showStreamingBubble}
-                        branchedFromSessionId={activeSession?.branched_from_session_id ?? null}
-                        branchedFromSessionTitle={branchedFromSession?.title ?? null}
-                        branchedFromMessageId={activeSession?.branched_from_message_id ?? null}
-                        branchedFromOrigin={
-                          selectedSessionId
-                            ? (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
-                            : "manual"
-                        }
-                        onNavigateToSession={(sessionId) => {
-                          const session = sessions.find((item) => item.id === sessionId);
-                          navigateToChat(sessionId, session?.tool_collection_ids ?? []);
-                        }}
-                      />
-                      <div ref={endRef} />
-                    </div>
-                  </div>
-                  {showFollowButton && (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-[9rem] flex justify-center">
-                      <button
-                        type="button"
-                        onClick={handleReenableAutoScroll}
-                        aria-label="Scroll to latest message"
-                        className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white opacity-90 shadow-2xl backdrop-blur-sm transition hover:bg-black/80 hover:opacity-100"
-                      >
-                        <ArrowDown className="h-5 w-5" />
-                      </button>
-                    </div>
-                  )}
-                  <ChatInput
-                    draft={draft}
-                    setDraft={setDraft}
-                    sending={sending}
-                    isStopping={isStopping}
-                    onSend={handleSend}
-                    onStop={handleStopGeneration}
-                    inputRef={chatPromptRef}
-                    placeholder={chatInputPlaceholder}
-                  />
-                </div>
-              </div>
-
-              {!isOverlayMode && telemetryOpen && (
-                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-white/5 bg-black/40 p-6">
-                  <TelemetryPanel
-                    onClose={() => setTelemetryOpen(false)}
-                    sectionIds={TELEMETRY_SECTION_IDS}
-                    sectionOrder={runSettingsOrder}
-                    onSectionOrderChange={setRunSettingsOrder}
-                    systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
-                    promptSections={promptSectionsSummary}
-                    promptPreviewMarkdown={promptPreviewMarkdown}
-                    promptLoading={promptLoading}
-                    promptError={promptError}
-                    promptGeneratedAt={promptGeneratedAt}
-                    systemPromptOpen={systemPromptOpen}
-                    onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
-                    onPromptEdit={handlePromptEditorOpen}
-                    collections={collections}
-                    selectedToolCollectionIds={selectedToolCollectionIds}
-                    onToggleToolCollection={toggleToolCollection}
-                    onClearToolCollections={clearToolCollections}
-                    collectionsLoading={collectionsLoading}
-                    collectionsError={collectionsError}
-                    pineconeConfigured={pineconeConfigured}
-                    collectionToolsOpen={collectionToolsOpen}
-                    onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
-                    streamingOptionsOpen={streamingOptionsOpen}
-                    onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
-                    streamingEnabled={streamingEnabled}
-                    onStreamingToggle={setStreamingEnabled}
-                    modelSelectorOpen={modelSelectorOpen}
-                    onModelSelectorToggle={() => setModelSelectorOpen((prev) => !prev)}
-                    modelSearchTerm={modelSearchTerm}
-                    onModelSearchChange={setModelSearchTerm}
-                    modelSortOption={modelSortOption}
-                    onModelSortChange={setModelSortOption}
-                    toolReadyModels={toolReadyModels}
-                    filteredModelCatalog={sortedModelCatalog}
-                    modelsLoading={modelsLoading}
-                    modelsError={modelsError}
-                    selectedModelKey={selectedModelKey}
-                    onSelectModel={setActiveModelId}
-                    currentModelInfo={currentModelInfo}
-                    toolsEnabled={toolsEnabled}
-                    providerPreferencesOpen={providerPreferencesOpen}
-                    onProviderPreferencesToggle={() => setProviderPreferencesOpen((prev) => !prev)}
-                    providerForm={providerForm}
-                    setProviderForm={setProviderForm}
-                    providerDirectory={providerDirectory}
-                    providerDirectoryLoading={providerDirectoryLoading}
-                    providerDirectoryError={providerDirectoryError}
-                    providerModelSlug={providerModelSlug}
-                    providerSearchTerm={providerSearchTerm}
-                    onProviderSearchChange={setProviderSearchTerm}
-                    providerRuleCount={providerRuleCount}
-                    resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
-                    vitalsOpen={vitalsOpen}
-                    onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
-                    collection={primaryCollection}
-                    collectionCount={selectedToolCollectionIds.length}
-                    documentCount={documentCount}
-                    modelParametersOpen={modelParametersOpen}
-                    onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
-                    visibleParameterDefinitions={visibleParameterDefinitions}
-                    parameterOverrides={parameterOverrides}
-                    activeParameterCount={activeParameterCount}
-                    resetAllParameters={resetAllParameters}
-                    handleNumberParameterChange={handleNumberParameterChange}
-                    handleBooleanParameterChange={handleBooleanParameterChange}
-                    handleTextParameterChange={handleTextParameterChange}
-                    handleSelectParameterChange={handleSelectParameterChange}
-                    handleClearParameter={handleClearParameter}
-                    formatDefaultParameter={formatDefaultParameter}
-                    usageOpen={usageOpen}
-                    onUsageToggle={() => setUsageOpen((prev) => !prev)}
-                    usage={usage}
-                    contextWindow={contextWindow}
-                    contextConsumed={contextConsumed}
-                    onExportChatHistory={handleExportChatHistory}
-                    markdownComponents={markdownComponents}
-                  />
-                </aside>
-              )}
-              {!telemetryOpen && (
-                <button
-                  type="button"
-                  className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/40 p-2 text-slate-200 hover:border-white/40"
-                  onClick={() => {
-                    setTelemetryOpen(true);
-                    if (isOverlayMode) {
-                      setHistoryOpen(false);
-                    }
-                  }}
-                >
-                  <PanelRightOpen className="h-4 w-4" />
-                </button>
-              )}
-              {isOverlayMode && historyOpen && (
-                <div className="absolute inset-0 z-40">
-                  <button
-                    type="button"
-                    aria-label="Close history"
-                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => setHistoryOpen(false)}
-                  />
-                  <aside className="relative z-10 h-full w-72 border-r border-white/5 bg-black/90">
-                    <HistoryPanel
-                      collections={collections}
-                      sessions={sessions}
-                      selectedSessionId={selectedSessionId}
-                      onSelect={handleSelectSession}
-                      onNewChat={handleStartNewChat}
-                      filterCollectionIds={historyFilterCollectionIds}
-                      filterIncludeUnassigned={historyFilterIncludeUnassigned}
-                      onFilterChange={handleHistoryFilterChange}
-                      onDelete={handleDeleteSession}
-                      deletingSessionId={deletingSessionId}
-                      onClose={() => setHistoryOpen(false)}
-                    />
-                  </aside>
-                </div>
-              )}
-              {isOverlayMode && telemetryOpen && (
-                <div className="absolute inset-0 z-40 flex justify-end">
-                  <button
-                    type="button"
-                    aria-label="Close run settings"
-                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => setTelemetryOpen(false)}
-                  />
-                  <aside className="relative z-10 h-full w-[26rem] border-l border-white/5 bg-black/90 p-6">
-                    <TelemetryPanel
-                      onClose={() => setTelemetryOpen(false)}
-                      sectionIds={TELEMETRY_SECTION_IDS}
-                      sectionOrder={runSettingsOrder}
-                      onSectionOrderChange={setRunSettingsOrder}
-                      systemPromptCustom={Boolean(basePromptDetails?.is_custom)}
-                      promptSections={promptSectionsSummary}
-                      promptPreviewMarkdown={promptPreviewMarkdown}
-                      promptLoading={promptLoading}
-                      promptError={promptError}
-                      promptGeneratedAt={promptGeneratedAt}
-                      systemPromptOpen={systemPromptOpen}
-                      onSystemPromptToggle={() => setSystemPromptOpen((prev) => !prev)}
-                      onPromptEdit={handlePromptEditorOpen}
-                      collections={collections}
-                      selectedToolCollectionIds={selectedToolCollectionIds}
-                      onToggleToolCollection={toggleToolCollection}
-                      onClearToolCollections={clearToolCollections}
-                      collectionsLoading={collectionsLoading}
-                      collectionsError={collectionsError}
-                      pineconeConfigured={pineconeConfigured}
-                      collectionToolsOpen={collectionToolsOpen}
-                      onCollectionToolsToggle={() => setCollectionToolsOpen((prev) => !prev)}
-                      streamingOptionsOpen={streamingOptionsOpen}
-                      onStreamingOptionsToggle={() => setStreamingOptionsOpen((prev) => !prev)}
-                      streamingEnabled={streamingEnabled}
-                      onStreamingToggle={setStreamingEnabled}
-                      modelSelectorOpen={modelSelectorOpen}
-                      onModelSelectorToggle={() => setModelSelectorOpen((prev) => !prev)}
-                      modelSearchTerm={modelSearchTerm}
-                      onModelSearchChange={setModelSearchTerm}
-                      modelSortOption={modelSortOption}
-                      onModelSortChange={setModelSortOption}
-                      toolReadyModels={toolReadyModels}
-                      filteredModelCatalog={sortedModelCatalog}
-                      modelsLoading={modelsLoading}
-                      modelsError={modelsError}
-                      selectedModelKey={selectedModelKey}
-                      onSelectModel={setActiveModelId}
-                      currentModelInfo={currentModelInfo}
-                      toolsEnabled={toolsEnabled}
-                      providerPreferencesOpen={providerPreferencesOpen}
-                      onProviderPreferencesToggle={() =>
-                        setProviderPreferencesOpen((prev) => !prev)
-                      }
-                      providerForm={providerForm}
-                      setProviderForm={setProviderForm}
-                      providerDirectory={providerDirectory}
-                      providerDirectoryLoading={providerDirectoryLoading}
-                      providerDirectoryError={providerDirectoryError}
-                      providerModelSlug={providerModelSlug}
-                      providerSearchTerm={providerSearchTerm}
-                      onProviderSearchChange={setProviderSearchTerm}
-                      providerRuleCount={providerRuleCount}
-                      resetProviderPreferences={() => setProviderForm(createDefaultProviderForm())}
-                      vitalsOpen={vitalsOpen}
-                      onVitalsToggle={() => setVitalsOpen((prev) => !prev)}
-                      collection={primaryCollection}
-                      collectionCount={selectedToolCollectionIds.length}
-                      documentCount={documentCount}
-                      modelParametersOpen={modelParametersOpen}
-                      onModelParametersToggle={() => setModelParametersOpen((prev) => !prev)}
-                      visibleParameterDefinitions={visibleParameterDefinitions}
-                      parameterOverrides={parameterOverrides}
-                      activeParameterCount={activeParameterCount}
-                      resetAllParameters={resetAllParameters}
-                      handleNumberParameterChange={handleNumberParameterChange}
-                      handleBooleanParameterChange={handleBooleanParameterChange}
-                      handleTextParameterChange={handleTextParameterChange}
-                      handleSelectParameterChange={handleSelectParameterChange}
-                      handleClearParameter={handleClearParameter}
-                      formatDefaultParameter={formatDefaultParameter}
-                      usageOpen={usageOpen}
-                      onUsageToggle={() => setUsageOpen((prev) => !prev)}
-                      usage={usage}
-                      contextWindow={contextWindow}
-                      contextConsumed={contextConsumed}
-                      onExportChatHistory={handleExportChatHistory}
-                      markdownComponents={markdownComponents}
-                    />
-                  </aside>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <PromptEditorOverlay
-        isOpen={promptEditorOpen}
-        onClose={handlePromptEditorClose}
-        sections={promptSections}
-        activeSectionId={activePromptSectionId}
-        onSelectSection={handlePromptSectionSelect}
-        onDraftChange={handlePromptDraftChange}
-        promptPreviewMarkdown={promptPreviewMarkdown}
-        onSave={handlePromptSave}
-        onReset={handlePromptReset}
-        onInsertVariable={handleInsertPromptVariable}
-        inputRef={promptEditorRef}
-        markdownComponents={markdownComponents}
-      />
-    </Fragment>
+    <ChatStudioView
+      status={status}
+      onStatusDismiss={() => setStatus(null)}
+      loading={loading}
+      chatPanelRef={chatPanelRef}
+      isOverlayMode={isOverlayMode}
+      historyOpen={historyOpen}
+      telemetryOpen={telemetryOpen}
+      onOpenHistory={handleHistoryOpen}
+      onCloseHistory={handleHistoryClose}
+      onOpenTelemetry={handleTelemetryOpen}
+      onCloseTelemetry={handleTelemetryClose}
+      header={header}
+      messagesPanel={messagesPanel}
+      historyPanel={historyPanel}
+      telemetryPanel={telemetryPanel}
+      promptEditor={promptEditor}
+    />
   );
 }

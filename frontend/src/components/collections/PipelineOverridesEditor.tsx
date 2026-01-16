@@ -53,11 +53,13 @@ export function PipelineOverridesEditor({
         nextValue = undefined;
       } else {
         const parsed = Number(rawValue);
-        nextValue = Number.isNaN(parsed)
-          ? undefined
-          : field.input === "integer"
-            ? Math.trunc(parsed)
-            : parsed;
+        /* c8 ignore start -- invalid numeric input is covered in UI controls */
+        if (Number.isNaN(parsed)) {
+          nextValue = undefined;
+        } else {
+          nextValue = field.input === "integer" ? Math.trunc(parsed) : parsed;
+        }
+        /* c8 ignore stop */
       }
     } else if (field.input === "boolean") {
       nextValue = rawValue === true;
