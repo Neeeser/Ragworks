@@ -14,6 +14,7 @@ import {
 import { PipelineTraceViewer } from "@/components/traces/PipelineTraceViewer";
 import { Button } from "@/components/ui/button";
 import { fetchPipelineRunTrace, fetchQueryEventTrace } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -95,7 +96,7 @@ export const ToolCallBubble = ({
       setTraceOpen(true);
       setTraceError(null);
     } catch (error) {
-      setTraceError(error instanceof Error ? error.message : "Unable to load the retrieval trace.");
+      setTraceError(getErrorMessage(error, "Unable to load the retrieval trace."));
     } finally {
       setTraceLoading(false);
     }

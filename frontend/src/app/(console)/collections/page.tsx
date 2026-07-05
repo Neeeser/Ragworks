@@ -17,6 +17,7 @@ import {
   fetchPipelineNodes,
   fetchPipelines,
 } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { Collection, CollectionStats, NodeSpec, Pipeline } from "@/lib/types";
@@ -62,7 +63,7 @@ export default function CollectionsPage() {
         setStatsById(statsMap);
       } catch (error) {
         if (!cancelled) {
-          setMessage(error instanceof Error ? error.message : "Unable to load collections.");
+          setMessage(getErrorMessage(error, "Unable to load collections."));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -93,7 +94,7 @@ export default function CollectionsPage() {
         setNodeSpecs(specs);
       } catch (error) {
         if (!cancelled) {
-          setMessage(error instanceof Error ? error.message : "Unable to load pipelines.");
+          setMessage(getErrorMessage(error, "Unable to load pipelines."));
         }
       }
     }
@@ -138,7 +139,7 @@ export default function CollectionsPage() {
       });
       setDeleteNotice("Collection deleted.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to delete collection.");
+      setMessage(getErrorMessage(error, "Unable to delete collection."));
     } finally {
       setDeleting(false);
       setDeleteTarget(null);

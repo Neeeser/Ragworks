@@ -7,6 +7,7 @@ import {
   isOptimisticDuplicate,
 } from "@/components/chat-studio/chat-entry-helpers";
 import { getChatHistory } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { ChatStudioCoreState } from "@/components/chat-studio/hooks/use-chat-studio-state";
 import type { ChatMessage, ToolCallTrace } from "@/lib/types";
@@ -78,7 +79,7 @@ export function useSessionMessages(params: UseSessionMessagesParams): void {
         }
       } catch (error) {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : "Unable to load chat history.");
+          setStatus(getErrorMessage(error, "Unable to load chat history."));
         }
       }
     }

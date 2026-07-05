@@ -48,7 +48,7 @@ export function Field({
   const control = cloneElement(children, {
     id: controlId,
     [DESCRIBED_BY]: description
-      ? cn(children.props[DESCRIBED_BY], descriptionId)
+      ? [children.props[DESCRIBED_BY], descriptionId].filter(Boolean).join(" ")
       : children.props[DESCRIBED_BY],
     "aria-invalid": error ? true : children.props["aria-invalid"],
   });

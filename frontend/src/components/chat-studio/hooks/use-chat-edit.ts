@@ -16,6 +16,7 @@ import {
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/chat-mutation-helpers";
 import { branchChatSession } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { ParameterOverrides } from "@/lib/chat-parameters";
 import type { ChatMessage, ProviderPreferences } from "@/lib/types";
@@ -125,7 +126,7 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
         setEditingMessageId(null);
         setEditingDraft("");
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Unable to edit this turn.");
+        setStatus(getErrorMessage(error, "Unable to edit this turn."));
       } finally {
         if (skipHistoryFetchSessionRef.current === sessionId) {
           skipHistoryFetchSessionRef.current = null;
@@ -192,7 +193,7 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
         navigateToChat(branchedSession.id, branchedSession.tool_collection_ids ?? []);
         return { session: branchedSession, messages: branchedMessages };
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Unable to branch this message.");
+        setStatus(getErrorMessage(error, "Unable to branch this message."));
         return null;
       }
     },

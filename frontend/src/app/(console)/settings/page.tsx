@@ -7,6 +7,7 @@ import { ApiKeyStatusPanel } from "@/components/settings/ApiKeyStatusPanel";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import { updateUserSettings, validateUserKeys } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { UserKeyValidation } from "@/lib/types";
@@ -33,7 +34,7 @@ export default function SettingsPage() {
       const result = await validateUserKeys(token);
       setValidation(result);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to validate API keys.");
+      setMessage(getErrorMessage(err, "Unable to validate API keys."));
     } finally {
       setChecking(false);
     }
@@ -85,7 +86,7 @@ export default function SettingsPage() {
       await loadValidation();
       setMessage("Settings saved.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to update settings.");
+      setMessage(getErrorMessage(err, "Unable to update settings."));
     } finally {
       setSaving(false);
     }

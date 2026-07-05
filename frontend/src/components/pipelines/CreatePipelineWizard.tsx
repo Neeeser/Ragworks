@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Select, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createPipeline } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { PineconeIndex, Pipeline, PipelineKind } from "@/lib/types";
 
@@ -83,7 +84,7 @@ export function CreatePipelineWizard({
       onCreated(created);
       onClose();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to create pipeline.");
+      setMessage(getErrorMessage(error, "Unable to create pipeline."));
     } finally {
       setCreating(false);
     }

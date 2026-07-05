@@ -8,6 +8,7 @@ import {
   createProviderFormFromPreferences,
 } from "@/components/chat-studio/chat-payload-helpers";
 import { listChatSessions } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { ChatStudioCoreState } from "@/components/chat-studio/hooks/use-chat-studio-state";
 import type { ProviderFormState } from "@/components/chat-studio/types";
@@ -136,7 +137,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : "Unable to load chat sessions.");
+          setStatus(getErrorMessage(error, "Unable to load chat sessions."));
         }
       })
       .finally(() => {

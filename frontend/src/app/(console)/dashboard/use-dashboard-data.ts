@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchCollections, fetchDocuments, fetchPipelines, listChatSessions } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ChatSession, Collection, Document, Pipeline } from "@/lib/types";
@@ -101,7 +102,7 @@ export function useDashboardData(): UseDashboardDataResult {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load data.");
+          setError(getErrorMessage(err, "Unable to load data."));
         }
       } finally {
         if (!cancelled) {

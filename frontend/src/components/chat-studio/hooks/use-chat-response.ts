@@ -14,11 +14,11 @@ import { areArraysEqual } from "@/components/chat-studio/chat-helpers";
 import { createProviderFormFromPreferences } from "@/components/chat-studio/chat-payload-helpers";
 import {
   injectStreamedReasoning,
-  isAbortError,
   type PerformChatMutation,
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/chat-mutation-helpers";
 import { chat, streamChat } from "@/lib/api";
+import { isAbortError } from "@/lib/errors";
 
 import type { ChatCompletionPayload, ChatRequestPayload } from "@/lib/types";
 

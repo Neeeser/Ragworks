@@ -8,6 +8,7 @@ import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
 import { Loader } from "@/components/ui/loader";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createCollection } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { Collection, CollectionCreatePayload, NodeSpec, Pipeline } from "@/lib/types";
 
@@ -200,7 +201,7 @@ export function CreateCollectionWizard({
       onCreated(created);
       onClose();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to create collection.");
+      setMessage(getErrorMessage(error, "Unable to create collection."));
     } finally {
       setCreating(false);
     }

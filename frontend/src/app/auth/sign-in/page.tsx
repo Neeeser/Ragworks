@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { GlassCard } from "@/components/ui/panel";
 import { registerUser } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 export default function SignInPage() {
@@ -33,7 +34,7 @@ export default function SignInPage() {
         setMode("login");
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setMessage(getErrorMessage(error, "Something went wrong."));
     } finally {
       setSubmitting(false);
     }

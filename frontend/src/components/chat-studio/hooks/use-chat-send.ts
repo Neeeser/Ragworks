@@ -9,10 +9,10 @@ import {
   generateClientSessionId,
 } from "@/components/chat-studio/chat-helpers";
 import {
-  isAbortError,
   type PerformChatMutation,
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/chat-mutation-helpers";
+import { getErrorMessage, isAbortError } from "@/lib/errors";
 
 import type { ChatMessage, ChatSession } from "@/lib/types";
 
@@ -151,7 +151,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
       }
       if (!aborted) {
         const statusMessage =
-          error instanceof Error ? error.message : "Unable to send your message.";
+          getErrorMessage(error, "Unable to send your message.");
         setStatus(statusMessage);
       }
     } finally {

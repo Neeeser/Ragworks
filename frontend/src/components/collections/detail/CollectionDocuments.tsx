@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchDocumentChunks, fetchDocuments, fetchDocumentTrace, uploadDocument } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { cn, prettyJson, truncate } from "@/lib/utils";
 
 import type { Chunk, Document, PipelineTraceResponse } from "@/lib/types";
@@ -46,7 +47,7 @@ export function CollectionDocuments({ collectionId, token }: CollectionDocuments
         }
       } catch (error) {
         if (!cancelled) {
-          setMessage(error instanceof Error ? error.message : "Unable to load documents.");
+          setMessage(getErrorMessage(error, "Unable to load documents."));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -68,7 +69,7 @@ export function CollectionDocuments({ collectionId, token }: CollectionDocuments
       const payload = await fetchDocumentChunks(token, documentId);
       setChunksByDocument((prev) => ({ ...prev, [documentId]: payload.chunks }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load chunks.");
+      setMessage(getErrorMessage(error, "Unable to load chunks."));
     } finally {
       setWorking((prev) => ({ ...prev, [documentId]: false }));
     }
@@ -93,7 +94,7 @@ export function CollectionDocuments({ collectionId, token }: CollectionDocuments
       setDocuments(docs);
       setMessage(`Uploaded ${file.name}. Chunking in progress.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Upload failed.");
+      setMessage(getErrorMessage(error, "Upload failed."));
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -111,7 +112,7 @@ export function CollectionDocuments({ collectionId, token }: CollectionDocuments
       setActiveTraceDocumentId(documentId);
       setActiveTraceChunkId(chunkId ?? null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load trace.");
+      setMessage(getErrorMessage(error, "Unable to load trace."));
     } finally {
       setTraceLoading((prev) => ({ ...prev, [documentId]: false }));
     }

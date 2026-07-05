@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
 import { computeCollectionUmap, fetchChunkDetail, fetchCollectionUmap } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { timeAgo } from "@/lib/utils";
 
 import type { ChunkDetail, UmapPoint, UmapVisualization } from "@/lib/types";
@@ -61,7 +62,7 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
       const data = await fetchCollectionUmap(token, collectionId);
       setVisualization(data);
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "Unable to load UMAP.";
+      const detail = getErrorMessage(error, "Unable to load UMAP.");
       setVisualization(null);
       setMessage(detail);
     } finally {
@@ -87,7 +88,7 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
       const data = await computeCollectionUmap(token, collectionId);
       setVisualization(data);
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "Unable to compute UMAP.";
+      const detail = getErrorMessage(error, "Unable to compute UMAP.");
       setMessage(detail);
     } finally {
       setComputing(false);
@@ -104,7 +105,7 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
         const detail = await fetchChunkDetail(token, point.chunk_id);
         setChunkDetail(detail);
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unable to load chunk details.";
+        const detail = getErrorMessage(error, "Unable to load chunk details.");
         setChunkError(detail);
       } finally {
         setChunkLoading(false);

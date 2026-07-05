@@ -110,9 +110,6 @@ export interface UseChatMutationResult {
   handleDeleteSession: (sessionId: string) => Promise<void>;
 }
 
-export const isAbortError = (value: unknown): value is DOMException =>
-  value instanceof DOMException && value.name === "AbortError";
-
 /**
  * Injects freshly-streamed reasoning segments into the final assistant message when the
  * persisted response omitted them (tool-call turns can drop the just-streamed trace).

@@ -14,18 +14,6 @@ import type {
 } from "@/components/chat-studio/hooks/chat-stream-reducer";
 import type { ReasoningTraceSegment } from "@/lib/types";
 
-// Re-exported so existing consumers can keep importing the reducer surface from the hook.
-export {
-  chatStreamReducer,
-  initialChatStreamState,
-  upsertLiveToolEvents,
-} from "@/components/chat-studio/hooks/chat-stream-reducer";
-export type {
-  ChatStreamAction,
-  ChatStreamState,
-  LiveToolUpsert,
-} from "@/components/chat-studio/hooks/chat-stream-reducer";
-
 export interface UseChatStreamResult extends ChatStreamState {
   /** Mirror of `isStreamingResponse` for synchronous reads (e.g. history polling). */
   isStreamingResponseRef: React.MutableRefObject<boolean>;

@@ -6,6 +6,7 @@ import { useChatEdit } from "@/components/chat-studio/hooks/use-chat-edit";
 import { useChatResponse } from "@/components/chat-studio/hooks/use-chat-response";
 import { useChatSend } from "@/components/chat-studio/hooks/use-chat-send";
 import { deleteChatSession } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type {
   UseChatMutationParams,
@@ -130,7 +131,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
           }
         }
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Unable to delete chat session.");
+        setStatus(getErrorMessage(error, "Unable to delete chat session."));
       } finally {
         setDeletingSessionId((current) => (current === sessionId ? null : current));
       }

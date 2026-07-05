@@ -1,4 +1,5 @@
 import { apiFetch, API_BASE_URL, parseError } from "@/lib/api/client";
+import { isAbortError } from "@/lib/errors";
 
 import type {
   ChatBranchPayload,
@@ -104,9 +105,6 @@ type ChatStreamEvent =
     }
   | { type: "final"; payload: ChatCompletionPayload }
   | { type: "error"; message?: string };
-
-const isAbortError = (value: unknown): value is DOMException =>
-  value instanceof DOMException && value.name === "AbortError";
 
 /**
  * Single source of truth for the shape handed to `onToolCall` / `onToolResult`.

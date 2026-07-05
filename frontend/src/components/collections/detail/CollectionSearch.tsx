@@ -7,6 +7,7 @@ import { PipelineTraceViewer } from "@/components/traces/PipelineTraceViewer";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchQueryEventTrace, runCollectionQuery } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { truncate } from "@/lib/utils";
 
 import type { CollectionQueryResult, PipelineTraceResponse } from "@/lib/types";
@@ -40,7 +41,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
       setTraceChunkId(null);
       setTraceOpen(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Query failed.");
+      setMessage(getErrorMessage(error, "Query failed."));
     } finally {
       setWorking(false);
     }
@@ -59,7 +60,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
       setTraceChunkId(chunkId ?? null);
       setTraceOpen(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load trace.");
+      setMessage(getErrorMessage(error, "Unable to load trace."));
     } finally {
       setTraceLoading(false);
     }

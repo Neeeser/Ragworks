@@ -13,6 +13,7 @@ import { CollectionVisualization } from "@/components/collections/detail/visuali
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollection, fetchCollectionStatsById, fetchPipelines } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { Collection, CollectionStats, Pipeline } from "@/lib/types";
@@ -57,7 +58,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         setRetrievalPipelines(retrieval);
       } catch (error) {
         if (!cancelled) {
-          setMessage(error instanceof Error ? error.message : "Unable to load collection.");
+          setMessage(getErrorMessage(error, "Unable to load collection."));
         }
       } finally {
         if (!cancelled) {

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
 import { updateCollection } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { Collection, CollectionStats, Pipeline } from "@/lib/types";
 
@@ -72,7 +73,7 @@ export function CollectionOverview({
       onCollectionUpdated(updated);
       setMessage("Pipeline bindings updated.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to update pipelines.");
+      setMessage(getErrorMessage(error, "Unable to update pipelines."));
     } finally {
       setBinding(false);
     }

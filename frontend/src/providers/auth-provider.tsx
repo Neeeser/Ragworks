@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { getProfile, loginRequest } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 
 import type { User } from "@/lib/types";
 
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setToken(null);
         window.localStorage.removeItem(STORAGE_KEY);
-        setError(err instanceof Error ? err.message : "Unable to load profile.");
+        setError(getErrorMessage(err, "Unable to load profile."));
       } finally {
         setLoading(false);
       }
