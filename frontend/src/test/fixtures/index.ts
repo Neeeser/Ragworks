@@ -33,6 +33,8 @@ import type {
 export const TIMESTAMP = "2024-01-01T00:00:00.000Z";
 export const USER_ID = "user-1";
 const PROVIDER_A = "provider-a";
+const CHAT_SETTINGS_TYPE = "chat.settings";
+const CHAT_SETTINGS_LABEL = "Chat settings";
 
 export function makeUser(overrides: Partial<User> = {}): User {
   return {
@@ -149,8 +151,8 @@ export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
       nodes: [
         {
           id: "node-1",
-          type: "chat.settings",
-          name: "Chat settings",
+          type: CHAT_SETTINGS_TYPE,
+          name: CHAT_SETTINGS_LABEL,
           config: { chat_model: "model-1", context_window: 4096 },
         },
       ],
@@ -175,8 +177,8 @@ export function makePipelineVersion(overrides: Partial<PipelineVersion> = {}): P
 
 export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
   return {
-    type: "chat.settings",
-    label: "Chat settings",
+    type: CHAT_SETTINGS_TYPE,
+    label: CHAT_SETTINGS_LABEL,
     category: "chat",
     description: "Configure chat model",
     example: "",
@@ -350,8 +352,8 @@ export function makeNodeRunTrace(
     id: "node-run-1",
     run_id: "run-1",
     node_id: "node-1",
-    node_type: "chat.settings",
-    node_name: "Chat settings",
+    node_type: CHAT_SETTINGS_TYPE,
+    node_name: CHAT_SETTINGS_LABEL,
     sequence_index: 0,
     status: "completed",
     started_at: TIMESTAMP,
@@ -402,3 +404,6 @@ export function makeChatCompletion(
     ...overrides,
   };
 }
+
+// Rich chat-studio scenario fixtures (relocated from chat-studio/__tests__).
+export * from "@/test/fixtures/chat-scenarios";

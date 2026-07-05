@@ -10,7 +10,7 @@ import type { ChatMessage, ReasoningTraceSegment, ToolCallTrace } from "@/lib/ty
 
 vi.mock("@/components/chat-studio/Tooling", () => ({
   ToolCallBubble: ({ label, footer }: { label: string; footer?: React.ReactNode }) => (
-    <div data-testid="tool-bubble">
+    <div data-testid={TOOL_BUBBLE_TESTID}>
       <span>{label}</span>
       {footer}
     </div>
@@ -40,6 +40,10 @@ type ChatTimelineProps = React.ComponentProps<typeof ChatTimeline>;
 
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
 const assistantEntryId = "entry-assistant";
+const userEntryId = "entry-user";
+const TOOL_BUBBLE_TESTID = "tool-bubble";
+const ORIGINAL_CHAT_TITLE = "Original chat";
+const ASSISTANT_REASONING_TEXT = "Assistant reasoning";
 
 const buildMessage = (
   role: ChatMessage["role"],
@@ -123,21 +127,13 @@ describe("ChatTimeline", () => {
     expect(screen.getByText("No overrides yet")).toBeInTheDocument();
   });
 
-  it("renders a blank canvas when a session is selected but empty", () => {
-    const { container } = render(
-      <ChatTimeline {...baseProps({ selectedSessionId: "session-1" })} />,
-    );
-
-    expect(container.querySelector(".h-full")).toBeInTheDocument();
-  });
-
   it("renders message entries and edit actions", () => {
     const userMessage = buildMessage("user", "Hi", { id: "u1" });
     const assistantMessage = buildMessage("assistant", "Hello", { id: "a1" });
 
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,
@@ -231,7 +227,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getByTestId("tool-bubble")).toBeInTheDocument();
+    expect(screen.getByTestId(TOOL_BUBBLE_TESTID)).toBeInTheDocument();
     expect(screen.getByTestId("reasoning")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Original/ }));
     expect(onNavigateToSession).toHaveBeenCalledWith("session-2");
@@ -294,7 +290,7 @@ describe("ChatTimeline", () => {
 
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,
@@ -373,7 +369,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("tool-bubble").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId(TOOL_BUBBLE_TESTID).length).toBeGreaterThan(0);
     expect(screen.getByTestId("typing")).toBeInTheDocument();
   });
 
@@ -408,7 +404,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    const labels = screen.getAllByTestId("tool-bubble").map((node) => node.textContent ?? "");
+    const labels = screen.getAllByTestId(TOOL_BUBBLE_TESTID).map((node) => node.textContent ?? "");
     expect(labels[0]).toContain("Alpha");
     expect(labels[1]).toContain("Beta");
   });
@@ -444,7 +440,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    const labels = screen.getAllByTestId("tool-bubble").map((node) => node.textContent ?? "");
+    const labels = screen.getAllByTestId(TOOL_BUBBLE_TESTID).map((node) => node.textContent ?? "");
     expect(labels[0]).toContain("Beta");
     expect(labels[1]).toContain("Alpha");
   });
@@ -452,7 +448,7 @@ describe("ChatTimeline", () => {
   it("skips empty reasoning blocks in streaming phases", () => {
     const userMessage = buildMessage("user", "Hi", { id: "u4" });
     const entry: ChatEntry = {
-      id: "entry-user",
+      id: userEntryId,
       type: "user",
       message: userMessage,
       content: userMessage.content,
@@ -551,7 +547,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("tool-bubble")).toHaveLength(2);
+    expect(screen.getAllByTestId(TOOL_BUBBLE_TESTID)).toHaveLength(2);
   });
 
   it("uses entry ids for tool entries when no keys are present", () => {
@@ -580,7 +576,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getByTestId("tool-bubble")).toBeInTheDocument();
+    expect(screen.getByTestId(TOOL_BUBBLE_TESTID)).toBeInTheDocument();
   });
 
   it("renders branched tool banners without session links", () => {
@@ -608,14 +604,14 @@ describe("ChatTimeline", () => {
           chatEntryMap: new Map([[toolEntry.id, toolEntry]]),
           selectedSessionId: "session-1",
           branchedFromSessionId: null,
-          branchedFromSessionTitle: "Original chat",
+          branchedFromSessionTitle: ORIGINAL_CHAT_TITLE,
           branchedFromMessageId: "source-branch",
         })}
       />,
     );
 
-    expect(screen.getByText("Original chat")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Original chat" })).not.toBeInTheDocument();
+    expect(screen.getByText(ORIGINAL_CHAT_TITLE)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ORIGINAL_CHAT_TITLE })).not.toBeInTheDocument();
   });
 
   it("renders branched message banners without session links", () => {
@@ -638,13 +634,13 @@ describe("ChatTimeline", () => {
           chatEntryMap: new Map([[entry.id, entry]]),
           selectedSessionId: "session-1",
           branchedFromSessionId: null,
-          branchedFromSessionTitle: "Original chat",
+          branchedFromSessionTitle: ORIGINAL_CHAT_TITLE,
           branchedFromMessageId: "source-branch-2",
         })}
       />,
     );
 
-    expect(screen.getByText("Original chat")).toBeInTheDocument();
+    expect(screen.getByText(ORIGINAL_CHAT_TITLE)).toBeInTheDocument();
   });
 
   it("renders branched message banners with session links", () => {
@@ -698,7 +694,7 @@ describe("ChatTimeline", () => {
 
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,
@@ -761,7 +757,7 @@ describe("ChatTimeline", () => {
     const userMessage = buildMessage("user", "Hi", { id: "u1" });
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,
@@ -788,8 +784,8 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("reasoning")[0]).toHaveTextContent("Assistant reasoning");
-    expect(screen.getAllByTestId("tool-bubble")[0]).toHaveTextContent("Tool");
+    expect(screen.getAllByTestId("reasoning")[0]).toHaveTextContent(ASSISTANT_REASONING_TEXT);
+    expect(screen.getAllByTestId(TOOL_BUBBLE_TESTID)[0]).toHaveTextContent("Tool");
   });
 
   it("shows assistant subtitle when live reasoning types are non-string", () => {
@@ -819,7 +815,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getByTestId("reasoning")).toHaveTextContent("Assistant reasoning");
+    expect(screen.getByTestId("reasoning")).toHaveTextContent(ASSISTANT_REASONING_TEXT);
   });
 
   it("renders tool reasoning payloads and multi-phase reasoning subtitles", () => {
@@ -842,7 +838,7 @@ describe("ChatTimeline", () => {
     const userMessage = buildMessage("user", "Hi", { id: "u1" });
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,
@@ -873,15 +869,15 @@ describe("ChatTimeline", () => {
     );
 
     expect(screen.getAllByTestId("reasoning").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByTestId("reasoning")[0]).toHaveTextContent("Assistant reasoning");
-    expect(screen.getAllByTestId("tool-bubble")[0]).toHaveTextContent("search");
+    expect(screen.getAllByTestId("reasoning")[0]).toHaveTextContent(ASSISTANT_REASONING_TEXT);
+    expect(screen.getAllByTestId(TOOL_BUBBLE_TESTID)[0]).toHaveTextContent("search");
   });
 
   it("handles missing streaming reasoning blocks", () => {
     const userMessage = buildMessage("user", "Hi", { id: "u1" });
     const entries: ChatEntry[] = [
       {
-        id: "entry-user",
+        id: userEntryId,
         type: "user",
         message: userMessage,
         content: userMessage.content,

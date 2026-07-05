@@ -38,6 +38,7 @@ import {
   makeProviderDirectory,
   makeQueryResult,
   makeTraceResponse,
+  makeUmapVisualization,
   makeUser,
   makeValidation,
 } from "@/test/fixtures";
@@ -88,7 +89,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchDocumentChunks: vi.fn(async () => makeChunkVisualization()),
     fetchChunkDetail: vi.fn(async () => makeChunkDetail()),
     fetchCollectionUmap: vi.fn(async () => null),
-    computeCollectionUmap: vi.fn(async () => null),
+    computeCollectionUmap: vi.fn(async () => makeUmapVisualization()),
     runCollectionQuery: vi.fn(async () => makeQueryResult()),
     fetchPipelineRunTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentTrace: vi.fn(async () => makeTraceResponse()),
@@ -117,7 +118,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     // models
     fetchEmbeddingModels: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
-    listModelEndpoints: vi.fn(async () => makeProviderDirectory()),
+    listModelEndpoints: vi.fn(async () => ({ data: makeProviderDirectory() })),
     ...overrides,
   };
 }

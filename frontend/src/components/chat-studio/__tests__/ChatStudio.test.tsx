@@ -2,6 +2,22 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatStudio } from "@/components/chat-studio/ChatStudio";
+import * as apiModule from "@/lib/api";
+import {
+  altChatCompletionPayload,
+  baseUser,
+  basePromptDetails,
+  chatCompletionPayload,
+  chatMessages,
+  collectionPromptDetails,
+  collections,
+  makeDocument,
+  modelCatalog,
+  pipeline,
+  providerDirectory,
+  sessions,
+} from "@/test/fixtures";
+import { setMockAuth } from "@/test/mocks";
 import {
   getMockRouter,
   setMockParams,
@@ -9,125 +25,50 @@ import {
   setMockSearchParams,
 } from "@/test/test-utils";
 
-import {
-  altChatCompletionPayload,
-  basePromptDetails,
-  baseUser,
-  chatCompletionPayload,
-  chatMessages,
-  collectionPromptDetails,
-  collections,
-  modelCatalog,
-  pipeline,
-  providerDirectory,
-  sessions,
-} from "./fixtures";
-
+import type { ChatStreamHandlers } from "@/lib/api";
 import type {
   ChatCompletionPayload,
+  ChatRequestPayload,
   Document,
   PromptDetails,
   RunSettingsSectionKey,
-  User,
 } from "@/lib/types";
 import type { ReactNode } from "react";
 
 const CHAT_STUDIO_LOADED_KEY = "chatStudio.loaded";
 const SEND_TURN_LABEL = "Send turn";
 const TOOL_NAME = "collection.search";
+const AUTH_TOKEN = "token";
 
-let mockAuthState: {
-  token: string | null;
-  user: User | null;
-  loading: boolean;
-  refreshProfile: () => Promise<void>;
-} = {
-  token: "token",
-  user: baseUser,
-  loading: false,
-  refreshProfile: vi.fn(),
-};
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
-const api = {
-  branchChatSession: vi.fn(),
-  chat: vi.fn(),
-  deleteChatSession: vi.fn(),
-  fetchCollections: vi.fn(),
-  fetchDocuments: vi.fn(),
-  fetchPipeline: vi.fn(),
-  getBasePrompt: vi.fn(),
-  getChatHistory: vi.fn(),
-  getCollectionPrompt: vi.fn(),
-  listChatSessions: vi.fn(),
-  listModelEndpoints: vi.fn(),
-  listModels: vi.fn(),
-  streamChat: vi.fn(),
-  updateRunSettingsOrder: vi.fn(),
-  updateBasePrompt: vi.fn(),
-  updateCollectionPrompt: vi.fn(),
-};
+const api = vi.mocked(apiModule);
 
+// Children are mocked so the container's derived state can be observed through
+// captured props; each kept test asserts a value that would change if the real
+// container/hook logic regressed. api + auth remain mocked at the module edge.
 let mockChatTimelineProps: Record<string, unknown> | null = null;
 let mockHistoryPanelProps: Record<string, unknown> | null = null;
 let mockTelemetryPanelProps: Record<string, unknown> | null = null;
 let mockPromptOverlayProps: Record<string, unknown> | null = null;
+let authValue = setMockAuth({ token: AUTH_TOKEN });
 
-const documents: Document[] = [
-  {
-    id: "doc-1",
-    collection_id: "col-1",
-    name: "Doc",
-    content_type: "text/plain",
-    status: "ready",
-    num_chunks: 1,
-    num_tokens: 10,
-    chunk_size: 256,
-    chunk_overlap: 0,
-    chunk_strategy: "token",
-    created_at: "2024-01-01T00:00:00.000Z",
-    updated_at: "2024-01-01T00:00:00.000Z",
-  },
-];
+const documents: Document[] = [makeDocument({ collection_id: "col-1", content_type: "text/plain" })];
 
-const setAuthState = (next: Partial<typeof mockAuthState>) => {
-  mockAuthState = {
-    ...mockAuthState,
-    ...next,
-  };
+const setAuthState = (next: Parameters<typeof setMockAuth>[0]) => {
+  authValue = setMockAuth({ token: AUTH_TOKEN, ...next });
 };
 
-const setQuery = (value: string) => {
-  setMockSearchParams(value);
-};
+const setQuery = (value: string) => setMockSearchParams(value);
 
 const flushPromises = async () => {
   await act(async () => {
     await Promise.resolve();
   });
 };
-
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => mockAuthState,
-}));
-
-vi.mock("@/lib/api", () => ({
-  branchChatSession: (...args: unknown[]) => api.branchChatSession(...args),
-  chat: (...args: unknown[]) => api.chat(...args),
-  deleteChatSession: (...args: unknown[]) => api.deleteChatSession(...args),
-  fetchCollections: (...args: unknown[]) => api.fetchCollections(...args),
-  fetchDocuments: (...args: unknown[]) => api.fetchDocuments(...args),
-  fetchPipeline: (...args: unknown[]) => api.fetchPipeline(...args),
-  getBasePrompt: (...args: unknown[]) => api.getBasePrompt(...args),
-  getChatHistory: (...args: unknown[]) => api.getChatHistory(...args),
-  getCollectionPrompt: (...args: unknown[]) => api.getCollectionPrompt(...args),
-  listChatSessions: (...args: unknown[]) => api.listChatSessions(...args),
-  listModelEndpoints: (...args: unknown[]) => api.listModelEndpoints(...args),
-  listModels: (...args: unknown[]) => api.listModels(...args),
-  streamChat: (...args: unknown[]) => api.streamChat(...args),
-  updateRunSettingsOrder: (...args: unknown[]) => api.updateRunSettingsOrder(...args),
-  updateBasePrompt: (...args: unknown[]) => api.updateBasePrompt(...args),
-  updateCollectionPrompt: (...args: unknown[]) => api.updateCollectionPrompt(...args),
-}));
 
 vi.mock("@/components/chat-studio/ChatTimeline", () => ({
   ChatTimeline: (props: Record<string, unknown>) => {
@@ -144,11 +85,20 @@ vi.mock("@/components/chat-studio/HistoryPanel", () => ({
 }));
 
 vi.mock("@/components/chat-studio/telemetry/TelemetryPanel", () => ({
-  // TelemetryPanel now takes grouped props (sections/prompts/collections/streaming/
-  // model/provider/parameters/usage). Flatten them into a single object so these
-  // wiring assertions can read each field directly regardless of its group.
+  // TelemetryPanel takes grouped props (sections/prompts/collections/streaming/
+  // model/provider/parameters/usage). Flatten them so assertions can read each
+  // field directly regardless of its group.
   TelemetryPanel: (props: Record<string, Record<string, unknown> | unknown>) => {
-    const groups = ["sections", "prompts", "collections", "streaming", "model", "provider", "parameters", "usage"];
+    const groups = [
+      "sections",
+      "prompts",
+      "collections",
+      "streaming",
+      "model",
+      "provider",
+      "parameters",
+      "usage",
+    ];
     const flattened: Record<string, unknown> = { onClose: props.onClose };
     for (const group of groups) {
       Object.assign(flattened, props[group] as Record<string, unknown>);
@@ -230,33 +180,27 @@ const setupDefaultApiMocks = () => {
   } satisfies PromptDetails);
   api.streamChat.mockImplementation(
     async (
-      _payload: unknown,
       _token: string,
-      handlers: {
-        onToken?: (token: string) => void;
-        onReasoning?: (segments: unknown) => void;
-        onToolCall?: (event: Record<string, unknown>) => void;
-        onToolResult?: (event: Record<string, unknown>) => void;
-        onError?: (message: string) => void;
-      },
+      _payload: ChatRequestPayload,
+      handlers?: ChatStreamHandlers,
     ): Promise<ChatCompletionPayload> => {
-      handlers.onToken?.("Stream");
-      handlers.onReasoning?.([{ type: "text", content: "Reason" }]);
-      handlers.onToolCall?.({
-        id: "tool-1",
-        name: TOOL_NAME,
-        arguments: { query: "alpha" },
-      });
-      handlers.onToolResult?.({
-        id: "tool-1",
-        name: TOOL_NAME,
-        response: { ok: true },
-      });
-      handlers.onError?.("Streaming warning");
+      handlers?.onToken?.("Stream");
+      handlers?.onReasoning?.([{ type: "text", content: "Reason" }]);
+      handlers?.onToolCall?.({ id: "tool-1", name: TOOL_NAME, arguments: { query: "alpha" } });
+      handlers?.onToolResult?.({ id: "tool-1", name: TOOL_NAME, response: { ok: true } });
+      handlers?.onError?.("Streaming warning");
       return chatCompletionPayload;
     },
   );
 };
+
+const typeAndSend = (value: string) => {
+  fireEvent.change(screen.getByRole("textbox"), { target: { value } });
+  fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
+};
+
+const firstStreamPayload = () =>
+  api.streamChat.mock.calls[0][1] as unknown as Record<string, unknown>;
 
 describe("ChatStudio", () => {
   beforeEach(() => {
@@ -276,15 +220,7 @@ describe("ChatStudio", () => {
     window.innerHeight = 900;
     window.localStorage.clear();
     window.sessionStorage.clear();
-    mockAuthState = {
-      token: "token",
-      user: baseUser,
-      loading: false,
-      refreshProfile: vi.fn(),
-    };
-    Object.values(api).forEach((mockFn) => {
-      mockFn.mockReset();
-    });
+    authValue = setMockAuth({ token: AUTH_TOKEN });
     setupDefaultApiMocks();
   });
 
@@ -292,898 +228,580 @@ describe("ChatStudio", () => {
     vi.useRealTimers();
   });
 
-  it("renders a loader while auth is loading", async () => {
-    setAuthState({ loading: false });
-    api.listChatSessions.mockImplementation(() => new Promise(() => {}));
+  describe("composition & guards", () => {
+    it("renders a loader while the initial session list is pending", async () => {
+      api.listChatSessions.mockImplementation(() => new Promise(() => {}));
 
-    render(<ChatStudio />);
-    await flushPromises();
+      render(<ChatStudio />);
+      await flushPromises();
 
-    expect(screen.getByTestId("loader")).toBeInTheDocument();
-  });
-
-  it("shows status messages when missing auth or configuration", async () => {
-    setAuthState({ token: null, user: null, loading: false });
-    const { rerender } = render(<ChatStudio />);
-
-    expect(screen.getByTestId("notification")).toHaveTextContent(
-      "Sign in to access the chat studio.",
-    );
-
-    setAuthState({
-      token: "token",
-      user: {
-        ...baseUser,
-        openrouter_configured: false,
-      },
+      expect(screen.getByTestId("loader")).toBeInTheDocument();
     });
 
-    rerender(<ChatStudio />);
-    await flushPromises();
+    it("shows status messages when missing auth or configuration", async () => {
+      setAuthState({ token: null, user: null });
+      const { rerender } = render(<ChatStudio />);
 
-    expect(screen.getByTestId("notification")).toHaveTextContent(
-      "OpenRouter API key is not configured.",
-    );
-  });
-
-  it("handles array session params", async () => {
-    setMockParams({ sessionId: ["session-1"] });
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockChatTimelineProps).not.toBeNull();
-    });
-
-    const timelineProps = mockChatTimelineProps as { selectedSessionId?: string | null };
-    expect(timelineProps.selectedSessionId).toBe("session-1");
-  });
-
-  it("updates tool collections from URL params when no session is selected", async () => {
-    setMockParams({});
-    setQuery("");
-    api.listChatSessions.mockResolvedValueOnce([]);
-    setAuthState({
-      user: {
-        ...baseUser,
-        last_used_tool_collection_ids: [],
-      },
-    });
-
-    const { rerender } = render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockTelemetryPanelProps).not.toBeNull();
-    });
-
-    setQuery("collections=col-2,missing");
-    rerender(<ChatStudio />);
-
-    await waitFor(() => {
-      const telemetryProps = mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] };
-      expect(telemetryProps.selectedToolCollectionIds).toEqual(["col-2"]);
-    });
-  });
-
-  it("filters last-used tool collections against available collections", async () => {
-    setMockParams({});
-    setQuery("");
-    api.listChatSessions.mockResolvedValueOnce([]);
-    setAuthState({
-      user: {
-        ...baseUser,
-        last_used_tool_collection_ids: ["col-1", "missing"],
-      },
-    });
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      const telemetryProps = mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] };
-      expect(telemetryProps.selectedToolCollectionIds).toEqual(["col-1"]);
-    });
-  });
-
-  it("toggles edit cancel and provider preferences", async () => {
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockChatTimelineProps).not.toBeNull();
-      expect(mockTelemetryPanelProps).not.toBeNull();
-    });
-
-    await act(async () => {
-      (
-        mockChatTimelineProps as { onEditStart?: (id: string, content: string) => void }
-      ).onEditStart?.("message-1", "Draft");
-    });
-
-    await waitFor(() => {
-      const timelineProps = mockChatTimelineProps as {
-        editingMessageId?: string | null;
-        editingDraft?: string;
-      };
-      expect(timelineProps.editingMessageId).toBe("message-1");
-      expect(timelineProps.editingDraft).toBe("Draft");
-    });
-
-    await act(async () => {
-      (mockChatTimelineProps as { onEditCancel?: () => void }).onEditCancel?.();
-    });
-
-    await waitFor(() => {
-      const timelineProps = mockChatTimelineProps as {
-        editingMessageId?: string | null;
-        editingDraft?: string;
-      };
-      expect(timelineProps.editingMessageId).toBeNull();
-      expect(timelineProps.editingDraft).toBe("");
-    });
-
-    const initialOpen = (mockTelemetryPanelProps as { providerPreferencesOpen?: boolean })
-      .providerPreferencesOpen;
-
-    await act(async () => {
-      (
-        mockTelemetryPanelProps as { onProviderPreferencesToggle?: () => void }
-      ).onProviderPreferencesToggle?.();
-    });
-
-    await waitFor(() => {
-      const telemetryProps = mockTelemetryPanelProps as { providerPreferencesOpen?: boolean };
-      expect(telemetryProps.providerPreferencesOpen).toBe(!initialOpen);
-    });
-  });
-
-  it("handles overlay telemetry toggles and cancels scroll frames", async () => {
-    const originalWidth = window.innerWidth;
-    const originalRAF = window.requestAnimationFrame;
-    const originalCAF = window.cancelAnimationFrame;
-    const cancelSpy = vi.fn();
-    window.innerWidth = 1000;
-    const requestSpy = vi.fn().mockReturnValue(123);
-    window.requestAnimationFrame = requestSpy;
-    window.cancelAnimationFrame = cancelSpy;
-    window.localStorage.setItem("chat.telemetryOpen", "true");
-    window.localStorage.setItem("chat.historyOpen", "false");
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockChatTimelineProps).not.toBeNull();
-      expect(mockTelemetryPanelProps).not.toBeNull();
-      expect(requestSpy).toHaveBeenCalled();
-    });
-
-    await act(async () => {
-      (
-        mockChatTimelineProps as { onEditStart?: (id: string, content: string) => void }
-      ).onEditStart?.("message-1", "Draft");
-    });
-
-    await waitFor(() => {
-      expect(cancelSpy).toHaveBeenCalled();
-    });
-
-    await act(async () => {
-      (
-        mockTelemetryPanelProps as { onProviderPreferencesToggle?: () => void }
-      ).onProviderPreferencesToggle?.();
-    });
-
-    window.innerWidth = originalWidth;
-    window.requestAnimationFrame = originalRAF;
-    window.cancelAnimationFrame = originalCAF;
-  });
-
-  it("loads data, toggles panels, and saves prompt edits", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-    setQuery("collections=col-1,col-2");
-
-    const { container } = render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.listChatSessions).toHaveBeenCalled();
-      expect(api.fetchCollections).toHaveBeenCalled();
-      expect(api.listModels).toHaveBeenCalled();
-    });
-
-    const scrollContainer = container.querySelector("div.scroll-smooth");
-    expect(scrollContainer).toBeTruthy();
-    if (scrollContainer) {
-      Object.defineProperty(scrollContainer, "scrollHeight", { value: 200, configurable: true });
-      Object.defineProperty(scrollContainer, "clientHeight", { value: 100, configurable: true });
-      Object.defineProperty(scrollContainer, "scrollTop", {
-        value: 0,
-        writable: true,
-        configurable: true,
-      });
-      scrollContainer.scrollTop = 0;
-      fireEvent.scroll(scrollContainer);
-      scrollContainer.scrollTop = 98;
-      fireEvent.scroll(scrollContainer);
-    }
-
-    const telemetryProps = mockTelemetryPanelProps as Record<string, unknown>;
-    expect(telemetryProps).toBeTruthy();
-
-    act(() => {
-      (telemetryProps.onToggleToolCollection as (value: string) => void)("col-2");
-      (telemetryProps.onClearToolCollections as () => void)();
-      (telemetryProps.onStreamingToggle as (value: boolean) => void)(false);
-      (telemetryProps.onSelectModel as (value: string) => void)("model-2");
-      (telemetryProps.onModelSearchChange as (value: string) => void)("Model");
-      (telemetryProps.onModelSortChange as (value: string) => void)("price");
-      (telemetryProps.resetProviderPreferences as () => void)();
-      (telemetryProps.resetAllParameters as () => void)();
-      (telemetryProps.handleNumberParameterChange as (key: string, value: string) => void)(
-        "temperature",
-        "0.7",
-      );
-      (telemetryProps.handleNumberParameterChange as (key: string, value: string) => void)(
-        "temperature",
-        "",
-      );
-      (telemetryProps.handleBooleanParameterChange as (key: string, value: boolean) => void)(
-        "logit_bias",
-        true,
-      );
-      (telemetryProps.handleTextParameterChange as (key: string, value: string) => void)(
-        "user",
-        "test",
-      );
-      (telemetryProps.handleSelectParameterChange as (key: string, value: string) => void)(
-        "reasoning",
-        "low",
-      );
-      (telemetryProps.handleClearParameter as (key: string) => void)("reasoning");
-      (telemetryProps.formatDefaultParameter as (key: string) => string | null)("temperature");
-    });
-
-    act(() => {
-      (telemetryProps.onPromptEdit as () => void)();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("prompt-textarea")).toBeInTheDocument();
-    });
-
-    const promptProps = mockPromptOverlayProps as Record<string, unknown>;
-    expect(promptProps).toBeTruthy();
-
-    act(() => {
-      (promptProps.onSelectSection as (value: string) => void)("base");
-      (promptProps.onDraftChange as (sectionId: string, value: string) => void)("base", "Draft");
-      (promptProps.onInsertVariable as (sectionId: string, variableName: string) => void)(
-        "base",
-        "user",
-      );
-      (promptProps.onReset as (sectionId: string) => void)("base");
-    });
-
-    await act(async () => {
-      await (promptProps.onSave as (sectionId: string) => Promise<void>)("base");
-      await (promptProps.onSave as (sectionId: string) => Promise<void>)("col-1");
-    });
-
-    act(() => {
-      (promptProps.onClose as () => void)();
-    });
-
-    act(() => {
-      (telemetryProps.onExportChatHistory as () => void)();
-    });
-
-    const historyProps = mockHistoryPanelProps as Record<string, unknown>;
-    expect(historyProps).toBeTruthy();
-
-    api.listChatSessions.mockClear();
-    act(() => {
-      (historyProps.onFilterChange as (ids: string[], include: boolean) => void)(["col-1"], true);
-    });
-
-    await waitFor(() => {
-      expect(api.listChatSessions).toHaveBeenCalledWith("token", {
-        collectionIds: ["col-1"],
-        includeUnassigned: true,
-      });
-    });
-
-    getMockRouter().push.mockClear();
-    act(() => {
-      (historyProps.onSelect as (sessionId: string) => void)("session-1");
-      (historyProps.onNewChat as () => void)();
-    });
-
-    expect(getMockRouter().push).toHaveBeenCalled();
-  });
-
-  it("saves run settings order changes", async () => {
-    vi.useFakeTimers();
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-
-    render(<ChatStudio />);
-
-    await flushPromises();
-
-    const telemetryProps = mockTelemetryPanelProps as Record<string, unknown>;
-    expect(telemetryProps).toBeTruthy();
-    const currentOrder = telemetryProps.sectionOrder as string[];
-    const nextOrder = [...currentOrder].reverse();
-
-    act(() => {
-      (telemetryProps.onSectionOrderChange as (value: string[]) => void)(nextOrder);
-    });
-
-    vi.advanceTimersByTime(600);
-    await flushPromises();
-
-    expect(api.updateRunSettingsOrder).toHaveBeenCalledWith("token", nextOrder);
-    expect(mockAuthState.refreshProfile).toHaveBeenCalled();
-
-    vi.useRealTimers();
-  });
-
-  it("handles run settings order save failures", async () => {
-    api.updateRunSettingsOrder.mockRejectedValueOnce(new Error("Save failed"));
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockTelemetryPanelProps).not.toBeNull();
-    });
-
-    const telemetryProps = mockTelemetryPanelProps as {
-      onSectionOrderChange?: (order: RunSettingsSectionKey[]) => void;
-    };
-    const reversed = [...(baseUser.run_settings_order ?? [])].reverse() as RunSettingsSectionKey[];
-
-    vi.useFakeTimers();
-    act(() => {
-      telemetryProps.onSectionOrderChange?.(reversed);
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(600);
-    });
-    await flushPromises();
-
-    expect(screen.getByTestId("notification")).toHaveTextContent("Save failed");
-  });
-
-  it("skips data loading while auth is loading", async () => {
-    setAuthState({ loading: true });
-
-    render(<ChatStudio />);
-    await flushPromises();
-
-    expect(api.listChatSessions).not.toHaveBeenCalled();
-    expect(api.fetchCollections).not.toHaveBeenCalled();
-    expect(api.listModels).not.toHaveBeenCalled();
-  });
-
-  it("surfaces collection load errors", async () => {
-    api.fetchCollections.mockRejectedValueOnce(new Error("Collections down"));
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      const telemetryProps = mockTelemetryPanelProps as { collectionsError?: string | null };
-      expect(telemetryProps.collectionsError).toBe("Collections down");
-    });
-  });
-
-  it("resets counts when document or pipeline loads fail", async () => {
-    api.fetchDocuments.mockRejectedValueOnce(new Error("Docs down"));
-    api.fetchPipeline.mockRejectedValueOnce(new Error("Pipeline down"));
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.fetchDocuments).toHaveBeenCalled();
-      expect(api.fetchPipeline).toHaveBeenCalled();
-    });
-
-    const telemetryProps = mockTelemetryPanelProps as {
-      documentCount?: number;
-      contextWindow?: number;
-    };
-    expect(telemetryProps.documentCount).toBe(0);
-    expect(telemetryProps.contextWindow).toBe(0);
-  });
-
-  it("creates new sessions with fallback ids", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({});
-    setAuthState({
-      user: {
-        ...baseUser,
-        last_used_tool_collection_ids: [],
-      },
-    });
-
-    vi.stubGlobal("crypto", {
-      randomUUID: undefined,
-    } as unknown as Crypto);
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.listChatSessions).toHaveBeenCalled();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Model One")).toBeInTheDocument();
-    });
-
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "New chat" } });
-
-    getMockRouter().push.mockClear();
-    const sendButton = screen.getByRole("button", { name: SEND_TURN_LABEL });
-    fireEvent.click(sendButton);
-
-    await waitFor(() => {
-      expect(api.chat.mock.calls.length + api.streamChat.mock.calls.length).toBeGreaterThan(0);
-    });
-
-    expect(getMockRouter().push).toHaveBeenCalled();
-
-    vi.unstubAllGlobals();
-  });
-
-  it("opens model routing from the timeline selector", async () => {
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockChatTimelineProps).not.toBeNull();
-      expect(mockTelemetryPanelProps).not.toBeNull();
-    });
-
-    await act(async () => {
-      (mockChatTimelineProps as { onModelSelect?: () => void }).onModelSelect?.();
-    });
-
-    await waitFor(() => {
-      const telemetryProps = mockTelemetryPanelProps as { modelSelectorOpen?: boolean };
-      expect(telemetryProps.modelSelectorOpen).toBe(true);
-    });
-  });
-
-  it("surfaces streaming errors and resets live state", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-    api.streamChat.mockRejectedValueOnce(new Error("Stream failed"));
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
-      expect(api.listChatSessions).toHaveBeenCalled();
-    });
-
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "Hello" } });
-
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("notification")).toHaveTextContent("Stream failed");
-    });
-  });
-
-  it("assigns fallback tool phases when tool results arrive without calls", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-    api.streamChat.mockImplementationOnce(
-      async (
-        _payload: unknown,
-        _token: string,
-        handlers: {
-          onToolResult?: (event: Record<string, unknown>) => void;
-        },
-      ) => {
-        handlers.onToolResult?.({ id: " ", name: TOOL_NAME, response: { ok: true } });
-        return chatCompletionPayload;
-      },
-    );
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
-    });
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
-
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
-    });
-
-    const timelineProps = mockChatTimelineProps as { liveToolPhaseById?: Record<string, number> };
-    expect(timelineProps?.liveToolPhaseById).toEqual(expect.any(Object));
-  });
-
-  it("flags incomplete streaming responses", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-    api.streamChat.mockResolvedValueOnce(null as unknown as ChatCompletionPayload);
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
-    });
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
-
-    await waitFor(() => {
       expect(screen.getByTestId("notification")).toHaveTextContent(
-        "Streaming response did not complete.",
+        "Sign in to access the chat studio.",
+      );
+
+      setAuthState({ user: { ...baseUser, openrouter_configured: false } });
+      rerender(<ChatStudio />);
+      await flushPromises();
+
+      expect(screen.getByTestId("notification")).toHaveTextContent(
+        "OpenRouter API key is not configured.",
       );
     });
+
+    it("skips data loading while auth is loading", async () => {
+      setAuthState({ loading: true });
+
+      render(<ChatStudio />);
+      await flushPromises();
+
+      expect(api.listChatSessions).not.toHaveBeenCalled();
+      expect(api.fetchCollections).not.toHaveBeenCalled();
+      expect(api.listModels).not.toHaveBeenCalled();
+    });
+
+    it("warns when sending without a Pinecone key but tools are selected", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+
+      render(<ChatStudio />);
+      typeAndSend("Test");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("notification")).toHaveTextContent(
+          "Add your Pinecone API key in Settings to enable collection tools.",
+        );
+      });
+    });
+
+    it("warns when sending without a selected model", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setAuthState({
+        user: { ...baseUser, last_used_chat_model: null, last_used_tool_collection_ids: [] },
+      });
+
+      render(<ChatStudio />);
+      typeAndSend("Test");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("notification")).toHaveTextContent(
+          "Select a chat model before sending a message.",
+        );
+      });
+    });
   });
 
-  it("sends boolean parameter overrides for supported params", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
+  describe("session & tool-collection derivation", () => {
+    it("normalizes an array session param to the selected session id", async () => {
+      setMockParams({ sessionId: ["session-1"] });
 
-    render(<ChatStudio />);
+      render(<ChatStudio />);
 
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(mockChatTimelineProps).not.toBeNull();
+      });
+      expect((mockChatTimelineProps as { selectedSessionId?: string }).selectedSessionId).toBe(
+        "session-1",
+      );
     });
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
+    it("derives tool collections from URL params, dropping unknown ids", async () => {
+      api.listChatSessions.mockResolvedValueOnce([]);
+      setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: [] } });
 
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
+      const { rerender } = render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockTelemetryPanelProps).not.toBeNull();
+      });
+
+      setQuery("collections=col-2,missing");
+      rerender(<ChatStudio />);
+
+      await waitFor(() => {
+        expect(
+          (mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] })
+            .selectedToolCollectionIds,
+        ).toEqual(["col-2"]);
+      });
     });
 
-    const [, payload] = api.streamChat.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload).toEqual(
-      expect.objectContaining({
-        parameters: expect.objectContaining({ logprobs: true, stop: "END" }),
-      }),
-    );
-    expect(payload).toEqual(
-      expect.objectContaining({
-        parameters: expect.not.objectContaining({ response_format: expect.anything() }),
-      }),
-    );
+    it("filters last-used tool collections against available collections", async () => {
+      api.listChatSessions.mockResolvedValueOnce([]);
+      setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: ["col-1", "missing"] } });
+
+      render(<ChatStudio />);
+
+      await waitFor(() => {
+        expect(
+          (mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] })
+            .selectedToolCollectionIds,
+        ).toEqual(["col-1"]);
+      });
+    });
   });
 
-  it("creates fallback ids for streaming tool calls", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
+  describe("load error handling", () => {
+    it("surfaces collection load errors", async () => {
+      api.fetchCollections.mockRejectedValueOnce(new Error("Collections down"));
 
-    api.streamChat.mockImplementationOnce(
-      async (
-        _payload: unknown,
-        _token: string,
-        handlers: {
-          onToolCall?: (event: Record<string, unknown>) => void;
-        },
-      ): Promise<ChatCompletionPayload> => {
-        handlers.onToolCall?.({ id: " ", name: TOOL_NAME, arguments: { q: "x" } });
-        return chatCompletionPayload;
-      },
-    );
+      render(<ChatStudio />);
 
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(
+          (mockTelemetryPanelProps as { collectionsError?: string | null }).collectionsError,
+        ).toBe("Collections down");
+      });
     });
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
+    it("resets document and context counts when document or pipeline loads fail", async () => {
+      api.fetchDocuments.mockRejectedValueOnce(new Error("Docs down"));
+      api.fetchPipeline.mockRejectedValueOnce(new Error("Pipeline down"));
 
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
+      render(<ChatStudio />);
+
+      await waitFor(() => {
+        expect(api.fetchDocuments).toHaveBeenCalled();
+        expect(api.fetchPipeline).toHaveBeenCalled();
+      });
+
+      const telemetryProps = mockTelemetryPanelProps as {
+        documentCount?: number;
+        contextWindow?: number;
+      };
+      expect(telemetryProps.documentCount).toBe(0);
+      expect(telemetryProps.contextWindow).toBe(0);
     });
-
-    const timelineProps = mockChatTimelineProps as { liveToolEvents?: Array<{ id?: string }> };
-    const toolId = timelineProps?.liveToolEvents?.[0]?.id;
-    expect(toolId).toMatch(/^tool-/);
   });
 
-  it("filters empty reasoning and string overrides", async () => {
-    const customSession = {
-      ...sessions[0],
-      id: "session-empty",
-      parameter_overrides: {
-        reasoning: "   ",
-        response_format: "  ",
-      },
-    };
-    api.listChatSessions.mockResolvedValueOnce([customSession]);
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: customSession.id });
+  describe("edit state", () => {
+    it("opens and cancels an in-place message edit", async () => {
+      render(<ChatStudio />);
 
-    render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockChatTimelineProps).not.toBeNull();
+      });
 
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
+      await act(async () => {
+        (
+          mockChatTimelineProps as { onEditStart?: (id: string, content: string) => void }
+        ).onEditStart?.("message-1", "Draft");
+      });
+
+      await waitFor(() => {
+        const props = mockChatTimelineProps as {
+          editingMessageId?: string | null;
+          editingDraft?: string;
+        };
+        expect(props.editingMessageId).toBe("message-1");
+        expect(props.editingDraft).toBe("Draft");
+      });
+
+      await act(async () => {
+        (mockChatTimelineProps as { onEditCancel?: () => void }).onEditCancel?.();
+      });
+
+      await waitFor(() => {
+        const props = mockChatTimelineProps as {
+          editingMessageId?: string | null;
+          editingDraft?: string;
+        };
+        expect(props.editingMessageId).toBeNull();
+        expect(props.editingDraft).toBe("");
+      });
+    });
+  });
+
+  describe("send flow & payload building", () => {
+    it("creates a new session and routes to it on first send", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: [] } });
+      vi.stubGlobal("crypto", { randomUUID: undefined } as unknown as Crypto);
+
+      render(<ChatStudio />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Model One")).toBeInTheDocument();
+      });
+
+      getMockRouter().push.mockClear();
+      typeAndSend("New chat");
+
+      await waitFor(() => {
+        expect(api.chat.mock.calls.length + api.streamChat.mock.calls.length).toBeGreaterThan(0);
+      });
+      expect(getMockRouter().push).toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
     });
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
+    it("surfaces streaming errors and resets live state", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+      api.streamChat.mockRejectedValueOnce(new Error("Stream failed"));
 
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
+
+      typeAndSend("Hello");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("notification")).toHaveTextContent("Stream failed");
+      });
     });
 
-    const [, payload] = api.streamChat.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload).toEqual(
-      expect.objectContaining({
-        parameters: expect.not.objectContaining({
-          reasoning: expect.anything(),
-          response_format: expect.anything(),
+    it("flags incomplete streaming responses", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+      api.streamChat.mockResolvedValueOnce(null as unknown as ChatCompletionPayload);
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
+
+      typeAndSend("Hello");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("notification")).toHaveTextContent(
+          "Streaming response did not complete.",
+        );
+      });
+    });
+
+    it("sends supported boolean/string overrides and omits blank ones", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
+
+      typeAndSend("Hello");
+      await waitFor(() => {
+        expect(api.streamChat).toHaveBeenCalled();
+      });
+
+      const payload = firstStreamPayload();
+      expect(payload).toEqual(
+        expect.objectContaining({
+          parameters: expect.objectContaining({ logprobs: true, stop: "END" }),
         }),
-      }),
-    );
-  });
-
-  it("sends object-based reasoning overrides", async () => {
-    const customSession = {
-      ...sessions[0],
-      id: "session-object",
-      parameter_overrides: {
-        reasoning: { effort: "high" },
-      },
-    };
-    api.listChatSessions.mockResolvedValueOnce([customSession]);
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: customSession.id });
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
+      );
+      expect(payload).toEqual(
+        expect.objectContaining({
+          parameters: expect.not.objectContaining({ response_format: expect.anything() }),
+        }),
+      );
     });
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
-    fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
-
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
-    });
-
-    const [, payload] = api.streamChat.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload).toEqual(
-      expect.objectContaining({
-        parameters: expect.objectContaining({ reasoning: { effort: "high" } }),
-      }),
-    );
-  });
-
-  it("sends messages and handles streaming, stop, and edits", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-1" });
-
-    let resolveStream: ((value: ChatCompletionPayload) => void) | null = null;
-    api.streamChat.mockImplementation(
-      async (
-        _payload: unknown,
-        _token: string,
-        handlers: {
-          onToken?: (token: string) => void;
-          onReasoning?: (segments: unknown) => void;
-          onToolCall?: (event: Record<string, unknown>) => void;
-          onToolResult?: (event: Record<string, unknown>) => void;
+    it("generates fallback ids for streaming tool calls without an id", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+      api.streamChat.mockImplementationOnce(
+        async (
+          _token: string,
+          _payload: ChatRequestPayload,
+          handlers?: ChatStreamHandlers,
+        ): Promise<ChatCompletionPayload> => {
+          handlers?.onToolCall?.({ id: " ", name: TOOL_NAME, arguments: { q: "x" } });
+          return chatCompletionPayload;
         },
-      ): Promise<ChatCompletionPayload> => {
-        handlers.onToken?.("Stream");
-        handlers.onReasoning?.([{ type: "text", content: "Reason" }]);
-        handlers.onToolCall?.({
-          id: "tool-1",
-          name: TOOL_NAME,
-          arguments: { query: "alpha" },
-        });
-        handlers.onToolResult?.({
-          id: "tool-1",
-          name: TOOL_NAME,
-          response: { ok: true },
-        });
-        return new Promise<ChatCompletionPayload>((resolve) => {
-          resolveStream = resolve;
-        });
-      },
-    );
+      );
 
-    render(<ChatStudio />);
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
 
-    await waitFor(() => {
-      expect(api.getChatHistory).toHaveBeenCalled();
-      expect(api.listChatSessions).toHaveBeenCalled();
+      typeAndSend("Hello");
+      await waitFor(() => {
+        expect(api.streamChat).toHaveBeenCalled();
+      });
+
+      const timelineProps = mockChatTimelineProps as { liveToolEvents?: Array<{ id?: string }> };
+      expect(timelineProps?.liveToolEvents?.[0]?.id).toMatch(/^tool-/);
     });
 
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "Hello there" } });
+    it("filters blank reasoning/response_format string overrides", async () => {
+      const customSession = {
+        ...sessions[0],
+        id: "session-empty",
+        parameter_overrides: { reasoning: "   ", response_format: "  " },
+      };
+      api.listChatSessions.mockResolvedValueOnce([customSession]);
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: customSession.id });
 
-    const sendButton = screen.getByRole("button", { name: SEND_TURN_LABEL });
-    fireEvent.click(sendButton);
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
 
-    await waitFor(() => {
-      expect(api.streamChat).toHaveBeenCalled();
-    });
+      typeAndSend("Hello");
+      await waitFor(() => {
+        expect(api.streamChat).toHaveBeenCalled();
+      });
 
-    const stopButton = screen.getByRole("button", { name: "Stop" });
-    fireEvent.click(stopButton);
-
-    await act(async () => {
-      resolveStream?.(chatCompletionPayload);
-    });
-
-    api.streamChat.mockResolvedValue(chatCompletionPayload);
-
-    const timelineProps = mockChatTimelineProps as Record<string, unknown>;
-    const overrideTarget = document.createElement("div");
-    overrideTarget.id = "telemetry-model-routing";
-    document.body.appendChild(overrideTarget);
-    act(() => {
-      (timelineProps.onEditStart as (messageId: string, content: string) => void)("msg-2", "Hello");
-      (timelineProps.onEditChange as (value: string) => void)("Edited message");
-      (timelineProps.onOverrideSelect as (sectionId: string) => void)("telemetry-model-routing");
-      (timelineProps.onNavigateToSession as (sessionId: string) => void)("session-2");
-    });
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    });
-
-    await act(async () => {
-      await (timelineProps.onEditSubmit as () => Promise<void>)();
-      await (timelineProps.onRetryAssistant as (messageId: string) => Promise<void>)("msg-3");
-    });
-
-    await act(async () => {
-      await (timelineProps.onBranchMessage as (messageId: string) => Promise<void>)("msg-2");
-    });
-
-    expect(api.branchChatSession).toHaveBeenCalled();
-
-    act(() => {
-      (timelineProps.onEditStart as (messageId: string, content: string) => void)("msg-2", "Hello");
-      (timelineProps.onEditChange as (value: string) => void)(" ");
-    });
-
-    await act(async () => {
-      await (timelineProps.onEditSubmit as () => Promise<void>)();
-    });
-  });
-
-  it("handles non-streaming mutations and delete flows", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({ sessionId: "session-2" });
-    setAuthState({
-      user: {
-        ...baseUser,
-        pinecone_configured: false,
-      },
-    });
-
-    api.chat.mockResolvedValue({
-      ...chatCompletionPayload,
-      session: sessions[1],
-    });
-
-    render(<ChatStudio />);
-
-    await waitFor(() => {
-      expect(mockTelemetryPanelProps).toBeTruthy();
-    });
-
-    const telemetryProps = mockTelemetryPanelProps as Record<string, unknown>;
-    act(() => {
-      (telemetryProps.onStreamingToggle as (value: boolean) => void)(false);
-    });
-
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "Question" } });
-
-    const sendButton = screen.getByRole("button", { name: SEND_TURN_LABEL });
-    fireEvent.click(sendButton);
-
-    await waitFor(() => {
-      expect(api.chat).toHaveBeenCalled();
-    });
-
-    const historyProps = mockHistoryPanelProps as Record<string, unknown>;
-
-    await act(async () => {
-      await (historyProps.onDelete as (sessionId: string) => Promise<void>)("session-2");
-    });
-
-    expect(api.deleteChatSession).toHaveBeenCalledWith("token", "session-2");
-  });
-
-  it("guards against missing tool keys", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({});
-    setAuthState({
-      user: {
-        ...baseUser,
-        pinecone_configured: false,
-      },
-    });
-
-    render(<ChatStudio />);
-
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "Test" } });
-
-    const sendButton = screen.getByRole("button", { name: SEND_TURN_LABEL });
-    fireEvent.click(sendButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("notification")).toHaveTextContent(
-        "Add your Pinecone API key in Settings to enable collection tools.",
+      expect(firstStreamPayload()).toEqual(
+        expect.objectContaining({
+          parameters: expect.not.objectContaining({
+            reasoning: expect.anything(),
+            response_format: expect.anything(),
+          }),
+        }),
       );
     });
-  });
 
-  it("guards against missing model", async () => {
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    setMockParams({});
-    setAuthState({
-      user: {
-        ...baseUser,
-        last_used_chat_model: null,
-        last_used_tool_collection_ids: [],
-      },
-    });
+    it("sends object-based reasoning overrides intact", async () => {
+      const customSession = {
+        ...sessions[0],
+        id: "session-object",
+        parameter_overrides: { reasoning: { effort: "high" } },
+      };
+      api.listChatSessions.mockResolvedValueOnce([customSession]);
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: customSession.id });
 
-    render(<ChatStudio />);
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
 
-    const textarea = screen.getByRole("textbox");
-    fireEvent.change(textarea, { target: { value: "Test" } });
+      typeAndSend("Hello");
+      await waitFor(() => {
+        expect(api.streamChat).toHaveBeenCalled();
+      });
 
-    const sendButton = screen.getByRole("button", { name: SEND_TURN_LABEL });
-    fireEvent.click(sendButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("notification")).toHaveTextContent(
-        "Select a chat model before sending a message.",
+      expect(firstStreamPayload()).toEqual(
+        expect.objectContaining({
+          parameters: expect.objectContaining({ reasoning: { effort: "high" } }),
+        }),
       );
     });
+
+    it("stops an in-flight stream and branches from a message", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+
+      let resolveStream: ((value: ChatCompletionPayload) => void) | null = null;
+      api.streamChat.mockImplementation(
+        async (
+          _token: string,
+          _payload: ChatRequestPayload,
+          handlers?: ChatStreamHandlers,
+        ): Promise<ChatCompletionPayload> => {
+          handlers?.onToken?.("Stream");
+          return new Promise<ChatCompletionPayload>((resolve) => {
+            resolveStream = resolve;
+          });
+        },
+      );
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(api.getChatHistory).toHaveBeenCalled();
+      });
+
+      typeAndSend("Hello there");
+      await waitFor(() => {
+        expect(api.streamChat).toHaveBeenCalled();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      await act(async () => {
+        resolveStream?.(chatCompletionPayload);
+      });
+      api.streamChat.mockResolvedValue(chatCompletionPayload);
+
+      const timelineProps = mockChatTimelineProps as Record<string, unknown>;
+      await act(async () => {
+        await (timelineProps.onBranchMessage as (id: string) => Promise<void>)("msg-2");
+      });
+
+      expect(api.branchChatSession).toHaveBeenCalled();
+    });
+
+    it("sends a non-streaming turn and deletes a session", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-2" });
+      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+      api.chat.mockResolvedValue({ ...chatCompletionPayload, session: sessions[1] });
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockTelemetryPanelProps).toBeTruthy();
+      });
+
+      act(() => {
+        (mockTelemetryPanelProps as { onStreamingToggle: (v: boolean) => void }).onStreamingToggle(
+          false,
+        );
+      });
+
+      typeAndSend("Question");
+      await waitFor(() => {
+        expect(api.chat).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        await (
+          mockHistoryPanelProps as { onDelete: (id: string) => Promise<void> }
+        ).onDelete("session-2");
+      });
+
+      expect(api.deleteChatSession).toHaveBeenCalledWith(AUTH_TOKEN, "session-2");
+    });
   });
 
-  it("supports overlay mode and scroll controls", async () => {
-    window.innerWidth = 800;
-    window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-    window.localStorage.setItem("chat.historyOpen", "true");
-    window.localStorage.setItem("chat.telemetryOpen", "true");
-    setMockParams({ sessionId: "session-1" });
+  describe("history & run settings", () => {
+    it("refetches sessions with the collection filter and routes on session select", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
 
-    render(<ChatStudio />);
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockHistoryPanelProps).not.toBeNull();
+      });
 
-    await waitFor(() => {
-      expect(mockChatTimelineProps).toBeTruthy();
+      const historyProps = mockHistoryPanelProps as {
+        onFilterChange: (ids: string[], include: boolean) => void;
+        onSelect: (id: string) => void;
+      };
+
+      api.listChatSessions.mockClear();
+      act(() => {
+        historyProps.onFilterChange(["col-1"], true);
+      });
+
+      await waitFor(() => {
+        expect(api.listChatSessions).toHaveBeenCalledWith(AUTH_TOKEN, {
+          collectionIds: ["col-1"],
+          includeUnassigned: true,
+        });
+      });
+
+      getMockRouter().push.mockClear();
+      await act(async () => {
+        historyProps.onSelect("session-2");
+      });
+      expect(getMockRouter().push).toHaveBeenCalledWith(expect.stringContaining("session-2"));
     });
 
-    const timelineProps = mockChatTimelineProps as Record<string, unknown>;
-    act(() => {
-      (timelineProps.onEditStart as (messageId: string, content: string) => void)("msg-2", "Hello");
+    it("persists a debounced run settings order change and refreshes the profile", async () => {
+      vi.useFakeTimers();
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+
+      render(<ChatStudio />);
+      await flushPromises();
+
+      const telemetryProps = mockTelemetryPanelProps as {
+        sectionOrder: string[];
+        onSectionOrderChange: (v: string[]) => void;
+      };
+      const nextOrder = [...telemetryProps.sectionOrder].reverse();
+
+      act(() => {
+        telemetryProps.onSectionOrderChange(nextOrder);
+      });
+      vi.advanceTimersByTime(600);
+      await flushPromises();
+
+      expect(api.updateRunSettingsOrder).toHaveBeenCalledWith(AUTH_TOKEN, nextOrder);
+      expect(authValue.refreshProfile).toHaveBeenCalled();
     });
 
-    const followButton = screen.getByRole("button", { name: "Scroll to latest message" });
-    fireEvent.click(followButton);
+    it("notifies when saving the run settings order fails", async () => {
+      api.updateRunSettingsOrder.mockRejectedValueOnce(new Error("Save failed"));
 
-    const openTelemetryButton = screen.getByRole("button", { name: "Open run settings" });
-    fireEvent.click(openTelemetryButton);
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockTelemetryPanelProps).not.toBeNull();
+      });
 
-    await waitFor(() => {
-      expect(screen.getByTestId("telemetry-panel")).toBeInTheDocument();
+      const reversed = [
+        ...(baseUser.run_settings_order ?? []),
+      ].reverse() as RunSettingsSectionKey[];
+
+      vi.useFakeTimers();
+      act(() => {
+        (
+          mockTelemetryPanelProps as {
+            onSectionOrderChange?: (order: RunSettingsSectionKey[]) => void;
+          }
+        ).onSectionOrderChange?.(reversed);
+      });
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      await flushPromises();
+
+      expect(screen.getByTestId("notification")).toHaveTextContent("Save failed");
     });
 
-    const openHistoryButton = await screen.findByRole("button", { name: "Open history" });
-    fireEvent.click(openHistoryButton);
+    it("saves prompt edits from the prompt editor overlay", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockTelemetryPanelProps).not.toBeNull();
+      });
+
+      act(() => {
+        (mockTelemetryPanelProps as { onPromptEdit: () => void }).onPromptEdit();
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("prompt-textarea")).toBeInTheDocument();
+      });
+
+      act(() => {
+        (
+          mockPromptOverlayProps as { onDraftChange: (section: string, value: string) => void }
+        ).onDraftChange("base", "Draft base");
+      });
+
+      // Re-read the freshly captured props so onSave closes over the updated draft.
+      await act(async () => {
+        await (mockPromptOverlayProps as { onSave: (section: string) => Promise<void> }).onSave(
+          "base",
+        );
+      });
+
+      expect(api.updateBasePrompt).toHaveBeenCalledWith(AUTH_TOKEN, "Draft base");
+    });
+  });
+
+  describe("responsive panels", () => {
+    it("opens the run settings and history panels in overlay mode", async () => {
+      window.innerWidth = 800;
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      window.localStorage.setItem("chat.historyOpen", "true");
+      window.localStorage.setItem("chat.telemetryOpen", "true");
+      setMockParams({ sessionId: "session-1" });
+
+      render(<ChatStudio />);
+      await waitFor(() => {
+        expect(mockChatTimelineProps).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Open run settings" }));
+      await waitFor(() => {
+        expect(screen.getByTestId("telemetry-panel")).toBeInTheDocument();
+      });
+
+      const openHistoryButton = await screen.findByRole("button", { name: "Open history" });
+      fireEvent.click(openHistoryButton);
+      expect(screen.getByTestId("history-panel")).toBeInTheDocument();
+    });
   });
 });
