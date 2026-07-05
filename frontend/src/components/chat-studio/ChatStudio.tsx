@@ -7,7 +7,6 @@ import {
   CHAT_INPUT_MAX_HEIGHT,
   CHAT_INPUT_MIN_HEIGHT,
   DEFAULT_STREAMING_ENABLED,
-  DEFAULT_TELEMETRY_ORDER,
   PINECONE_KEY_REQUIRED_MESSAGE,
   TELEMETRY_SECTION_IDS,
 } from "@/components/chat-studio/chat-constants";
@@ -26,7 +25,6 @@ import {
   isToolReasoningSegment,
   makeToolId,
   mergeMessageHistory,
-  normalizeRunSettingsOrder,
   parseCollectionIdsParam,
   pruneHistoryForEdit,
   sortMessagesChronologically,
@@ -34,6 +32,7 @@ import {
 import { ChatStudioHeader } from "@/components/chat-studio/ChatStudioHeader";
 import { ChatStudioMessages } from "@/components/chat-studio/ChatStudioMessages";
 import { ChatStudioView } from "@/components/chat-studio/ChatStudioView";
+import { useRunSettingsOrder } from "@/components/chat-studio/hooks/use-run-settings-order";
 import { HistoryPanel } from "@/components/chat-studio/HistoryPanel";
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
@@ -52,7 +51,6 @@ import {
   listModelEndpoints,
   listModels,
   streamChat,
-  updateRunSettingsOrder,
   updateBasePrompt,
   updateCollectionPrompt,
 } from "@/lib/api";
@@ -94,7 +92,6 @@ import type {
   ReasoningTraceSegment,
   ToolCallTrace,
   UsageBreakdown,
-  RunSettingsSectionKey,
 } from "@/lib/types";
 
 const HISTORY_PANEL_WIDTH_PX = 288;
@@ -216,10 +213,6 @@ export function ChatStudio() {
     "chat.telemetry.streamingOpen",
     true,
   );
-  const [runSettingsOrder, setRunSettingsOrder] =
-    useState<RunSettingsSectionKey[]>(DEFAULT_TELEMETRY_ORDER);
-  const runSettingsSaveTimeoutRef = useRef<number | null>(null);
-  const lastSavedRunSettingsOrderRef = useRef<string>(JSON.stringify(DEFAULT_TELEMETRY_ORDER));
   const [streamingEnabled, setStreamingEnabled] = useState(DEFAULT_STREAMING_ENABLED);
   const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -561,6 +554,13 @@ export function ChatStudio() {
   const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
   const pineconeConfigured = Boolean(!authLoading && user?.pinecone_configured);
 
+  const { runSettingsOrder, setRunSettingsOrder } = useRunSettingsOrder({
+    authToken,
+    user,
+    refreshProfile,
+    onError: setStatus,
+  });
+
   const sortSessions = useCallback((items: ChatSession[]) => {
     const pendingIds = pendingSessionIdsRef.current;
     return [...items].sort((a, b) => {
@@ -599,42 +599,6 @@ export function ChatStudio() {
     }
     setStatus(null);
   }, [authLoading, authToken, openrouterConfigured]);
-
-  useEffect(() => {
-    const normalizedOrder = normalizeRunSettingsOrder(user?.run_settings_order ?? null);
-    setRunSettingsOrder(normalizedOrder);
-    lastSavedRunSettingsOrderRef.current = JSON.stringify(normalizedOrder);
-  }, [user]);
-
-  useEffect(() => {
-    if (!authToken || !user) {
-      return;
-    }
-    const serialized = JSON.stringify(runSettingsOrder);
-    if (serialized === lastSavedRunSettingsOrderRef.current) {
-      return;
-    }
-    if (runSettingsSaveTimeoutRef.current) {
-      window.clearTimeout(runSettingsSaveTimeoutRef.current);
-    }
-    runSettingsSaveTimeoutRef.current = window.setTimeout(() => {
-      updateRunSettingsOrder(authToken, runSettingsOrder)
-        .then(() => {
-          lastSavedRunSettingsOrderRef.current = serialized;
-          refreshProfile();
-        })
-        .catch((error: unknown) => {
-          const message =
-            error instanceof Error ? error.message : "Unable to save run settings order.";
-          setStatus(message);
-        });
-    }, 600);
-    return () => {
-      if (runSettingsSaveTimeoutRef.current) {
-        window.clearTimeout(runSettingsSaveTimeoutRef.current);
-      }
-    };
-  }, [authToken, refreshProfile, runSettingsOrder, user]);
 
   useEffect(() => {
     if (authLoading) {
