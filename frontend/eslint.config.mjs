@@ -17,14 +17,6 @@ const eslintConfig = defineConfig([
     rules: {
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "error",
-      // eslint-config-next bundles a newer eslint-plugin-react-hooks build whose
-      // "recommended" set now includes react-hooks/set-state-in-effect. It fires on
-      // the codebase's established prop/session-sync effect pattern (see
-      // use-collection-tools.ts, use-provider-preferences.ts, etc.) in ~10 pre-existing
-      // hooks. Task 13 scope is lint/TS config, not a hooks-architecture rewrite, so this
-      // is kept at "warn" (still visible, doesn't block `npm run lint`) rather than adding
-      // a dozen one-off disables or rewriting those hooks. Follow-up: revisit per-hook.
-      "react-hooks/set-state-in-effect": "warn",
       "import/no-cycle": "error",
       "import/no-duplicates": "error",
       "import/newline-after-import": "error",
@@ -71,6 +63,27 @@ const eslintConfig = defineConfig([
     files: ["**/__tests__/**"],
     rules: {
       "max-lines": "off",
+    },
+  },
+  {
+    // GRANDFATHERED, DO NOT COPY: eslint-config-next bundles a newer
+    // eslint-plugin-react-hooks whose recommended set includes
+    // react-hooks/set-state-in-effect (error by default). These 6 pre-existing
+    // hooks (12 sites total) use a prop/session-sync setState-in-effect pattern
+    // that predates the rule; rewriting them was out of scope for the lint-config
+    // task. The rule stays at its default "error" everywhere else — new code must
+    // not add setState-in-effect and must not be added to this list. Burn these
+    // down per-hook (derived state / key-reset patterns) and delete this override.
+    files: [
+      "src/components/chat-studio/hooks/use-auto-scroll.ts",
+      "src/components/chat-studio/hooks/use-chat-session-routing.ts",
+      "src/components/chat-studio/hooks/use-collection-tools.ts",
+      "src/components/chat-studio/hooks/use-panel-controls.ts",
+      "src/components/chat-studio/hooks/use-provider-preferences.ts",
+      "src/components/chat-studio/hooks/use-run-settings-order.ts",
+    ],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
     },
   },
   prettier,
