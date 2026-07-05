@@ -23,6 +23,30 @@ component-driven, well-named files that one person can hold in their head at onc
   pasted three times; a reducer `RESET` action replaced it).
 - **Pages are thin shells.** Route files under `app/` delegate to components/hooks; no
   business logic, no fetch orchestration in a `page.tsx`.
+- **Chat Studio is the reference decomposition.** `ChatStudio.tsx` is a ~390-line
+  orchestrator composing single-domain hooks under `chat-studio/hooks/` (routing, stream
+  reducer, mutation, prompt editor, panel controls, …) plus a pure reducer module
+  (`chat-stream-reducer.ts`) with focused tests. New features follow this shape: add a
+  hook or extend the reducer — don't grow the orchestrator.
+- **Reducers live in pure modules.** State shape, action types, and the reducer function
+  go in a plain `*-reducer.ts` with no React imports so they're unit-testable; the hook
+  file owns only `useReducer` wiring, refs, and the exposed API.
+- **Group props by domain, not by count.** When a component's prop list grows past ~10,
+  group related props into typed objects built with `useMemo` (see TelemetryPanel's
+  grouped props). A 78-prop interface is a smell that the parent owns state the child's
+  hooks should own.
+- **`React.memo` only works with stable props.** If you memoize a child, every object/
+  callback prop it receives must come from `useMemo`/`useCallback` — one inline literal
+  defeats the whole memo. During streaming this is the difference between re-rendering a
+  timeline and re-rendering the entire page per token.
+- **Hydration-safe initializers.** Never read `localStorage`/`sessionStorage`/`window.*`
+  inside a `useState` initializer — the server render uses different values and React
+  hydration mismatches. Initialize with the default, hydrate in a mount effect, and gate
+  any effect that reacts to the hydrated value behind a `hydrated` flag so it can't fire
+  against first-paint defaults.
+- **Effects must not write state they derive.** Computing a value in a `useMemo` and then
+  copying it into `useState` via an effect adds a render per change and a stale window.
+  Derive it where you use it.
 - **Delete dead code on sight.** No-op callbacks drilled through props, re-export blocks
   "for convenience", helpers that wrap a single operator — remove them. Dead code is not
   harmless; it costs every future reader.
