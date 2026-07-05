@@ -1,8 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-
 import type { ParameterInputKind } from "@/lib/types";
+import type { ReactNode } from "react";
 
 export type ParameterSelectOption = {
   label: string;

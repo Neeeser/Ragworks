@@ -14,6 +14,7 @@ const chunkerNodeType = "chunker.token";
 const embedderNodeType = "embedder.openrouter";
 const indexerNodeType = "indexer.pinecone";
 const retrieverNodeType = "retriever.pinecone";
+const EMBEDDING_DIMENSION_ERROR = "Embedding dimension";
 
 const buildNode = (data: Partial<PipelineNodeData> & { nodeType: string }, id = data.nodeType) =>
   ({
@@ -108,8 +109,8 @@ describe("pipeline-io", () => {
     const edgeValidation = validatePipelineEdges(nodes, [
       { id: "edge-1", source: embedderNodeType, target: indexerNodeType },
     ]);
-    expect(edgeValidation.edgeErrors["edge-1"]).toContain("Embedding dimension");
-    expect(edgeValidation.nodeErrors[indexerNodeType][0]).toContain("Embedding dimension");
+    expect(edgeValidation.edgeErrors["edge-1"]).toContain(EMBEDDING_DIMENSION_ERROR);
+    expect(edgeValidation.nodeErrors[indexerNodeType][0]).toContain(EMBEDDING_DIMENSION_ERROR);
   });
 
   it("uses config overrides when validating dimensions", () => {
@@ -136,7 +137,7 @@ describe("pipeline-io", () => {
       [indexerNodeType]: { dimension: 512 },
     });
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain("Embedding dimension");
+    expect(result.reason).toContain(EMBEDDING_DIMENSION_ERROR);
   });
 
   it("skips dimension validation when dimensions are not finite", () => {

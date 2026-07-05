@@ -117,6 +117,7 @@ const pipelineDefinition: PipelineDefinition = { nodes: [], edges: [] };
 const testEmail = "test@example.com";
 const testPassword = "secret";
 const badRequestStatus = "Bad Request";
+const streamingRequestFailedMessage = "Streaming request failed.";
 
 describe("api", () => {
   it("exposes a default API base URL", () => {
@@ -450,7 +451,7 @@ describe("api", () => {
     await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers3)).rejects.toBe(
       "oops",
     );
-    expect(handlers3.onError).toHaveBeenCalledWith("Streaming request failed.");
+    expect(handlers3.onError).toHaveBeenCalledWith(streamingRequestFailedMessage);
   });
 
   it("throws on invalid stream responses", async () => {
@@ -484,9 +485,9 @@ describe("api", () => {
     fetchMock.mockResolvedValueOnce(createStreamResponse(reader));
     const handlers = { onError: vi.fn() };
     await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers)).rejects.toThrow(
-      "Streaming request failed.",
+      streamingRequestFailedMessage,
     );
-    expect(handlers.onError).toHaveBeenCalledWith("Streaming request failed.");
+    expect(handlers.onError).toHaveBeenCalledWith(streamingRequestFailedMessage);
   });
 
   it("falls back to default stream errors when HTTP details are missing", async () => {
@@ -495,7 +496,7 @@ describe("api", () => {
     fetchMock.mockResolvedValueOnce(createErrorResponse("", { detail: "" }));
 
     await expect(streamChat("token", { content: "Hello", chat_model: "model" })).rejects.toThrow(
-      "Streaming request failed.",
+      streamingRequestFailedMessage,
     );
   });
 });

@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify": "npm run typecheck && npm run lint && vitest run"
   },
   "dependencies": {
     "@deck.gl/core": "^9.0.0",

@@ -4,9 +4,9 @@ import { useCallback, useMemo } from "react";
 
 import { createDefaultProviderForm } from "@/components/chat-studio/chat-helpers";
 
-import type { UsePanelControlsResult } from "@/components/chat-studio/hooks/use-panel-controls";
 import type { useModelCatalog } from "@/components/chat-studio/hooks/use-model-catalog";
 import type { useModelParameters } from "@/components/chat-studio/hooks/use-model-parameters";
+import type { UsePanelControlsResult } from "@/components/chat-studio/hooks/use-panel-controls";
 import type { useProviderPreferences } from "@/components/chat-studio/hooks/use-provider-preferences";
 import type {
   TelemetryModelProps,

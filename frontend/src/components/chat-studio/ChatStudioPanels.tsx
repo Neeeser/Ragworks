@@ -238,8 +238,12 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
         branchedFromSessionId: activeSession?.branched_from_session_id ?? null,
         branchedFromSessionTitle: branchedFromSession?.title ?? null,
         branchedFromMessageId: activeSession?.branched_from_message_id ?? null,
+        // Reading a ref during render to look up per-session metadata computed on a
+        // prior navigation (not written during this render); React's "recompute during
+        // render" pattern for derived, session-keyed history. See Task 13 brief.
         branchedFromOrigin: selectedSessionId
-          ? (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
+          ? // eslint-disable-next-line react-hooks/refs
+            (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
           : "manual",
         onNavigateToSession,
       }}

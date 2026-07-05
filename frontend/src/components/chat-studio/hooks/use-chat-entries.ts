@@ -43,8 +43,14 @@ export interface UseChatEntriesResult {
  * pure buildChatEntries output — no state written back from an effect.
  */
 export function useChatEntries(params: UseChatEntriesParams): UseChatEntriesResult {
-  const { messages, setMessages, optimisticMessages, toolTraces, selectedSessionId, resetStreamKeys } =
-    params;
+  const {
+    messages,
+    setMessages,
+    optimisticMessages,
+    toolTraces,
+    selectedSessionId,
+    resetStreamKeys,
+  } = params;
 
   const reasoningCacheRef = useRef<Map<string, ReasoningTraceSegment[]>>(new Map());
   const messageOrderRef = useRef<Map<string, number>>(new Map());
@@ -67,6 +73,11 @@ export function useChatEntries(params: UseChatEntriesParams): UseChatEntriesResu
     return map;
   }, [toolTraces]);
 
+  // buildChatEntries is a pure function; messageOrderRef only ever accumulates
+  // stable per-message ordinals assigned outside of render (see syncMessages below),
+  // so reading it here to derive chatEntries is the "recompute during render from a
+  // ref that isn't written during render" pattern rather than a stateful side effect.
+  /* eslint-disable react-hooks/refs -- see comment above; ref is read, not written, during render */
   const chatEntries = useMemo<ChatEntry[]>(
     () =>
       buildChatEntries({
@@ -79,6 +90,7 @@ export function useChatEntries(params: UseChatEntriesParams): UseChatEntriesResu
       }),
     [getPersistedReasoningSegments, messages, optimisticMessages, toolTraceMap],
   );
+  /* eslint-enable react-hooks/refs */
 
   const chatEntryMap = useMemo(() => {
     const map = new Map<string, ChatEntry>();

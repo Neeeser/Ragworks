@@ -14,6 +14,9 @@ import {
 
 import type { ReasoningTraceSegment } from "@/lib/types";
 
+const INLINE_TEXT = "Inline text";
+const CONTENT_TEXT = "Content text";
+
 describe("chat-utils", () => {
   it("parses JSON safely", () => {
     expect(safeParseJSON()).toBeNull();
@@ -71,17 +74,17 @@ describe("chat-utils", () => {
     expect(mixed[0]).toEqual(expect.objectContaining({ type: "text", content: "Alpha" }));
 
     const fromTextField = normalizeReasoningSegments([
-      { type: "text", text: "Inline text", content: 123 } as unknown as ReasoningTraceSegment,
+      { type: "text", text: INLINE_TEXT, content: 123 } as unknown as ReasoningTraceSegment,
     ]);
     expect(fromTextField[0]).toEqual(
-      expect.objectContaining({ text: "Inline text", content: "Inline text" }),
+      expect.objectContaining({ text: INLINE_TEXT, content: INLINE_TEXT }),
     );
 
     const fromContentField = normalizeReasoningSegments([
-      { type: "text", text: 5, content: "Content text" } as unknown as ReasoningTraceSegment,
+      { type: "text", text: 5, content: CONTENT_TEXT } as unknown as ReasoningTraceSegment,
     ]);
     expect(fromContentField[0]).toEqual(
-      expect.objectContaining({ text: "Content text", content: "Content text" }),
+      expect.objectContaining({ text: CONTENT_TEXT, content: CONTENT_TEXT }),
     );
 
     const usesPrevContentWhenTextMissing = normalizeReasoningSegments([

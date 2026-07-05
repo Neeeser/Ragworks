@@ -19,10 +19,13 @@ import type {
   TelemetryStreamingProps,
   TelemetryUsageProps,
 } from "@/components/chat-studio/types";
-import type { RunSettingsSectionKey, UsageBreakdown } from "@/lib/types";
-import type { ChatMessage, ChatSession } from "@/lib/types";
+import type {
+  ChatMessage,
+  ChatSession,
+  RunSettingsSectionKey,
+  UsageBreakdown,
+} from "@/lib/types";
 
-type Dispatch<T> = React.Dispatch<React.SetStateAction<T>>;
 type CollectionTools = ReturnType<typeof useCollectionTools>;
 type PromptEditor = ReturnType<typeof usePromptEditor>;
 

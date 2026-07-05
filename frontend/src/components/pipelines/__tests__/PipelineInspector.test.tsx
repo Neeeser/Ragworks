@@ -8,6 +8,10 @@ import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
+const NODE_TYPE_EMBEDDER = "embedder.openrouter";
+const NODE_TYPE_INDEXER = "indexer.pinecone";
+const NODE_TYPE_PARSER = "parser.document";
+
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
 
@@ -78,7 +82,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Embedder",
-        nodeType: "embedder.openrouter",
+        nodeType: NODE_TYPE_EMBEDDER,
         description: "",
         example: { input: "input", output: "output" },
         inputs: [],
@@ -120,7 +124,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Embedder",
-        nodeType: "embedder.openrouter",
+        nodeType: NODE_TYPE_EMBEDDER,
         description: "",
         inputs: [],
         outputs: [],
@@ -162,7 +166,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Indexer",
-        nodeType: "indexer.pinecone",
+        nodeType: NODE_TYPE_INDEXER,
         description: "",
         inputs: [],
         outputs: [],
@@ -228,7 +232,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Parser",
-        nodeType: "parser.document",
+        nodeType: NODE_TYPE_PARSER,
         description: "",
         inputs: [],
         outputs: [],
@@ -276,7 +280,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Indexer",
-        nodeType: "indexer.pinecone",
+        nodeType: NODE_TYPE_INDEXER,
         description: "",
         inputs: [],
         outputs: [],
@@ -312,7 +316,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Empty",
-        nodeType: "parser.document",
+        nodeType: NODE_TYPE_PARSER,
         description: "",
         inputs: [],
         outputs: [],
@@ -341,7 +345,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Indexer",
-        nodeType: "indexer.pinecone",
+        nodeType: NODE_TYPE_INDEXER,
         description: "",
         inputs: [],
         outputs: [],
@@ -376,7 +380,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Indexer",
-        nodeType: "indexer.pinecone",
+        nodeType: NODE_TYPE_INDEXER,
         description: "",
         inputs: [],
         outputs: [],
@@ -425,7 +429,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Config",
-        nodeType: "parser.document",
+        nodeType: NODE_TYPE_PARSER,
         description: "",
         inputs: [],
         outputs: [],
@@ -464,7 +468,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Embedder",
-        nodeType: "embedder.openrouter",
+        nodeType: NODE_TYPE_EMBEDDER,
         description: "",
         inputs: [],
         outputs: [],
@@ -495,7 +499,7 @@ describe("PipelineInspector", () => {
       position: { x: 0, y: 0 },
       data: {
         label: "Embedder",
-        nodeType: "embedder.openrouter",
+        nodeType: NODE_TYPE_EMBEDDER,
         description: "",
         inputs: [],
         outputs: [],

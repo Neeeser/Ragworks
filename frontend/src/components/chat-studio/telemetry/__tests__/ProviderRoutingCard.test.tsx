@@ -7,9 +7,12 @@ import { ProviderRoutingCard } from "@/components/chat-studio/telemetry/Provider
 import type { ProviderFormState } from "@/components/chat-studio/types";
 import type { ModelEndpointDirectory, ProviderEndpoint } from "@/lib/types";
 
+const OPENAI_GPT4 = "openai/gpt-4";
+const MISTRAL_MIXTRAL = "mistral/mixtral";
+
 const endpoints: ProviderEndpoint[] = [
   {
-    name: "openai/gpt-4",
+    name: OPENAI_GPT4,
     provider_name: "OpenAI",
     status: 0,
     uptime_last_30m: 0.99,
@@ -30,7 +33,7 @@ const endpoints: ProviderEndpoint[] = [
     supported_parameters: ["temperature"],
   },
   {
-    name: "mistral/mixtral",
+    name: MISTRAL_MIXTRAL,
     provider_name: "Mistral",
     status: -1,
     uptime_last_30m: 50,
@@ -229,7 +232,7 @@ describe("ProviderRoutingCard", () => {
 
     render(
       <ProviderRoutingCard
-        providerForm={{ ...baseForm, order: ["openai/gpt-4", "mistral/mixtral"] }}
+        providerForm={{ ...baseForm, order: [OPENAI_GPT4, MISTRAL_MIXTRAL] }}
         setProviderForm={(updater) => updater(baseForm)}
         providerDirectory={directory}
         providerDirectoryLoading={false}
@@ -249,7 +252,7 @@ describe("ProviderRoutingCard", () => {
   it("guards provider reordering when state changes", () => {
     const { unmount } = render(
       <ProviderRoutingCard
-        providerForm={{ ...baseForm, order: ["openai/gpt-4", "mistral/mixtral"] }}
+        providerForm={{ ...baseForm, order: [OPENAI_GPT4, MISTRAL_MIXTRAL] }}
         setProviderForm={(updater) => updater(baseForm)}
         providerDirectory={directory}
         providerDirectoryLoading={false}
@@ -267,8 +270,8 @@ describe("ProviderRoutingCard", () => {
 
     render(
       <ProviderRoutingCard
-        providerForm={{ ...baseForm, order: ["openai/gpt-4", "mistral/mixtral"] }}
-        setProviderForm={(updater) => updater({ ...baseForm, order: ["openai/gpt-4"] })}
+        providerForm={{ ...baseForm, order: [OPENAI_GPT4, MISTRAL_MIXTRAL] }}
+        setProviderForm={(updater) => updater({ ...baseForm, order: [OPENAI_GPT4] })}
         providerDirectory={directory}
         providerDirectoryLoading={false}
         providerDirectoryError={null}

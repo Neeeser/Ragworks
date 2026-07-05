@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { sortChatModels, sortEmbeddingModels } from "@/lib/model-sorting";
 
-import type { EmbeddingModelInfo, ModelInfo } from "@/lib/types";
 import type { EmbeddingModelSortOption } from "@/lib/model-sorting";
+import type { EmbeddingModelInfo, ModelInfo } from "@/lib/types";
 
 describe("model-sorting", () => {
   it("keeps default chat model order", () => {
