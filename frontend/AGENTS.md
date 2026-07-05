@@ -4,6 +4,17 @@ Rules for working in `frontend/`. Every rule here exists because we found and fi
 opposite in this codebase — don't reintroduce it. The core idea throughout: **small,
 component-driven, well-named files that one person can hold in their head at once.**
 
+## The gate
+
+**`npm run verify` (typecheck → lint → tests) must pass before every commit.** All three
+stages are errors-fail. Lint enforces the structural rules mechanically: `max-lines` 400
+(production code), `no-console` (warn/error allowed), `react-hooks/exhaustive-deps` as
+error, `import/no-duplicates`. `complexity`/`max-depth` warn — treat a new warning in
+your diff as a design prompt, not noise. The `react-hooks/set-state-in-effect` override
+for six grandfathered hooks is a burn-down list, not a pattern to copy — never add a
+file to it. Do not add `eslint-disable` without a comment saying why, and never disable
+`max-lines` — split the file instead.
+
 ## Code structure
 
 - **File size is a design signal.** Components and hooks stay under ~300 lines; 400 is the
@@ -82,9 +93,9 @@ component-driven, well-named files that one person can hold in their head at onc
 
 ## TypeScript
 
-- **`npm run typecheck` must exit 0 before every commit.** It is part of the verify
-  chain (`typecheck && vitest run && lint`). This codebase once accumulated 227 unnoticed
-  errors because no gate existed; one of them was a shipped runtime crash.
+- **`npm run typecheck` must exit 0 before every commit.** It is the first stage of
+  `npm run verify`. This codebase once accumulated 227 unnoticed errors because no gate
+  existed; one of them was a shipped runtime crash.
 - **Never suppress:** no `any`, no `@ts-ignore`, no `@ts-expect-error` in source. Fix the
   type. An `as` cast is a last resort for invariants the type system can't express — keep
   it local and comment why.
@@ -211,3 +222,18 @@ component-driven, well-named files that one person can hold in their head at onc
 - **Name tests after behavior, not methods.** "submits full node config when pipelines
   load after expanding advanced options" tells the next reader what contract broke;
   "handleToggleAdvanced works" doesn't.
+
+## Known gaps (deliberate, tracked — not license to add more)
+
+- **No CI pipeline in the repo.** `npm run verify` is only enforced by discipline; wiring
+  it into CI (plus `npm run build`) is the single highest-value next step.
+- **No E2E layer** (Playwright/Cypress). The suite is unit/component only.
+- **Types are hand-mirrored from FastAPI.** Generate from `/openapi.json` via
+  `openapi-typescript` to eliminate drift.
+- **`noUncheckedIndexedAccess` is off** — enabling it surfaced 182 errors; burn down in a
+  dedicated pass, don't half-enable.
+- **Six grandfathered hooks** carry `react-hooks/set-state-in-effect` warnings (see
+  eslint.config.mjs) and there are ~24 `complexity` warnings — both are burn-down lists.
+- **Auth guard is client-only** (redirect in `(console)/layout.tsx`, token in
+  localStorage; no `middleware.ts`). Safe only because the API enforces auth server-side;
+  a cookie + middleware migration would remove the loading flash and harden it.
