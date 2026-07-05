@@ -60,40 +60,45 @@ describe("useApiQuery", () => {
     rerender({ dep: 2 });
 
     // Resolve the second (current) request first, then the stale first one.
-    act(() => {
+    // `await act(async () => ...)` flushes both the promise callbacks and any
+    // React work they schedule, so an unguarded stale setData would be visible.
+    await act(async () => {
       second.resolve(secondResult);
     });
-    await waitFor(() => expect(result.current.data).toBe(secondResult));
+    expect(result.current.data).toBe(secondResult);
+    expect(result.current.loading).toBe(false);
 
-    act(() => {
+    await act(async () => {
       first.resolve("first-result-stale");
     });
-
-    // Give any microtasks a chance to run; the stale resolution must be ignored.
-    await Promise.resolve();
-    await Promise.resolve();
 
     expect(result.current.data).toBe(secondResult);
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores resolution after unmount", async () => {
-    const pending = deferred<string>();
-    const fn = vi.fn().mockReturnValue(pending.promise);
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("ignores a stale rejection after deps change", async () => {
+    const currentResult = "current-result";
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const fn = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
-    const { unmount } = renderHook(() => useApiQuery(fn, []));
-
-    unmount();
-
-    await act(async () => {
-      pending.resolve("too-late");
-      await Promise.resolve();
-      await Promise.resolve();
+    const { result, rerender } = renderHook(({ dep }) => useApiQuery(fn, [dep]), {
+      initialProps: { dep: 1 },
     });
 
-    expect(consoleError).not.toHaveBeenCalled();
-    consoleError.mockRestore();
+    rerender({ dep: 2 });
+
+    await act(async () => {
+      second.resolve(currentResult);
+    });
+    expect(result.current.data).toBe(currentResult);
+
+    await act(async () => {
+      first.reject(new Error("stale failure"));
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toBe(currentResult);
   });
 
   it("refetches when reload is called", async () => {
