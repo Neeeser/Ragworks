@@ -2,9 +2,9 @@
 
 import { Handle, Position } from "@xyflow/react";
 
-import { cn } from "@/lib/utils";
+import { cn, truncate } from "@/lib/utils";
 
-import { buildPipelineConfigFields } from "./pipeline-config";
+import { buildPipelineConfigFields, formatConfigValue } from "./pipeline-config";
 import { getNodeFamilyStyles, getPortTypeClasses, resolveNodeFamily } from "./pipeline-theme";
 
 import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
@@ -34,20 +34,6 @@ export type PipelineNodeData = {
 
 const portLeftPercent = (index: number, total: number) => `${((index + 1) / (total + 1)) * 100}%`;
 const CONFIG_PREVIEW_LIMIT = 48;
-
-const formatConfigValue = (value: unknown) => {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const truncate = (value: string, limit: number) =>
-  value.length > limit ? `${value.slice(0, limit - 3)}...` : value;
 
 export function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
   const family = resolveNodeFamily(data.nodeType);

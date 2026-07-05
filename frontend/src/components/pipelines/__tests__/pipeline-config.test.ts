@@ -4,8 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPipelineConfigFields,
+  coerceFieldValue,
   formatConfigValue,
+  getInputValue,
 } from "@/components/pipelines/pipeline-config";
+
+import type { PipelineConfigField } from "@/components/pipelines/pipeline-config";
 
 describe("pipeline-config", () => {
   it("returns empty fields for undefined schema", () => {
@@ -84,7 +88,9 @@ describe("pipeline-config", () => {
   });
 
   it("formats config values", () => {
-    expect(formatConfigValue(null)).toBe("");
+    // Null/undefined render as an em dash (unified with the previous PipelineNode-local
+    // formatConfigValue, which rendered "null"); "" is no longer a valid rendering.
+    expect(formatConfigValue(null)).toBe("—");
     expect(formatConfigValue("text")).toBe("text");
     expect(formatConfigValue(12)).toBe("12");
     expect(formatConfigValue(true)).toBe("true");
@@ -110,5 +116,40 @@ describe("pipeline-config", () => {
     expect(fields.some((field) => field.label === "Pick me")).toBe(true);
     expect(fields.some((field) => field.key === "nullableChoice" && field.nullable)).toBe(true);
     expect(fields.some((field) => field.key === "nullOnly" && field.nullable)).toBe(true);
+  });
+
+  const numberField: PipelineConfigField = {
+    key: "count",
+    label: "Count",
+    input: "number",
+    nullable: false,
+    required: false,
+  };
+  const integerField: PipelineConfigField = { ...numberField, key: "n", input: "integer" };
+  const booleanField: PipelineConfigField = { ...numberField, key: "flag", input: "boolean" };
+  const nullableTextField: PipelineConfigField = {
+    ...numberField,
+    key: "note",
+    input: "text",
+    nullable: true,
+  };
+  const textField: PipelineConfigField = { ...numberField, key: "label", input: "text" };
+
+  it("reads input values with schema default fallback", () => {
+    expect(getInputValue(numberField, { count: 5 })).toBe(5);
+    expect(getInputValue(numberField, {})).toBe("");
+    expect(getInputValue({ ...numberField, defaultValue: 2 }, {})).toBe(2);
+  });
+
+  it("coerces raw control values per field kind", () => {
+    expect(coerceFieldValue(numberField, "1.5")).toBe(1.5);
+    expect(coerceFieldValue(numberField, "")).toBeUndefined();
+    expect(coerceFieldValue(numberField, "NaN")).toBeUndefined();
+    expect(coerceFieldValue(integerField, "3.9")).toBe(3);
+    expect(coerceFieldValue(booleanField, true)).toBe(true);
+    expect(coerceFieldValue(booleanField, false)).toBe(false);
+    expect(coerceFieldValue(nullableTextField, "")).toBeUndefined();
+    expect(coerceFieldValue(textField, "")).toBe("");
+    expect(coerceFieldValue(textField, "hello")).toBe("hello");
   });
 });

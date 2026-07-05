@@ -3,7 +3,8 @@
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { buildDefaultDefinition } from "@/components/pipelines/pipeline-utils";
+import { CREATE_SENTINEL } from "@/components/pipelines/pipeline-kinds";
+import { buildDefaultDefinition, sortIndexesByName } from "@/components/pipelines/pipeline-utils";
 import { Button } from "@/components/ui/button";
 import { Field, Select, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
@@ -26,8 +27,6 @@ const steps: WizardStep[] = [
   { id: "index", label: "Index", description: "Select the Pinecone index to target." },
   { id: "review", label: "Review", description: "Confirm pipeline details." },
 ];
-
-const CREATE_INDEX_VALUE = "__create__";
 
 export function CreatePipelineWizard({
   open,
@@ -53,10 +52,7 @@ export function CreatePipelineWizard({
     wasOpen.current = open;
   }, [open]);
 
-  const sortedIndexes = useMemo(
-    () => [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
-    [indexes],
-  );
+  const sortedIndexes = useMemo(() => sortIndexesByName(indexes), [indexes]);
   const selectedIndex = useMemo(
     () => sortedIndexes.find((index) => index.name === form.index_name) ?? null,
     [sortedIndexes, form.index_name],
@@ -94,7 +90,7 @@ export function CreatePipelineWizard({
   };
 
   const handleIndexSelect = (value: string) => {
-    if (value === CREATE_INDEX_VALUE) {
+    if (value === CREATE_SENTINEL) {
       onOpenIndexManager();
       return;
     }
@@ -159,7 +155,7 @@ export function CreatePipelineWizard({
                   {index.name}
                 </option>
               ))}
-              <option value={CREATE_INDEX_VALUE}>+ Add new index...</option>
+              <option value={CREATE_SENTINEL}>+ Add new index...</option>
             </Select>
           </Field>
           {sortedIndexes.length === 0 ? (

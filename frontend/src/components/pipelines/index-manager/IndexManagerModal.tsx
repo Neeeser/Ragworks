@@ -4,11 +4,11 @@ import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
+import { sortIndexesByName } from "@/components/pipelines/pipeline-utils";
 import { Button } from "@/components/ui/button";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import { createPineconeIndex, deletePineconeIndex } from "@/lib/api";
-import { sortEmbeddingModels, type EmbeddingModelSortOption } from "@/lib/model-sorting";
 
 import type { EmbeddingModelInfo, PineconeIndex, PineconeIndexCreatePayload } from "@/lib/types";
 
@@ -63,27 +63,10 @@ export function IndexManagerModal({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"details" | "create">("details");
   const [useModelDimension, setUseModelDimension] = useState(false);
-  const [embeddingSearchTerm, setEmbeddingSearchTerm] = useState("");
-  const [embeddingSortOption, setEmbeddingSortOption] = useState<EmbeddingModelSortOption>("price");
   const [selectedEmbeddingModelId, setSelectedEmbeddingModelId] = useState("");
 
-  const sortedIndexes = useMemo(
-    () => [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
-    [indexes],
-  );
+  const sortedIndexes = useMemo(() => sortIndexesByName(indexes), [indexes]);
   const selectedIndex = sortedIndexes.find((index) => index.name === selectedName) ?? null;
-  const filteredEmbeddingModels = useMemo(() => {
-    const term = embeddingSearchTerm.trim().toLowerCase();
-    if (!term) return embeddingModels;
-    return embeddingModels.filter((model) => {
-      const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [embeddingModels, embeddingSearchTerm]);
-  const sortedEmbeddingModels = useMemo(
-    () => sortEmbeddingModels(filteredEmbeddingModels, embeddingSortOption),
-    [filteredEmbeddingModels, embeddingSortOption],
-  );
   const selectedEmbeddingModel =
     embeddingModels.find((model) => model.id === selectedEmbeddingModelId) ?? null;
   const dimensionValid =
@@ -508,16 +491,11 @@ export function IndexManagerModal({
                         {useModelDimension ? (
                           <div className="mt-3 max-h-[60vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/30 p-3">
                             <EmbeddingModelSelectorCard
-                              currentModelInfo={selectedEmbeddingModel}
+                              models={embeddingModels}
                               selectedModelKey={selectedEmbeddingModelId}
-                              filteredModelCatalog={sortedEmbeddingModels}
-                              modelSearchTerm={embeddingSearchTerm}
-                              onSearchChange={setEmbeddingSearchTerm}
                               modelsLoading={embeddingModelsLoading}
                               modelsError={embeddingModelsError}
                               onSelectModel={handleSelectEmbeddingModel}
-                              sortOption={embeddingSortOption}
-                              onSortChange={setEmbeddingSortOption}
                             />
                           </div>
                         ) : (

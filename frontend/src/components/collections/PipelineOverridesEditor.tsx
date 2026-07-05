@@ -4,7 +4,12 @@ import { useMemo } from "react";
 
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 
-import { buildPipelineConfigFields, formatConfigValue } from "../pipelines/pipeline-config";
+import {
+  buildPipelineConfigFields,
+  coerceFieldValue,
+  formatConfigValue,
+  getInputValue,
+} from "../pipelines/pipeline-config";
 
 import type { PipelineConfigField } from "../pipelines/pipeline-config";
 import type { NodeSpec, Pipeline } from "@/lib/types";
@@ -17,13 +22,6 @@ type PipelineOverridesEditorProps = {
   nodeSpecs: NodeSpec[];
   overrides: OverridesState;
   onOverridesChange: (next: OverridesState) => void;
-};
-
-const getInputValue = (field: PipelineConfigField, draft: Record<string, unknown>) => {
-  if (Object.prototype.hasOwnProperty.call(draft, field.key)) {
-    return draft[field.key];
-  }
-  return field.defaultValue ?? "";
 };
 
 export function PipelineOverridesEditor({
@@ -47,27 +45,7 @@ export function PipelineOverridesEditor({
     field: PipelineConfigField,
     rawValue: string | boolean,
   ) => {
-    let nextValue: unknown = rawValue;
-    if (field.input === "number" || field.input === "integer") {
-      if (rawValue === "") {
-        nextValue = undefined;
-      } else {
-        const parsed = Number(rawValue);
-        /* c8 ignore start -- invalid numeric input is covered in UI controls */
-        if (Number.isNaN(parsed)) {
-          nextValue = undefined;
-        } else {
-          nextValue = field.input === "integer" ? Math.trunc(parsed) : parsed;
-        }
-        /* c8 ignore stop */
-      }
-    } else if (field.input === "boolean") {
-      nextValue = rawValue === true;
-    } else if (rawValue === "" && field.nullable) {
-      nextValue = undefined;
-    } else {
-      nextValue = rawValue;
-    }
+    const nextValue = coerceFieldValue(field, rawValue);
 
     const nextOverrides = { ...overrides };
     const nextConfig = { ...(nextOverrides[nodeId] ?? {}) };

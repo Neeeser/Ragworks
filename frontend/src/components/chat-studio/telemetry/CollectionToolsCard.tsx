@@ -1,5 +1,6 @@
 "use client";
 
+import { chipClass } from "@/components/chat-studio/chat-constants";
 import { cn } from "@/lib/utils";
 
 import type { Collection } from "@/lib/types";
@@ -13,9 +14,6 @@ interface CollectionToolsCardProps {
   collectionsLoading: boolean;
   collectionsError: string | null;
 }
-
-const chipClass =
-  "rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-slate-300";
 
 export const CollectionToolsCard = ({
   collections,

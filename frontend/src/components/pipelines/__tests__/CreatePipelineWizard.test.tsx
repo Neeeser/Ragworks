@@ -17,6 +17,8 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/components/pipelines/pipeline-utils", () => ({
   buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
+  sortIndexesByName: (indexes: { name: string }[]) =>
+    [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
 }));
 
 describe("CreatePipelineWizard", () => {

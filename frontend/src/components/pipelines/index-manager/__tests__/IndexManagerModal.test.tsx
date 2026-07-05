@@ -200,14 +200,10 @@ describe("IndexManagerModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "From model" }));
     expect(screen.getByText("Select embedding")).toBeInTheDocument();
 
-    act(() => {
-      (lastEmbeddingProps?.onSearchChange as (value: string) => void)("embed");
-    });
-
-    await waitFor(() => {
-      const filtered = lastEmbeddingProps?.filteredModelCatalog as EmbeddingModelInfo[] | undefined;
-      expect(filtered?.length).toBe(1);
-    });
+    // Search/sort are now owned internally by EmbeddingModelSelectorCard; the modal
+    // just forwards the raw catalog.
+    const models = lastEmbeddingProps?.models as EmbeddingModelInfo[] | undefined;
+    expect(models).toEqual(embeddingModels);
 
     act(() => {
       (lastEmbeddingProps?.onSelectModel as (id: string) => void)("emb-1");

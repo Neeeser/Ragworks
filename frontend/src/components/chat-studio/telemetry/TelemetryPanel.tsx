@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
+import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/chat-constants";
 import { CollectionToolsCard } from "@/components/chat-studio/telemetry/CollectionToolsCard";
 import { CollectionVitalsCard } from "@/components/chat-studio/telemetry/CollectionVitalsCard";
 import { ModelParametersCard } from "@/components/chat-studio/telemetry/ModelParametersCard";
@@ -56,8 +57,6 @@ import type {
   UsageBreakdown,
 } from "@/lib/types";
 import type { Components } from "react-markdown";
-
-const DEFAULT_STREAMING_ENABLED = true;
 
 interface TelemetrySectionConfig {
   title: string;

@@ -3,6 +3,7 @@
 import { Filter, PanelLeftClose, PlusCircle, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { chipClass } from "@/components/chat-studio/chat-constants";
 import { Button } from "@/components/ui/button";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -43,8 +44,6 @@ export const HistoryPanel = ({
   );
   const filterActive = filterCollectionIds.length > 0 || filterIncludeUnassigned;
   const filterCount = filterCollectionIds.length + (filterIncludeUnassigned ? 1 : 0);
-  const chipClass =
-    "rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-slate-300";
 
   useEffect(() => {
     if (!filterOpen) {

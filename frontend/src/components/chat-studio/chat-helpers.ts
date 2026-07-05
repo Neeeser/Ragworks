@@ -199,6 +199,11 @@ export const generateClientMessageId = () => {
   return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
+/** Generates a fallback id for a live tool call/result event when the server-sent event
+ * doesn't carry its own id. */
+export const makeToolId = () =>
+  `tool-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
 export const ensureMessageOrder = (
   map: Map<string, number>,
   nextOrderRef: { current: number },

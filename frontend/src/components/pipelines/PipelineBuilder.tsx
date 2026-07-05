@@ -19,12 +19,10 @@ import {
   updatePipeline,
   validatePipeline,
 } from "@/lib/api";
-import { sortEmbeddingModels, type EmbeddingModelSortOption } from "@/lib/model-sorting";
 import { useAuth } from "@/providers/auth-provider";
 
 import { CreatePipelineWizard } from "./CreatePipelineWizard";
 import { IndexManagerModal } from "./index-manager/IndexManagerModal";
-import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import {
   validatePipelineConfig,
   validatePipelineConnection,
@@ -35,6 +33,7 @@ import {
   buildNodeCatalog,
   createDefaultNodePosition,
   createId,
+  specToNodeData,
   toFlowEdges,
   toFlowNodes,
   toPipelineDefinition,
@@ -90,9 +89,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModelInfo[]>([]);
   const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false);
   const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null);
-  const [embeddingModelSearchTerm, setEmbeddingModelSearchTerm] = useState("");
-  const [embeddingModelSortOption, setEmbeddingModelSortOption] =
-    useState<EmbeddingModelSortOption>("price");
   const [indexes, setIndexes] = useState<PineconeIndex[]>([]);
   const [indexesLoading, setIndexesLoading] = useState(false);
   const [indexesError, setIndexesError] = useState<string | null>(null);
@@ -127,22 +123,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   );
   const previewNode = useMemo(() => {
     if (!previewSpec) return null;
-    const description = resolveNodeDescription(previewSpec);
-    const example = resolveNodeExample(previewSpec);
     const node: Node<PipelineNodeData> = {
       id: `preview-${previewSpec.type}`,
       type: "pipelineNode",
       position: { x: 0, y: 0 },
-      data: {
-        label: previewSpec.label,
-        nodeType: previewSpec.type,
-        description,
-        example,
-        inputs: previewSpec.input_ports,
-        outputs: previewSpec.output_ports,
-        config: previewSpec.default_config ?? {},
-        configSchema: previewSpec.config_schema ?? {},
-      },
+      data: specToNodeData(previewSpec),
     };
     return node;
   }, [previewSpec]);
@@ -357,22 +342,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const handleAddNode = (spec: NodeSpec, position?: { x: number; y: number }) => {
     const nodeId = createId();
-    const description = resolveNodeDescription(spec);
-    const example = resolveNodeExample(spec);
     const newNode: Node<PipelineNodeData> = {
       id: nodeId,
       type: "pipelineNode",
       position: position ?? createDefaultNodePosition(nodes.length),
-      data: {
-        label: spec.label,
-        nodeType: spec.type,
-        description,
-        example,
-        inputs: spec.input_ports,
-        outputs: spec.output_ports,
-        config: spec.default_config ?? {},
-        configSchema: spec.config_schema ?? {},
-      },
+      data: specToNodeData(spec),
     };
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeId(nodeId);
@@ -547,20 +521,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     if (!authToken) return;
     refreshIndexes(authToken);
   };
-
-  const filteredEmbeddingModels = useMemo(() => {
-    const term = embeddingModelSearchTerm.trim().toLowerCase();
-    if (!term) return embeddingModels;
-    return embeddingModels.filter((model) => {
-      const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [embeddingModels, embeddingModelSearchTerm]);
-
-  const sortedEmbeddingModels = useMemo(
-    () => sortEmbeddingModels(filteredEmbeddingModels, embeddingModelSortOption),
-    [filteredEmbeddingModels, embeddingModelSortOption],
-  );
 
   const handleSelectEmbeddingModel = async (modelId: string) => {
     if (!selectedNode || selectedNode.data.nodeType !== "embedder.openrouter") return;
@@ -767,14 +727,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
               pineconeIndexes={indexes}
               onOpenIndexManager={handleOpenIndexManager}
               embeddingModels={embeddingModels}
-              filteredEmbeddingModels={sortedEmbeddingModels}
-              embeddingModelSearchTerm={embeddingModelSearchTerm}
               embeddingModelsLoading={embeddingModelsLoading}
               embeddingModelsError={embeddingModelsError}
-              onEmbeddingSearchChange={setEmbeddingModelSearchTerm}
               onSelectEmbeddingModel={handleSelectEmbeddingModel}
-              embeddingModelSortOption={embeddingModelSortOption}
-              onEmbeddingModelSortChange={setEmbeddingModelSortOption}
             />
 
             <PipelineSavePanel

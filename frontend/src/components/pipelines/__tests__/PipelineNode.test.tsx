@@ -65,7 +65,9 @@ describe("PipelineNode", () => {
     expect(screen.getByText("Node")).toBeInTheDocument();
     expect(screen.getByText(parserNodeType)).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
-    expect(screen.getByText(/\.\.\./)).toBeInTheDocument();
+    // PipelineNode now reuses the shared lib/utils truncate, which appends a single
+    // ellipsis character rather than three literal dots.
+    expect(screen.getByText(/…/)).toBeInTheDocument();
     expect(screen.getByTestId("target-in")).toBeInTheDocument();
     expect(screen.getByTestId("source-out")).toBeInTheDocument();
   });

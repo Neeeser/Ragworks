@@ -2,10 +2,11 @@
 
 import { type RefObject } from "react";
 
+import {
+  CHAT_INPUT_MAX_HEIGHT,
+  CHAT_INPUT_MIN_HEIGHT,
+} from "@/components/chat-studio/chat-constants";
 import { Button } from "@/components/ui/button";
-
-const CHAT_INPUT_MIN_HEIGHT = 40;
-const CHAT_INPUT_MAX_HEIGHT = 160;
 
 interface ChatInputProps {
   draft: string;

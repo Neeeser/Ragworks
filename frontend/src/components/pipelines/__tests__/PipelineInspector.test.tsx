@@ -113,7 +113,7 @@ describe("PipelineInspector", () => {
     expect(screen.queryByRole("button", { name: /Apply config/ })).not.toBeInTheDocument();
   });
 
-  it("provides fallback embedding handlers", () => {
+  it("defaults the embedding select handler to a no-op when the caller omits one", () => {
     const node: Node<PipelineNodeData> = {
       id: "node-embed",
       type: "pipelineNode",
@@ -146,9 +146,7 @@ describe("PipelineInspector", () => {
 
     expect(lastEmbeddingProps).not.toBeNull();
     expect(() => {
-      (lastEmbeddingProps?.onSearchChange as (value: string) => void)("query");
       (lastEmbeddingProps?.onSelectModel as (value: string) => void)("model-1");
-      (lastEmbeddingProps?.onSortChange as (value: string) => void)("price");
     }).not.toThrow();
   });
 
@@ -489,9 +487,7 @@ describe("PipelineInspector", () => {
   });
 
   it("passes embedder selection state and callbacks", () => {
-    const onEmbeddingSearchChange = vi.fn();
     const onSelectEmbeddingModel = vi.fn();
-    const onEmbeddingModelSortChange = vi.fn();
     const embeddingModels: EmbeddingModelInfo[] = [{ id: "emb-1", name: "Embed" }];
     const node: Node<PipelineNodeData> = {
       id: "node-10",
@@ -516,16 +512,12 @@ describe("PipelineInspector", () => {
         onLabelChange={() => undefined}
         onApplyConfig={() => undefined}
         embeddingModels={embeddingModels}
-        onEmbeddingSearchChange={onEmbeddingSearchChange}
         onSelectEmbeddingModel={onSelectEmbeddingModel}
-        embeddingModelSortOption="dimension"
-        onEmbeddingModelSortChange={onEmbeddingModelSortChange}
       />,
     );
 
     expect(lastEmbeddingProps?.selectedModelKey).toBe("emb-1");
-    expect(lastEmbeddingProps?.onSearchChange).toBe(onEmbeddingSearchChange);
+    expect(lastEmbeddingProps?.models).toBe(embeddingModels);
     expect(lastEmbeddingProps?.onSelectModel).toBe(onSelectEmbeddingModel);
-    expect(lastEmbeddingProps?.onSortChange).toBe(onEmbeddingModelSortChange);
   });
 });

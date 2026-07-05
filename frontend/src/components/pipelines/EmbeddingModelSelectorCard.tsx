@@ -1,97 +1,57 @@
 "use client";
 
 import { Check, Loader, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
+import { formatPricePerMillion } from "@/lib/format";
+import { sortEmbeddingModels, type EmbeddingModelSortOption } from "@/lib/model-sorting";
 import { cn } from "@/lib/utils";
 
-import type { EmbeddingModelSortOption } from "@/lib/model-sorting";
 import type { EmbeddingModelInfo } from "@/lib/types";
 
 type EmbeddingModelSelectorCardProps = {
-  currentModelInfo: EmbeddingModelInfo | null;
+  models: EmbeddingModelInfo[];
   selectedModelKey: string;
-  filteredModelCatalog: EmbeddingModelInfo[];
-  modelSearchTerm: string;
-  onSearchChange: (value: string) => void;
+  onSelectModel: (id: string) => void;
   modelsLoading: boolean;
   modelsError: string | null;
-  onSelectModel: (id: string) => void;
-  sortOption: EmbeddingModelSortOption;
-  onSortChange: (value: EmbeddingModelSortOption) => void;
 };
 
-const formatPricePerMillion = (value?: number | string | null): string | null => {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const raw =
-    typeof value === "number"
-      ? value
-      : Number(
-          String(value)
-            .trim()
-            .replace(/[^0-9eE.+-]/g, ""),
-        );
-  if (!Number.isFinite(raw)) {
-    const fallback = String(value).trim();
-    return fallback || null;
-  }
-  const pricePerMillion = raw * 1_000_000;
-  const trimFractionDigits = (numericString: string, minFractionDigits: number) => {
-    if (!numericString.includes(".")) {
-      return numericString;
-    }
-    const [whole, fraction] = numericString.split(".");
-    if (fraction.length <= minFractionDigits) {
-      return `${whole}.${fraction.padEnd(minFractionDigits, "0")}`;
-    }
-    let trimmedFraction = fraction;
-    while (trimmedFraction.length > minFractionDigits && trimmedFraction.endsWith("0")) {
-      trimmedFraction = trimmedFraction.slice(0, -1);
-    }
-    /* c8 ignore next -- minFractionDigits is never zero when a fraction exists */
-    return trimmedFraction.length > 0 ? `${whole}.${trimmedFraction}` : whole;
-  };
+/**
+ * Owns the search/sort state for an embedding model catalog. Previously this
+ * filter+sort pipeline was duplicated across PipelineBuilder, IndexManagerModal, and
+ * (via prop drilling) PipelineInspector; centralizing it here lets every caller just
+ * pass the raw model list.
+ */
+export function useEmbeddingModelFilter(models: EmbeddingModelInfo[]) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOption, setSortOption] = useState<EmbeddingModelSortOption>("price");
 
-  let minFractionDigits = 0;
-  let maxFractionDigits = 0;
-  if (pricePerMillion >= 100) {
-    minFractionDigits = 0;
-    maxFractionDigits = 0;
-  } else if (pricePerMillion >= 10) {
-    minFractionDigits = 1;
-    maxFractionDigits = 1;
-  } else if (pricePerMillion >= 1) {
-    minFractionDigits = 2;
-    maxFractionDigits = 2;
-  } else if (pricePerMillion >= 0.1) {
-    minFractionDigits = 2;
-    maxFractionDigits = 3;
-  } else if (pricePerMillion >= 0.01) {
-    minFractionDigits = 2;
-    maxFractionDigits = 4;
-  } else {
-    minFractionDigits = 2;
-    maxFractionDigits = 6;
-  }
-  const fixed = pricePerMillion.toFixed(maxFractionDigits);
-  const normalized = trimFractionDigits(fixed, minFractionDigits);
-  return `$${normalized}/M`;
-};
+  const filteredModels = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const matching = term
+      ? models.filter((model) => {
+          const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
+          return haystack.includes(term);
+        })
+      : models;
+    return sortEmbeddingModels(matching, sortOption);
+  }, [models, searchTerm, sortOption]);
+
+  return { searchTerm, setSearchTerm, sortOption, setSortOption, filteredModels };
+}
 
 export function EmbeddingModelSelectorCard({
-  currentModelInfo,
+  models,
   selectedModelKey,
-  filteredModelCatalog,
-  modelSearchTerm,
-  onSearchChange,
+  onSelectModel,
   modelsLoading,
   modelsError,
-  onSelectModel,
-  sortOption,
-  onSortChange,
 }: EmbeddingModelSelectorCardProps) {
-  const visibleModels = filteredModelCatalog.slice(0, 50);
+  const { searchTerm, setSearchTerm, sortOption, setSortOption, filteredModels } =
+    useEmbeddingModelFilter(models);
+  const currentModelInfo = models.find((model) => model.id === selectedModelKey) ?? null;
+  const visibleModels = filteredModels.slice(0, 50);
   const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
 
   return (
@@ -123,8 +83,8 @@ export function EmbeddingModelSelectorCard({
           type="search"
           className="w-full rounded-2xl border border-white/10 bg-black/40 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
           placeholder="Search OpenRouter embeddings…"
-          value={modelSearchTerm}
-          onChange={(event) => onSearchChange(event.target.value)}
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
         />
       </div>
       {modelsError && <p className="text-sm text-rose-300">{modelsError}</p>}
@@ -143,7 +103,7 @@ export function EmbeddingModelSelectorCard({
           <select
             className="w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-200 outline-none focus:border-violet-400"
             value={sortOption}
-            onChange={(event) => onSortChange(event.target.value as EmbeddingModelSortOption)}
+            onChange={(event) => setSortOption(event.target.value as EmbeddingModelSortOption)}
           >
             <option value="price">Sort by price</option>
             <option value="dimension">Sort by dimension</option>
@@ -151,13 +111,11 @@ export function EmbeddingModelSelectorCard({
         </div>
       </div>
       <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-        {modelsLoading && filteredModelCatalog.length === 0 ? (
+        {modelsLoading && filteredModels.length === 0 ? (
           <p className="text-sm text-slate-400">Loading embedding models…</p>
         ) : visibleModels.length === 0 ? (
           <p className="text-sm text-slate-400">
-            {modelSearchTerm
-              ? `No models match "${modelSearchTerm}".`
-              : "No embedding models available."}
+            {searchTerm ? `No models match "${searchTerm}".` : "No embedding models available."}
           </p>
         ) : (
           visibleModels.map((model) => {

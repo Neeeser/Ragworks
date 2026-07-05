@@ -4,6 +4,9 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
+  CHAT_INPUT_MAX_HEIGHT,
+  CHAT_INPUT_MIN_HEIGHT,
+  DEFAULT_STREAMING_ENABLED,
   DEFAULT_TELEMETRY_ORDER,
   PINECONE_KEY_REQUIRED_MESSAGE,
   TELEMETRY_SECTION_IDS,
@@ -21,6 +24,7 @@ import {
   generateClientSessionId,
   isOptimisticDuplicate,
   isToolReasoningSegment,
+  makeToolId,
   mergeMessageHistory,
   normalizeRunSettingsOrder,
   parseCollectionIdsParam,
@@ -127,10 +131,7 @@ const usePersistentToggle = (key: string, defaultValue: boolean) => {
   return [value, setValue] as const;
 };
 
-const CHAT_INPUT_MIN_HEIGHT = 40;
-const CHAT_INPUT_MAX_HEIGHT = 160;
 const PROGRESS_POLL_INTERVAL = 800;
-const DEFAULT_STREAMING_ENABLED = true;
 
 export function ChatStudio() {
   const router = useRouter();
@@ -484,8 +485,7 @@ export function ChatStudio() {
       collection_id?: string;
       collection_name?: string;
     }) => {
-      const generatedId = `tool-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      const eventId = update.id || generatedId;
+      const eventId = update.id || makeToolId();
       const reasoningSegments =
         update.reasoning !== undefined ? normalizeReasoningSegments(update.reasoning) : undefined;
       setLiveToolEvents((prev) => {
@@ -2164,11 +2164,9 @@ export function ChatStudio() {
         return null;
       }
       try {
-        const response = await branchChatSession(
-          authToken,
-          selectedSessionId,
-          { message_id: messageId },
-        );
+        const response = await branchChatSession(authToken, selectedSessionId, {
+          message_id: messageId,
+        });
         const branchedSession = response.session;
         const branchedMessages = response.messages;
         setSessions((prev) => {
@@ -2739,9 +2737,7 @@ export function ChatStudio() {
               finalizeLiveReasoningBlock();
               const rawId =
                 typeof event.id === "string" && event.id.trim() ? event.id.trim() : null;
-              const toolId =
-                rawId ??
-                `tool-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              const toolId = rawId ?? makeToolId();
               const phaseIndex = streamReasoningPhaseRef.current;
               setLiveToolPhaseById((prev) =>
                 prev[toolId] === phaseIndex ? prev : { ...prev, [toolId]: phaseIndex },
@@ -2761,9 +2757,7 @@ export function ChatStudio() {
             onToolResult: (event) => {
               const rawId =
                 typeof event.id === "string" && event.id.trim() ? event.id.trim() : null;
-              const toolId =
-                rawId ??
-                `tool-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              const toolId = rawId ?? makeToolId();
               setLiveToolOrder((prev) => (prev.includes(toolId) ? prev : [...prev, toolId]));
               setLiveToolPhaseById((prev) => {
                 if (prev[toolId] !== undefined) {

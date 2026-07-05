@@ -9,16 +9,11 @@ describe("EmbeddingModelSelectorCard", () => {
   it("shows loading, empty, and error states", () => {
     const { rerender } = render(
       <EmbeddingModelSelectorCard
-        currentModelInfo={null}
         selectedModelKey=""
-        filteredModelCatalog={[]}
-        modelSearchTerm=""
-        onSearchChange={() => undefined}
+        models={[]}
         modelsLoading
         modelsError={null}
         onSelectModel={() => undefined}
-        sortOption="price"
-        onSortChange={() => undefined}
       />,
     );
 
@@ -26,41 +21,83 @@ describe("EmbeddingModelSelectorCard", () => {
 
     rerender(
       <EmbeddingModelSelectorCard
-        currentModelInfo={null}
         selectedModelKey=""
-        filteredModelCatalog={[]}
-        modelSearchTerm="hello"
-        onSearchChange={() => undefined}
+        models={[]}
         modelsLoading={false}
         modelsError={null}
         onSelectModel={() => undefined}
-        sortOption="price"
-        onSortChange={() => undefined}
       />,
     );
-    expect(screen.getByText(/No models match/)).toBeInTheDocument();
+    expect(screen.getByText("No embedding models available.")).toBeInTheDocument();
 
     rerender(
       <EmbeddingModelSelectorCard
-        currentModelInfo={null}
         selectedModelKey=""
-        filteredModelCatalog={[]}
-        modelSearchTerm=""
-        onSearchChange={() => undefined}
+        models={[]}
         modelsLoading={false}
         modelsError="Failed"
         onSelectModel={() => undefined}
-        sortOption="price"
-        onSortChange={() => undefined}
       />,
     );
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
-  it("renders models and pricing details", () => {
-    const onSearchChange = vi.fn();
+  it("filters models by the internal search box", () => {
+    const models: EmbeddingModelInfo[] = [
+      { id: "model-1", name: "Alpha", description: "desc", pricing: { prompt: 0.0002 } },
+      { id: "model-2", name: "Beta", description: "desc", pricing: { prompt: 0.0002 } },
+    ];
+
+    render(
+      <EmbeddingModelSelectorCard
+        selectedModelKey=""
+        models={models}
+        modelsLoading={false}
+        modelsError={null}
+        onSelectModel={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Alpha/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Beta/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "Alpha" } });
+
+    expect(screen.getByRole("button", { name: /Alpha/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Beta/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "nothing" } });
+    expect(screen.getByText(/No models match "nothing"/)).toBeInTheDocument();
+  });
+
+  it("sorts models via the internal sort control", () => {
+    const models: EmbeddingModelInfo[] = [
+      { id: "model-big", name: "Big", dimension: 1024, pricing: {} },
+      { id: "model-small", name: "Small", dimension: 128, pricing: {} },
+    ];
+
+    render(
+      <EmbeddingModelSelectorCard
+        selectedModelKey=""
+        models={models}
+        modelsLoading={false}
+        modelsError={null}
+        onSelectModel={() => undefined}
+      />,
+    );
+
+    const buttons = () => screen.getAllByRole("button").filter((el) => el.tagName === "BUTTON");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "dimension" } });
+
+    const names = buttons()
+      .map((el) => el.textContent ?? "")
+      .filter((text) => text.includes("Big") || text.includes("Small"));
+    expect(names[0]).toContain("Small");
+    expect(names[1]).toContain("Big");
+  });
+
+  it("renders models and pricing details, and reports selection", () => {
     const onSelectModel = vi.fn();
-    const onSortChange = vi.fn();
     const longDescription = "A".repeat(200);
     const models: EmbeddingModelInfo[] = [
       {
@@ -100,24 +137,13 @@ describe("EmbeddingModelSelectorCard", () => {
 
     render(
       <EmbeddingModelSelectorCard
-        currentModelInfo={models[0]}
         selectedModelKey="model-1"
-        filteredModelCatalog={models}
-        modelSearchTerm=""
-        onSearchChange={onSearchChange}
+        models={models}
         modelsLoading={false}
         modelsError={null}
         onSelectModel={onSelectModel}
-        sortOption="price"
-        onSortChange={onSortChange}
       />,
     );
-
-    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "Alpha" } });
-    expect(onSearchChange).toHaveBeenCalledWith("Alpha");
-
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "dimension" } });
-    expect(onSortChange).toHaveBeenCalledWith("dimension");
 
     fireEvent.click(screen.getByRole("button", { name: /Alpha/ }));
     expect(onSelectModel).toHaveBeenCalledWith("model-1");
@@ -127,6 +153,10 @@ describe("EmbeddingModelSelectorCard", () => {
     expect(screen.getAllByText(/Completion \$/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Prompt\s+free/)).toBeInTheDocument();
     expect(screen.getByText(/Prompt\s+e/)).toBeInTheDocument();
+
+    // currentModelInfo is now derived internally from models + selectedModelKey.
+    expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
+    expect(screen.getByText("768")).toBeInTheDocument();
   });
 
   it("renders non-numeric pricing fallbacks", () => {
@@ -141,16 +171,11 @@ describe("EmbeddingModelSelectorCard", () => {
 
     render(
       <EmbeddingModelSelectorCard
-        currentModelInfo={models[0]}
         selectedModelKey="model-fallback"
-        filteredModelCatalog={models}
-        modelSearchTerm=""
-        onSearchChange={() => undefined}
+        models={models}
         modelsLoading={false}
         modelsError={null}
         onSelectModel={() => undefined}
-        sortOption="price"
-        onSortChange={() => undefined}
       />,
     );
 

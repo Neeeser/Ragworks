@@ -2,7 +2,7 @@ import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
 import type { PipelineNodeData } from "./PipelineNode";
-import type { NodeSpec, PipelineDefinition, PipelineKind } from "@/lib/types";
+import type { NodeSpec, PineconeIndex, PipelineDefinition, PipelineKind } from "@/lib/types";
 import type { Edge, Node } from "@xyflow/react";
 
 const PORT_SOURCE = "source";
@@ -255,3 +255,21 @@ export const createDefaultNodePosition = (count: number) => ({
   x: 160,
   y: 140 + count * 140,
 });
+
+/** Builds the flow-node `data` payload for a node spec, shared by the sidebar's drag
+ * preview node and by the node actually added to the canvas. */
+export const specToNodeData = (spec: NodeSpec): PipelineNodeData => ({
+  label: spec.label,
+  nodeType: spec.type,
+  description: resolveNodeDescription(spec),
+  example: resolveNodeExample(spec),
+  inputs: spec.input_ports,
+  outputs: spec.output_ports,
+  config: spec.default_config ?? {},
+  configSchema: spec.config_schema ?? {},
+});
+
+/** Sorts Pinecone indexes alphabetically by name; used anywhere an index <select> needs a
+ * stable, human-friendly ordering. */
+export const sortIndexesByName = <T extends Pick<PineconeIndex, "name">>(indexes: T[]): T[] =>
+  [...indexes].sort((a, b) => a.name.localeCompare(b.name));

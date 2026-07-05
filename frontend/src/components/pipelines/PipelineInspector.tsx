@@ -1,17 +1,24 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
+import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
-import { buildPipelineConfigFields, formatConfigValue } from "./pipeline-config";
+import {
+  buildPipelineConfigFields,
+  coerceFieldValue,
+  formatConfigValue,
+  getInputValue,
+} from "./pipeline-config";
+import { CREATE_SENTINEL } from "./pipeline-kinds";
+import { sortIndexesByName } from "./pipeline-utils";
 
 import type { PipelineConfigField } from "./pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { EmbeddingModelSortOption } from "@/lib/model-sorting";
 import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
@@ -27,21 +34,9 @@ type PipelineInspectorProps = {
   pineconeIndexes?: PineconeIndex[];
   onOpenIndexManager?: () => void;
   embeddingModels?: EmbeddingModelInfo[];
-  filteredEmbeddingModels?: EmbeddingModelInfo[];
-  embeddingModelSearchTerm?: string;
   embeddingModelsLoading?: boolean;
   embeddingModelsError?: string | null;
-  onEmbeddingSearchChange?: (value: string) => void;
   onSelectEmbeddingModel?: (modelId: string) => void;
-  embeddingModelSortOption?: EmbeddingModelSortOption;
-  onEmbeddingModelSortChange?: (value: EmbeddingModelSortOption) => void;
-};
-
-const getInputValue = (field: PipelineConfigField, draft: Record<string, unknown>) => {
-  if (Object.prototype.hasOwnProperty.call(draft, field.key)) {
-    return draft[field.key];
-  }
-  return field.defaultValue ?? "";
 };
 
 export function PipelineInspector({
@@ -54,16 +49,11 @@ export function PipelineInspector({
   validationErrors = [],
   applyDisabled = false,
   embeddingModels = [],
-  filteredEmbeddingModels,
-  embeddingModelSearchTerm = "",
   embeddingModelsLoading = false,
   embeddingModelsError = null,
   pineconeIndexes = [],
   onOpenIndexManager,
-  onEmbeddingSearchChange,
-  onSelectEmbeddingModel,
-  embeddingModelSortOption = "price",
-  onEmbeddingModelSortChange,
+  onSelectEmbeddingModel = () => undefined,
 }: PipelineInspectorProps) {
   const isEmbedder = selectedNode?.data.nodeType === "embedder.openrouter";
   const isIndexNode =
@@ -79,36 +69,12 @@ export function PipelineInspector({
   });
   const selectedEmbeddingModelKey =
     typeof configDraft.model_name === "string" ? configDraft.model_name : "";
-  const selectedEmbeddingModel =
-    embeddingModels.find((model) => model.id === selectedEmbeddingModelKey) ?? null;
-  const visibleEmbeddingModels = filteredEmbeddingModels ?? embeddingModels;
-  const sortedIndexes = [...pineconeIndexes].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedIndexes = useMemo(() => sortIndexesByName(pineconeIndexes), [pineconeIndexes]);
   const indexValue = typeof configDraft.index_name === "string" ? configDraft.index_name : "";
   const selectedIndex = sortedIndexes.find((index) => index.name === indexValue) ?? null;
 
   const handleConfigChange = (field: PipelineConfigField, rawValue: string | boolean) => {
-    let nextValue: unknown = rawValue;
-    if (field.input === "number" || field.input === "integer") {
-      if (rawValue === "") {
-        nextValue = undefined;
-      } else {
-        const parsed = Number(rawValue);
-        nextValue = Number.isNaN(parsed)
-          ? undefined
-          : field.input === "integer"
-            ? Math.trunc(parsed)
-            : parsed;
-      }
-    } else if (field.input === "boolean") {
-      nextValue = rawValue === true;
-    } else {
-      if (rawValue === "" && field.nullable) {
-        nextValue = undefined;
-      } else {
-        nextValue = rawValue;
-      }
-    }
-
+    const nextValue = coerceFieldValue(field, rawValue);
     const nextDraft = { ...configDraft };
     if (nextValue === undefined) {
       delete nextDraft[field.key];
@@ -119,7 +85,7 @@ export function PipelineInspector({
   };
 
   const handleIndexChange = (value: string) => {
-    if (value === "__create__") {
+    if (value === CREATE_SENTINEL) {
       onOpenIndexManager?.();
       return;
     }
@@ -199,16 +165,11 @@ export function PipelineInspector({
             {isEmbedder ? (
               <div className="mt-2 space-y-3">
                 <EmbeddingModelSelectorCard
-                  currentModelInfo={selectedEmbeddingModel}
+                  models={embeddingModels}
                   selectedModelKey={selectedEmbeddingModelKey}
-                  filteredModelCatalog={visibleEmbeddingModels}
-                  modelSearchTerm={embeddingModelSearchTerm}
-                  onSearchChange={onEmbeddingSearchChange ?? (() => undefined)}
                   modelsLoading={embeddingModelsLoading}
                   modelsError={embeddingModelsError}
-                  onSelectModel={onSelectEmbeddingModel ?? (() => undefined)}
-                  sortOption={embeddingModelSortOption}
-                  onSortChange={onEmbeddingModelSortChange ?? (() => undefined)}
+                  onSelectModel={onSelectEmbeddingModel}
                 />
               </div>
             ) : null}
@@ -240,7 +201,7 @@ export function PipelineInspector({
                         {index.name}
                       </option>
                     ))}
-                    <option value="__create__">+ Add new index...</option>
+                    <option value={CREATE_SENTINEL}>+ Add new index...</option>
                   </select>
                 </ParameterFieldCard>
               </div>

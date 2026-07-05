@@ -3,8 +3,12 @@
 import { FolderKanban, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+import {
+  buildCollectionStatItems,
+  CollectionStatCard,
+} from "@/components/collections/CollectionStats";
 import { GlassCard } from "@/components/ui/panel";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 import type { Collection, CollectionStats } from "@/lib/types";
 
@@ -12,13 +16,6 @@ type CollectionsListProps = {
   collections: Collection[];
   statsById: Record<string, CollectionStats | undefined>;
   onDeleteRequest: (collection: Collection) => void;
-};
-
-const formatLatency = (latency?: number | null) => {
-  if (!latency || Number.isNaN(latency)) {
-    return "n/a";
-  }
-  return `${Math.round(latency)} ms`;
 };
 
 export function CollectionsList({ collections, statsById, onDeleteRequest }: CollectionsListProps) {
@@ -36,7 +33,7 @@ export function CollectionsList({ collections, statsById, onDeleteRequest }: Col
     <div className="space-y-4">
       {collections.map((collection) => {
         const stats = statsById[collection.id];
-        const lastUsed = stats?.last_used_at ? timeAgo(stats.last_used_at) : "n/a";
+        const statItems = buildCollectionStatItems(collection, stats);
         return (
           <div
             key={collection.id}
@@ -83,34 +80,15 @@ export function CollectionsList({ collections, statsById, onDeleteRequest }: Col
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                {
-                  label: "Documents",
-                  value: stats?.document_count?.toLocaleString() ?? "0",
-                },
-                {
-                  label: "Chunks",
-                  value: stats?.chunk_count?.toLocaleString() ?? "0",
-                },
-                {
-                  label: "Avg latency",
-                  value: formatLatency(stats?.average_latency_ms),
-                },
-                {
-                  label: "Last updated",
-                  value: timeAgo(collection.updated_at),
-                },
-                {
-                  label: "Last used",
-                  value: lastUsed,
-                },
-              ].map((item) => (
+              {statItems.map((item) => (
                 <div
                   key={`${collection.id}-${item.label}`}
                   className="rounded-2xl border border-white/5 bg-white/5 px-3 py-3 text-sm"
                 >
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{item.label}</p>
-                  <p className="mt-2 text-base font-semibold text-white">{item.value}</p>
+                  <CollectionStatCard
+                    item={item}
+                    valueClassName="mt-2 text-base font-semibold text-white"
+                  />
                 </div>
               ))}
             </div>

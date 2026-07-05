@@ -150,7 +150,7 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
 };
 
 export const formatConfigValue = (value: unknown) => {
-  if (value === null || value === undefined) return "";
+  if (value === null || value === undefined) return "—";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   try {
@@ -158,4 +158,36 @@ export const formatConfigValue = (value: unknown) => {
   } catch {
     return String(value);
   }
+};
+
+/** Reads the current value for a config field out of a draft/config record, falling back
+ * to the field's schema default (or "") when the key hasn't been set yet. */
+export const getInputValue = (field: PipelineConfigField, config: Record<string, unknown>) => {
+  if (Object.prototype.hasOwnProperty.call(config, field.key)) {
+    return config[field.key];
+  }
+  return field.defaultValue ?? "";
+};
+
+/** Coerces a raw control value (string from a text/number input, or boolean from a
+ * checkbox) into the value that should be stored for a config field, returning
+ * `undefined` when the field should be cleared from the config record entirely. */
+export const coerceFieldValue = (field: PipelineConfigField, raw: string | boolean): unknown => {
+  if (field.input === "number" || field.input === "integer") {
+    if (raw === "") {
+      return undefined;
+    }
+    const parsed = Number(raw);
+    if (Number.isNaN(parsed)) {
+      return undefined;
+    }
+    return field.input === "integer" ? Math.trunc(parsed) : parsed;
+  }
+  if (field.input === "boolean") {
+    return raw === true;
+  }
+  if (raw === "" && field.nullable) {
+    return undefined;
+  }
+  return raw;
 };

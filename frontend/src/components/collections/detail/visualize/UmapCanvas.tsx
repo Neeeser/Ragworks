@@ -9,10 +9,11 @@ import {
 } from "@deck.gl/core";
 import { LineLayer, ScatterplotLayer } from "@deck.gl/layers";
 import DeckGL from "@deck.gl/react";
-import { CanvasContext } from "@luma.gl/core";
 import { webgl2Adapter } from "@luma.gl/webgl";
 import { Home, LocateFixed, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { ensureCanvasContextLimits } from "./luma-patches";
 
 import type { UmapPoint } from "@/lib/types";
 
@@ -29,31 +30,6 @@ const GRID_PIXEL_STEP = 40;
 const GRID_MARGIN_MULTIPLIER = 0.2;
 const MIN_POINT_RADIUS_PX = 4;
 const MAX_POINT_RADIUS_PX = 10;
-const DEFAULT_LIMIT_FALLBACK = 4096;
-
-// Guard against ResizeObserver running before the WebGL device limits are ready.
-const ensureCanvasContextLimits = (() => {
-  let patched = false;
-  return () => {
-    if (patched) {
-      return;
-    }
-    patched = true;
-    const original = CanvasContext.prototype.getMaxDrawingBufferSize;
-    CanvasContext.prototype.getMaxDrawingBufferSize = function getMaxDrawingBufferSizePatched() {
-      const maxTextureDimension = this.device?.limits?.maxTextureDimension2D;
-      if (Number.isFinite(maxTextureDimension) && maxTextureDimension > 0) {
-        return original.call(this);
-      }
-      const fallback = Math.max(
-        this.canvas?.width ?? 1,
-        this.canvas?.height ?? 1,
-        DEFAULT_LIMIT_FALLBACK,
-      );
-      return [fallback, fallback];
-    };
-  };
-})();
 
 function buildInitialViewState(points: UmapPoint[]): OrthographicViewState {
   if (points.length === 0) {
