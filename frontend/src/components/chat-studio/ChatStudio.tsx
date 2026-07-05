@@ -62,16 +62,23 @@ const OVERLAY_TRIGGER_WIDTH_PX =
   HISTORY_PANEL_WIDTH_PX + TELEMETRY_PANEL_WIDTH_PX + MIN_CENTER_PANEL_WIDTH_PX;
 
 const usePersistentToggle = (key: string, defaultValue: boolean) => {
-  const [value, setValue] = useState(() => {
-    if (typeof window === "undefined") {
-      return defaultValue;
-    }
-    const stored = window.localStorage.getItem(key);
-    return stored === null ? defaultValue : stored === "true";
-  });
+  // First paint uses the default so server and client markup agree; the stored
+  // value is read after mount to avoid a hydration mismatch.
+  const [value, setValue] = useState(defaultValue);
+  const skipFirstPersistRef = useRef(true);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    const stored = window.localStorage.getItem(key);
+    if (stored !== null) {
+      setValue(stored === "true");
+    }
+  }, [key]);
+
+  useEffect(() => {
+    // Skip the initial commit so the default never clobbers the stored value before
+    // the hydration effect above has had a chance to apply it.
+    if (skipFirstPersistRef.current) {
+      skipFirstPersistRef.current = false;
       return;
     }
     window.localStorage.setItem(key, value ? "true" : "false");
@@ -98,12 +105,11 @@ export function ChatStudio() {
   const [contextConsumed, setContextConsumed] = useState<number>(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") {
-      return true;
-    }
-    return window.sessionStorage.getItem("chatStudio.loaded") !== "true";
-  });
+  // Defaults to the loading state; a previously-loaded session is detected after mount.
+  const [loading, setLoading] = useState(true);
+  // Flips true once storage/viewport values have been read post-mount, so effects that
+  // depend on them (e.g. the overlay auto-close) don't act on first-paint defaults.
+  const [hydrated, setHydrated] = useState(false);
   const [sending, setSending] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [isStopping, setIsStopping] = useState(false);
@@ -168,12 +174,9 @@ export function ChatStudio() {
     pruneLiveToolEvents,
   } = chatStream;
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
-  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
-    if (typeof window === "undefined") {
-      return 0;
-    }
-    return window.innerWidth;
-  });
+  // Starts at 0 (non-overlay) for a stable first paint; the real width is measured
+  // after mount by the ResizeObserver effect below.
+  const [chatPanelWidth, setChatPanelWidth] = useState(0);
   const isOverlayMode = chatPanelWidth > 0 && chatPanelWidth < OVERLAY_TRIGGER_WIDTH_PX;
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
@@ -726,6 +729,16 @@ export function ChatStudio() {
     reasoningCacheRef.current.clear();
   }, [selectedSessionId]);
 
+  // Post-mount hydration of storage/viewport-derived state, kept out of the useState
+  // initializers so server and first client render agree.
+  useEffect(() => {
+    if (window.sessionStorage.getItem("chatStudio.loaded") === "true") {
+      setLoading(false);
+    }
+    setChatPanelWidth((prev) => (prev === 0 ? window.innerWidth : prev));
+    setHydrated(true);
+  }, []);
+
   useEffect(() => {
     const element = chatPanelRef.current;
     if (!element) {
@@ -743,13 +756,15 @@ export function ChatStudio() {
   }, []);
 
   useEffect(() => {
-    if (!isOverlayMode) {
+    // Gate on hydration so the auto-close doesn't fire on first-paint defaults before
+    // the persisted panel-open values have been read back.
+    if (!hydrated || !isOverlayMode) {
       return;
     }
     if (historyOpen && telemetryOpen) {
       setTelemetryOpen(false);
     }
-  }, [historyOpen, isOverlayMode, telemetryOpen, setTelemetryOpen]);
+  }, [hydrated, historyOpen, isOverlayMode, telemetryOpen, setTelemetryOpen]);
 
   useLayoutEffect(() => {
     if (!editingMessageId) {
