@@ -2,23 +2,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
+import * as apiModule from "@/lib/api";
+import { makeCollection, makeNodeSpec, makePipeline, makePipelineVersion } from "@/test/fixtures";
 
 import type { NodeSpec, Pipeline, PipelineVersion } from "@/lib/types";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import type { DragEvent } from "react";
-
-const api = {
-  activatePipelineVersion: vi.fn(),
-  deletePipeline: vi.fn(),
-  fetchCollections: vi.fn(),
-  fetchPipelineNodes: vi.fn(),
-  fetchPipelines: vi.fn(),
-  fetchEmbeddingModels: vi.fn(),
-  listPineconeIndexes: vi.fn(),
-  listPipelineVersions: vi.fn(),
-  updatePipeline: vi.fn(),
-  validatePipeline: vi.fn(),
-};
 
 const io = {
   validatePipelineConnection: vi.fn(),
@@ -30,6 +19,9 @@ let lastCanvasProps: Record<string, unknown> | null = null;
 let lastInspectorProps: Record<string, unknown> | null = null;
 let lastSidebarProps: Record<string, unknown> | null = null;
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
+const embedderType = "embedder.openrouter";
+const savePipelineLabel = "Save pipeline";
+const deletePipelineLabel = "Delete pipeline";
 const buildDragEvent = (type: string) =>
   ({
     preventDefault: vi.fn(),
@@ -41,22 +33,13 @@ const buildDragEvent = (type: string) =>
     clientY: 150,
   }) as unknown as DragEvent<HTMLDivElement>;
 
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ token: "token" }),
-}));
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
 
-vi.mock("@/lib/api", () => ({
-  activatePipelineVersion: (...args: unknown[]) => api.activatePipelineVersion(...args),
-  deletePipeline: (...args: unknown[]) => api.deletePipeline(...args),
-  fetchCollections: (...args: unknown[]) => api.fetchCollections(...args),
-  fetchPipelineNodes: (...args: unknown[]) => api.fetchPipelineNodes(...args),
-  fetchPipelines: (...args: unknown[]) => api.fetchPipelines(...args),
-  fetchEmbeddingModels: (...args: unknown[]) => api.fetchEmbeddingModels(...args),
-  listPineconeIndexes: (...args: unknown[]) => api.listPineconeIndexes(...args),
-  listPipelineVersions: (...args: unknown[]) => api.listPipelineVersions(...args),
-  updatePipeline: (...args: unknown[]) => api.updatePipeline(...args),
-  validatePipeline: (...args: unknown[]) => api.validatePipeline(...args),
-}));
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+
+const api = vi.mocked(apiModule);
 
 vi.mock("@/components/pipelines/pipeline-io", () => ({
   validatePipelineConnection: (...args: unknown[]) => io.validatePipelineConnection(...args),
@@ -305,20 +288,14 @@ vi.mock("@/components/ui/loader", () => ({
   Loader: () => <span>Loading</span>,
 }));
 
-const pipeline: Pipeline = {
-  id: "pipe-1",
-  user_id: "user-1",
+const pipeline: Pipeline = makePipeline({
   name: "Pipeline",
   kind: "ingestion",
-  current_version: 1,
-  is_default: false,
-  created_at: baseTimestamp,
-  updated_at: baseTimestamp,
   definition: {
     nodes: [
       {
         id: "node-1",
-        type: "embedder.openrouter",
+        type: embedderType,
         name: "Embed",
         config: {},
         position: { x: 0, y: 0 },
@@ -327,20 +304,17 @@ const pipeline: Pipeline = {
     edges: [],
     viewport: {},
   },
-};
+});
 
 const nodeSpecs: NodeSpec[] = [
-  {
-    type: "embedder.openrouter",
+  makeNodeSpec({
+    type: embedderType,
     label: "Embedder",
     category: "ingestion",
     description: "",
-    example: "",
     input_ports: [],
     output_ports: [],
-    config_schema: {},
-    default_config: {},
-  },
+  }),
 ];
 
 describe("PipelineBuilder", () => {
@@ -353,18 +327,9 @@ describe("PipelineBuilder", () => {
     api.fetchCollections.mockResolvedValue([]);
     api.fetchEmbeddingModels.mockResolvedValue([]);
     api.listPineconeIndexes.mockResolvedValue([]);
-    api.listPipelineVersions.mockResolvedValue([
-      {
-        id: "v1",
-        pipeline_id: "pipe-1",
-        version: 1,
-        created_at: baseTimestamp,
-        updated_at: baseTimestamp,
-      },
-    ]);
+    api.listPipelineVersions.mockResolvedValue([makePipelineVersion({ id: "v1" })]);
     api.validatePipeline.mockResolvedValue({ valid: true, errors: [], warnings: [] });
     api.updatePipeline.mockResolvedValue(pipeline);
-    api.deletePipeline.mockResolvedValue(undefined);
     api.activatePipelineVersion.mockResolvedValue(pipeline);
 
     io.validatePipelineConnection.mockReturnValue({ valid: true });
@@ -396,10 +361,10 @@ describe("PipelineBuilder", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => expect(api.updatePipeline).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: deletePipelineLabel }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
     await waitFor(() => expect(api.deletePipeline).toHaveBeenCalled());
   });
@@ -410,7 +375,7 @@ describe("PipelineBuilder", () => {
 
     await waitFor(() => expect(lastCanvasProps).not.toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: deletePipelineLabel }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
 
     await waitFor(() => {
@@ -432,7 +397,7 @@ describe("PipelineBuilder", () => {
 
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
     fireEvent.click(screen.getByRole("button", { name: "Change label" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(api.validatePipeline).toHaveBeenCalled();
       expect(screen.getByTestId("canvas")).toHaveTextContent(/Validation failed/);
@@ -454,7 +419,7 @@ describe("PipelineBuilder", () => {
 
     await waitFor(() => expect(lastCanvasProps).not.toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(api.updatePipeline).toHaveBeenCalled();
       expect(screen.getByTestId("canvas")).toHaveTextContent(
@@ -465,7 +430,7 @@ describe("PipelineBuilder", () => {
     api.validatePipeline.mockResolvedValueOnce({ valid: true, errors: [], warnings: [] });
     api.updatePipeline.mockRejectedValueOnce("Save failed");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(screen.getByTestId("canvas")).toHaveTextContent("Unable to save pipeline.");
     });
@@ -501,22 +466,18 @@ describe("PipelineBuilder", () => {
 
   it("prevents deletion when pipeline is in use", async () => {
     api.fetchCollections.mockResolvedValueOnce([
-      {
-        id: "col-1",
-        user_id: "user-1",
+      makeCollection({
         name: "Collection",
-        created_at: baseTimestamp,
-        updated_at: baseTimestamp,
         ingestion_pipeline_id: "pipe-1",
         retrieval_pipeline_id: "pipe-1",
-      },
+      }),
     ]);
 
     render(<PipelineBuilder kind="ingestion" />);
 
     await waitFor(() => expect(lastCanvasProps).not.toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: deletePipelineLabel }));
     expect(screen.getByTestId("canvas")).toHaveTextContent(/cannot be deleted/);
   });
 
@@ -528,7 +489,7 @@ describe("PipelineBuilder", () => {
           ...pipeline.definition.nodes,
           {
             id: "node-2",
-            type: "embedder.openrouter",
+            type: embedderType,
             name: "Embed Two",
             config: {},
             position: { x: 120, y: 120 },
@@ -635,7 +596,7 @@ describe("PipelineBuilder", () => {
       preventDefault: vi.fn(),
       dataTransfer: {
         getData: (key: string) =>
-          key === "application/transparentrag-node" ? "embedder.openrouter" : "",
+          key === "application/transparentrag-node" ? embedderType : "",
         dropEffect: "",
       },
       clientX: 10,

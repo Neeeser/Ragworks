@@ -1,22 +1,20 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IndexManagerModal } from "@/components/pipelines/index-manager/IndexManagerModal";
+import * as apiModule from "@/lib/api";
+import { makePineconeIndex } from "@/test/fixtures";
 
 import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
 
-const api = {
-  createPineconeIndex: vi.fn(),
-  deletePineconeIndex: vi.fn(),
-};
-
 let lastEmbeddingProps: Record<string, unknown> | null = null;
 const deleteIndexLabel = "Delete index";
+const createIndexName = "index";
+const confirmDeletionText = /Confirm index deletion/;
+const createIndexButtonName = /Create index/;
 
-vi.mock("@/lib/api", () => ({
-  createPineconeIndex: (...args: unknown[]) => api.createPineconeIndex(...args),
-  deletePineconeIndex: (...args: unknown[]) => api.deletePineconeIndex(...args),
-}));
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   EmbeddingModelSelectorCard: (props: Record<string, unknown>) => {
@@ -29,17 +27,11 @@ vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   },
 }));
 
+const api = vi.mocked(apiModule);
+
 describe("IndexManagerModal", () => {
   const indexes: PineconeIndex[] = [
-    {
-      name: "alpha",
-      dimension: 768,
-      metric: "cosine",
-      host: "host",
-      spec: null,
-      status: { state: "READY" },
-      vector_type: "dense",
-    },
+    makePineconeIndex({ name: "alpha", dimension: 768, host: "host", status: { state: "READY" } }),
   ];
 
   const embeddingModels: EmbeddingModelInfo[] = [
@@ -47,9 +39,12 @@ describe("IndexManagerModal", () => {
     { id: "emb-2", name: "Other", dimension: 1024 },
   ];
 
+  const lastButton = (name: string | RegExp) => {
+    const buttons = screen.getAllByRole("button", { name });
+    return buttons[buttons.length - 1];
+  };
+
   beforeEach(() => {
-    api.createPineconeIndex.mockReset();
-    api.deletePineconeIndex.mockReset();
     lastEmbeddingProps = null;
   });
 
@@ -84,6 +79,7 @@ describe("IndexManagerModal", () => {
   });
 
   it("shows details and handles deletion flow", async () => {
+    const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
       <IndexManagerModal
@@ -97,26 +93,25 @@ describe("IndexManagerModal", () => {
     );
 
     expect(screen.getByText("Index details")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: deleteIndexLabel }));
+    await user.click(screen.getByRole("button", { name: deleteIndexLabel }));
 
-    expect(screen.getByText(/Confirm index deletion/)).toBeInTheDocument();
+    expect(screen.getByText(confirmDeletionText)).toBeInTheDocument();
     const overlays = screen.getAllByRole("presentation");
-    fireEvent.click(overlays[overlays.length - 1]);
+    await user.click(overlays[overlays.length - 1]);
     await waitFor(() => {
-      expect(screen.queryByText(/Confirm index deletion/)).not.toBeInTheDocument();
+      expect(screen.queryByText(confirmDeletionText)).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: deleteIndexLabel }));
-    expect(screen.getByText(/Confirm index deletion/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: deleteIndexLabel }));
+    expect(screen.getByText(confirmDeletionText)).toBeInTheDocument();
     const confirmInput = screen.getByLabelText(/Type/);
-    fireEvent.change(confirmInput, { target: { value: "wrong" } });
-    let deleteButtons = screen.getAllByRole("button", { name: deleteIndexLabel });
-    expect(deleteButtons[deleteButtons.length - 1]).toBeDisabled();
+    await user.type(confirmInput, "wrong");
+    expect(lastButton(deleteIndexLabel)).toBeDisabled();
 
-    api.deletePineconeIndex.mockResolvedValueOnce(undefined);
-    fireEvent.change(confirmInput, { target: { value: "alpha" } });
-    deleteButtons = screen.getAllByRole("button", { name: deleteIndexLabel });
-    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    api.deletePineconeIndex.mockResolvedValueOnce({ status: "deleted" });
+    await user.clear(confirmInput);
+    await user.type(confirmInput, "alpha");
+    await user.click(lastButton(deleteIndexLabel));
 
     await waitFor(() => {
       expect(api.deletePineconeIndex).toHaveBeenCalledWith("token", "alpha");
@@ -125,6 +120,7 @@ describe("IndexManagerModal", () => {
   });
 
   it("surfaces delete errors", async () => {
+    const user = userEvent.setup();
     api.deletePineconeIndex.mockRejectedValueOnce("Delete failed");
     render(
       <IndexManagerModal
@@ -137,17 +133,15 @@ describe("IndexManagerModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: deleteIndexLabel }));
-    fireEvent.change(screen.getByLabelText(/Type/), {
-      target: { value: "alpha" },
-    });
-    const deleteButtons = screen.getAllByRole("button", { name: deleteIndexLabel });
-    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    await user.click(screen.getByRole("button", { name: deleteIndexLabel }));
+    await user.type(screen.getByLabelText(/Type/), "alpha");
+    await user.click(lastButton(deleteIndexLabel));
 
     expect(await screen.findByText("Unable to delete index.")).toBeInTheDocument();
   });
 
   it("handles create flow and validation", async () => {
+    const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
       <IndexManagerModal
@@ -164,40 +158,35 @@ describe("IndexManagerModal", () => {
 
     const nameInput = screen.getByPlaceholderText("research-vault");
     const getVectorTypeSelect = () => screen.getAllByRole("combobox")[0];
-    fireEvent.change(nameInput, { target: { value: "index" } });
+    await user.type(nameInput, createIndexName);
 
-    fireEvent.change(getVectorTypeSelect(), {
-      target: { value: "sparse" },
-    });
-    let createButtons = screen.getAllByRole("button", { name: /Create index/ });
+    await user.selectOptions(getVectorTypeSelect(), "sparse");
 
-    api.createPineconeIndex.mockResolvedValueOnce(undefined);
-    fireEvent.click(createButtons[createButtons.length - 1]);
+    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
       expect(api.createPineconeIndex).toHaveBeenCalled();
       expect(onRefresh).toHaveBeenCalled();
     });
 
-    fireEvent.change(nameInput, { target: { value: "index" } });
-    fireEvent.change(getVectorTypeSelect(), {
-      target: { value: "dense" },
-    });
+    await user.clear(nameInput);
+    await user.type(nameInput, createIndexName);
+    await user.selectOptions(getVectorTypeSelect(), "dense");
     const selects = screen.getAllByRole("combobox");
-    fireEvent.change(selects[1], { target: { value: "dotproduct" } });
-    fireEvent.change(selects[2], { target: { value: "gcp" } });
-    fireEvent.change(selects[3], { target: { value: "us-central1" } });
-    fireEvent.change(screen.getByPlaceholderText("1536"), { target: { value: "1024" } });
-    fireEvent.change(screen.getByPlaceholderText("1536"), { target: { value: "" } });
+    await user.selectOptions(selects[1], "dotproduct");
+    await user.selectOptions(selects[2], "gcp");
+    await user.selectOptions(selects[3], "us-central1");
+    const dimensionInput = screen.getByPlaceholderText("1536");
+    await user.type(dimensionInput, "1024");
+    await user.clear(dimensionInput);
 
     await waitFor(() => {
-      createButtons = screen.getAllByRole("button", { name: /Create index/ });
-      const createButton = createButtons[createButtons.length - 1];
-      expect(createButton).toBeDisabled();
+      expect(lastButton(createIndexButtonName)).toBeDisabled();
     });
     expect(screen.getByText(/Enter a dimension to create a dense index/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "From model" }));
+    await user.click(screen.getByRole("button", { name: "From model" }));
     expect(screen.getByText("Select embedding")).toBeInTheDocument();
 
     // Search/sort are now owned internally by EmbeddingModelSelectorCard; the modal
@@ -209,11 +198,10 @@ describe("IndexManagerModal", () => {
       (lastEmbeddingProps?.onSelectModel as (id: string) => void)("emb-1");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    await user.click(screen.getByRole("button", { name: "Manual" }));
 
-    api.createPineconeIndex.mockResolvedValueOnce(undefined);
-    createButtons = screen.getAllByRole("button", { name: /Create index/ });
-    fireEvent.click(createButtons[createButtons.length - 1]);
+    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
       expect(api.createPineconeIndex).toHaveBeenCalledTimes(2);
@@ -221,13 +209,14 @@ describe("IndexManagerModal", () => {
     });
 
     api.createPineconeIndex.mockRejectedValueOnce(new Error("Boom"));
-    fireEvent.change(nameInput, { target: { value: "index" } });
-    createButtons = screen.getAllByRole("button", { name: /Create index/ });
-    fireEvent.click(createButtons[createButtons.length - 1]);
+    await user.clear(nameInput);
+    await user.type(nameInput, createIndexName);
+    await user.click(lastButton(createIndexButtonName));
     expect(await screen.findByText("Boom")).toBeInTheDocument();
   });
 
   it("clears a stale error banner when a create retry succeeds", async () => {
+    const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
       <IndexManagerModal
@@ -241,16 +230,14 @@ describe("IndexManagerModal", () => {
     );
 
     const nameInput = screen.getByPlaceholderText("research-vault");
-    fireEvent.change(nameInput, { target: { value: "index" } });
+    await user.type(nameInput, createIndexName);
 
     api.createPineconeIndex.mockRejectedValueOnce(new Error("Boom"));
-    let createButtons = screen.getAllByRole("button", { name: /Create index/ });
-    fireEvent.click(createButtons[createButtons.length - 1]);
+    await user.click(lastButton(createIndexButtonName));
     expect(await screen.findByText("Boom")).toBeInTheDocument();
 
-    api.createPineconeIndex.mockResolvedValueOnce(undefined);
-    createButtons = screen.getAllByRole("button", { name: /Create index/ });
-    fireEvent.click(createButtons[createButtons.length - 1]);
+    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
       expect(screen.getByText("Index created.")).toBeInTheDocument();
@@ -259,7 +246,8 @@ describe("IndexManagerModal", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("switches between index list views", () => {
+  it("switches between index list views", async () => {
+    const user = userEvent.setup();
     render(
       <IndexManagerModal
         open
@@ -271,14 +259,15 @@ describe("IndexManagerModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Create index" }));
+    await user.click(screen.getByRole("button", { name: "Create index" }));
     expect(screen.getByText(/Create new index/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    await user.click(screen.getByRole("button", { name: /alpha/i }));
     expect(screen.getByText("Index details")).toBeInTheDocument();
   });
 
-  it("handles escape key dismissal", () => {
+  it("handles escape key dismissal", async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
     render(
       <IndexManagerModal
@@ -291,17 +280,17 @@ describe("IndexManagerModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: deleteIndexLabel }));
-    expect(screen.getByText(/Confirm index deletion/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: deleteIndexLabel }));
+    expect(screen.getByText(confirmDeletionText)).toBeInTheDocument();
 
     // First Escape closes only the topmost dialog (the delete confirmation); the
     // index manager itself stays open.
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByText(/Confirm index deletion/)).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText(confirmDeletionText)).not.toBeInTheDocument();
     expect(screen.getByText("Pinecone index manager")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

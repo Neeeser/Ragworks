@@ -2,12 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineTraceViewer } from "@/components/traces/PipelineTraceViewer";
+import * as apiModule from "@/lib/api";
+import { makeNodeRunTrace, makeNodeSpec, makeTraceResponse } from "@/test/fixtures";
 
 import type { PipelineTraceResponse } from "@/lib/types";
-
-const api = {
-  fetchPipelineNodes: vi.fn(),
-};
 
 let lastReactFlowProps: Record<string, unknown> | null = null;
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
@@ -17,13 +15,11 @@ const indexerNodeType = "indexer.pinecone";
 const nodeOneId = "n1";
 const nodeTwoId = "n2";
 
-vi.mock("@/lib/api", () => ({
-  fetchPipelineNodes: (...args: unknown[]) => api.fetchPipelineNodes(...args),
-}));
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ token: "context-token" }),
-}));
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "context-token" }),
+);
 
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: Record<string, unknown>) => {
@@ -35,7 +31,7 @@ vi.mock("@xyflow/react", () => ({
   Controls: () => <div data-testid="controls" />,
 }));
 
-const trace: PipelineTraceResponse = {
+const trace: PipelineTraceResponse = makeTraceResponse({
   run: {
     id: runId,
     kind: "ingestion",
@@ -77,33 +73,23 @@ const trace: PipelineTraceResponse = {
     viewport: {},
   },
   node_runs: [
-    {
+    makeNodeRunTrace({
       id: "nr1",
-      run_id: runId,
       node_id: nodeOneId,
       node_type: ingestionNodeType,
       node_name: "Input",
       sequence_index: 0,
-      status: "completed",
-      started_at: baseTimestamp,
-      completed_at: baseTimestamp,
       summary: {
         inputs: [{ label: "Query", value: { chunk_id: "chunk-1", text: "hello" }, kind: "text" }],
         outputs: [{ label: "Score", value: 3, kind: "value" }],
       },
-      created_at: baseTimestamp,
-      updated_at: baseTimestamp,
-    },
-    {
+    }),
+    makeNodeRunTrace({
       id: "nr2",
-      run_id: runId,
       node_id: nodeTwoId,
       node_type: indexerNodeType,
       node_name: "Index",
       sequence_index: 1,
-      status: "completed",
-      started_at: baseTimestamp,
-      completed_at: baseTimestamp,
       summary: {
         inputs: [
           {
@@ -119,9 +105,7 @@ const trace: PipelineTraceResponse = {
           },
         ],
       },
-      created_at: baseTimestamp,
-      updated_at: baseTimestamp,
-    },
+    }),
   ],
   node_io: [
     {
@@ -161,34 +145,29 @@ const trace: PipelineTraceResponse = {
       updated_at: baseTimestamp,
     },
   ],
-};
+});
+
+const api = vi.mocked(apiModule);
 
 describe("PipelineTraceViewer", () => {
   beforeEach(() => {
-    api.fetchPipelineNodes.mockReset();
     api.fetchPipelineNodes.mockResolvedValue([
-      {
+      makeNodeSpec({
         type: ingestionNodeType,
         label: "Input",
         category: "ingestion",
         description: "",
-        example: "",
         input_ports: [],
         output_ports: [],
-        config_schema: {},
-        default_config: {},
-      },
-      {
+      }),
+      makeNodeSpec({
         type: indexerNodeType,
         label: "Index",
         category: "ingestion",
         description: "",
-        example: "",
         input_ports: [],
         output_ports: [],
-        config_schema: {},
-        default_config: {},
-      },
+      }),
     ]);
   });
 
@@ -299,19 +278,6 @@ describe("PipelineTraceViewer", () => {
     await waitFor(() => {
       expect(fitView).toHaveBeenCalled();
     });
-  });
-
-  it("plays trace and advances steps", () => {
-    vi.useFakeTimers();
-    render(<PipelineTraceViewer trace={trace} token="token" isOpen onClose={() => undefined} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Play trace/ }));
-
-    act(() => {
-      vi.advanceTimersByTime(1500);
-    });
-
-    vi.useRealTimers();
   });
 
   it("handles fetch errors by surfacing a non-blocking notice", async () => {

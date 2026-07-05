@@ -10,25 +10,21 @@ import {
   ToolPayloadSection,
   formatToolLabel,
 } from "@/components/chat-studio/Tooling";
+import * as apiModule from "@/lib/api";
+import { makeTraceResponse } from "@/test/fixtures";
+import { resetMockAuth, setMockAuth } from "@/test/mocks";
 
 import type { PipelineTraceResponse } from "@/lib/types";
 
-const api = {
-  fetchQueryEventTrace: vi.fn(),
-  fetchPipelineRunTrace: vi.fn(),
-};
-
-let mockToken: string | null = "token";
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
 
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ token: mockToken }),
-}));
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
 
-vi.mock("@/lib/api", () => ({
-  fetchQueryEventTrace: (...args: unknown[]) => api.fetchQueryEventTrace(...args),
-  fetchPipelineRunTrace: (...args: unknown[]) => api.fetchPipelineRunTrace(...args),
-}));
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+
+const api = vi.mocked(apiModule);
 
 vi.mock("@/components/traces/PipelineTraceViewer", () => ({
   PipelineTraceViewer: ({
@@ -52,9 +48,7 @@ vi.mock("@/components/traces/PipelineTraceViewer", () => ({
 
 describe("Tooling", () => {
   beforeEach(() => {
-    api.fetchQueryEventTrace.mockReset();
-    api.fetchPipelineRunTrace.mockReset();
-    mockToken = "token";
+    resetMockAuth();
   });
 
   it("formats tool labels", () => {
@@ -168,7 +162,7 @@ describe("Tooling", () => {
   });
 
   it("renders tool call bubble and loads traces", async () => {
-    const trace: PipelineTraceResponse = {
+    const trace = makeTraceResponse({
       run: {
         id: "trace-1",
         kind: "ingestion",
@@ -181,10 +175,8 @@ describe("Tooling", () => {
         pipeline_id: "pipe-1",
         pipeline_version: 1,
       },
-      definition: { nodes: [], edges: [], viewport: {} },
       node_runs: [],
-      node_io: [],
-    };
+    });
 
     api.fetchQueryEventTrace.mockResolvedValueOnce(trace);
 
@@ -277,7 +269,7 @@ describe("Tooling", () => {
   });
 
   it("loads pipeline run traces when available", async () => {
-    const trace: PipelineTraceResponse = {
+    const trace = makeTraceResponse({
       run: {
         id: "trace-2",
         kind: "ingestion",
@@ -290,10 +282,8 @@ describe("Tooling", () => {
         pipeline_id: "pipe-1",
         pipeline_version: 1,
       },
-      definition: { nodes: [], edges: [], viewport: {} },
       node_runs: [],
-      node_io: [],
-    };
+    });
     api.fetchPipelineRunTrace.mockResolvedValueOnce(trace);
 
     render(
@@ -316,7 +306,7 @@ describe("Tooling", () => {
   });
 
   it("handles missing tokens and response-only payloads", () => {
-    mockToken = null;
+    setMockAuth({ token: null });
 
     render(
       <ToolCallBubble
@@ -336,7 +326,7 @@ describe("Tooling", () => {
   });
 
   it("skips trace loads when unauthenticated", () => {
-    mockToken = null;
+    setMockAuth({ token: null });
     render(
       <ToolCallBubble
         label="trace"

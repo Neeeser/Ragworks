@@ -1,42 +1,31 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CreatePipelineWizard } from "@/components/pipelines/CreatePipelineWizard";
+import * as apiModule from "@/lib/api";
+import { makePineconeIndex, makePipeline } from "@/test/fixtures";
 
-import type { PineconeIndex, Pipeline } from "@/lib/types";
+import type { PineconeIndex } from "@/lib/types";
 
-const api = {
-  createPipeline: vi.fn(),
-};
 const pipelineUtils = {
   buildDefaultDefinition: vi.fn(),
 };
+const createPipelineLabel = "Create pipeline";
 
-vi.mock("@/lib/api", () => ({
-  createPipeline: (...args: unknown[]) => api.createPipeline(...args),
-}));
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/components/pipelines/pipeline-utils", () => ({
   buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
   sortIndexesByName: (indexes: { name: string }[]) =>
     [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
 }));
 
+const api = vi.mocked(apiModule);
+
 describe("CreatePipelineWizard", () => {
-  const pipeline: Pipeline = {
-    id: "pipe-1",
-    user_id: "user-1",
-    name: "Pipeline",
-    kind: "ingestion",
-    current_version: 1,
-    is_default: false,
-    created_at: "2024-01-01T00:00:00.000Z",
-    updated_at: "2024-01-01T00:00:00.000Z",
-    definition: { nodes: [], edges: [] },
-  };
+  const pipeline = makePipeline({ kind: "ingestion", definition: { nodes: [], edges: [] } });
 
   beforeEach(() => {
-    api.createPipeline.mockReset();
-    pipelineUtils.buildDefaultDefinition.mockReset();
     pipelineUtils.buildDefaultDefinition.mockReturnValue({ nodes: [], edges: [] });
   });
 
@@ -55,7 +44,8 @@ describe("CreatePipelineWizard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("handles step navigation and index creation prompt", () => {
+  it("handles step navigation and index creation prompt", async () => {
+    const user = userEvent.setup();
     const onOpenIndexManager = vi.fn();
     render(
       <CreatePipelineWizard
@@ -70,55 +60,51 @@ describe("CreatePipelineWizard", () => {
     );
 
     expect(screen.getByText("Basics")).toBeInTheDocument();
-    const nextButton = screen.getByRole("button", { name: "Next" });
-    expect(nextButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    fireEvent.change(screen.getByPlaceholderText(/Ingestion/), { target: { value: "New" } });
-    expect(nextButton).toBeEnabled();
+    await user.type(screen.getByPlaceholderText(/Ingestion/), "New");
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
 
-    fireEvent.click(nextButton);
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByText(/Select an index/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.getByText(/No Pinecone indexes/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "__create__" } });
+    await user.selectOptions(screen.getByRole("combobox"), "__create__");
     expect(onOpenIndexManager).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Create index/ }));
-    expect(onOpenIndexManager).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Create index/ }));
+    expect(onOpenIndexManager).toHaveBeenCalledTimes(2);
   }, 10000);
 
-  it("requires an index selection before proceeding", () => {
+  it("requires an index selection before proceeding", async () => {
+    const user = userEvent.setup();
     render(
       <CreatePipelineWizard
         open
         token="token"
         kind="ingestion"
-        indexes={[
-          { name: "alpha", dimension: 768, metric: "cosine", host: null, spec: null, status: null },
-        ]}
+        indexes={[makePineconeIndex({ name: "alpha", dimension: 768 })]}
         onClose={() => undefined}
         onCreated={() => undefined}
         onOpenIndexManager={() => undefined}
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Ingestion/), { target: { value: "Pipe" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.click(screen.getByRole("button", { name: "Next" }));
 
-    const nextButton = screen.getByRole("button", { name: "Next" });
-    expect(nextButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "alpha" } });
-    expect(nextButton).toBeEnabled();
+    await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("creates a pipeline and handles errors", async () => {
+    const user = userEvent.setup();
     const onCreated = vi.fn();
     const onClose = vi.fn();
-    const indexes: PineconeIndex[] = [
-      { name: "alpha", dimension: 768, metric: "cosine", host: null, spec: null, status: null },
-    ];
+    const indexes: PineconeIndex[] = [makePineconeIndex({ name: "alpha", dimension: 768 })];
 
     api.createPipeline.mockResolvedValueOnce(pipeline);
 
@@ -134,17 +120,17 @@ describe("CreatePipelineWizard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Ingestion/), { target: { value: "Pipe" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.click(screen.getByRole("button", { name: "Next" }));
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "alpha" } });
+    await user.selectOptions(screen.getByRole("combobox"), "alpha");
     const stepTwoNext = screen.getByRole("button", { name: "Next" });
     expect(stepTwoNext).toBeEnabled();
-    fireEvent.click(stepTwoNext);
+    await user.click(stepTwoNext);
 
     expect(screen.getByText(/Summary/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create pipeline" }));
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
       expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("retrieval", "alpha", 768);
@@ -153,19 +139,16 @@ describe("CreatePipelineWizard", () => {
     });
 
     api.createPipeline.mockRejectedValueOnce(new Error("Boom"));
-
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Create pipeline" }));
-    });
-
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
     expect(await screen.findByText("Boom")).toBeInTheDocument();
 
     api.createPipeline.mockRejectedValueOnce("bad");
-    fireEvent.click(screen.getByRole("button", { name: "Create pipeline" }));
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
     expect(await screen.findByText("Unable to create pipeline.")).toBeInTheDocument();
   });
 
   it("creates pipelines without index dimensions", async () => {
+    const user = userEvent.setup();
     const onCreated = vi.fn();
     api.createPipeline.mockResolvedValueOnce(pipeline);
 
@@ -174,27 +157,18 @@ describe("CreatePipelineWizard", () => {
         open
         token="token"
         kind="ingestion"
-        indexes={[
-          {
-            name: "alpha",
-            dimension: null,
-            metric: "cosine",
-            host: null,
-            spec: null,
-            status: null,
-          },
-        ]}
+        indexes={[makePineconeIndex({ name: "alpha", dimension: null })]}
         onClose={() => undefined}
         onCreated={onCreated}
         onOpenIndexManager={() => undefined}
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Ingestion/), { target: { value: "Pipe" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "alpha" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create pipeline" }));
+    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
       expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
@@ -206,7 +180,8 @@ describe("CreatePipelineWizard", () => {
     });
   });
 
-  it("shows summary defaults when details are missing", () => {
+  it("shows summary defaults when details are missing", async () => {
+    const user = userEvent.setup();
     render(
       <CreatePipelineWizard
         open
@@ -219,7 +194,7 @@ describe("CreatePipelineWizard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Review/ }));
+    await user.click(screen.getByRole("button", { name: /Review/ }));
 
     expect(screen.getByText("Untitled")).toBeInTheDocument();
     expect(screen.getByText("Not selected")).toBeInTheDocument();
