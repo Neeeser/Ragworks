@@ -202,3 +202,12 @@ component-driven, well-named files that one person can hold in their head at onc
 - **Giant test files mirror giant components.** If a component's test needs to mock every
   child and capture their props to be testable, the component is too big — decompose the
   component instead of growing the test.
+- **Mocks and fixtures are centralized.** `src/test/mocks.ts` provides `mockApi(overrides?)`
+  and `mockAuth(user?)` — never hand-roll a `vi.mock("@/lib/api")` module shape in a test
+  file (we deleted 18 divergent copies, several of which mocked functions with the WRONG
+  argument order and hid real bugs). `src/test/fixtures/` provides `make*` builders for
+  every domain object; don't re-declare inline Collection/Pipeline/Session literals.
+  When an API function's signature changes, the factory is the single place mocks update.
+- **Name tests after behavior, not methods.** "submits full node config when pipelines
+  load after expanding advanced options" tells the next reader what contract broke;
+  "handleToggleAdvanced works" doesn't.
