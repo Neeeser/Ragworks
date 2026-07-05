@@ -78,8 +78,17 @@ export function CreateCollectionWizard({
     return new Map(entries);
   }, [ingestionPipelines, retrievalPipelines]);
 
+  // Single hydrate-on-open path: the first time `open` flips true, reset the whole
+  // wizard to a blank slate. On every subsequent render while still open, backfill
+  // the pipeline selection once the pipeline lists (and their defaults) finish
+  // loading, without clobbering a selection the user already made.
   useEffect(() => {
-    if (open && !wasOpen.current) {
+    if (!open) {
+      wasOpen.current = false;
+      return;
+    }
+    if (!wasOpen.current) {
+      wasOpen.current = true;
       setStepIndex(0);
       setMessage(null);
       setShowAdvanced(false);
@@ -91,12 +100,8 @@ export function CreateCollectionWizard({
         ingestion_pipeline_id: defaultIngestion?.id || "",
         retrieval_pipeline_id: defaultRetrieval?.id || "",
       });
+      return;
     }
-    wasOpen.current = open;
-  }, [open, defaultIngestion, defaultRetrieval]);
-
-  useEffect(() => {
-    if (!open) return;
     setForm((prev) => ({
       ...prev,
       ingestion_pipeline_id: prev.ingestion_pipeline_id || defaultIngestion?.id || "",
@@ -127,24 +132,31 @@ export function CreateCollectionWizard({
     [nodeSpecs],
   );
 
-  useEffect(() => {
-    if (!open || !showAdvanced || !usesDefaultPipelines) return;
-    if (defaultIngestion && Object.keys(ingestionOverrides).length === 0) {
-      setIngestionOverrides(buildOverridesFromPipeline(defaultIngestion));
-    }
-    if (defaultRetrieval && Object.keys(retrievalOverrides).length === 0) {
-      setRetrievalOverrides(buildOverridesFromPipeline(defaultRetrieval));
-    }
-  }, [
-    open,
-    showAdvanced,
-    usesDefaultPipelines,
-    defaultIngestion,
-    defaultRetrieval,
-    buildOverridesFromPipeline,
-    ingestionOverrides,
-    retrievalOverrides,
-  ]);
+  // Seed the override editors the moment advanced options are expanded, rather than
+  // reactively re-deriving them from an effect (which required listing the very state
+  // it writes as a dependency, guarded only by an "is it still empty" check).
+  const handleToggleAdvanced = useCallback(() => {
+    setShowAdvanced((prev) => {
+      const next = !prev;
+      if (next && usesDefaultPipelines) {
+        if (defaultIngestion) {
+          setIngestionOverrides((current) =>
+            Object.keys(current).length === 0
+              ? buildOverridesFromPipeline(defaultIngestion)
+              : current,
+          );
+        }
+        if (defaultRetrieval) {
+          setRetrievalOverrides((current) =>
+            Object.keys(current).length === 0
+              ? buildOverridesFromPipeline(defaultRetrieval)
+              : current,
+          );
+        }
+      }
+      return next;
+    });
+  }, [usesDefaultPipelines, defaultIngestion, defaultRetrieval, buildOverridesFromPipeline]);
 
   if (!open) {
     return null;
@@ -306,7 +318,7 @@ export function CreateCollectionWizard({
             <button
               type="button"
               className="flex w-full items-center justify-between text-sm text-slate-200"
-              onClick={() => setShowAdvanced((prev) => !prev)}
+              onClick={handleToggleAdvanced}
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-violet-300" />
