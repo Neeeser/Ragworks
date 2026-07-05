@@ -25,7 +25,6 @@ import {
   isToolReasoningSegment,
   makeToolId,
   mergeMessageHistory,
-  parseCollectionIdsParam,
   pruneHistoryForEdit,
   sortMessagesChronologically,
 } from "@/components/chat-studio/chat-helpers";
@@ -33,6 +32,7 @@ import { ChatStudioHeader } from "@/components/chat-studio/ChatStudioHeader";
 import { ChatStudioMessages } from "@/components/chat-studio/ChatStudioMessages";
 import { ChatStudioView } from "@/components/chat-studio/ChatStudioView";
 import { useAutoScroll } from "@/components/chat-studio/hooks/use-auto-scroll";
+import { useCollectionTools } from "@/components/chat-studio/hooks/use-collection-tools";
 import { useModelCatalog } from "@/components/chat-studio/hooks/use-model-catalog";
 import { useModelParameters } from "@/components/chat-studio/hooks/use-model-parameters";
 import { usePromptEditor } from "@/components/chat-studio/hooks/use-prompt-editor";
@@ -47,9 +47,6 @@ import {
   branchChatSession,
   chat,
   deleteChatSession,
-  fetchCollections,
-  fetchDocuments,
-  fetchPipeline,
   getChatHistory,
   listChatSessions,
   streamChat,
@@ -73,7 +70,6 @@ import type {
   ChatRequestPayload,
   ChatSession,
   Collection,
-  Pipeline,
   ProviderPreferences,
   ReasoningTraceSegment,
   ToolCallTrace,
@@ -120,26 +116,13 @@ export function ChatStudio() {
     active: false,
   });
   const urlCollectionsValue = searchParams.get("collections");
-  const urlCollectionIds = useMemo(
-    () => parseCollectionIdsParam(urlCollectionsValue),
-    [urlCollectionsValue],
-  );
   const { token, user, loading: authLoading, refreshProfile } = useAuth();
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [collectionsLoading, setCollectionsLoading] = useState(false);
-  const [collectionsError, setCollectionsError] = useState<string | null>(null);
-  const [selectedToolCollectionIds, setSelectedToolCollectionIds] =
-    useState<string[]>(urlCollectionIds);
-  const [historyFilterCollectionIds, setHistoryFilterCollectionIds] = useState<string[]>([]);
-  const [historyFilterIncludeUnassigned, setHistoryFilterIncludeUnassigned] = useState(false);
-  const [documentCount, setDocumentCount] = useState(0);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const selectedSessionId = activeSessionId;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolTraces, setToolTraces] = useState<ToolCallTrace[]>([]);
   const [chatEntryOrder, setChatEntryOrder] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageBreakdown | null>(null);
-  const [contextWindow, setContextWindow] = useState<number>(0);
   const [contextConsumed, setContextConsumed] = useState<number>(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -234,7 +217,6 @@ export function ChatStudio() {
   });
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
-  const toolCollectionsDirtyRef = useRef(false);
   const newChatDefaultsRef = useRef<{
     activeModelId: string | null;
     parameterOverrides: ParameterOverrides;
@@ -243,51 +225,9 @@ export function ChatStudio() {
     toolCollectionIds: string[];
   } | null>(null);
   const chatHydrationPendingRef = useRef(false);
-  const historyFilterTouchedRef = useRef(false);
   const reasoningCacheRef = useRef<Map<string, ReasoningTraceSegment[]>>(new Map());
   const messageOrderRef = useRef<Map<string, number>>(new Map());
   const nextMessageOrderRef = useRef(1);
-  const historyFilterActive =
-    historyFilterCollectionIds.length > 0 || historyFilterIncludeUnassigned;
-  const collectionMap = useMemo(() => {
-    return new Map(collections.map((collection) => [collection.id, collection]));
-  }, [collections]);
-  const resolveValidToolCollectionIds = useCallback(
-    (collectionIds: string[]) => {
-      if (collectionIds.length === 0) {
-        return [];
-      }
-      if (collectionMap.size === 0) {
-        return collectionIds;
-      }
-      return collectionIds.filter((collectionId) => collectionMap.has(collectionId));
-    },
-    [collectionMap],
-  );
-  const selectedToolCollections = useMemo(() => {
-    return selectedToolCollectionIds
-      .map((collectionId) => collectionMap.get(collectionId))
-      .filter(Boolean) as Collection[];
-  }, [collectionMap, selectedToolCollectionIds]);
-  const primaryCollection = selectedToolCollections[0] ?? null;
-  const collectionLabel = useMemo(() => {
-    if (selectedToolCollections.length === 0) {
-      return "No collections selected";
-    }
-    if (selectedToolCollections.length === 1) {
-      return selectedToolCollections[0].name;
-    }
-    return `${selectedToolCollections.length} collections selected`;
-  }, [selectedToolCollections]);
-  const collectionMetaLabel = useMemo(() => {
-    if (selectedToolCollections.length === 0) {
-      return "No collection tools enabled";
-    }
-    if (selectedToolCollections.length === 1) {
-      return `${documentCount} documents`;
-    }
-    return `${selectedToolCollections.length} tools enabled`;
-  }, [documentCount, selectedToolCollections]);
 
   const hasLiveText = liveResponse.trim().length > 0;
   const hasLiveReasoning = liveReasoningSegments.length > 0;
@@ -344,49 +284,12 @@ export function ChatStudio() {
     }
   }, [activeSessionId, sessionIdParam]);
 
-  useEffect(() => {
-    toolCollectionsDirtyRef.current = false;
-  }, [selectedSessionId]);
-
-  useEffect(() => {
-    if (selectedSessionId) {
-      return;
-    }
-    if (urlCollectionsValue === null) {
-      return;
-    }
-    const parsed = parseCollectionIdsParam(urlCollectionsValue);
-    const resolved = resolveValidToolCollectionIds(parsed);
-    setSelectedToolCollectionIds((prev) => (areArraysEqual(prev, resolved) ? prev : resolved));
-  }, [resolveValidToolCollectionIds, selectedSessionId, urlCollectionsValue]);
-
   const isPendingSession = useMemo(() => {
     if (!selectedSessionId) {
       return false;
     }
     return pendingSessionIdsRef.current.has(selectedSessionId);
   }, [selectedSessionId]);
-
-  useEffect(() => {
-    if (isPendingSession) {
-      return;
-    }
-    if (sessionIdParam !== selectedSessionId) {
-      return;
-    }
-    const target = buildChatUrl(selectedSessionId, selectedToolCollectionIds);
-    if (target !== currentUrl) {
-      router.replace(target);
-    }
-  }, [
-    buildChatUrl,
-    currentUrl,
-    isPendingSession,
-    router,
-    selectedSessionId,
-    sessionIdParam,
-    selectedToolCollectionIds,
-  ]);
 
   useEffect(() => {
     isStreamingResponseRef.current = isStreamingResponse;
@@ -520,7 +423,58 @@ export function ChatStudio() {
     setUsage,
   });
 
+  const {
+    collections,
+    collectionsLoading,
+    collectionsError,
+    selectedToolCollectionIds,
+    setSelectedToolCollectionIds,
+    historyFilterCollectionIds,
+    historyFilterIncludeUnassigned,
+    historyFilterActive,
+    handleHistoryFilterChange,
+    documentCount,
+    contextWindow,
+    setContextWindow,
+    resolveValidToolCollectionIds,
+    selectedToolCollections,
+    primaryCollection,
+    collectionLabel,
+    collectionMetaLabel,
+    toggleToolCollection,
+    clearToolCollections,
+    toolCollectionsDirtyRef,
+  } = useCollectionTools({
+    authToken,
+    authLoading,
+    pineconeConfigured,
+    selectedSessionId,
+    urlCollectionsValue,
+    setSessions,
+  });
+
   const toolsEnabled = selectedToolCollectionIds.length > 0;
+
+  useEffect(() => {
+    if (isPendingSession) {
+      return;
+    }
+    if (sessionIdParam !== selectedSessionId) {
+      return;
+    }
+    const target = buildChatUrl(selectedSessionId, selectedToolCollectionIds);
+    if (target !== currentUrl) {
+      router.replace(target);
+    }
+  }, [
+    buildChatUrl,
+    currentUrl,
+    isPendingSession,
+    router,
+    selectedSessionId,
+    sessionIdParam,
+    selectedToolCollectionIds,
+  ]);
 
   const {
     modelCatalog,
@@ -616,17 +570,6 @@ export function ChatStudio() {
     });
   }, []);
 
-  const resolveChatSettings = useCallback((pipeline: Pipeline | null) => {
-    if (!pipeline) {
-      return { contextWindow: 0 };
-    }
-    const settingsNode = pipeline.definition.nodes.find((node) => node.type === "chat.settings");
-    const contextWindow = settingsNode?.config?.context_window;
-    return {
-      contextWindow: typeof contextWindow === "number" ? contextWindow : 0,
-    };
-  }, []);
-
   useEffect(() => {
     if (authLoading) {
       return;
@@ -643,100 +586,6 @@ export function ChatStudio() {
     }
     setStatus(null);
   }, [authLoading, authToken, openrouterConfigured]);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    if (!authToken || !pineconeConfigured) {
-      setCollections([]);
-      setCollectionsLoading(false);
-      setCollectionsError(pineconeConfigured ? null : PINECONE_KEY_REQUIRED_MESSAGE);
-      return;
-    }
-    let cancelled = false;
-    setCollectionsLoading(true);
-    setCollectionsError(null);
-    fetchCollections(authToken)
-      .then((items) => {
-        if (!cancelled) {
-          setCollections(items);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Unable to load collections.";
-          setCollectionsError(message);
-          setCollections([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCollectionsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, authToken, pineconeConfigured]);
-
-  useEffect(() => {
-    if (collections.length === 0) {
-      return;
-    }
-    const validIds = new Set(collections.map((collection) => collection.id));
-    setSelectedToolCollectionIds((prev) => prev.filter((id) => validIds.has(id)));
-    setHistoryFilterCollectionIds((prev) => prev.filter((id) => validIds.has(id)));
-  }, [collections]);
-
-  useEffect(() => {
-    if (!authToken || !primaryCollection) {
-      setDocumentCount(0);
-      return;
-    }
-    let cancelled = false;
-    fetchDocuments(authToken, primaryCollection.id)
-      .then((docs) => {
-        if (!cancelled) {
-          setDocumentCount(docs.length);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDocumentCount(0);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authToken, primaryCollection]);
-
-  useEffect(() => {
-    if (!authToken || !primaryCollection) {
-      setContextWindow(0);
-      return;
-    }
-    if (!primaryCollection.retrieval_pipeline_id) {
-      setContextWindow(0);
-      return;
-    }
-    let cancelled = false;
-    fetchPipeline(authToken, primaryCollection.retrieval_pipeline_id)
-      .then((pipeline) => {
-        if (!cancelled) {
-          const settings = resolveChatSettings(pipeline);
-          setContextWindow(settings.contextWindow);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setContextWindow(0);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authToken, primaryCollection, resolveChatSettings]);
 
   useEffect(() => {
     if (authLoading || !authToken || !openrouterConfigured) {
@@ -1706,49 +1555,6 @@ export function ChatStudio() {
     setOptimisticMessages([]);
     navigateToChat(null, selectedToolCollectionIds);
   };
-
-  const toggleToolCollection = useCallback(
-    (collectionId: string) => {
-      toolCollectionsDirtyRef.current = true;
-      setSelectedToolCollectionIds((prev) => {
-        const next = prev.includes(collectionId)
-          ? prev.filter((id) => id !== collectionId)
-          : [...prev, collectionId];
-        if (selectedSessionId) {
-          setSessions((sessionsPrev) =>
-            sessionsPrev.map((session) =>
-              session.id === selectedSessionId
-                ? { ...session, tool_collection_ids: next }
-                : session,
-            ),
-          );
-        }
-        return next;
-      });
-    },
-    [selectedSessionId],
-  );
-
-  const clearToolCollections = useCallback(() => {
-    toolCollectionsDirtyRef.current = true;
-    setSelectedToolCollectionIds([]);
-    if (selectedSessionId) {
-      setSessions((sessionsPrev) =>
-        sessionsPrev.map((session) =>
-          session.id === selectedSessionId ? { ...session, tool_collection_ids: [] } : session,
-        ),
-      );
-    }
-  }, [selectedSessionId]);
-
-  const handleHistoryFilterChange = useCallback(
-    (collectionIds: string[], includeUnassigned: boolean) => {
-      historyFilterTouchedRef.current = true;
-      setHistoryFilterCollectionIds(collectionIds);
-      setHistoryFilterIncludeUnassigned(includeUnassigned);
-    },
-    [],
-  );
 
   const handleExportChatHistory = useCallback(() => {
     if (typeof document === "undefined") {
