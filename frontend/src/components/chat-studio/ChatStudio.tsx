@@ -993,6 +993,47 @@ export function ChatStudio() {
     }
   }, [isOverlayMode, setHistoryOpen, setTelemetryOpen]);
 
+  const handleTimelineModelSelect = useCallback(
+    () => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting),
+    [handleOverrideSelect],
+  );
+
+  const handleEditStart = useCallback(
+    (messageId: string, content: string) => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        editScrollSnapshotRef.current = {
+          scrollTop: container.scrollTop,
+          scrollHeight: container.scrollHeight,
+        };
+      }
+      editAutoScrollRef.current = autoScrollEnabled;
+      if (autoScrollEnabled) {
+        setAutoScrollEnabled(false);
+      }
+      if (scrollAnimationFrameRef.current) {
+        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+        scrollAnimationFrameRef.current = null;
+      }
+      setEditingMessageId(messageId);
+      setEditingDraft(content);
+    },
+    [autoScrollEnabled, messagesContainerRef, scrollAnimationFrameRef, setAutoScrollEnabled],
+  );
+
+  const handleEditCancel = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingDraft("");
+  }, []);
+
+  const handleNavigateToSession = useCallback(
+    (sessionId: string) => {
+      const session = sessions.find((item) => item.id === sessionId);
+      navigateToChat(sessionId, session?.tool_collection_ids ?? []);
+    },
+    [navigateToChat, sessions],
+  );
+
   const currentModelLabel = currentModelInfo?.name || activeModelId || "Select model";
 
   const historyPanel = (
@@ -1231,7 +1272,7 @@ export function ChatStudio() {
       onFollow={handleReenableAutoScroll}
       timelineProps={{
         modelLabel: currentModelLabel,
-        onModelSelect: () => handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting),
+        onModelSelect: handleTimelineModelSelect,
         chatEntryOrder,
         chatEntryMap,
         finalStreamAssistantId,
@@ -1242,29 +1283,8 @@ export function ChatStudio() {
         editingMessageId,
         editingDraft,
         onEditChange: setEditingDraft,
-        onEditStart: (messageId, content) => {
-          const container = messagesContainerRef.current;
-          if (container) {
-            editScrollSnapshotRef.current = {
-              scrollTop: container.scrollTop,
-              scrollHeight: container.scrollHeight,
-            };
-          }
-          editAutoScrollRef.current = autoScrollEnabled;
-          if (autoScrollEnabled) {
-            setAutoScrollEnabled(false);
-          }
-          if (scrollAnimationFrameRef.current) {
-            window.cancelAnimationFrame(scrollAnimationFrameRef.current);
-            scrollAnimationFrameRef.current = null;
-          }
-          setEditingMessageId(messageId);
-          setEditingDraft(content);
-        },
-        onEditCancel: () => {
-          setEditingMessageId(null);
-          setEditingDraft("");
-        },
+        onEditStart: handleEditStart,
+        onEditCancel: handleEditCancel,
         onEditSubmit: handleEditSubmit,
         onRetryAssistant: handleRetryAssistant,
         onBranchMessage: handleBranchMessage,
@@ -1289,10 +1309,7 @@ export function ChatStudio() {
         branchedFromOrigin: selectedSessionId
           ? (branchedSessionOriginRef.current.get(selectedSessionId) ?? "manual")
           : "manual",
-        onNavigateToSession: (sessionId) => {
-          const session = sessions.find((item) => item.id === sessionId);
-          navigateToChat(sessionId, session?.tool_collection_ids ?? []);
-        },
+        onNavigateToSession: handleNavigateToSession,
       }}
       inputProps={{
         draft,

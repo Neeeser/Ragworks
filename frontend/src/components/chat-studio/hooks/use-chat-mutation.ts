@@ -393,7 +393,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     ],
   );
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!authToken || !user) return;
     if (toolsEnabled && !pineconeConfigured) {
       setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
@@ -490,7 +490,35 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
         prev.filter((message) => message.id !== placeholderMessageId),
       );
     }
-  };
+  }, [
+    activeModelId,
+    authToken,
+    buildParameterPayload,
+    draft,
+    messageOrderRef,
+    navigateToChat,
+    nextMessageOrderRef,
+    pendingSessionIdsRef,
+    performChatMutation,
+    pineconeConfigured,
+    providerPayload,
+    providerRuleCount,
+    resetLiveMessage,
+    selectedSessionId,
+    selectedToolCollectionIds,
+    setContextConsumed,
+    setDraft,
+    setMessages,
+    setOptimisticMessages,
+    setSessions,
+    setStatus,
+    setToolTraces,
+    setUsage,
+    sortSessions,
+    streamingEnabled,
+    toolsEnabled,
+    user,
+  ]);
 
   const handleStopGeneration = useCallback(() => {
     if (!sending) {
@@ -501,7 +529,8 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     stopProgressPolling();
   }, [abortControllerRef, sending, setIsStopping, stopProgressPolling]);
 
-  const runEditMutation = async (
+  const runEditMutation = useCallback(
+    async (
     messageId: string,
     newContent: string,
     overrides: {
@@ -558,7 +587,29 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
         skipHistoryFetchSessionRef.current = null;
       }
     }
-  };
+    },
+    [
+      activeModelId,
+      authToken,
+      buildParameterPayload,
+      deriveToolTraces,
+      messages,
+      performChatMutation,
+      pineconeConfigured,
+      providerPayload,
+      providerRuleCount,
+      selectedSessionId,
+      setEditingDraft,
+      setEditingMessageId,
+      setStatus,
+      setToolTraces,
+      setUsage,
+      skipHistoryFetchSessionRef,
+      streamingEnabled,
+      syncMessages,
+      toolsEnabled,
+    ],
+  );
 
   const branchSessionForEdit = useCallback(
     async (messageId: string, origin: "edit" | "manual") => {
@@ -617,6 +668,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
       setProviderForm,
       setSelectedToolCollectionIds,
       setSessions,
+      setStatus,
       setStreamingEnabled,
       setToolTraces,
       setUsage,
@@ -627,7 +679,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     ],
   );
 
-  const handleEditSubmit = async () => {
+  const handleEditSubmit = useCallback(async () => {
     if (!editingMessageId) return;
     const trimmed = editingDraft.trim();
     if (!trimmed) {
@@ -658,11 +710,14 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
       provider: branched.session.provider_preferences ?? undefined,
       stream: branched.session.stream ?? DEFAULT_STREAMING_ENABLED,
     });
-  };
+  }, [branchSessionForEdit, editingDraft, editingMessageId, runEditMutation, setStatus]);
 
-  const handleRetryAssistant = async (messageId: string) => {
-    await runEditMutation(messageId, "");
-  };
+  const handleRetryAssistant = useCallback(
+    async (messageId: string) => {
+      await runEditMutation(messageId, "");
+    },
+    [runEditMutation],
+  );
 
   const handleBranchMessage = useCallback(
     async (messageId: string) => {
@@ -671,7 +726,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     [branchSessionForEdit],
   );
 
-  const handleStartNewChat = () => {
+  const handleStartNewChat = useCallback(() => {
     stopProgressPolling();
     newChatDefaultsRef.current = {
       activeModelId,
@@ -693,36 +748,69 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     setEditingDraft("");
     setOptimisticMessages([]);
     navigateToChat(null, selectedToolCollectionIds);
-  };
+  }, [
+    activeModelId,
+    applyNewChatDefaultsRef,
+    navigateToChat,
+    newChatDefaultsRef,
+    parameterOverrides,
+    pendingSessionIdsRef,
+    providerForm,
+    resetChatStream,
+    selectedToolCollectionIds,
+    setContextConsumed,
+    setDraft,
+    setEditingDraft,
+    setEditingMessageId,
+    setMessages,
+    setOptimisticMessages,
+    setToolTraces,
+    setUsage,
+    stopProgressPolling,
+    streamingEnabled,
+    toolCollectionsDirtyRef,
+  ]);
 
-  const handleDeleteSession = async (sessionId: string) => {
-    if (!authToken) return;
-    setStatus(null);
-    setDeletingSessionId(sessionId);
-    try {
-      await deleteChatSession(authToken, sessionId);
-      let nextSelectedId: string | null = null;
-      setSessions((prev) => {
-        const next = prev.filter((session) => session.id !== sessionId);
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      if (!authToken) return;
+      setStatus(null);
+      setDeletingSessionId(sessionId);
+      try {
+        await deleteChatSession(authToken, sessionId);
+        let nextSelectedId: string | null = null;
+        setSessions((prev) => {
+          const next = prev.filter((session) => session.id !== sessionId);
+          if (selectedSessionId === sessionId) {
+            nextSelectedId = next[0]?.id ?? null;
+          }
+          return next;
+        });
         if (selectedSessionId === sessionId) {
-          nextSelectedId = next[0]?.id ?? null;
+          if (nextSelectedId) {
+            const nextSession = sessions.find((session) => session.id === nextSelectedId);
+            navigateToChat(nextSelectedId, nextSession?.tool_collection_ids ?? []);
+          } else {
+            handleStartNewChat();
+          }
         }
-        return next;
-      });
-      if (selectedSessionId === sessionId) {
-        if (nextSelectedId) {
-          const nextSession = sessions.find((session) => session.id === nextSelectedId);
-          navigateToChat(nextSelectedId, nextSession?.tool_collection_ids ?? []);
-        } else {
-          handleStartNewChat();
-        }
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Unable to delete chat session.");
+      } finally {
+        setDeletingSessionId((current) => (current === sessionId ? null : current));
       }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to delete chat session.");
-    } finally {
-      setDeletingSessionId((current) => (current === sessionId ? null : current));
-    }
-  };
+    },
+    [
+      authToken,
+      handleStartNewChat,
+      navigateToChat,
+      selectedSessionId,
+      sessions,
+      setDeletingSessionId,
+      setSessions,
+      setStatus,
+    ],
+  );
 
   return {
     handleSend,

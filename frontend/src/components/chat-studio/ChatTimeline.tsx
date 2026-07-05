@@ -1,5 +1,5 @@
 import { Edit3, GitBranch, RotateCcw } from "lucide-react";
-import React, { Fragment, useEffect, useMemo, useRef } from "react";
+import React, { Fragment, memo, useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -85,7 +85,7 @@ type ChatTimelineProps = {
   onNavigateToSession: (sessionId: string) => void;
 };
 
-export function ChatTimeline({
+function ChatTimelineComponent({
   modelLabel,
   onModelSelect,
   chatEntryOrder,
@@ -587,3 +587,5 @@ export function ChatTimeline({
   if (assistantTypingBubble) streamingBubbles.push(assistantTypingBubble);
   return streamingBubbles.length > 0 ? [...messageBubbles, ...streamingBubbles] : messageBubbles;
 }
+
+export const ChatTimeline = memo(ChatTimelineComponent);
