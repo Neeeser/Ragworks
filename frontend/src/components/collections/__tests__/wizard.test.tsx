@@ -8,6 +8,10 @@ import { CreateCollectionWizard } from "@/components/collections/list/CreateColl
 import type { Collection, NodeSpec, Pipeline } from "@/lib/types";
 
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
+const namePlaceholder = "Research vault";
+const createButtonLabel = "Create collection";
+const ingestionDefaultsTitle = "Ingestion defaults";
+const createFailedMessage = "Unable to create collection.";
 
 const api = {
   createCollection: vi.fn(),
@@ -17,17 +21,23 @@ vi.mock("@/lib/api", () => ({
   createCollection: (...args: unknown[]) => api.createCollection(...args),
 }));
 
-let overridesByTitle: Record<string, Record<string, Record<string, unknown>>> = {};
+type OverridesState = Record<string, Record<string, unknown>>;
+
+let overridesByTitle: Record<string, OverridesState> = {};
+let overridesChangeByTitle: Record<string, (next: OverridesState) => void> = {};
 
 vi.mock("@/components/collections/PipelineOverridesEditor", () => ({
   PipelineOverridesEditor: ({
     title,
     overrides,
+    onOverridesChange,
   }: {
     title: string;
-    overrides: Record<string, Record<string, unknown>>;
+    overrides: OverridesState;
+    onOverridesChange: (next: OverridesState) => void;
   }) => {
     overridesByTitle = { ...overridesByTitle, [title]: overrides };
+    overridesChangeByTitle = { ...overridesChangeByTitle, [title]: onOverridesChange };
     return <div data-testid="overrides-editor">{title}</div>;
   },
 }));
@@ -77,6 +87,8 @@ describe("CreateCollectionWizard", () => {
 
   beforeEach(() => {
     overridesByTitle = {};
+    overridesChangeByTitle = {};
+    api.createCollection.mockReset();
   });
 
   it("returns null when closed", () => {
@@ -118,7 +130,7 @@ describe("CreateCollectionWizard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Research vault"), {
+    fireEvent.change(screen.getByPlaceholderText(namePlaceholder), {
       target: { value: "Collection" },
     });
     fireEvent.change(screen.getByPlaceholderText("Summarize what this collection is for."), {
@@ -135,7 +147,7 @@ describe("CreateCollectionWizard", () => {
     fireEvent.click(screen.getByText("Next"));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Create collection" }));
+      fireEvent.click(screen.getByRole("button", { name: createButtonLabel }));
     });
 
     await waitFor(() => {
@@ -205,7 +217,7 @@ describe("CreateCollectionWizard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Research vault"), {
+    fireEvent.change(screen.getByPlaceholderText(namePlaceholder), {
       target: { value: "Collection" },
     });
     fireEvent.click(screen.getByText("Next"));
@@ -214,12 +226,120 @@ describe("CreateCollectionWizard", () => {
     fireEvent.click(screen.getByText("Show"));
 
     await waitFor(() => {
-      expect(overridesByTitle["Ingestion defaults"]).toEqual({
+      expect(overridesByTitle[ingestionDefaultsTitle]).toEqual({
         "node-1": { foo: "override", bar: 2 },
       });
       expect(overridesByTitle["Retrieval defaults"]).toEqual({
         "node-2": { foo: "override", bar: 2 },
       });
+    });
+  });
+
+  it("seeds full node configs when pipelines resolve after Advanced is expanded, so an edit submits the whole config", async () => {
+    const ingestionWithDefaults: Pipeline = {
+      ...ingestion,
+      definition: {
+        nodes: [{ id: "node-1", type: "node.type", name: "Node", config: { foo: "override" } }],
+        edges: [],
+      },
+    };
+    const retrievalWithDefaults: Pipeline = {
+      ...retrieval,
+      definition: {
+        nodes: [{ id: "node-2", type: "node.type", name: "Node", config: { foo: "override" } }],
+        edges: [],
+      },
+    };
+    const advancedSpecs: NodeSpec[] = [
+      {
+        ...nodeSpecs[0],
+        config_schema: {
+          properties: {
+            foo: { type: "string", default: "default" },
+            bar: { type: "number", default: 2 },
+          },
+        },
+        default_config: { foo: "default", bar: 2 },
+      },
+    ];
+    const created: Collection = {
+      id: "col-1",
+      user_id: "user-1",
+      name: "Collection",
+      created_at: baseTimestamp,
+      updated_at: baseTimestamp,
+    };
+    api.createCollection.mockResolvedValueOnce(created);
+
+    // Open the wizard and expand Advanced BEFORE the pipelines/specs have loaded.
+    const { rerender } = render(
+      <CreateCollectionWizard
+        open
+        token="token"
+        ingestionPipelines={[]}
+        retrievalPipelines={[]}
+        nodeSpecs={[]}
+        onClose={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(namePlaceholder), {
+      target: { value: "Collection" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Defaults/ }));
+    fireEvent.click(screen.getByText("Show"));
+    // No pipelines yet, so the defaults aren't selected and nothing can be seeded here.
+    expect(
+      screen.getByText(
+        "Advanced options are available only when the default pipelines are selected.",
+      ),
+    ).toBeInTheDocument();
+
+    // Pipelines and specs resolve while the panel is already expanded.
+    rerender(
+      <CreateCollectionWizard
+        open
+        token="token"
+        ingestionPipelines={[ingestionWithDefaults]}
+        retrievalPipelines={[retrievalWithDefaults]}
+        nodeSpecs={advancedSpecs}
+        onClose={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+
+    // The overrides state (not just the editor's display fallback) must be seeded.
+    await waitFor(() => {
+      expect(overridesByTitle[ingestionDefaultsTitle]).toEqual({
+        "node-1": { foo: "override", bar: 2 },
+      });
+    });
+
+    // Simulate a user edit exactly as PipelineOverridesEditor.handleConfigChange does:
+    // it builds the next per-node config from `overrides[nodeId] ?? {}`, so if the
+    // seed hadn't happened the edit would produce a one-field config.
+    act(() => {
+      const current = overridesByTitle[ingestionDefaultsTitle];
+      const nextConfig = { ...(current["node-1"] ?? {}), foo: "edited" };
+      overridesChangeByTitle[ingestionDefaultsTitle]({ ...current, "node-1": nextConfig });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Review/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: createButtonLabel }));
+    });
+
+    await waitFor(() => {
+      expect(api.createCollection).toHaveBeenCalledWith(
+        "token",
+        expect.objectContaining({
+          pipeline_overrides: {
+            ingestion: [{ node_id: "node-1", config: { foo: "edited", bar: 2 } }],
+            retrieval: [{ node_id: "node-2", config: { foo: "override", bar: 2 } }],
+          },
+        }),
+      );
     });
   });
 
@@ -353,7 +473,7 @@ describe("CreateCollectionWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Defaults/ }));
     fireEvent.click(screen.getByText("Show"));
 
-    expect(overridesByTitle["Ingestion defaults"]?.["node-override"]).toEqual({
+    expect(overridesByTitle[ingestionDefaultsTitle]?.["node-override"]).toEqual({
       bar: "from-default",
       foo: "bar",
     });
@@ -381,7 +501,7 @@ describe("CreateCollectionWizard", () => {
   });
 
   it("shows errors when create fails and advanced options are unavailable", async () => {
-    api.createCollection.mockRejectedValueOnce(new Error("Unable to create collection."));
+    api.createCollection.mockRejectedValueOnce(new Error(createFailedMessage));
     const nonDefault = { ...ingestion, id: "ing-2", is_default: false };
     render(
       <CreateCollectionWizard
@@ -395,7 +515,7 @@ describe("CreateCollectionWizard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Research vault"), {
+    fireEvent.change(screen.getByPlaceholderText(namePlaceholder), {
       target: { value: "Collection" },
     });
     fireEvent.click(screen.getByText("Next"));
@@ -412,11 +532,11 @@ describe("CreateCollectionWizard", () => {
     fireEvent.click(screen.getByText("Next"));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Create collection" }));
+      fireEvent.click(screen.getByRole("button", { name: createButtonLabel }));
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Unable to create collection.")).toBeInTheDocument();
+      expect(screen.getByText(createFailedMessage)).toBeInTheDocument();
     });
   });
 
@@ -434,7 +554,7 @@ describe("CreateCollectionWizard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Research vault"), {
+    fireEvent.change(screen.getByPlaceholderText(namePlaceholder), {
       target: { value: "Collection" },
     });
     fireEvent.click(screen.getByText("Next"));
@@ -442,11 +562,11 @@ describe("CreateCollectionWizard", () => {
     fireEvent.click(screen.getByText("Next"));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Create collection" }));
+      fireEvent.click(screen.getByRole("button", { name: createButtonLabel }));
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Unable to create collection.")).toBeInTheDocument();
+      expect(screen.getByText(createFailedMessage)).toBeInTheDocument();
     });
   });
 });

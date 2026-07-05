@@ -132,34 +132,32 @@ export function CreateCollectionWizard({
     [nodeSpecs],
   );
 
-  // Seed the override editors the moment advanced options are expanded, rather than
-  // reactively re-deriving them from an effect (which required listing the very state
-  // it writes as a dependency, guarded only by an "is it still empty" check).
-  const handleToggleAdvanced = useCallback(() => {
-    setShowAdvanced((prev) => {
-      const next = !prev;
-      if (next && usesDefaultPipelines) {
-        if (defaultIngestion) {
-          setIngestionOverrides((current) =>
-            Object.keys(current).length === 0
-              ? buildOverridesFromPipeline(defaultIngestion)
-              : current,
-          );
-        }
-        if (defaultRetrieval) {
-          setRetrievalOverrides((current) =>
-            Object.keys(current).length === 0
-              ? buildOverridesFromPipeline(defaultRetrieval)
-              : current,
-          );
-        }
-      }
-      return next;
-    });
-  }, [usesDefaultPipelines, defaultIngestion, defaultRetrieval, buildOverridesFromPipeline]);
-
   if (!open) {
     return null;
+  }
+
+  // Seed the override editors once advanced options are expanded AND the default
+  // pipelines are known. This runs during render (React's "adjust state when props
+  // change" pattern) instead of only in the expand click handler, because the
+  // pipelines/specs fetch can resolve *after* the user expanded the panel — without a
+  // reactive re-seed, the editors would display fallback configs but the overrides
+  // state would stay empty, so the user's first edit would submit a one-field
+  // per-node config and silently drop every other seeded value. The empty-object
+  // guards ensure user-entered values are never clobbered, and the non-empty check
+  // on the seeded result prevents a re-render loop for pipelines with no nodes.
+  if (showAdvanced && usesDefaultPipelines) {
+    if (defaultIngestion && Object.keys(ingestionOverrides).length === 0) {
+      const seeded = buildOverridesFromPipeline(defaultIngestion);
+      if (Object.keys(seeded).length > 0) {
+        setIngestionOverrides(seeded);
+      }
+    }
+    if (defaultRetrieval && Object.keys(retrievalOverrides).length === 0) {
+      const seeded = buildOverridesFromPipeline(defaultRetrieval);
+      if (Object.keys(seeded).length > 0) {
+        setRetrievalOverrides(seeded);
+      }
+    }
   }
 
   const canProceed = () => {
@@ -318,7 +316,7 @@ export function CreateCollectionWizard({
             <button
               type="button"
               className="flex w-full items-center justify-between text-sm text-slate-200"
-              onClick={handleToggleAdvanced}
+              onClick={() => setShowAdvanced((prev) => !prev)}
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-violet-300" />
