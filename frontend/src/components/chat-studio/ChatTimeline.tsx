@@ -1,46 +1,27 @@
-import { Edit3, GitBranch, RotateCcw } from "lucide-react";
-import React, { Fragment, memo, useEffect, useMemo, useRef } from "react";
+import React, { memo, useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { isToolReasoningSegment } from "@/components/chat-studio/chat-helpers";
+import { EmptyTimelineState } from "@/components/chat-studio/timeline/EmptyTimelineState";
+import { MessageEntry } from "@/components/chat-studio/timeline/MessageEntry";
+import {
+  getReasoningEntryKey,
+  ReasoningEntry,
+} from "@/components/chat-studio/timeline/ReasoningEntry";
+import { roleVariants } from "@/components/chat-studio/timeline/timeline-constants";
+import {
+  getToolTraceEntryKey,
+  ToolTraceEntry,
+} from "@/components/chat-studio/timeline/ToolTraceEntry";
 import { ToolCallBubble } from "@/components/chat-studio/Tooling";
-import { Button } from "@/components/ui/button";
 import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
 import { TypingAnimation } from "@/components/ui/typing-animation";
 import { cn } from "@/lib/utils";
 
 import type { ChatEntry } from "./chat-types";
-import type { ReasoningTraceSegment, ToolCallTrace, UsageBreakdown } from "@/lib/types";
+import type { ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
 import type { Components } from "react-markdown";
-
-const roleVariants: Record<string, string> = {
-  user: "border-violet-500/50 bg-violet-600/20 text-violet-50 backdrop-blur-sm",
-  assistant: "border-white/20 bg-white/10 text-white backdrop-blur-sm",
-  tool: "border-cyan-400/40 bg-cyan-500/15 text-cyan-50 backdrop-blur-sm",
-  system: "border-sky-500/30 bg-sky-500/10 text-sky-50",
-  reasoning: "border-amber-400/50 bg-amber-500/15 text-amber-50 backdrop-blur-sm",
-};
-
-const UsageInline = ({ usage }: { usage: UsageBreakdown }) => (
-  <>
-    {usage.total_tokens != null && <span>{usage.total_tokens.toLocaleString()} tok</span>}
-    {usage.prompt_tokens != null && <span>{usage.prompt_tokens.toLocaleString()} in</span>}
-    {usage.completion_tokens != null && <span>{usage.completion_tokens.toLocaleString()} out</span>}
-    {usage.reasoning_tokens != null && usage.reasoning_tokens > 0 && (
-      <span>{usage.reasoning_tokens.toLocaleString()} reasoning</span>
-    )}
-    {usage.cost != null && (
-      <span className="text-slate-100/80">
-        $
-        {usage.cost.toLocaleString(undefined, {
-          minimumFractionDigits: 4,
-          maximumFractionDigits: 6,
-        })}
-      </span>
-    )}
-  </>
-);
 
 type ChatTimelineProps = {
   modelLabel: string;
@@ -135,20 +116,6 @@ function ChatTimelineComponent({
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [editingDraft, editingMessageId]);
-  const renderBranchRow = (messageId: string, usage?: UsageBreakdown | null) => (
-    <div className="absolute left-0 right-0 top-full mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-      {usage && <UsageInline usage={usage} />}
-      <button
-        type="button"
-        className="pointer-events-auto inline-flex items-center justify-center rounded-full border border-white/20 p-1 text-white/80 hover:border-white/60"
-        onClick={() => onBranchMessage(messageId)}
-        disabled={sending}
-        aria-label="Branch chat"
-      >
-        <GitBranch className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
 
   const timelineEntries = chatEntryOrder
     .map((entryId) => chatEntryMap.get(entryId))
@@ -170,53 +137,12 @@ function ChatTimelineComponent({
   if (timelineEntries.length === 0) {
     if (!selectedSessionId) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-10 text-center">
-          <div className="flex w-full max-w-md flex-col items-center">
-            <button
-              type="button"
-              onClick={onModelSelect}
-              className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-left text-xs text-slate-300 transition hover:border-white/30 hover:text-white"
-            >
-              <span className="shrink-0 text-[10px] uppercase tracking-[0.35em] text-slate-500">
-                Model
-              </span>
-              <span className="min-w-0 truncate text-sm font-semibold text-white">
-                {modelLabel}
-              </span>
-            </button>
-          </div>
-          <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/40 to-cyan-950/30 p-6 text-left shadow-[0_30px_80px_-50px_rgba(56,189,248,0.35)]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Overrides</p>
-                <h4 className="text-lg font-semibold text-white">Run settings active</h4>
-                <p className="text-sm text-slate-400">Tap a section to open it in Run settings.</p>
-              </div>
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.4em] text-cyan-300">
-                <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.85)]" />
-                Live
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {overrideSections.length > 0 ? (
-                overrideSections.map((section) => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => onOverrideSelect(section.id)}
-                    className="rounded-full border border-cyan-200/30 bg-cyan-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-400/20"
-                  >
-                    {section.label}
-                  </button>
-                ))
-              ) : (
-                <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                  No overrides yet
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        <EmptyTimelineState
+          modelLabel={modelLabel}
+          onModelSelect={onModelSelect}
+          overrideSections={overrideSections}
+          onOverrideSelect={onOverrideSelect}
+        />
       );
     }
     return <div className="h-full" />;
@@ -395,185 +321,45 @@ function ChatTimelineComponent({
 
   const messageBubbles = timelineEntries.map((entry) => {
     if (entry.type === "tool-call") {
-      const toolKey =
-        (entry.message.tool_call_id && streamEntryKeyMap[entry.message.tool_call_id]) ||
-        entry.message.tool_call_id ||
-        entry.messageId ||
-        entry.id;
-      const shouldShowBranchedFrom =
-        Boolean(branchedFromMessageId) && entry.message.source_message_id === branchedFromMessageId;
-      const branchedFromLabel = branchedFromSessionTitle || "Original chat";
-      const branchBanner = shouldShowBranchedFrom ? (
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-300/80">
-          <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">
-            Branched from
-          </span>
-          {branchedFromSessionId ? (
-            <button
-              type="button"
-              onClick={() => onNavigateToSession(branchedFromSessionId)}
-              className="text-slate-100 underline-offset-4 hover:underline"
-            >
-              {branchedFromLabel}
-            </button>
-          ) : (
-            <span>{branchedFromLabel}</span>
-          )}
-        </div>
-      ) : null;
       return (
-        <div key={toolKey} className="flex flex-col">
-          <ToolCallBubble
-            label={entry.label}
-            variantClass={roleVariants.tool}
-            args={entry.args}
-            response={entry.response}
-            rawPayload={entry.rawPayload}
-            className="chat-bubble"
-          />
-          {branchBanner ? <div className="flex justify-start">{branchBanner}</div> : null}
-        </div>
+        <ToolTraceEntry
+          key={getToolTraceEntryKey(entry, streamEntryKeyMap)}
+          entry={entry}
+          streamEntryKeyMap={streamEntryKeyMap}
+          branchedFromMessageId={branchedFromMessageId}
+          branchedFromSessionId={branchedFromSessionId}
+          branchedFromSessionTitle={branchedFromSessionTitle}
+          onNavigateToSession={onNavigateToSession}
+        />
       );
     }
 
     if (entry.type === "reasoning") {
-      const mappedKey =
-        entry.messageId && streamEntryKeyMap[entry.messageId]
-          ? `${streamEntryKeyMap[entry.messageId]}-reasoning`
-          : null;
-      const bubbleKey = mappedKey || entry.id;
-      return (
-        <div key={bubbleKey} className="flex justify-start">
-          <div className="max-w-[75%]">
-            <CollapsibleReasoning
-              segments={entry.segments}
-              messageId={entry.id}
-              title={entry.title}
-              subtitle={entry.subtitle}
-              isAutoOpen={false}
-              preventAutoClose
-              className={cn("chat-bubble", roleVariants.reasoning)}
-            />
-          </div>
-        </div>
-      );
+      return <ReasoningEntry key={getReasoningEntryKey(entry, streamEntryKeyMap)} entry={entry} />;
     }
 
-    const variant = roleVariants[entry.type] ?? roleVariants.system;
-    const isUser = entry.type === "user";
-    const isAssistant = entry.type === "assistant";
-    const showActions = (isUser || isAssistant) && !!selectedSessionId;
-    const alignClass = isUser ? "justify-end" : "justify-start";
-    const usage = entry.message.usage;
-    const headerLabel = entry.message.role === "user" ? "You" : entry.message.role.toUpperCase();
-    const bubbleKey = entry.id;
-
-    const branchFooter = selectedSessionId ? renderBranchRow(entry.message.id, usage) : null;
-    const hasBranchFooter = Boolean(branchFooter);
-
-    const shouldShowBranchedFrom =
-      Boolean(branchedFromMessageId) && entry.message.source_message_id === branchedFromMessageId;
-    const branchedFromLabel = branchedFromSessionTitle || "Original chat";
-    const branchBanner = shouldShowBranchedFrom ? (
-      <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-300/80">
-        <span className="text-[9px] uppercase tracking-[0.35em] text-slate-500">Branched from</span>
-        {branchedFromSessionId ? (
-          <button
-            type="button"
-            onClick={() => onNavigateToSession(branchedFromSessionId)}
-            className="text-slate-100 underline-offset-4 hover:underline"
-          >
-            {branchedFromLabel}
-          </button>
-        ) : (
-          <span>{branchedFromLabel}</span>
-        )}
-      </div>
-    ) : null;
-    const shouldShowBannerAbove =
-      shouldShowBranchedFrom && entry.message.role === "user" && branchedFromOrigin === "edit";
-    const shouldShowBannerBelow = shouldShowBranchedFrom && !shouldShowBannerAbove;
-
-    const isEditing = isUser && editingMessageId === entry.message.id;
-    const editHighlight = isEditing
-      ? "border-violet-300/80 bg-violet-500/25 shadow-[0_0_0_1px_rgba(196,181,253,0.35)]"
-      : null;
-
     return (
-      <div key={bubbleKey} className={cn("flex", alignClass, hasBranchFooter && "mb-5")}>
-        <div className={cn("group relative max-w-[75%]", isEditing && "w-full")}>
-          {shouldShowBannerAbove ? branchBanner : null}
-          <div
-            className={cn(
-              "chat-bubble rounded-2xl border px-4 py-3 text-sm shadow-2xl transition",
-              variant,
-              editHighlight,
-              isEditing && "w-full",
-            )}
-            data-chat-role={entry.type}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-white/70">
-                {headerLabel}
-                {entry.message.tool_name ? ` • ${entry.message.tool_name}` : ""}
-              </p>
-              {showActions && (
-                <div className="flex items-center gap-2 text-[11px] text-white/80">
-                  {isUser && (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
-                      onClick={() => onEditStart(entry.message.id, entry.message.content)}
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                  )}
-                  {isAssistant && (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2 py-1 hover:border-white/60"
-                      onClick={() => onRetryAssistant(entry.message.id)}
-                      disabled={sending}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Retry
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            {isEditing ? (
-              <div className="space-y-2">
-                <textarea
-                  ref={editTextareaRef}
-                  className="min-h-[64px] w-full resize-none overflow-hidden rounded-xl bg-violet-500/15 px-4 py-3 text-sm leading-relaxed text-white outline-none"
-                  value={editingDraft}
-                  onChange={(event) => onEditChange(event.target.value)}
-                />
-                <div className="flex items-center gap-3">
-                  <Button size="sm" onClick={onEditSubmit} loading={sending}>
-                    Update & rerun
-                  </Button>
-                  <Button size="sm" variant="ghost" type="button" onClick={onEditCancel}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : isAssistant ? (
-              <div className="space-y-3">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {entry.content}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
-            )}
-          </div>
-          {shouldShowBannerBelow ? branchBanner : null}
-          {branchFooter}
-        </div>
-      </div>
+      <MessageEntry
+        key={entry.id}
+        entry={entry}
+        selectedSessionId={selectedSessionId}
+        sending={sending}
+        editingMessageId={editingMessageId}
+        editingDraft={editingDraft}
+        editTextareaRef={editTextareaRef}
+        onEditChange={onEditChange}
+        onEditStart={onEditStart}
+        onEditCancel={onEditCancel}
+        onEditSubmit={onEditSubmit}
+        onRetryAssistant={onRetryAssistant}
+        onBranchMessage={onBranchMessage}
+        markdownComponents={markdownComponents}
+        branchedFromSessionId={branchedFromSessionId}
+        branchedFromSessionTitle={branchedFromSessionTitle}
+        branchedFromMessageId={branchedFromMessageId}
+        branchedFromOrigin={branchedFromOrigin}
+        onNavigateToSession={onNavigateToSession}
+      />
     );
   });
 
