@@ -47,6 +47,13 @@ component-driven, well-named files that one person can hold in their head at onc
 - **Effects must not write state they derive.** Computing a value in a `useMemo` and then
   copying it into `useState` via an effect adds a render per change and a stale window.
   Derive it where you use it.
+- **When replacing an effect, enumerate every ordering it handled.** A reactive effect
+  re-fires when async data arrives; a click handler runs once. Converting one to the
+  other silently drops the "data resolved after the interaction" path — we shipped (and
+  caught in review) a data-loss bug exactly this way. For seed/sync logic, prefer a
+  render-time state adjustment guarded so it only fires when the target is still empty
+  and the seed is non-empty (both guards matter — the second prevents an infinite
+  setState loop on empty seeds).
 - **Delete dead code on sight.** No-op callbacks drilled through props, re-export blocks
   "for convenience", helpers that wrap a single operator — remove them. Dead code is not
   harmless; it costs every future reader.
