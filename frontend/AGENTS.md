@@ -9,11 +9,11 @@ component-driven, well-named files that one person can hold in their head at onc
 **`npm run verify` (typecheck → lint → tests) must pass before every commit.** All three
 stages are errors-fail. Lint enforces the structural rules mechanically: `max-lines` 400
 (production code), `no-console` (warn/error allowed), `react-hooks/exhaustive-deps` as
-error, `import/no-duplicates`. `complexity`/`max-depth` warn — treat a new warning in
-your diff as a design prompt, not noise. The `react-hooks/set-state-in-effect` override
-for six grandfathered hooks is a burn-down list, not a pattern to copy — never add a
-file to it. Do not add `eslint-disable` without a comment saying why, and never disable
-`max-lines` — split the file instead.
+error, `import/no-duplicates`, `import/no-cycle`. `complexity`/`max-depth` warn — treat a
+new warning in your diff as a design prompt, not noise. The `react-hooks/set-state-in-effect`
+override for six grandfathered hooks is a burn-down list, not a pattern to copy — never
+add a file to it. Do not add `eslint-disable` without a comment saying why, and never
+disable `max-lines` — split the file instead.
 
 ## Code structure
 
