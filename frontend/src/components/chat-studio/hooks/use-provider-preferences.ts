@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   buildProviderPayload,
   createDefaultProviderForm,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-payload-helpers";
 import { listModelEndpoints } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 

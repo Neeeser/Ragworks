@@ -3,8 +3,8 @@
 import { useCallback } from "react";
 
 import { PINECONE_KEY_REQUIRED_MESSAGE } from "@/components/chat-studio/chat-constants";
+import { ensureMessageOrder } from "@/components/chat-studio/chat-entry-helpers";
 import {
-  ensureMessageOrder,
   generateClientMessageId,
   generateClientSessionId,
 } from "@/components/chat-studio/chat-helpers";

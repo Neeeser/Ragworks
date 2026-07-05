@@ -6,7 +6,7 @@ import {
   DEFAULT_STREAMING_ENABLED,
   TELEMETRY_SECTION_IDS,
 } from "@/components/chat-studio/chat-constants";
-import { sortMessagesChronologically } from "@/components/chat-studio/chat-helpers";
+import { sortMessagesChronologically } from "@/components/chat-studio/chat-entry-helpers";
 import { sanitizeFileName } from "@/components/chat-studio/chat-utils";
 
 import type { useCollectionTools } from "@/components/chat-studio/hooks/use-collection-tools";
@@ -19,12 +19,7 @@ import type {
   TelemetryStreamingProps,
   TelemetryUsageProps,
 } from "@/components/chat-studio/types";
-import type {
-  ChatMessage,
-  ChatSession,
-  RunSettingsSectionKey,
-  UsageBreakdown,
-} from "@/lib/types";
+import type { ChatMessage, ChatSession, RunSettingsSectionKey, UsageBreakdown } from "@/lib/types";
 
 type CollectionTools = ReturnType<typeof useCollectionTools>;
 type PromptEditor = ReturnType<typeof usePromptEditor>;

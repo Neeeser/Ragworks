@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   calculateSessionUsage,
   deriveToolTracesFromMessages,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-entry-helpers";
 import { getChatHistory } from "@/lib/api";
 
 import type { ChatMessage, ToolCallTrace, UsageBreakdown } from "@/lib/types";
@@ -13,10 +13,7 @@ import type { ChatMessage, ToolCallTrace, UsageBreakdown } from "@/lib/types";
 const PROGRESS_POLL_INTERVAL = 800;
 
 interface SyncMessagesFn {
-  (
-    incoming: ChatMessage[],
-    options?: { hydrate?: boolean; resetStreamKeys?: boolean },
-  ): void;
+  (incoming: ChatMessage[], options?: { hydrate?: boolean; resetStreamKeys?: boolean }): void;
 }
 
 interface UseSessionHistoryPollingParams {

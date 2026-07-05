@@ -7,11 +7,11 @@ import {
   PINECONE_KEY_REQUIRED_MESSAGE,
 } from "@/components/chat-studio/chat-constants";
 import {
-  areArraysEqual,
   attachUsageToLastAssistantMessage,
   calculateSessionUsage,
-  createProviderFormFromPreferences,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-entry-helpers";
+import { areArraysEqual } from "@/components/chat-studio/chat-helpers";
+import { createProviderFormFromPreferences } from "@/components/chat-studio/chat-payload-helpers";
 import {
   injectStreamedReasoning,
   isAbortError,

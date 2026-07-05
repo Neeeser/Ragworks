@@ -8,7 +8,7 @@ import {
   ensureMessageOrder,
   mergeMessageHistory,
   sortMessagesChronologically,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-entry-helpers";
 import { formatToolLabel } from "@/components/chat-studio/Tooling";
 
 import type { ChatEntry } from "@/components/chat-studio/chat-types";

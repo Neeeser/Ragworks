@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import {
   calculateSessionUsage,
   isOptimisticDuplicate,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-entry-helpers";
 import { getChatHistory } from "@/lib/api";
 
 import type { ChatStudioCoreState } from "@/components/chat-studio/hooks/use-chat-studio-state";

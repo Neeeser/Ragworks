@@ -1,24 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  areArraysEqual,
   attachUsageToLastAssistantMessage,
-  buildCollectionsQuery,
   calculateSessionUsage,
-  createDefaultProviderForm,
-  createProviderFormFromPreferences,
   deriveToolTracesFromMessages,
   ensureMessageOrder,
-  generateClientMessageId,
-  generateClientSessionId,
   isOptimisticDuplicate,
   isToolReasoningSegment,
   mergeMessageHistory,
-  normalizeRunSettingsOrder,
-  parseCollectionIdsParam,
   pruneHistoryForEdit,
   sortMessagesChronologically,
+} from "@/components/chat-studio/chat-entry-helpers";
+import {
+  areArraysEqual,
+  buildCollectionsQuery,
+  generateClientMessageId,
+  generateClientSessionId,
+  normalizeRunSettingsOrder,
+  parseCollectionIdsParam,
 } from "@/components/chat-studio/chat-helpers";
+import {
+  createDefaultProviderForm,
+  createProviderFormFromPreferences,
+} from "@/components/chat-studio/chat-payload-helpers";
 
 import type {
   ChatMessage,

@@ -6,7 +6,7 @@ import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/chat-constan
 import {
   createDefaultProviderForm,
   createProviderFormFromPreferences,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-payload-helpers";
 import { listChatSessions } from "@/lib/api";
 
 import type { ChatStudioCoreState } from "@/components/chat-studio/hooks/use-chat-studio-state";
@@ -46,9 +46,7 @@ export interface UseSessionLifecycleResult {
  * tools), and the URL <-> session reconciliation. Returns the active + branched-from
  * session memos the timeline renders.
  */
-export function useSessionLifecycle(
-  params: UseSessionLifecycleParams,
-): UseSessionLifecycleResult {
+export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessionLifecycleResult {
   const {
     authLoading,
     authToken,

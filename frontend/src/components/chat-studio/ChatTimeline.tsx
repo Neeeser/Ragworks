@@ -2,7 +2,7 @@ import React, { memo, useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { isToolReasoningSegment } from "@/components/chat-studio/chat-helpers";
+import { isToolReasoningSegment } from "@/components/chat-studio/chat-entry-helpers";
 import { EmptyTimelineState } from "@/components/chat-studio/timeline/EmptyTimelineState";
 import { MessageEntry } from "@/components/chat-studio/timeline/MessageEntry";
 import {

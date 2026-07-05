@@ -8,9 +8,9 @@ import {
 } from "@/components/chat-studio/chat-constants";
 import {
   calculateSessionUsage,
-  createProviderFormFromPreferences,
   pruneHistoryForEdit,
-} from "@/components/chat-studio/chat-helpers";
+} from "@/components/chat-studio/chat-entry-helpers";
+import { createProviderFormFromPreferences } from "@/components/chat-studio/chat-payload-helpers";
 import {
   type PerformChatMutation,
   type UseChatMutationParams,
