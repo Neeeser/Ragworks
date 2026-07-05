@@ -4,6 +4,7 @@ import { DEFAULT_TELEMETRY_ORDER } from "@/components/chat-studio/chat-constants
 
 import { coerceRecord, normalizeReasoningSegments, parsePriceInput, safeParseJSON } from "./chat-utils";
 
+import type { ChatEntry } from "./chat-types";
 import type { ProviderFormState } from "@/components/chat-studio/types";
 import type {
   ChatMessage,
@@ -87,6 +88,165 @@ export const createProviderFormFromPreferences = (
 
 /** Inverse of {@link createProviderFormFromPreferences}: collapses the provider form
  * into a sparse `ProviderPreferences` payload, omitting defaults and empty values. */
+interface BuildChatEntriesParams {
+  messages: ChatMessage[];
+  optimisticMessages: ChatMessage[];
+  messageOrder: Map<string, number>;
+  toolTraceMap: Map<string, ToolCallTrace>;
+  getPersistedReasoningSegments: (
+    messageId: string,
+    segments: ReasoningTraceSegment[],
+  ) => ReasoningTraceSegment[];
+  formatToolLabel: (label: string) => string;
+}
+
+/** Pure projection of persisted + optimistic chat messages into the ordered list of
+ * timeline entries (message bubbles, reasoning blocks, tool calls). */
+export const buildChatEntries = ({
+  messages,
+  optimisticMessages,
+  messageOrder,
+  toolTraceMap,
+  getPersistedReasoningSegments,
+  formatToolLabel,
+}: BuildChatEntriesParams): ChatEntry[] => {
+  const dedupedOptimistic = optimisticMessages.filter((optimistic) => {
+    const trimmedOptimistic = optimistic.content.trim();
+    if (!trimmedOptimistic) {
+      return false;
+    }
+    return !messages.some((message) =>
+      isOptimisticDuplicate(optimistic, message, messageOrder),
+    );
+  });
+  const combined = [...messages, ...dedupedOptimistic].sort((a, b) => {
+    const aOrder = messageOrder.get(a.id);
+    const bOrder = messageOrder.get(b.id);
+    if (aOrder !== undefined && bOrder !== undefined) {
+      return aOrder - bOrder;
+    }
+    if (aOrder !== undefined) {
+      return -1;
+    }
+    if (bOrder !== undefined) {
+      return 1;
+    }
+    const aTime = Date.parse(a.created_at) || 0;
+    const bTime = Date.parse(b.created_at) || 0;
+    if (aTime === bTime) {
+      return a.id.localeCompare(b.id);
+    }
+    return aTime - bTime;
+  });
+
+  return combined.flatMap((message) => {
+    const entryList: ChatEntry[] = [];
+    const createdAt = message.created_at;
+    const trimmedContent = message.content?.trim() ?? "";
+    const isAssistant = message.role === "assistant";
+    const isUser = message.role === "user";
+    const isSystem = message.role === "system";
+    const isTool = message.role === "tool";
+    const isToolCallPlaceholder =
+      isAssistant &&
+      !trimmedContent &&
+      Array.isArray(message.tool_payload?.tool_calls) &&
+      message.tool_payload?.tool_calls.length > 0;
+
+    if (isAssistant) {
+      const reasoningSegments = getPersistedReasoningSegments(
+        `${message.id}-assistant-reasoning`,
+        normalizeReasoningSegments(message.reasoning_trace),
+      );
+      const assistantSegments = reasoningSegments.filter(
+        (segment) => !isToolReasoningSegment(segment),
+      );
+      if (assistantSegments.length > 0) {
+        entryList.push({
+          id: `${message.id}:reasoning:assistant`,
+          type: "reasoning",
+          messageId: message.id,
+          source: "assistant",
+          title: "Reasoning",
+          subtitle: "Assistant reasoning",
+          segments: assistantSegments,
+          createdAt,
+        });
+      }
+    }
+
+    if (isTool) {
+      const trace = message.tool_call_id ? toolTraceMap.get(message.tool_call_id) : null;
+      const toolSegments = getPersistedReasoningSegments(
+        `${message.id}-tool-reasoning`,
+        trace
+          ? normalizeReasoningSegments(trace.reasoning)
+          : normalizeReasoningSegments(message.reasoning_trace),
+      );
+      const rawPayload =
+        (message.tool_payload as Record<string, unknown> | null) ??
+        safeParseJSON(message.content) ??
+        {};
+      const payloadRecord: Record<string, unknown> = {
+        ...coerceRecord(rawPayload),
+        ...(trace
+          ? {
+              arguments: trace.arguments,
+              response: trace.response,
+            }
+          : {}),
+      };
+      const collectionName =
+        trace?.collection_name ||
+        (typeof payloadRecord.collection_name === "string"
+          ? payloadRecord.collection_name
+          : null);
+      const baseToolLabel = formatToolLabel(trace?.name || message.tool_name || "Tool");
+      const toolLabel = collectionName ? `${baseToolLabel} · ${collectionName}` : baseToolLabel;
+      if (toolSegments.length > 0) {
+        entryList.push({
+          id: `${message.id}:reasoning:tool`,
+          type: "reasoning",
+          messageId: message.id,
+          source: "tool",
+          title: "Reasoning",
+          subtitle: toolLabel,
+          segments: toolSegments,
+          relatedToolLabel: toolLabel,
+          createdAt,
+        });
+      }
+      const argsRecord = coerceRecord(payloadRecord.arguments ?? {});
+      const responseRecord = coerceRecord(payloadRecord.response ?? payloadRecord);
+      entryList.push({
+        id: `${message.id}:tool`,
+        type: "tool-call",
+        message,
+        messageId: message.id,
+        label: toolLabel,
+        args: argsRecord,
+        response: responseRecord,
+        rawPayload: payloadRecord,
+        createdAt,
+      });
+      return entryList;
+    }
+
+    if (!isToolCallPlaceholder && (isUser || isAssistant || isSystem)) {
+      entryList.push({
+        id: message.id,
+        type: isAssistant ? "assistant" : isUser ? "user" : "system",
+        message,
+        messageId: message.id,
+        content: trimmedContent || "No response captured.",
+        createdAt,
+      });
+    }
+
+    return entryList;
+  });
+};
+
 export const buildProviderPayload = (providerForm: ProviderFormState): ProviderPreferences => {
   const payload: ProviderPreferences = {};
   if (providerForm.order.length > 0) {
