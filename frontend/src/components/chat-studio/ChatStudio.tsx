@@ -34,6 +34,7 @@ import { ChatStudioMessages } from "@/components/chat-studio/ChatStudioMessages"
 import { ChatStudioView } from "@/components/chat-studio/ChatStudioView";
 import { useAutoScroll } from "@/components/chat-studio/hooks/use-auto-scroll";
 import { useRunSettingsOrder } from "@/components/chat-studio/hooks/use-run-settings-order";
+import { useSessionHistoryPolling } from "@/components/chat-studio/hooks/use-session-history-polling";
 import { HistoryPanel } from "@/components/chat-studio/HistoryPanel";
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
@@ -128,8 +129,6 @@ const usePersistentToggle = (key: string, defaultValue: boolean) => {
 
   return [value, setValue] as const;
 };
-
-const PROGRESS_POLL_INTERVAL = 800;
 
 export function ChatStudio() {
   const router = useRouter();
@@ -290,8 +289,6 @@ export function ChatStudio() {
   });
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
   const promptEditorRef = useRef<HTMLTextAreaElement | null>(null);
-  const pollIntervalRef = useRef<number | null>(null);
-  const activePollingSession = useRef<string | null>(null);
   const pendingSessionIdsRef = useRef<Set<string>>(new Set());
   const toolCollectionsDirtyRef = useRef(false);
   const newChatDefaultsRef = useRef<{
@@ -568,6 +565,15 @@ export function ChatStudio() {
     user,
     refreshProfile,
     onError: setStatus,
+  });
+
+  const { startProgressPolling, stopProgressPolling } = useSessionHistoryPolling({
+    authToken,
+    selectedSessionId,
+    isStreamingResponseRef,
+    syncMessages,
+    setToolTraces,
+    setUsage,
   });
 
   const sortSessions = useCallback((items: ChatSession[]) => {
@@ -1296,66 +1302,6 @@ export function ChatStudio() {
     textarea.style.height = `${clampedHeight}px`;
     textarea.style.overflowY = fullHeight > CHAT_INPUT_MAX_HEIGHT ? "auto" : "hidden";
   }, [draft]);
-
-  const pollSessionHistory = useCallback(
-    async (sessionId: string) => {
-      if (!authToken) return;
-      if (isStreamingResponseRef.current) {
-        return;
-      }
-      try {
-        const history = await getChatHistory(authToken, sessionId);
-        if (activePollingSession.current !== sessionId) {
-          return;
-        }
-        if (isStreamingResponseRef.current) {
-          return;
-        }
-        // Hydrate instead of queueing pending reveals so previously streamed bubbles
-        // stay mounted while their persisted counterparts arrive.
-        syncMessages(history, { hydrate: true });
-        setToolTraces(deriveToolTraces(history));
-        setUsage(calculateSessionUsage(history));
-      } catch {
-        // swallow transient polling errors
-      }
-    },
-    [authToken, deriveToolTraces, syncMessages],
-  );
-
-  const stopProgressPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      window.clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    activePollingSession.current = null;
-  }, []);
-
-  const startProgressPolling = useCallback(
-    (sessionId: string) => {
-      if (!authToken) return;
-      activePollingSession.current = sessionId;
-      void pollSessionHistory(sessionId);
-      if (pollIntervalRef.current) {
-        window.clearInterval(pollIntervalRef.current);
-      }
-      pollIntervalRef.current = window.setInterval(() => {
-        void pollSessionHistory(sessionId);
-      }, PROGRESS_POLL_INTERVAL);
-    },
-    [authToken, pollSessionHistory],
-  );
-
-  useEffect(() => () => stopProgressPolling(), [stopProgressPolling]);
-
-  useEffect(() => {
-    if (!activePollingSession.current) {
-      return;
-    }
-    if (!selectedSessionId || activePollingSession.current !== selectedSessionId) {
-      stopProgressPolling();
-    }
-  }, [selectedSessionId, stopProgressPolling]);
 
   const toolTraceMap = useMemo(() => {
     const map = new Map<string, ToolCallTrace>();
