@@ -21,7 +21,6 @@ import {
   generateClientMessageId,
   generateClientSessionId,
   isOptimisticDuplicate,
-  makeToolId,
   mergeMessageHistory,
   pruneHistoryForEdit,
   sortMessagesChronologically,
@@ -31,6 +30,7 @@ import { ChatStudioMessages } from "@/components/chat-studio/ChatStudioMessages"
 import { ChatStudioView } from "@/components/chat-studio/ChatStudioView";
 import { useAutoScroll } from "@/components/chat-studio/hooks/use-auto-scroll";
 import { useChatSessionRouting } from "@/components/chat-studio/hooks/use-chat-session-routing";
+import { useChatStream } from "@/components/chat-studio/hooks/use-chat-stream";
 import { useCollectionTools } from "@/components/chat-studio/hooks/use-collection-tools";
 import { useModelCatalog } from "@/components/chat-studio/hooks/use-model-catalog";
 import { useModelParameters } from "@/components/chat-studio/hooks/use-model-parameters";
@@ -52,11 +52,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
-import {
-  markdownComponents,
-  normalizeReasoningSegments,
-  sanitizeFileName,
-} from "./chat-utils";
+import { markdownComponents, sanitizeFileName } from "./chat-utils";
 
 import type { ChatEntry } from "./chat-types";
 import type { ProviderFormState } from "@/components/chat-studio/types";
@@ -166,24 +162,35 @@ export function ChatStudio() {
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const previousModelIdRef = useRef<string | null>(null);
   const applyNewChatDefaultsRef = useRef(true);
-  const [liveResponse, setLiveResponse] = useState("");
-  const [isStreamingResponse, setIsStreamingResponse] = useState(false);
-  const [liveReasoningSegments, setLiveReasoningSegments] = useState<ReasoningTraceSegment[]>([]);
-  const [liveReasoningBlocks, setLiveReasoningBlocks] = useState<ReasoningTraceSegment[][]>([]);
-  const [liveReasoningPhase, setLiveReasoningPhase] = useState(0);
-  const [persistedLiveReasoningSegments, setPersistedLiveReasoningSegments] = useState<
-    ReasoningTraceSegment[]
-  >([]);
-  const [activeStreamEntryKey, setActiveStreamEntryKey] = useState<string | null>(null);
-  const activeStreamEntryKeyRef = useRef<string | null>(null);
-  const isStreamingResponseRef = useRef(false);
-  const [finalStreamAssistantId, setFinalStreamAssistantId] = useState<string | null>(null);
-  const [streamEntryKeyMap, setStreamEntryKeyMap] = useState<Record<string, string>>({});
-  const [liveToolEvents, setLiveToolEvents] = useState<ToolCallTrace[]>([]);
-  const [liveToolOrder, setLiveToolOrder] = useState<string[]>([]);
-  const [liveToolPhaseById, setLiveToolPhaseById] = useState<Record<string, number>>({});
-  const [liveResponseAnimationKey, setLiveResponseAnimationKey] = useState(0);
-  const [liveReasoningAnimationKey, setLiveReasoningAnimationKey] = useState(0);
+  const {
+    liveResponse,
+    isStreamingResponse,
+    liveReasoningSegments,
+    liveReasoningBlocks,
+    liveReasoningPhase,
+    persistedLiveReasoningSegments,
+    activeStreamEntryKey,
+    finalStreamAssistantId,
+    streamEntryKeyMap,
+    liveToolEvents,
+    liveToolOrder,
+    liveToolPhaseById,
+    liveResponseAnimationKey,
+    liveReasoningAnimationKey,
+    isStreamingResponseRef,
+    reset: resetChatStream,
+    resetLiveMessage,
+    beginMutation,
+    beginStream,
+    handleToken,
+    handleReasoning,
+    handleToolCall,
+    handleToolResult,
+    completeStream,
+    failStream,
+    resetStreamKeys,
+    pruneLiveToolEvents,
+  } = useChatStream();
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(() => {
     if (typeof window === "undefined") {
@@ -231,8 +238,6 @@ export function ChatStudio() {
     liveReasoningBlocks.length > 0 || liveReasoningDisplaySegments.length > 0;
   const shouldShowStreamingReasoningBubble =
     Boolean(activeStreamEntryKey) && hasDisplayedLiveReasoning;
-  const hadLiveTextRef = useRef(false);
-  const hadLiveReasoningRef = useRef(false);
 
   const isPendingSession = useMemo(() => {
     if (!selectedSessionId) {
@@ -241,92 +246,12 @@ export function ChatStudio() {
     return pendingSessionIdsRef.current.has(selectedSessionId);
   }, [selectedSessionId]);
 
-  useEffect(() => {
-    isStreamingResponseRef.current = isStreamingResponse;
-  }, [isStreamingResponse]);
-
-  useEffect(() => {
-    const hadLiveText = hadLiveTextRef.current;
-    hadLiveTextRef.current = hasLiveText;
-    if (!hasLiveText || hadLiveText) {
-      return;
-    }
-    setLiveResponseAnimationKey((prev) => prev + 1);
-  }, [hasLiveText]);
-
-  useEffect(() => {
-    const hasSegments = liveReasoningSegments.length > 0;
-    const hadLiveReasoning = hadLiveReasoningRef.current;
-    hadLiveReasoningRef.current = hasSegments;
-    if (!hasSegments || hadLiveReasoning) {
-      return;
-    }
-    setLiveReasoningAnimationKey((prev) => prev + 1);
-  }, [liveReasoningSegments.length]);
-
-  const resetLiveReasoningState = useCallback(() => {
-    setLiveReasoningSegments([]);
-    setLiveReasoningBlocks([]);
-    setLiveReasoningPhase(0);
-    setPersistedLiveReasoningSegments([]);
-  }, []);
-
-  const upsertLiveToolEvent = useCallback(
-    (update: {
-      id?: string;
-      name?: string;
-      arguments?: Record<string, unknown>;
-      response?: Record<string, unknown>;
-      reasoning?: unknown;
-      collection_id?: string;
-      collection_name?: string;
-    }) => {
-      const eventId = update.id || makeToolId();
-      const reasoningSegments =
-        update.reasoning !== undefined ? normalizeReasoningSegments(update.reasoning) : undefined;
-      setLiveToolEvents((prev) => {
-        const next = [...prev];
-        const existingIndex = next.findIndex((item) => item.id === eventId);
-        const base =
-          existingIndex >= 0
-            ? next[existingIndex]
-            : {
-                id: eventId,
-                name: update.name || "tool_call",
-                arguments: {},
-                response: {},
-                reasoning: null as ToolCallTrace["reasoning"],
-                collection_id: update.collection_id ?? null,
-                collection_name: update.collection_name ?? null,
-              };
-        const merged = {
-          ...base,
-          name: update.name || base.name,
-          arguments: { ...base.arguments, ...(update.arguments || {}) },
-          response: update.response !== undefined ? update.response || {} : base.response || {},
-          collection_id: update.collection_id ?? base.collection_id ?? null,
-          collection_name: update.collection_name ?? base.collection_name ?? null,
-          reasoning:
-            reasoningSegments && reasoningSegments.length > 0
-              ? { segments: reasoningSegments }
-              : (base.reasoning ?? null),
-        };
-        if (existingIndex >= 0) {
-          next[existingIndex] = merged;
-          return next;
-        }
-        return [...next, merged];
-      });
-    },
-    [],
-  );
-
   const syncMessages = useCallback(
     (
       incoming: ChatMessage[],
       {
         hydrate = false,
-        resetStreamKeys = false,
+        resetStreamKeys: shouldResetStreamKeys = false,
       }: { hydrate?: boolean; resetStreamKeys?: boolean } = {},
     ) => {
       setMessages((previousMessages) => {
@@ -339,13 +264,12 @@ export function ChatStudio() {
       });
       if (hydrate) {
         chatHydrationPendingRef.current = true;
-        if (resetStreamKeys) {
-          setStreamEntryKeyMap({});
-          setActiveStreamEntryKey(null);
+        if (shouldResetStreamKeys) {
+          resetStreamKeys();
         }
       }
     },
-    [],
+    [resetStreamKeys],
   );
 
   const deriveToolTraces = useCallback(
@@ -828,12 +752,6 @@ export function ChatStudio() {
     [],
   );
 
-  useEffect(() => {
-    if (liveReasoningSegments.length > 0) {
-      setPersistedLiveReasoningSegments(liveReasoningSegments);
-    }
-  }, [liveReasoningSegments]);
-
   useLayoutEffect(() => {
     if (!editingMessageId) {
       editScrollSnapshotRef.current = null;
@@ -915,30 +833,6 @@ export function ChatStudio() {
     ? "Ask about the selected collections…"
     : "Ask anything…";
 
-  const liveReasoningSegmentsRef = useRef<ReasoningTraceSegment[]>([]);
-  const streamedReasoningAllRef = useRef<ReasoningTraceSegment[]>([]);
-  const streamReasoningPhaseRef = useRef(0);
-
-  useEffect(() => {
-    liveReasoningSegmentsRef.current = liveReasoningSegments;
-  }, [liveReasoningSegments]);
-
-  const finalizeLiveReasoningBlock = useCallback(() => {
-    const currentSegments = liveReasoningSegmentsRef.current;
-    if (currentSegments.length === 0) {
-      return;
-    }
-    streamedReasoningAllRef.current = [...streamedReasoningAllRef.current, ...currentSegments];
-    const phaseIndex = streamReasoningPhaseRef.current;
-    setLiveReasoningBlocks((prev) => {
-      const next = [...prev];
-      next[phaseIndex] = currentSegments;
-      return next;
-    });
-    setLiveReasoningSegments([]);
-    setPersistedLiveReasoningSegments([]);
-  }, []);
-
   // Remove live tool events once their persisted counterparts are present
   useEffect(() => {
     const persistedToolIds = new Set<string>();
@@ -951,33 +845,15 @@ export function ChatStudio() {
       }
     });
     if (persistedToolIds.size === 0) return;
-    setLiveToolEvents((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-      const next = prev.filter((event) => !event.id || !persistedToolIds.has(event.id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [messages]);
+    pruneLiveToolEvents(persistedToolIds);
+  }, [messages, pruneLiveToolEvents]);
 
   const applyChatResponse = useCallback(
     (response: ChatCompletionPayload) => {
-      finalizeLiveReasoningBlock();
-      const streamedReasoningSegments = streamedReasoningAllRef.current;
-      setLiveResponse("");
-      setIsStreamingResponse(false);
-      setPersistedLiveReasoningSegments(streamedReasoningSegments);
-      setLiveReasoningSegments([]);
-      setLiveReasoningBlocks([]);
-      streamedReasoningAllRef.current = [];
       const finalAssistant = [...response.messages]
         .reverse()
         .find((msg) => msg.role === "assistant");
-      setFinalStreamAssistantId(finalAssistant?.id ?? null);
-      const streamKey = activeStreamEntryKeyRef.current;
-      if (finalAssistant?.id && streamKey) {
-        setStreamEntryKeyMap((prev) => ({ ...prev, [finalAssistant.id]: streamKey }));
-      }
+      const streamedReasoningSegments = completeStream(finalAssistant?.id ?? null);
       const wasPending = pendingSessionIdsRef.current.has(response.session.id);
       pendingSessionIdsRef.current.delete(response.session.id);
       if (wasPending) {
@@ -1051,9 +927,9 @@ export function ChatStudio() {
       });
     },
     [
+      completeStream,
       contextWindow,
       deriveToolTraces,
-      finalizeLiveReasoningBlock,
       navigateToChat,
       selectedToolCollectionIds,
       sortSessions,
@@ -1136,9 +1012,7 @@ export function ChatStudio() {
       return isNewSession ? [placeholderMessageId] : [...prev, placeholderMessageId];
     });
 
-    setLiveResponse("");
-    setIsStreamingResponse(false);
-    resetLiveReasoningState();
+    resetLiveMessage();
     try {
       await performChatMutation(sessionId, {
         content: trimmed,
@@ -1304,13 +1178,7 @@ export function ChatStudio() {
         setToolTraces(deriveToolTraces(branchedMessages));
         setChatEntryOrder([]);
         chatHydrationPendingRef.current = true;
-        setFinalStreamAssistantId(null);
-        setStreamEntryKeyMap({});
-        setLiveResponse("");
-        setIsStreamingResponse(false);
-        setActiveStreamEntryKey(null);
-        activeStreamEntryKeyRef.current = null;
-        resetLiveReasoningState();
+        resetChatStream();
         setEditingMessageId(null);
         setEditingDraft("");
         setOptimisticMessages([]);
@@ -1331,7 +1199,7 @@ export function ChatStudio() {
       authToken,
       deriveToolTraces,
       navigateToChat,
-      resetLiveReasoningState,
+      resetChatStream,
       selectedSessionId,
       sortSessions,
       syncMessages,
@@ -1361,16 +1229,10 @@ export function ChatStudio() {
     setToolTraces([]);
     setChatEntryOrder([]);
     chatHydrationPendingRef.current = true;
-    setFinalStreamAssistantId(null);
-    setStreamEntryKeyMap({});
+    resetChatStream();
     setUsage(null);
     setContextConsumed(0);
     setDraft("");
-    setLiveResponse("");
-    setIsStreamingResponse(false);
-    setActiveStreamEntryKey(null);
-    activeStreamEntryKeyRef.current = null;
-    resetLiveReasoningState();
     setEditingMessageId(null);
     setEditingDraft("");
     setOptimisticMessages([]);
@@ -1503,18 +1365,8 @@ export function ChatStudio() {
       setIsStopping(false);
       setSending(true);
       setStatus(null);
-      setLiveResponse("");
-      setIsStreamingResponse(false);
-      isStreamingResponseRef.current = false;
       toolCollectionsDirtyRef.current = false;
-      setFinalStreamAssistantId(null);
-      setLiveToolEvents([]);
-      setLiveToolOrder([]);
-      setLiveToolPhaseById({});
-      resetLiveReasoningState();
-      streamReasoningPhaseRef.current = 0;
-      setLiveReasoningPhase(0);
-      streamedReasoningAllRef.current = [];
+      beginMutation();
       if (!payload.stream) {
         startProgressPolling(sessionId);
       }
@@ -1526,66 +1378,16 @@ export function ChatStudio() {
         };
         let result: ChatCompletionPayload | null;
         if (payload.stream) {
-          setIsStreamingResponse(true);
-          isStreamingResponseRef.current = true;
           const streamKey = `stream-${Date.now().toString(36)}-${Math.random()
             .toString(36)
             .slice(2, 7)}`;
-          setActiveStreamEntryKey(streamKey);
-          activeStreamEntryKeyRef.current = streamKey;
+          beginStream(streamKey);
           result = await streamChat(authToken, requestPayload, {
             signal: controller.signal,
-            onToken: (token) => {
-              if (token) {
-                setLiveResponse((prev) => `${prev}${token}`);
-              }
-            },
-            onReasoning: (segments) => {
-              setLiveReasoningSegments(segments ?? []);
-            },
-            onToolCall: (event) => {
-              finalizeLiveReasoningBlock();
-              const rawId =
-                typeof event.id === "string" && event.id.trim() ? event.id.trim() : null;
-              const toolId = rawId ?? makeToolId();
-              const phaseIndex = streamReasoningPhaseRef.current;
-              setLiveToolPhaseById((prev) =>
-                prev[toolId] === phaseIndex ? prev : { ...prev, [toolId]: phaseIndex },
-              );
-              setLiveToolOrder((prev) => (prev.includes(toolId) ? prev : [...prev, toolId]));
-              streamReasoningPhaseRef.current = phaseIndex + 1;
-              setLiveReasoningPhase(phaseIndex + 1);
-              upsertLiveToolEvent({
-                id: toolId,
-                name: event.name,
-                arguments: event.arguments,
-                reasoning: event.reasoning,
-                collection_id: event.collection_id,
-                collection_name: event.collection_name,
-              });
-            },
-            onToolResult: (event) => {
-              const rawId =
-                typeof event.id === "string" && event.id.trim() ? event.id.trim() : null;
-              const toolId = rawId ?? makeToolId();
-              setLiveToolOrder((prev) => (prev.includes(toolId) ? prev : [...prev, toolId]));
-              setLiveToolPhaseById((prev) => {
-                if (prev[toolId] !== undefined) {
-                  return prev;
-                }
-                const fallbackPhase = Math.max(0, streamReasoningPhaseRef.current - 1);
-                return { ...prev, [toolId]: fallbackPhase };
-              });
-              upsertLiveToolEvent({
-                id: toolId,
-                name: event.name,
-                arguments: event.arguments,
-                response: event.response,
-                reasoning: event.reasoning,
-                collection_id: event.collection_id,
-                collection_name: event.collection_name,
-              });
-            },
+            onToken: handleToken,
+            onReasoning: handleReasoning,
+            onToolCall: handleToolCall,
+            onToolResult: handleToolResult,
             onError: (message) => {
               setStatus(message);
             },
@@ -1599,13 +1401,7 @@ export function ChatStudio() {
         applyChatResponse(result);
         return result;
       } catch (error) {
-        setIsStreamingResponse(false);
-        isStreamingResponseRef.current = false;
-        const shouldClearLiveState = !isAbortError(error);
-        if (shouldClearLiveState) {
-          setLiveResponse("");
-          resetLiveReasoningState();
-        }
+        failStream(!isAbortError(error));
         throw error;
       } finally {
         stopProgressPolling();
@@ -1617,15 +1413,18 @@ export function ChatStudio() {
     [
       applyChatResponse,
       authToken,
-      finalizeLiveReasoningBlock,
+      beginMutation,
+      beginStream,
+      failStream,
+      handleReasoning,
+      handleToken,
+      handleToolCall,
+      handleToolResult,
       pineconeConfigured,
       selectedToolCollectionIds,
-      setActiveStreamEntryKey,
-      resetLiveReasoningState,
       startProgressPolling,
       stopProgressPolling,
       toolsEnabled,
-      upsertLiveToolEvent,
     ],
   );
 
