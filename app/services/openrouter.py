@@ -34,9 +34,13 @@ class OpenRouterClient:
             headers=default_headers,
             timeout=60.0,
         )
+        # Share the httpx client with the SDK: without `http_client=` the OpenAI
+        # SDK builds its own internal httpx.Client, which `close()` would miss —
+        # leaking the pool that carries the main chat/chat_stream traffic.
         self._client = OpenAI(
             base_url=self.settings.openrouter_base_url,
             api_key=self.api_key,
+            http_client=self._http,
         )
         self._model_cache: dict[str, Any] = {"ts": 0.0, "data": []}
         self._embedding_model_cache: dict[str, Any] = {
@@ -261,7 +265,12 @@ class OpenRouterClient:
             yield chunk.model_dump()
 
     def close(self) -> None:
-        """Close the underlying HTTP client, releasing its connection pool."""
+        """Close the HTTP transport, releasing its connection pool.
+
+        The SDK shares `self._http` (see `__init__`), so closing either would
+        suffice; both are closed defensively in case they ever diverge again.
+        """
+        self._client.close()
         self._http.close()
 
 

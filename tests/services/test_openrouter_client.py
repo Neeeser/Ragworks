@@ -82,9 +82,10 @@ class _StubChat:
 
 
 class _StubOpenAI:
-    def __init__(self, base_url: str, api_key: str) -> None:
+    def __init__(self, base_url: str, api_key: str, http_client: Any = None) -> None:
         self.base_url = base_url
         self.api_key = api_key
+        self.http_client = http_client
         self.embeddings = _StubEmbeddings()
         self.chat = _StubChat()
 
@@ -497,6 +498,12 @@ def test_get_openrouter_client_closes_evicted_clients(monkeypatch) -> None:
             self.closed = True
 
     monkeypatch.setattr(openrouter_module, "OpenRouterClient", _StubCacheClient)
+    # Isolated cache instance: mutating the module-level singleton would leave 64
+    # stub entries in the production cache for the rest of the pytest session and
+    # could evict (and close) a real cached client held by other fixtures.
+    monkeypatch.setattr(
+        openrouter_module, "_client_cache", openrouter_module._ClientCache(max_size=64)
+    )
 
     keys = [f"cache-eviction-test-key-{i}" for i in range(65)]
     clients = [openrouter_module.get_openrouter_client(key) for key in keys]
@@ -506,3 +513,25 @@ def test_get_openrouter_client_closes_evicted_clients(monkeypatch) -> None:
 
     same_instance = openrouter_module.get_openrouter_client(keys[-1])
     assert same_instance is clients[-1]
+
+
+def test_close_closes_shared_http_transport(monkeypatch) -> None:
+    """`close()` must shut down the transport that carries ALL traffic.
+
+    The OpenAI SDK client must share the same httpx.Client as raw HTTP calls —
+    if the SDK built its own internal client, `close()` would miss it and the
+    pool carrying chat/chat_stream traffic (the main traffic) would still leak
+    on cache eviction. Constructs a real client (no network I/O happens at
+    construction) and verifies both that the transport is shared and that
+    `close()` actually closes it.
+    """
+    monkeypatch.setattr(openrouter_module, "get_settings", lambda: _StubSettings())
+
+    client = OpenRouterClient("close-test-key")
+
+    # The SDK's underlying httpx client is the very same object as `_http`.
+    assert client._client._client is client._http
+
+    client.close()
+
+    assert client._http.is_closed
