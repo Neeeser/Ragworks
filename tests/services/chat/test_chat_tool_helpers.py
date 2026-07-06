@@ -76,11 +76,10 @@ def test_normalize_tool_calls_filters_missing_names() -> None:
     normalized = normalize_tool_calls(tool_calls, processed_ids)
 
     assert len(normalized) == 1
-    assert normalized[0]["id"] == "call-1"
-    assert normalized[0]["function"]["name"] == "pinecone_query"
-    assert decode_tool_arguments(normalized[0]["function"]["arguments"]) == {
-        "query": "docs"
-    }
+    assert normalized[0].id == "call-1"
+    assert normalized[0].type == "function"
+    assert normalized[0].function.name == "pinecone_query"
+    assert decode_tool_arguments(normalized[0].function.arguments) == {"query": "docs"}
     assert processed_ids == {"call-1"}
 
 
@@ -94,7 +93,7 @@ def test_normalize_tool_calls_skips_invalid_function_payload() -> None:
     normalized = normalize_tool_calls(tool_calls, processed_ids)
 
     assert len(normalized) == 1
-    assert normalized[0]["id"] == "call-1"
+    assert normalized[0].id == "call-1"
 
 
 def test_coerce_stream_text_handles_various_shapes() -> None:

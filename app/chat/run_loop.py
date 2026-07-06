@@ -20,7 +20,7 @@ from typing import Any, Literal, overload
 from sqlmodel import Session
 
 from app.chat.events import FinalEvent
-from app.chat.messages import normalize_assistant_content
+from app.chat.messages import ToolCall, normalize_assistant_content
 from app.chat.persistence.records import (
     MessageRecord,
     RecordContext,
@@ -124,21 +124,28 @@ def append_tool_call_assistant_message(
     run: ChatRun,
     *,
     assistant_content: str | None,
-    tool_calls: list[dict[str, Any]],
+    tool_calls: list[ToolCall],
 ) -> None:
-    """Append the assistant tool-call message to history and persist it."""
+    """Append the assistant tool-call message to history and persist it.
+
+    The typed `ToolCall` models are serialized exactly once here: the provider
+    request payload (message history) and the persisted `tool_payload` column
+    genuinely need plain dicts, and `model_dump()` reproduces the OpenAI wire
+    shape byte-for-byte.
+    """
+    tool_call_payloads = [call.model_dump() for call in tool_calls]
     run.setup.messages.append(
         {
             "role": "assistant",
             "content": assistant_content or "",
-            "tool_calls": tool_calls,
+            "tool_calls": tool_call_payloads,
         }
     )
     record_tool_call_assistant_message(
         context=RecordContext(session=run.session, chat_repo=run.chat_repo),
         session_model=run.setup.session_model,
         content=assistant_content or "",
-        tool_calls=tool_calls,
+        tool_calls=tool_call_payloads,
     )
 
 

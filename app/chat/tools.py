@@ -22,6 +22,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
 from app.chat.events import ToolCallEvent, ToolResultEvent
+from app.chat.messages import ToolCall
 from app.chat.persistence.records import (
     MessageRecord,
     RecordContext,
@@ -153,15 +154,21 @@ class ToolExecutor:
         raise ValueError("Tool call does not match an enabled collection.")
 
     @staticmethod
-    def parse_call(tool_call: dict[str, Any], payload: ChatMessageCreate) -> ParsedToolCall:
-        """Parse a raw tool call into the fields needed to execute it.
+    def parse_call(
+        tool_call: ToolCall | dict[str, Any],
+        payload: ChatMessageCreate,
+    ) -> ParsedToolCall:
+        """Parse a tool call into the fields needed to execute it.
 
-        Always backfills a fallback id: by the time a call reaches execution it
-        has been normalized (see `normalize_tool_calls`), but a provider can
-        still omit the id, and downstream persistence/events require one.
+        The typed `ToolCall` (what the run loop always sends, post-
+        `normalize_tool_calls`) is the primary input; the dict arm is the
+        lenient boundary for un-normalized provider shapes — it backfills a
+        fallback id when the provider omitted one, since downstream
+        persistence/events require an id.
         """
+        raw = tool_call.model_dump() if isinstance(tool_call, ToolCall) else tool_call
         return parse_tool_call(
-            tool_call,
+            raw,
             default_query=payload.content,
             use_fallback_id=True,
         )
@@ -169,15 +176,17 @@ class ToolExecutor:
     def execute(
         self,
         *,
-        tool_calls: list[dict[str, Any]],
+        tool_calls: list[ToolCall] | list[dict[str, Any]],
         context: ToolExecutionContext,
     ) -> Iterator[dict[str, Any]]:
         """Execute tool calls, yielding tool-call/tool-result events and persisting each.
 
-        Yields a `ToolCallEvent` before retrieval and a `ToolResultEvent` after,
-        as serialized dicts. Streaming callers forward them; non-streaming
-        callers drain without forwarding. Persistence (tool message row and
-        `ToolCallTrace`) happens once here, in either mode.
+        Consumes the typed `ToolCall` models the run loop resolves (the dict form
+        is tolerated only as the lenient escape for un-normalized shapes — see
+        `parse_call`). Yields a `ToolCallEvent` before retrieval and a
+        `ToolResultEvent` after, as serialized dicts. Streaming callers forward
+        them; non-streaming callers drain without forwarding. Persistence (tool
+        message row and `ToolCallTrace`) happens once here, in either mode.
         """
         for tool_call in tool_calls:
             parsed = self.parse_call(tool_call, context.payload)

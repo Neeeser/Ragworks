@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from app.chat.messages import FunctionCall, ToolCall
 from app.chat.processing.reasoning import extend_reasoning_segments, normalize_reasoning_segments
 
 _CANDIDATE_TOOL_TYPES = {"tool_call", "tool_use", "tool_request", "call_tool", "function_call"}
@@ -76,12 +77,14 @@ def parse_tool_call(
 def _resolve_call_components(segment: dict[str, Any]) -> tuple[str, str, str] | None:
     """Extract call id, name, and arguments string from a reasoning segment."""
     segment_type = str(segment.get("type") or "").lower()
-    has_function = isinstance(segment.get("function"), dict)
-    has_call = isinstance(segment.get("call"), dict)
+    raw_function = segment.get("function")
+    raw_call = segment.get("call")
+    has_function = isinstance(raw_function, dict)
+    has_call = isinstance(raw_call, dict)
     if not (segment_type in _CANDIDATE_TOOL_TYPES or has_function or has_call):
         return None
-    function_payload = segment.get("function") if has_function else {}
-    call_payload = segment.get("call") if has_call else {}
+    function_payload: dict[str, Any] = raw_function if isinstance(raw_function, dict) else {}
+    call_payload: dict[str, Any] = raw_call if isinstance(raw_call, dict) else {}
     name = (
         function_payload.get("name")
         or call_payload.get("name")
@@ -148,9 +151,15 @@ def decode_tool_arguments(arguments: Any) -> dict[str, Any]:
 def normalize_tool_calls(
     tool_calls: list[dict[str, Any]],
     processed_ids: set[str],
-) -> list[dict[str, Any]]:
-    """Normalize tool call payloads and deduplicate ids."""
-    normalized: list[dict[str, Any]] = []
+) -> list[ToolCall]:
+    """Normalize raw provider tool-call payloads into typed `ToolCall` models.
+
+    This is the lenient boundary for *fresh* provider output: entries without a
+    usable function/name are dropped, missing ids are backfilled, and arguments
+    are coerced to a JSON string — so every `ToolCall` leaving here is regular
+    by construction (`model_dump()` reproduces the exact OpenAI wire shape).
+    """
+    normalized: list[ToolCall] = []
     for call in tool_calls:
         function_payload = call.get("function") or {}
         if not isinstance(function_payload, dict):
@@ -162,11 +171,10 @@ def normalize_tool_calls(
         call_id = str(call.get("id") or f"tool_call_{uuid4().hex}")
         processed_ids.add(call_id)
         normalized.append(
-            {
-                "id": call_id,
-                "type": "function",
-                "function": {"name": name, "arguments": arguments_str},
-            }
+            ToolCall(
+                id=call_id,
+                function=FunctionCall(name=str(name), arguments=arguments_str),
+            )
         )
     return normalized
 
@@ -174,9 +182,13 @@ def normalize_tool_calls(
 def extract_reasoning_tool_calls(
     reasoning_segments: list[dict[str, Any]],
     processed_ids: set[str],
-) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
-    """Extract tool calls from reasoning segments."""
-    tool_calls: list[dict[str, Any]] = []
+) -> tuple[list[ToolCall], dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Extract typed tool calls from reasoning segments.
+
+    Feeds the same execution pipe as `normalize_tool_calls`, so it produces the
+    same `ToolCall` models (ids are always resolved or generated here).
+    """
+    tool_calls: list[ToolCall] = []
     context: dict[str, dict[str, Any]] = {}
     residual_segments: list[dict[str, Any]] = []
     pending_context: list[dict[str, Any]] = []
@@ -189,11 +201,10 @@ def extract_reasoning_tool_calls(
         if call_id not in processed_ids:
             processed_ids.add(call_id)
             tool_calls.append(
-                {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {"name": name, "arguments": arguments_str},
-                }
+                ToolCall(
+                    id=call_id,
+                    function=FunctionCall(name=name, arguments=arguments_str),
+                )
             )
         if call_id in context and "segments" in context[call_id]:
             context[call_id]["segments"].extend(pending_context)

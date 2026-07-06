@@ -9,17 +9,15 @@ frames to the pre-4.1 dict-based events. See
 
 `TokenEvent`/`ReasoningEvent` are defined here as the formal contract but are
 still constructed as plain dicts in `app/chat/streaming/streaming.py` —
-that generator is exercised directly by a large, deliberately
-garbage-tolerant test suite (`tests/services/chat/test_chat_streaming.py`,
-`tests/services/chat/test_chat_service_coverage.py::test_stream_iteration_skips_invalid_event_shapes`)
-that depends on malformed/partial event dicts passing through unchanged.
-Validating every event at that point would be a real (out-of-scope)
-behavior change; `ChatService` forwards those dicts unmodified today, and
-they already conform to this contract's shape. `ToolCallEvent`/
-`ToolResultEvent`/`FinalEvent`/`ErrorEvent` are constructed directly at
-their single origination points (`app/chat/service.py`,
-`app/api/routes/chat.py`), since those sites build the event fresh rather
-than forwarding one.
+that generator is exercised directly by a deliberately garbage-tolerant test
+suite (`tests/services/chat/test_chat_streaming.py`) that depends on
+malformed/partial event dicts passing through unchanged. Validating every
+event at that point would be a real (out-of-scope) behavior change; the run
+loop forwards those dicts unmodified today, and they already conform to this
+contract's shape. `ToolCallEvent`/`ToolResultEvent`/`FinalEvent`/`ErrorEvent`
+are constructed directly at their single origination points
+(`app/chat/tools.py`, `app/chat/run_loop.py`, `app/api/routes/chat.py`),
+since those sites build the event fresh rather than forwarding one.
 """
 
 from __future__ import annotations

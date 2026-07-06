@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.chat.messages import ToolCall
 from app.chat.usage import UsageSummary
 from app.db import models
 from app.pipelines.config import IngestionPipelineSettings, RetrievalPipelineSettings
@@ -71,9 +72,9 @@ class RunState:
 
 @dataclass(frozen=True)
 class ToolCallResolution:
-    """Resolved tool call payloads for an iteration."""
+    """Resolved tool calls for an iteration, typed as `ToolCall` models."""
 
-    pending_tool_calls: list[dict[str, Any]]
+    pending_tool_calls: list[ToolCall]
     shared_tool_reasoning: dict[str, Any] | None
 
 

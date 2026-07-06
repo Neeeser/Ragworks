@@ -75,8 +75,6 @@ class SessionPreferencesUpdate:
 class ChatService:
     """Manage chat sessions, tool calls, and provider interactions."""
 
-    MAX_TOOL_ITERATIONS = 48
-
     def __init__(self, session: Session) -> None:
         """Initialize the chat service with database and provider clients."""
         self.session = session

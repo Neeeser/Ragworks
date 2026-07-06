@@ -31,9 +31,10 @@ def test_extract_reasoning_tool_calls_creates_openai_payload() -> None:
 
     assert len(tool_calls) == 1
     call = tool_calls[0]
-    assert call["id"] == "call-1"
-    assert call["function"]["name"] == "pinecone_query"
-    args = decode_tool_arguments(call["function"]["arguments"])
+    assert call.id == "call-1"
+    assert call.type == "function"
+    assert call.function.name == "pinecone_query"
+    args = decode_tool_arguments(call.function.arguments)
     assert args == {"query": "docs", "top_k": 7}
     assert "call-1" in context
     assert residual == [{"type": "reasoning", "text": "Thinking"}]
@@ -117,7 +118,7 @@ def test_extract_reasoning_tool_calls_handles_multiple_calls_and_shared_context(
 
     tool_calls, context, residual = extract_reasoning_tool_calls(segments, set())
 
-    assert {call["id"] for call in tool_calls} == {"call-1", "call-2"}
+    assert {call.id for call in tool_calls} == {"call-1", "call-2"}
     assert context["call-1"]["segments"][0]["content"] == "preface"
     assert context["call-1"]["segments"][1]["id"] == "call-1"
     assert context["call-2"]["segments"][0]["content"] == "between calls"
