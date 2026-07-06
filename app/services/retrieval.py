@@ -96,7 +96,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                     )
                 )
             latency_ms = (perf_counter() - start_time) * 1000
-            usage = payload.usage or {}
+            usage = payload.usage.model_dump()
             event = QueryRepository(self.session).add_event(
                 models.QueryEvent(
                     user_id=user.id,

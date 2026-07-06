@@ -10,11 +10,10 @@ from app.pipelines.definition import (
 )
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 
-settings = get_settings()
-
 
 def build_default_ingestion_pipeline() -> PipelineDefinition:
     """Return the default ingestion pipeline definition."""
+    settings = get_settings()
     nodes = [
         PipelineNodeDefinition(
             id="ingest-input",
@@ -106,6 +105,7 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
 
 def build_default_retrieval_pipeline() -> PipelineDefinition:
     """Return the default retrieval pipeline definition."""
+    settings = get_settings()
     nodes = [
         PipelineNodeDefinition(
             id="query-input",

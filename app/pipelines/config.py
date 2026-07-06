@@ -9,12 +9,9 @@ from pydantic import BaseModel
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-from app.pipelines.nodes.ingestion import (
-    ChunkerConfig,
-    EmbedderConfig,
-    FixedChunkerConfig,
-    IndexerConfig,
-)
+from app.pipelines.nodes.chunking import ChunkerConfig, FixedChunkerConfig
+from app.pipelines.nodes.embedding import EmbedderConfig
+from app.pipelines.nodes.indexing import IndexerConfig
 from app.pipelines.nodes.retrieval import ChatSettingsConfig, RetrieverConfig
 from app.pipelines.template import resolve_collection_template
 

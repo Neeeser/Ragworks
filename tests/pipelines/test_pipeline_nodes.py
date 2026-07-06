@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -23,7 +21,7 @@ from app.pipelines.definition import (
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutor
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.nodes.ingestion import ChunkerConfig, ChunkerNode
+from app.pipelines.nodes.chunking import ChunkerConfig, ChunkerNode
 from app.pipelines.payloads import (
     ChunkPayload,
     IndexingPayload,
@@ -34,6 +32,7 @@ from app.pipelines.payloads import (
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, build_default_registry
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
+from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
     Document,
     DocumentChunk,
@@ -43,6 +42,7 @@ from app.retrieval.models import (
 )
 from app.retrieval.parsers.base import DocumentSource
 from app.utils.file_storage import FileStorage
+from tests.pipelines.conftest import make_stub_embedder, make_stub_indexer
 
 
 def _build_context(
@@ -141,8 +141,8 @@ def test_pipeline_executor_skips_unreached_branch(session: Session) -> None:
         category = "test"
         description = "Test input"
         example = "Input -> Output."
-        input_ports = []
-        output_ports = [NodePort(key="payload", label="Payload", data_type="text")]
+        input_ports = ()
+        output_ports = (NodePort(key="payload", label="Payload", data_type="text"),)
 
         def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
             return {"payload": "alpha"}
@@ -153,11 +153,11 @@ def test_pipeline_executor_skips_unreached_branch(session: Session) -> None:
         category = "test"
         description = "Test router"
         example = "Input -> {alpha: payload}."
-        input_ports = [NodePort(key="payload", label="Payload", data_type="text")]
-        output_ports = [
+        input_ports = (NodePort(key="payload", label="Payload", data_type="text"),)
+        output_ports = (
             NodePort(key="alpha", label="Alpha", data_type="text", required=False),
             NodePort(key="beta", label="Beta", data_type="text", required=False),
-        ]
+        )
 
         def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
             return {"alpha": inputs["payload"]}
@@ -168,8 +168,8 @@ def test_pipeline_executor_skips_unreached_branch(session: Session) -> None:
         category = "test"
         description = "Test sink"
         example = "Input -> Result."
-        input_ports = [NodePort(key="payload", label="Payload", data_type="text")]
-        output_ports = [NodePort(key="result", label="Result", data_type="text")]
+        input_ports = (NodePort(key="payload", label="Payload", data_type="text"),)
+        output_ports = (NodePort(key="result", label="Result", data_type="text"),)
 
         def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
             return {"result": inputs["payload"]}
@@ -226,41 +226,18 @@ def test_default_ingestion_pipeline_executes(monkeypatch, session: Session, tmp_
     document = _build_document(user, collection, source_path)
     context = _build_context(session, user, collection, document=document, storage_path=tmp_path)
 
-    class _StubEmbedder:
-        usage = {"prompt_tokens": 3}
-
-        def __init__(
-            self,
-            _client: object,
-            _model_name: str,
-            *,
-            dimensions: int | None = None,
-        ) -> None:
-            pass
-
-        def embed_documents(self, chunks: list[DocumentChunk]) -> list[list[float]]:
-            return [[0.1, 0.2] for _ in chunks]
-
-    @dataclass
-    class _IndexerState:
-        upsert_calls: list[dict[str, Any]]
-
-    state = _IndexerState(upsert_calls=[])
-
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
-
-        def ensure_index(self, config: object) -> None:
-            state.upsert_calls.append({"config": config, "ensure": True})
-
-        def upsert(self, config: object, chunks: list[DocumentChunk], namespace: str | None = None) -> None:
-            state.upsert_calls.append(
-                {"config": config, "chunks": chunks, "namespace": namespace}
-            )
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+    upsert_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(usage={"prompt_tokens": 3}),
+    )
+    monkeypatch.setattr(
+        "app.pipelines.nodes.indexing.PineconeIndexer",
+        make_stub_indexer(
+            on_ensure_index=lambda config: upsert_calls.append({"config": config, "ensure": True}),
+            on_upsert=lambda kwargs: upsert_calls.append(kwargs),
+        ),
+    )
 
     definition = build_default_ingestion_pipeline()
     executor = PipelineExecutor(build_default_registry())
@@ -272,8 +249,8 @@ def test_default_ingestion_pipeline_executes(monkeypatch, session: Session, tmp_
     )
 
     assert payload.chunks
-    assert payload.usage == {"prompt_tokens": 3}
-    assert state.upsert_calls
+    assert payload.usage == TokenUsage(prompt_tokens=3)
+    assert upsert_calls
 
 
 def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> None:
@@ -281,21 +258,6 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     collection = _build_collection(user)
     context = _build_context(session, user, collection, query="hello", top_k=3)
     state: dict[str, object] = {}
-
-    class _StubEmbedder:
-        usage = {"prompt_tokens": 2}
-
-        def __init__(
-            self,
-            _client: object,
-            _model_name: str,
-            *,
-            dimensions: int | None = None,
-        ) -> None:
-            pass
-
-        def embed_query(self, _query: str) -> list[float]:
-            return [0.1, 0.2]
 
     class _StubRetriever:
         def __init__(self, index_config: object, client: object) -> None:
@@ -314,7 +276,10 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
             scored = ScoredChunk(chunk=chunk, score=0.9)
             return RetrievalResponse(matches=[scored])
 
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(usage={"prompt_tokens": 2}, query_result=[0.1, 0.2]),
+    )
     monkeypatch.setattr("app.pipelines.nodes.retrieval.PineconeRetriever", _StubRetriever)
 
     definition = build_default_retrieval_pipeline()
@@ -327,7 +292,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     )
 
     assert payload.response.matches
-    assert payload.usage == {"prompt_tokens": 2}
+    assert payload.usage == TokenUsage(prompt_tokens=2)
     expected_namespace = DEFAULT_NAMESPACE_TEMPLATE.replace(
         "{collection_id}",
         str(collection.id),
@@ -386,7 +351,7 @@ def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
 
 
 def test_file_type_router_routes_pdf(session: Session) -> None:
-    from app.pipelines.nodes.ingestion import FileTypeRouterConfig, FileTypeRouterNode
+    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
 
     source = DocumentSource(
         document_id="doc",
@@ -404,7 +369,7 @@ def test_file_type_router_routes_pdf(session: Session) -> None:
 
 
 def test_ingestion_input_requires_document(session: Session) -> None:
-    from app.pipelines.nodes.ingestion import IngestionInputConfig, IngestionInputNode
+    from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
 
     user = _build_user()
     collection = _build_collection(user)
@@ -416,7 +381,7 @@ def test_ingestion_input_requires_document(session: Session) -> None:
 
 
 def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) -> None:
-    from app.pipelines.nodes.ingestion import IngestionInputConfig, IngestionInputNode
+    from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
 
     user = _build_user()
     collection = _build_collection(user)
@@ -430,7 +395,7 @@ def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) 
 
 
 def test_document_parser_node_resolves_modes(session: Session) -> None:
-    from app.pipelines.nodes.ingestion import DocumentParserNode, ParserConfig
+    from app.pipelines.nodes.parsing import DocumentParserNode, ParserConfig
     from app.retrieval.parsers.pdf import PdfToTextParser
     from app.retrieval.parsers.txt import TxtDocumentParser
 
@@ -446,7 +411,7 @@ def test_document_parser_node_resolves_modes(session: Session) -> None:
 
 
 def test_file_type_router_routes_text_and_other(session: Session) -> None:
-    from app.pipelines.nodes.ingestion import FileTypeRouterConfig, FileTypeRouterNode
+    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
 
     node = FileTypeRouterNode(FileTypeRouterConfig())
     user = _build_user()
@@ -475,7 +440,7 @@ def test_file_type_router_routes_text_and_other(session: Session) -> None:
 
 
 def test_file_type_router_summarizes_unknown_route(session: Session) -> None:
-    from app.pipelines.nodes.ingestion import FileTypeRouterConfig, FileTypeRouterNode
+    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
 
     node = FileTypeRouterNode(FileTypeRouterConfig())
 
@@ -492,26 +457,14 @@ def test_file_type_router_summarizes_unknown_route(session: Session) -> None:
 
 
 def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import EmbedderConfig, EmbedderNode
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
     from app.pipelines.payloads import ChunkPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-    class _StubEmbedder:
-        usage = {}
-
-        def __init__(
-            self,
-            _client: object,
-            _model_name: str,
-            *,
-            dimensions: int | None = None,
-        ) -> None:
-            pass
-
-        def embed_documents(self, _chunks):
-            return [[0.1, 0.2]]
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(documents_result=[[0.1, 0.2]]),
+    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
@@ -528,27 +481,79 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
         node.run({"chunks": payload}, context)
 
 
+def test_embedder_node_requires_a_mode(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+
+    monkeypatch.setattr("app.pipelines.nodes.embedding.OpenRouterEmbedder", make_stub_embedder())
+
+    node = EmbedderNode(EmbedderConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    with pytest.raises(ValueError, match="requires a chunk batch or query request"):
+        node.run({}, context)
+
+
+def test_embedder_node_summarizes_chunk_mode(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import ChunkPayload
+    from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
+
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(usage={"prompt_tokens": 1}),
+    )
+
+    document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
+    chunks = [
+        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
+    ]
+    payload = ChunkPayload(document=document, chunks=chunks)
+    node = EmbedderNode(EmbedderConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    outputs = node.run({"chunks": payload}, context)
+    summary = node.summarize_io({"chunks": payload}, outputs)
+
+    assert summary.inputs
+    assert summary.outputs
+
+
+def test_embedder_node_summarizes_query_mode(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import RetrievalRequestPayload
+    from app.retrieval.models import QueryRequest
+
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(usage={"prompt_tokens": 1}),
+    )
+
+    payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
+    node = EmbedderNode(EmbedderConfig())
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+
+    outputs = node.run({"request": payload}, context)
+    summary = node.summarize_io({"request": payload}, outputs)
+
+    assert summary.inputs
+    assert summary.outputs
+
+
 def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import EmbedderConfig, EmbedderNode
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
     from app.pipelines.payloads import QueryEmbeddingPayload, RetrievalRequestPayload
     from app.retrieval.models import QueryRequest
 
-    class _StubEmbedder:
-        usage = {"prompt_tokens": 4}
-
-        def __init__(
-            self,
-            _client: object,
-            _model_name: str,
-            *,
-            dimensions: int | None = None,
-        ) -> None:
-            pass
-
-        def embed_query(self, _query: str) -> list[float]:
-            return [0.1, 0.2, 0.3]
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.OpenRouterEmbedder", _StubEmbedder)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
+        make_stub_embedder(usage={"prompt_tokens": 4}, query_result=[0.1, 0.2, 0.3]),
+    )
 
     payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
     node = EmbedderNode(EmbedderConfig())
@@ -561,25 +566,15 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
 
     assert result.embedding == [0.1, 0.2, 0.3]
     assert result.request.text == "hello"
-    assert result.usage == {"prompt_tokens": 4}
+    assert result.usage == TokenUsage(prompt_tokens=4)
 
 
 def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
-
-        def ensure_index(self, _config):
-            return None
-
-        def upsert(self, **_kwargs):
-            return None
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+    monkeypatch.setattr("app.pipelines.nodes.indexing.PineconeIndexer", make_stub_indexer())
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
@@ -596,23 +591,22 @@ def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
     calls = {"ensure": 0, "upsert": 0}
 
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
+    def _inc_ensure(_config: object) -> None:
+        calls["ensure"] += 1
 
-        def ensure_index(self, _config):
-            calls["ensure"] += 1
+    def _inc_upsert(_kwargs: dict[str, object]) -> None:
+        calls["upsert"] += 1
 
-        def upsert(self, **_kwargs):
-            calls["upsert"] += 1
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.indexing.PineconeIndexer",
+        make_stub_indexer(on_ensure_index=_inc_ensure, on_upsert=_inc_upsert),
+    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
@@ -631,23 +625,22 @@ def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
     captured: dict[str, object] = {}
 
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
+    def _capture_ensure(config: object) -> None:
+        captured["ensure"] = config
 
-        def ensure_index(self, config):
-            captured["ensure"] = config
+    def _capture_upsert(kwargs: dict[str, object]) -> None:
+        captured["upsert"] = kwargs["config"]
 
-        def upsert(self, **kwargs):
-            captured["upsert"] = kwargs["config"]
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.indexing.PineconeIndexer",
+        make_stub_indexer(on_ensure_index=_capture_ensure, on_upsert=_capture_upsert),
+    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
@@ -673,23 +666,22 @@ def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.ingestion import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
     captured: dict[str, object] = {}
 
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
+    def _capture_ensure(config: object) -> None:
+        captured["ensure"] = config
 
-        def ensure_index(self, config):
-            captured["ensure"] = config
+    def _capture_upsert(kwargs: dict[str, object]) -> None:
+        captured["upsert"] = kwargs["config"]
 
-        def upsert(self, **kwargs):
-            captured["upsert"] = kwargs["config"]
-
-    monkeypatch.setattr("app.pipelines.nodes.ingestion.PineconeIndexer", _StubIndexer)
+    monkeypatch.setattr(
+        "app.pipelines.nodes.indexing.PineconeIndexer",
+        make_stub_indexer(on_ensure_index=_capture_ensure, on_upsert=_capture_upsert),
+    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [

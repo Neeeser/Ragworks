@@ -66,11 +66,6 @@ max-complexity = 10
 # Burn-down list: each entry below is owned by the phase that rewrites the module,
 # never a place to park code you don't want to lint. Do not copy this pattern for
 # new code.
-"app/pipelines/nodes/*.py" = ["RUF012"]  # TODO(phase-5.2): remove; node port lists become tuples or a proper base-class contract
-"tests/pipelines/test_pipeline_nodes.py" = ["RUF012"]  # TODO(phase-5.2): remove; mirrors the node subclass pattern above
-"tests/pipelines/test_validation.py" = ["RUF012"]  # TODO(phase-5.2): remove; mirrors the node subclass pattern above
-"tests/pipelines/test_execution.py" = ["RUF012"]  # TODO(phase-5.2): remove; mirrors the node subclass pattern above
-"tests/pipelines/test_pipeline_trace.py" = ["RUF012"]  # TODO(phase-5.2): remove; mirrors the node subclass pattern above
 "app/schemas/enums.py" = ["UP042"]  # TODO(phase-2): remove; `str(member)` differs between a str/Enum mixin and StrEnum -- verify no code depends on the "Class.MEMBER" str() form before switching. Moved here from app/db/models.py when the enums relocated to app.schemas.enums.
 "app/schemas/auth.py" = ["UP042"]  # TODO(phase-2): remove; same str(member) caveat as app/schemas/enums.py
 "app/api/routes/auth.py" = ["C901"]  # TODO(phase-6): remove; update_current_user rewritten with the rest of api.routes
@@ -93,14 +88,6 @@ warn_unused_ignores = true
 # subtype, SQLAlchemy boolean-typed filter expressions, str | None flowing into
 # `str`-typed dict keys, etc.). A narrower per-check relaxation would still
 # leave dozens of unrelated errors failing `make verify` today.
-
-[[tool.mypy.overrides]]
-# Narrowed in Phase 5.1: ports/node/registry/validation/execution/definition are
-# mypy-clean now. app.pipelines.nodes.* still has pre-existing errors unrelated
-# to this split (EmbedderNode's dual-branch `payload` reassignment narrows to
-# the first branch's type) -- left for the node-file split in Phase 5.2.
-module = "app.pipelines.nodes.*"
-ignore_errors = true  # removed in Phase 5.2
 
 [[tool.mypy.overrides]]
 module = "app.api.routes.*"

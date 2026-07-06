@@ -11,8 +11,9 @@ from app.pipelines.definition import (
 )
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.nodes.ingestion import EmbedderNode, IndexerNode
-from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrievalInputNode
+from app.pipelines.nodes.embedding import EmbedderNode
+from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrievalInputNode, RetrieverConfig
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
@@ -24,8 +25,8 @@ class _InputNode(PipelineNodeBase):
     category = "test"
     description = "Input node"
     example = "Input -> Output."
-    input_ports = []
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = ()
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "payload"}
@@ -40,11 +41,11 @@ class _DoubleInputNode(PipelineNodeBase):
     category = "test"
     description = "Double input node"
     example = "A+B -> Output."
-    input_ports = [
+    input_ports = (
         NodePort(key="a", label="A", data_type="text"),
         NodePort(key="b", label="B", data_type="text"),
-    ]
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    )
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "ok"}
@@ -59,8 +60,8 @@ class _NumberSinkNode(PipelineNodeBase):
     category = "test"
     description = "Number input node"
     example = "Input -> Output."
-    input_ports = [NodePort(key="value", label="Value", data_type="number")]
-    output_ports = []
+    input_ports = (NodePort(key="value", label="Value", data_type="number"),)
+    output_ports = ()
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {}
@@ -75,8 +76,8 @@ class _ChunkSourceNode(PipelineNodeBase):
     category = "test"
     description = "Outputs a chunk batch."
     example = "Input -> Chunks."
-    input_ports = []
-    output_ports = [NodePort(key="chunks", label="Chunks", data_type="chunk_batch")]
+    input_ports = ()
+    output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"chunks": []}
@@ -91,8 +92,8 @@ class _EmbeddedSourceNode(PipelineNodeBase):
     category = "test"
     description = "Outputs an embedded batch."
     example = "Input -> Embedded."
-    input_ports = []
-    output_ports = [NodePort(key="embedded", label="Embedded", data_type="embedded_batch")]
+    input_ports = ()
+    output_ports = (NodePort(key="embedded", label="Embedded", data_type="embedded_batch"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"embedded": []}
@@ -107,8 +108,8 @@ class _BlankSpecNode(PipelineNodeBase):
     category = "test"
     description = " "
     example = " "
-    input_ports = []
-    output_ports = []
+    input_ports = ()
+    output_ports = ()
 
 
 class _MissingExampleNode(PipelineNodeBase):
@@ -117,8 +118,8 @@ class _MissingExampleNode(PipelineNodeBase):
     category = "test"
     description = "Has description"
     example = ""
-    input_ports = []
-    output_ports = []
+    input_ports = ()
+    output_ports = ()
 
 
 class _MissingDescriptionNode(PipelineNodeBase):
@@ -127,8 +128,8 @@ class _MissingDescriptionNode(PipelineNodeBase):
     category = "test"
     description = ""
     example = "Example"
-    input_ports = []
-    output_ports = []
+    input_ports = ()
+    output_ports = ()
 
 
 def test_pipeline_node_base_spec_requires_description_and_example() -> None:
@@ -442,6 +443,34 @@ def test_pipeline_validator_requires_retriever_index() -> None:
 
     assert result.valid is False
     assert any("must specify a Pinecone index" in error for error in result.errors)
+
+
+def test_indexer_node_omitted_index_name_resolves_from_default_settings() -> None:
+    """`config={}` must not read as a blank index: validation goes through
+    `IndexerConfig`, whose `index_name` default factory resolves from
+    settings -- validation and runtime must stay in sync on what "unset"
+    means (see app/AGENTS.md's validate-via-config-model rule).
+    """
+    node = PipelineNodeDefinition(id="indexer", type="indexer.pinecone", name="Indexer", config={})
+    definition = PipelineDefinition(nodes=[node], edges=[])
+    registry = NodeRegistry([IndexerNode])
+
+    issues = IndexerNode.validation_issues_for_node(node, definition, registry)
+
+    assert IndexerConfig().index_name.strip()
+    assert not any("must specify a Pinecone index" in issue.message for issue in issues)
+
+
+def test_retriever_node_omitted_index_name_resolves_from_default_settings() -> None:
+    """Same guarantee as above for the retriever's index-name validation."""
+    node = PipelineNodeDefinition(id="retriever", type="retriever.pinecone", name="Retriever", config={})
+    definition = PipelineDefinition(nodes=[node], edges=[])
+    registry = NodeRegistry([PineconeRetrieverNode])
+
+    issues = PineconeRetrieverNode.validation_issues_for_node(node, definition, registry)
+
+    assert RetrieverConfig().index_name.strip()
+    assert not any("must specify a Pinecone index" in issue.message for issue in issues)
 
 
 def test_pipeline_validator_detects_cycles() -> None:

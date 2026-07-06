@@ -42,8 +42,8 @@ class InputNode(PipelineNodeBase):
     category = "test"
     description = "Emit a static payload."
     example = "Input() -> Payload(text='hello')."
-    input_ports = []
-    output_ports = [NodePort(key="value", label="Value", data_type="payload")]
+    input_ports = ()
+    output_ports = (NodePort(key="value", label="Value", data_type="payload"),)
     config_model = InputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -72,8 +72,8 @@ class EchoNode(PipelineNodeBase):
     category = "test"
     description = "Echo the payload."
     example = "Payload(text='hello') -> Payload(text='hello')."
-    input_ports = [NodePort(key="value", label="Value", data_type="payload")]
-    output_ports = [NodePort(key="result", label="Result", data_type="payload")]
+    input_ports = (NodePort(key="value", label="Value", data_type="payload"),)
+    output_ports = (NodePort(key="result", label="Result", data_type="payload"),)
     class EchoConfig(BaseModel):
         """Empty config for echo node."""
 

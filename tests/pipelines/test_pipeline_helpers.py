@@ -5,9 +5,12 @@ from uuid import uuid4
 from app.db import models
 from app.pipelines.config import resolve_ingestion_settings, resolve_retrieval_settings
 from app.pipelines.definition import PipelineDefinition
-from app.pipelines.nodes.ingestion import ChunkerConfig, EmbedderConfig, IndexerConfig
+from app.pipelines.nodes.chunking import ChunkerConfig
+from app.pipelines.nodes.embedding import EmbedderConfig
+from app.pipelines.nodes.indexing import IndexerConfig
 from app.pipelines.nodes.retrieval import ChatSettingsConfig, RetrieverConfig
-from app.pipelines.nodes.trace_utils import (
+from app.pipelines.template import resolve_collection_template
+from app.pipelines.tracing.summaries import (
     preview_text,
     summarize_chunks,
     summarize_embeddings,
@@ -15,7 +18,6 @@ from app.pipelines.nodes.trace_utils import (
     summarize_matches,
     summarize_text,
 )
-from app.pipelines.template import resolve_collection_template
 from app.retrieval.models import DocumentChunk, DocumentMetadata, ScoredChunk
 
 
@@ -68,20 +70,21 @@ def test_resolve_retrieval_settings_defaults() -> None:
     assert settings.context_window == chat_settings.context_window
 
 
-def test_trace_utils_preview_and_summary() -> None:
+def test_summaries_preview_and_summary() -> None:
     text = "alpha " * 100
 
     preview = preview_text(text, limit=10)
 
     assert preview.endswith("...")
     summary = summarize_text("short text", limit=10, full_limit=20)
-    assert summary["preview"] == "short text"
-    assert summary["full"] == "short text"
+    assert summary.preview == "short text"
+    assert summary.full == "short text"
     long_summary = summarize_text("x" * 50, limit=10, full_limit=20)
-    assert "full" not in long_summary
+    assert long_summary.full is None
+    assert "full" not in long_summary.model_dump()
 
 
-def test_trace_utils_chunk_and_embedding_summaries() -> None:
+def test_summaries_chunk_and_embedding_summaries() -> None:
     chunk = DocumentChunk(
         document_id="doc",
         chunk_id="doc:0",
@@ -100,17 +103,17 @@ def test_trace_utils_chunk_and_embedding_summaries() -> None:
     )
 
     chunk_summary = summarize_chunks([chunk, chunk_no_embed])
-    assert chunk_summary["count"] == 2
-    assert chunk_summary["document_id"] == "doc"
+    assert chunk_summary.count == 2
+    assert chunk_summary.document_id == "doc"
 
     embed_summary = summarize_embeddings([chunk, chunk_no_embed])
-    assert embed_summary["dimension"] == 3
-    assert embed_summary["samples"][1]["preview"] is None
+    assert embed_summary.dimension == 3
+    assert embed_summary.samples[1].preview is None
     empty_summary = summarize_chunks([])
-    assert empty_summary["count"] == 0
+    assert empty_summary.count == 0
 
 
-def test_trace_utils_match_summaries() -> None:
+def test_summaries_match_summaries() -> None:
     chunk = DocumentChunk(
         document_id="doc",
         chunk_id="doc:0",
@@ -121,8 +124,8 @@ def test_trace_utils_match_summaries() -> None:
     matches = [ScoredChunk(chunk=chunk, score=0.9)]
 
     match_summary = summarize_matches(matches)
-    assert match_summary["count"] == 1
-    assert match_summary["top_matches"][0]["chunk_id"] == "doc:0"
+    assert match_summary.count == 1
+    assert match_summary.top_matches[0].chunk_id == "doc:0"
 
     order_summary = summarize_match_order(matches)
-    assert order_summary[0]["rank"] == 1
+    assert order_summary[0].rank == 1

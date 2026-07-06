@@ -28,8 +28,8 @@ class _InputNode(PipelineNodeBase):
     category = "test"
     description = "Input node"
     example = "Input -> Output."
-    input_ports = []
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = ()
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "payload"}
@@ -44,11 +44,11 @@ class _PartialOutputNode(PipelineNodeBase):
     category = "test"
     description = "Outputs only a subset of ports."
     example = "Input -> {a}."
-    input_ports = []
-    output_ports = [
+    input_ports = ()
+    output_ports = (
         NodePort(key="a", label="A", data_type="text"),
         NodePort(key="b", label="B", data_type="text"),
-    ]
+    )
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"a": "payload"}
@@ -63,11 +63,11 @@ class _DoubleInputNode(PipelineNodeBase):
     category = "test"
     description = "Double input node"
     example = "A+B -> Output."
-    input_ports = [
+    input_ports = (
         NodePort(key="a", label="A", data_type="text"),
         NodePort(key="b", label="B", data_type="text"),
-    ]
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    )
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "ok"}
@@ -82,8 +82,8 @@ class _FailingNode(PipelineNodeBase):
     category = "test"
     description = "Raises an error."
     example = "Input -> Error."
-    input_ports = []
-    output_ports = []
+    input_ports = ()
+    output_ports = ()
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         raise RuntimeError("boom")
@@ -98,8 +98,8 @@ class _DiamondSourceNode(PipelineNodeBase):
     category = "test"
     description = "Emits a single value fanned out to two branches."
     example = "-> Output."
-    input_ports = []
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = ()
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "seed"}
@@ -114,8 +114,8 @@ class _DiamondBranchNode(PipelineNodeBase):
     category = "test"
     description = "Passes a value through to the join node."
     example = "Input -> Output."
-    input_ports = [NodePort(key="in", label="In", data_type="text")]
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = (NodePort(key="in", label="In", data_type="text"),)
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": f"{inputs['in']}-branched"}
@@ -130,11 +130,11 @@ class _DiamondJoinNode(PipelineNodeBase):
     category = "test"
     description = "Requires both branch outputs before it can run."
     example = "Left+Right -> Result."
-    input_ports = [
+    input_ports = (
         NodePort(key="left", label="Left", data_type="text"),
         NodePort(key="right", label="Right", data_type="text"),
-    ]
-    output_ports = [NodePort(key="result", label="Result", data_type="text")]
+    )
+    output_ports = (NodePort(key="result", label="Result", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"result": f"{inputs['left']}+{inputs['right']}"}
@@ -149,8 +149,8 @@ class _FanoutSourceNode(PipelineNodeBase):
     category = "test"
     description = "Emits a single output consumed by several targets."
     example = "-> Output."
-    input_ports = []
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = ()
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": "shared"}
@@ -165,8 +165,8 @@ class _FanoutSinkNode(PipelineNodeBase):
     category = "test"
     description = "Echoes whatever it receives."
     example = "Input -> Output."
-    input_ports = [NodePort(key="in", label="In", data_type="text")]
-    output_ports = [NodePort(key="out", label="Out", data_type="text")]
+    input_ports = (NodePort(key="in", label="In", data_type="text"),)
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"out": inputs["in"]}

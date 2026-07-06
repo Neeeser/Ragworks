@@ -82,7 +82,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             result = executor.execute(definition, context)
             payload = self._extract_indexing_payload(result.terminal_outputs)
             enriched_chunks = payload.chunks
-            usage = payload.usage or {}
+            usage = payload.usage.model_dump()
             chunk_records = self._persist_chunks(
                 document,
                 collection,

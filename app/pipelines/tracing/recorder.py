@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -48,7 +48,7 @@ class NodeTraceValue(BaseModel):
 
     label: str
     value: object
-    kind: str = "json"
+    kind: Literal["json", "text", "embedding"] = "json"
 
 
 class NodeTraceSummary(BaseModel):

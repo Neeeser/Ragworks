@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
     Document,
     DocumentChunk,
@@ -38,7 +39,7 @@ class EmbeddingPayload(BaseModel):
 
     document: Document
     chunks: list[DocumentChunk]
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: TokenUsage = Field(default_factory=TokenUsage)
 
 
 class IndexingPayload(BaseModel):
@@ -46,7 +47,7 @@ class IndexingPayload(BaseModel):
 
     document: Document
     chunks: list[DocumentChunk]
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: TokenUsage = Field(default_factory=TokenUsage)
 
 
 class RetrievalRequestPayload(BaseModel):
@@ -60,11 +61,11 @@ class QueryEmbeddingPayload(BaseModel):
 
     request: QueryRequest
     embedding: EmbeddingVector
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: TokenUsage = Field(default_factory=TokenUsage)
 
 
 class RetrievalPayload(BaseModel):
     """Payload containing retrieval results."""
 
     response: RetrievalResponse
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: TokenUsage = Field(default_factory=TokenUsage)

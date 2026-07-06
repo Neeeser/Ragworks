@@ -7,19 +7,17 @@ from typing import Any
 
 from app.pipelines.definition import PipelineNodeDefinition
 from app.pipelines.node import NodeSpec, PipelineNodeBase
-from app.pipelines.nodes.ingestion import (
+from app.pipelines.nodes.chunking import (
     ChunkerNode,
-    DocumentParserNode,
-    EmbedderNode,
-    FileTypeRouterNode,
-    IndexerNode,
-    IngestionInputNode,
-    IngestionOutputNode,
     ParagraphChunkerNode,
     SemanticChunkerNode,
     SentenceChunkerNode,
     TokenChunkerNode,
 )
+from app.pipelines.nodes.embedding import EmbedderNode
+from app.pipelines.nodes.indexing import IndexerNode
+from app.pipelines.nodes.io import IngestionInputNode, IngestionOutputNode
+from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.retrieval import (
     ChatSettingsNode,
     PineconeRetrieverNode,

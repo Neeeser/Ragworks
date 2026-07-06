@@ -70,8 +70,12 @@ app/
                    (PipelineNodeBase, NodeSpec), registry.py (NodeRegistry +
                    default_registry() singleton), validation.py (PipelineValidator),
                    definition.py (PipelineDefinition — the graph's wire shape),
-                   execution/ (context.py, executor.py), nodes/ (node
-                   implementations — ingestion.py split further in Phase 5.2)
+                   execution/ (context.py, executor.py), tracing/ (recorder.py —
+                   PipelineTraceRecorder; summaries.py — typed trace summary
+                   models), nodes/ (node implementations, one module per
+                   pipeline stage: io.py, parsing.py, chunking.py, embedding.py,
+                   indexing.py, retrieval.py, plus validators.py for the
+                   validation helpers shared across those stage modules)
   retrieval/       RAG components: chunkers, embedders, indexers, parsers,
                    rerankers, retrievers — one folder per pluggable stage
   core/            settings, auth primitives, cross-cutting config
@@ -96,6 +100,23 @@ single implementation file and were collapsed to root modules (`parameters.py`,
 (`PipelineService`, `get_settings`, …) so a test can monkeypatch them through the package
 is forbidden — patch at the real boundary where the name is used (e.g. tests patch
 `app.chat.setup.resolve_retrieval_settings`, not a re-export on the package).
+
+**`pipelines/nodes/` modules group by pipeline stage, not by node count.** Each
+module (`io.py`, `parsing.py`, `chunking.py`, `embedding.py`, `indexing.py`,
+`retrieval.py`) owns every node/config for one stage of the ingestion or
+retrieval flow — a stage with several fixed-shape variants (the chunkers) shares
+one base class in its module rather than duplicating `run()`/`summarize_io()`
+per variant. **Cross-node validation lives in small named helpers, not one
+60-line per-node method.** `nodes/validators.py` holds helpers shared across
+stage modules (e.g. `missing_index_issue`, used by both the indexer's and the
+retriever's `validation_issues_for_node`); a helper used by only one node's
+validator (e.g. `_dimension_issue` in `indexing.py`) stays local to that module.
+**Validation reads config through the node's config model, never through the
+raw config dict.** `validation_issues_for_node` calls `SomeConfig.model_validate
+(node.config or {})` and reads fields off the validated model — the same model
+`NodeRegistry.create` uses to build the node that actually runs. Peeking at
+`node.config["index_name"]` directly would silently diverge from runtime
+behavior the moment the config model's defaults or validation change.
 
 **One module per domain in `db/models/`.** Tables are split by domain —
 `user.py` (User + `TimestampMixin`), `collection.py`, `document.py`, `pipeline.py`,
@@ -326,6 +347,17 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   lock) that calls `close()` on whatever it evicts, and never key a long-lived cache on
   a raw secret you can't invalidate on demand (a rotated/leaked API key stays cached
   until it ages out).
+- **Import-time `settings = get_settings()` snapshots are forbidden**, even though
+  `get_settings()` is itself `lru_cache`d and cheap to call repeatedly. A module-level
+  `settings = get_settings()` captures the value once at import time; code that reads it
+  later never sees a settings change (env var override, `get_settings.cache_clear()` in a
+  test) made after that import. Call `get_settings()` at the point of use instead — inside
+  a function body, or in a Pydantic field's `default_factory` (`Field(default_factory=
+  lambda: get_settings().pinecone_index_name)`) — so the read happens at
+  call/instantiation time, not import time. Every pipeline node config's settings-backed
+  default follows this pattern (`EmbedderConfig.model_name`, `IndexerConfig.index_name`,
+  `RetrieverConfig.index_name`, `ChatSettingsConfig.chat_model`), as do
+  `build_default_ingestion_pipeline`/`build_default_retrieval_pipeline`.
 
 ## Wire-contract completeness
 

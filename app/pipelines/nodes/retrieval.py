@@ -1,7 +1,5 @@
 """Pipeline nodes for retrieval workflows."""
 
-# pylint: disable=duplicate-code
-
 from __future__ import annotations
 
 import logging
@@ -13,7 +11,7 @@ from app.core.config import get_settings
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.nodes.trace_utils import summarize_match_order, summarize_matches, summarize_text
+from app.pipelines.nodes.validators import missing_index_issue
 from app.pipelines.payloads import (
     QueryEmbeddingPayload,
     RetrievalPayload,
@@ -22,6 +20,7 @@ from app.pipelines.payloads import (
 from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
+from app.pipelines.tracing.summaries import summarize_match_order, summarize_matches, summarize_text
 from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
 from app.retrieval.models import QueryRequest
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 class RetrievalInputConfig(BaseModel):
@@ -48,8 +46,8 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
     category = "retrieval"
     description = "Provide the query payload for retrieval."
     example = "Query='coffee', top_k=3 -> QueryRequest(text='coffee', top_k=3)."
-    input_ports = []
-    output_ports = [NodePort(key="request", label="Request", data_type="query_request")]
+    input_ports = ()
+    output_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
     config_model = RetrievalInputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -90,7 +88,7 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
 class RetrieverConfig(BaseModel):
     """Configuration for Pinecone retriever nodes."""
 
-    index_name: str = Field(default_factory=lambda: settings.pinecone_index_name)
+    index_name: str = Field(default_factory=lambda: get_settings().pinecone_index_name)
     namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
 
 
@@ -105,10 +103,10 @@ class PineconeRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
         "RetrievalPayload(matches=[chunk_a, chunk_b])."
     )
-    input_ports = [
-        NodePort(key="query_embedding", label="Query Embedding", data_type="query_embedding")
-    ]
-    output_ports = [NodePort(key="results", label="Results", data_type="retrieval_results")]
+    input_ports = (
+        NodePort(key="query_embedding", label="Query Embedding", data_type="query_embedding"),
+    )
+    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
     config_model = RetrieverConfig
 
     @classmethod
@@ -119,16 +117,9 @@ class PineconeRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
         """Validate required Pinecone index selection."""
-        issues: list[PipelineValidationIssue] = []
         config = RetrieverConfig.model_validate(node.config or {})
-        if not config.index_name.strip():
-            issues.append(
-                PipelineValidationIssue(
-                    message=f"Retriever node '{node.id}' must specify a Pinecone index.",
-                    severity="error",
-                )
-            )
-        return issues
+        issue = missing_index_issue(config.index_name, node.id, "Retriever")
+        return [issue] if issue else []
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve chunks for the query request."""
@@ -156,12 +147,11 @@ class PineconeRetrieverNode(PipelineNodeBase[RetrieverConfig]):
             ),
             embedding=embedding,
         )
-        usage = payload.usage or {}
         logger.info(
             "Pipeline retrieval returned %s matches for query.",
             len(response.matches),
         )
-        return {"results": RetrievalPayload(response=response, usage=usage)}
+        return {"results": RetrievalPayload(response=response, usage=payload.usage)}
 
     def summarize_io(
         self,
@@ -206,12 +196,9 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
     label = "Cross-Encoder Reranker"
     category = "retrieval"
     description = "Re-score retrieved chunks with a cross-encoder."
-    example = (
-        "RetrievalPayload([chunk_b, chunk_a]) -> "
-        "RetrievalPayload([chunk_a, chunk_b])."
-    )
-    input_ports = [NodePort(key="results", label="Results", data_type="retrieval_results")]
-    output_ports = [NodePort(key="results", label="Results", data_type="retrieval_results")]
+    example = "RetrievalPayload([chunk_b, chunk_a]) -> RetrievalPayload([chunk_a, chunk_b])."
+    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
     config_model = RerankerConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -271,12 +258,9 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
     label = "Retrieval Output"
     category = "retrieval"
     description = "Emit retrieval results for the API."
-    example = (
-        "RetrievalPayload(matches=2) -> "
-        "Result(RetrievalPayload(matches=2))."
-    )
-    input_ports = [NodePort(key="results", label="Results", data_type="retrieval_results")]
-    output_ports = [NodePort(key="result", label="Result", data_type="retrieval_results")]
+    example = "RetrievalPayload(matches=2) -> Result(RetrievalPayload(matches=2))."
+    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    output_ports = (NodePort(key="result", label="Result", data_type="retrieval_results"),)
     config_model = RetrievalOutputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -310,7 +294,7 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
 class ChatSettingsConfig(BaseModel):
     """Configuration for chat model settings."""
 
-    chat_model: str = Field(default_factory=lambda: settings.default_chat_model)
+    chat_model: str = Field(default_factory=lambda: get_settings().default_chat_model)
     context_window: int = Field(default=8192, gt=0)
 
 
@@ -322,8 +306,8 @@ class ChatSettingsNode(PipelineNodeBase[ChatSettingsConfig]):
     category = "retrieval"
     description = "Configure the chat model and context window used for generation."
     example = "chat_model='openai/gpt-oss-120b', context_window=8192."
-    input_ports = []
-    output_ports = []
+    input_ports = ()
+    output_ports = ()
     config_model = ChatSettingsConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
