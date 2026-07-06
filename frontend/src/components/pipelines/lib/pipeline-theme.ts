@@ -45,6 +45,8 @@ const NODE_FAMILY_ORDER: NodeFamily[] = [
 ];
 
 const SLATE_BADGE = "text-slate-300";
+const AMBER_BG = "bg-amber-400";
+const AMBER_RING = "border-amber-400/60";
 
 const NODE_FAMILY_STYLES: Record<
   NodeFamily,
@@ -57,7 +59,7 @@ const NODE_FAMILY_STYLES: Record<
     badge: "text-teal-200",
   },
   embedder: {
-    accent: "bg-amber-400",
+    accent: AMBER_BG,
     border: "border-amber-400/40",
     glow: "shadow-[0_0_24px_rgba(251,191,36,0.2)]",
     badge: "text-amber-200",
@@ -128,9 +130,10 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string }> = {
   document_source: { bg: "bg-sky-400", ring: "border-sky-400/60" },
   document: { bg: "bg-emerald-400", ring: "border-emerald-400/60" },
   chunk_batch: { bg: "bg-teal-400", ring: "border-teal-400/60" },
-  embedded_batch: { bg: "bg-amber-400", ring: "border-amber-400/60" },
+  embedded_batch: { bg: AMBER_BG, ring: AMBER_RING },
   indexed_batch: { bg: "bg-cyan-400", ring: "border-cyan-400/60" },
   query_request: { bg: "bg-indigo-400", ring: "border-indigo-400/60" },
+  query_embedding: { bg: AMBER_BG, ring: AMBER_RING },
   retrieval_results: { bg: "bg-fuchsia-400", ring: "border-fuchsia-400/60" },
 };
 

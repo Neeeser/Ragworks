@@ -508,10 +508,11 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
 
 
 def test_pipeline_validator_requires_retriever_index() -> None:
-    registry = NodeRegistry([RetrievalInputNode, PineconeRetrieverNode])
+    registry = NodeRegistry([RetrievalInputNode, EmbedderNode, PineconeRetrieverNode])
     definition = PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="retrieval.input", name="Input"),
+            PipelineNodeDefinition(id="embedder", type="embedder.openrouter", name="Embedder"),
             PipelineNodeDefinition(
                 id="retriever",
                 type="retriever.pinecone",
@@ -523,9 +524,16 @@ def test_pipeline_validator_requires_retriever_index() -> None:
             PipelineEdgeDefinition(
                 id="edge-input-retriever",
                 source="input",
-                target="retriever",
+                target="embedder",
                 source_port="request",
                 target_port="request",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-embedder-retriever",
+                source="embedder",
+                target="retriever",
+                source_port="query_embedding",
+                target_port="query_embedding",
             )
         ],
     )

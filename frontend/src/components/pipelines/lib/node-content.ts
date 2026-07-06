@@ -74,10 +74,10 @@ const NODE_CONTENT: Record<string, NodeContent> = {
   },
   "embedder.openrouter": {
     description:
-      "Calls the configured OpenRouter embedding model for each chunk and attaches the vector plus usage metadata. The output is ready for Pinecone indexing.",
+      "Calls the configured OpenRouter embedding model to embed chunks or a query request. It attaches vectors plus usage metadata for downstream indexing or retrieval.",
     example: {
-      input: 'Chunks:\n- "Hello world!"',
-      output: "Embeddings:\n- [0.12, -0.03, 0.44, ...]",
+      input: 'Query request: "Hello world!"',
+      output: "Query embedding:\n- [0.12, -0.03, 0.44, ...]",
     },
   },
   "indexer.pinecone": {
@@ -106,9 +106,9 @@ const NODE_CONTENT: Record<string, NodeContent> = {
   },
   "retriever.pinecone": {
     description:
-      "Embeds the query, queries Pinecone for nearest neighbors, and returns scored matches with usage using the node configuration.",
+      "Queries Pinecone with a precomputed query embedding and returns scored matches with usage metadata.",
     example: {
-      input: 'Query request: "coffee grinders"',
+      input: "Query embedding: [0.12, -0.03, 0.44, ...]",
       output: "Retrieval results\n- chunk A (score 0.82)\n- chunk B (score 0.79)\n- ...",
     },
   },

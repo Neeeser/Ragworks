@@ -4,7 +4,7 @@ import os
 import sys
 import unittest
 from types import ModuleType, SimpleNamespace
-from typing import Any, Iterable, List, Sequence
+from typing import Any, Iterable, Sequence
 from unittest.mock import patch
 
 
@@ -46,20 +46,6 @@ _ensure_stub("pypdf", PdfReader=_StubPdfReader)
 from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
 from app.retrieval.models import QueryRequest, RetrievalResponse, ScoredChunk
 from app.retrieval.retrievers.pinecone_retriever import PineconeRetriever
-
-
-class DummyEmbedder:
-    def __init__(self, vector: Sequence[float]) -> None:
-        self._vector = list(vector)
-        self.queries: list[str] = []
-
-    @property
-    def vector(self) -> List[float]:
-        return list(self._vector)
-
-    def embed_query(self, text: str) -> List[float]:
-        self.queries.append(text)
-        return self.vector
 
 
 class DummyReranker:
@@ -112,7 +98,7 @@ class PineconeRetrieverTests(unittest.TestCase):
             namespace="config-namespace",
             text_key="content",
         )
-        self.embedder = DummyEmbedder([0.1, 0.2, 0.3])
+        self.query_vector = [0.1, 0.2, 0.3]
 
     def _build_match(self, *, chunk_id: str, document_id: str, score: float, order: int, text: str, **metadata: Any) -> FakeMatch:
         payload = dict(metadata)
@@ -136,7 +122,6 @@ class PineconeRetrieverTests(unittest.TestCase):
         client = FakePineconeClient(fake_index)
         retriever = PineconeRetriever(
             index_config=self.config,
-            embedder=self.embedder,
             client=client,
         )
         request = QueryRequest(
@@ -146,16 +131,15 @@ class PineconeRetrieverTests(unittest.TestCase):
             filter={"category": "faq"},
         )
 
-        response = retriever.retrieve(request)
+        response = retriever.retrieve(request, embedding=self.query_vector)
 
-        self.assertEqual(self.embedder.queries, [request.text])
         self.assertEqual(client.requested_names, [self.config.name])
         self.assertEqual(len(fake_index.query_calls), 1)
         query_kwargs = fake_index.query_calls[0]
         self.assertEqual(query_kwargs["namespace"], request.namespace)
         self.assertEqual(query_kwargs["top_k"], request.top_k)
         self.assertEqual(query_kwargs["filter"], request.filter)
-        self.assertEqual(query_kwargs["vector"], self.embedder.vector)
+        self.assertEqual(query_kwargs["vector"], self.query_vector)
         self.assertTrue(query_kwargs["include_metadata"])
         self.assertFalse(query_kwargs["include_values"])
 
@@ -184,12 +168,11 @@ class PineconeRetrieverTests(unittest.TestCase):
         client = FakePineconeClient(fake_index)
         retriever = PineconeRetriever(
             index_config=self.config,
-            embedder=self.embedder,
             client=client,
         )
         request = QueryRequest(text="Fallback namespace test", top_k=2)
 
-        retriever.retrieve(request)
+        retriever.retrieve(request, embedding=self.query_vector)
 
         query_kwargs = fake_index.query_calls[0]
         self.assertEqual(query_kwargs["namespace"], self.config.namespace)
@@ -216,13 +199,12 @@ class PineconeRetrieverTests(unittest.TestCase):
         reranker = DummyReranker()
         retriever = PineconeRetriever(
             index_config=self.config,
-            embedder=self.embedder,
             client=client,
             reranker=reranker,
         )
         request = QueryRequest(text="Rerank me", top_k=2)
 
-        response = retriever.retrieve(request)
+        response = retriever.retrieve(request, embedding=self.query_vector)
 
         self.assertEqual(len(reranker.calls), 1)
         rerank_call = reranker.calls[0]
@@ -237,7 +219,6 @@ class PineconeRetrieverTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Pinecone API key must be provided"):
                 PineconeRetriever(
                     index_config=self.config,
-                    embedder=self.embedder,
                 )
 
     @patch("app.retrieval.pinecone.Pinecone")
@@ -248,7 +229,6 @@ class PineconeRetrieverTests(unittest.TestCase):
 
         retriever = PineconeRetriever(
             index_config=self.config,
-            embedder=self.embedder,
             api_key="explicit-key",
         )
 

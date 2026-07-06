@@ -88,7 +88,6 @@ def test_system_prompt_context_includes_collection_and_metadata():
         index_name="pinecone-index",
         namespace="pinecone-namespace",
         dimension=2048,
-        metric="cosine",
         chat_model="chat-model",
         context_window=8192,
     )
@@ -134,7 +133,6 @@ def test_render_system_prompt_uses_custom_template(monkeypatch):
         index_name="pinecone-index",
         namespace="pinecone-namespace",
         dimension=1536,
-        metric="cosine",
         chat_model="chat-model",
         context_window=8192,
     )

@@ -58,10 +58,20 @@ describe("pipeline-utils", () => {
 
   it("builds default definitions for retrieval and ingestion pipelines", () => {
     const retrieval = buildDefaultDefinition("retrieval", "index-a", 384);
-    expect(retrieval.nodes).toHaveLength(3);
-    expect(retrieval.edges).toHaveLength(2);
+    expect(retrieval.nodes).toHaveLength(4);
+    expect(retrieval.edges).toHaveLength(3);
     const retriever = retrieval.nodes.find((node) => node.type === "retriever.pinecone");
     expect(retriever?.config).toEqual({ index_name: "index-a", dimension: 384 });
+    const embedder = retrieval.nodes.find((node) => node.type === "embedder.openrouter");
+    expect(embedder).toBeDefined();
+    expect(retrieval.edges).toContainEqual(
+      expect.objectContaining({
+        source: embedder?.id,
+        target: retriever?.id,
+        source_port: "query_embedding",
+        target_port: "query_embedding",
+      }),
+    );
 
     const ingestion = buildDefaultDefinition("ingestion", "index-b");
     expect(ingestion.nodes).toHaveLength(6);

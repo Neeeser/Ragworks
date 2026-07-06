@@ -6,7 +6,13 @@ from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
-from app.retrieval.models import Document, DocumentChunk, QueryRequest, RetrievalResponse
+from app.retrieval.models import (
+    Document,
+    DocumentChunk,
+    EmbeddingVector,
+    QueryRequest,
+    RetrievalResponse,
+)
 from app.retrieval.parsers.base import DocumentSource
 
 
@@ -49,6 +55,14 @@ class RetrievalRequestPayload(BaseModel):
     """Payload containing a retrieval request."""
 
     request: QueryRequest
+
+
+class QueryEmbeddingPayload(BaseModel):
+    """Payload containing a query embedding."""
+
+    request: QueryRequest
+    embedding: EmbeddingVector
+    usage: Dict[str, int] = Field(default_factory=dict)
 
 
 class RetrievalPayload(BaseModel):
