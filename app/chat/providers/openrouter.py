@@ -82,57 +82,59 @@ class OpenRouterProvider:
         )
 
     def parse_stream_chunk(self, chunk: dict) -> ParsedStreamChunk | None:
-        """Normalize a streaming chunk payload into a delta snapshot."""
+        """Normalize a streaming chunk payload into a delta snapshot.
+
+        A chunk that validates as `OpenRouterStreamChunk` is read through the
+        typed model; one that fails validation falls back to lenient dict
+        access. The two paths are kept separate so neither leaks the other's
+        shape.
+        """
         if not isinstance(chunk, dict):
             return None
-        parsed_chunk: OpenRouterStreamChunk | None
         try:
             parsed_chunk = self._stream_chunk_model.model_validate(chunk)
         except ValidationError:
-            parsed_chunk = None
+            return self._parse_raw_stream_chunk(chunk)
+        return self._parse_typed_stream_chunk(parsed_chunk)
 
-        if parsed_chunk:
-            provider = parsed_chunk.provider
-            response_model = parsed_chunk.model
-            choices = parsed_chunk.choices
-            usage = (
-                parsed_chunk.usage.model_dump(exclude_none=True)
-                if parsed_chunk.usage
-                else None
-            )
-        else:
-            provider = chunk.get("provider")
-            response_model = chunk.get("model")
-            choices = chunk.get("choices") or []
-            usage = chunk.get("usage") if chunk.get("usage") else None
+    @staticmethod
+    def _parse_typed_stream_chunk(parsed_chunk: OpenRouterStreamChunk) -> ParsedStreamChunk | None:
+        """Extract a delta snapshot from a validated stream chunk."""
+        if not parsed_chunk.choices:
+            return None
+        choice = parsed_chunk.choices[0]
+        delta = choice.delta
+        tool_call_updates = (
+            [call.model_dump(exclude_none=True) for call in delta.tool_calls]
+            if delta and delta.tool_calls
+            else None
+        )
+        usage = parsed_chunk.usage.model_dump(exclude_none=True) if parsed_chunk.usage else None
+        return ParsedStreamChunk(
+            provider=parsed_chunk.provider,
+            response_model=parsed_chunk.model,
+            finish_reason=choice.finish_reason,
+            delta_content=delta.content if delta else None,
+            tool_calls=tool_call_updates,
+            reasoning=delta.reasoning if delta else None,
+            usage=usage,
+        )
 
+    @staticmethod
+    def _parse_raw_stream_chunk(chunk: dict) -> ParsedStreamChunk | None:
+        """Extract a delta snapshot from a chunk that failed typed validation."""
+        choices = chunk.get("choices") or []
         if not choices:
             return None
-
         choice = choices[0]
-        if parsed_chunk:
-            finish_reason = choice.finish_reason
-            delta = choice.delta
-            delta_content = delta.content if delta else None
-            tool_call_updates = (
-                [call.model_dump(exclude_none=True) for call in delta.tool_calls]
-                if delta and delta.tool_calls
-                else None
-            )
-            reasoning = delta.reasoning if delta else None
-        else:
-            finish_reason = choice.get("finish_reason")
-            delta = choice.get("delta") or {}
-            delta_content = delta.get("content")
-            tool_call_updates = delta.get("tool_calls") if delta.get("tool_calls") else None
-            reasoning = delta.get("reasoning")
-
+        delta = choice.get("delta") or {}
+        tool_call_updates = delta.get("tool_calls") if delta.get("tool_calls") else None
         return ParsedStreamChunk(
-            provider=provider,
-            response_model=response_model,
-            finish_reason=finish_reason,
-            delta_content=delta_content,
+            provider=chunk.get("provider"),
+            response_model=chunk.get("model"),
+            finish_reason=choice.get("finish_reason"),
+            delta_content=delta.get("content"),
             tool_calls=tool_call_updates,
-            reasoning=reasoning,
-            usage=usage,
+            reasoning=delta.get("reasoning"),
+            usage=chunk.get("usage") if chunk.get("usage") else None,
         )

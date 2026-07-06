@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.chat.processing.tool_calls import (
+from app.chat.tool_calls import (
     accumulate_stream_tool_calls,
     coerce_stream_text,
     decode_tool_arguments,

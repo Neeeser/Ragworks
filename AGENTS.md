@@ -46,6 +46,10 @@ failing-then-passing test is incomplete.
 - **The wire contract is defined once, in `app/schemas/`.** Frontend types in
   `frontend/src/lib/types/` hand-mirror them; when a schema changes, the mirror changes
   in the same PR.
+- **Chat parameter keys are matched exact-case since the typed models
+  (`app/schemas/chat_parameters.py`).** `ChatParameters` ignores unknown keys and
+  `ProviderPreferences` only normalizes a small alias set — a deliberate narrowing from
+  the old case-insensitive hand-rolled sanitizer; send canonical snake_case keys.
 - **Docs are updated incrementally.** When a fix or incident teaches a rule, add it to
   the relevant AGENTS.md in that same PR — never batched later.
 

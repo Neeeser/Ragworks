@@ -20,28 +20,29 @@ from typing import Any, Literal, overload
 from sqlmodel import Session
 
 from app.chat.events import FinalEvent
-from app.chat.messages import ToolCall, normalize_assistant_content
-from app.chat.persistence.records import (
+from app.chat.messages import AssistantMessage, ToolCall, normalize_assistant_content
+from app.chat.parameters import build_openrouter_body
+from app.chat.persistence import (
     MessageRecord,
     RecordContext,
     convert_messages,
     convert_session,
+    provider_message_from_model,
     record_message,
     record_partial_assistant_message,
     record_tool_call_assistant_message,
-    serialize_message,
+    serialize_messages,
 )
-from app.chat.processing.parameters import build_openrouter_body
-from app.chat.processing.reasoning import normalize_reasoning_segments
-from app.chat.processing.tool_calls import extract_reasoning_tool_calls, normalize_tool_calls
 from app.chat.providers.base import ChatProvider, ChatRequest
+from app.chat.reasoning import normalize_reasoning_segments
 from app.chat.state import (
     ChatSetup,
     RunState,
     ToolCallResolution,
     ToolExecutionContext,
 )
-from app.chat.streaming.streaming import StreamOutcome, StreamState, stream_model_completion
+from app.chat.streaming import StreamOutcome, StreamState, stream_model_completion
+from app.chat.tool_calls import extract_reasoning_tool_calls, normalize_tool_calls
 from app.chat.tools import ToolExecutor
 from app.chat.usage import UsageSummary, coerce_usage_value
 from app.db import models
@@ -128,19 +129,15 @@ def append_tool_call_assistant_message(
 ) -> None:
     """Append the assistant tool-call message to history and persist it.
 
-    The typed `ToolCall` models are serialized exactly once here: the provider
-    request payload (message history) and the persisted `tool_payload` column
-    genuinely need plain dicts, and `model_dump()` reproduces the OpenAI wire
+    The message history keeps a typed `AssistantMessage` (serialized to the wire
+    shape only at the request boundary). The persisted `tool_payload` column
+    genuinely needs plain dicts, and `model_dump()` reproduces the OpenAI wire
     shape byte-for-byte.
     """
-    tool_call_payloads = [call.model_dump() for call in tool_calls]
     run.setup.messages.append(
-        {
-            "role": "assistant",
-            "content": assistant_content or "",
-            "tool_calls": tool_call_payloads,
-        }
+        AssistantMessage(content=assistant_content or "", tool_calls=list(tool_calls))
     )
+    tool_call_payloads = [call.model_dump() for call in tool_calls]
     record_tool_call_assistant_message(
         context=RecordContext(session=run.session, chat_repo=run.chat_repo),
         session_model=run.setup.session_model,
@@ -184,7 +181,7 @@ def finalize_response(
             usage=final_usage,
         ),
     )
-    run.setup.messages.append(serialize_message(assistant_msg))
+    run.setup.messages.append(provider_message_from_model(assistant_msg))
     run.setup.session_model.context_tokens = (
         latest_usage_total
         if latest_usage_total is not None
@@ -210,7 +207,7 @@ def finalize_response(
 def _build_request(run: ChatRun) -> ChatRequest:
     """Build the provider request for the current message history (shared by both modes)."""
     return ChatRequest(
-        messages=run.setup.messages,
+        messages=serialize_messages(run.setup.messages),
         tools=run.setup.tools or None,
         model=run.setup.model.active_model_name,
         extra_body=build_openrouter_body(

@@ -8,9 +8,8 @@ from pydantic import ValidationError
 
 from app.chat.providers.base import ChatRequest, ParsedStreamChunk
 from app.chat.providers.openrouter import OpenRouterProvider
-from app.chat.streaming.streaming import StreamOutcome, stream_model_completion
+from app.chat.streaming import StreamOutcome, stream_model_completion
 from app.schemas.openrouter import OpenRouterStreamChunk
-from app.services import chat as chat_module
 
 
 class _StubOpenRouter:
@@ -278,7 +277,7 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
     def _raise_validation(_chunk: object):
         raise ValidationError.from_exception_data("OpenRouterStreamChunk", [])
 
-    monkeypatch.setattr(chat_module.OpenRouterStreamChunk, "model_validate", _raise_validation)
+    monkeypatch.setattr(OpenRouterStreamChunk, "model_validate", _raise_validation)
 
     # `_StubOpenRouter.chat_stream` now simulates the typed client boundary (it
     # always yields `OpenRouterStreamChunk` instances, never a bare string) --
@@ -312,7 +311,7 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
         },
     ]
     stub = _StubOpenRouter(chunks)
-    provider = OpenRouterProvider(stub, stream_chunk_model=chat_module.OpenRouterStreamChunk)
+    provider = OpenRouterProvider(stub, stream_chunk_model=OpenRouterStreamChunk)
 
     request = ChatRequest(
         messages=[],
@@ -368,7 +367,7 @@ def test_stream_model_completion_skips_tool_calls_without_name() -> None:
 
 
 # `test_stream_message_records_partial_on_abort` was re-homed to
-# tests/services/chat/test_chat_service_flow.py as a real-DB flow test
+# tests/chat/test_chat_service_flow.py as a real-DB flow test
 # (`test_stream_message_persists_partial_on_client_disconnect`). The old
 # version constructed `ChatService` via `__new__` and monkeypatched module
 # globals that Task 4.2 moved into `app.chat.run_loop`; the flow-harness

@@ -1,7 +1,40 @@
 from __future__ import annotations
 
-from app.chat.processing.parameters import build_openrouter_body
-from app.chat.usage import UsageSummary, extract_reasoning_tokens_from_usage
+from app.chat.parameters import build_openrouter_body
+from app.chat.usage import (
+    UsageSummary,
+    coerce_float_value,
+    coerce_usage_value,
+    extract_reasoning_tokens_from_usage,
+)
+
+
+def test_coerce_usage_value_sums_nested_values() -> None:
+    value = {"prompt_tokens": "3", "nested": {"completion_tokens": 2.8}, "extra": None}
+
+    assert coerce_usage_value(value) == 5
+
+
+def test_coerce_usage_value_returns_none_for_empty_dict() -> None:
+    assert coerce_usage_value({}) is None
+
+
+def test_coerce_usage_value_rejects_invalid_inputs() -> None:
+    assert coerce_usage_value("not-a-number") is None
+    assert coerce_usage_value(["list"]) is None
+
+
+def test_coerce_float_value_accepts_numeric_types() -> None:
+    assert coerce_float_value(3) == 3.0
+    assert coerce_float_value(1.5) == 1.5
+
+
+def test_coerce_float_value_rejects_invalid_string() -> None:
+    assert coerce_float_value("bad") is None
+
+
+def test_coerce_float_value_rejects_non_numeric_type() -> None:
+    assert coerce_float_value([]) is None
 
 
 def test_build_openrouter_body_always_includes_usage_flag() -> None:

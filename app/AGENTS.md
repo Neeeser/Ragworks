@@ -61,7 +61,11 @@ app/
   db/              session, migrations
     models/        SQLModel tables, one module per domain (see below)
     repositories/  data access, one module per domain (see below)
-  chat/            chat subsystem (providers, streaming, persistence, processing)
+  chat/            chat subsystem — facade + flat modules, one responsibility each:
+                   service.py (facade), setup.py (ChatSetupBuilder), run_loop.py,
+                   tools.py, branching.py, persistence.py, streaming.py,
+                   parameters.py, reasoning.py, tool_calls.py, usage.py, events.py,
+                   messages.py, state.py, and providers/ (base + openrouter)
   pipelines/       pipeline engine + nodes/
   retrieval/       RAG components: chunkers, embedders, indexers, parsers,
                    rerankers, retrievers — one folder per pluggable stage
@@ -73,6 +77,20 @@ tests/             mirrors the app/ layout (tests/api, tests/services, …)
 New code goes in the existing folder that owns its concern. A new folder is justified
 only when it names a genuinely new ownership boundary (the way `retrieval/rerankers/`
 does), not to house one file — colocate a single file with its consumer instead.
+
+**A package folder needs ≥2 cohesive modules; single-file folders collapse into their
+consumer.** A directory holding one module (plus `__init__.py`) is not a boundary — it's
+overhead. Chat's `processing/`, `persistence/`, and `streaming/` folders each held a
+single implementation file and were collapsed to root modules (`parameters.py`,
+`reasoning.py`, `tool_calls.py`, `persistence.py`, `streaming.py`) in Phase 4.3;
+`providers/` stayed a package because it genuinely holds two (`base.py`, `openrouter.py`).
+
+**A subsystem's `__init__` exports its public API only.** `app/chat/__init__.py` exports
+`ChatService` and nothing else; consumers import other names from the owning submodule
+(`from app.chat.persistence import persist_base_prompt`). Re-exporting foreign symbols
+(`PipelineService`, `get_settings`, …) so a test can monkeypatch them through the package
+is forbidden — patch at the real boundary where the name is used (e.g. tests patch
+`app.chat.setup.resolve_retrieval_settings`, not a re-export on the package).
 
 **One module per domain in `db/models/`.** Tables are split by domain —
 `user.py` (User + `TimestampMixin`), `collection.py`, `document.py`, `pipeline.py`,

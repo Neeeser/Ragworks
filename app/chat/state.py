@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.chat.messages import ToolCall
+from app.chat.messages import ProviderMessage, ToolCall
 from app.chat.usage import UsageSummary
 from app.db import models
 from app.pipelines.config import IngestionPipelineSettings, RetrievalPipelineSettings
@@ -49,7 +49,7 @@ class ChatSetup:
     """Prepared chat request state before model execution."""
 
     session_model: models.ChatSession
-    messages: list[dict[str, Any]]
+    messages: list[ProviderMessage]
     tools: list[dict[str, Any]]
     tool_collections: list[ToolCollectionContext]
     tool_collection_map: dict[str, models.Collection]
@@ -96,7 +96,7 @@ class ToolExecutionContext:
     user: models.User
     payload: ChatMessageCreate
     session_model: models.ChatSession
-    messages: list[dict[str, Any]]
+    messages: list[ProviderMessage]
     run_state: RunState
     shared_tool_reasoning: dict[str, Any] | None
     tool_collection_map: dict[str, models.Collection]

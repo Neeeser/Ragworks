@@ -3,29 +3,20 @@
 `ProviderMessage` models the messages an OpenRouter-compatible chat
 completion endpoint expects in its request body.
 
-Adoption status (Task 4.2 split ruling):
+Adoption status (fully wired as of Task 4.3):
 
-- `ToolCall`/`FunctionCall` ARE wired through the fresh tool-call path:
-  `processing/tool_calls.py::normalize_tool_calls` and
-  `extract_reasoning_tool_calls` return `list[ToolCall]`, which flows through
-  `run_loop.py::resolve_tool_calls` (`ToolCallResolution.pending_tool_calls`)
-  into `tools.py::ToolExecutor.execute`. `model_dump()` happens only where a
-  dict is genuinely required (provider message history, persisted
-  `tool_payload`).
-- The full `ProviderMessage` union is deliberately NOT yet wired into the
-  *persisted/replayed* message history (`ChatSetup.messages`,
-  `persistence/records.py::serialize_message`): those paths replay
-  already-persisted JSON verbatim, including at least one on-disk shape
-  (`tool_calls` entries missing `type`/`function`, see
-  `tests/services/chat/test_chat_records.py::test_serialize_message_includes_tool_calls_for_assistant`)
-  that predates this model and would fail strict validation. **Deferred to
-  Task 4.3 (persistence consolidation), which owns the lenient on-disk
-  normalization boundary** — backfill or normalize-at-read there, then adopt
-  `ProviderMessage` for history.
+- `ToolCall`/`FunctionCall` flow through the fresh tool-call path:
+  `tool_calls.py::normalize_tool_calls`/`extract_reasoning_tool_calls` return
+  `list[ToolCall]`, which the run loop feeds into `tools.py::ToolExecutor.execute`.
+- The full `ProviderMessage` union IS the message-history vocabulary:
+  `ChatSetup.messages` is `list[ProviderMessage]`. `persistence.py`
+  reads persisted rows into typed messages at the read boundary
+  (`provider_message_from_model`, lenient about legacy on-disk `tool_calls`
+  shapes missing `type`/`function`) and `serialize_messages` renders them back
+  to provider request dicts only at the request boundary.
 
-`normalize_assistant_content` is used today: it replaces the `json.dumps`
-list-content coercion that was duplicated three times in
-`app/chat/service.py`.
+`normalize_assistant_content` coerces a provider-returned assistant `content`
+(string or list-of-parts) into a single string.
 """
 
 from __future__ import annotations

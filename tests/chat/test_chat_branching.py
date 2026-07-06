@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
+import pytest
 from sqlmodel import Session
 
 from app.chat.service import ChatService
@@ -98,3 +100,48 @@ def test_branch_session_copies_history(session: Session) -> None:
     assert len(response.messages) == 2
     assert response.messages[0].source_message_id == user_message.id
     assert response.messages[1].source_message_id == assistant_message.id
+
+
+def test_branch_session_rejects_unknown_session(session: Session) -> None:
+    user = _create_user(session)
+    service = ChatService(session)
+
+    with pytest.raises(ValueError, match="Chat session not found"):
+        service.branch_session(
+            user=user,
+            session_id=uuid4(),
+            message_id=uuid4(),
+            title=None,
+        )
+
+
+def test_branch_session_rejects_unknown_message(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    chat_session = _create_session(session, user, collection)
+    service = ChatService(session)
+
+    with pytest.raises(ValueError, match="Message not found for branching"):
+        service.branch_session(
+            user=user,
+            session_id=chat_session.id,
+            message_id=uuid4(),
+            title=None,
+        )
+
+
+def test_branch_session_rejects_message_from_other_session(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    chat_session = _create_session(session, user, collection)
+    other_session = _create_session(session, user, collection)
+    other_message = _add_message(session, other_session, ChatRole.USER, "elsewhere")
+    service = ChatService(session)
+
+    with pytest.raises(ValueError, match="does not belong to this session"):
+        service.branch_session(
+            user=user,
+            session_id=chat_session.id,
+            message_id=other_message.id,
+            title=None,
+        )

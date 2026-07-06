@@ -9,7 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from app.chat.messages import FunctionCall, ToolCall
-from app.chat.processing.reasoning import extend_reasoning_segments, normalize_reasoning_segments
+from app.chat.reasoning import extend_reasoning_segments, normalize_reasoning_segments
 
 _CANDIDATE_TOOL_TYPES = {"tool_call", "tool_use", "tool_request", "call_tool", "function_call"}
 

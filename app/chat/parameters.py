@@ -31,6 +31,23 @@ def normalize_reasoning_effort(value: Any) -> str | None:
     return lowered if lowered in REASONING_EFFORT_OPTIONS else None
 
 
+def _apply_reasoning_override_key(prepared: dict[str, Any], key: Any, value: Any) -> None:
+    """Coerce one raw reasoning-override key/value into `prepared` if valid."""
+    normalized_key = str(key).lower()
+    if normalized_key == "effort":
+        effort_value = normalize_reasoning_effort(value)
+        if effort_value:
+            prepared["effort"] = effort_value
+    elif normalized_key == "max_tokens":
+        numeric_value = coerce_numeric_parameter(value)
+        if numeric_value is not None:
+            prepared["max_tokens"] = int(numeric_value)
+    elif normalized_key in {"exclude", "enabled"}:
+        bool_value = coerce_bool_parameter(value)
+        if bool_value is not None:
+            prepared[normalized_key] = bool_value
+
+
 def prepare_reasoning_override(raw: Any) -> dict[str, Any] | None:
     """Prepare a reasoning override payload from raw input."""
     if raw is None:
@@ -45,19 +62,7 @@ def prepare_reasoning_override(raw: Any) -> dict[str, Any] | None:
         payload = {"effort": normalized}
     prepared: dict[str, Any] = {}
     for key, value in payload.items():
-        normalized_key = str(key).lower()
-        if normalized_key == "effort":
-            effort_value = normalize_reasoning_effort(value)
-            if effort_value:
-                prepared["effort"] = effort_value
-        elif normalized_key == "max_tokens":
-            numeric_value = coerce_numeric_parameter(value)
-            if numeric_value is not None:
-                prepared["max_tokens"] = int(numeric_value)
-        elif normalized_key in {"exclude", "enabled"}:
-            bool_value = coerce_bool_parameter(value)
-            if bool_value is not None:
-                prepared[normalized_key] = bool_value
+        _apply_reasoning_override_key(prepared, key, value)
     return prepared or None
 
 

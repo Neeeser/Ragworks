@@ -4,7 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat import service as chat_service_module
+from app.chat import setup as chat_setup_module
 from app.chat.service import ChatService
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
@@ -174,14 +174,14 @@ def _stub_pipeline_helpers(monkeypatch) -> None:
         context_window=8192,
     )
 
-    monkeypatch.setattr(chat_service_module, "PipelineService", _StubPipelineService)
+    monkeypatch.setattr(chat_setup_module, "PipelineService", _StubPipelineService)
     monkeypatch.setattr(
-        chat_service_module,
+        chat_setup_module,
         "resolve_ingestion_settings",
         lambda *_args, **_kwargs: ingestion_settings,
     )
     monkeypatch.setattr(
-        chat_service_module,
+        chat_setup_module,
         "resolve_retrieval_settings",
         lambda *_args, **_kwargs: retrieval_settings,
     )
@@ -223,6 +223,7 @@ def test_tool_call_history_replayed_for_follow_up(monkeypatch) -> None:
 
     service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
     service.chat_repo = _StubChatRepository()
+    service.provider = None
     service.openrouter = _StubOpenRouter([first_response, final_response])
     service.retrieval = _StubRetrieval()
     service.reasoning_effort = None

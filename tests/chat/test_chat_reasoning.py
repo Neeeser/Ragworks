@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from app.chat.processing.parameters import build_reasoning_options
-from app.chat.processing.reasoning import (
+from app.chat.parameters import build_reasoning_options
+from app.chat.reasoning import (
     append_reasoning_segment,
     extend_reasoning_segments,
     join_text_with_spacing,
     normalize_reasoning_segments,
 )
-from app.chat.processing.tool_calls import decode_tool_arguments, extract_reasoning_tool_calls
+from app.chat.tool_calls import decode_tool_arguments, extract_reasoning_tool_calls
 
 
 def test_normalize_reasoning_segments_parses_json_string() -> None:

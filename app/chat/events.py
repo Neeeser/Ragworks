@@ -8,9 +8,9 @@ frames to the pre-4.1 dict-based events. See
 `tests/api/test_chat_stream_events.py` for the byte-identity guard.
 
 `TokenEvent`/`ReasoningEvent` are defined here as the formal contract but are
-still constructed as plain dicts in `app/chat/streaming/streaming.py` —
+still constructed as plain dicts in `app/chat/streaming.py` —
 that generator is exercised directly by a deliberately garbage-tolerant test
-suite (`tests/services/chat/test_chat_streaming.py`) that depends on
+suite (`tests/chat/test_chat_streaming.py`) that depends on
 malformed/partial event dicts passing through unchanged. Validating every
 event at that point would be a real (out-of-scope) behavior change; the run
 loop forwards those dicts unmodified today, and they already conform to this

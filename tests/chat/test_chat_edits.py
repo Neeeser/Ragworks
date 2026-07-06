@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import Session
 
-from app.chat.persistence.sessions import apply_edit
+from app.chat.persistence import apply_edit
 from app.db import models
 from app.db.repositories import ChatRepository
 

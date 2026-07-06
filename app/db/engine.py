@@ -39,3 +39,21 @@ def get_session() -> Iterator[Session]:
     """Yield a database session for dependency injection."""
     with session_scope() as session:
         yield session
+
+
+@contextmanager
+def stream_scoped_session() -> Iterator[Session]:
+    """Yield a session for a streaming response and close it exactly once.
+
+    Unlike `session_scope`, it neither commits nor rolls back: a streaming chat
+    turn manages its own commits, and this only guarantees the session is
+    released when the response finishes (or when setup fails before streaming
+    starts). The streaming generator outlives its request handler, so the
+    caller transfers ownership of this scope (via `ExitStack.pop_all`) and
+    closes it from the generator's `finally`.
+    """
+    session = Session(engine)
+    try:
+        yield session
+    finally:
+        session.close()

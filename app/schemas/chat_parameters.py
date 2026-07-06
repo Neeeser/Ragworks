@@ -3,7 +3,7 @@
 `ChatParameters` and `ProviderPreferences` are the typed replacements for the
 raw `dict[str, Any]` that `ChatMessageCreate.parameters` / `.provider` used to
 carry. Field validators reproduce the exact coercion behavior of the former
-hand-rolled sanitizers in `app/chat/processing/parameters.py`
+hand-rolled sanitizers in `app/chat/parameters.py`
 (`PARAMETER_TYPE_HINTS` + the provider-preference coercers): a value that
 can't be coerced to the field's type is dropped to `None` rather than
 rejected with a 422, because these are optional user-supplied overrides, not
@@ -204,7 +204,7 @@ class ChatParameters(BaseModel):
     incoming payload are ignored (a client sending a parameter this model
     doesn't know about is not an error); values that fail coercion become
     `None` and are dropped by the caller (`sanitize_parameter_overrides` in
-    `app/chat/processing/parameters.py`) rather than rejected.
+    `app/chat/parameters.py`) rather than rejected.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -338,15 +338,3 @@ class ProviderPreferences(BaseModel):
     def to_request_payload(self) -> dict[str, Any] | None:
         """Return the OpenRouter `provider` request payload, or `None` if empty."""
         return self.model_dump(exclude_none=True) or None
-
-
-def sanitize_provider_preferences(raw: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Validate a raw provider-preferences payload and return its request dict.
-
-    Compatibility wrapper matching the historical dict-in/dict-out sanitizer,
-    for callers (and tests) that still hold a raw dict rather than an
-    already-validated `ProviderPreferences` instance.
-    """
-    if raw is None:
-        return None
-    return ProviderPreferences.model_validate(raw).to_request_payload()

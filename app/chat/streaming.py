@@ -9,9 +9,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from app.chat.processing.reasoning import extend_reasoning_segments, normalize_reasoning_segments
-from app.chat.processing.tool_calls import accumulate_stream_tool_calls, coerce_stream_text
 from app.chat.providers.base import ChatProvider, ChatRequest, ParsedStreamChunk
+from app.chat.reasoning import extend_reasoning_segments, normalize_reasoning_segments
+from app.chat.tool_calls import accumulate_stream_tool_calls, coerce_stream_text
 
 
 @dataclass
@@ -95,7 +95,7 @@ def _update_stream_metadata(state: StreamState, parsed: ParsedStreamChunk) -> No
 def _handle_stream_delta(
     state: StreamState,
     parsed: ParsedStreamChunk,
-) -> Generator[dict[str, str], None, None]:
+) -> Generator[dict[str, Any], None, None]:
     """Apply a parsed delta to state and emit stream events."""
     token_text = coerce_stream_text(parsed.delta_content)
     if token_text:

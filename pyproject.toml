@@ -73,8 +73,6 @@ max-complexity = 10
 "app/schemas/enums.py" = ["UP042"]  # TODO(phase-2): remove; `str(member)` differs between a str/Enum mixin and StrEnum -- verify no code depends on the "Class.MEMBER" str() form before switching. Moved here from app/db/models.py when the enums relocated to app.schemas.enums.
 "app/schemas/auth.py" = ["UP042"]  # TODO(phase-2): remove; same str(member) caveat as app/schemas/enums.py
 "app/api/routes/auth.py" = ["C901"]  # TODO(phase-6): remove; update_current_user rewritten with the rest of api.routes
-"app/chat/processing/parameters.py" = ["C901"]  # TODO(phase-4): remove; prepare_reasoning_override/sanitize_provider_preferences rewritten with app.chat
-"app/chat/processing/reasoning.py" = ["C901"]  # TODO(phase-4): remove; append_reasoning_segment rewritten with app.chat
 "app/pipelines/runtime.py" = ["C901"]  # TODO(phase-5): remove; validate/_execute_nodes rewritten with app.pipelines
 
 [tool.mypy]
@@ -95,26 +93,6 @@ warn_unused_ignores = true
 # subtype, SQLAlchemy boolean-typed filter expressions, str | None flowing into
 # `str`-typed dict keys, etc.). A narrower per-check relaxation would still
 # leave dozens of unrelated errors failing `make verify` today.
-
-[[tool.mypy.overrides]]
-module = "app.chat.*"
-ignore_errors = true  # removed in Phase 4
-
-[[tool.mypy.overrides]]
-# Tasks 4.1/4.2: fully-typed modules with no dependency on service.py's
-# still-untyped internals -- narrow the blanket app.chat.* ignore above so
-# they stay mypy-clean rather than riding along for free (processing.tool_calls
-# joined when the ToolCall model was wired through it).
-# service.py itself stays under the blanket ignore until Task 4.3 finishes it.
-module = [
-    "app.chat.events",
-    "app.chat.messages",
-    "app.chat.usage",
-    "app.chat.tools",
-    "app.chat.run_loop",
-    "app.chat.processing.tool_calls",
-]
-ignore_errors = false
 
 [[tool.mypy.overrides]]
 module = "app.pipelines.*"

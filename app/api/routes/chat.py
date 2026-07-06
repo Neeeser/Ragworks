@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -16,9 +17,11 @@ from app.api.dependencies import (
     oauth2_scheme,
     require_openrouter_key,
 )
+from app.chat import ChatService
 from app.chat.events import ErrorEvent
+from app.chat.persistence import persist_base_prompt
 from app.db import models
-from app.db.engine import engine
+from app.db.engine import stream_scoped_session
 from app.db.repositories import ChatRepository
 from app.schemas.chat import (
     ChatBranchCreate,
@@ -29,7 +32,6 @@ from app.schemas.chat import (
     ChatSessionRead,
 )
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
-from app.services.chat import ChatService
 from app.services.prompts import (
     apply_prompt_template,
     base_prompt_context,
@@ -65,11 +67,7 @@ def update_base_prompt(
     session: Session = Depends(get_session),
 ) -> PromptTemplateRead:
     """Update the base system prompt for the current user."""
-    template = (payload.template or "").strip()
-    current_user.system_prompt_template = template or None
-    session.add(current_user)
-    session.commit()
-    session.refresh(current_user)
+    persist_base_prompt(session=session, user=current_user, template=payload.template)
     template = get_base_prompt_template(current_user)
     context = base_prompt_context(current_user)
     rendered = apply_prompt_template(template, context)
@@ -103,22 +101,16 @@ def stream_chat(
     token: str = Depends(oauth2_scheme),
 ) -> StreamingResponse:
     """Stream a chat response via SSE."""
-    session = Session(engine)
-    session_closed = False
-
-    def close_session():
-        """Ensure the SQL session is closed exactly once."""
-        nonlocal session_closed
-        session.close()
-        session_closed = True
-
-    try:
+    # Setup runs synchronously so auth failures surface as HTTP errors, not
+    # mid-stream SSE. stream_scoped_session owns the session; on setup failure
+    # the ExitStack closes it, otherwise pop_all() hands cleanup to the
+    # streaming generator (which outlives this handler) via `session_cleanup`.
+    with ExitStack() as stack:
+        session = stack.enter_context(stream_scoped_session())
         current_user = get_current_user(token=token, session=session)
         current_user = require_openrouter_key(current_user)
         chat_service = ChatService(session)
-    except Exception:  # pylint: disable=broad-exception-caught
-        close_session()
-        raise
+        session_cleanup = stack.pop_all()
 
     def format_event(data: dict[str, object]) -> str:
         """Format an SSE data payload."""
@@ -142,7 +134,7 @@ def stream_chat(
             yield format_event(ErrorEvent(message=message).model_dump())
         finally:
             yield "data: [DONE]\n\n"
-            close_session()
+            session_cleanup.close()
 
     return StreamingResponse(
         event_stream(),
