@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Optional, Tuple, cast
+from typing import Any, Dict, Generator, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from fastapi.encoders import jsonable_encoder
@@ -777,7 +777,7 @@ class ChatService:
             call_id, name, arguments, query_text, top_k = self._parse_tool_call(
                 tool_call,
                 context.payload,
-                use_fallback_id=False,
+                use_fallback_id=True,
             )
             collection = self._select_tool_collection(
                 tool_name=name,
@@ -811,7 +811,7 @@ class ChatService:
             )
             context.run_state.tool_traces.append(
                 ToolCallTrace(
-                    id=cast(str, call_id),
+                    id=call_id,
                     name=name,
                     arguments=arguments,
                     response=response_payload,
@@ -905,7 +905,7 @@ class ChatService:
             )
             context.run_state.tool_traces.append(
                 ToolCallTrace(
-                    id=cast(str, call_id),
+                    id=call_id,
                     name=name,
                     arguments=arguments,
                     response=response_payload,

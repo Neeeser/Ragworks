@@ -13,6 +13,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
 from app.chat import service as chat_service_module
 from app.chat.service import ChatService
+from app.chat.state import RunState, ToolExecutionContext
 
 
 @dataclass
@@ -316,6 +317,55 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
     assert result.messages[-1].content == "Final answer"
     assert result.tool_traces[0].name == "pinecone_query"
     assert retrieval.calls[0]["top_k"] == 2
+
+
+def test_execute_tool_calls_tolerates_missing_provider_id(session: Session) -> None:
+    """`_execute_tool_calls` (non-streaming) must not crash on a tool call with no id.
+
+    A full `send_message` round trip can't reproduce this: `normalize_tool_calls`
+    (`app/chat/processing/tool_calls.py`) already backfills a fallback id for every
+    tool call before `_resolve_tool_calls` hands it to `_execute_tool_calls`. The bug
+    lives in `_execute_tool_calls`/`_parse_tool_call` themselves — they still assume
+    `use_fallback_id=False` is safe and `cast(str, call_id)` away the `None` — so it's
+    exercised directly here, at the layer that actually contains the unsafe code path.
+    """
+    user = _create_user(session)
+    collection = _create_collection(session, user, chat_model="tool-model")
+
+    chat_session = models.ChatSession(
+        user_id=user.id,
+        title="Tool session",
+        chat_model="tool-model",
+    )
+    session.add(chat_session)
+    session.commit()
+    session.refresh(chat_session)
+
+    service = ChatService(session)
+    service.retrieval = _StubRetrievalService()
+
+    run_state = RunState()
+    context = ToolExecutionContext(
+        user=user,
+        payload=ChatMessageCreate(content="hi", tool_collection_ids=[collection.id]),
+        session_model=chat_session,
+        messages=[],
+        run_state=run_state,
+        shared_tool_reasoning=None,
+        tool_collection_map={"pinecone_query": collection},
+    )
+    tool_call_without_id = {
+        "type": "function",
+        "function": {"name": "pinecone_query", "arguments": "{\"query\": \"docs\"}"},
+    }
+
+    service._execute_tool_calls(  # pylint: disable=protected-access
+        tool_calls=[tool_call_without_id],
+        context=context,
+    )
+
+    assert run_state.tool_traces[0].id
+    assert run_state.tool_traces[0].name == "pinecone_query"
 
 
 def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Session) -> None:

@@ -97,6 +97,11 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   No `Any`; no `isinstance` ladders as a substitute for a proper schema or a
   discriminated union. Note `requires-python = ">=3.9"` — use `Optional[X]` /
   `List[X]` (or `from __future__ import annotations`), not bare `X | None` at runtime.
+- **`cast()` is never the fix for an `Optional`.** It hides the crash at the assignment
+  and detonates it downstream, further from the cause. Handle the `None` for real:
+  supply a fallback, raise, or narrow with an actual check — we shipped a `cast(str,
+  call_id)` in `app/chat/service.py` that masked a provider tool call with no `id`
+  until it blew up as a Pydantic `ValidationError` inside `ToolCallTrace`.
 - **Validate at the boundary, trust inside.** Pydantic validates at the route; internal
   code assumes valid data and stays on the happy path. Re-validating mid-stack is noise;
   *failing* to validate at the edge means garbage propagates until it crashes far from
