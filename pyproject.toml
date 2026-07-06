@@ -91,13 +91,13 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 # Task 6.2 gutted collections/auth/documents/search into services (typed domain
 # errors, thin routes) -- those are mypy-clean now and dropped from this list.
-# chat.py, indexes.py, and visualizations.py still carry the dynamic patterns a
-# later Phase-6 task rewrites.
-module = [
-    "app.api.routes.chat",
-    "app.api.routes.indexes",
-    "app.api.routes.visualizations",
-]
+# chat.py was dropped in Task 7.1 once the chat subsystem raised typed domain
+# errors (routes/chat.py catching `ServiceError` instead of `ValueError`
+# removed the last dynamic pattern that needed the override; indexes.py turned
+# out to already be clean underneath a stale entry and was dropped alongside
+# it). visualizations.py still routes through raw `ValueError`/`HTTPException`
+# (see routes/visualizations.py) and isn't part of this phase's scope.
+module = "app.api.routes.visualizations"
 ignore_errors = true  # removed in Phase 6
 
 [[tool.mypy.overrides]]

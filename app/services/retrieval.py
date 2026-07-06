@@ -17,7 +17,7 @@ from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
 from app.pipelines.tracing.summaries import TokenUsage
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedRetrievalPipeline, resolve_retrieval_pipeline
 from app.utils.file_storage import FileStorage
 
@@ -67,6 +67,8 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             )
         except Exception as exc:
             handle.trace.mark_run_failed(exc)
+            if is_external_provider_error(exc):
+                raise ExternalServiceError(f"Retrieval pipeline failed: {exc}") from exc
             raise
 
     def _resolve_pipeline(

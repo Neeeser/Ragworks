@@ -2,9 +2,10 @@
 
 `branch_session` creates a new session that copies history up to and including
 a target message, preserving source links, tool-collection assignments, and run
-settings. All error paths raise `ValueError` (translated to 400/404 at the
-route): unknown session, unknown message, or a message that belongs to a
-different session.
+settings. All error paths raise `InvalidInputError` (translated to 400 at the
+route via `to_http_exception`, preserving the status code the legacy
+`ValueError` path used to produce): unknown session, unknown message, or a
+message that belongs to a different session.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from app.chat.persistence import convert_session
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatBranchResponse, ChatMessageRead
+from app.services.errors import InvalidInputError
 from app.utils.time import utc_now
 
 
@@ -71,12 +73,12 @@ def branch_session(
     """Create a new chat session branched from a specific message."""
     session_model = chat_repo.get_session(session_id, user_id=user.id)
     if not session_model:
-        raise ValueError("Chat session not found.")
+        raise InvalidInputError("Chat session not found.")
     target_message = chat_repo.get_message(message_id, user_id=user.id)
     if not target_message:
-        raise ValueError("Message not found for branching.")
+        raise InvalidInputError("Message not found for branching.")
     if target_message.session_id != session_model.id:
-        raise ValueError("Message does not belong to this session.")
+        raise InvalidInputError("Message does not belong to this session.")
 
     messages = chat_repo.list_messages(session_model.id, limit=None)
     target_index = next(
@@ -84,7 +86,7 @@ def branch_session(
         -1,
     )
     if target_index < 0:
-        raise ValueError("Message not found in session history.")
+        raise InvalidInputError("Message not found in session history.")
     branch_title = resolve_branch_title(session_model.title, title)
     branched_session = models.ChatSession(
         user_id=user.id,

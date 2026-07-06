@@ -10,6 +10,7 @@ from app.chat.service import ChatService
 from app.db import models
 from app.db.models import ChatRole
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
+from app.services.errors import InvalidInputError
 
 
 def _create_user(session: Session) -> models.User:
@@ -106,7 +107,7 @@ def test_branch_session_rejects_unknown_session(session: Session) -> None:
     user = _create_user(session)
     service = ChatService(session)
 
-    with pytest.raises(ValueError, match="Chat session not found"):
+    with pytest.raises(InvalidInputError, match="Chat session not found"):
         service.branch_session(
             user=user,
             session_id=uuid4(),
@@ -121,7 +122,7 @@ def test_branch_session_rejects_unknown_message(session: Session) -> None:
     chat_session = _create_session(session, user, collection)
     service = ChatService(session)
 
-    with pytest.raises(ValueError, match="Message not found for branching"):
+    with pytest.raises(InvalidInputError, match="Message not found for branching"):
         service.branch_session(
             user=user,
             session_id=chat_session.id,
@@ -138,7 +139,7 @@ def test_branch_session_rejects_message_from_other_session(session: Session) -> 
     other_message = _add_message(session, other_session, ChatRole.USER, "elsewhere")
     service = ChatService(session)
 
-    with pytest.raises(ValueError, match="does not belong to this session"):
+    with pytest.raises(InvalidInputError, match="does not belong to this session"):
         service.branch_session(
             user=user,
             session_id=chat_session.id,

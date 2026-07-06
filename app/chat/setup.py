@@ -47,6 +47,7 @@ from app.core.config import Settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
 from app.schemas.chat import ChatMessageCreate
+from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import (
     resolve_ingestion_pipeline,
     resolve_retrieval_pipeline,
@@ -84,8 +85,9 @@ class ChatSetupBuilder:
     ) -> PipelineContext:
         """Resolve ingestion and retrieval pipeline settings for a collection.
 
-        `PipelineResolutionError` is a `ValueError`, so callers that catch chat's
-        domain errors as `ValueError` (the routes do) keep working unchanged.
+        `PipelineResolutionError` subclasses `InvalidInputError`, so it flows
+        through the same `except ServiceError` the routes use for every other
+        chat domain error.
         """
         ingestion = resolve_ingestion_pipeline(self.session, user, collection)
         retrieval = resolve_retrieval_pipeline(self.session, user, collection)
@@ -132,7 +134,7 @@ class ChatSetupBuilder:
             return [], []
 
         if not (user.pinecone_api_key or "").strip():
-            raise ValueError(
+            raise InvalidInputError(
                 "Pinecone API key is not configured. Update it in Settings to enable tools."
             )
 
@@ -144,7 +146,7 @@ class ChatSetupBuilder:
             if collection_id not in collection_map
         ]
         if missing:
-            raise ValueError("Selected collections are not available.")
+            raise InvalidInputError("Selected collections are not available.")
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
         contexts = [self._build_tool_collection_context(user, collection) for collection in ordered]
         return contexts, collection_ids
@@ -161,10 +163,10 @@ class ChatSetupBuilder:
         if payload.edit_message_id:
             edit_target = self.chat_repo.get_message(payload.edit_message_id, user_id=user.id)
             if not edit_target:
-                raise ValueError("Message not found for editing.")
+                raise InvalidInputError("Message not found for editing.")
             session_model = self.chat_repo.get_session(edit_target.session_id, user_id=user.id)
             if not session_model:
-                raise ValueError("Chat session not found for edit.")
+                raise InvalidInputError("Chat session not found for edit.")
             return session_model, edit_target
 
         session_request = SessionRequest(
@@ -197,7 +199,7 @@ class ChatSetupBuilder:
 
         trimmed_content = (payload.content or "").strip()
         if not trimmed_content:
-            raise ValueError("Message content cannot be empty.")
+            raise InvalidInputError("Message content cannot be empty.")
         record_message(
             RecordContext(session=self.session, chat_repo=self.chat_repo),
             MessageRecord(
@@ -269,14 +271,14 @@ class ChatSetupBuilder:
         """Resolve model settings, parameters, and preferences."""
         active_model_name = session_model.chat_model or default_chat_model
         if not active_model_name:
-            raise ValueError("No chat model is configured for this session.")
+            raise InvalidInputError("No chat model is configured for this session.")
         model_info = provider.get_model(active_model_name)
         if not model_info:
-            raise ValueError("Selected model is not available on OpenRouter.")
+            raise InvalidInputError("Selected model is not available on OpenRouter.")
         supported_parameters = model_info.supported_parameters or []
         tool_supported = any(param.lower() == "tools" for param in supported_parameters)
         if tools_enabled and not tool_supported:
-            raise ValueError("Selected model does not support tool calls required for retrieval.")
+            raise InvalidInputError("Selected model does not support tool calls required for retrieval.")
         parameter_overrides = sanitize_parameter_overrides(payload.parameters, supported_parameters)
         reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
         reasoning_options = self._build_reasoning_request_options(

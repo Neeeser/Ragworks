@@ -1,6 +1,19 @@
+"""Bootstrap tests.
+
+`test_init_db_raises_for_invalid_schema` (mocked 8 internals of `init_db` to
+force `is_valid=False`) was deleted rather than kept or replaced with a live
+case: `init_db` heals every schema gap `SchemaValidationResult` can detect —
+`create_all` for missing tables, `apply_missing_columns` for missing columns
+— both driven from the same `SQLModel.metadata` the validator compares
+against, so a live Postgres run cannot be coaxed into an unhealable state
+cheaply; the mocked test exercised only the RuntimeError-formatting branch.
+That branch's real behavior (the message contents) is covered directly and
+without mocking by `test_format_validation_error_lists_missing_tables_and_columns`
+below.
+"""
+
 from __future__ import annotations
 
-from typing import ClassVar
 from uuid import uuid4
 
 import pytest
@@ -8,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlmodel import SQLModel, create_engine
 
-from app.db.bootstrap import ensure_database_exists, init_db
+from app.db.bootstrap import _format_validation_error, ensure_database_exists, init_db
 from app.db.engine import engine as app_engine
 from app.db.schema import SchemaValidationResult, build_expected_schema, inspect_database_schema
 
@@ -18,29 +31,17 @@ def test_ensure_database_exists_requires_database_name() -> None:
         ensure_database_exists("postgresql+psycopg://localhost")
 
 
-def test_init_db_raises_for_invalid_schema(monkeypatch) -> None:
-    class _StubValidation:
-        missing_tables: ClassVar[set[str]] = {"missing"}
-        missing_columns: ClassVar[dict[str, set[str]]] = {"table": {"column"}}
-
-        @property
-        def is_valid(self) -> bool:
-            return False
-
-    monkeypatch.setattr("app.db.bootstrap.ensure_database_exists", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.db.bootstrap.build_expected_schema", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.db.bootstrap.inspect_database_schema", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        "app.db.bootstrap.SchemaValidationResult.from_schemas",
-        lambda *_args, **_kwargs: _StubValidation(),
+def test_format_validation_error_lists_missing_tables_and_columns() -> None:
+    validation = SchemaValidationResult(
+        missing_tables={"widgets"},
+        missing_columns={"users": {"nickname"}},
     )
-    monkeypatch.setattr("app.db.bootstrap.apply_missing_columns", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.db.bootstrap.ensure_indexes", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.db.bootstrap.ensure_foreign_keys", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.db.bootstrap.SQLModel.metadata.create_all", lambda *_args, **_kwargs: None)
 
-    with pytest.raises(RuntimeError, match="Postgres schema validation failed"):
-        init_db()
+    message = _format_validation_error(validation)
+
+    assert "widgets" in message
+    assert "users" in message
+    assert "nickname" in message
 
 
 def _admin_engine(database_url: str):

@@ -214,9 +214,23 @@ invert it:
   routes translate with `to_http_exception` (`app/api/routes/utils.py`) in a single
   `except ServiceError` — never map status codes by string-matching a message, and never
   leave a domain error untranslated (that's a 500). `PipelineResolutionError` subclasses
-  `InvalidInputError` (and, transitionally, `ValueError` so not-yet-migrated chat paths
-  still catch it — the bridge sites are tagged `TODO(chat-error-taxonomy)`; grep that tag
-  when migrating chat); new services skip `ValueError` entirely.
+  `InvalidInputError`; chat's `routes/chat.py` used to bridge onto this taxonomy via a
+  transitional `ValueError` base (tagged `TODO(chat-error-taxonomy)`) — that bridge is
+  gone: every `raise ValueError` in `app/chat/*.py` (persistence, setup, branching,
+  tools) now raises `InvalidInputError`, and `routes/chat.py` catches `ServiceError`
+  like every other route. The "not found" cases in that migration (missing session/
+  message) were mapped to `InvalidInputError` (400), not `NotFoundError` (404), to
+  preserve the exact status codes the frontend already depends on — semantically some
+  read as 404s, but changing the wire contract wasn't in scope. New services skip
+  `ValueError` entirely.
+- **A genuinely external failure (Pinecone/OpenRouter) is classified at the service
+  boundary, not left to surface raw.** `is_external_provider_error` (`app/services/
+  errors.py`) matches the SDK/HTTP exception families those clients actually raise
+  (`httpx.HTTPError`, `openai.OpenAIError`, `pinecone.exceptions.PineconeException`);
+  `RetrievalService.query_collection` and `IngestionService.ingest_upload` catch broad
+  `Exception` around pipeline execution (to mark the run/document FAILED either way)
+  and re-raise as `ExternalServiceError` only when that check matches — an internal bug
+  in node logic still surfaces as itself, not a misleading "upstream is down".
 - **`app/services/traces.py`'s `TraceService` owns trace resolution; `routes/traces.py`
   only translates `TraceNotFoundError` to a 404.** Building a `PipelineTraceResponse`
   from a run — including the run's own pinned `PipelineVersion` vs. its pipeline's
@@ -464,10 +478,20 @@ construction site.
 - **Test behavior, not wiring.** A test earns its place by failing when a real contract
   breaks. "Calling the service inserts a row and returns the schema with the generated
   id" is a test; "the route calls the service" (asserted via mock) is wiring — delete it.
-- **Test at the lowest layer that exercises the behavior.** Pure logic (chunkers,
-  processing, utils) as unit tests; orchestration at the service layer; route tests
-  reserved for the HTTP contract itself — status codes, validation rejections, auth
-  gating, response shape.
+  The tell: if you deleted the code under test and the test still passed (or the only
+  thing that could break it is a rename), it was never testing behavior. We ran this
+  exercise across the suite in Task 7.1 and deleted on that basis: an `isinstance`
+  round-trip over two dependency helpers, a mock-driven `init_db` test that stubbed
+  eight of its own internals to force a branch, and half of `test_migrations.py`
+  (SQL-string-echo assertions that checked a stub connection's recorded statements for
+  substrings, and orchestration tests that monkeypatched `_constraint_signature` to
+  force a code path — testing the mock, not the migration).
+- **Test at the lowest layer a real bug would actually appear.** Pure logic (chunkers,
+  processing, utils, a default-resolution helper like `_resolve_default_sql`) as unit
+  tests; orchestration at the service layer; route tests reserved for the HTTP contract
+  itself — status codes, validation rejections, auth gating, response shape. Don't test
+  a pure function's behavior by driving it through three layers of orchestration when a
+  direct call exercises the same contract for a fraction of the setup.
 - **Route tests go through `TestClient`, not a direct function call.** A test that calls
   the route function with hand-built args and `current_user`/`session` kwargs exercises
   none of what the HTTP layer does — auth dependencies, request-body validation (422),
@@ -483,6 +507,17 @@ construction site.
   (use `tests/assets/`); the valuable cases are the awkward ones — empty collections,
   unicode documents, a provider returning an error mid-stream — not the third
   happy-path permutation.
+- **Exercise failure paths as deliberately as the happy path, especially at a
+  provider boundary.** A service that talks to Pinecone/OpenRouter has at least two
+  contracts: what it returns on success, and what a caller sees when the provider is
+  down, rate-limited, or rejects the credential. `RetrievalService`/`IngestionService`/
+  `ChatService` each have a boundary-stubbed test that raises the real SDK exception
+  (`pinecone.exceptions.PineconeException`, `openai.RateLimitError`/`AuthenticationError`)
+  and asserts the *typed* outcome (`ExternalServiceError` -> 502, or the streaming
+  `ErrorEvent` the route already emits) — not just that the happy path maps chunks
+  correctly. An expired-JWT rejection through `get_current_user` is the same idea
+  applied to auth: the failure path is the contract worth pinning, not a footnote to
+  the success test.
 - **Mock at the boundary you don't own.** Fake OpenRouter/Pinecone at the client edge;
   never mock your own services to test your own routes — that pins implementation and
   proves nothing.
@@ -492,18 +527,34 @@ construction site.
   `_execute_tool_calls`/`_finalize_response`/`_stream_iteration` etc.; it broke wholesale
   the moment those privates moved, while asserting nothing a caller relies on. Drive the
   public entry point against a real session with the boundary stubbed (the
-  `test_chat_service_flow.py` harness) so the test survives the next reshuffle.
+  `test_chat_service_flow.py` harness) so the test survives the next reshuffle. The same
+  goes for reload-the-module-to-observe-an-import-time-side-effect tests
+  (`test_main_logging.py`'s `importlib.reload` gymnastics, deleted in Task 7.1 by moving
+  the logging setup it existed to test into a plain `configure_logging()` function): if
+  a test needs machinery like that to observe behavior, the behavior is in the wrong
+  shape, not the test.
+- **A test that must be updated whenever anything changes is measuring layout, not
+  behavior — delete it.** This cuts both ways with the coverage number: meaningfully
+  lower coverage from deleting real wiring/mock-echo tests beats a larger suite padded
+  with tests that assert nothing and break on every unrelated refactor. When a test's
+  only failure mode is "the code moved," it was never load-bearing.
 - **Persistence assertions must read back through a fresh session**
   (`Session(session.get_bind())`, or expunge first). Asserting on the object the code
   under test just handled proves nothing — the session's identity map hands back the
   same in-memory instance, so the test passes even when nothing was ever written. The
   `update_collection_prompt` JSON-mutation bug survived precisely because its test
   read back through the same session.
-- **Coverage is a floor, not a goal.** Use `term-missing` to find genuinely untested
-  behavior, not to pad. It's fine to leave something untested *for a stated reason* —
-  e.g. thin wrappers over a third-party SDK where the test would only re-assert the
-  mock, or `db/migrations.py` glue exercised implicitly by every db test. Say so in the
-  PR rather than writing a can't-fail test.
+- **Coverage is a floor, not a goal, and an untested line needs a stated reason, not
+  silence.** Use `term-missing` to find genuinely untested behavior, not to pad. Named
+  reasons we've actually used: a thin wrapper over a third-party SDK where the test
+  would only re-assert the mock; `db/migrations.py` orchestration glue (`apply_missing_
+  columns`/`ensure_indexes`/`ensure_foreign_keys`) exercised implicitly, against real
+  Postgres, by every `test_bootstrap.py` case — a second copy mocking the same
+  functions' internals proves only that the mock was called; a defensive branch genuinely
+  unreachable through any real caller (`init_db`'s schema-still-invalid-after-healing
+  path — every gap `SchemaValidationResult` can detect is one `create_all`/
+  `apply_missing_columns` already heals, so the branch has no live path to force
+  cheaply). Say so in the PR rather than writing a can't-fail test.
 - **Never write tests that execute Protocol/ABC stub bodies or assert
   `NotImplementedError` on abstract methods:** they assert nothing a user cares about
   and rot silently when signatures change (we had two such files broken on main for
@@ -515,3 +566,15 @@ construction site.
   happens on the type, not the instance, so `str()` ignores the assigned attribute and
   falls back to `SimpleNamespace`'s own repr — a test built this way can pass for a
   reason that has nothing to do with the behavior it claims to check.
+
+## Known gaps (deliberate, tracked — not license to add more)
+
+- **Document upload enforces no content-type or size limit.** `routes/documents.py`'s
+  `upload_document` passes `file.content_type` straight through (defaulting to
+  `text/plain` only when the header is absent) and streams `file.file` to storage with
+  no cap — an arbitrarily large or mistyped upload reaches `IngestionService` unchecked.
+  Noted here rather than fixed in Task 7.1: adding a limit is a product decision (what
+  size, what content-types, what error shape) that wasn't in scope for a test-pruning
+  pass, not a one-line fix. Add both the guard and its test together when this is
+  prioritized — don't let the guard land without the regression test that proves an
+  oversized/mistyped upload is actually rejected.

@@ -26,7 +26,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(subject: str, expires_minutes: int | None = None) -> str:
     """Create a JWT access token for the provided subject."""
-    expire_delta = timedelta(minutes=expires_minutes or settings.access_token_expire_minutes)
+    minutes = (
+        expires_minutes if expires_minutes is not None else settings.access_token_expire_minutes
+    )
+    expire_delta = timedelta(minutes=minutes)
     expire = datetime.now(UTC) + expire_delta
     payload: dict[str, Any] = {"sub": subject, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)

@@ -9,9 +9,16 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.db.bootstrap import ensure_database_exists
-
 DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/transparentrag_test"
+"""Single source of truth for the fallback test database URL.
+
+`tests/conftest.py` imports this constant to seed `DATABASE_URL` before any
+`app.db.*` module loads (`app.db.engine` snapshots `DATABASE_URL` at import
+time). `app.db.bootstrap` is imported lazily inside `open_session` below,
+not at module scope, so importing this module early — before that env var is
+set — can't accidentally trigger `app.db.engine`'s import-time engine
+creation against the wrong URL.
+"""
 
 
 def get_database_url() -> str:
@@ -34,6 +41,8 @@ def reset_database(engine: Engine) -> None:
 
 def open_session() -> Iterator[Session]:
     """Yield a SQLModel session backed by a reset test database."""
+    from app.db.bootstrap import ensure_database_exists  # pylint: disable=import-outside-toplevel
+
     ensure_database_exists(get_database_url())
     engine = create_test_engine()
     reset_database(engine)

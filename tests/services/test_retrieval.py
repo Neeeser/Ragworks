@@ -10,12 +10,13 @@ indirectly through the persisted `QueryEvent.context_tokens`.
 from __future__ import annotations
 
 import pytest
+from pinecone.exceptions import PineconeException
 from sqlmodel import Session, select
 
 from app.db import models
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
 
@@ -161,7 +162,7 @@ def test_query_collection_rejects_missing_pipeline(session: Session) -> None:
     collection = _create_collection(session, user, retrieval_pipeline_id=pipeline.id)
     service = RetrievalService(session)
 
-    with pytest.raises(ValueError, match="Retrieval pipeline could not be resolved"):
+    with pytest.raises(InvalidInputError, match="Retrieval pipeline could not be resolved"):
         service.query_collection(user, collection, query="hello")
 
 
@@ -194,6 +195,41 @@ def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Se
     assert run is not None
     assert run.status == models.PipelineRunStatus.FAILED
     assert run.error_message == "boom"
+
+
+def test_query_collection_wraps_pinecone_outage_as_external_service_error(
+    monkeypatch, session: Session
+) -> None:
+    """A Pinecone outage mid-query must surface as a 502-mapped
+    `ExternalServiceError`, not the raw SDK exception (which the route has no
+    handler for and would 500 on) -- while still marking the run FAILED."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    service = RetrievalService(session)
+
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    collection.retrieval_pipeline_id = defaults.retrieval.id
+    session.add(collection)
+    session.commit()
+
+    class _StubExecutor:
+        def __init__(self, _registry) -> None:
+            pass
+
+        def execute(self, _definition, _context):
+            raise PineconeException("Pinecone is unavailable")
+
+    monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
+    monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr("app.services.retrieval.get_pinecone_client", lambda *_args, **_kwargs: object())
+
+    with pytest.raises(ExternalServiceError, match="Pinecone is unavailable"):
+        service.query_collection(user, collection, query="hello")
+
+    run = session.exec(select(models.PipelineRun)).first()
+    assert run is not None
+    assert run.status == models.PipelineRunStatus.FAILED
 
 
 def test_query_collection_skips_failed_run_update(monkeypatch, session: Session) -> None:

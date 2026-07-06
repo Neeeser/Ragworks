@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from contextlib import ExitStack
 from uuid import UUID
 
@@ -17,6 +18,7 @@ from app.api.dependencies import (
     oauth2_scheme,
     require_openrouter_key,
 )
+from app.api.routes.utils import to_http_exception
 from app.chat import ChatService
 from app.chat.events import ErrorEvent
 from app.db import models
@@ -32,6 +34,7 @@ from app.schemas.chat import (
 )
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 from app.services.accounts import AccountService
+from app.services.errors import ServiceError
 from app.services.prompts import (
     apply_prompt_template,
     base_prompt_context,
@@ -90,10 +93,8 @@ def chat(
     chat_service = ChatService(session)
     try:
         return chat_service.send_message(user=current_user, payload=payload)
-    # TODO(chat-error-taxonomy): replace with `except ServiceError` +
-    # `to_http_exception` once the chat subsystem raises typed domain errors.
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.post("/chat/stream")
@@ -119,7 +120,7 @@ def stream_chat(
         serialized = jsonable_encoder(data)
         return f"data: {json.dumps(serialized)}\n\n"
 
-    async def event_stream():
+    async def event_stream() -> AsyncIterator[str]:
         """Yield SSE events for the streaming chat session."""
         stream_gen = chat_service.stream_message(
             user=current_user,
@@ -201,10 +202,8 @@ def branch_chat_session(
             message_id=payload.message_id,
             title=payload.title,
         )
-    # TODO(chat-error-taxonomy): replace with `except ServiceError` +
-    # `to_http_exception` once the chat subsystem raises typed domain errors.
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

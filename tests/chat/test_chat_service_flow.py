@@ -18,6 +18,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.retrieval import CollectionQueryResponse
+from app.services.errors import InvalidInputError
 from tests.chat.conftest import (
     ModelOnlyOpenRouter,
     SequencedOpenRouter,
@@ -436,7 +437,7 @@ def test_send_message_rejects_other_users_session(
         content="hi", session_id=owned_session.id, tool_collection_ids=[collection.id]
     )
 
-    with pytest.raises(ValueError, match="Chat session not found"):
+    with pytest.raises(InvalidInputError, match="Chat session not found"):
         service.send_message(user=other, payload=payload)
 
 

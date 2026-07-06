@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import HTTPException
+from openai import AuthenticationError
 from sqlmodel import Session
 
 from app.api.routes import chat as chat_routes
@@ -21,6 +23,7 @@ from app.schemas.chat import (
     ChatMessageRead,
     ChatSessionRead,
 )
+from app.services.errors import InvalidInputError
 
 
 class _DummyRequest:
@@ -101,7 +104,9 @@ def _add_message(
     return message
 
 
-def test_chat_maps_value_error(monkeypatch, session: Session) -> None:
+def test_chat_maps_invalid_input_error(monkeypatch, session: Session) -> None:
+    """The route translates any `ServiceError` (not just `ValueError`) raised by
+    the chat service into its mapped `HTTPException` via `to_http_exception`."""
     user = _create_user(session)
 
     class _StubChatService:
@@ -109,7 +114,7 @@ def test_chat_maps_value_error(monkeypatch, session: Session) -> None:
             return None
 
         def send_message(self, **_kwargs):
-            raise ValueError("bad request")
+            raise InvalidInputError("bad request")
 
     monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
 
@@ -208,6 +213,31 @@ def test_branch_session_route(monkeypatch, session: Session) -> None:
     )
 
     assert result.session.id == session_id
+
+
+def test_branch_session_route_maps_service_error(monkeypatch, session: Session) -> None:
+    """`branch_chat_session` translates a `ServiceError` the same way `chat`
+    does -- via `to_http_exception`, not a bespoke `except ValueError`."""
+    user = _create_user(session)
+
+    class _StubChatService:
+        def __init__(self, _session: Session) -> None:
+            return None
+
+        def branch_session(self, **_kwargs):
+            raise InvalidInputError("Chat session not found.")
+
+    monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
+
+    with pytest.raises(HTTPException) as excinfo:
+        chat_routes.branch_chat_session(
+            uuid4(),
+            ChatBranchCreate(message_id=uuid4()),
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 400
 
 
 def test_list_sessions_filters_by_collection(session: Session) -> None:
@@ -332,6 +362,48 @@ def test_stream_chat_handles_errors(monkeypatch) -> None:
 
     materialized = [chunk.decode() if isinstance(chunk, (bytes, bytearray)) else chunk for chunk in body]
     assert any("error" in chunk for chunk in materialized)
+
+
+def test_stream_chat_surfaces_openrouter_auth_failure_as_error_event(monkeypatch) -> None:
+    """An OpenRouter 401 mid-stream (e.g. a revoked key) must reach the client
+    as a user-visible `error` SSE event carrying the provider's message, via
+    the same broad `except Exception` `test_stream_chat_handles_errors`
+    pins for a generic failure -- this pins it specifically for the
+    `openai.AuthenticationError` OpenRouter's SDK actually raises."""
+    user = SimpleNamespace(
+        id=uuid4(),
+        openrouter_api_key="openrouter-key",
+    )
+
+    class _StubChatService:
+        def __init__(self, _session: Session) -> None:
+            return None
+
+        def stream_message(self, **_kwargs):
+            yield {"type": "token", "content": "hi"}
+            response = httpx.Response(
+                status_code=401, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat")
+            )
+            raise AuthenticationError("Invalid API key", response=response, body=None)
+
+    monkeypatch.setattr(chat_routes, "ChatService", _StubChatService)
+    monkeypatch.setattr(chat_routes, "get_current_user", lambda token, session: user)
+
+    response = chat_routes.stream_chat(
+        ChatMessageCreate(content="hi"),
+        _DummyRequest(),
+        token="token",
+    )
+
+    async def _collect():
+        return [chunk async for chunk in response.body_iterator]
+
+    body = asyncio.run(_collect())
+
+    materialized = [chunk.decode() if isinstance(chunk, (bytes, bytearray)) else chunk for chunk in body]
+    error_chunks = [chunk for chunk in materialized if '"type": "error"' in chunk]
+    assert error_chunks
+    assert "Invalid API key" in error_chunks[0]
 
 
 def test_stream_chat_closes_on_disconnect(monkeypatch) -> None:

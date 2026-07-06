@@ -11,9 +11,8 @@ a collection's Pinecone namespace) all go through `resolve_ingestion_pipeline`
 
 Resolution failures raise `PipelineResolutionError`, never an HTTP exception --
 this is a service module, so translating to a status code is the caller's job.
-Routes translate it as a 400 (it is an `InvalidInputError`); it also subclasses
-`ValueError` so chat's not-yet-migrated `except ValueError` paths keep catching
-it until they move onto the typed taxonomy.
+Routes translate it as a 400 (it is an `InvalidInputError`), including chat's
+routes, which now catch `ServiceError` like every other service.
 """
 
 from __future__ import annotations
@@ -35,16 +34,13 @@ from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
 
 
-class PipelineResolutionError(InvalidInputError, ValueError):
+class PipelineResolutionError(InvalidInputError):
     """Raised when a collection's pipeline cannot be resolved.
 
-    `InvalidInputError` so routes map it to a 400 through the typed taxonomy;
-    `ValueError` so legacy chat callers that still `except ValueError` keep
-    working until they migrate.
-
-    TODO(chat-error-taxonomy): drop the ValueError base once the chat
-    subsystem raises typed domain errors and routes/chat.py stops catching
-    ValueError.
+    Subclasses `InvalidInputError` so routes map it to a 400 through the
+    typed taxonomy. It used to also subclass `ValueError` as a transitional
+    bridge for chat's not-yet-migrated `except ValueError` routes; that bridge
+    is gone now that `routes/chat.py` catches `ServiceError` directly.
     """
 
 

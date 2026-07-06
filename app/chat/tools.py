@@ -34,6 +34,7 @@ from app.chat.tool_calls import ParsedToolCall, ToolResultPayload, parse_tool_ca
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
+from app.services.errors import InvalidInputError
 from app.services.retrieval import RetrievalService
 
 
@@ -151,7 +152,7 @@ class ToolExecutor:
             return tool_map[tool_name]
         if tool_name == "pinecone_query" and len(tool_map) == 1:
             return next(iter(tool_map.values()))
-        raise ValueError("Tool call does not match an enabled collection.")
+        raise InvalidInputError("Tool call does not match an enabled collection.")
 
     @staticmethod
     def parse_call(

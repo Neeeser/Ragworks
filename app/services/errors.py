@@ -17,6 +17,30 @@ per-field validation errors.
 
 from __future__ import annotations
 
+import httpx
+from openai import OpenAIError
+from pinecone.exceptions import PineconeException
+
+_EXTERNAL_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
+    httpx.HTTPError,
+    OpenAIError,
+    PineconeException,
+)
+
+
+def is_external_provider_error(exc: Exception) -> bool:
+    """Return True when `exc` originates from a Pinecone/OpenRouter client call.
+
+    Used at service boundaries that run pipeline nodes talking to those
+    providers (`RetrievalService`, `IngestionService`): a genuine upstream
+    fault (rate limit, auth rejection, network failure) should surface as a
+    502 via `ExternalServiceError`, but a bug in *our* node logic should not
+    be misreported as an upstream failure, so this only matches the SDK/HTTP
+    exception families those clients actually raise -- never a bare
+    `isinstance(exc, Exception)`.
+    """
+    return isinstance(exc, _EXTERNAL_PROVIDER_ERRORS)
+
 
 class ServiceError(Exception):
     """Base for domain errors that a route translates into an HTTP response."""

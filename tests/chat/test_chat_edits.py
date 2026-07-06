@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.chat.persistence import apply_edit
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.services.errors import InvalidInputError
 
 
 def _create_user(session: Session) -> models.User:
@@ -165,7 +166,7 @@ def test_apply_edit_rejects_message_from_other_session(session: Session) -> None
         created_at=datetime.now(UTC),
     )
 
-    with pytest.raises(ValueError, match="does not belong to this session"):
+    with pytest.raises(InvalidInputError, match="does not belong to this session"):
         apply_edit(
             session=session,
             chat_repo=ChatRepository(session),
@@ -221,7 +222,7 @@ def test_apply_edit_rejects_empty_user_edit() -> None:
     chat_repo = SimpleNamespace(delete_messages_after=lambda **_kwargs: None)
     session = SimpleNamespace(add=lambda *_args, **_kwargs: None, flush=lambda: None)
 
-    with pytest.raises(ValueError, match="Edited message cannot be empty"):
+    with pytest.raises(InvalidInputError, match="Edited message cannot be empty"):
         apply_edit(
             session=session,
             chat_repo=chat_repo,

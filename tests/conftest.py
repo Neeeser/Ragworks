@@ -16,9 +16,10 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session
 
+from tests.utils.db import DEFAULT_TEST_DATABASE_URL, open_session
+
 TEST_ROOT = Path(__file__).resolve().parent / ".integration"
 STORAGE_PATH = TEST_ROOT / "storage"
-DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/transparentrag_test"
 ENV_FILES = [Path(".env"), Path(".env.local")]
 
 
@@ -67,7 +68,6 @@ from app.core import config as api_config  # noqa: E402
 api_config.get_settings.cache_clear()
 
 import app.db.models  # noqa: E402,F401  # register SQLModel metadata before any reset
-from tests.utils.db import open_session  # noqa: E402
 
 
 @pytest.fixture(name="session")

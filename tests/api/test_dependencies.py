@@ -86,13 +86,6 @@ def test_get_current_user_rejects_inactive_user(session: Session) -> None:
         dependencies.get_current_user(token=token, session=session)
 
 
-def test_dependency_helpers_return_expected_types(session: Session) -> None:
-    user = _create_user(session)
-
-    assert dependencies.get_user_repository(session).session is session
-    assert isinstance(dependencies.issue_access_token(user), str)
-
-
 def test_require_openrouter_key_rejects_missing_value(session: Session) -> None:
     user = _create_user(session)
 

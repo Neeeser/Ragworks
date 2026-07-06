@@ -32,6 +32,7 @@ from app.chat.tool_calls import ensure_arguments_string
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate, ChatMessageRead, ChatSessionRead
+from app.services.errors import InvalidInputError
 from app.utils.time import utc_now
 
 
@@ -265,7 +266,7 @@ def ensure_session(request: SessionRequest) -> models.ChatSession:
         # and is a cross-user access attempt). A genuinely unused client-supplied
         # id still creates a new session below.
         if request.chat_repo.get_session(payload.session_id) is not None:
-            raise ValueError("Chat session not found.")
+            raise InvalidInputError("Chat session not found.")
         return create_session(request=request, session_id=payload.session_id)
     return create_session(request=request)
 
@@ -306,12 +307,12 @@ def apply_edit(
 ) -> None:
     """Apply edits to a message and prune dependent history."""
     if target_message.session_id != session_model.id:
-        raise ValueError("Message does not belong to this session.")
+        raise InvalidInputError("Message does not belong to this session.")
 
     if target_message.role == models.ChatRole.USER:
         trimmed = (new_content or "").strip()
         if not trimmed:
-            raise ValueError("Edited message cannot be empty.")
+            raise InvalidInputError("Edited message cannot be empty.")
         target_message.content = trimmed
         session.add(target_message)
         session.flush()

@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 
 import pytest
+from pinecone.exceptions import PineconeException
 from sqlmodel import Session, select
 
 from app.db import models
@@ -22,7 +23,7 @@ from app.db.models import DocumentStatus
 from app.pipelines.defaults import build_default_retrieval_pipeline
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services import ingestion as ingestion_module
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.services.pipelines import PipelineService
@@ -201,6 +202,58 @@ def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, 
     assert "parse failed" in event.details["error"]
 
 
+def test_ingest_upload_wraps_pinecone_outage_as_external_service_error(
+    monkeypatch, session, tmp_path
+) -> None:
+    """A Pinecone outage mid-upload must surface as a 502-mapped
+    `ExternalServiceError`, not the raw SDK exception -- while still marking
+    the document and run FAILED, same as any other pipeline failure."""
+
+    class _StubStorage:
+        def __init__(self) -> None:
+            self.base_path = tmp_path
+
+        def save_stream(self, _stream: object, _relative_path: str):
+            return tmp_path / "upload.txt"
+
+    class _FailingExecutor:
+        def __init__(self, _registry: object) -> None:
+            self.registry = _registry
+
+        def execute(self, _definition: object, _context: object) -> None:
+            raise PineconeException("Pinecone is unavailable")
+
+    monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
+    monkeypatch.setattr(
+        ingestion_module,
+        "get_pinecone_client",
+        lambda **_kwargs: _StubPineconeClient(),
+    )
+    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    service = IngestionService(session)
+
+    with pytest.raises(ExternalServiceError, match="Pinecone is unavailable"):
+        service.ingest_upload(
+            user=user,
+            collection=collection,
+            filename="doc.txt",
+            content_type="text/plain",
+            stream=io.BytesIO(b"content"),
+        )
+
+    document = session.exec(select(models.Document)).first()
+    assert document is not None
+    assert document.status == DocumentStatus.FAILED
+
+    run = session.exec(select(models.PipelineRun)).first()
+    assert run is not None
+    assert run.status == models.PipelineRunStatus.FAILED
+
+
 def test_resolve_ingestion_pipeline_rejects_missing(session: Session) -> None:
     """`resolve_ingestion_pipeline` (app/services/pipeline_resolution.py) rejects
     a collection pointing at a retrieval pipeline instead of an ingestion one.
@@ -219,7 +272,7 @@ def test_resolve_ingestion_pipeline_rejects_missing(session: Session) -> None:
     session.commit()
     collection = _create_collection(session, user, ingestion_pipeline_id=pipeline.id)
 
-    with pytest.raises(ValueError, match="Ingestion pipeline could not be resolved"):
+    with pytest.raises(InvalidInputError, match="Ingestion pipeline could not be resolved"):
         resolve_ingestion_pipeline(session, user, collection)
 
 

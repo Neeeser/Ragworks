@@ -18,7 +18,7 @@ from app.pipelines.settings import IngestionPipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.retrieval.models import DocumentChunk
 from app.schemas.documents import DocumentRead, IngestionResponse
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.utils.file_storage import FileStorage
 
@@ -104,6 +104,8 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         except Exception as exc:
             self._record_failure(document, handle.trace if handle else None, exc)
             self.session.commit()
+            if is_external_provider_error(exc):
+                raise ExternalServiceError(f"Ingestion pipeline failed: {exc}") from exc
             raise
 
     def _create_document_record(

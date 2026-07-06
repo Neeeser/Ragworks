@@ -3,7 +3,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
+from openai import RateLimitError
 from sqlmodel import Session
 
 from app.chat import service as service_module
@@ -12,6 +14,7 @@ from app.chat.setup import ChatSetupBuilder
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
+from app.services.errors import ExternalServiceError, InvalidInputError
 from tests.chat.conftest import (
     StubOpenRouter,
     StubRetrievalService,
@@ -33,12 +36,44 @@ def _drive(service: ChatService, user: models.User, payload: ChatMessageCreate, 
     return service.send_message(user=user, payload=payload)
 
 
+class _RateLimitedOpenRouter:
+    """Stand-in for `OpenRouterClient` whose `chat()` call hits an OpenRouter 429."""
+
+    def __init__(self, model_info: ModelInfo) -> None:
+        self._model_info = model_info
+
+    def get_model(self, _model_id: str) -> ModelInfo:
+        return self._model_info
+
+    def chat(self, **_kwargs):
+        response = httpx.Response(
+            status_code=429, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat")
+        )
+        raise RateLimitError("Rate limit exceeded", response=response, body=None)
+
+
+def test_send_message_maps_openrouter_rate_limit_to_external_service_error(
+    session: Session, chat_user, install_chat_flow
+) -> None:
+    """A 429 from OpenRouter mid-request must surface as a 502-mapped
+    `ExternalServiceError`, not the raw `openai.RateLimitError` (which the
+    route has no handler for and would otherwise 500 on)."""
+    install_chat_flow(
+        openrouter=_RateLimitedOpenRouter(tool_model_info("test-model")), chat_model="test-model"
+    )
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi")
+
+    with pytest.raises(ExternalServiceError, match="Rate limit exceeded"):
+        service.send_message(user=chat_user, payload=payload)
+
+
 def test_rejects_missing_edit_message(session: Session, chat_user, install_chat_flow, stream) -> None:
     install_chat_flow(openrouter=StubOpenRouter(tool_model_info("test-model"), {}), chat_model="test-model")
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
 
-    with pytest.raises(ValueError, match="Message not found for editing"):
+    with pytest.raises(InvalidInputError, match="Message not found for editing"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -47,7 +82,7 @@ def test_rejects_empty_content(session: Session, chat_user, install_chat_flow, s
     service = ChatService(session)
     payload = ChatMessageCreate(content="   ")
 
-    with pytest.raises(ValueError, match="Message content cannot be empty"):
+    with pytest.raises(InvalidInputError, match="Message content cannot be empty"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -60,7 +95,7 @@ def test_rejects_unavailable_model(session: Session, chat_user, install_chat_flo
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", session_id=chat_session.id)
 
-    with pytest.raises(ValueError, match="Selected model is not available"):
+    with pytest.raises(InvalidInputError, match="Selected model is not available"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -75,7 +110,7 @@ def test_rejects_model_without_tool_support(
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
 
-    with pytest.raises(ValueError, match="does not support tool calls"):
+    with pytest.raises(InvalidInputError, match="does not support tool calls"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -95,7 +130,7 @@ def test_rejects_when_no_chat_model_configured(
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", session_id=chat_session.id)
 
-    with pytest.raises(ValueError, match="No chat model is configured"):
+    with pytest.raises(InvalidInputError, match="No chat model is configured"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -123,7 +158,7 @@ def test_resolve_session_model_raises_when_edit_session_missing() -> None:
     )
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())
 
-    with pytest.raises(ValueError, match="Chat session not found for edit"):
+    with pytest.raises(InvalidInputError, match="Chat session not found for edit"):
         builder._resolve_session_model(
             user=SimpleNamespace(id=uuid4()),
             payload=payload,

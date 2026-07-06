@@ -54,3 +54,20 @@ def test_create_access_token_honors_expires_minutes_override() -> None:
 
     expected_expiry = now + timedelta(minutes=5)
     assert abs((expires_at - expected_expiry).total_seconds()) < 5
+
+
+def test_create_access_token_honors_explicit_zero_expiry() -> None:
+    """`expires_minutes=0` must mean "expires immediately", not "unset".
+
+    `0 or default` is falsy in Python, so a naive `expires_minutes or default`
+    silently substitutes the configured default for an explicit 0 — this
+    regression-tests that a caller asking for immediate expiry gets it.
+    """
+    settings = get_settings()
+    now = datetime.now(UTC)
+    token = create_access_token("user-123", expires_minutes=0)
+
+    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    expires_at = datetime.fromtimestamp(payload["exp"], tz=UTC)
+
+    assert abs((expires_at - now).total_seconds()) < 5
