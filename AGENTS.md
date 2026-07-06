@@ -1,91 +1,63 @@
-# Project
+# TransparentRAG
 
 TransparentRAG is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`).
-The goal of this project is to provide an easy to use RAG interface for power users.
-It's backbones are pinecone for vector storage and Openrouter for Embeddings and LLMs.
+The goal is an easy-to-use RAG interface for power users. Its backbones are Pinecone
+for vector storage and OpenRouter for embeddings and LLMs.
 
-# External API Documentation
+This file holds only repo-wide rules. Area-specific engineering practices live next to
+the code they govern — load the one for the code you're touching:
 
-For Pinecone and OpenRouter changes, read the locally downloaded docs in
-`external_api_documentation/pinecone-docs/` and `external_api_documentation/openrouter-docs/`
-to ensure the most up-to-date behavior and feature availability.
+- Backend (`app/`): @app/AGENTS.md
+- Frontend (`frontend/`): @frontend/AGENTS.md
 
-# Make Commands
+# Verify gates
+
+Nothing ships without its gate passing. Run the gate for every area you changed:
+
+- Backend: `make test`, `make coverage` (review `term-missing`), `make lint`
+- Frontend: `npm run verify` in `frontend/` (typecheck → lint → tests), plus
+  `make format-check-frontend`
+
+If you only changed one side, only that side's gate is required.
+
+# Bug fixes require a regression test
+
+Whenever a bug is fixed, a regression test must be written alongside the fix, **in the
+same commit** — verified red-green: run the test without the fix and watch it fail for
+the bug's reason, then apply the fix and watch it pass. This is how the test suite
+grows: on things we know were broken, not on coverage padding. A bug fix PR with no
+failing-then-passing test is incomplete.
+
+# Commit and PR conventions
+
+- Conventional-commit style subjects, scoped: `feat(pipelines): …`, `fix(ui): …`,
+  `test(chat): …`, `docs: …`.
+- Work on a branch; merge to `main` via PR. Keep PRs to one concern.
+- If a change spans the API contract (backend schemas + frontend types), update both
+  sides in the same PR so they can't drift.
+
+# Cross-cutting constraints
+
+- **External API changes (Pinecone, OpenRouter):** read the locally downloaded docs in
+  `external_api_documentation/pinecone-docs/` and
+  `external_api_documentation/openrouter-docs/` first — they reflect the versions we
+  actually run against; trust them over memory.
+- **The wire contract is defined once, in `app/schemas/`.** Frontend types in
+  `frontend/src/lib/types/` hand-mirror them; when a schema changes, the mirror changes
+  in the same PR.
+- **Docs are updated incrementally.** When a fix or incident teaches a rule, add it to
+  the relevant AGENTS.md in that same PR — never batched later.
+
+# Make commands
 
 - `make env`: install backend deps via `uv` and frontend deps via `npm`
 - `make server`: run FastAPI with reload (`uvicorn app.api.main:app`)
 - `make frontend`: run Next.js dev server (sets `NEXT_PUBLIC_API_BASE_URL`)
 - `make run`: run backend + frontend together
-- `make test`: run backend tests (`pytest`)
-- `make coverage`: run tests with coverage (terminal missing-lines + `htmlcov/` + `coverage.xml`)
-- `make coverage-report`: like `make coverage`, but does not fail the Make target if tests fail
-- `make coverage-open`: open `htmlcov/index.html`
-- `make test-frontend`: run frontend tests (`vitest`)
-- `make coverage-frontend`: run frontend coverage (`vitest`)
-- `make coverage-report-frontend`: like `make coverage-frontend`, but does not fail the Make target if tests fail
-- `make coverage-open-frontend`: open `frontend/coverage/index.html`
-
-
-# Backend Coding Guidelines
-
-## Data Contracts and Types
-
-- Prefer explicit Pydantic models for request/response bodies, service boundaries, and persistence DTOs.
-- Use strong typing throughout the backend (typed function signatures, return types, and attributes).
-- Avoid `Any` and runtime type checks (e.g., `isinstance`) as a substitute for clear types and schemas.
-- Validate inputs at boundaries so internal code stays on the happy path.
-
-## Modularity and Structure
-
-- Keep code modular: small, focused modules with clear responsibilities.
-- Put shared models in dedicated `models` modules/files and reuse them rather than duplicating shapes.
-- Organize code into the existing folder structure (`app/api`, `app/services`, `app/db`, `app/schemas`, `app/retrieval`); introduce new folders only when they clarify ownership.
-
-## Style and Readability
-
-- Follow pylint-friendly formatting and conventions; keep code compliant with typical pylint rules.
-- Always include docstrings for modules, classes, and functions.
-- Add clear, concise comments where behavior is non-obvious to keep code easy to understand.
-
-## Backend Tests and Coverage
-
-- Always add/adjust tests alongside new backend code.
-- Before finishing your work on a backend change:
-  - Run `make test` (or `make coverage-report` while iterating)
-  - Run `make coverage` and review the terminal `term-missing` output
-  - Always run these before sending your final response
-- Check for untested code and add tests as needed.
-- If you only made frontend changes, no need to run backend tests/coverage.
-
-## Backend Linting
-
-- Always run pylint on backend code you change (use `make lint`).
-- Fix lint warnings/errors you introduce before sending your final response.
-
-# Frontend Coding Guidelines
-
-## Frontend Linting
-
-- Always run ESLint on frontend code you change (use `make lint-frontend`).
-- Fix lint warnings/errors you introduce before sending your final response.
-
-## Frontend Formatting
-
-- Always run Prettier on frontend code you change (use `make format-frontend`).
-- Ensure CI-friendly formatting checks pass (use `make format-check-frontend`).
-
-## Frontend Tests and Coverage
-
-- Always add/adjust tests alongside new frontend code.
-- Before finishing your work on a frontend change:
-  - Run `make test-frontend`
-  - Run `make coverage-frontend` and ensure frontend updates meet coverage thresholds
-  - Use `make coverage-report-frontend` while iterating if you need a non-blocking run
-
-## Modularity and Structure
-
-- Prefer modular, component-first frontend architecture. Keep `page.tsx` files focused on composition and orchestration, moving UI blocks into reusable components.
-- Use subfolders under `frontend/src/components/` to show component hierarchy and keep large views digestible.
-- Keep component files under ~400-500 lines; split layout, hooks, and helpers into focused modules before they grow beyond that.
-- Standardize shared UI patterns by using `frontend/src/components/ui` primitives (or promote a shared component there) instead of introducing near-duplicate one-offs.
-- For transient frontend status messages, use the `Notification` component.
+- `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
+- `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure)
+- `make coverage-report` / `make coverage-report-frontend`: coverage, non-blocking
+- `make coverage-open` / `make coverage-open-frontend`: open HTML coverage reports
+- `make lint`: pylint on `app/`
+- `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
+  ESLint / Prettier write / Prettier check on `frontend/`

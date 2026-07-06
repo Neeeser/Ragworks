@@ -1,8 +1,10 @@
 # Frontend Engineering Practices
 
-Rules for working in `frontend/`. Every rule here exists because we found and fixed the
-opposite in this codebase — don't reintroduce it. The core idea throughout: **small,
-component-driven, well-named files that one person can hold in their head at once.**
+Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). Most
+rules here exist because we found and fixed the opposite in this codebase — don't
+reintroduce them. The core idea throughout: **small, component-driven, well-named files
+that one person can hold in their head at once.** Repo-wide rules (verify gates, the
+bug-fix regression-test rule, commit conventions) live in the root `AGENTS.md`.
 
 ## The gate
 
@@ -14,6 +16,57 @@ new warning in your diff as a design prompt, not noise. The `react-hooks/set-sta
 override for six grandfathered hooks is a burn-down list, not a pattern to copy — never
 add a file to it. Do not add `eslint-disable` without a comment saying why, and never
 disable `max-lines` — split the file instead.
+
+## Layout — where code goes
+
+```
+src/
+  app/             Next.js App Router routes — thin shells only
+    (console)/     authed console routes (chat, collections, pipelines, …)
+    auth/          login/signup routes
+  components/      feature folders (chat-studio/, collections/, pipelines/, …)
+    <feature>/     components at the root, pure modules in lib/, hooks in hooks/
+    ui/            shared primitives (ModalOverlay, Field, Button, WizardShell, …)
+  lib/
+    api/           the ONLY place network calls live (domain modules + apiFetch)
+    types/         wire types by domain, hand-mirrored from app/schemas
+    *.ts           shared pure helpers (errors, format, use-api-query, …)
+  providers/       React context providers
+  test/            setup, centralized mocks (mocks.ts), fixtures (fixtures/)
+```
+
+New code goes in the feature folder that owns it. Promote to `components/ui/` or
+`lib/` only on second use (see Duplication). A single-file folder isn't a feature —
+colocate the file with its only consumer.
+
+## Adding a feature end-to-end
+
+The expected shape, in order:
+
+1. **Types** — add/extend wire types in `src/lib/types/<domain>.ts`, matching the
+   backend schema in `app/schemas/` (check it — don't guess the shape).
+2. **API module** — add the typed function to the right `src/lib/api/<domain>` module,
+   through `apiFetch`, `token` first. No `fetch()` anywhere else.
+3. **Hook** — a custom hook owning the state domain (data loading via `useApiQuery`,
+   mutations with error/success channels). Complex state gets a pure `*-reducer.ts`
+   with its own tests.
+4. **Component** — renders from the hook's API, built on `components/ui` primitives.
+5. **Page** — the route file under `app/` composes the component; no logic in it.
+6. **Tests** — behavior tests for the reducer/hook logic and the key user-visible
+   flows, using `src/test/mocks.ts` and `src/test/fixtures/` — never hand-rolled mocks.
+
+Chat Studio (`components/chat-studio/`) is the reference implementation of this shape.
+Then run the gate (`npm run verify`).
+
+## Fixing a bug
+
+Follow the root rule: **regression test in the same commit, verified red-green.**
+
+1. Reproduce with a failing test at the lowest level that exhibits the bug (pure
+   `lib/` function or reducer > hook > component). Watch it fail for the bug's reason.
+2. Fix. Watch it pass. Run `npm run verify`.
+3. If the bug reveals a reusable rule, add one line to the relevant section of this
+   file in the same PR — that's where most of the rules below came from.
 
 ## Code structure
 
@@ -181,6 +234,23 @@ disable `max-lines` — split the file instead.
   names (`aria-label` on icon buttons), labels need `htmlFor`, expanded/collapsed state
   needs `aria-expanded`, and anything keyboard-reachable must actually work with a
   keyboard (test with `user-event`, not `fireEvent`, when focus/keyboard semantics matter).
+
+## Server/Client component boundaries (Next.js App Router)
+
+- **`"use client"` marks a boundary, not a habit.** Everything imported by a client
+  component becomes client code. Put the directive on the interactive leaf/feature
+  component, not reflexively at the top of the tree — and never on plain `lib/`
+  modules (covered above).
+- **Server components can't receive functions or use hooks.** If a route file needs
+  state, effects, or event handlers, that logic belongs in a client component it
+  renders — the `page.tsx` itself stays a thin shell either way.
+- **Hydration mismatches come from render-time nondeterminism:** `Date.now()`,
+  `Math.random()`, locale-dependent formatting, and browser-only globals during the
+  first render. Same rule as the storage one above — render the deterministic default,
+  then update after mount.
+- **This app's data flow is deliberately client-side** (token in localStorage →
+  `apiFetch`), so don't introduce one-off server-side data fetching or route handlers
+  for a single feature; that's an architecture change, not a feature.
 
 ## Logging & debug artifacts
 
