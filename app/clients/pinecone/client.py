@@ -19,10 +19,6 @@ def get_pinecone_client(api_key: str) -> Pinecone:
     Unlike `app.clients.openrouter.get_openrouter_client`, this does not cache
     instances: the installed SDK's `Pinecone` client exposes no `close()` method, so
     there is no connection pool an eviction would need to release.
-
-    NOTE: `app.retrieval.pinecone.get_pinecone_client(client, api_key)` is a same-named
-    DI-style resolver with a different signature; its remaining callers consolidate
-    onto this factory in Phase 6 (retrieval refactor).
     """
     resolved = (api_key or "").strip()
     if not resolved:

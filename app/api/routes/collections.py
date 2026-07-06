@@ -13,9 +13,9 @@ from sqlmodel import Session, select
 
 from app.api.dependencies import get_session, require_user_api_keys
 from app.api.routes.utils import get_collection_or_404
+from app.clients.pinecone import get_pinecone_client
 from app.db import models
 from app.db.repositories import CollectionRepository, CollectionStats
-from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.collections import (
     CollectionCreate,
     CollectionDeleteResponse,
@@ -367,7 +367,7 @@ def delete_collection(  # pylint: disable=too-many-locals
         session=session,
     )
 
-    pinecone_client = get_pinecone_client(api_key=current_user.pinecone_api_key)
+    pinecone_client = get_pinecone_client(api_key=current_user.pinecone_api_key or "")
     storage = FileStorage()
     try:
         resolved_ingestion = resolve_ingestion_pipeline(session, current_user, collection)

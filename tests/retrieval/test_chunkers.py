@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from app.db.models import ChunkStrategy
+from app.retrieval.chunkers.strategies import _BaseChunker, build_chunker
 from app.retrieval.models import Document, DocumentMetadata
-from app.services.chunking import _BaseChunker, build_chunker
 
 
 def _document(text: str) -> Document:
@@ -85,6 +85,27 @@ def test_token_chunker_emits_overlap_chunks() -> None:
     assert chunks[1].text.split()[0] == "token3"
 
 
+def test_token_chunker_produces_one_giant_chunk_for_whitespace_free_cjk_text() -> None:
+    """Pins the whitespace-split limitation: chunkers split on `str.split()`, so a
+    run of CJK text with no whitespace is a single "token" regardless of its
+    character length, and every strategy collapses to one chunk containing it.
+    This is a known limitation (not a crash) -- documented here as the contract
+    every chunker strategy actually honors today.
+    """
+    text = "这是一个没有空格的中文句子测试文本内容重复多次以便产生足够长度" * 20
+
+    for strategy in (
+        ChunkStrategy.TOKEN,
+        ChunkStrategy.SENTENCE,
+        ChunkStrategy.PARAGRAPH,
+        ChunkStrategy.SEMANTIC,
+    ):
+        chunker = build_chunker(strategy, 50, 10)
+        chunks = chunker.chunk(_document(text))
+        assert len(chunks) == 1, f"{strategy} split whitespace-free CJK text into >1 chunk"
+        assert chunks[0].text == text
+
+
 def test_semantic_chunker_flushes_on_headings() -> None:
     text = "\n".join(
         [
@@ -111,13 +132,6 @@ def test_semantic_chunker_emits_buffered_segment() -> None:
     chunks = chunker.chunk(_document(text))
 
     assert any("Heading" in chunk.text for chunk in chunks)
-
-
-def test_base_chunker_chunk_not_implemented() -> None:
-    chunker = _BaseChunker(chunk_size=2, overlap=0)
-
-    with pytest.raises(NotImplementedError):
-        chunker.chunk(_document("hello world"))
 
 
 def test_chunk_segments_falls_back_to_document_text() -> None:

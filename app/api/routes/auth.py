@@ -10,10 +10,10 @@ from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
 from app.clients.openrouter import get_openrouter_client
+from app.clients.pinecone import get_pinecone_client
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import models
 from app.db.repositories import UserRepository
-from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.auth import (
     ProviderKeyStatus,
     Token,

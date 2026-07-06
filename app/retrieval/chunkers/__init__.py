@@ -1,6 +1,19 @@
 """Chunkers for document ingestion."""
 
 from .base import DocumentChunker
-from .text import FixedSizeTextChunker
+from .strategies import (
+    ParagraphChunker,
+    SemanticChunker,
+    SentenceChunker,
+    TokenChunker,
+    build_chunker,
+)
 
-__all__ = ["DocumentChunker", "FixedSizeTextChunker"]
+__all__ = [
+    "DocumentChunker",
+    "ParagraphChunker",
+    "SemanticChunker",
+    "SentenceChunker",
+    "TokenChunker",
+    "build_chunker",
+]

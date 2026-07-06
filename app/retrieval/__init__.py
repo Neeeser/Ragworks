@@ -1,14 +1,13 @@
 """TransparentRAG retrieval module."""
 
-# NOTE: Keep imports lightweight so optional dependencies (e.g. transformers)
-# are not pulled in when the retrieval package is imported. Users that need
-# concrete implementations such as SentenceTransformerEmbedder can import
-# those modules directly.
+# NOTE: Keep imports lightweight so optional dependencies (e.g.
+# sentence-transformers) are not pulled in when the retrieval package is
+# imported. Users that need concrete implementations such as
+# CrossEncoderReranker can import that module directly.
 
 from .chunkers import DocumentChunker
 from .embedders import Embedder
 from .indexers import Indexer, PineconeIndexConfig, PineconeIndexer, VectorIndexConfig
-from .indexing import DocumentIndexer
 from .models import (
     Document,
     DocumentChunk,
@@ -25,7 +24,6 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "DocumentChunker",
-    "DocumentIndexer",
     "DocumentMetadata",
     "DocumentParser",
     "DocumentSource",

@@ -80,7 +80,13 @@ app/
                    indexing.py, retrieval.py, plus validators.py for the
                    validation helpers shared across those stage modules)
   retrieval/       RAG components: chunkers, embedders, indexers, parsers,
-                   rerankers, retrievers — one folder per pluggable stage
+                   rerankers, retrievers — one folder per pluggable stage.
+                   chunkers/base.py holds the `DocumentChunker` protocol;
+                   chunkers/strategies.py holds every concrete strategy
+                   (Token/Sentence/Paragraph/Semantic + `build_chunker`) —
+                   chunker implementations live here and nowhere else (they
+                   used to also exist as `app/services/chunking.py`, which
+                   was a lockstep-drift risk, not a real second concern)
   core/            settings, auth primitives, cross-cutting config
   utils/           small pure helpers only
 tests/             mirrors the app/ layout (tests/api, tests/services, …)
@@ -316,7 +322,15 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   saying why, and is never the fix for a design problem.
 - **Dead code is deleted on sight** — unused params, endpoints, schemas. A parameter
   or symbol with no caller (grep before deleting, and report the grep) is not
-  "kept for later"; add it back when a real caller needs it.
+  "kept for later"; add it back when a real caller needs it. **This includes whole
+  dead layers, not just symbols.** `app/retrieval/indexing.py`'s `DocumentIndexer`
+  and `app/retrieval/chunkers/text.py`'s `FixedSizeTextChunker` were a parallel
+  ingestion path with zero production callers (real ingestion runs through the
+  pipeline nodes in `pipelines/nodes/`) — an unexecuted parallel implementation
+  drifts silently from the one that's actually running, and its tests only assert
+  that the dead code agrees with itself, not that anything real works. Dead layers
+  are deleted, not preserved "in case"; grep for callers before deleting and report
+  the grep either way.
 - **Import-time side effects are forbidden**, with one deliberate exception: the
   process-wide db `engine` (`app/db/engine.py`) is created at import time because
   SQLAlchemy's own guidance is one engine per process, reused for its life. Every

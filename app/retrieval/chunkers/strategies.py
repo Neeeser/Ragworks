@@ -6,8 +6,9 @@ import re
 from collections.abc import Sequence
 
 from app.db.models import ChunkStrategy
-from app.retrieval.chunkers.base import DocumentChunker
 from app.retrieval.models import Document, DocumentChunk
+
+from .base import DocumentChunker
 
 
 class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
@@ -97,7 +98,14 @@ class TokenChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
 
 
 class SentenceChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
-    """Groups contiguous sentences up to the requested chunk size (in sentences)."""
+    """Splits on sentence boundaries, then packs by whitespace token count.
+
+    `chunk_size`/`overlap` are token budgets, not sentence counts: sentences
+    are concatenated into a chunk until adding the next one would exceed
+    `chunk_size` tokens, and a single sentence longer than `chunk_size` is
+    itself split mid-sentence -- same token-packing behavior as every other
+    chunker in this module.
+    """
 
     SENTENCE_REGEX = re.compile(r"(?<=[.!?])\s+")
 

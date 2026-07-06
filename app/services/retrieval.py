@@ -9,12 +9,12 @@ from time import perf_counter
 from sqlmodel import Session
 
 from app.clients.openrouter import get_openrouter_client
+from app.clients.pinecone import get_pinecone_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
-from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
 from app.services.pipeline_resolution import resolve_retrieval_pipeline
 from app.utils.file_storage import FileStorage
@@ -39,7 +39,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         start_time = perf_counter()
         resolved = resolve_retrieval_pipeline(self.session, user, collection)
         openrouter = get_openrouter_client(user.openrouter_api_key or "")
-        pinecone = get_pinecone_client(api_key=user.pinecone_api_key)
+        pinecone = get_pinecone_client(api_key=user.pinecone_api_key or "")
         runner = PipelineRunner(self.session)
         version = resolved.service.get_current_version(resolved.pipeline)
         handle = runner.start(

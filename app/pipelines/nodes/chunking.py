@@ -14,7 +14,7 @@ from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_chunks, summarize_text
-from app.services.chunking import build_chunker
+from app.retrieval.chunkers import build_chunker
 
 logger = logging.getLogger(__name__)
 

@@ -8,6 +8,7 @@ from fastapi import UploadFile
 from sqlmodel import Session
 
 from app.clients.openrouter import get_openrouter_client
+from app.clients.pinecone import get_pinecone_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import ChunkRepository
@@ -16,7 +17,6 @@ from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import IngestionPipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.retrieval.models import DocumentChunk
-from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.utils.file_storage import FileStorage
@@ -50,7 +50,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         handle: PipelineRunHandle | None = None
         try:
             openrouter = get_openrouter_client(user.openrouter_api_key or "")
-            pinecone = get_pinecone_client(api_key=user.pinecone_api_key)
+            pinecone = get_pinecone_client(api_key=user.pinecone_api_key or "")
             version = resolved.service.get_current_version(resolved.pipeline)
             handle = runner.start(
                 pipeline=resolved.pipeline,
