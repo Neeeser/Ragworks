@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_user_api_keys
@@ -30,9 +30,12 @@ def run_collection_query(
         session=session,
     )
     retrieval_service = RetrievalService(session)
-    return retrieval_service.query_collection(
-        current_user,
-        collection,
-        query=payload.query,
-        top_k=payload.top_k,
-    )
+    try:
+        return retrieval_service.query_collection(
+            current_user,
+            collection,
+            query=payload.query,
+            top_k=payload.top_k,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

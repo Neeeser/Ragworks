@@ -202,7 +202,10 @@ def activate_pipeline_version(
     pipeline = service.get_pipeline(pipeline_id, current_user.id)
     if not pipeline:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline not found.")
-    service.activate_version(pipeline, payload.version)
+    try:
+        service.activate_version(pipeline, payload.version)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     session.commit()
     session.refresh(pipeline)
     definition = service.get_definition(pipeline)

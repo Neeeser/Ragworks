@@ -50,6 +50,19 @@ def _create_user(session: Session) -> models.User:
     return user
 
 
+def _create_collection(session: Session, user: models.User) -> models.Collection:
+    collection = models.Collection(
+        user_id=user.id,
+        name="Collection",
+        description="",
+        extra_metadata={},
+    )
+    session.add(collection)
+    session.commit()
+    session.refresh(collection)
+    return collection
+
+
 def test_healthcheck_includes_timestamp() -> None:
     payload = health_routes.healthcheck()
 
@@ -143,3 +156,55 @@ def test_upload_document_raises_for_missing_collection(session: Session) -> None
         asyncio.run(_call())
 
     assert excinfo.value.status_code == 404
+
+
+def test_upload_document_translates_ingestion_value_error(monkeypatch, session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    upload = UploadFile(filename="doc.txt", file=io.BytesIO(b"data"))
+
+    class _StubIngestionService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def ingest_upload(self, *, user, collection, upload):  # noqa: ARG002
+            raise ValueError("Ingestion pipeline could not be resolved.")
+
+    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+
+    async def _call():
+        return await documents_routes.upload_document(
+            collection.id,
+            upload,
+            current_user=user,
+            session=session,
+        )
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_call())
+
+    assert excinfo.value.status_code == 400
+
+
+def test_search_route_translates_retrieval_value_error(monkeypatch, session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    class _StubRetrievalService:
+        def __init__(self, _session) -> None:
+            pass
+
+        def query_collection(self, _user, _collection, *, query, top_k):  # noqa: ARG002
+            raise ValueError("Retrieval pipeline could not be resolved.")
+
+    monkeypatch.setattr(search_routes, "RetrievalService", _StubRetrievalService)
+
+    with pytest.raises(HTTPException) as excinfo:
+        search_routes.run_collection_query(
+            collection.id,
+            CollectionQueryRequest(query="test", top_k=5),
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 400

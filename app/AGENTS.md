@@ -48,6 +48,11 @@ invert it:
   clients, return typed results, and raise domain errors. They must not import from
   `app.api` — a service that needs `HTTPException` is a route in disguise; raise a
   domain exception and translate it at the route.
+- **Every service-raised domain error (`ValueError` today) must be translated at the
+  route** — an untranslated domain error is a 500. When adding a route, write the
+  failure-path test first, the way `routes/visualizations.py` wraps `UmapService`
+  calls in `try/except ValueError`. (Longer-term: typed domain exceptions so routes can
+  distinguish 400/404 without string matching.)
 - **DB access goes through `app/db/repositories.py`.** Routes and services don't build
   raw `select()` statements inline; add or extend a repository method so query logic
   has one home and one set of tests.

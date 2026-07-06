@@ -297,6 +297,21 @@ def test_activate_pipeline_version_missing(session: Session) -> None:
     assert excinfo.value.status_code == 404
 
 
+def test_activate_pipeline_version_unknown_version(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.activate_pipeline_version(
+            pipeline.id,
+            pipelines_routes.PipelineActivateRequest(version=999),
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 404
+
+
 def test_create_pipeline_creates_record(session: Session) -> None:
     user = _create_user(session)
 

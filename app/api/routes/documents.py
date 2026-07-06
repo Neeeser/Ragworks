@@ -43,7 +43,14 @@ async def upload_document(
     )
 
     ingestion_service = IngestionService(session)
-    return ingestion_service.ingest_upload(user=current_user, collection=collection, upload=file)
+    try:
+        return ingestion_service.ingest_upload(
+            user=current_user,
+            collection=collection,
+            upload=file,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/collections/{collection_id}/documents", response_model=List[DocumentRead])
