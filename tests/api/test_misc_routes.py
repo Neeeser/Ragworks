@@ -37,7 +37,7 @@ class _StubOpenRouter:
 
     def list_embedding_models(self, force_refresh: bool = False):
         self.calls.append({"embedding_refresh": force_refresh})
-        return [{"id": "embed-a", "name": "Embed A", "dimension": 1536}]
+        return [EmbeddingModelInfo(id="embed-a", name="Embed A", dimension=1536)]
 
 
 def _create_user(session: Session) -> models.User:
@@ -94,29 +94,6 @@ def test_models_routes_delegate_to_openrouter(monkeypatch) -> None:
     assert endpoints.data.id == "model-a"
     assert embedding_models == [EmbeddingModelInfo(id="embed-a", name="Embed A", dimension=1536)]
     assert client.calls[0]["force_refresh"] is True
-
-
-def test_list_embedding_models_skips_invalid_entries(monkeypatch) -> None:
-    class _StubEmbeddingClient:
-        def list_embedding_models(self, force_refresh: bool = False):
-            return ["invalid", {"id": ""}, {"id": "embed-a", "name": "Embed A"}]
-
-    monkeypatch.setattr(
-        models_routes,
-        "get_openrouter_client",
-        lambda *_args, **_kwargs: _StubEmbeddingClient(),
-    )
-
-    user = models.User(
-        email="user@example.com",
-        full_name="User",
-        hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-    )
-
-    embedding_models = models_routes.list_embedding_models(refresh=False, current_user=user)
-
-    assert embedding_models == [EmbeddingModelInfo(id="embed-a", name="Embed A")]
 
 
 def test_search_route_raises_for_missing_collection(session: Session) -> None:

@@ -109,10 +109,6 @@ module = "app.api.routes.*"
 ignore_errors = true  # removed in Phase 6
 
 [[tool.mypy.overrides]]
-module = "app.services.openrouter"
-ignore_errors = true  # removed in Phase 6
-
-[[tool.mypy.overrides]]
 module = "app.services.pipelines"
 ignore_errors = true  # removed in Phase 6
 

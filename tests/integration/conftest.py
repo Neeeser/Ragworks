@@ -21,9 +21,9 @@ from pinecone import Pinecone, ServerlessSpec
 from pinecone.exceptions import NotFoundException
 
 from app.api.main import app
+from app.clients.openrouter import get_openrouter_client
 from app.core import config as api_config
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
-from app.services.openrouter import get_openrouter_client
 
 REQUIRED_ENV_VARS = [
     "TEST_OPENROUTER_API_KEY",
@@ -136,10 +136,10 @@ def _embedding_dimension() -> int:
     openrouter_key = os.getenv("TEST_OPENROUTER_API_KEY", "")
     openrouter = get_openrouter_client(openrouter_key)
     response = openrouter.embed(["dimension probe"], model=SETTINGS.default_embedding_model)
-    data = response.get("data", [])
+    data = response.data or []
     if not data:
         raise RuntimeError("Failed to resolve embedding dimension from OpenRouter response.")
-    dimension = len(data[0].get("embedding", []))
+    dimension = len(data[0].embedding or [])
     if dimension == 0:
         raise RuntimeError("OpenRouter returned an empty embedding while probing dimension.")
     _EMBED_DIMENSION_CACHE = dimension

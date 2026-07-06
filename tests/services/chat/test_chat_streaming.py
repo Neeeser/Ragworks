@@ -14,6 +14,7 @@ from app.chat.providers.openrouter import OpenRouterProvider
 from app.chat.service import ChatService
 from app.chat.streaming.streaming import stream_model_completion
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.openrouter import OpenRouterStreamChunk
 from app.services import chat as chat_module
 
 
@@ -31,7 +32,7 @@ class _StubOpenRouter:
         parallel_tool_calls: bool,
         extra_body: dict[str, Any],
         parameters: dict[str, Any] | None,
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[OpenRouterStreamChunk, None, None]:
         self.calls.append(
             {
                 "messages": messages,
@@ -42,7 +43,12 @@ class _StubOpenRouter:
                 "parameters": parameters,
             }
         )
-        yield from self._chunks
+        # `__init__` (not `model_validate`) so tests that monkeypatch
+        # `OpenRouterStreamChunk.model_validate` to simulate the *provider's*
+        # own re-validation failing don't also break this stub's simulation of
+        # the (already-validated) client boundary.
+        for chunk in self._chunks:
+            yield OpenRouterStreamChunk(**chunk)
 
 
 def _collect_stream_results(gen: Generator[dict[str, Any], None, tuple[dict[str, Any], dict[str, Any], str, str, str]]) -> tuple[list[dict[str, Any]], tuple[dict[str, Any], dict[str, Any], str, str, str]]:
@@ -273,8 +279,11 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
 
     monkeypatch.setattr(chat_module.OpenRouterStreamChunk, "model_validate", _raise_validation)
 
+    # `_StubOpenRouter.chat_stream` now simulates the typed client boundary (it
+    # always yields `OpenRouterStreamChunk` instances, never a bare string) --
+    # non-dict/malformed chunks reaching `parse_stream_chunk` are covered
+    # directly by `test_openrouter_provider_ignores_non_dict_chunks` instead.
     chunks = [
-        "skip",
         {"choices": []},
         {
             "provider": "router-c",

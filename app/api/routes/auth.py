@@ -9,6 +9,7 @@ from pinecone.exceptions import PineconeException
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
+from app.clients.openrouter import get_openrouter_client
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import models
 from app.db.repositories import UserRepository
@@ -21,7 +22,6 @@ from app.schemas.auth import (
     UserRead,
     UserSettingsUpdate,
 )
-from app.services.openrouter import get_openrouter_client
 from app.services.pipelines import PipelineService
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])

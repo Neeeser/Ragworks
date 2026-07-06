@@ -1,19 +1,25 @@
-"""OpenRouter client wrapper and helpers."""
+"""Typed OpenRouter HTTP + OpenAI-compatible SDK client."""
 
 from __future__ import annotations
 
 import threading
-import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 from openai import OpenAI
 
+from app.clients.openrouter.catalog import ModelCatalog
 from app.core.config import get_settings
-from app.schemas.models import EndpointsListResponse, ModelInfo
+from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
+from app.schemas.openrouter import (
+    OpenRouterChatResponse,
+    OpenRouterEmbeddingsResponse,
+    OpenRouterKeyInfo,
+    OpenRouterStreamChunk,
+)
 
 
 class OpenRouterClient:
@@ -47,12 +53,11 @@ class OpenRouterClient:
             http_client=self._http,
             timeout=httpx.Timeout(600.0, connect=5.0),
         )
-        self._model_cache: dict[str, Any] = {"ts": 0.0, "data": []}
-        self._embedding_model_cache: dict[str, Any] = {
-            "ts": 0.0,
-            "data": [],
-            "dimensions": {},
-        }
+        self._catalog = ModelCatalog(
+            fetch_models=self._fetch_models,
+            fetch_embedding_models=self._fetch_embedding_models,
+            probe_embedding=self._probe_embedding_dimension,
+        )
 
     def _build_app_headers(self) -> dict[str, str]:
         """Build static headers required by OpenRouter."""
@@ -69,82 +74,60 @@ class OpenRouterClient:
             return merged
         return dict(self._app_headers)
 
-    def list_models(self, force_refresh: bool = False) -> list[ModelInfo]:
-        """Return available models, caching for a short period."""
-        now = time.time()
-        if (
-            not force_refresh
-            and now - self._model_cache["ts"] < 300
-            and self._model_cache["data"]
-        ):
-            return self._model_cache["data"]
+    def _fetch_models(self) -> list[ModelInfo]:
+        """Fetch the full model list from OpenRouter (no caching)."""
         response = self._http.get("/models")
         response.raise_for_status()
         payload = response.json()
-        models = [ModelInfo(**item) for item in payload.get("data", [])]
-        self._model_cache = {"ts": now, "data": models}
-        return models
+        return [ModelInfo(**item) for item in payload.get("data", [])]
 
-    def list_embedding_models(self, force_refresh: bool = False) -> list[dict[str, Any]]:
-        """Return available embedding models, caching for a short period."""
-        now = time.time()
-        if (
-            not force_refresh
-            and now - self._embedding_model_cache["ts"] < 300
-            and self._embedding_model_cache["data"]
-        ):
-            return self._embedding_model_cache["data"]
+    def _fetch_embedding_models(self) -> list[EmbeddingModelInfo]:
+        """Fetch the embedding model list from OpenRouter (no caching, no dimensions)."""
         response = self._http.get("/embeddings/models")
         response.raise_for_status()
         payload = response.json()
-        models = payload.get("data") or []
-        if not isinstance(models, list):
-            models = []
-        enriched: list[dict[str, Any]] = []
-        dimension_cache = self._embedding_model_cache.get("dimensions") or {}
-        for model in models:
-            if not isinstance(model, dict):
+        raw = payload.get("data")
+        if not isinstance(raw, list):
+            return []
+        models: list[EmbeddingModelInfo] = []
+        for item in raw:
+            if not isinstance(item, dict):
                 continue
-            model_id = model.get("id")
+            model_id = item.get("id")
             if not model_id:
-                enriched.append(model)
                 continue
-            dimension = dimension_cache.get(str(model_id))
-            if dimension is None:
-                try:
-                    dimension = self.get_embedding_dimension(str(model_id))
-                    dimension_cache[str(model_id)] = dimension
-                except ValueError:
-                    dimension = None
-            enriched.append({**model, "dimension": dimension})
-        self._embedding_model_cache = {
-            "ts": now,
-            "data": enriched,
-            "dimensions": dimension_cache,
-        }
-        return enriched
+            models.append(
+                EmbeddingModelInfo(
+                    id=str(model_id),
+                    name=str(item.get("name") or model_id),
+                    description=item.get("description"),
+                    context_length=item.get("context_length"),
+                    pricing=item.get("pricing"),
+                )
+            )
+        return models
+
+    def _probe_embedding_dimension(self, model_id: str) -> OpenRouterEmbeddingsResponse:
+        """Issue a single-input embeddings call used to measure vector length."""
+        return self.embed(["dimension_probe"], model=model_id)
+
+    def list_models(self, force_refresh: bool = False) -> list[ModelInfo]:
+        """Return available models, caching for a short period."""
+        return self._catalog.list_models(force_refresh=force_refresh)
+
+    def list_embedding_models(self, force_refresh: bool = False) -> list[EmbeddingModelInfo]:
+        """Return available embedding models, caching for a short period."""
+        return self._catalog.list_embedding_models(force_refresh=force_refresh)
 
     def get_embedding_dimension(self, model_id: str) -> int:
         """Return embedding dimension for the requested model."""
-        if not model_id:
-            raise ValueError("Embedding model id must be provided.")
-        payload = self.embed(["dimension_probe"], model=model_id)
-        data = payload.get("data")
-        if not isinstance(data, list) or not data:
-            raise ValueError("OpenRouter embeddings response missing data array.")
-        first = data[0]
-        if not isinstance(first, dict):
-            raise ValueError("OpenRouter embeddings response entry is invalid.")
-        embedding = first.get("embedding")
-        if not isinstance(embedding, Iterable) or isinstance(embedding, (str, bytes)):
-            raise ValueError("OpenRouter embeddings response missing embedding values.")
-        return len(list(embedding))
+        return self._catalog.get_embedding_dimension(model_id)
 
-    def get_current_key(self) -> dict[str, Any]:
+    def get_current_key(self) -> OpenRouterKeyInfo:
         """Return metadata for the currently authenticated API key."""
         response = self._http.get("/key")
         response.raise_for_status()
-        return response.json()
+        return OpenRouterKeyInfo.model_validate(response.json())
 
     def get_model(self, model_id: str) -> ModelInfo | None:
         """Find a model by id or canonical slug."""
@@ -187,7 +170,7 @@ class OpenRouterClient:
         model: str | None = None,
         extra_headers: dict[str, str] | None = None,
         dimensions: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> OpenRouterEmbeddingsResponse:
         """Create embeddings for the provided texts."""
         headers = self._merge_extra_headers(extra_headers)
         kwargs: dict[str, Any] = {
@@ -199,7 +182,42 @@ class OpenRouterClient:
         if dimensions is not None:
             kwargs["dimensions"] = dimensions
         embeddings = self._client.embeddings.create(**kwargs)
-        return embeddings.model_dump()
+        return OpenRouterEmbeddingsResponse.model_validate(embeddings.model_dump())
+
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    def _build_chat_kwargs(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: dict[str, Any] | None,
+        parallel_tool_calls: bool | None,
+        extra_headers: dict[str, str] | None,
+        extra_body: dict[str, Any] | None,
+        parameters: dict[str, Any] | None,
+        stream: bool,
+    ) -> dict[str, Any]:
+        """Assemble the SDK kwargs shared by `chat` and `chat_stream`."""
+        kwargs: dict[str, Any] = {
+            "messages": messages,
+            "model": model or self.settings.default_chat_model,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        if tool_choice:
+            kwargs["tool_choice"] = tool_choice
+        if parallel_tool_calls is not None:
+            kwargs["parallel_tool_calls"] = parallel_tool_calls
+        kwargs["extra_headers"] = self._merge_extra_headers(extra_headers)
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        if parameters:
+            for key, value in parameters.items():
+                if value is not None:
+                    kwargs[key] = value
+        if stream:
+            kwargs["stream"] = True
+        return kwargs
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def chat(
@@ -212,27 +230,21 @@ class OpenRouterClient:
         extra_headers: dict[str, str] | None = None,
         extra_body: dict[str, Any] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> OpenRouterChatResponse:
         """Create a chat completion with optional tools and parameters."""
-        kwargs: dict[str, Any] = {
-            "messages": messages,
-            "model": model or self.settings.default_chat_model,
-        }
-        if tools:
-            kwargs["tools"] = tools
-        if tool_choice:
-            kwargs["tool_choice"] = tool_choice
-        if parallel_tool_calls is not None:
-            kwargs["parallel_tool_calls"] = parallel_tool_calls
-        kwargs["extra_headers"] = self._merge_extra_headers(extra_headers)
-        if extra_body:
-            kwargs["extra_body"] = extra_body
-        if parameters:
-            for key, value in parameters.items():
-                if value is not None:
-                    kwargs[key] = value
+        kwargs = self._build_chat_kwargs(
+            messages,
+            model,
+            tools,
+            tool_choice,
+            parallel_tool_calls,
+            extra_headers,
+            extra_body,
+            parameters,
+            stream=False,
+        )
         response = self._client.chat.completions.create(**kwargs)
-        return response.model_dump()
+        return OpenRouterChatResponse.model_validate(response.model_dump())
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def chat_stream(
@@ -245,29 +257,22 @@ class OpenRouterClient:
         extra_headers: dict[str, str] | None = None,
         extra_body: dict[str, Any] | None = None,
         parameters: dict[str, Any] | None = None,
-    ):
+    ) -> Iterator[OpenRouterStreamChunk]:
         """Yield streaming chat completion chunks."""
-        kwargs: dict[str, Any] = {
-            "messages": messages,
-            "model": model or self.settings.default_chat_model,
-        }
-        if tools:
-            kwargs["tools"] = tools
-        if tool_choice:
-            kwargs["tool_choice"] = tool_choice
-        if parallel_tool_calls is not None:
-            kwargs["parallel_tool_calls"] = parallel_tool_calls
-        kwargs["extra_headers"] = self._merge_extra_headers(extra_headers)
-        if extra_body:
-            kwargs["extra_body"] = extra_body
-        if parameters:
-            for key, value in parameters.items():
-                if value is not None:
-                    kwargs[key] = value
-        kwargs["stream"] = True
+        kwargs = self._build_chat_kwargs(
+            messages,
+            model,
+            tools,
+            tool_choice,
+            parallel_tool_calls,
+            extra_headers,
+            extra_body,
+            parameters,
+            stream=True,
+        )
         stream = self._client.chat.completions.create(**kwargs)
         for chunk in stream:
-            yield chunk.model_dump()
+            yield OpenRouterStreamChunk.model_validate(chunk.model_dump())
 
     def close(self) -> None:
         """Close the HTTP transport, releasing its connection pool.

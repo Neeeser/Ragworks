@@ -8,6 +8,7 @@ from time import perf_counter
 
 from sqlmodel import Session
 
+from app.clients.openrouter import get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import QueryRepository
@@ -18,7 +19,6 @@ from app.pipelines.runtime import PipelineExecutor, PipelineRunContext
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
-from app.services.openrouter import get_openrouter_client
 from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now

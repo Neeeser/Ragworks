@@ -7,9 +7,9 @@ from collections.abc import Iterable
 from pydantic import ValidationError
 
 from app.chat.providers.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
+from app.clients.openrouter import OpenRouterClient
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse, OpenRouterStreamChunk
-from app.services.openrouter import OpenRouterClient
 
 
 class OpenRouterProvider:
@@ -31,8 +31,16 @@ class OpenRouterProvider:
         return self._client.get_model(model_id)
 
     def chat(self, request: ChatRequest) -> dict:
-        """Send a non-streaming chat request."""
-        return self._client.chat(
+        """Send a non-streaming chat request.
+
+        `OpenRouterClient.chat` returns a validated `OpenRouterChatResponse`;
+        this dumps it back to a dict at the provider boundary so the
+        `ChatProvider` protocol (still dict-based pending Task 4.1's chat
+        internals rewrite) doesn't change here. `exclude_none=True` keeps the
+        dumped shape close to OpenRouter's actual (sparse) payload rather than
+        materializing every optional schema field as an explicit `None`.
+        """
+        response = self._client.chat(
             messages=request.messages,
             tools=request.tools,
             model=request.model,
@@ -40,17 +48,19 @@ class OpenRouterProvider:
             extra_body=request.extra_body,
             parameters=request.parameters or None,
         )
+        return response.model_dump(exclude_none=True)
 
     def chat_stream(self, request: ChatRequest) -> Iterable[dict]:
-        """Stream a chat completion request."""
-        return self._client.chat_stream(
+        """Stream a chat completion request, dumping each typed chunk to a dict."""
+        for chunk in self._client.chat_stream(
             messages=request.messages,
             tools=request.tools,
             model=request.model,
             parallel_tool_calls=True,
             extra_body=request.extra_body,
             parameters=request.parameters or None,
-        )
+        ):
+            yield chunk.model_dump(exclude_none=True)
 
     def parse_chat_response(self, response: dict) -> ParsedChatResponse:
         """Normalize the OpenRouter chat response into a common shape."""

@@ -5,9 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import require_openrouter_key
+from app.clients.openrouter import get_openrouter_client
 from app.db import models
 from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
-from app.services.openrouter import get_openrouter_client
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
@@ -46,23 +46,4 @@ def list_embedding_models(
 ) -> list[EmbeddingModelInfo]:
     """List available OpenRouter embedding models."""
     client = get_openrouter_client(current_user.openrouter_api_key or "")
-    payload = client.list_embedding_models(force_refresh=refresh)
-    models_list: list[EmbeddingModelInfo] = []
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("id")
-        if not model_id:
-            continue
-        name = item.get("name") or model_id
-        models_list.append(
-            EmbeddingModelInfo(
-                id=str(model_id),
-                name=str(name),
-                description=item.get("description"),
-                context_length=item.get("context_length"),
-                pricing=item.get("pricing"),
-                dimension=item.get("dimension"),
-            )
-        )
-    return models_list
+    return client.list_embedding_models(force_refresh=refresh)

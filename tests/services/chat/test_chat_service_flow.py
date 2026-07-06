@@ -13,6 +13,7 @@ from app.chat.state import RunState, ToolExecutionContext
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
+from app.schemas.openrouter import OpenRouterChatResponse
 
 
 @dataclass
@@ -43,9 +44,9 @@ class _StubOpenRouter:
     def get_model(self, _model_id: str) -> ModelInfo | None:
         return self._model_info
 
-    def chat(self, **kwargs: Any) -> dict[str, Any]:
+    def chat(self, **kwargs: Any) -> OpenRouterChatResponse:
         self.chat_calls.append(kwargs)
-        return dict(self._response)
+        return OpenRouterChatResponse.model_validate(self._response)
 
 
 class _SequencedOpenRouter:
@@ -57,9 +58,9 @@ class _SequencedOpenRouter:
     def get_model(self, _model_id: str) -> ModelInfo:
         return self._model_info
 
-    def chat(self, **kwargs: Any) -> dict[str, Any]:
+    def chat(self, **kwargs: Any) -> OpenRouterChatResponse:
         self.chat_calls.append(kwargs)
-        return dict(self._responses.pop(0))
+        return OpenRouterChatResponse.model_validate(self._responses.pop(0))
 
 
 class _ModelOnlyOpenRouter:

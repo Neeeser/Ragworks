@@ -12,11 +12,11 @@ from pinecone import Pinecone
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
+from app.clients.openrouter import OpenRouterClient
 from app.core.config import Settings
 from app.db import models
 from app.pipelines.models import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.tracing import NodeTraceSummary, PipelineTraceRecorder
-from app.services.openrouter import OpenRouterClient
 from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)

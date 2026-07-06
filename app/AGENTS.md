@@ -55,7 +55,8 @@ app/
   api/             FastAPI app assembly + dependencies
     routes/        one router module per resource (collections.py, chat.py, …)
   schemas/         Pydantic wire types, one module per domain — the API contract
-  services/        business logic; orchestrates db + external clients
+  clients/         typed external-API clients, one package per provider (openrouter/)
+  services/        business logic; orchestrates db + clients
   db/              session, migrations
     models/        SQLModel tables, one module per domain (see below)
     repositories/  data access, one module per domain (see below)
@@ -233,9 +234,15 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   `StreamingResponse` runs after the function returns — anything it closes over
   (session, client) must still be alive, and cleanup must handle the client
   disconnecting mid-stream.
-- **External calls (OpenRouter, Pinecone) live in their client/service module** with
-  timeouts set explicitly. Before changing these integrations, read the local docs in
-  `external_api_documentation/` — behavior there trumps memory.
+- **External-API code lives in `app/clients/<provider>/`, typed end to end.** Each
+  provider gets its own package (`app/clients/openrouter/`) with a client module (HTTP/
+  SDK calls, timeouts set explicitly) and typed request/response models — the schemas in
+  `app/schemas/` are the source of truth, so a client method returning `dict` is a bug,
+  not a shortcut. Split out a same-package module (e.g. `catalog.py`) for
+  caching/shaping logic that doesn't itself do I/O, taking the transport as injected
+  callables so it stays unit-testable without a fake HTTP client. Before changing these
+  integrations, read the local docs in `external_api_documentation/` first — behavior
+  there trumps memory.
 - **Never `lru_cache` objects that own OS resources** (httpx clients, sessions, file
   handles): eviction just drops the reference, so whatever it owns leaks — we had this
   exact bug on `get_openrouter_client`. Use an explicit cache (e.g. an `OrderedDict` +

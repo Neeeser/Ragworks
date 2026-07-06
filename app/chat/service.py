@@ -57,6 +57,7 @@ from app.chat.state import (
     ToolExecutionContext,
 )
 from app.chat.streaming.streaming import stream_model_completion
+from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
@@ -69,7 +70,6 @@ from app.schemas.chat import (
     ChatSessionRead,
     ToolCallTrace,
 )
-from app.services.openrouter import OpenRouterClient, get_openrouter_client
 from app.services.pipelines import PipelineService
 from app.services.prompts import (
     collection_tool_name,

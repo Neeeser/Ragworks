@@ -8,6 +8,7 @@ from app.chat import service as chat_service_module
 from app.chat.service import ChatService
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.openrouter import OpenRouterChatResponse
 
 
 class _NoOpSession:
@@ -112,7 +113,7 @@ class _StubOpenRouter:
         parallel_tool_calls: bool,
         extra_body: dict[str, Any],
         parameters: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    ) -> OpenRouterChatResponse:
         self.calls.append(
             {
                 "messages": deepcopy(messages),
@@ -123,7 +124,7 @@ class _StubOpenRouter:
                 "parameters": deepcopy(parameters),
             }
         )
-        return self._responses.pop(0)
+        return OpenRouterChatResponse.model_validate(self._responses.pop(0))
 
 
 def _stub_pipeline_helpers(monkeypatch) -> None:

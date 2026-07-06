@@ -5,9 +5,10 @@ from typing import Any, ClassVar
 
 import pytest
 
+from app.clients.openrouter import OpenRouterClient
+from app.clients.openrouter import client as openrouter_module
 from app.schemas.models import EndpointsListResponse, ListEndpointsResponse, ModelInfo
-from app.services import openrouter as openrouter_module
-from app.services.openrouter import OpenRouterClient
+from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 
 
 @dataclass
@@ -256,6 +257,41 @@ def test_get_model_matches_id_case_insensitive_without_canonical(client: OpenRou
     assert model.id == "OpenAI/TEST"
 
 
+def test_get_current_key_returns_parsed_metadata(client: OpenRouterClient) -> None:
+    _StubHttpClient.responses = {
+        "/key": [
+            {
+                "data": {
+                    "label": "test-label",
+                    "limit": 10.0,
+                    "usage": 1.5,
+                    "usage_daily": 0.1,
+                    "usage_weekly": 0.5,
+                    "usage_monthly": 1.0,
+                    "byok_usage": 0,
+                    "byok_usage_daily": 0,
+                    "byok_usage_weekly": 0,
+                    "byok_usage_monthly": 0,
+                    "is_free_tier": False,
+                    "is_provisioning_key": False,
+                    "limit_remaining": 8.5,
+                    "limit_reset": None,
+                    "include_byok_in_limit": True,
+                    "rate_limit": {"requests": -1, "interval": "10s", "note": "legacy"},
+                }
+            }
+        ],
+    }
+
+    key_info = client.get_current_key()
+
+    assert key_info.data.label == "test-label"
+    assert key_info.data.limit_remaining == 8.5
+    assert key_info.data.rate_limit
+    assert key_info.data.rate_limit.interval == "10s"
+    assert client._http.get_calls == ["/key"]
+
+
 def test_list_model_endpoints_encodes_path(client: OpenRouterClient) -> None:
     response = EndpointsListResponse(data=ListEndpointsResponse(id="model", name="Model"))
     _StubHttpClient.responses = {
@@ -280,9 +316,9 @@ def test_list_embedding_models_caches_and_refreshes(client: OpenRouterClient) ->
     second = client.list_embedding_models()
     refreshed = client.list_embedding_models(force_refresh=True)
 
-    assert first[0]["id"] == "embed-a"
-    assert second[0]["id"] == "embed-a"
-    assert refreshed[0]["id"] == "embed-b"
+    assert first[0].id == "embed-a"
+    assert second[0].id == "embed-a"
+    assert refreshed[0].id == "embed-b"
     assert client._http.get_calls.count("/embeddings/models") == 2
 
 
@@ -297,6 +333,13 @@ def test_list_embedding_models_handles_invalid_payload(client: OpenRouterClient)
 
 
 def test_list_embedding_models_skips_invalid_entries(client: OpenRouterClient) -> None:
+    """Entries with no `id` are dropped: `EmbeddingModelInfo.id` is required.
+
+    This replaces the old dict-shape test that kept a raw `{"name": "No Id"}`
+    entry with no id -- once the fetch produces typed `EmbeddingModelInfo`
+    directly, an id-less entry can't be represented and is skipped, matching
+    what the `/models.py` route used to do by hand before this refactor.
+    """
     _StubHttpClient.responses = {
         "/embeddings/models": [
             {"data": ["bad-entry", {"name": "No Id"}, {"id": "embed-a", "name": "Embed A"}]}
@@ -306,30 +349,29 @@ def test_list_embedding_models_skips_invalid_entries(client: OpenRouterClient) -
     def _raise_dimension(_model_id: str) -> int:
         raise ValueError("no dimension")
 
-    client.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
+    client._catalog.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
 
     models = client.list_embedding_models()
 
-    assert len(models) == 2
-    assert models[0]["name"] == "No Id"
-    assert models[1]["id"] == "embed-a"
-    assert models[1]["dimension"] is None
+    assert len(models) == 1
+    assert models[0].id == "embed-a"
+    assert models[0].dimension is None
 
 
 def test_list_embedding_models_uses_dimension_cache(client: OpenRouterClient) -> None:
     _StubHttpClient.responses = {
         "/embeddings/models": [{"data": [{"id": "embed-a", "name": "Embed A"}]}],
     }
-    client._embedding_model_cache["dimensions"] = {"embed-a": 256}
+    client._catalog._dimensions = {"embed-a": 256}
 
     def _raise_dimension(_model_id: str) -> int:
         raise AssertionError("dimension lookup should be skipped")
 
-    client.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
+    client._catalog.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
 
     models = client.list_embedding_models(force_refresh=True)
 
-    assert models[0]["dimension"] == 256
+    assert models[0].dimension == 256
 
 
 def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> None:
@@ -344,7 +386,7 @@ def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
     call = client._client.embeddings.calls[0]
     assert call["extra_headers"]["X-Extra"] == "value"
     assert call["extra_headers"]["X-Title"] == "TransparentRag"
-    assert result["data"][0]["embedding"] == [0.1]
+    assert result.data[0].embedding == [0.1]
 
 
 def test_embed_includes_dimensions(client: OpenRouterClient) -> None:
@@ -361,7 +403,7 @@ def test_get_embedding_dimension_raises_on_missing_model_id(client: OpenRouterCl
 
 def test_get_embedding_dimension_raises_on_invalid_payload(client: OpenRouterClient) -> None:
     def _stub_embed(*_args, **_kwargs):
-        return {"data": []}
+        return OpenRouterEmbeddingsResponse(data=[])
 
     client.embed = _stub_embed  # type: ignore[assignment]
 
@@ -369,19 +411,9 @@ def test_get_embedding_dimension_raises_on_invalid_payload(client: OpenRouterCli
         client.get_embedding_dimension("model-a")
 
 
-def test_get_embedding_dimension_raises_on_invalid_entry(client: OpenRouterClient) -> None:
-    def _stub_embed(*_args, **_kwargs):
-        return {"data": ["bad"]}
-
-    client.embed = _stub_embed  # type: ignore[assignment]
-
-    with pytest.raises(ValueError, match="entry is invalid"):
-        client.get_embedding_dimension("model-a")
-
-
 def test_get_embedding_dimension_raises_on_missing_embedding(client: OpenRouterClient) -> None:
     def _stub_embed(*_args, **_kwargs):
-        return {"data": [{"embedding": "bad"}]}
+        return OpenRouterEmbeddingsResponse(data=[{"embedding": "bad"}])
 
     client.embed = _stub_embed  # type: ignore[assignment]
 
@@ -400,7 +432,7 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
     assert call["temperature"] == 0.2
     assert "top_p" not in call
     assert call["extra_body"] == {"usage": {"include": True}}
-    assert payload["id"] == "chat-1"
+    assert payload.id == "chat-1"
 
 
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
@@ -425,7 +457,7 @@ def test_chat_stream_yields_chunks(client: OpenRouterClient) -> None:
     call = client._client.chat.completions.calls[0]
     assert call["stream"] is True
     assert call["top_p"] == 0.9
-    assert chunks == [{"chunk": 1}, {"chunk": 2}]
+    assert [chunk.model_extra for chunk in chunks] == [{"chunk": 1}, {"chunk": 2}]
 
 
 def test_chat_stream_skips_none_parameters(client: OpenRouterClient) -> None:
@@ -477,7 +509,7 @@ def test_chat_stream_includes_tool_settings(client: OpenRouterClient) -> None:
     assert call["tool_choice"]["function"]["name"] == "tool"
     assert call["parallel_tool_calls"] is True
     assert call["extra_body"] == {"usage": {"include": True}}
-    assert chunks == [{"chunk": 1}, {"chunk": 2}]
+    assert [chunk.model_extra for chunk in chunks] == [{"chunk": 1}, {"chunk": 2}]
 
 
 def test_openrouter_client_requires_api_key() -> None:

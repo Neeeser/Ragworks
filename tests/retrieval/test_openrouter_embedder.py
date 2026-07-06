@@ -5,11 +5,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
 
-from app.retrieval.embedders import openrouter_embedder as embedder_module
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.models import DocumentChunk
+from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 
 
 @dataclass
@@ -23,7 +22,7 @@ class StubOpenRouterClient:
         model: str | None = None,
         extra_headers: dict[str, str] | None = None,
         dimensions: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> OpenRouterEmbeddingsResponse:
         self.calls.append(
             {
                 "texts": list(texts),
@@ -34,7 +33,7 @@ class StubOpenRouterClient:
         )
         if not self.responses:
             raise AssertionError("No stub responses remaining for embed call.")
-        return self.responses.pop(0)
+        return OpenRouterEmbeddingsResponse.model_validate(self.responses.pop(0))
 
 
 def _chunk(text: str, chunk_id: str) -> DocumentChunk:
@@ -73,15 +72,6 @@ def test_embed_documents_raises_when_payload_missing_data() -> None:
         embedder.embed_documents([_chunk("text", "chunk-0")])
 
 
-def test_embed_documents_rejects_invalid_entries() -> None:
-    payload = {"data": ["invalid"]}
-    client = StubOpenRouterClient(responses=[payload])
-    embedder = OpenRouterEmbedder(client, "qwen/qwen3-embedding-0.6b")
-
-    with pytest.raises(ValueError, match="invalid embedding entry"):
-        embedder.embed_documents([_chunk("text", "chunk-0")])
-
-
 def test_embed_documents_rejects_invalid_embedding_payload() -> None:
     payload = {"data": [{"embedding": "oops"}]}
     client = StubOpenRouterClient(responses=[payload])
@@ -116,14 +106,3 @@ def test_embed_documents_short_circuits_on_empty_chunks() -> None:
     assert embedder.embed_documents([]) == []
 
 
-def test_embed_documents_accepts_raw_dict_payload(monkeypatch) -> None:
-    payload = {"data": [{"embedding": [0.1, 0.2]}]}
-    client = StubOpenRouterClient(responses=[payload])
-    embedder = OpenRouterEmbedder(client, "qwen/qwen3-embedding-0.6b")
-
-    def _raise_validation_error(*_args, **_kwargs):
-        raise ValidationError.from_exception_data("OpenRouterEmbeddingsResponse", [])
-
-    monkeypatch.setattr(embedder_module.OpenRouterEmbeddingsResponse, "model_validate", _raise_validation_error)
-
-    assert embedder.embed_documents([_chunk("text", "chunk-0")]) == [[0.1, 0.2]]
