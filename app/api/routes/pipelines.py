@@ -76,7 +76,11 @@ def validate_pipeline(
     registry = build_default_registry()
     validator = PipelineValidator(registry)
     result = validator.validate(definition)
-    return PipelineValidationResponse(valid=result.valid, errors=result.errors)
+    return PipelineValidationResponse(
+        valid=result.valid,
+        errors=result.errors,
+        warnings=result.warnings,
+    )
 
 
 @router.get("", response_model=List[PipelineRead])

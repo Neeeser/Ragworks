@@ -147,6 +147,13 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   timeouts set explicitly. Before changing these integrations, read the local docs in
   `external_api_documentation/` — behavior there trumps memory.
 
+## Wire-contract completeness
+
+When a route shapes a response from a richer internal result, every schema field must
+be populated from the result — a field left to its default (`warnings=[]`) is invisible
+data loss the schema can't catch. When adding a field to a response schema, grep every
+construction site.
+
 ## Testing philosophy
 
 - **Test behavior, not wiring.** A test earns its place by failing when a real contract

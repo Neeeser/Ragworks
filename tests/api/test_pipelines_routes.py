@@ -118,6 +118,17 @@ def test_validate_pipeline_requires_index_name() -> None:
     assert any("must specify a Pinecone index" in error for error in response.errors)
 
 
+def test_validate_pipeline_returns_warnings() -> None:
+    definition = build_default_ingestion_pipeline()
+    for node in definition.nodes:
+        if node.type == "embedder.openrouter":
+            node.config = {**(node.config or {}), "dimension": 512}
+    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
+
+    assert response.warnings != []
+    assert any("no dimension configured" in warning for warning in response.warnings)
+
+
 def test_validate_definition_rejects_invalid(monkeypatch) -> None:
     class _StubValidator:
         def __init__(self, _registry) -> None:
