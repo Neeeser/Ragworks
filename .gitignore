@@ -2,6 +2,7 @@
 # Distribution / packaging
 .Python
 __pycache__
+*.egg-info/
 
 # Virtual environments
 .env/
