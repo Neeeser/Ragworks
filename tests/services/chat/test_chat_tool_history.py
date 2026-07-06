@@ -9,6 +9,7 @@ from app.chat.service import ChatService
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.openrouter import OpenRouterChatResponse
+from app.schemas.retrieval import CollectionQueryResponse
 
 
 class _NoOpSession:
@@ -89,8 +90,8 @@ class _StubRetrieval:
         top_k: int,
         *args: Any,
         **kwargs: Any,
-    ) -> dict[str, Any]:
-        return {"chunks": [], "query": query_text, "top_k": top_k}
+    ) -> CollectionQueryResponse:
+        return CollectionQueryResponse(query=query_text, top_k=top_k, chunks=[], usage={})
 
 
 class _StubOpenRouter:

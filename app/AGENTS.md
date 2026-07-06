@@ -196,6 +196,15 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   or when two copies must change in lockstep (that's a latent bug, not duplication).
   Never add a parameter, base class, or plugin hook for a future caller that doesn't
   exist yet.
+- **A streaming and non-streaming variant of the same operation share one
+  implementation** — the variant is a parameter (or the caller drains the iterator).
+  Two hand-synced loops/constants are a latent bug, not duplication: the chat
+  send/stream paths had drifted (a module `MAX_TOOL_ITERATIONS` *and* a local
+  `max_iterations`, plus two near-identical tool loops differing only in two `yield`s),
+  so a change to one silently skipped the other. The single loop lives in
+  `app/chat/run_loop.py` (parameterized by `stream`) and the single tool path in
+  `app/chat/tools.py::ToolExecutor.execute` (an iterator; non-streaming callers drain
+  it without forwarding).
 - **Docstrings on modules, classes, and functions** — they should state contract and
   intent ("returns None when the user has no keys"), not restate the signature.
   Comments explain *why* for non-obvious behavior only.
@@ -245,6 +254,19 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   `StreamingResponse` runs after the function returns — anything it closes over
   (session, client) must still be alive, and cleanup must handle the client
   disconnecting mid-stream.
+- **Persist partial stream content on *any* mid-stream termination, not just
+  `GeneratorExit`.** The chat run loop caught only client-disconnect and lost the
+  streamed-so-far assistant content whenever the provider raised mid-turn. The
+  abort/failure handler wraps `(GeneratorExit, Exception)` around the token-streaming
+  step (only that step — the assistant tool-call message is already committed by the
+  time tool execution runs, so widening the scope would double-persist), records the
+  partial, and re-raises so the route still emits an `error` SSE event. Never swallow.
+- **Resolve a client-supplied `session_id` against the current user, and reject one
+  owned by another user as a domain error.** `ensure_session` looks up the id scoped to
+  the user; if it's absent for this user but exists for someone else, raise
+  `ValueError("Chat session not found.")` rather than trying to create a row under a
+  colliding primary key (which surfaced as an opaque `IntegrityError`/500 and is a
+  cross-user access attempt).
 - **External-API code lives in `app/clients/<provider>/`, typed end to end.** Each
   provider gets its own package (`app/clients/openrouter/`) with a client module (HTTP/
   SDK calls, timeouts set explicitly) and typed request/response models — the schemas in
@@ -293,6 +315,13 @@ construction site.
 - **Mock at the boundary you don't own.** Fake OpenRouter/Pinecone at the client edge;
   never mock your own services to test your own routes — that pins implementation and
   proves nothing.
+- **Tests that construct objects via `__new__` and monkeypatch private methods pin
+  layout, not behavior — they are deleted, not migrated, on refactors.** A 580-line
+  `test_chat_service_coverage.py` built `ChatService.__new__(ChatService)` and stubbed
+  `_execute_tool_calls`/`_finalize_response`/`_stream_iteration` etc.; it broke wholesale
+  the moment those privates moved, while asserting nothing a caller relies on. Drive the
+  public entry point against a real session with the boundary stubbed (the
+  `test_chat_service_flow.py` harness) so the test survives the next reshuffle.
 - **Persistence assertions must read back through a fresh session**
   (`Session(session.get_bind())`, or expunge first). Asserting on the object the code
   under test just handled proves nothing — the session's identity map hands back the

@@ -10,7 +10,31 @@ from app.chat.processing.tool_calls import (
     extract_reasoning_tool_calls,
     merge_reasoning_segments,
     normalize_tool_calls,
+    parse_tool_call,
 )
+
+
+def test_parse_tool_call_handles_non_dict_function() -> None:
+    """A non-dict `function` block falls back to the default name/query, no id."""
+    parsed = parse_tool_call({"function": "oops"}, default_query="query", use_fallback_id=False)
+
+    assert parsed.id is None
+    assert parsed.name == "tool_call"
+    assert parsed.query_text == "query"
+    assert parsed.top_k == 5
+
+
+def test_parse_tool_call_applies_fallback_id_and_top_k_default() -> None:
+    """With `use_fallback_id`, a missing id is generated and a bad top_k clamps to 5."""
+    parsed = parse_tool_call(
+        {"function": {"name": "pinecone_query", "arguments": {"top_k": "bad"}}},
+        default_query="query",
+        use_fallback_id=True,
+    )
+
+    assert isinstance(parsed.id, str)
+    assert parsed.id.startswith("tool_call_")
+    assert parsed.top_k == 5
 
 
 def test_ensure_arguments_string_wraps_invalid_json() -> None:

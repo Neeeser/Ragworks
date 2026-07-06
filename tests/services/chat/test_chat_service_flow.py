@@ -7,11 +7,14 @@ from typing import Any
 import pytest
 from sqlmodel import Session
 
+from app.chat import run_loop as chat_run_loop
 from app.chat import service as chat_service_module
 from app.chat.service import ChatService
 from app.chat.state import RunState, ToolExecutionContext
 from app.chat.streaming.streaming import StreamOutcome
+from app.chat.tools import ToolExecutor
 from app.db import models
+from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
@@ -31,10 +34,10 @@ class _StubRetrievalService:
         self,
         _user: models.User,
         _collection: models.Collection,
-        _query: str,
+        query: str,
         top_k: int = 5,
-    ):
-        return {"chunks": [], "top_k": top_k}
+    ) -> CollectionQueryResponse:
+        return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
 
 
 class _StubOpenRouter:
@@ -296,9 +299,9 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
             collection: models.Collection,
             query: str,
             top_k: int = 5,
-        ):
+        ) -> CollectionQueryResponse:
             self.calls.append({"collection": collection, "query": query, "top_k": top_k})
-            return {"chunks": [], "top_k": top_k}
+            return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
 
     retrieval = _TrackingRetrievalService()
 
@@ -319,17 +322,22 @@ def test_send_message_handles_tool_calls(monkeypatch, session: Session) -> None:
     assert result.messages[-1].content == "Final answer"
     assert result.tool_traces[0].name == "pinecone_query"
     assert retrieval.calls[0]["top_k"] == 2
+    # Usage is aggregated across both provider calls of the tool-calling turn
+    # (1+2 prompt, 1+3 completion, 2+5 total), not just the final response.
+    assert result.usage["prompt_tokens"] == 3
+    assert result.usage["completion_tokens"] == 4
+    assert result.usage["total_tokens"] == 7
 
 
-def test_execute_tool_calls_tolerates_missing_provider_id(session: Session) -> None:
-    """`_execute_tool_calls` (non-streaming) must not crash on a tool call with no id.
+def test_tool_executor_tolerates_missing_provider_id(session: Session) -> None:
+    """`ToolExecutor.execute` must not crash on a tool call with no id.
 
     A full `send_message` round trip can't reproduce this: `normalize_tool_calls`
-    (`app/chat/processing/tool_calls.py`) already backfills a fallback id for every
-    tool call before `_resolve_tool_calls` hands it to `_execute_tool_calls`. The bug
-    lives in `_execute_tool_calls`/`_parse_tool_call` themselves — they still assume
-    `use_fallback_id=False` is safe and `cast(str, call_id)` away the `None` — so it's
-    exercised directly here, at the layer that actually contains the unsafe code path.
+    already backfills a fallback id for every tool call before the run loop hands
+    it to the executor. The tolerance lives in the executor's parsing path itself
+    (`use_fallback_id=True`), so it's exercised directly here — the single public
+    execution path, drained like a non-streaming caller would. (Retargeted from
+    the Phase 0 regression against the deleted private `_execute_tool_calls`.)
     """
     user = _create_user(session)
     collection = _create_collection(session, user, chat_model="tool-model")
@@ -343,8 +351,11 @@ def test_execute_tool_calls_tolerates_missing_provider_id(session: Session) -> N
     session.commit()
     session.refresh(chat_session)
 
-    service = ChatService(session)
-    service.retrieval = _StubRetrievalService()
+    executor = ToolExecutor(
+        session=session,
+        chat_repo=ChatRepository(session),
+        retrieval=_StubRetrievalService(),
+    )
 
     run_state = RunState()
     context = ToolExecutionContext(
@@ -361,11 +372,10 @@ def test_execute_tool_calls_tolerates_missing_provider_id(session: Session) -> N
         "function": {"name": "pinecone_query", "arguments": "{\"query\": \"docs\"}"},
     }
 
-    service._execute_tool_calls(  # pylint: disable=protected-access
-        tool_calls=[tool_call_without_id],
-        context=context,
-    )
+    # Non-streaming callers drain the iterator without forwarding.
+    events = list(executor.execute(tool_calls=[tool_call_without_id], context=context))
 
+    assert [event["type"] for event in events] == ["tool_call", "tool_result"]
     assert run_state.tool_traces[0].id
     assert run_state.tool_traces[0].name == "pinecone_query"
 
@@ -450,7 +460,8 @@ def test_stream_message_handles_tool_calls_and_final(monkeypatch, session: Sessi
         lambda *_args, **_kwargs: _ModelOnlyOpenRouter(model_info),
     )
     monkeypatch.setattr(chat_service_module, "RetrievalService", _TrackingRetrievalService)
-    monkeypatch.setattr(chat_service_module, "stream_model_completion", _stream_model_completion)
+    # stream_model_completion now lives in the shared run loop, not the service.
+    monkeypatch.setattr(chat_run_loop, "stream_model_completion", _stream_model_completion)
     _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
 
     service = ChatService(session)
@@ -506,3 +517,272 @@ def test_send_message_uses_reasoning_content_fallback_and_list_content(monkeypat
 
     assert result.messages[-1].content == '[{"text": "Hello"}]'
     assert result.usage["total_tokens"] == 2
+
+
+def _only_session_id(session: Session, user: models.User) -> Any:
+    """Return the id of the single chat session created for a user in a flow test."""
+    sessions = ChatRepository(session).list_sessions(user_id=user.id)
+    assert len(sessions) == 1
+    return sessions[0].id
+
+
+def _tool_model_info() -> ModelInfo:
+    return ModelInfo(
+        id="tool-model",
+        name="Tool Model",
+        context_length=2048,
+        supported_parameters=["tools"],
+    )
+
+
+def test_send_message_raises_when_model_never_stops_calling_tools(
+    monkeypatch, session: Session
+) -> None:
+    """The real run loop must abort after MAX_TOOL_ITERATIONS if the model keeps calling tools."""
+    user = _create_user(session)
+    collection = _create_collection(session, user, chat_model="tool-model")
+
+    tool_response = {
+        "id": "resp",
+        "provider": "openrouter",
+        "model": "tool-model",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "content": "Calling tool",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "pinecone_query",
+                                "arguments": "{\"query\": \"docs\"}",
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+
+    class _AlwaysToolOpenRouter:
+        def get_model(self, _model_id: str) -> ModelInfo:
+            return _tool_model_info()
+
+        def chat(self, **_kwargs: Any) -> OpenRouterChatResponse:
+            return OpenRouterChatResponse.model_validate(tool_response)
+
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(
+        chat_service_module, "get_openrouter_client", lambda *_a, **_k: _AlwaysToolOpenRouter()
+    )
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(chat_run_loop, "MAX_TOOL_ITERATIONS", 3)
+    _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
+
+    with pytest.raises(RuntimeError, match="tool iteration limit"):
+        service.send_message(user=user, payload=payload)
+
+
+def test_send_message_rejects_other_users_session(monkeypatch, session: Session) -> None:
+    """A session_id owned by another user is rejected as not-found (no cross-user access)."""
+    owner = _create_user(session)
+    other = models.User(
+        email="other@example.com",
+        full_name="Other",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key="pinecone-key",
+    )
+    session.add(other)
+    session.commit()
+    session.refresh(other)
+    collection = _create_collection(session, other, chat_model="test-model")
+    owned_session = models.ChatSession(user_id=owner.id, title="Owned", chat_model="test-model")
+    session.add(owned_session)
+    session.commit()
+    session.refresh(owned_session)
+
+    model_info = ModelInfo(
+        id="test-model", name="M", context_length=2048, supported_parameters=["tools"]
+    )
+    response = {
+        "id": "r",
+        "provider": "openrouter",
+        "model": "test-model",
+        "choices": [{"index": 0, "message": {"content": "A"}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 1},
+    }
+    openrouter = _StubOpenRouter(model_info=model_info, response=response)
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(
+        chat_service_module, "get_openrouter_client", lambda *_a, **_k: openrouter
+    )
+    monkeypatch.setattr(chat_service_module, "RetrievalService", _StubRetrievalService)
+    _stub_pipeline_settings(monkeypatch, chat_model="test-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(
+        content="hi", session_id=owned_session.id, tool_collection_ids=[collection.id]
+    )
+
+    with pytest.raises(ValueError, match="Chat session not found"):
+        service.send_message(user=other, payload=payload)
+
+
+def _install_streaming_flow(
+    monkeypatch,
+    *,
+    stream_factory,
+    retrieval_cls=_StubRetrievalService,
+) -> None:
+    """Wire a streaming service flow with a fake `stream_model_completion` factory."""
+    monkeypatch.setattr(chat_service_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(
+        chat_service_module,
+        "get_openrouter_client",
+        lambda *_a, **_k: _ModelOnlyOpenRouter(_tool_model_info()),
+    )
+    monkeypatch.setattr(chat_service_module, "RetrievalService", retrieval_cls)
+    monkeypatch.setattr(chat_run_loop, "stream_model_completion", stream_factory)
+    _stub_pipeline_settings(monkeypatch, chat_model="tool-model")
+
+
+def test_stream_message_persists_partial_on_client_disconnect(
+    monkeypatch, session: Session
+) -> None:
+    """Closing the stream mid-token persists the partial assistant content + reasoning."""
+
+    def _stream_forever(**_kwargs):
+        def _gen():
+            yield {"type": "token", "content": "Hello"}
+            yield {"type": "reasoning", "segments": [{"type": "text", "content": "thinking"}]}
+            while True:
+                yield {"type": "token", "content": ""}
+
+        return _gen()
+
+    user = _create_user(session)
+    collection = _create_collection(session, user, chat_model="tool-model")
+    _install_streaming_flow(monkeypatch, stream_factory=_stream_forever)
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(
+        content="Truncate me", tool_collection_ids=[collection.id], stream=True
+    )
+    gen = service.stream_message(user=user, payload=payload)
+
+    assert next(gen)["type"] == "token"
+    assert next(gen)["type"] == "reasoning"
+    gen.close()
+
+    messages = ChatRepository(session).list_messages(_only_session_id(session, user))
+    partials = [
+        message
+        for message in messages
+        if message.role == models.ChatRole.ASSISTANT and message.content == "Hello"
+    ]
+    assert partials, "partial assistant content should persist on client disconnect"
+    assert partials[0].reasoning_trace == {
+        "segments": [{"type": "text", "content": "thinking"}]
+    }
+
+
+def test_stream_message_persists_partial_and_raises_on_provider_error(
+    monkeypatch, session: Session
+) -> None:
+    """A mid-stream provider exception persists the partial content and surfaces the error."""
+
+    def _stream_boom(**_kwargs):
+        def _gen():
+            yield {"type": "token", "content": "Partial"}
+            raise RuntimeError("provider exploded")
+            yield {"type": "token", "content": "unreachable"}  # pragma: no cover
+
+        return _gen()
+
+    user = _create_user(session)
+    collection = _create_collection(session, user, chat_model="tool-model")
+    _install_streaming_flow(monkeypatch, stream_factory=_stream_boom)
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id], stream=True)
+    gen = service.stream_message(user=user, payload=payload)
+
+    assert next(gen)["type"] == "token"
+    with pytest.raises(RuntimeError, match="provider exploded"):
+        list(gen)
+
+    messages = ChatRepository(session).list_messages(_only_session_id(session, user))
+    partials = [
+        message
+        for message in messages
+        if message.role == models.ChatRole.ASSISTANT and message.content == "Partial"
+    ]
+    assert partials, "partial content must persist even when the provider fails mid-stream"
+
+
+def test_stream_message_surfaces_retrieval_failure_without_losing_turn(
+    monkeypatch, session: Session
+) -> None:
+    """A retrieval failure during tool execution surfaces the error; the turn's history persists."""
+    tool_message = {
+        "content": "Calling tool",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "pinecone_query", "arguments": "{\"query\": \"docs\"}"},
+            }
+        ],
+    }
+
+    def _stream_tool(**_kwargs):
+        def _gen():
+            yield {"type": "token", "content": "Calling"}
+            return StreamOutcome(
+                message=tool_message,
+                usage={"total_tokens": 1},
+                provider="openrouter",
+                finish_reason="tool_calls",
+                response_model="tool-model",
+            )
+
+        return _gen()
+
+    class _BoomRetrieval(_StubRetrievalService):
+        def query_collection(
+            self,
+            _user: models.User,
+            _collection: models.Collection,
+            query: str,
+            top_k: int = 5,
+        ) -> CollectionQueryResponse:
+            raise RuntimeError("pinecone down")
+
+    user = _create_user(session)
+    collection = _create_collection(session, user, chat_model="tool-model")
+    _install_streaming_flow(monkeypatch, stream_factory=_stream_tool, retrieval_cls=_BoomRetrieval)
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id], stream=True)
+    gen = service.stream_message(user=user, payload=payload)
+
+    with pytest.raises(RuntimeError, match="pinecone down"):
+        list(gen)
+
+    messages = ChatRepository(session).list_messages(_only_session_id(session, user))
+    assistant_tool_messages = [
+        message
+        for message in messages
+        if message.role == models.ChatRole.ASSISTANT
+        and isinstance(message.tool_payload, dict)
+        and "tool_calls" in message.tool_payload
+    ]
+    assert assistant_tool_messages, "the assistant tool-call turn must survive a retrieval failure"

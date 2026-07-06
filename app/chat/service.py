@@ -1,60 +1,44 @@
-"""Chat service orchestration for sessions, tools, and streaming."""
+"""Chat service orchestration for sessions, tools, and streaming.
+
+Request setup (session/collection/model resolution, message history, preference
+persistence) lives here; the actual chat turn — the provider loop, tool
+execution, and finalization — lives in `run_loop.py`/`tools.py`. `send_message`
+and `stream_message` are thin entry points that build a `ChatRun` and hand it to
+the single `run_chat` implementation (streaming is a parameter, not a fork).
+"""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
-from app.chat.events import FinalEvent, ToolCallEvent, ToolResultEvent
-from app.chat.messages import normalize_assistant_content
 from app.chat.persistence.records import (
     MessageRecord,
     RecordContext,
-    ToolCallRecord,
-    convert_messages,
-    convert_session,
     record_message,
-    record_partial_assistant_message,
-    record_tool_call_assistant_message,
     serialize_message,
 )
 from app.chat.persistence.sessions import SessionRequest, apply_edit, ensure_session
 from app.chat.processing.parameters import (
-    build_openrouter_body,
     build_reasoning_options,
     prepare_reasoning_override,
     sanitize_parameter_overrides,
 )
-from app.chat.processing.reasoning import normalize_reasoning_segments
-from app.chat.processing.tool_calls import (
-    ParsedToolCall,
-    ToolResultPayload,
-    extract_reasoning_tool_calls,
-    normalize_tool_calls,
-    parse_tool_call,
-)
-from app.chat.providers.base import ChatProvider, ChatRequest
+from app.chat.providers.base import ChatProvider
 from app.chat.providers.openrouter import OpenRouterProvider
+from app.chat.run_loop import ChatRun, run_chat
 from app.chat.state import (
     ChatSetup,
     ModelSettings,
     PipelineContext,
-    ProviderResponse,
     RunState,
-    StreamIterationResult,
-    StreamToolCallContext,
-    ToolCallResolution,
     ToolCollectionContext,
-    ToolExecutionContext,
 )
-from app.chat.streaming.streaming import StreamOutcome, stream_model_completion
-from app.chat.usage import UsageSummary, coerce_usage_value
+from app.chat.tools import ToolExecutor
 from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
@@ -66,7 +50,6 @@ from app.schemas.chat import (
     ChatMessageCreate,
     ChatMessageRead,
     ChatSessionRead,
-    ToolCallTrace,
 )
 from app.services.pipelines import PipelineService
 from app.services.prompts import (
@@ -77,14 +60,6 @@ from app.services.prompts import (
 )
 from app.services.retrieval import RetrievalService
 from app.utils.time import utc_now
-
-
-@dataclass
-class StreamCapture:
-    """Track partial stream state for abort handling."""
-
-    content_parts: list[str] = field(default_factory=list)
-    reasoning_segments: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -544,7 +519,7 @@ class ChatService:
             session_model=session_model,
             tool_collections=tool_collections,
         )
-        tools, tool_collection_map = self._tool_specs(tool_collections)
+        tools, tool_collection_map = ToolExecutor.specs(tool_collections)
         model_settings = self._prepare_model_settings(
             provider=provider,
             payload=payload,
@@ -577,538 +552,24 @@ class ChatService:
             model=model_settings,
         )
 
-    def _update_usage_aggregate(self, run_state: RunState, usage: dict[str, Any]) -> None:
-        """Update usage aggregation with a new usage payload."""
-        if not usage:
-            return
-        run_state.latest_usage_payload = usage
-        run_state.usage_aggregate = run_state.usage_aggregate.merged_with(
-            UsageSummary.from_raw(usage)
-        )
-
-    def _resolve_tool_calls(
-        self,
-        *,
-        message: dict[str, Any],
-        run_state: RunState,
-        combine_reasoning: bool,
-    ) -> ToolCallResolution:
-        """Normalize tool calls and reasoning for the current iteration."""
-        reasoning_content = message.get("reasoning") or message.get("reasoning_content")
-        reasoning_segments = normalize_reasoning_segments(reasoning_content)
-        base_tool_calls = normalize_tool_calls(
-            message.get("tool_calls") or [],
-            run_state.processed_reasoning_calls,
-        )
-        reasoning_tool_calls, reasoning_context, residual_reasoning = extract_reasoning_tool_calls(
-            reasoning_segments,
-            run_state.processed_reasoning_calls,
-        )
-        if combine_reasoning:
-            pending_tool_calls = base_tool_calls + reasoning_tool_calls
-        else:
-            pending_tool_calls = base_tool_calls or reasoning_tool_calls
-        shared_tool_reasoning: dict[str, Any] | None = None
-        if pending_tool_calls:
-            if reasoning_context:
-                run_state.reasoning_call_segments.update(reasoning_context)
-            elif reasoning_segments:
-                shared_tool_reasoning = {"segments": reasoning_segments}
-        elif reasoning_segments:
-            run_state.reasoning_trace.extend(residual_reasoning or reasoning_segments)
-        return ToolCallResolution(
-            pending_tool_calls=pending_tool_calls,
-            shared_tool_reasoning=shared_tool_reasoning,
-        )
-
-    def _parse_tool_call(
-        self,
-        tool_call: dict[str, Any],
-        payload: ChatMessageCreate,
-        *,
-        use_fallback_id: bool,
-    ) -> ParsedToolCall:
-        """Parse tool call metadata into a normalized `ParsedToolCall`."""
-        return parse_tool_call(
-            tool_call,
-            default_query=payload.content,
-            use_fallback_id=use_fallback_id,
-        )
-
-    def _select_tool_reasoning(
-        self,
-        *,
-        call_id: str | None,
-        run_state: RunState,
-        shared_tool_reasoning: dict[str, Any] | None,
-    ) -> dict[str, Any] | None:
-        """Select reasoning entry for tool call events."""
-        return run_state.reasoning_call_segments.get(call_id) or shared_tool_reasoning
-
-    def _build_reasoning_payload(
-        self,
-        *,
-        call_id: str | None,
-        run_state: RunState,
-        shared_tool_reasoning: dict[str, Any] | None,
-    ) -> dict[str, Any] | None:
-        """Build reasoning payload for tool call results."""
-        reasoning_segment = run_state.reasoning_call_segments.pop(call_id, None)
-        if reasoning_segment is None and shared_tool_reasoning:
-            reasoning_segment = shared_tool_reasoning
-        if not reasoning_segment:
-            return None
-        if "segments" not in reasoning_segment:
-            return {"segments": [reasoning_segment]}
-        return reasoning_segment
-
-    def _append_tool_call_assistant_message(
-        self,
-        *,
-        session_model: models.ChatSession,
-        messages: list[dict[str, Any]],
-        assistant_content: str | None,
-        tool_calls: list[dict[str, Any]],
-    ) -> None:
-        """Append assistant tool-call message to history and persist it."""
-        messages.append(
-            {
-                "role": "assistant",
-                "content": assistant_content or "",
-                "tool_calls": tool_calls,
-            }
-        )
-        record_tool_call_assistant_message(
-            context=RecordContext(session=self.session, chat_repo=self.chat_repo),
-            session_model=session_model,
-            content=assistant_content or "",
-            tool_calls=tool_calls,
-        )
-
-    def _record_partial_stream_exit(
-        self,
-        *,
-        capture: StreamCapture,
-        setup: ChatSetup,
-    ) -> None:
-        """Persist partial assistant content when streaming is aborted."""
-        partial_content = "".join(capture.content_parts)
-        reasoning_segments = [
-            dict(segment)
-            for segment in capture.reasoning_segments
-            if isinstance(segment, dict)
-        ]
-        record_partial_assistant_message(
-            context=RecordContext(session=self.session, chat_repo=self.chat_repo),
-            session_model=setup.session_model,
-            content=partial_content,
-            reasoning_segments=reasoning_segments,
-            model=setup.model.active_model_name,
-        )
-
-    def _stream_tool_calls_if_needed(
-        self,
-        *,
-        context: StreamToolCallContext,
-    ) -> Generator[dict[str, Any], None, bool]:
-        """Resolve and execute streaming tool calls if present."""
-        resolution = self._resolve_tool_calls(
-            message=context.message,
-            run_state=context.run_state,
-            combine_reasoning=True,
-        )
-        if not resolution.pending_tool_calls:
-            return False
-        assistant_content = normalize_assistant_content(context.message.get("content"))
-        self._append_tool_call_assistant_message(
-            session_model=context.setup.session_model,
-            messages=context.setup.messages,
-            assistant_content=assistant_content,
-            tool_calls=resolution.pending_tool_calls,
-        )
-        tool_context = ToolExecutionContext(
-            user=context.user,
-            payload=context.payload,
-            session_model=context.setup.session_model,
-            messages=context.setup.messages,
-            run_state=context.run_state,
-            shared_tool_reasoning=resolution.shared_tool_reasoning,
-            tool_collection_map=context.setup.tool_collection_map,
-        )
-        yield from self._stream_tool_calls(
-            tool_calls=resolution.pending_tool_calls,
-            context=tool_context,
-        )
-        return True
-
-    def _execute_tool_calls(
-        self,
-        *,
-        tool_calls: list[dict[str, Any]],
-        context: ToolExecutionContext,
-    ) -> None:
-        """Execute tool calls and persist the results."""
-        for tool_call in tool_calls:
-            parsed = self._parse_tool_call(
-                tool_call,
-                context.payload,
-                use_fallback_id=True,
-            )
-            collection = self._select_tool_collection(
-                tool_name=parsed.name,
-                tool_map=context.tool_collection_map,
-            )
-            retrieval_response = self.retrieval.query_collection(
-                context.user,
-                collection,
-                parsed.query_text,
-                top_k=parsed.top_k,
-            )
-            response_payload = jsonable_encoder(retrieval_response)
-            tool_result = ToolResultPayload(
-                collection_id=str(collection.id),
-                collection_name=collection.name,
-                arguments=parsed.arguments,
-                response=response_payload,
-            )
-            tool_content = json.dumps(tool_result.model_dump())
-            reasoning_payload = self._build_reasoning_payload(
-                call_id=parsed.id,
-                run_state=context.run_state,
-                shared_tool_reasoning=context.shared_tool_reasoning,
-            )
-            context.messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": parsed.id,
-                    "content": tool_content,
-                }
-            )
-            context.run_state.tool_traces.append(
-                ToolCallTrace(
-                    id=parsed.id,
-                    name=parsed.name,
-                    arguments=parsed.arguments,
-                    response=response_payload,
-                    reasoning=reasoning_payload,
-                    collection_id=collection.id,
-                    collection_name=collection.name,
-                )
-            )
-            record_message(
-                RecordContext(session=self.session, chat_repo=self.chat_repo),
-                MessageRecord(
-                    session_id=context.session_model.id,
-                    role=models.ChatRole.TOOL,
-                    content=tool_content,
-                    tool=ToolCallRecord(
-                        name=parsed.name,
-                        call_id=parsed.id,
-                        payload=tool_result.model_dump(),
-                    ),
-                    reasoning=reasoning_payload,
-                ),
-            )
-
-    # pylint: disable=too-many-locals
-    def _stream_tool_calls(
-        self,
-        *,
-        tool_calls: list[dict[str, Any]],
-        context: ToolExecutionContext,
-    ) -> Generator[dict[str, Any], None, None]:
-        """Execute tool calls while emitting streaming events."""
-        for tool_call in tool_calls:
-            parsed = self._parse_tool_call(
-                tool_call,
-                context.payload,
-                use_fallback_id=True,
-            )
-            collection = self._select_tool_collection(
-                tool_name=parsed.name,
-                tool_map=context.tool_collection_map,
-            )
-            reasoning_entry = self._select_tool_reasoning(
-                call_id=parsed.id,
-                run_state=context.run_state,
-                shared_tool_reasoning=context.shared_tool_reasoning,
-            )
-            yield ToolCallEvent(
-                id=parsed.id,
-                name=parsed.name,
-                arguments=parsed.arguments,
-                reasoning=reasoning_entry,
-                collection_id=str(collection.id),
-                collection_name=collection.name,
-            ).model_dump()
-            retrieval_response = self.retrieval.query_collection(
-                context.user,
-                collection,
-                parsed.query_text,
-                top_k=parsed.top_k,
-            )
-            response_payload = jsonable_encoder(retrieval_response)
-            tool_result = ToolResultPayload(
-                collection_id=str(collection.id),
-                collection_name=collection.name,
-                arguments=parsed.arguments,
-                response=response_payload,
-            )
-            tool_content = json.dumps(tool_result.model_dump())
-            reasoning_payload = self._build_reasoning_payload(
-                call_id=parsed.id,
-                run_state=context.run_state,
-                shared_tool_reasoning=context.shared_tool_reasoning,
-            )
-            yield ToolResultEvent(
-                id=parsed.id,
-                name=parsed.name,
-                arguments=parsed.arguments,
-                response=retrieval_response,
-                reasoning=reasoning_payload,
-                collection_id=str(collection.id),
-                collection_name=collection.name,
-            ).model_dump()
-            context.messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": parsed.id,
-                    "content": tool_content,
-                }
-            )
-            context.run_state.tool_traces.append(
-                ToolCallTrace(
-                    id=parsed.id,
-                    name=parsed.name,
-                    arguments=parsed.arguments,
-                    response=response_payload,
-                    reasoning=reasoning_payload,
-                    collection_id=collection.id,
-                    collection_name=collection.name,
-                )
-            )
-            record_message(
-                RecordContext(session=self.session, chat_repo=self.chat_repo),
-                MessageRecord(
-                    session_id=context.session_model.id,
-                    role=models.ChatRole.TOOL,
-                    content=tool_content,
-                    tool=ToolCallRecord(
-                        name=parsed.name,
-                        call_id=parsed.id,
-                        payload=tool_result.model_dump(),
-                    ),
-                    reasoning=reasoning_payload,
-                ),
-            )
-
-    def _finalize_response(
-        self,
-        *,
-        setup: ChatSetup,
-        run_state: RunState,
-        response: ProviderResponse,
-    ) -> ChatCompletionResponse:
-        """Persist the final assistant response and build API response."""
-        content = normalize_assistant_content(response.message.get("content"))
-        reasoning_payload = None
-        if run_state.reasoning_trace:
-            reasoning_payload = {"segments": run_state.reasoning_trace}
-        latest_usage_source = run_state.latest_usage_payload or response.usage or {}
-        latest_usage_total = coerce_usage_value(latest_usage_source.get("total_tokens"))
-        final_usage: dict[str, Any] = dict(run_state.latest_usage_payload or response.usage or {})
-        if not run_state.usage_aggregate.is_empty():
-            final_usage = dict(final_usage) if final_usage else {}
-            final_usage.update(run_state.usage_aggregate.model_dump(exclude_none=True))
-        assistant_msg = record_message(
-            RecordContext(session=self.session, chat_repo=self.chat_repo),
-            MessageRecord(
-                session_id=setup.session_model.id,
-                role=models.ChatRole.ASSISTANT,
-                content=content,
-                model=response.response_model_name,
-                reasoning=reasoning_payload,
-                usage=final_usage,
-            ),
-        )
-        setup.messages.append(serialize_message(assistant_msg))
-        setup.session_model.context_tokens = (
-            latest_usage_total
-            if latest_usage_total is not None
-            else run_state.usage_aggregate.total_tokens or 0
-        )
-        self.session.add(setup.session_model)
-        self.session.commit()
-        tool_collection_ids = [context.collection.id for context in setup.tool_collections]
-        return ChatCompletionResponse(
-            session=convert_session(
-                setup.session_model,
-                tool_collection_ids=tool_collection_ids,
-            ),
-            messages=convert_messages(chat_repo=self.chat_repo, session_id=setup.session_model.id),
-            tool_traces=run_state.tool_traces,
-            usage=final_usage,
-            provider=run_state.provider,
-            context_window=setup.model.context_window,
-            context_consumed=setup.session_model.context_tokens,
-        )
-
-    def _stream_iteration(
-        self,
-        *,
-        provider: ChatProvider,
-        setup: ChatSetup,
-        capture: StreamCapture,
-    ) -> Generator[dict[str, Any], None, StreamOutcome]:
-        """Run one streaming iteration and yield events."""
-        request = ChatRequest(
-            messages=setup.messages,
-            tools=setup.tools or None,
-            model=setup.model.active_model_name,
-            extra_body=build_openrouter_body(
-                setup.model.reasoning_options,
-                setup.model.provider_preferences,
-            ),
-            parameters=setup.model.parameter_overrides or None,
-        )
-        stream = stream_model_completion(provider=provider, request=request)
-        while True:
-            try:
-                event = next(stream)
-            except StopIteration as stop:
-                return stop.value
-            if isinstance(event, dict):
-                event_type = event.get("type")
-                if event_type == "token":
-                    token_text = event.get("content")
-                    if isinstance(token_text, str):
-                        capture.content_parts.append(token_text)
-                elif event_type == "reasoning":
-                    segments = event.get("segments")
-                    if isinstance(segments, list):
-                        capture.reasoning_segments = segments
-            yield event
-
-    def _tool_specs(
-        self, tool_collections: list[ToolCollectionContext]
-    ) -> tuple[list[dict[str, object]], dict[str, models.Collection]]:
-        """Return tool schemas and collection mappings for chat completion requests."""
-        if not tool_collections:
-            return [], {}
-        tools: list[dict[str, object]] = []
-        tool_map: dict[str, models.Collection] = {}
-        for tool_context in tool_collections:
-            tool_name = tool_context.tool_name
-            tool_map[tool_name] = tool_context.collection
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": (
-                            "Search the Pinecone namespace for the collection "
-                            f"'{tool_context.collection.name}' to gather grounded context. "
-                            "Always call this tool before answering questions about "
-                            "documents in this collection."
-                        ),
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "Natural language search query.",
-                                },
-                                "top_k": {
-                                    "type": "integer",
-                                    "description": "How many chunks to retrieve (max 10).",
-                                    "default": 5,
-                                    "minimum": 1,
-                                    "maximum": 10,
-                                },
-                            },
-                            "required": ["query"],
-                        },
-                    },
-                }
-            )
-        return tools, tool_map
-
-    @staticmethod
-    def _select_tool_collection(
-        *,
-        tool_name: str,
-        tool_map: dict[str, models.Collection],
-    ) -> models.Collection:
-        """Return the collection for a tool call name."""
-        if tool_name in tool_map:
-            return tool_map[tool_name]
-        if tool_name == "pinecone_query" and len(tool_map) == 1:
-            return next(iter(tool_map.values()))
-        raise ValueError("Tool call does not match an enabled collection.")
-
-    def stream_message(
-        self,
-        *,
-        user: models.User,
-        payload: ChatMessageCreate,
-    ) -> Generator[dict[str, Any], None, None]:
-        """Stream a chat response while yielding intermediate events."""
+    def _build_run(self, *, user: models.User, payload: ChatMessageCreate) -> ChatRun:
+        """Resolve providers and setup, then assemble the run context for a turn."""
         provider = self._ensure_provider(user)
-        setup = self._prepare_chat_setup(
+        setup = self._prepare_chat_setup(user=user, payload=payload, provider=provider)
+        return ChatRun(
+            provider=provider,
+            setup=setup,
+            run_state=RunState(provider=provider.name),
             user=user,
             payload=payload,
-            provider=provider,
+            session=self.session,
+            chat_repo=self.chat_repo,
+            tool_executor=ToolExecutor(
+                session=self.session,
+                chat_repo=self.chat_repo,
+                retrieval=self.retrieval,
+            ),
         )
-        run_state = RunState(provider=provider.name)
-
-        for _ in range(self.MAX_TOOL_ITERATIONS):
-            capture = StreamCapture()
-            try:
-                stream_result = yield from self._stream_iteration(
-                    provider=provider,
-                    setup=setup,
-                    capture=capture,
-                )
-            except GeneratorExit:
-                self._record_partial_stream_exit(capture=capture, setup=setup)
-                raise
-            result = StreamIterationResult(
-                message=stream_result.message,
-                usage=stream_result.usage,
-                provider_name=stream_result.provider,
-                response_model_name=stream_result.response_model,
-                finish_reason=stream_result.finish_reason,
-            )
-            run_state.provider = result.provider_name or run_state.provider
-            if result.usage:
-                run_state.latest_usage_payload = result.usage
-                self._update_usage_aggregate(run_state, result.usage)
-
-            tool_calls_handled = yield from self._stream_tool_calls_if_needed(
-                context=StreamToolCallContext(
-                    message=result.message,
-                    setup=setup,
-                    run_state=run_state,
-                    user=user,
-                    payload=payload,
-                )
-            )
-            if tool_calls_handled:
-                continue
-
-            response = self._finalize_response(
-                setup=setup,
-                run_state=run_state,
-                response=ProviderResponse(
-                    message=result.message,
-                    usage=result.usage,
-                    response_model_name=result.response_model_name,
-                ),
-            )
-            yield FinalEvent(payload=response.model_dump()).model_dump()
-            return
-
-        raise RuntimeError("LLM did not complete within the allowed tool iteration limit.")
 
     def send_message(
         self,
@@ -1117,73 +578,13 @@ class ChatService:
         payload: ChatMessageCreate,
     ) -> ChatCompletionResponse:
         """Send a chat message and return the final response."""
-        provider = self._ensure_provider(user)
-        setup = self._prepare_chat_setup(
-            user=user,
-            payload=payload,
-            provider=provider,
-        )
-        run_state = RunState(provider=provider.name)
+        return run_chat(self._build_run(user=user, payload=payload), stream=False)
 
-        max_iterations = 48
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            request = ChatRequest(
-                messages=setup.messages,
-                tools=setup.tools or None,
-                model=setup.model.active_model_name,
-                extra_body=build_openrouter_body(
-                    setup.model.reasoning_options,
-                    setup.model.provider_preferences,
-                ),
-                parameters=setup.model.parameter_overrides or None,
-            )
-            response_payload = provider.chat(request)
-            parsed_response = provider.parse_chat_response(response_payload)
-            run_state.provider = parsed_response.provider or run_state.provider
-            if parsed_response.usage:
-                run_state.latest_usage_payload = parsed_response.usage
-                self._update_usage_aggregate(run_state, parsed_response.usage)
-
-            resolution = self._resolve_tool_calls(
-                message=parsed_response.message,
-                run_state=run_state,
-                combine_reasoning=False,
-            )
-            if resolution.pending_tool_calls:
-                assistant_content = normalize_assistant_content(
-                    parsed_response.message.get("content")
-                )
-                self._append_tool_call_assistant_message(
-                    session_model=setup.session_model,
-                    messages=setup.messages,
-                    assistant_content=assistant_content,
-                    tool_calls=resolution.pending_tool_calls,
-                )
-                tool_context = ToolExecutionContext(
-                    user=user,
-                    payload=payload,
-                    session_model=setup.session_model,
-                    messages=setup.messages,
-                    run_state=run_state,
-                    shared_tool_reasoning=resolution.shared_tool_reasoning,
-                    tool_collection_map=setup.tool_collection_map,
-                )
-                self._execute_tool_calls(
-                    tool_calls=resolution.pending_tool_calls,
-                    context=tool_context,
-                )
-                continue
-
-            return self._finalize_response(
-                setup=setup,
-                run_state=run_state,
-                response=ProviderResponse(
-                    message=parsed_response.message,
-                    usage=parsed_response.usage,
-                    response_model_name=parsed_response.response_model,
-                ),
-            )
-
-        raise RuntimeError("LLM did not complete within the allowed tool iteration limit.")
+    def stream_message(
+        self,
+        *,
+        user: models.User,
+        payload: ChatMessageCreate,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Stream a chat response while yielding intermediate events."""
+        return run_chat(self._build_run(user=user, payload=payload), stream=True)

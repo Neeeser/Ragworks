@@ -32,6 +32,13 @@ def ensure_session(request: SessionRequest) -> models.ChatSession:
         existing = request.chat_repo.get_session(payload.session_id, user_id=request.user.id)
         if existing:
             return existing
+        # The id isn't owned by this user. If it belongs to *another* user,
+        # reject as not-found rather than attempting to create a session under a
+        # colliding primary key (which surfaced as an opaque IntegrityError/500
+        # and is a cross-user access attempt). A genuinely unused client-supplied
+        # id still creates a new session below.
+        if request.chat_repo.get_session(payload.session_id) is not None:
+            raise ValueError("Chat session not found.")
         return create_session(
             request=request,
             session_id=payload.session_id,

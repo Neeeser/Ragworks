@@ -101,10 +101,17 @@ module = "app.chat.*"
 ignore_errors = true  # removed in Phase 4
 
 [[tool.mypy.overrides]]
-# Task 4.1: these are new, fully-typed modules with no dependency on
+# Tasks 4.1/4.2: these are new, fully-typed modules with no dependency on
 # service.py's still-untyped internals -- narrow the blanket app.chat.*
 # ignore above so they stay mypy-clean rather than riding along for free.
-module = ["app.chat.events", "app.chat.messages", "app.chat.usage"]
+# service.py itself stays under the blanket ignore until Task 4.3 finishes it.
+module = [
+    "app.chat.events",
+    "app.chat.messages",
+    "app.chat.usage",
+    "app.chat.tools",
+    "app.chat.run_loop",
+]
 ignore_errors = false
 
 [[tool.mypy.overrides]]

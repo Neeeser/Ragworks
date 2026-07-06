@@ -3,17 +3,12 @@ from __future__ import annotations
 from collections.abc import Generator
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import Mock
 
 from pydantic import ValidationError
 
-from app.chat import service as chat_service_module
-from app.chat.persistence.records import RecordContext
 from app.chat.providers.base import ChatRequest, ParsedStreamChunk
 from app.chat.providers.openrouter import OpenRouterProvider
-from app.chat.service import ChatService
 from app.chat.streaming.streaming import StreamOutcome, stream_model_completion
-from app.schemas.chat import ChatMessageCreate
 from app.schemas.openrouter import OpenRouterStreamChunk
 from app.services import chat as chat_module
 
@@ -371,133 +366,12 @@ def test_stream_model_completion_skips_tool_calls_without_name() -> None:
     assert "tool_calls" not in message
 
 
-class _StubChatRepo:
-    def list_messages(self, session_id: object) -> list[dict[str, Any]]:
-        return []
 
-    def add_message(self, message: object) -> None:
-        return
-
-    def delete_messages_after(self, *args: object, **kwargs: object) -> None:
-        return
-
-    def get_last_user_message_before(self, *args: object, **kwargs: object) -> None:
-        return None
-
-    def delete_tool_messages_since(self, *args: object, **kwargs: object) -> None:
-        return
-
-    def list_session_collection_ids(self, *args: object, **kwargs: object) -> list[Any]:
-        return []
-
-
-def _stub_pipeline_helpers(monkeypatch, *, chat_model: str, context_window: int) -> None:
-    class _StubPipelineService:
-        def __init__(self, _session) -> None:
-            pass
-
-        def ensure_default_pipelines(self, _user):
-            return SimpleNamespace(
-                ingestion=SimpleNamespace(id="ingestion"),
-                retrieval=SimpleNamespace(id="retrieval"),
-            )
-
-        def ensure_collection_pipelines(self, collection, defaults):
-            collection.ingestion_pipeline_id = (
-                getattr(collection, "ingestion_pipeline_id", None) or defaults.ingestion.id
-            )
-            collection.retrieval_pipeline_id = (
-                getattr(collection, "retrieval_pipeline_id", None) or defaults.retrieval.id
-            )
-            return collection
-
-        def get_pipeline(self, pipeline_id, _user_id):
-            return SimpleNamespace(id=pipeline_id)
-
-        def get_definition(self, _pipeline):
-            return SimpleNamespace(nodes=[])
-
-    ingestion_settings = SimpleNamespace(
-        chunk_strategy="token",
-        chunk_size=256,
-        chunk_overlap=32,
-        embedding_model="embed-model",
-        index_name="idx",
-        namespace="ns",
-        dimension=128,
-        metric="cosine",
-    )
-    retrieval_settings = SimpleNamespace(
-        embedding_model="embed-model",
-        index_name="idx",
-        namespace="ns",
-        dimension=128,
-        metric="cosine",
-        chat_model=chat_model,
-        context_window=context_window,
-    )
-
-    monkeypatch.setattr(chat_service_module, "PipelineService", _StubPipelineService)
-    monkeypatch.setattr(
-        chat_service_module,
-        "resolve_ingestion_settings",
-        lambda *_args, **_kwargs: ingestion_settings,
-    )
-    monkeypatch.setattr(
-        chat_service_module,
-        "resolve_retrieval_settings",
-        lambda *_args, **_kwargs: retrieval_settings,
-    )
-
-
-def test_stream_message_records_partial_on_abort(monkeypatch) -> None:
-    service = ChatService.__new__(ChatService)  # type: ignore[call-arg]
-    session_model = SimpleNamespace(id="session-x", chat_model="openrouter/test", updated_at=None)
-    service.chat_repo = _StubChatRepo()
-    service.session = SimpleNamespace(add=lambda *args, **kwargs: None, commit=lambda: None, flush=lambda: None)
-    service.reasoning_effort = None
-    service.settings = SimpleNamespace(
-        default_chat_model="openrouter/test",
-        openrouter_reasoning_effort=None,
-    )
-    monkeypatch.setattr(chat_service_module, "ensure_session", lambda *_args, **_kwargs: session_model)
-    service.openrouter = SimpleNamespace(
-        get_model=lambda model_name: SimpleNamespace(
-            supported_parameters=["tools"],
-            context_length=4096,
-        )
-    )
-    service.retrieval = SimpleNamespace()
-    partial_recorder = Mock()
-    monkeypatch.setattr(chat_service_module, "record_partial_assistant_message", partial_recorder)
-    _stub_pipeline_helpers(monkeypatch, chat_model="openrouter/test", context_window=8192)
-
-    def fake_stream(*args: Any, **kwargs: Any) -> Generator[dict[str, Any], None, tuple]:
-        yield {"type": "token", "content": "Hello"}
-        yield {"type": "reasoning", "segments": [{"type": "text", "content": "thinking"}]}
-        while True:
-            yield {}
-
-    monkeypatch.setattr(chat_service_module, "stream_model_completion", fake_stream)
-
-    user = SimpleNamespace(
-        id="user-x",
-        email="tester@example.com",
-        full_name="Tester",
-        system_prompt_template=None,
-    )
-    payload = ChatMessageCreate(content="Truncate me", stream=True)
-    stream_gen = service.stream_message(user=user, payload=payload)
-
-    assert next(stream_gen)["type"] == "token"
-    assert next(stream_gen)["type"] == "reasoning"
-
-    stream_gen.close()
-
-    partial_recorder.assert_called_once_with(
-        context=RecordContext(session=service.session, chat_repo=service.chat_repo),
-        session_model=session_model,
-        content="Hello",
-        reasoning_segments=[{"type": "text", "content": "thinking"}],
-        model="openrouter/test",
-    )
+# `test_stream_message_records_partial_on_abort` was re-homed to
+# tests/services/chat/test_chat_service_flow.py as a real-DB flow test
+# (`test_stream_message_persists_partial_on_client_disconnect`). The old
+# version constructed `ChatService` via `__new__` and monkeypatched module
+# globals that Task 4.2 moved into `app.chat.run_loop`; the flow-harness
+# version drives the real `stream_message`, closes the generator mid-stream,
+# and asserts the persisted partial message row (a stronger, layout-agnostic
+# assertion than a mock-call check).

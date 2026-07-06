@@ -23,7 +23,7 @@ MAX_LINES = 400
 # ceiling in the same commit; if you empty it below MAX_LINES, delete the entry.
 GRANDFATHERED: dict[str, int] = {
     "app/api/routes/collections.py": 478,  # split in Phase 6
-    "app/chat/service.py": 1224,  # split in Phase 4
+    "app/chat/service.py": 590,  # Phase 4.2 extracted run_loop.py/tools.py; 4.3 finishes
     "app/pipelines/nodes/ingestion.py": 735,  # split in Phase 5
     "app/pipelines/runtime.py": 447,  # split in Phase 5
 }
