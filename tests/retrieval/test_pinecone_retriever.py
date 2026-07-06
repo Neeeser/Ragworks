@@ -1,53 +1,17 @@
 from __future__ import annotations
 
 import os
-import sys
 from collections.abc import Iterable, Sequence
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-
-def _ensure_stub(module_name: str, **attrs: Any) -> None:
-    if module_name in sys.modules:
-        return
-    module = ModuleType(module_name)
-    for key, value in attrs.items():
-        setattr(module, key, value)
-    sys.modules[module_name] = module
-
-
-class _StubSentenceTransformer:
-    pass
-
-
-class _StubCrossEncoder:
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.calls: list[tuple[Any, Any]] = []
-
-    def predict(self, pairs: Iterable[tuple[str, str]]) -> list[float]:
-        self.calls.append(tuple(pairs))
-        return [0.0 for _ in pairs]
-
-
-class _StubPdfReader:
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-
-_ensure_stub(
-    "sentence_transformers",
-    SentenceTransformer=_StubSentenceTransformer,
-    CrossEncoder=_StubCrossEncoder,
-)
-_ensure_stub("pypdf", PdfReader=_StubPdfReader)
-
-
-from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig  # noqa: E402
-from app.retrieval.models import QueryRequest, RetrievalResponse, ScoredChunk  # noqa: E402
-from app.retrieval.retrievers.pinecone_retriever import PineconeRetriever  # noqa: E402
+from app.clients.pinecone import client as pinecone_client_module
+from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
+from app.retrieval.models import QueryRequest, RetrievalResponse, ScoredChunk
+from app.retrieval.retrievers.pinecone_retriever import PineconeRetriever
 
 
 class DummyReranker:
@@ -244,6 +208,23 @@ def test_retrieve_with_reranker_returns_reranked_matches(
     assert [sc.chunk.chunk_id for sc in response.matches] == ["chunk-b", "chunk-a"]
 
 
+def test_retrieve_falls_back_to_match_id_when_document_id_missing(
+    config: PineconeIndexConfig, query_vector: list[float]
+) -> None:
+    """Metadata without `document_id` falls back to the match id (not an error)."""
+    match = FakeMatch(match_id="chunk-3", score=0.5, metadata={config.text_key: "orphan chunk"})
+    fake_index = FakeIndex([match])
+    client = FakePineconeClient(fake_index)
+    retriever = PineconeRetriever(index_config=config, client=client)
+    request = QueryRequest(text="No document id", top_k=1)
+
+    response = retriever.retrieve(request, embedding=query_vector)
+
+    chunk = response.matches[0].chunk
+    assert chunk.document_id == "chunk-3"
+    assert chunk.order == 0
+
+
 def test_init_without_api_key_or_client_raises_value_error(config: PineconeIndexConfig) -> None:
     with patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValueError, match="Pinecone API key must be provided"):
@@ -252,7 +233,7 @@ def test_init_without_api_key_or_client_raises_value_error(config: PineconeIndex
             )
 
 
-@patch("app.retrieval.pinecone.Pinecone")
+@patch.object(pinecone_client_module, "Pinecone")
 def test_init_with_api_key_instantiates_pinecone_client(
     pinecone_cls: Any, config: PineconeIndexConfig
 ) -> None:

@@ -55,7 +55,8 @@ app/
   api/             FastAPI app assembly + dependencies
     routes/        one router module per resource (collections.py, chat.py, …)
   schemas/         Pydantic wire types, one module per domain — the API contract
-  clients/         typed external-API clients, one package per provider (openrouter/)
+  clients/         typed external-API clients, one package per provider (openrouter/,
+                   pinecone/)
   services/        business logic; orchestrates db + clients
   db/              session, migrations
     models/        SQLModel tables, one module per domain (see below)
@@ -243,6 +244,15 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   callables so it stays unit-testable without a fake HTTP client. Before changing these
   integrations, read the local docs in `external_api_documentation/` first — behavior
   there trumps memory.
+- **Never feature-detect a pinned SDK with `inspect.signature`.** `app/clients/pinecone/`
+  used to probe `create_index`'s parameters at runtime (twice — once in the route, once
+  in the indexer) to decide whether `metadata_config` was supported; on the SDK version
+  actually pinned in `uv.lock`, that kwarg had been removed entirely, so the probe's
+  branch was always-false dead code silently no-opping a config field. Pin behavior to
+  the documented version and let the lockfile guarantee it — introspect the *installed*
+  SDK (`python -c "import inspect, pinecone; print(inspect.signature(...))"`) while
+  writing the client, then call it directly; don't ship runtime feature-detection for a
+  dependency version you already control.
 - **Never `lru_cache` objects that own OS resources** (httpx clients, sessions, file
   handles): eviction just drops the reference, so whatever it owns leaks — we had this
   exact bug on `get_openrouter_client`. Use an explicit cache (e.g. an `OrderedDict` +

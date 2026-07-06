@@ -4,8 +4,7 @@ from typing import Any
 
 import pytest
 
-from app.retrieval import pinecone as pinecone_client_module
-from app.retrieval.indexers import pinecone_indexer as pinecone_module
+from app.clients.pinecone import client as pinecone_client_module
 from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig, PineconeIndexer
 from app.retrieval.models import DocumentChunk, DocumentMetadata
 
@@ -19,9 +18,8 @@ class _StubIndex:
 
 
 class _StubPinecone:
-    def __init__(self, has_index: bool = False, include_metadata_param: bool = True) -> None:
+    def __init__(self, has_index: bool = False) -> None:
         self._has_index = has_index
-        self._include_metadata_param = include_metadata_param
         self.created: dict[str, Any] | None = None
         self.deleted: str | None = None
         self.requested_names: list[str] = []
@@ -30,16 +28,15 @@ class _StubPinecone:
     def has_index(self, _name: str) -> bool:
         return self._has_index
 
-    def create_index(self, name: str, dimension: int, metric: str, spec: Any, deletion_protection: str, metadata_config: Any = None) -> None:
-        if not self._include_metadata_param and metadata_config is not None:
-            raise AssertionError("metadata_config should not be provided")
+    def create_index(
+        self, name: str, dimension: int, metric: str, spec: Any, deletion_protection: str
+    ) -> None:
         self.created = {
             "name": name,
             "dimension": dimension,
             "metric": metric,
             "spec": spec,
             "deletion_protection": deletion_protection,
-            "metadata_config": metadata_config,
         }
 
     def delete_index(self, name: str) -> None:
@@ -48,26 +45,6 @@ class _StubPinecone:
     def Index(self, name: str) -> _StubIndex:
         self.requested_names.append(name)
         return self.index
-
-
-class _StubPineconeNoMetadata:
-    def __init__(self) -> None:
-        self.created: dict[str, Any] | None = None
-
-    def has_index(self, _name: str) -> bool:
-        return False
-
-    def create_index(self, name: str, dimension: int, metric: str, spec: Any, deletion_protection: str) -> None:
-        self.created = {
-            "name": name,
-            "dimension": dimension,
-            "metric": metric,
-            "spec": spec,
-            "deletion_protection": deletion_protection,
-        }
-
-    def Index(self, name: str) -> _StubIndex:
-        return _StubIndex()
 
 
 def _chunk(text: str, embedding: list[float] | None) -> DocumentChunk:
@@ -91,26 +68,32 @@ def test_ensure_index_skips_when_present() -> None:
     assert client.created is None
 
 
-def test_ensure_index_includes_metadata_config_when_supported() -> None:
-    client = _StubPinecone(has_index=False, include_metadata_param=True)
+def test_ensure_index_creates_when_absent() -> None:
+    client = _StubPinecone(has_index=False)
     indexer = PineconeIndexer(client=client)
-    config = PineconeIndexConfig(name="unit-index", metadata_config={"indexed": ["source"]})
+    config = PineconeIndexConfig(name="unit-index", dimension=768, metric="dotproduct")
 
     indexer.ensure_index(config)
 
     assert client.created is not None
-    assert client.created["metadata_config"] == {"indexed": ["source"]}
+    assert client.created["name"] == "unit-index"
+    assert client.created["dimension"] == 768
+    assert client.created["metric"] == "dotproduct"
 
 
-def test_ensure_index_drops_metadata_config_when_not_supported() -> None:
-    client = _StubPineconeNoMetadata()
+def test_ensure_index_uses_serverless_spec_overrides() -> None:
+    client = _StubPinecone(has_index=False)
     indexer = PineconeIndexer(client=client)
-    config = PineconeIndexConfig(name="unit-index", metadata_config={"indexed": ["source"]})
+    config = PineconeIndexConfig(
+        name="unit-index",
+        serverless_spec={"cloud": "gcp", "region": "us-central1"},
+    )
 
     indexer.ensure_index(config)
 
     assert client.created is not None
-    assert "metadata_config" not in client.created
+    assert client.created["spec"].cloud == "gcp"
+    assert client.created["spec"].region == "us-central1"
 
 
 def test_upsert_builds_vectors_and_uses_namespace() -> None:
@@ -124,9 +107,12 @@ def test_upsert_builds_vectors_and_uses_namespace() -> None:
     call = client.index.upsert_calls[0]
     assert call["namespace"] == "config-ns"
     vector = call["vectors"][0]
+    assert vector["id"] == "chunk-1"
+    assert vector["values"] == [0.1, 0.2]
     assert vector["metadata"]["document_id"] == "doc-1"
     assert vector["metadata"]["order"] == 0
     assert vector["metadata"]["text"] == "hello"
+    assert vector["metadata"]["source"] == "unit"
 
 
 def test_upsert_raises_when_embedding_missing() -> None:
@@ -149,9 +135,7 @@ def test_delete_index_clears_cache() -> None:
     assert "unit-index" not in indexer._indexes
 
 
-def test_init_requires_api_key_when_client_missing(monkeypatch) -> None:
-    monkeypatch.delenv("TEST_PINECONE_API_KEY", raising=False)
-
+def test_init_requires_api_key_when_client_missing() -> None:
     with pytest.raises(ValueError, match="Pinecone API key must be provided"):
         PineconeIndexer(client=None, api_key=None)
 
@@ -179,31 +163,6 @@ def test_init_uses_api_key_when_client_missing(monkeypatch) -> None:
 
     assert isinstance(indexer._client, _StubPineconeClient)
     assert captured["api_key"] == "unit-key"
-
-
-def test_ensure_index_without_metadata_config_creates_index() -> None:
-    client = _StubPinecone(has_index=False)
-    indexer = PineconeIndexer(client=client)
-    config = PineconeIndexConfig(name="unit-index")
-
-    indexer.ensure_index(config)
-
-    assert client.created is not None
-
-
-def test_ensure_index_handles_signature_errors(monkeypatch) -> None:
-    client = _StubPineconeNoMetadata()
-    indexer = PineconeIndexer(client=client)
-    config = PineconeIndexConfig(name="unit-index", metadata_config={"indexed": ["source"]})
-
-    def _raise_signature_error(*_args, **_kwargs):
-        raise TypeError("signature not available")
-
-    monkeypatch.setattr(pinecone_module.inspect, "signature", _raise_signature_error)
-
-    indexer.ensure_index(config)
-
-    assert client.created is not None
 
 
 def test_delete_index_skips_when_missing() -> None:
