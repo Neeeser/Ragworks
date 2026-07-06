@@ -6,6 +6,7 @@ import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from enum import Enum
+from typing import Any
 
 from sqlalchemy import inspect, literal, text
 from sqlalchemy.engine import Connection, Dialect, Engine
@@ -125,7 +126,7 @@ def ensure_foreign_keys(engine: Engine) -> None:
 def _add_column(
     connection: Connection,
     table: Table,
-    column: Column,
+    column: Column[Any],
     preparer: IdentifierPreparer,
     dialect: Dialect,
 ) -> None:
@@ -176,7 +177,7 @@ def _table_is_empty(
 
 
 def _resolve_default_sql(
-    column: Column,
+    column: Column[Any],
     dialect: Dialect,
     *,
     allow_application_default: bool,

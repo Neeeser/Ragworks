@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import cast
 
 from sqlmodel import Session, create_engine
 
@@ -17,7 +16,7 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-database_url = cast(str, settings.database_url)
+database_url = settings.database_url
 engine = create_engine(database_url, pool_pre_ping=True)
 
 

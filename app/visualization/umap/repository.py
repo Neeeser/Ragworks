@@ -6,7 +6,7 @@ from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlmodel import Session, select
+from sqlmodel import Session, col, desc, select
 
 from app.db import models
 
@@ -29,16 +29,25 @@ class UmapRepository:
         self.session = session
 
     def list_chunk_embeddings(self, collection_id: UUID) -> list[ChunkEmbeddingRow]:
-        """Return chunk embeddings for a collection."""
-        statement = select(
-            models.DocumentChunkRecord.id,
-            models.DocumentChunkRecord.document_id,
-            models.DocumentChunkRecord.chunk_index,
-            models.DocumentChunkRecord.embedding,
-            models.DocumentChunkRecord.embedding_model,
-        ).where(models.DocumentChunkRecord.collection_id == collection_id)
+        """Return chunk embeddings for a collection.
+
+        Selects the full row (rather than a 5-column tuple) because SQLModel's
+        `select()` tuple overloads only go up to four typed entities.
+        """
+        statement = select(models.DocumentChunkRecord).where(
+            col(models.DocumentChunkRecord.collection_id) == collection_id
+        )
         rows = self.session.exec(statement).all()
-        return [ChunkEmbeddingRow(*row) for row in rows]
+        return [
+            ChunkEmbeddingRow(
+                chunk_id=row.id,
+                document_id=row.document_id,
+                chunk_index=row.chunk_index,
+                embedding=row.embedding,
+                embedding_model=row.embedding_model,
+            )
+            for row in rows
+        ]
 
     def get_latest_projection(
         self, collection_id: UUID
@@ -46,8 +55,8 @@ class UmapRepository:
         """Return the most recent projection for a collection."""
         statement = (
             select(models.UmapProjectionRecord)
-            .where(models.UmapProjectionRecord.collection_id == collection_id)
-            .order_by(models.UmapProjectionRecord.created_at.desc())  # pylint: disable=no-member
+            .where(col(models.UmapProjectionRecord.collection_id) == collection_id)
+            .order_by(desc(col(models.UmapProjectionRecord.created_at)))
             .limit(1)
         )
         return self.session.exec(statement).first()
@@ -56,26 +65,26 @@ class UmapRepository:
         """Return all points for a projection."""
         statement = (
             select(models.UmapPointRecord)
-            .where(models.UmapPointRecord.projection_id == projection_id)
-            .order_by(models.UmapPointRecord.chunk_index)
+            .where(col(models.UmapPointRecord.projection_id) == projection_id)
+            .order_by(col(models.UmapPointRecord.chunk_index))
         )
-        return self.session.exec(statement).all()
+        return list(self.session.exec(statement).all())
 
     def delete_collection_projections(self, collection_id: UUID) -> None:
         """Delete all projections and points for a collection."""
         projection_ids = self.session.exec(
-            select(models.UmapProjectionRecord.id).where(
-                models.UmapProjectionRecord.collection_id == collection_id
+            select(col(models.UmapProjectionRecord.id)).where(
+                col(models.UmapProjectionRecord.collection_id) == collection_id
             )
         ).all()
         if projection_ids:
             self.session.exec(
                 sa_delete(models.UmapPointRecord).where(
-                    models.UmapPointRecord.projection_id.in_(projection_ids)  # pylint: disable=no-member
+                    col(models.UmapPointRecord.projection_id).in_(projection_ids)
                 )
             )
         self.session.exec(
             sa_delete(models.UmapProjectionRecord).where(
-                models.UmapProjectionRecord.collection_id == collection_id
+                col(models.UmapProjectionRecord.collection_id) == collection_id
             )
         )

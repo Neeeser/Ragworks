@@ -75,7 +75,7 @@ def stream_model_completion(
     )
 
 
-def _parse_chunk(provider: ChatProvider, chunk: dict) -> ParsedStreamChunk | None:
+def _parse_chunk(provider: ChatProvider, chunk: dict[str, Any]) -> ParsedStreamChunk | None:
     """Parse a raw chunk into a normalized delta structure."""
     if not isinstance(chunk, dict):
         return None

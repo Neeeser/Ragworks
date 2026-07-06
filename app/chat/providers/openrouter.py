@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -30,7 +31,7 @@ class OpenRouterProvider:
         """Return model metadata for the requested model id."""
         return self._client.get_model(model_id)
 
-    def chat(self, request: ChatRequest) -> dict:
+    def chat(self, request: ChatRequest) -> dict[str, Any]:
         """Send a non-streaming chat request.
 
         `OpenRouterClient.chat` returns a validated `OpenRouterChatResponse`;
@@ -50,7 +51,7 @@ class OpenRouterProvider:
         )
         return response.model_dump(exclude_none=True)
 
-    def chat_stream(self, request: ChatRequest) -> Iterable[dict]:
+    def chat_stream(self, request: ChatRequest) -> Iterable[dict[str, Any]]:
         """Stream a chat completion request, dumping each typed chunk to a dict."""
         for chunk in self._client.chat_stream(
             messages=request.messages,
@@ -62,7 +63,7 @@ class OpenRouterProvider:
         ):
             yield chunk.model_dump(exclude_none=True)
 
-    def parse_chat_response(self, response: dict) -> ParsedChatResponse:
+    def parse_chat_response(self, response: dict[str, Any]) -> ParsedChatResponse:
         """Normalize the OpenRouter chat response into a common shape."""
         parsed_response = OpenRouterChatResponse.model_validate(response)
         choice = parsed_response.choices[0]
@@ -81,7 +82,7 @@ class OpenRouterProvider:
             response_model=response_model,
         )
 
-    def parse_stream_chunk(self, chunk: dict) -> ParsedStreamChunk | None:
+    def parse_stream_chunk(self, chunk: dict[str, Any]) -> ParsedStreamChunk | None:
         """Normalize a streaming chunk payload into a delta snapshot.
 
         A chunk that validates as `OpenRouterStreamChunk` is read through the
@@ -121,7 +122,7 @@ class OpenRouterProvider:
         )
 
     @staticmethod
-    def _parse_raw_stream_chunk(chunk: dict) -> ParsedStreamChunk | None:
+    def _parse_raw_stream_chunk(chunk: dict[str, Any]) -> ParsedStreamChunk | None:
         """Extract a delta snapshot from a chunk that failed typed validation."""
         choices = chunk.get("choices") or []
         if not choices:

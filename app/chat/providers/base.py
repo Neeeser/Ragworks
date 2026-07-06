@@ -51,14 +51,14 @@ class ChatProvider(Protocol):
     def get_model(self, model_id: str) -> ModelInfo | None:
         """Return provider model metadata when available."""
 
-    def chat(self, request: ChatRequest) -> dict:
+    def chat(self, request: ChatRequest) -> dict[str, Any]:
         """Request a chat completion response."""
 
-    def chat_stream(self, request: ChatRequest) -> Iterable[dict]:
+    def chat_stream(self, request: ChatRequest) -> Iterable[dict[str, Any]]:
         """Yield streaming chat completion chunks."""
 
-    def parse_chat_response(self, response: dict) -> ParsedChatResponse:
+    def parse_chat_response(self, response: dict[str, Any]) -> ParsedChatResponse:
         """Normalize a non-streaming chat response payload."""
 
-    def parse_stream_chunk(self, chunk: dict) -> ParsedStreamChunk | None:
+    def parse_stream_chunk(self, chunk: dict[str, Any]) -> ParsedStreamChunk | None:
         """Normalize a streaming chunk payload."""

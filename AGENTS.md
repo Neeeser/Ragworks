@@ -60,9 +60,12 @@ failing-then-passing test is incomplete.
 - `make frontend`: run Next.js dev server (sets `NEXT_PUBLIC_API_BASE_URL`)
 - `make run`: run backend + frontend together
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
+- `make test-integration`: backend live-credential suite (hits real OpenRouter/Pinecone)
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure)
 - `make coverage-report` / `make coverage-report-frontend`: coverage, non-blocking
 - `make coverage-open` / `make coverage-open-frontend`: open HTML coverage reports
-- `make lint`: pylint on `app/`
+- `make typecheck`: `mypy app` (strict)
+- `make lint`: ruff + pylint on `app/` (and ruff on `tests/`)
+- `make verify`: the backend gate — typecheck → lint → test
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`

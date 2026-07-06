@@ -77,14 +77,16 @@ def _resolve_node_config(
     return model.model_validate(node.config if node else {})
 
 
-def _fixed_chunker_classes(registry: NodeRegistry) -> list[type[BaseChunkerNode]]:
+def _fixed_chunker_classes(
+    registry: NodeRegistry,
+) -> list[type[BaseChunkerNode[FixedChunkerConfig]]]:
     """Return the registry's fixed-strategy chunker node classes.
 
     `ChunkerNode` (the configurable-strategy variant) is excluded here --
     `_resolve_chunker_config` falls back to it separately via
     `_resolve_node_config`.
     """
-    classes: list[type[BaseChunkerNode]] = []
+    classes: list[type[BaseChunkerNode[FixedChunkerConfig]]] = []
     for node_type in registry.node_types():
         node_cls = registry.get_node_class(node_type)
         if node_cls is None or node_cls is ChunkerNode:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import cast
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -136,6 +135,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return cached application settings."""
     settings = Settings()
-    storage_path = cast(Path, settings.storage_path)
-    storage_path.mkdir(parents=True, exist_ok=True)  # pylint: disable=no-member
+    settings.storage_path.mkdir(parents=True, exist_ok=True)
     return settings

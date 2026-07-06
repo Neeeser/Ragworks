@@ -8,8 +8,9 @@ verify gates, the bug-fix regression-test rule, commit conventions — live in t
 
 Before finishing any backend change, run `make verify` — it chains, in order:
 
-1. `make typecheck` — `mypy app`, with `disallow_untyped_defs = true` globally. New and
-   refactored code must be fully typed and pass with zero errors.
+1. `make typecheck` — `mypy app` with `strict = true`. New and refactored code must be
+   fully typed and pass with zero errors; there is no per-module relaxation for our own
+   code (see "mypy overrides" below for the one narrow exception).
 2. `make lint` — `ruff check app tests` (imports, bugs, complexity, pytest style,
    pyupgrade, simplify) plus a slim `pylint` kept only for the design checks ruff
    doesn't cover (`too-many-arguments/branches/statements/locals`), at
@@ -19,7 +20,10 @@ Before finishing any backend change, run `make verify` — it chains, in order:
 
 All three must be green; `make verify` exits non-zero if any stage fails. Run
 `make coverage` separately and review the `term-missing` output for untested lines you
-introduced — coverage is not yet a blocking gate (a floor is planned for Phase 8).
+introduced — it is also a gate: `fail_under` in `pyproject.toml` is set a few points
+below the last measured suite-wide percentage, so coverage can drift slightly but not
+silently collapse. Lowering `fail_under` to make a change pass is not a fix; investigate
+why coverage dropped first.
 
 **The live integration suite is opt-in, not part of the gate.** `tests/integration/`
 hits real OpenRouter/Pinecone and needs `TEST_OPENROUTER_API_KEY`/`TEST_PINECONE_API_KEY`
@@ -31,29 +35,37 @@ root conftest only does environment bootstrapping (env file loading, DB/storage
 redirection) and the function-scoped `session` fixture — it must never grow a hard
 requirement on live credentials, or the whole unit suite stops collecting without them.
 
-**mypy overrides are a burn-down list with a named owner-phase, never a pattern to
-copy.** Every `[[tool.mypy.overrides]]` block in `pyproject.toml` is commented with the
-phase that removes it (e.g. `# removed in Phase 5`) and exists only because that
-module is getting rewritten, not because typing it properly is hard. Do not add a new
-override for code you're writing today — type it correctly instead. The same rule
-applies to `pyproject.toml`'s `[tool.ruff.lint.per-file-ignores]` burn-down entries.
+**mypy overrides are for permanent third-party-stub gaps only, never a place to park
+code you don't want to type.** The Phase 2–7 burn-down list of `ignore_errors = true`
+overrides on our own modules (config, db, visualizations, `app.visualization.*`) is
+gone as of Phase 8 — `strict = true` applies to every module we own. The one remaining
+`[[tool.mypy.overrides]]` entry (`module = "umap"`) is a different kind of thing:
+`umap-learn` ships no inline types and no stub package exists on PyPI, so
+`ignore_missing_imports` there is permanent, not a burn-down item — there's nothing to
+"finish" short of upstream shipping stubs. Don't add a new `ignore_errors` override for
+code you're writing today — type it correctly instead. The same "burn-down, not a
+parking lot" rule applies to `pyproject.toml`'s `[tool.ruff.lint.per-file-ignores]`
+entries.
 
 **Module size is enforced by `tests/test_module_size.py`, which is the single source
 of truth for the grandfathered list.** The rule: every module under `app/` stays at or
-under 400 lines. The currently-oversize modules are grandfathered in that test's
-`GRANDFATHERED` dict, each with a recorded line-count ceiling that may shrink but never
-grow — the test fails if a new module exceeds 400 lines, if a grandfathered module
-grows past its ceiling, or if an entry that has shrunk to ≤400 lines is still listed
-(so the list can't rot). Never add an entry for new code, and never silence an oversize
-module with a `# pylint: disable=too-many-lines` comment — one of those defeated the
-gate for a 1,200-line module once. Phases 2–6 shrink the dict to empty.
+under 400 lines. Oversize modules are grandfathered in that test's `GRANDFATHERED`
+dict, each with a recorded line-count ceiling that may shrink but never grow — the test
+fails if a new module exceeds 400 lines, if a grandfathered module grows past its
+ceiling, or if an entry that has shrunk to ≤400 lines is still listed (so the list can't
+rot). As of Phase 8 the dict is empty: every module in `app/` is at or under 400 lines.
+Never add an entry for new code, and never silence an oversize module with a
+`# pylint: disable=too-many-lines` comment — one of those defeated the gate for a
+1,200-line module once.
 
 ## Layout — where code goes
 
 ```
 app/
   api/             FastAPI app assembly + dependencies
-    routes/        one router module per resource (collections.py, chat.py, …)
+    routes/        one router module per resource (collections.py, chat.py,
+                   health.py, …) plus utils.py for shared route-translation helpers
+                   (get_collection_or_404, to_http_exception)
   schemas/         Pydantic wire types, one module per domain — the API contract
   clients/         typed external-API clients, one package per provider (openrouter/,
                    pinecone/)
@@ -64,7 +76,9 @@ app/
                    context.py (render-context construction from domain models),
                    render.py (substitution + render_system_prompt's PromptContext
                    model) — package __init__.py re-exports the flat surface
-  db/              session, migrations
+  db/              engine.py (process-wide Engine + session_scope/get_session),
+                   bootstrap.py (init_db/ensure_database_exists), migrations.py,
+                   schema.py (schema validation)
     models/        SQLModel tables, one module per domain (see below)
     repositories/  data access, one module per domain (see below)
   chat/            chat subsystem — facade + flat modules, one responsibility each:
@@ -78,6 +92,11 @@ app/
                    definition.py (PipelineDefinition — the graph's wire shape),
                    settings.py (registry-driven config extraction —
                    resolve_ingestion_settings/resolve_retrieval_settings),
+                   template.py (resolve_collection_template — collection-placeholder
+                   substitution for index/namespace templates), defaults.py
+                   (build_default_ingestion_pipeline/build_default_retrieval_pipeline —
+                   the definitions new collections attach), payloads.py (Pydantic
+                   payload models passed between nodes over ports),
                    execution/ (context.py, executor.py, runner.py — PipelineRunner,
                    the run-lifecycle bootstrap), tracing/ (recorder.py —
                    PipelineTraceRecorder; summaries.py — typed trace summary
@@ -187,7 +206,7 @@ invert it:
   `app.api` — `core` imports nothing above it, and the import direction is
   `core ← schemas ← db/clients ← domain packages ← services ← api`. (Settings used to
   live under `app/api`, which forced every module that needed config —
-  `db/session.py`, `core/security.py`, `pipelines/`, `services/` — to import upward
+  `db/engine.py`, `core/security.py`, `pipelines/`, `services/` — to import upward
   from `app.api`; moved in Phase 2.)
 - **Deployments must set `DEBUG=false`.** The fail-fast guard on the default JWT
   secret only fires outside debug mode, and `debug` defaults to `True` — under the
@@ -286,7 +305,7 @@ The expected shape, in order:
 6. If the frontend consumes it, update the hand-mirrored types in
    `frontend/src/lib/types/` (see `frontend/AGENTS.md`) in the same PR so they can't drift.
 
-Then run the gate (`make test`, `make coverage`, `make lint`).
+Then run the gate (`make verify`, `make coverage`).
 
 ## Fixing a bug
 
@@ -302,10 +321,17 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
 ## Code quality standards
 
 - **Strong typing everywhere.** Typed signatures, return types, and attributes.
-  No `Any`; no `isinstance` ladders as a substitute for a proper schema or a
-  discriminated union. `requires-python = ">=3.11"` — PEP 604 unions (`X | None`) and
-  builtin generics (`list[X]`, `dict[K, V]`) are the house style, including at runtime;
-  don't write `Optional[X]` / `List[X]` in new code (ruff's `UP` rules flag them).
+  No `Any` as an escape hatch; no `isinstance` ladders as a substitute for a proper
+  schema or a discriminated union. `requires-python = ">=3.11"` — PEP 604 unions
+  (`X | None`) and builtin generics (`list[X]`, `dict[K, V]`) are the house style,
+  including at runtime; don't write `Optional[X]` / `List[X]` in new code (ruff's `UP`
+  rules flag them). The one legitimate use of `Any` is filling a generic type
+  parameter mypy strict mode requires but that genuinely has no narrower type: a
+  SQLAlchemy `Column[Any]` (the column's Python value type isn't expressible without
+  duplicating SQLAlchemy's own type machinery), a numpy `ndarray[Any, np.dtype[...]]`
+  (numpy's stubs don't track array rank), or a provider payload dict (`dict[str,
+  Any]`) whose key set is genuinely open-ended (see the data-oriented-design
+  corollary below) — never `Any` in place of a type you could actually write down.
 - **`cast()` is never the fix for an `Optional`.** It hides the crash at the assignment
   and detonates it downstream, further from the cause. Handle the `None` for real:
   supply a fallback, raise, or narrow with an actual check — we shipped a `cast(str,

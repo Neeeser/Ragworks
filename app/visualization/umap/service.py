@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 import numpy as np
@@ -105,19 +106,27 @@ class UmapService:
     def _build_points(
         projection_id: UUID,
         chunk_rows: list[ChunkEmbeddingRow],
-        coordinates: np.ndarray,
+        coordinates: np.ndarray[Any, np.dtype[np.float64]],
     ) -> list[models.UmapPointRecord]:
-        """Build point records from coordinate outputs."""
+        """Build point records from coordinate outputs.
+
+        Indexed by position (`coordinates[i, 0]`) rather than iterated
+        row-by-row: numpy's stubs don't track array rank, so `for coord in
+        coordinates` types each `coord` as a scalar `float64` (unindexable)
+        instead of a length-2 row.
+        """
+        if len(chunk_rows) != coordinates.shape[0]:
+            raise ValueError("Coordinate count does not match chunk row count.")
         points: list[models.UmapPointRecord] = []
-        for row, coord in zip(chunk_rows, coordinates, strict=True):
+        for i, row in enumerate(chunk_rows):
             points.append(
                 models.UmapPointRecord(
                     projection_id=projection_id,
                     chunk_id=row.chunk_id,
                     document_id=row.document_id,
                     chunk_index=row.chunk_index,
-                    x=float(coord[0]),
-                    y=float(coord[1]),
+                    x=float(coordinates[i, 0]),
+                    y=float(coordinates[i, 1]),
                 )
             )
         return points

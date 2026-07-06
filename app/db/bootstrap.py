@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
@@ -47,10 +46,13 @@ def ensure_database_exists(target_url: str) -> None:
 def _format_validation_error(validation: SchemaValidationResult) -> str:
     """Build the error message for a failed schema validation."""
     missing_tables = ", ".join(sorted(validation.missing_tables)) or "none"
-    missing_columns_map = cast(dict[str, set[str]], validation.missing_columns)
-    missing_columns = ", ".join(
-        f"{table}: {sorted(columns)}" for table, columns in missing_columns_map.items()  # pylint: disable=no-member
-    ) or "none"
+    missing_columns = (
+        ", ".join(
+            f"{table}: {sorted(columns)}"
+            for table, columns in validation.missing_columns.items()
+        )
+        or "none"
+    )
     return (
         "Postgres schema validation failed. "
         f"Missing tables: {missing_tables}. Missing columns: {missing_columns}."

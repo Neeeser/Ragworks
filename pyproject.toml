@@ -72,46 +72,15 @@ max-complexity = 10
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
-strict = false                # flipped true in Phase 8
-disallow_untyped_defs = true
-no_implicit_optional = true
-warn_return_any = true
-warn_unused_ignores = true
-# Temporary per-module relaxations. Each override is a burn-down list entry
-# owned by a named phase — never add one without a phase to remove it, and
-# never treat this list as a place to park code you don't want to type.
-#
-# These use `ignore_errors = true` (not a narrower flag) because the errors here
-# are not missing annotations -- they're real type mismatches from dynamic
-# patterns the rewrite phases replace (config: BaseModel accessed as its
-# subtype, SQLAlchemy boolean-typed filter expressions, str | None flowing into
-# `str`-typed dict keys, etc.). A narrower per-check relaxation would still
-# leave dozens of unrelated errors failing `make verify` today.
+strict = true
 
 [[tool.mypy.overrides]]
-# Task 6.2 gutted collections/auth/documents/search into services (typed domain
-# errors, thin routes) -- those are mypy-clean now and dropped from this list.
-# chat.py was dropped in Task 7.1 once the chat subsystem raised typed domain
-# errors (routes/chat.py catching `ServiceError` instead of `ValueError`
-# removed the last dynamic pattern that needed the override; indexes.py turned
-# out to already be clean underneath a stale entry and was dropped alongside
-# it). visualizations.py still routes through raw `ValueError`/`HTTPException`
-# (see routes/visualizations.py) and isn't part of this phase's scope.
-module = "app.api.routes.visualizations"
-ignore_errors = true  # removed in Phase 6
-
-[[tool.mypy.overrides]]
-module = "app.visualization.*"
-# Same SQLModel `select()`/`.where()` typing friction as app.db.* had -- owned
-# by the same Phase 2 db-typing cleanup, not a separate burn-down item.
-# app.db.* (engine/bootstrap/migrations/schema/models/repositories) is now
-# mypy-clean as of Task 2.5; this module is still pending its own pass.
-ignore_errors = true  # removed in Phase 2
-
-[[tool.mypy.overrides]]
-module = "umap"
 # umap-learn ships no inline types and no `types-umap` stub package exists on
-# PyPI. This is a permanent third-party stub gap, not a phase burn-down item.
+# PyPI. This is a permanent third-party-stubs gap, not a phase burn-down item:
+# unlike the `ignore_errors` overrides above (removed once), there is nothing
+# to "finish" here short of upstream shipping stubs, so it stays even under
+# strict mode.
+module = "umap"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -131,7 +100,11 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-fail_under = 0
+# Measured branch coverage post-refactor (Task 8.1) was 97.06%. Floor is set
+# to actual minus a 3-point buffer, rounded down, so the suite has headroom to
+# fluctuate without every PR fighting the gate -- not the >=70 floor named as
+# a minimum in the plan, since we're well above it.
+fail_under = 94
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

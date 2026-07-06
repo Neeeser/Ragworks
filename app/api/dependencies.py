@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.core.security import create_access_token
-from app.db.engine import get_session
+from app.db.engine import get_session as get_session  # re-exported for routes
 from app.db.models import User
 from app.db.repositories import UserRepository
 

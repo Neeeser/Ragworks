@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
@@ -34,10 +32,8 @@ class DatabaseSchema(BaseModel):
         """Return missing columns for tables that exist in both schemas."""
         # pylint: disable=no-member
         missing: dict[str, set[str]] = {}
-        expected_tables = cast(dict[str, TableSchema], expected.tables)
-        actual_tables = cast(dict[str, TableSchema], self.tables)
-        for table_name, expected_table in expected_tables.items():
-            actual_table = actual_tables.get(table_name)
+        for table_name, expected_table in expected.tables.items():
+            actual_table = self.tables.get(table_name)
             if not actual_table:
                 continue
             missing_columns = expected_table.columns - actual_table.columns
