@@ -148,13 +148,15 @@ gets picked up automatically as long as it's registered — no second place to u
 **A collection's ingestion/retrieval pipeline is resolved in exactly one place:
 `app/services/pipeline_resolution.py`.** `resolve_ingestion_pipeline`/
 `resolve_retrieval_pipeline` run the ensure-defaults → attach-to-collection →
-load-pipeline → validate-kind → resolve-settings sequence once; every caller (both
-services and the collection routes that render a prompt or purge a namespace) calls
-through them instead of repeating it. They raise `PipelineResolutionError` (a
-`ValueError`) — never `HTTPException` — so each caller can translate it into whatever
-route-specific message fits (contrast `IngestionService`'s generic "Ingestion pipeline
-could not be resolved" with `delete_collection`'s "Unable to resolve ingestion pipeline
-for deletion").
+load-pipeline → validate-kind → resolve-settings sequence once; every caller —
+`IngestionService`, `RetrievalService`, chat's `ChatSetupBuilder`, and the collection
+routes that render a prompt or purge a namespace — calls through them instead of
+repeating it. They raise `PipelineResolutionError` (a `ValueError`) — never
+`HTTPException` — so each caller can translate it into whatever route-specific message
+fits (contrast `IngestionService`'s generic "Ingestion pipeline could not be resolved"
+with `delete_collection`'s "Unable to resolve ingestion pipeline for deletion"). Tests
+that need to stub resolution patch these functions at the importing module's boundary
+(e.g. `app.chat.setup.resolve_retrieval_pipeline`), not a re-export.
 
 **One module per domain in `db/models/`.** Tables are split by domain —
 `user.py` (User + `TimestampMixin`), `collection.py`, `document.py`, `pipeline.py`,

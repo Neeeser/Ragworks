@@ -14,12 +14,12 @@ from app.db.repositories import ChunkRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import IngestionPipelineSettings
+from app.pipelines.tracing import PipelineTraceRecorder
 from app.retrieval.models import DocumentChunk
 from app.retrieval.pinecone import get_pinecone_client
 from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.utils.file_storage import FileStorage
-from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 usage=usage,
             )
         except Exception as exc:
-            self._record_failure(document, handle.run if handle else None, exc)
+            self._record_failure(document, handle.trace if handle else None, exc)
             self.session.commit()
             raise
 
@@ -188,16 +188,18 @@ class IngestionService:  # pylint: disable=too-few-public-methods
     def _record_failure(
         self,
         document: models.Document,
-        run: models.PipelineRun | None,
+        trace: PipelineTraceRecorder | None,
         exc: Exception,
     ) -> None:
-        """Record ingestion failure metadata."""
+        """Record ingestion failure metadata.
+
+        Run-status transitions belong to the trace recorder (`mark_run_failed`
+        is a no-op on an already-failed run); this method owns only the
+        document status and the ingestion event.
+        """
         document.status = models.DocumentStatus.FAILED
-        if run and run.status != models.PipelineRunStatus.FAILED:
-            run.status = models.PipelineRunStatus.FAILED
-            run.error_message = str(exc)
-            run.completed_at = utc_now()
-            self.session.add(run)
+        if trace:
+            trace.mark_run_failed(exc)
         self.session.add(
             models.IngestionEvent(
                 document_id=document.id,

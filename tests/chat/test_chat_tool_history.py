@@ -129,31 +129,13 @@ class _StubOpenRouter:
 
 
 def _stub_pipeline_helpers(monkeypatch) -> None:
-    class _StubPipelineService:
-        def __init__(self, _session) -> None:
-            pass
+    """Patch the consolidated pipeline resolver at chat setup's boundary.
 
-        def ensure_default_pipelines(self, _user):
-            return SimpleNamespace(
-                ingestion=SimpleNamespace(id="ingestion"),
-                retrieval=SimpleNamespace(id="retrieval"),
-            )
-
-        def ensure_collection_pipelines(self, collection, defaults):
-            collection.ingestion_pipeline_id = (
-                getattr(collection, "ingestion_pipeline_id", None) or defaults.ingestion.id
-            )
-            collection.retrieval_pipeline_id = (
-                getattr(collection, "retrieval_pipeline_id", None) or defaults.retrieval.id
-            )
-            return collection
-
-        def get_pipeline(self, pipeline_id, _user_id):
-            return SimpleNamespace(id=pipeline_id)
-
-        def get_definition(self, _pipeline):
-            return SimpleNamespace(nodes=[])
-
+    `_resolve_pipeline_context` now calls `resolve_ingestion_pipeline` /
+    `resolve_retrieval_pipeline` (app/services/pipeline_resolution.py) and
+    reads only `.settings` off each result, so that's the whole surface the
+    stubs need to provide.
+    """
     ingestion_settings = SimpleNamespace(
         chunk_strategy="token",
         chunk_size=256,
@@ -174,16 +156,15 @@ def _stub_pipeline_helpers(monkeypatch) -> None:
         context_window=8192,
     )
 
-    monkeypatch.setattr(chat_setup_module, "PipelineService", _StubPipelineService)
     monkeypatch.setattr(
         chat_setup_module,
-        "resolve_ingestion_settings",
-        lambda *_args, **_kwargs: ingestion_settings,
+        "resolve_ingestion_pipeline",
+        lambda *_args, **_kwargs: SimpleNamespace(settings=ingestion_settings),
     )
     monkeypatch.setattr(
         chat_setup_module,
-        "resolve_retrieval_settings",
-        lambda *_args, **_kwargs: retrieval_settings,
+        "resolve_retrieval_pipeline",
+        lambda *_args, **_kwargs: SimpleNamespace(settings=retrieval_settings),
     )
 
 

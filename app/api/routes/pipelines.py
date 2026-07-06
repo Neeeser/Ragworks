@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -48,12 +47,16 @@ def _to_pipeline_read(
     """Convert a pipeline model + its resolved definition into a response schema.
 
     `definition` lives on the pipeline's current `PipelineVersion`, not on
-    `models.Pipeline` itself, so it's attached to a shallow attribute view of
-    the pipeline before `from_attributes` validation instead of listed
-    field-by-field.
+    `models.Pipeline` itself, so the row is dumped to a dict and the definition
+    merged in before validation instead of listed field-by-field.
+
+    `warnings=False` on the dump: `table=True` models skip validation, so
+    enum-typed columns (`kind`) hold the raw DB string and pydantic's
+    serializer would warn on every request despite the value being exactly
+    what `model_validate` below expects -- that validation is the real gate.
     """
-    view = SimpleNamespace(**vars(pipeline), definition=definition)
-    return PipelineRead.model_validate(view)
+    data = pipeline.model_dump(warnings=False)
+    return PipelineRead.model_validate({**data, "definition": definition})
 
 
 def _validate_definition_or_400(definition: PipelineDefinition) -> None:

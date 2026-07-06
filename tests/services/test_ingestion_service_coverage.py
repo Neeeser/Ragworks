@@ -8,6 +8,8 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.definition import PipelineDefinition
+from app.pipelines.tracing import PipelineTraceRecorder
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.services.pipelines import PipelineService
@@ -107,7 +109,8 @@ def test_record_failure_updates_run_status(session: Session) -> None:
     session.refresh(run)
 
     service = IngestionService(session)
-    service._record_failure(document, run, RuntimeError("boom"))
+    trace = PipelineTraceRecorder(session, run, PipelineDefinition(nodes=[], edges=[]))
+    service._record_failure(document, trace, RuntimeError("boom"))
     session.commit()
 
     refreshed_run = session.get(models.PipelineRun, run.id)
@@ -155,7 +158,8 @@ def test_record_failure_skips_failed_run(session: Session) -> None:
     session.commit()
 
     service = IngestionService(session)
-    service._record_failure(document, run, RuntimeError("boom"))
+    trace = PipelineTraceRecorder(session, run, PipelineDefinition(nodes=[], edges=[]))
+    service._record_failure(document, trace, RuntimeError("boom"))
     session.commit()
 
     refreshed_run = session.get(models.PipelineRun, run.id)

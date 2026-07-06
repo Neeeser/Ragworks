@@ -46,10 +46,11 @@ from app.chat.tools import ToolExecutor
 from app.core.config import Settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
-from app.pipelines.registry import default_registry
-from app.pipelines.settings import resolve_ingestion_settings, resolve_retrieval_settings
 from app.schemas.chat import ChatMessageCreate
-from app.services.pipelines import PipelineService
+from app.services.pipeline_resolution import (
+    resolve_ingestion_pipeline,
+    resolve_retrieval_pipeline,
+)
 from app.services.prompts import (
     collection_tool_name,
     get_system_prompt_template,
@@ -80,24 +81,16 @@ class ChatSetupBuilder:
     def _resolve_pipeline_context(
         self, user: models.User, collection: models.Collection
     ) -> PipelineContext:
-        """Resolve ingestion and retrieval pipeline settings for a collection."""
-        pipeline_service = PipelineService(self.session)
-        defaults = pipeline_service.ensure_default_pipelines(user)
-        pipeline_service.ensure_collection_pipelines(collection, defaults)
-        ingestion_pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
-        retrieval_pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
-        ingestion_pipeline = pipeline_service.get_pipeline(ingestion_pipeline_id, user.id)
-        retrieval_pipeline = pipeline_service.get_pipeline(retrieval_pipeline_id, user.id)
-        if not ingestion_pipeline or not retrieval_pipeline:
-            raise ValueError("Pipeline configuration could not be resolved.")
-        ingestion_definition = pipeline_service.get_definition(ingestion_pipeline)
-        retrieval_definition = pipeline_service.get_definition(retrieval_pipeline)
-        registry = default_registry()
-        ingestion_settings = resolve_ingestion_settings(ingestion_definition, collection, registry)
-        retrieval_settings = resolve_retrieval_settings(retrieval_definition, collection, registry)
+        """Resolve ingestion and retrieval pipeline settings for a collection.
+
+        `PipelineResolutionError` is a `ValueError`, so callers that catch chat's
+        domain errors as `ValueError` (the routes do) keep working unchanged.
+        """
+        ingestion = resolve_ingestion_pipeline(self.session, user, collection)
+        retrieval = resolve_retrieval_pipeline(self.session, user, collection)
         return PipelineContext(
-            ingestion_settings=ingestion_settings,
-            retrieval_settings=retrieval_settings,
+            ingestion_settings=ingestion.settings,
+            retrieval_settings=retrieval.settings,
         )
 
     def _build_tool_collection_context(

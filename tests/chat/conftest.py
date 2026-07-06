@@ -4,8 +4,9 @@ These consolidate the per-file `_create_user` / `_create_collection` /
 `_stub_pipeline_helpers` builders that used to be copy-pasted across the chat
 service tests. Provider and pipeline collaborators are patched at their real
 boundaries: `get_settings` / `get_openrouter_client` / `RetrievalService` live
-in `app.chat.service`, while `resolve_ingestion_settings` /
-`resolve_retrieval_settings` live in `app.chat.setup`.
+in `app.chat.service`, while `resolve_ingestion_pipeline` /
+`resolve_retrieval_pipeline` (the consolidated resolver in
+`app.services.pipeline_resolution`) live in `app.chat.setup`.
 """
 
 from __future__ import annotations
@@ -138,7 +139,13 @@ def make_collection_fixture(session: Session):
 
 @pytest.fixture(name="stub_pipeline_settings")
 def stub_pipeline_settings_fixture(monkeypatch):
-    """Return a factory that patches pipeline settings resolution in setup."""
+    """Return a factory that patches pipeline resolution in setup.
+
+    Patches `resolve_ingestion_pipeline` / `resolve_retrieval_pipeline` (the
+    consolidated resolver from `app.services.pipeline_resolution`) as imported
+    by `app.chat.setup` -- chat's setup only reads `.settings` off the resolved
+    result, so the stubs return a namespace carrying just that.
+    """
 
     def _stub(*, chat_model: str | None, context_window: int = 1024) -> None:
         ingestion_settings = SimpleNamespace(
@@ -161,10 +168,14 @@ def stub_pipeline_settings_fixture(monkeypatch):
             context_window=context_window,
         )
         monkeypatch.setattr(
-            setup_module, "resolve_ingestion_settings", lambda *_a, **_k: ingestion_settings
+            setup_module,
+            "resolve_ingestion_pipeline",
+            lambda *_a, **_k: SimpleNamespace(settings=ingestion_settings),
         )
         monkeypatch.setattr(
-            setup_module, "resolve_retrieval_settings", lambda *_a, **_k: retrieval_settings
+            setup_module,
+            "resolve_retrieval_pipeline",
+            lambda *_a, **_k: SimpleNamespace(settings=retrieval_settings),
         )
 
     return _stub

@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.base import DateTimeConfigMixin
@@ -43,14 +43,12 @@ class PipelineUpdate(BaseModel):
 class PipelineRead(DateTimeConfigMixin, BaseModel):
     """Pipeline details returned to clients.
 
-    Built via `PipelineRead.model_validate(view, from_attributes=True)` at the
-    route, where `view` is the pipeline row plus its resolved `definition`
-    attached (`definition` lives on the pipeline's current `PipelineVersion`,
-    not on `models.Pipeline` itself, so it's the one field that can't come
-    straight off the ORM row).
+    Built at the route via
+    `PipelineRead.model_validate({**pipeline.model_dump(), "definition": definition})`
+    -- `definition` lives on the pipeline's current `PipelineVersion`, not on
+    `models.Pipeline` itself, so it's the one field that can't come straight
+    off the ORM row.
     """
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID
