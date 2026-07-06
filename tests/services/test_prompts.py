@@ -20,6 +20,7 @@ from app.services.prompts import (
     prompt_variables_payload,
     render_system_prompt,
     system_prompt_context,
+    with_system_prompt_template,
 )
 
 
@@ -182,3 +183,23 @@ def test_stringify_returns_default_on_unserializable_value() -> None:
 def test_stringify_handles_boolean_values() -> None:
     assert _stringify(True) == "true"
     assert _stringify(False) == "false"
+
+
+def test_with_system_prompt_template_sets_without_mutating_input() -> None:
+    original = {"other": "kept"}
+
+    result = with_system_prompt_template(original, "Hello")
+
+    assert result == {"other": "kept", SYSTEM_PROMPT_METADATA_KEY: "Hello"}
+    assert result is not original
+    assert original == {"other": "kept"}  # never mutated: JSON columns need new dicts
+
+
+def test_with_system_prompt_template_clears_on_blank_without_mutating_input() -> None:
+    original = {"other": "kept", SYSTEM_PROMPT_METADATA_KEY: "old"}
+
+    result = with_system_prompt_template(original, "   ")
+
+    assert result == {"other": "kept"}
+    assert result is not original
+    assert original[SYSTEM_PROMPT_METADATA_KEY] == "old"

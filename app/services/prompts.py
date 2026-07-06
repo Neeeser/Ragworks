@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from app.db import models
@@ -263,6 +264,21 @@ def base_prompt_context(user: models.User | None) -> dict[str, str]:
 def collection_tool_name(collection_id: UUID) -> str:
     """Return the tool function name for a collection."""
     return f"pinecone_query_{collection_id.hex}"
+
+
+def with_system_prompt_template(
+    metadata: dict[str, Any],
+    template: str,
+) -> dict[str, Any]:
+    """Return a NEW metadata dict with the template set (or cleared, if blank).
+
+    Always builds a fresh dict, never mutates: JSON columns aren't wrapped in
+    `MutableDict`, so in-place mutation is invisible to the session and would
+    never be written (see app/AGENTS.md).
+    """
+    if template.strip():
+        return {**metadata, SYSTEM_PROMPT_METADATA_KEY: template}
+    return {key: value for key, value in metadata.items() if key != SYSTEM_PROMPT_METADATA_KEY}
 
 
 def get_system_prompt_template(collection: models.Collection) -> str:

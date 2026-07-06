@@ -30,13 +30,13 @@ from app.schemas.collections import (
 )
 from app.services.pipelines import PipelineService
 from app.services.prompts import (
-    SYSTEM_PROMPT_METADATA_KEY,
     apply_prompt_template,
     collection_tool_name,
     get_system_prompt_template,
     is_collection_prompt_custom,
     prompt_variables_payload,
     system_prompt_context,
+    with_system_prompt_template,
 )
 from app.utils.file_storage import FileStorage
 
@@ -381,10 +381,11 @@ def update_collection_prompt(
     )
 
     template_value = (payload.template or "").replace("\r\n", "\n")
-    if template_value.strip():
-        collection.extra_metadata[SYSTEM_PROMPT_METADATA_KEY] = template_value
-    else:
-        collection.extra_metadata.pop(SYSTEM_PROMPT_METADATA_KEY, None)
+    # Reassignment, never in-place mutation: JSON columns aren't change-tracked.
+    collection.extra_metadata = with_system_prompt_template(
+        collection.extra_metadata,
+        template_value,
+    )
     session.add(collection)
     session.commit()
     session.refresh(collection)

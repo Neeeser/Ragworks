@@ -1,5 +1,5 @@
 """Domain enums shared by the wire contract (`app/schemas/`) and persistence
-(`app/db/models.py`).
+(`app/db/models/`).
 
 These live in `app/schemas` — not `app/db` — because the wire contract must not
 transitively depend on SQLModel: `db.models` imports these enums, never the

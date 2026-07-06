@@ -208,6 +208,13 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   dependency; don't open ad-hoc sessions inside services that already received one, and
   don't let a session escape the request that created it (detached-instance errors show
   up far from their cause).
+- **Never mutate a JSON column in place** (`model.extra_metadata[key] = value`,
+  `.pop(...)`, `.update(...)`): our JSON columns aren't wrapped in `MutableDict`, so
+  the session never sees the change and **nothing is written** — the response still
+  looks right because it's the same in-memory object. Reassign a new dict
+  (`model.extra_metadata = {**model.extra_metadata, key: value}`) or call
+  `flag_modified(model, "field")`. We shipped exactly this bug in
+  `update_collection_prompt`; its test passed for months via object identity.
 - **Streaming responses outlive the request handler.** A generator passed to
   `StreamingResponse` runs after the function returns — anything it closes over
   (session, client) must still be alive, and cleanup must handle the client
@@ -245,6 +252,12 @@ construction site.
 - **Mock at the boundary you don't own.** Fake OpenRouter/Pinecone at the client edge;
   never mock your own services to test your own routes — that pins implementation and
   proves nothing.
+- **Persistence assertions must read back through a fresh session**
+  (`Session(session.get_bind())`, or expunge first). Asserting on the object the code
+  under test just handled proves nothing — the session's identity map hands back the
+  same in-memory instance, so the test passes even when nothing was ever written. The
+  `update_collection_prompt` JSON-mutation bug survived precisely because its test
+  read back through the same session.
 - **Coverage is a floor, not a goal.** Use `term-missing` to find genuinely untested
   behavior, not to pad. It's fine to leave something untested *for a stated reason* —
   e.g. thin wrappers over a third-party SDK where the test would only re-assert the

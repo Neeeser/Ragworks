@@ -22,6 +22,7 @@ from app.schemas.collections import (
     PipelineNodeOverride,
 )
 from app.services.pipelines import PipelineService
+from app.services.prompts import SYSTEM_PROMPT_METADATA_KEY
 
 
 class _StubPinecone:
@@ -358,8 +359,17 @@ def test_prompt_read_rejects_missing_pipeline(monkeypatch, session: Session) -> 
 
 
 def test_update_collection_prompt_sets_and_clears_template(session: Session) -> None:
+    """Prompt updates must survive to the database, not just the request session.
+
+    Regression test: the route once mutated the JSON `extra_metadata` column in
+    place, which SQLAlchemy never tracks -- the response looked right (same
+    in-memory object) while nothing was ever written. Every persistence
+    assertion here reads back through a FRESH session so it cannot pass via
+    object identity.
+    """
     user = _create_user(session)
     collection = _create_collection(session, user)
+    original_updated_at = collection.updated_at
 
     updated = collections_routes.update_collection_prompt(
         collection.id,
@@ -370,6 +380,16 @@ def test_update_collection_prompt_sets_and_clears_template(session: Session) -> 
     assert updated.template
     assert updated.rendered
 
+    with Session(session.get_bind()) as fresh:
+        persisted = fresh.get(models.Collection, collection.id)
+        assert persisted is not None
+        assert (
+            persisted.extra_metadata.get(SYSTEM_PROMPT_METADATA_KEY)
+            == "Hello {{collection.name}}"
+        )
+        # The row is genuinely dirty now, so TimestampMixin's onupdate fires.
+        assert persisted.updated_at > original_updated_at
+
     updated = collections_routes.update_collection_prompt(
         collection.id,
         CollectionPromptUpdate(template="  "),
@@ -377,6 +397,11 @@ def test_update_collection_prompt_sets_and_clears_template(session: Session) -> 
         session=session,
     )
     assert "Tool context" in updated.rendered
+
+    with Session(session.get_bind()) as fresh:
+        persisted = fresh.get(models.Collection, collection.id)
+        assert persisted is not None
+        assert SYSTEM_PROMPT_METADATA_KEY not in persisted.extra_metadata
 
 
 def test_delete_collection_removes_records(monkeypatch, session: Session) -> None:
