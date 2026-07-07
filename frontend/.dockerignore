@@ -8,3 +8,4 @@ coverage
 Dockerfile
 .dockerignore
 tsconfig.tsbuildinfo
+.env*
