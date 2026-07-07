@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api.routes import auth as auth_routes
@@ -35,3 +36,34 @@ def test_login_for_access_token_rejects_invalid_password(session: Session) -> No
         auth_routes.login_for_access_token(form_data, session=session)
 
     assert excinfo.value.status_code == 401
+
+
+def test_login_for_access_token_rejects_deactivated_account(
+    unauthed_client: TestClient, session: Session
+) -> None:
+    """A deactivated account must not receive a token, even with the right password.
+
+    Otherwise login appears to succeed and every subsequent call 401s via
+    ``get_current_user`` -- confusing, not a security hole, but worth rejecting
+    at login with the same indistinguishable-from-bad-credentials response.
+    """
+    user = models.User(
+        email="deactivated@example.com",
+        full_name="Deactivated User",
+        hashed_password=hash_password("correct-password"),
+        is_active=False,
+    )
+    session.add(user)
+    session.commit()
+
+    response = unauthed_client.post(
+        "/api/auth/token",
+        data={
+            "grant_type": "password",
+            "username": "deactivated@example.com",
+            "password": "correct-password",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Incorrect email or password"

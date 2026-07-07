@@ -65,7 +65,11 @@ def login_for_access_token(
     """Authenticate a user and return an access token."""
     repo = UserRepository(session)
     user = repo.get_by_email(form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if (
+        not user
+        or not verify_password(form_data.password, user.hashed_password)
+        or not user.is_active
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
