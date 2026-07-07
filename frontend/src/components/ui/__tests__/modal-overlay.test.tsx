@@ -69,12 +69,20 @@ function Harness({
 
 describe("ModalOverlay", () => {
   it("renders nothing when closed", () => {
-    const { container } = render(<ModalOverlay open={false} onClose={() => {}}>content</ModalOverlay>);
+    const { container } = render(
+      <ModalOverlay open={false} onClose={() => {}}>
+        content
+      </ModalOverlay>,
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it("renders a dialog with role and aria-modal when open", () => {
-    render(<ModalOverlay open onClose={() => {}}>content</ModalOverlay>);
+    render(
+      <ModalOverlay open onClose={() => {}}>
+        content
+      </ModalOverlay>,
+    );
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
   });
 

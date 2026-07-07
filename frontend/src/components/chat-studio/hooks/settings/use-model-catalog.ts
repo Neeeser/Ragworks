@@ -9,10 +9,7 @@ import { sortChatModels } from "@/lib/model-sorting";
 
 import { sanitizeModelSlug } from "../../lib/chat-utils";
 
-import type {
-  ModelParameterKey,
-  ParameterDefinition,
-} from "@/lib/chat-parameters";
+import type { ModelParameterKey, ParameterDefinition } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
 import type { ModelInfo } from "@/lib/types";
 

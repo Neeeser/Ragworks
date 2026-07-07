@@ -73,15 +73,21 @@ export function ChatStudio() {
   const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
   const pineconeConfigured = Boolean(!authLoading && user?.pinecone_configured);
 
-  const { chatEntryMap, chatEntryOrder, syncMessages, deriveToolTraces, messageOrderRef, nextMessageOrderRef } =
-    useChatEntries({
-      messages,
-      setMessages: state.setMessages,
-      optimisticMessages: state.optimisticMessages,
-      toolTraces: state.toolTraces,
-      selectedSessionId,
-      resetStreamKeys: chatStream.resetStreamKeys,
-    });
+  const {
+    chatEntryMap,
+    chatEntryOrder,
+    syncMessages,
+    deriveToolTraces,
+    messageOrderRef,
+    nextMessageOrderRef,
+  } = useChatEntries({
+    messages,
+    setMessages: state.setMessages,
+    optimisticMessages: state.optimisticMessages,
+    toolTraces: state.toolTraces,
+    selectedSessionId,
+    resetStreamKeys: chatStream.resetStreamKeys,
+  });
 
   const {
     autoScrollEnabled,
@@ -261,24 +267,30 @@ export function ChatStudio() {
     sortSessions,
   });
 
-  const { telemetrySections, telemetryPrompts, telemetryCollections, telemetryStreaming, telemetryUsage, overrideSections } =
-    useTelemetryGroups({
-      runSettingsOrder: runSettings.runSettingsOrder,
-      setRunSettingsOrder: runSettings.setRunSettingsOrder,
-      promptEditor,
-      collectionTools,
-      panel,
-      pineconeConfigured,
-      streamingEnabled,
-      setStreamingEnabled,
-      usage,
-      contextConsumed,
-      messages,
-      sessions,
-      selectedSessionId,
-      providerRuleCount: providerPreferences.providerRuleCount,
-      activeParameterCount: modelParameters.activeParameterCount,
-    });
+  const {
+    telemetrySections,
+    telemetryPrompts,
+    telemetryCollections,
+    telemetryStreaming,
+    telemetryUsage,
+    overrideSections,
+  } = useTelemetryGroups({
+    runSettingsOrder: runSettings.runSettingsOrder,
+    setRunSettingsOrder: runSettings.setRunSettingsOrder,
+    promptEditor,
+    collectionTools,
+    panel,
+    pineconeConfigured,
+    streamingEnabled,
+    setStreamingEnabled,
+    usage,
+    contextConsumed,
+    messages,
+    sessions,
+    selectedSessionId,
+    providerRuleCount: providerPreferences.providerRuleCount,
+    activeParameterCount: modelParameters.activeParameterCount,
+  });
 
   const { telemetryModel, telemetryProvider, telemetryParameters } = useTelemetryModelGroups({
     modelCatalog,

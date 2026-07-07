@@ -470,7 +470,7 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   not a shortcut. Split out a same-package module (e.g. `catalog.py`) for
   caching/shaping logic that doesn't itself do I/O, taking the transport as injected
   callables so it stays unit-testable without a fake HTTP client. Before changing these
-  integrations, read the local docs in `external_api_documentation/` first — behavior
+  integrations, read the local docs in `docs/external-api/` first — behavior
   there trumps memory.
 - **Never feature-detect a pinned SDK with `inspect.signature`.** `app/clients/pinecone/`
   used to probe `create_index`'s parameters at runtime (twice — once in the route, once

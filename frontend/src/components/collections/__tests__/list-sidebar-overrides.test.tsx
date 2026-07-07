@@ -176,7 +176,12 @@ describe("PipelineOverridesEditor", () => {
       kind: "retrieval",
       definition: {
         nodes: [
-          { id: "node-nan", type: NODE_TYPE, name: "Node", config: { threshold: 0.2, note: "keep" } },
+          {
+            id: "node-nan",
+            type: NODE_TYPE,
+            name: "Node",
+            config: { threshold: 0.2, note: "keep" },
+          },
         ],
         edges: [],
       },

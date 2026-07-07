@@ -6,6 +6,8 @@
 
 **Build retrieval pipelines you can actually see — every parse, chunk, embedding, and retrieval step is a node on a graph you can inspect, trace, and rewire.**
 
+[![CI](https://github.com/Neeeser/TransparentRag/actions/workflows/ci.yml/badge.svg)](https://github.com/Neeeser/TransparentRag/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-frontend-black?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)

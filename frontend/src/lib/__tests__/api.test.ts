@@ -424,33 +424,33 @@ describe("api", () => {
     });
     fetchMock.mockResolvedValueOnce(createStreamResponse(readerError));
     const handlers = { onError: vi.fn() };
-    await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers)).rejects.toThrow(
-      "bad",
-    );
+    await expect(
+      streamChat("token", { content: "Hello", chat_model: "model" }, handlers),
+    ).rejects.toThrow("bad");
     expect(handlers.onError).toHaveBeenCalledWith("bad");
 
     const readerAbort = createMockReader([], {
       throwOnRead: new DOMException("Aborted", "AbortError"),
     });
     fetchMock.mockResolvedValueOnce(createStreamResponse(readerAbort));
-    await expect(streamChat("token", { content: "Hello", chat_model: "model" })).rejects.toBeInstanceOf(
-      DOMException,
-    );
+    await expect(
+      streamChat("token", { content: "Hello", chat_model: "model" }),
+    ).rejects.toBeInstanceOf(DOMException);
 
     const readerBoom = createMockReader([], { throwOnRead: new Error("boom") });
     fetchMock.mockResolvedValueOnce(createStreamResponse(readerBoom));
     const handlers2 = { onError: vi.fn() };
-    await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers2)).rejects.toThrow(
-      "boom",
-    );
+    await expect(
+      streamChat("token", { content: "Hello", chat_model: "model" }, handlers2),
+    ).rejects.toThrow("boom");
     expect(handlers2.onError).toHaveBeenCalledWith("boom");
 
     const readerNonError = createMockReader([], { throwOnRead: "oops" });
     fetchMock.mockResolvedValueOnce(createStreamResponse(readerNonError));
     const handlers3 = { onError: vi.fn() };
-    await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers3)).rejects.toBe(
-      "oops",
-    );
+    await expect(
+      streamChat("token", { content: "Hello", chat_model: "model" }, handlers3),
+    ).rejects.toBe("oops");
     expect(handlers3.onError).toHaveBeenCalledWith(streamingRequestFailedMessage);
   });
 
@@ -484,9 +484,9 @@ describe("api", () => {
     const reader = createMockReader(['data: {"type":"error","message":"  "}\n\n']);
     fetchMock.mockResolvedValueOnce(createStreamResponse(reader));
     const handlers = { onError: vi.fn() };
-    await expect(streamChat("token", { content: "Hello", chat_model: "model" }, handlers)).rejects.toThrow(
-      streamingRequestFailedMessage,
-    );
+    await expect(
+      streamChat("token", { content: "Hello", chat_model: "model" }, handlers),
+    ).rejects.toThrow(streamingRequestFailedMessage);
     expect(handlers.onError).toHaveBeenCalledWith(streamingRequestFailedMessage);
   });
 

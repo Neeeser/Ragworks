@@ -287,19 +287,16 @@ export function usePromptEditor({
     setPromptEditorOpen(false);
   }, []);
 
-  const updatePromptDraft = useCallback(
-    (sectionId: string, updater: (value: string) => string) => {
-      if (sectionId === "base") {
-        setBasePromptDraft(updater);
-        return;
-      }
-      setCollectionPromptDrafts((prev) => {
-        const current = prev[sectionId] ?? "";
-        return { ...prev, [sectionId]: updater(current) };
-      });
-    },
-    [],
-  );
+  const updatePromptDraft = useCallback((sectionId: string, updater: (value: string) => string) => {
+    if (sectionId === "base") {
+      setBasePromptDraft(updater);
+      return;
+    }
+    setCollectionPromptDrafts((prev) => {
+      const current = prev[sectionId] ?? "";
+      return { ...prev, [sectionId]: updater(current) };
+    });
+  }, []);
 
   const handleInsertPromptVariable = useCallback(
     (sectionId: string, variableName: string) => {

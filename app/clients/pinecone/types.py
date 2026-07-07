@@ -15,7 +15,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 # Pinecone metadata values are restricted to these primitives (see
-# external_api_documentation/pinecone-docs/guides/search/filter-by-metadata.md); this
+# docs/external-api/pinecone/guides/search/filter-by-metadata.md); this
 # app never writes list-valued metadata, so the narrower primitive union is sufficient
 # and catches accidental non-primitive metadata at the client boundary.
 PineconeMetadataValue = str | int | float | bool

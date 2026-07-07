@@ -67,9 +67,7 @@ describe("ChunkPreviewOverlay", () => {
       chunk: { ...detail.chunk, id: "chunk-2", text: "World" },
     };
 
-    const { rerender } = render(
-      <ChunkPreviewOverlay isOpen onClose={() => {}} detail={detail} />,
-    );
+    const { rerender } = render(<ChunkPreviewOverlay isOpen onClose={() => {}} detail={detail} />);
 
     fireEvent.click(screen.getByText("Markdown"));
 
@@ -84,9 +82,7 @@ describe("ChunkPreviewOverlay", () => {
   });
 
   it("resets to the default render mode when reopened after closing", () => {
-    const { rerender } = render(
-      <ChunkPreviewOverlay isOpen onClose={() => {}} detail={detail} />,
-    );
+    const { rerender } = render(<ChunkPreviewOverlay isOpen onClose={() => {}} detail={detail} />);
 
     fireEvent.click(screen.getByText("Markdown"));
     rerender(<ChunkPreviewOverlay isOpen={false} onClose={() => {}} detail={detail} />);

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const OUT_DIR = "openrouter-docs";
+const OUT_DIR = path.join(import.meta.dirname, "..", "docs", "external-api", "openrouter");
 const INDEX_URL = "https://openrouter.ai/docs/llms.txt";
 
 // polite + identifiable

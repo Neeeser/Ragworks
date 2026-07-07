@@ -48,6 +48,9 @@ uploads/
 *.log
 logs/
 
+# ruff
+.ruff_cache/
+
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -70,9 +73,8 @@ frontend/out/
 frontend/.vercel/
 frontend/.cache/
 
-# External API documentation downloads
-external_api_documentation/openrouter-docs/
-external_api_documentation/pinecone-docs/
+# External API documentation downloads (fetch via scripts/download-*-docs.mjs)
+docs/external-api/
 
 # Local agent working files (keep local, never commit)
 .superpowers/

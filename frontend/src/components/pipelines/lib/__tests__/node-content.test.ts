@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveNodeDescription, resolveNodeExample } from "@/components/pipelines/lib/node-content";
+import {
+  resolveNodeDescription,
+  resolveNodeExample,
+} from "@/components/pipelines/lib/node-content";
 
 import type { NodeSpec } from "@/lib/types";
 

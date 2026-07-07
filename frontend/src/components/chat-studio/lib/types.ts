@@ -133,7 +133,11 @@ export interface TelemetryParametersProps {
   parameterOverrides: ParameterOverrides;
   activeParameterCount: number;
   resetAllParameters: () => void;
-  handleNumberParameterChange: (key: ModelParameterKey, rawValue: string, asInteger?: boolean) => void;
+  handleNumberParameterChange: (
+    key: ModelParameterKey,
+    rawValue: string,
+    asInteger?: boolean,
+  ) => void;
   handleBooleanParameterChange: (key: ModelParameterKey, checked: boolean) => void;
   handleTextParameterChange: (key: ModelParameterKey, value: string) => void;
   handleSelectParameterChange: (key: ModelParameterKey, value: string) => void;

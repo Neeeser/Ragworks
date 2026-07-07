@@ -71,10 +71,7 @@ export function Field({
       )}
       {control}
       {description ? (
-        <p
-          id={descriptionId}
-          className={cn("text-xs", error ? "text-rose-300" : "text-slate-400")}
-        >
+        <p id={descriptionId} className={cn("text-xs", error ? "text-rose-300" : "text-slate-400")}>
           {description}
         </p>
       ) : null}

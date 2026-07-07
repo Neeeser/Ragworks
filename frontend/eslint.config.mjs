@@ -20,10 +20,7 @@ const eslintConfig = defineConfig([
       "import/no-cycle": "error",
       "import/no-duplicates": "error",
       "import/newline-after-import": "error",
-      "max-lines": [
-        "error",
-        { max: 400, skipBlankLines: true, skipComments: true },
-      ],
+      "max-lines": ["error", { max: 400, skipBlankLines: true, skipComments: true }],
       "no-console": ["error", { allow: ["warn", "error"] }],
       complexity: ["warn", 15],
       "max-depth": ["warn", 4],

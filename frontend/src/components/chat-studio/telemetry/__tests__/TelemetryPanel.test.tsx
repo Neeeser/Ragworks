@@ -159,9 +159,7 @@ type FlatOverrides = Partial<
     TelemetryUsageProps & { onClose: () => void }
 >;
 
-const buildProps = (
-  overrides: FlatOverrides = {},
-): React.ComponentProps<typeof TelemetryPanel> => {
+const buildProps = (overrides: FlatOverrides = {}): React.ComponentProps<typeof TelemetryPanel> => {
   const f = {
     onClose: vi.fn(),
     sectionIds,

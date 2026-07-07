@@ -143,7 +143,7 @@ class OpenRouterKeyRateLimit(BaseModel):
 class OpenRouterKeyData(BaseModel):
     """Metadata for the API key associated with the current session.
 
-    Shape per `external_api_documentation/openrouter-docs/api/api-reference/
+    Shape per `docs/external-api/openrouter/api/api-reference/
     api-keys/get-current-key.md` (GET /key).
     """
 

@@ -97,12 +97,9 @@ export function useChatStream(): UseChatStreamResult {
     dispatch({ type: "TOKEN", token });
   }, []);
 
-  const handleReasoning = useCallback(
-    (segments: ReasoningTraceSegment[] | null | undefined) => {
-      dispatch({ type: "REASONING_SET", segments: segments ?? [] });
-    },
-    [],
-  );
+  const handleReasoning = useCallback((segments: ReasoningTraceSegment[] | null | undefined) => {
+    dispatch({ type: "REASONING_SET", segments: segments ?? [] });
+  }, []);
 
   const finalizeLiveReasoningBlock = useCallback(() => {
     const currentSegments = liveReasoningSegmentsRef.current;

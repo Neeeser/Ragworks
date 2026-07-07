@@ -150,8 +150,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
         navigateToChat(null, selectedToolCollectionIds);
       }
       if (!aborted) {
-        const statusMessage =
-          getErrorMessage(error, "Unable to send your message.");
+        const statusMessage = getErrorMessage(error, "Unable to send your message.");
         setStatus(statusMessage);
       }
     } finally {

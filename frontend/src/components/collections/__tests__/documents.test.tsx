@@ -7,7 +7,6 @@ import { CollectionDocuments } from "@/components/collections/detail/CollectionD
 import * as apiModule from "@/lib/api";
 import { makeChunk, makeDocument, makeIngestionResponse } from "@/test/fixtures";
 
-
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);

@@ -1,10 +1,6 @@
 import { apiFetch, type FetchOptions } from "@/lib/api/client";
 
-import type {
-  EmbeddingModelInfo,
-  ListModelEndpointsResponse,
-  ModelInfo,
-} from "@/lib/types";
+import type { EmbeddingModelInfo, ListModelEndpointsResponse, ModelInfo } from "@/lib/types";
 
 export async function fetchEmbeddingModels(
   token: string,

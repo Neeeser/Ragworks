@@ -7,7 +7,6 @@ import { CollectionOverview } from "@/components/collections/detail/CollectionOv
 import * as apiModule from "@/lib/api";
 import { makeCollection, makeCollectionStats, makePipeline } from "@/test/fixtures";
 
-
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);
@@ -22,8 +21,18 @@ describe("CollectionOverview", () => {
     average_latency_ms: Number.NaN,
     last_used_at: null,
   });
-  const ingestion = makePipeline({ id: "pipe-1", name: "Ingestion", kind: "ingestion", is_default: true });
-  const retrieval = makePipeline({ id: "pipe-2", name: "Retrieval", kind: "retrieval", is_default: true });
+  const ingestion = makePipeline({
+    id: "pipe-1",
+    name: "Ingestion",
+    kind: "ingestion",
+    is_default: true,
+  });
+  const retrieval = makePipeline({
+    id: "pipe-2",
+    name: "Retrieval",
+    kind: "retrieval",
+    is_default: true,
+  });
 
   it("renders summary data and defaults", () => {
     render(

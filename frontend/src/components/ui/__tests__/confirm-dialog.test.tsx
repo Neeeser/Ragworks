@@ -6,9 +6,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 describe("ConfirmDialog", () => {
   it("labels the dialog by its title", () => {
-    render(
-      <ConfirmDialog open title="Delete index" onConfirm={() => {}} onCancel={() => {}} />,
-    );
+    render(<ConfirmDialog open title="Delete index" onConfirm={() => {}} onCancel={() => {}} />);
     const dialog = screen.getByRole("dialog");
     const labelledBy = dialog.getAttribute("aria-labelledby");
     expect(labelledBy).toBeTruthy();

@@ -6,7 +6,12 @@ import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingMode
 import { Button } from "@/components/ui/button";
 import { Field, Select, TextInput } from "@/components/ui/field";
 
-import { CLOUD_OPTIONS, METRIC_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
+import {
+  CLOUD_OPTIONS,
+  METRIC_OPTIONS,
+  REGION_OPTIONS,
+  useCreateIndexForm,
+} from "./use-create-index-form";
 
 import type { EmbeddingModelInfo } from "@/lib/types";
 

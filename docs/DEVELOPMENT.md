@@ -139,7 +139,9 @@ make format-check-frontend
 - Conventional-commit subjects, scoped: `feat(pipelines): …`, `fix(ui): …`.
 - Work on a branch; merge to `main` via PR; one concern per PR.
 - Before touching Pinecone/OpenRouter integrations, read the local docs in
-  `external_api_documentation/` — they match the pinned versions.
+  `docs/external-api/` — they match the pinned versions. The directory is
+  gitignored; fetch it with `node scripts/download-openrouter-docs.mjs` and
+  `node scripts/download-pinecone-docs.mjs`.
 - When a fix teaches a rule, add it to the relevant AGENTS.md in the same PR.
 
 ## Make command reference

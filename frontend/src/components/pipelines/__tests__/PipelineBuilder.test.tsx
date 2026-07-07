@@ -595,8 +595,7 @@ describe("PipelineBuilder", () => {
     const validDragEvent = {
       preventDefault: vi.fn(),
       dataTransfer: {
-        getData: (key: string) =>
-          key === "application/transparentrag-node" ? embedderType : "",
+        getData: (key: string) => (key === "application/transparentrag-node" ? embedderType : ""),
         dropEffect: "",
       },
       clientX: 10,

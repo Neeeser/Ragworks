@@ -18,8 +18,18 @@ const LOAD_FAILED = "Load failed";
 
 describe("DashboardPage", () => {
   const collections: Collection[] = [
-    makeCollection({ id: "col-1", name: "One", description: null, retrieval_pipeline_id: "pipe-1" }),
-    makeCollection({ id: "col-2", name: "Two", description: null, retrieval_pipeline_id: "pipe-2" }),
+    makeCollection({
+      id: "col-1",
+      name: "One",
+      description: null,
+      retrieval_pipeline_id: "pipe-1",
+    }),
+    makeCollection({
+      id: "col-2",
+      name: "Two",
+      description: null,
+      retrieval_pipeline_id: "pipe-2",
+    }),
   ];
   const docs: Document[] = [
     makeDocument({
@@ -45,7 +55,9 @@ describe("DashboardPage", () => {
       },
     }),
   ];
-  const sessions = [makeChatSession({ id: "session-1", title: "Session", tool_collection_ids: [] })];
+  const sessions = [
+    makeChatSession({ id: "session-1", title: "Session", tool_collection_ids: [] }),
+  ];
 
   beforeEach(() => {
     resetMockAuth();
@@ -126,7 +138,10 @@ describe("DashboardPage", () => {
   it("handles missing chat settings in pipelines", async () => {
     const pipelineWithoutSettings = [
       makePipeline({
-        definition: { nodes: [{ id: "node-1", type: "other", name: "Other", config: {} }], edges: [] },
+        definition: {
+          nodes: [{ id: "node-1", type: "other", name: "Other", config: {} }],
+          edges: [],
+        },
       }),
     ];
     api.fetchPipelines

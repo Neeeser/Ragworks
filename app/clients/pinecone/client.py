@@ -1,7 +1,7 @@
 """Typed Pinecone SDK client factory and control-plane index admin.
 
 Behavior here is pinned to the installed SDK (`pinecone==8.0.0`, per `uv.lock`) --
-verified by reading `external_api_documentation/pinecone-docs/reference/python-sdk.md`
+verified by reading `docs/external-api/pinecone/reference/python-sdk.md`
 and by introspecting the installed package directly, not by feature-detecting at
 runtime. See `app/AGENTS.md` for the resulting rule.
 """

@@ -124,8 +124,7 @@ export function injectStreamedReasoning(
     return messages;
   }
   const hasReasoning =
-    finalAssistant.reasoning_trace?.segments &&
-    finalAssistant.reasoning_trace.segments.length > 0;
+    finalAssistant.reasoning_trace?.segments && finalAssistant.reasoning_trace.segments.length > 0;
   if (hasReasoning) {
     return messages;
   }

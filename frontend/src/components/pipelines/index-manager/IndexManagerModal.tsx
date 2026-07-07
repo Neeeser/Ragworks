@@ -98,7 +98,12 @@ export function IndexManagerModal({
 
   return (
     <>
-      <ModalOverlay open={open} onClose={onClose} labelledBy={titleId} backdropClassName="bg-slate-950/80 px-4 py-8">
+      <ModalOverlay
+        open={open}
+        onClose={onClose}
+        labelledBy={titleId}
+        backdropClassName="bg-slate-950/80 px-4 py-8"
+      >
         <GlassCard className="relative flex w-full max-w-6xl max-h-[calc(100vh-4rem)] flex-col rounded-[2.5rem] border border-white/10 bg-slate-950/95 p-6 text-white">
           {notificationMessage ? (
             <Notification

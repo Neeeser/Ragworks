@@ -110,13 +110,19 @@ export function PipelineTraceViewer({
     }));
   }, [trace, nodeSpecs, orderedRuns]);
 
-  const { activeIndex, activeNodeId, isPlaying, togglePlaying, handleNodeClick, handleStepForward } =
-    useTracePlayback({
-      orderedRuns,
-      flowInstance,
-      baseNodes: positionedNodes,
-      resetPayloadToggles,
-    });
+  const {
+    activeIndex,
+    activeNodeId,
+    isPlaying,
+    togglePlaying,
+    handleNodeClick,
+    handleStepForward,
+  } = useTracePlayback({
+    orderedRuns,
+    flowInstance,
+    baseNodes: positionedNodes,
+    resetPayloadToggles,
+  });
 
   const { nodes, edges, ioByNode } = useTraceFlowGraph({
     trace,

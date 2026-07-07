@@ -47,7 +47,9 @@ export function ChunkPreviewOverlay({
     return null;
   }
 
-  const markdownSource = detail.chunk.text?.trim() ? detail.chunk.text : "_No chunk content available._";
+  const markdownSource = detail.chunk.text?.trim()
+    ? detail.chunk.text
+    : "_No chunk content available._";
 
   const { document, chunk } = detail;
 

@@ -98,7 +98,7 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   orchestrator composing single-domain hooks under `chat-studio/hooks/` (grouped into
   `messaging/`, `session/`, and `settings/` subdirectories, with cross-cutting hooks at
   the `hooks/` root) plus a pure reducer module (`chat-studio/hooks/messaging/
-  chat-stream-reducer.ts`) with focused tests. New features follow this shape: add a
+chat-stream-reducer.ts`) with focused tests. New features follow this shape: add a
   hook or extend the reducer — don't grow the orchestrator.
 - **Reducers live in pure modules.** State shape, action types, and the reducer function
   go in a plain `*-reducer.ts` with no React imports so they're unit-testable; the hook

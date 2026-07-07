@@ -2,11 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import type {
-  ModelParameterKey,
-  ParameterOverrides,
-  ParameterValue,
-} from "@/lib/chat-parameters";
+import type { ModelParameterKey, ParameterOverrides, ParameterValue } from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 interface UseModelParametersParams {

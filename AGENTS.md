@@ -40,9 +40,10 @@ failing-then-passing test is incomplete.
 # Cross-cutting constraints
 
 - **External API changes (Pinecone, OpenRouter):** read the locally downloaded docs in
-  `external_api_documentation/pinecone-docs/` and
-  `external_api_documentation/openrouter-docs/` first — they reflect the versions we
-  actually run against; trust them over memory.
+  `docs/external-api/pinecone/` and
+  `docs/external-api/openrouter/` first — they reflect the versions we
+  actually run against; trust them over memory. (Gitignored — fetch with
+  `node scripts/download-openrouter-docs.mjs` / `node scripts/download-pinecone-docs.mjs`.)
 - **The wire contract is defined once, in `app/schemas/`.** Frontend types in
   `frontend/src/lib/types/` hand-mirror them; when a schema changes, the mirror changes
   in the same PR.

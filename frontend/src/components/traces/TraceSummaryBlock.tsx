@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 
-import { formatPayload, renderScalarValue, resolveTextSummary } from "@/components/traces/trace-payload-utils";
+import {
+  formatPayload,
+  renderScalarValue,
+  resolveTextSummary,
+} from "@/components/traces/trace-payload-utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

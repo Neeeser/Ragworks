@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PINECONE_KEY_REQUIRED_MESSAGE } from "@/components/chat-studio/lib/chat-constants";
-import {
-  areArraysEqual,
-  parseCollectionIdsParam,
-} from "@/components/chat-studio/lib/chat-helpers";
+import { areArraysEqual, parseCollectionIdsParam } from "@/components/chat-studio/lib/chat-helpers";
 import { fetchCollections, fetchDocuments, fetchPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 

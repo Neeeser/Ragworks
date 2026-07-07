@@ -7,7 +7,6 @@ import { CollectionSearch } from "@/components/collections/detail/CollectionSear
 import * as apiModule from "@/lib/api";
 import { makeQueryResult } from "@/test/fixtures";
 
-
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);

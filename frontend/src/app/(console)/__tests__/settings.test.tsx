@@ -8,7 +8,9 @@ import { setMockAuth } from "@/test/mocks";
 
 import type { UserKeyValidation } from "@/lib/types";
 
-vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth({ token: "token" }));
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);

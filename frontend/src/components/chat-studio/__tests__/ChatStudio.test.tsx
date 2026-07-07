@@ -56,7 +56,9 @@ let mockTelemetryPanelProps: Record<string, unknown> | null = null;
 let mockPromptOverlayProps: Record<string, unknown> | null = null;
 let authValue = setMockAuth({ token: AUTH_TOKEN });
 
-const documents: Document[] = [makeDocument({ collection_id: "col-1", content_type: "text/plain" })];
+const documents: Document[] = [
+  makeDocument({ collection_id: "col-1", content_type: "text/plain" }),
+];
 
 const setAuthState = (next: Parameters<typeof setMockAuth>[0]) => {
   authValue = setMockAuth({ token: AUTH_TOKEN, ...next });
@@ -653,9 +655,9 @@ describe("ChatStudio", () => {
       });
 
       await act(async () => {
-        await (
-          mockHistoryPanelProps as { onDelete: (id: string) => Promise<void> }
-        ).onDelete("session-2");
+        await (mockHistoryPanelProps as { onDelete: (id: string) => Promise<void> }).onDelete(
+          "session-2",
+        );
       });
 
       expect(api.deleteChatSession).toHaveBeenCalledWith(AUTH_TOKEN, "session-2");

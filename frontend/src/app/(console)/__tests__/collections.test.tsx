@@ -17,7 +17,9 @@ const CONFIRM_DELETE = "Confirm delete";
 const NO_COLLECTIONS = "No collections";
 const PIPELINE_FAIL = "Pipeline fail";
 
-vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth({ token: "token" }));
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);

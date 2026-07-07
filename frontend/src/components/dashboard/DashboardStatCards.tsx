@@ -10,7 +10,11 @@ type DashboardStatCardsProps = {
   stats: DashboardStats;
 };
 
-export function DashboardStatCards({ collectionCount, sessionCount, stats }: DashboardStatCardsProps) {
+export function DashboardStatCards({
+  collectionCount,
+  sessionCount,
+  stats,
+}: DashboardStatCardsProps) {
   const cards = [
     {
       label: "Collections live",
