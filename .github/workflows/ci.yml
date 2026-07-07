@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   backend:
@@ -32,6 +31,17 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --locked
+      # mypy is incremental; persisting its cache cuts the strict typecheck
+      # from ~57s to ~10s on warm runs. Keyed per-sha so every run saves its
+      # updated cache; restore-keys fall back to the newest prior cache.
+      - name: Restore mypy cache
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('uv.lock') }}-
+            mypy-${{ runner.os }}-
       - name: Typecheck (mypy strict)
         run: uv run mypy app
       - name: Lint (ruff + pylint)
@@ -56,6 +66,21 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
+      # eslint (content-strategy cache), tsc (incremental tsbuildinfo), and
+      # next build all reuse prior state; warm runs skip unchanged files.
+      # Keyed per-sha so every run saves updated caches; restore-keys fall
+      # back to the newest prior cache (PRs can restore from main's caches).
+      - name: Restore lint/typecheck/build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/.eslintcache
+            frontend/tsconfig.tsbuildinfo
+            frontend/.next/cache
+          key: frontend-caches-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            frontend-caches-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-
+            frontend-caches-${{ runner.os }}-
       - name: Verify (typecheck → lint → tests)
         run: npm run verify
       - name: Format check (prettier)

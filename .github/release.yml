@@ -1,0 +1,23 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: 🚨 Breaking changes
+      labels:
+        - breaking
+    - title: ✨ Features
+      labels:
+        - feature
+    - title: 🐛 Bug fixes
+      labels:
+        - fix
+    - title: 📚 Documentation
+      labels:
+        - docs
+    - title: 🧰 Maintenance
+      labels:
+        - "*"

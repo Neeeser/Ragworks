@@ -1,7 +1,8 @@
 import { ApiError } from "@/lib/api-error";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+// Falls back to same-origin relative paths ("") so the prebuilt Docker image
+// works behind any host; the Next server proxies /api/* via API_PROXY_TARGET.
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 export type FetchOptions = RequestInit & { token?: string; signal?: AbortSignal };
 

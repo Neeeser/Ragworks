@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   activatePipelineVersion,
-  API_BASE_URL,
   branchChatSession,
   chat,
   computeCollectionUmap,
@@ -120,8 +119,16 @@ const badRequestStatus = "Bad Request";
 const streamingRequestFailedMessage = "Streaming request failed.";
 
 describe("api", () => {
-  it("exposes a default API base URL", () => {
-    expect(API_BASE_URL).toContain("http");
+  it("falls back to a same-origin base URL when NEXT_PUBLIC_API_BASE_URL is unset", async () => {
+    const original = process.env.NEXT_PUBLIC_API_BASE_URL;
+    delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    vi.resetModules();
+    const { API_BASE_URL: defaultBase } = await import("@/lib/api");
+    expect(defaultBase).toBe("");
+    if (original !== undefined) {
+      process.env.NEXT_PUBLIC_API_BASE_URL = original;
+    }
+    vi.resetModules();
   });
 
   it("uses NEXT_PUBLIC_API_BASE_URL when provided", async () => {

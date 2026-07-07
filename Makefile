@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-integration test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-integration test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -36,6 +36,7 @@ help:
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
+	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - bump version, commit, tag (push manually)"
 
 env: env-backend env-frontend
 
@@ -104,3 +105,15 @@ format-frontend: env-frontend
 
 format-check-frontend: env-frontend
 	$(NPM) --prefix frontend run format:check
+
+bump-patch:
+	$(UV) run python scripts/bump_version.py patch
+
+bump-minor:
+	$(UV) run python scripts/bump_version.py minor
+
+bump-major:
+	$(UV) run python scripts/bump_version.py major
+
+bump-rc:
+	$(UV) run python scripts/bump_version.py rc

@@ -1,0 +1,20 @@
+name: PR labels
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled, unlabeled, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  require-category-label:
+    name: Require a release-notes label
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          labels: "breaking, feature, fix, docs, ci, dependencies, chore, skip-changelog"
+          add_comment: true

@@ -1,0 +1,42 @@
+name: transparentrag
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: transparentrag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: transparentrag
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transparentrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/neeeser/transparentrag-backend:${TRANSPARENTRAG_VERSION:-latest}
+    environment:
+      DATABASE_URL: postgresql+psycopg://transparentrag:${POSTGRES_PASSWORD}@postgres:5432/transparentrag
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      DEBUG: "false"
+      FILE_STORAGE_PATH: /data/storage
+    volumes:
+      - document-storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/neeeser/transparentrag-frontend:${TRANSPARENTRAG_VERSION:-latest}
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  document-storage:

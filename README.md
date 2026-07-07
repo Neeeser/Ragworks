@@ -67,7 +67,34 @@ Both graphs are yours to rewire. Swap the chunking strategy, change the embeddin
 
 **Stack:** FastAPI + Pydantic v2 + SQLModel + Postgres on the backend, Next.js (App Router) + React 19 + TypeScript on the frontend, Pinecone for vectors, OpenRouter for models.
 
-## 🚀 Quick start
+## 🚀 Quick start (Docker)
+
+The supported way to run TransparentRAG. You need Docker with the compose plugin — nothing else.
+
+1. Download `docker-compose.yml` and `.env.example` from the
+   [latest release](https://github.com/Neeeser/TransparentRag/releases/latest)
+   (or grab them from the repo root).
+2. Copy the template and fill in the two required values:
+
+   ```bash
+   cp .env.example .env
+   # set JWT_SECRET_KEY (openssl rand -hex 32) and POSTGRES_PASSWORD
+   ```
+
+3. Start the stack:
+
+   ```bash
+   docker compose up -d
+   ```
+
+4. Open <http://localhost:3000>, create an account, and add your OpenRouter and
+   Pinecone API keys on the settings page.
+
+Documents and the database persist in named Docker volumes across restarts and
+upgrades. To upgrade, set `TRANSPARENTRAG_VERSION` in `.env` to the new tag and
+run `docker compose pull && docker compose up -d`.
+
+## 🛠️ Development setup
 
 **Prerequisites:** Python 3.11+, Node 22, Postgres, [uv](https://docs.astral.sh/uv/), an [OpenRouter](https://openrouter.ai/) key and a [Pinecone](https://www.pinecone.io/) key (entered per-user in the UI).
 

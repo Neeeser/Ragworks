@@ -36,6 +36,24 @@ failing-then-passing test is incomplete.
 - Work on a branch; merge to `main` via PR. Keep PRs to one concern.
 - If a change spans the API contract (backend schemas + frontend types), update both
   sides in the same PR so they can't drift.
+- Every PR carries at least one release-notes label (`breaking`, `feature`, `fix`,
+  `docs`, `ci`, `dependencies`, `chore`, or `skip-changelog`) — the `PR labels` check
+  fails without one, and `.github/release.yml` uses them to organize release notes.
+
+# Releases
+
+Docker is the release vehicle: pushing a `v*` tag runs the CI gates, publishes
+`ghcr.io/neeeser/transparentrag-backend` / `-frontend` images (multi-arch), and cuts a
+GitHub Release with `docker-compose.yml` + `.env.example` attached. Cut a release with
+`make bump-patch|bump-minor|bump-major` (pre-releases: `make bump-rc`, SemVer `-rc.N`)
+followed by the printed `git push`. Pushes to `main` publish `edge` images only. The
+version lives in `pyproject.toml` and `frontend/package.json`; only
+`scripts/bump_version.py` writes it. The frontend Docker image is built without
+`NEXT_PUBLIC_API_BASE_URL` and proxies same-origin `/api/*` calls to the backend via
+the runtime `API_PROXY_TARGET` proxy in `frontend/src/middleware.ts` (a Next.js
+`rewrites()` in `next.config.ts` is baked into the build-time routes manifest and
+can't see an env var set when the container starts — middleware runs per request
+instead).
 
 # Cross-cutting constraints
 
@@ -70,3 +88,6 @@ failing-then-passing test is incomplete.
 - `make verify`: the backend gate — typecheck → lint → test
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`
+- `make bump-patch` / `make bump-minor` / `make bump-major` / `make bump-rc`: bump the
+  version in `pyproject.toml` + `frontend/package.json`, commit, and tag; push manually
+  to publish
