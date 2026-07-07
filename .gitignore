@@ -33,6 +33,7 @@ htmlcov/
 # Local environment files
 .env
 .env.*
+!.env.example
 .DS_Store
 
 # Database files
