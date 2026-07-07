@@ -68,7 +68,6 @@ class ChatService:
             session=self.session,
             chat_repo=self.chat_repo,
             collection_repo=self.collection_repo,
-            settings=self.settings,
             reasoning_effort=self.reasoning_effort,
         )
         setup = builder.build(user=user, payload=payload, provider=provider)

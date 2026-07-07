@@ -163,7 +163,6 @@ def test_resolve_session_model_raises_when_edit_session_missing() -> None:
         session=SimpleNamespace(),
         chat_repo=_Repo(),
         collection_repo=SimpleNamespace(),
-        settings=SimpleNamespace(default_chat_model="m"),
         reasoning_effort=None,
     )
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())

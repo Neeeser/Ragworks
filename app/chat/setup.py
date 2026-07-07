@@ -43,7 +43,6 @@ from app.chat.state import (
     ToolCollectionContext,
 )
 from app.chat.tools import ToolExecutor
-from app.core.config import Settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
 from app.schemas.chat import ChatMessageCreate
@@ -71,14 +70,12 @@ class ChatSetupBuilder:
         session: Session,
         chat_repo: ChatRepository,
         collection_repo: CollectionRepository,
-        settings: Settings,
         reasoning_effort: str | None,
     ) -> None:
         """Store the collaborators setup resolution reads and writes through."""
         self.session = session
         self.chat_repo = chat_repo
         self.collection_repo = collection_repo
-        self.settings = settings
         self.reasoning_effort = reasoning_effort
 
     def _resolve_pipeline_context(

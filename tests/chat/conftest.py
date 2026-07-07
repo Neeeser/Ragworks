@@ -32,7 +32,6 @@ class StubSettings:
     """Minimal settings object for driving the chat flow under test."""
 
     openrouter_reasoning_effort: str | None = "low"
-    default_chat_model: str = "test-model"
 
 
 class StubRetrievalService:
