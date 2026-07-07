@@ -71,13 +71,13 @@ Both graphs are yours to rewire. Swap the chunking strategy, change the embeddin
 
 The supported way to run TransparentRAG. You need Docker with the compose plugin — nothing else.
 
-1. Download `docker-compose.yml` and `.env.example` from the
+1. Download `docker-compose.yml` and `env.example` from the
    [latest release](https://github.com/Neeeser/TransparentRag/releases/latest)
-   (or grab them from the repo root).
+   (or grab `docker-compose.yml` and `.env.example` from the repo root).
 2. Copy the template and fill in the two required values:
 
    ```bash
-   cp .env.example .env
+   cp env.example .env
    # set JWT_SECRET_KEY (openssl rand -hex 32) and POSTGRES_PASSWORD
    ```
 
