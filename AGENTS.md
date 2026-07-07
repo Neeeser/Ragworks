@@ -47,7 +47,10 @@ followed by the printed `git push`. Pushes to `main` publish `edge` images only.
 version lives in `pyproject.toml` and `frontend/package.json`; only
 `scripts/bump_version.py` writes it. The frontend Docker image is built without
 `NEXT_PUBLIC_API_BASE_URL` and proxies same-origin `/api/*` calls to the backend via
-the runtime `API_PROXY_TARGET` rewrite in `frontend/next.config.ts`.
+the runtime `API_PROXY_TARGET` proxy in `frontend/src/middleware.ts` (a Next.js
+`rewrites()` in `next.config.ts` is baked into the build-time routes manifest and
+can't see an env var set when the container starts — middleware runs per request
+instead).
 
 # Cross-cutting constraints
 
