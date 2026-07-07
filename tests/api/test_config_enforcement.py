@@ -15,8 +15,9 @@ when `size` is unavailable -- the content-type check still applies regardless.
 
 from __future__ import annotations
 
+import datetime
 from collections.abc import Iterator
-from uuid import UUID
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,7 +26,7 @@ from sqlmodel import Session
 from app.api.routes import documents as documents_routes
 from app.db import models
 from app.db.repositories import AppSettingRepository
-from app.schemas.documents import IngestionResponse
+from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.app_config import invalidate_app_config_cache
 
 
@@ -71,11 +72,27 @@ class _StubIngestionService:
         content_type: str | None,
         stream: object,
     ) -> IngestionResponse:
-        return IngestionResponse(
-            document_id=UUID(int=1),
+        now = datetime.datetime.now(datetime.UTC)
+        document = DocumentRead(
+            id=uuid4(),
+            collection_id=collection.id,
+            name=filename or "doc.txt",
+            content_type=content_type or "text/plain",
             status=models.DocumentStatus.READY,
             num_chunks=1,
             num_tokens=1,
+            chunk_size=100,
+            chunk_overlap=0,
+            chunk_strategy=models.ChunkStrategy.TOKEN,
+            created_at=now,
+            updated_at=now,
+        )
+        return IngestionResponse(
+            document=document,
+            chunk_count=1,
+            pinecone_namespace="ns",
+            embedding_model="test-embed",
+            usage={},
         )
 
 
@@ -103,6 +120,53 @@ def test_register_succeeds_when_registration_enabled(
     response = unauthed_client.post(
         "/api/auth/register",
         json={"email": "new2@example.com", "password": "password123", "full_name": "New"},
+    )
+
+    assert response.status_code == 201
+
+
+# --- Enforcement 2: upload size and content-type limits -----------------
+
+
+def test_upload_rejects_disallowed_content_type(
+    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+    collection = _create_collection(session, auth_user)
+
+    response = client.post(
+        f"/api/collections/{collection.id}/documents",
+        files={"file": ("virus.exe", b"data", "application/x-msdownload")},
+    )
+
+    assert response.status_code == 400
+
+
+def test_upload_rejects_oversized_file(
+    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+    _set_override(session, "uploads.max_upload_size_mb", 1)
+    collection = _create_collection(session, auth_user)
+    oversized = b"x" * (2 * 1024 * 1024)
+
+    response = client.post(
+        f"/api/collections/{collection.id}/documents",
+        files={"file": ("big.txt", oversized, "text/plain")},
+    )
+
+    assert response.status_code == 413
+
+
+def test_upload_allows_small_permitted_file(
+    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+    collection = _create_collection(session, auth_user)
+
+    response = client.post(
+        f"/api/collections/{collection.id}/documents",
+        files={"file": ("doc.txt", b"hello world", "text/plain")},
     )
 
     assert response.status_code == 201

@@ -18,6 +18,7 @@ from app.schemas.documents import (
     DocumentRead,
     IngestionResponse,
 )
+from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.services.ingestion import IngestionService
 
@@ -37,6 +38,22 @@ async def upload_document(
 ) -> IngestionResponse:
     """Upload and ingest a document into a collection."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
+    upload_config = get_app_config().uploads
+    content_type = file.content_type or "text/plain"
+    if content_type not in upload_config.allowed_content_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Content type {content_type} is not allowed.",
+        )
+    # `UploadFile.size` (Starlette) can be None depending on the transport;
+    # the cap is best-effort here and falls through when unavailable -- the
+    # content-type check above still applies regardless.
+    max_bytes = upload_config.max_upload_size_mb * 1024 * 1024
+    if file.size is not None and file.size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Upload exceeds the maximum size of {upload_config.max_upload_size_mb}MB.",
+        )
     try:
         return IngestionService(session).ingest_upload(
             user=current_user,

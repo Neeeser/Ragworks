@@ -634,15 +634,6 @@ construction site.
   deactivation only; deleting an account means cascading Pinecone namespaces,
   file storage, and relational rows (a `CollectionDeletionService`-scale job).
   Add the cascade service and its tests together when prioritized.
-- **Document upload enforces no content-type or size limit.** `routes/documents.py`'s
-  `upload_document` passes `file.content_type` straight through (defaulting to
-  `text/plain` only when the header is absent) and streams `file.file` to storage with
-  no cap — an arbitrarily large or mistyped upload reaches `IngestionService` unchecked.
-  Noted here rather than fixed in Task 7.1: adding a limit is a product decision (what
-  size, what content-types, what error shape) that wasn't in scope for a test-pruning
-  pass, not a one-line fix. Add both the guard and its test together when this is
-  prioritized — don't let the guard land without the regression test that proves an
-  oversized/mistyped upload is actually rejected.
 - **Provider API keys are stored plaintext at rest.** `User.openrouter_api_key` and
   `User.pinecone_api_key` (`app/db/models/user.py`) are plain `Text` columns with no
   encryption-at-rest. Pre-existing and tracked, not introduced by this pass; the wire
