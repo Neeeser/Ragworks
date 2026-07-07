@@ -28,7 +28,7 @@ def test_catalog_covers_every_leaf_field_with_metadata() -> None:
     fields = iter_config_fields()
     keys = {field.key for field in fields}
     # One entry per leaf field of every section.
-    expected_sections = {"auth", "uploads", "models", "features"}
+    expected_sections = {"auth", "uploads", "models", "features", "telemetry"}
     assert {key.split(".")[0] for key in keys} == expected_sections
     for field in fields:
         assert field.label, f"{field.key} missing label"

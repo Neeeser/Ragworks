@@ -27,6 +27,7 @@ from app.db.models.pipeline import (
     PipelineRun,
     PipelineVersion,
 )
+from app.db.models.telemetry import TelemetryEventRow
 from app.db.models.user import TimestampMixin, User
 from app.db.models.visualization import UmapPointRecord, UmapProjectionRecord
 from app.schemas.enums import (
@@ -61,6 +62,7 @@ __all__ = [
     "PipelineRunStatus",
     "PipelineVersion",
     "QueryEvent",
+    "TelemetryEventRow",
     "TimestampMixin",
     "UmapPointRecord",
     "UmapProjectionRecord",

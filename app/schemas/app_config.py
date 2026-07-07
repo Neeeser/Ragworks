@@ -124,6 +124,28 @@ class FeatureFlags(BaseModel):
     )
 
 
+class TelemetrySettings(BaseModel):
+    """Internal activity recording — nothing ever leaves the deployment."""
+
+    enabled: bool = Field(
+        default=True,
+        json_schema_extra=_meta(
+            "Telemetry",
+            "Record activity events (chat usage, ingestions, sign-ins) to the "
+            "local database for the admin dashboards. Never sent externally.",
+        ),
+    )
+    retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        json_schema_extra=_meta(
+            "Telemetry retention (days)",
+            "Events older than this are purged on startup.",
+        ),
+    )
+
+
 class AppConfig(BaseModel):
     """Root runtime config: one field per section model."""
 
@@ -131,6 +153,7 @@ class AppConfig(BaseModel):
     uploads: UploadSettings = Field(default_factory=UploadSettings)
     models: ModelDefaults = Field(default_factory=ModelDefaults)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
 
 
 class ConfigFieldKind(StrEnum):
