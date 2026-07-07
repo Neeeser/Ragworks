@@ -18,6 +18,7 @@ const providerA = "provider-a";
 export const baseUser: User = {
   id: baseUserId,
   email: "user@example.com",
+  role: "user",
   is_active: true,
   openrouter_configured: true,
   pinecone_configured: true,

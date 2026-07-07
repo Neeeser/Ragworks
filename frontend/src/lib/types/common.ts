@@ -10,10 +10,13 @@ export type RunSettingsSectionKey =
   | "vitals"
   | "usage";
 
+export type UserRole = "admin" | "user";
+
 export interface User {
   id: UUID;
   email: string;
   full_name?: string | null;
+  role: UserRole;
   is_active: boolean;
   openrouter_configured: boolean;
   pinecone_configured: boolean;

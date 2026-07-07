@@ -25,6 +25,7 @@
 import { vi } from "vitest";
 
 import {
+  makeAdminUser,
   makeChatCompletion,
   makeChatSession,
   makeChunkDetail,
@@ -62,6 +63,9 @@ type AuthValue = {
 export function mockApi(overrides: Record<string, unknown> = {}) {
   return {
     API_BASE_URL: "http://api.test",
+    // admin
+    fetchAdminUsers: vi.fn(async () => []),
+    updateAdminUser: vi.fn(async () => makeAdminUser()),
     // auth
     loginRequest: vi.fn(async () => ({ access_token: "test-token", token_type: "bearer" })),
     registerUser: vi.fn(async () => makeUser()),

@@ -4,6 +4,7 @@
  * object literals in tests so the canonical shape lives in one place.
  */
 import type {
+  AdminUser,
   ChatCompletionPayload,
   ChatMessage,
   ChatSession,
@@ -32,6 +33,8 @@ import type {
 
 export const TIMESTAMP = "2024-01-01T00:00:00.000Z";
 export const USER_ID = "user-1";
+export const USER_EMAIL = "user@example.com";
+const USER_ROLE = "user";
 const PROVIDER_A = "provider-a";
 const CHAT_SETTINGS_TYPE = "chat.settings";
 const CHAT_SETTINGS_LABEL = "Chat settings";
@@ -39,7 +42,8 @@ const CHAT_SETTINGS_LABEL = "Chat settings";
 export function makeUser(overrides: Partial<User> = {}): User {
   return {
     id: USER_ID,
-    email: "user@example.com",
+    email: USER_EMAIL,
+    role: USER_ROLE,
     is_active: true,
     openrouter_configured: true,
     pinecone_configured: true,
@@ -64,6 +68,20 @@ export function makeUser(overrides: Partial<User> = {}): User {
     ],
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
+    ...overrides,
+  };
+}
+
+export function makeAdminUser(overrides: Partial<AdminUser> = {}): AdminUser {
+  return {
+    id: USER_ID,
+    email: USER_EMAIL,
+    role: USER_ROLE,
+    is_active: true,
+    created_at: TIMESTAMP,
+    updated_at: TIMESTAMP,
+    collection_count: 0,
+    document_count: 0,
     ...overrides,
   };
 }
@@ -395,7 +413,7 @@ export function makeChatCompletion(
 ): ChatCompletionPayload {
   return {
     session: makeChatSession(),
-    messages: [makeChatMessage({ role: "user", content: "Hi" }), makeChatMessage()],
+    messages: [makeChatMessage({ role: USER_ROLE, content: "Hi" }), makeChatMessage()],
     tool_traces: [],
     usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.01 },
     provider: PROVIDER_A,
