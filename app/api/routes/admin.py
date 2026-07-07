@@ -13,8 +13,10 @@ from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_admin
 from app.api.routes.utils import to_http_exception
-from app.schemas.admin import AdminUserRead, AdminUserUpdate
+from app.db import models
+from app.schemas.admin import AdminUserRead, AdminUserUpdate, AppConfigUpdate, ConfigFieldRead
 from app.services.admin_users import AdminUserService
+from app.services.app_config import AppConfigService
 from app.services.errors import ServiceError
 
 router = APIRouter(
@@ -44,3 +46,24 @@ def update_user(
         raise to_http_exception(exc) from exc
     rows = {row.id: row for row in service.list_users()}
     return rows[user_id]
+
+
+@router.get("/config", response_model=list[ConfigFieldRead])
+def get_config_catalog(session: Session = Depends(get_session)) -> list[ConfigFieldRead]:
+    """Return every config field's metadata alongside its resolved value."""
+    return AppConfigService(session).field_catalog()
+
+
+@router.patch("/config", response_model=list[ConfigFieldRead])
+def update_config(
+    payload: AppConfigUpdate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(require_admin),
+) -> list[ConfigFieldRead]:
+    """Apply a sparse config patch and return the refreshed catalog."""
+    service = AppConfigService(session)
+    try:
+        service.apply_update(payload, updated_by=current_user.id)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    return service.field_catalog()

@@ -204,3 +204,52 @@ def iter_config_fields() -> list[ConfigFieldMeta]:
 PUBLIC_CONFIG_KEYS: frozenset[str] = frozenset(
     field.key for field in iter_config_fields() if field.public
 )
+
+
+class PublicAuthConfig(BaseModel):
+    """Public auth section: registration policy the frontend needs to know."""
+
+    allow_registration: bool
+
+
+class PublicUploadConfig(BaseModel):
+    """Public upload section: limits the frontend enforces client-side."""
+
+    max_upload_size_mb: int
+    allowed_content_types: list[str]
+
+
+class PublicFeatureFlags(BaseModel):
+    """Public feature flags the frontend gates UI on."""
+
+    umap_visualizations: bool
+    chat_branching: bool
+
+
+class PublicConfig(BaseModel):
+    """The subset of `AppConfig` served unauthenticated at `GET /api/config`.
+
+    Deliberately its own model, built explicitly from an `AppConfig` (never a
+    reflective subset) -- a new public field means touching this model on
+    purpose, so `GET /api/config` can never leak a field (like `models`,
+    which carries no `public=True` leaves) by accident.
+    """
+
+    auth: PublicAuthConfig
+    uploads: PublicUploadConfig
+    features: PublicFeatureFlags
+
+    @classmethod
+    def from_app_config(cls, config: AppConfig) -> PublicConfig:
+        """Build the public wire shape from the full effective config."""
+        return cls(
+            auth=PublicAuthConfig(allow_registration=config.auth.allow_registration),
+            uploads=PublicUploadConfig(
+                max_upload_size_mb=config.uploads.max_upload_size_mb,
+                allowed_content_types=config.uploads.allowed_content_types,
+            ),
+            features=PublicFeatureFlags(
+                umap_visualizations=config.features.umap_visualizations,
+                chat_branching=config.features.chat_branching,
+            ),
+        )
