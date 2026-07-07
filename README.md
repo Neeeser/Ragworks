@@ -153,7 +153,7 @@ make run       # backend on :8000, frontend on :3000
 
 No configuration needed — dev runs with sensible defaults (local Postgres,
 `./storage`, debug mode). Optional overrides (custom database URL, log level,
-integration-test credentials) go in a gitignored `.env` in the repo root; see
+default models) are plain environment variables; see
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 Open **http://localhost:3000**, register, add your OpenRouter + Pinecone keys in settings, create a collection, and drop in a document. Then open the trace of the ingestion run you just triggered — that's the whole idea.

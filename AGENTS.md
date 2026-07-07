@@ -86,7 +86,6 @@ instead).
 - `make frontend`: run Next.js dev server (sets `NEXT_PUBLIC_API_BASE_URL`)
 - `make run`: run backend + frontend together
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
-- `make test-integration`: backend live-credential suite (hits real OpenRouter/Pinecone)
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure)
 - `make coverage-report` / `make coverage-report-frontend`: coverage, non-blocking
 - `make coverage-open` / `make coverage-open-frontend`: open HTML coverage reports

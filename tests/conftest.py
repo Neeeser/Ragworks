@@ -1,9 +1,8 @@
-"""Shared fixtures for the unit test suite.
+"""Shared fixtures for the test suite.
 
 Only environment bootstrapping and the function-scoped `session` fixture live
-here. Live-credential fixtures (real OpenRouter/Pinecone calls) belong in
-`tests/integration/conftest.py` so the unit suite can collect and run without
-any `TEST_*` credentials configured.
+here. Configuration comes from real environment variables only (no env files):
+`TEST_DATABASE_URL` may point the suite at a different Postgres instance.
 """
 
 from __future__ import annotations
@@ -18,40 +17,17 @@ from sqlmodel import Session
 
 from tests.utils.db import DEFAULT_TEST_DATABASE_URL, open_session
 
-TEST_ROOT = Path(__file__).resolve().parent / ".integration"
+TEST_ROOT = Path(__file__).resolve().parent / ".artifacts"
 STORAGE_PATH = TEST_ROOT / "storage"
-ENV_FILE = Path(".env")
-
-
-def _load_env_file() -> None:
-    """Populate os.environ defaults from the optional repo-root .env file.
-
-    That file is the single home for local overrides and the TEST_* creds
-    the integration suite needs. Uses setdefault semantics only: a value
-    already present in the environment (e.g. set by CI) always wins.
-    """
-    if ENV_FILE.exists():
-        for raw_line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            os.environ.setdefault(key, value)
 
 
 def _prepare_environment() -> None:
-    """Redirect the unit suite at an isolated database and storage path.
+    """Redirect the suite at an isolated database and storage path.
 
-    Postgres is still required to run the unit suite (many tests hit a real
-    `session` fixture) but no live OpenRouter/Pinecone credentials are
-    needed here — those are gated in `tests/integration/conftest.py`.
+    Postgres is required (many tests hit a real `session` fixture) but no
+    live OpenRouter/Pinecone credentials are needed — provider boundaries
+    are stubbed.
     """
-    _load_env_file()
-
     TEST_ROOT.mkdir(parents=True, exist_ok=True)
     if STORAGE_PATH.exists():
         shutil.rmtree(STORAGE_PATH)

@@ -30,7 +30,7 @@ htmlcov/
 *.swo
 *~
 
-# Local environment file (optional overrides + integration-test credentials)
+# Local environment files (the app reads real env vars only; never commit these)
 .env
 .env.*
 .DS_Store

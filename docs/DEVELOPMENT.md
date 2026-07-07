@@ -18,29 +18,23 @@ project *is*, see the [README](../README.md). For binding engineering rules, see
 make env       # uv sync --locked + npm install in frontend/
 ```
 
-No env file is required — every setting has a working dev default (local
+No configuration is required — every setting has a working dev default (local
 Postgres at `postgresql+psycopg://localhost:5432/ragworks`, `./storage` for
 files, debug mode via `make server`). Provider API keys (OpenRouter, Pinecone)
-are configured **per user in the UI**, not in the environment.
+are configured **per user in the UI**, not in the environment. There are no
+env files: the app reads real environment variables only.
 
-For optional overrides, create a gitignored `.env` in the repo root (this is
-the only env file the app and test suite read):
+Optional overrides (every one has a sensible default):
 
-```ini
-# Live integration tests only (make test-integration)
-TEST_OPENROUTER_API_KEY=...
-TEST_PINECONE_API_KEY=...
-
-# Optional overrides — every one has a sensible default
-#LOG_LEVEL=INFO
-#DATABASE_URL=postgresql+psycopg://localhost:5432/ragworks
-#OPENROUTER_DEFAULT_EMBEDDING_MODEL=qwen/qwen3-embedding-0.6b
-#OPENROUTER_DEFAULT_CHAT_MODEL=openai/gpt-oss-120b
-#OPENROUTER_SITE_URL=https://ragworks.local
-#OPENROUTER_SITE_NAME=Ragworks
-#PINECONE_INDEX_NAME=ragworks
-#PINECONE_REGION=us-east-1
-#PINECONE_CLOUD=aws
+```bash
+LOG_LEVEL=INFO                 # app log level (default: uvicorn's)
+DATABASE_URL=…                 # default: postgresql+psycopg://localhost:5432/ragworks
+TEST_DATABASE_URL=…            # test-suite database (default: derived locally)
+OPENROUTER_DEFAULT_EMBEDDING_MODEL=…   # default: qwen/qwen3-embedding-0.6b
+OPENROUTER_DEFAULT_CHAT_MODEL=…        # default: openai/gpt-oss-120b
+OPENROUTER_SITE_URL=… / OPENROUTER_SITE_NAME=…   # optional attribution headers
+PINECONE_INDEX_NAME=…          # default: ragworks
+PINECONE_REGION=… / PINECONE_CLOUD=…   # defaults: us-east-1 / aws
 ```
 
 > **`DEBUG` defaults to `false` (secure by default).** A deployed process fails
@@ -100,7 +94,7 @@ app/
   visualization/ UMAP projection compute + persistence
   services/      business logic + typed domain errors (errors.py)
   api/routes/    thin routes: parse → one service call → translate errors
-tests/           mirrors app/ layout; tests/integration/ is the opt-in live suite
+tests/           mirrors app/ layout (tests/api, tests/services, …)
 frontend/
   src/app/       Next.js App Router routes (thin shells)
   src/components/ feature folders (chat-studio/, collections/, pipelines/, ui/)
@@ -129,9 +123,8 @@ cd frontend && npm run verify   # frontend gate: tsc → eslint → vitest
 make format-check-frontend
 ```
 
-- The unit suite runs **without live credentials** against a real Postgres.
-- `make test-integration` runs `tests/integration/` against real
-  OpenRouter/Pinecone (requires the `TEST_*` keys).
+- The suite runs **without live credentials** against a real Postgres —
+  OpenRouter/Pinecone are stubbed at the client boundary.
 - Module size is capped at 400 lines, enforced by `tests/test_module_size.py`.
 - **Every bug fix ships with a red-green regression test in the same commit.**
 
@@ -152,8 +145,7 @@ make format-check-frontend
 | `make env` | Install backend (uv) + frontend (npm) deps |
 | `make run` / `make server` / `make frontend` | Run both / backend / frontend |
 | `make verify` | Backend gate: typecheck → lint → test |
-| `make test` / `make test-frontend` | Backend / frontend unit tests |
-| `make test-integration` | Live-credential backend suite |
+| `make test` / `make test-frontend` | Backend / frontend tests |
 | `make coverage` / `make coverage-frontend` | Coverage (fails on test failure) |
 | `make coverage-open` / `make coverage-open-frontend` | Open HTML coverage reports |
 | `make typecheck` / `make lint` | mypy strict / ruff + pylint |

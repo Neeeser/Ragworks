@@ -15,8 +15,7 @@ Before finishing any backend change, run `make verify` — it chains, in order:
    pyupgrade, simplify) plus a slim `pylint` kept only for the design checks ruff
    doesn't cover (`too-many-arguments/branches/statements/locals`), at
    `--fail-under=10`. Module *length* is enforced by a guard test instead (below).
-3. `make test` — the unit suite (`uv run pytest`), which excludes `tests/integration/`
-   by default (see below).
+3. `make test` — the test suite (`uv run pytest`).
 
 All three must be green; `make verify` exits non-zero if any stage fails. Run
 `make coverage` separately and review the `term-missing` output for untested lines you
@@ -25,15 +24,15 @@ below the last measured suite-wide percentage, so coverage can drift slightly bu
 silently collapse. Lowering `fail_under` to make a change pass is not a fix; investigate
 why coverage dropped first.
 
-**The live integration suite is opt-in, not part of the gate.** `tests/integration/`
-hits real OpenRouter/Pinecone and needs `TEST_OPENROUTER_API_KEY`/`TEST_PINECONE_API_KEY`
-configured; run it explicitly with `make test-integration`. Every test under
-`tests/integration/` carries `pytestmark = pytest.mark.integration`, and its fixtures
-(live `client`, `user_context`, `collection_factory`, the Pinecone namespace tracker,
-etc.) live in `tests/integration/conftest.py`, not the root `tests/conftest.py`. The
-root conftest only does environment bootstrapping (env file loading, DB/storage
-redirection) and the function-scoped `session` fixture — it must never grow a hard
-requirement on live credentials, or the whole unit suite stops collecting without them.
+**The suite never hits live providers.** OpenRouter/Pinecone are stubbed at the
+client boundary; no API credentials are needed to run any test. (A live-credential
+`tests/integration/` suite existed once and was removed — it had rotted against
+current model ids and wasn't part of any gate. If live smoke tests come back, they
+return as an explicitly opt-in, marker-gated suite with its own conftest, never as
+a credential requirement on the root `tests/conftest.py` — the root conftest only
+does environment bootstrapping (DB/storage redirection, `DEBUG=true`) and the
+function-scoped `session` fixture, so the suite always collects and runs without
+secrets.)
 
 **mypy overrides are for permanent third-party-stub gaps only, never a place to park
 code you don't want to type.** The Phase 2–7 burn-down list of `ignore_errors = true`
