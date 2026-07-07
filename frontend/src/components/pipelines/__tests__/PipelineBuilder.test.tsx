@@ -393,7 +393,7 @@ describe("PipelineBuilder", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Select node" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply config" }));
-    expect(screen.getByTestId("canvas")).toHaveTextContent("Missing");
+    await waitFor(() => expect(screen.getByTestId("canvas")).toHaveTextContent("Missing"));
 
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
     fireEvent.click(screen.getByRole("button", { name: "Change label" }));
