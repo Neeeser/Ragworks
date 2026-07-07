@@ -1,0 +1,10 @@
+node_modules
+.next
+.turbo
+out
+coverage
+.vercel
+.cache
+Dockerfile
+.dockerignore
+tsconfig.tsbuildinfo
