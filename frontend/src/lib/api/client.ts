@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-error";
+import { formatApiErrorDetail } from "@/lib/errors";
 
 // Falls back to same-origin relative paths ("") so the prebuilt Docker image
 // works behind any host; the Next server proxies /api/* via API_PROXY_TARGET.
@@ -35,7 +36,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     const detail = errorData?.detail || response.statusText || "Request failed";
     throw new ApiError(
       response.status,
-      typeof detail === "string" ? detail : JSON.stringify(detail),
+      typeof detail === "string" ? detail : formatApiErrorDetail(detail),
     );
   }
 

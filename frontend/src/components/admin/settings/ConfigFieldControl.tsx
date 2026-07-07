@@ -49,16 +49,13 @@ export function ConfigFieldControl({
   if (field.kind === "bool") {
     return (
       <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
-        <label className="flex items-center gap-2 text-sm text-slate-200">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-white/30 bg-transparent"
-            checked={value === true}
-            disabled={locked}
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          <span>{field.label}</span>
-        </label>
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-white/30 bg-transparent"
+          checked={value === true}
+          disabled={locked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
       </Field>
     );
   }
@@ -70,7 +67,17 @@ export function ConfigFieldControl({
           type="number"
           value={typeof value === "number" ? value : ""}
           disabled={locked}
-          onChange={(event) => onChange(Number(event.target.value))}
+          onChange={(event) => {
+            const raw = event.target.value;
+            if (raw.trim() === "") {
+              return;
+            }
+            const parsed = Number(raw);
+            if (Number.isNaN(parsed)) {
+              return;
+            }
+            onChange(parsed);
+          }}
         />
       </Field>
     );

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminSettingsPage } from "@/components/admin/settings/AdminSettingsPage";
 import * as apiModule from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
+import { formatApiErrorDetail } from "@/lib/errors";
 import { makeConfigField } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -105,8 +106,11 @@ describe("AdminSettingsPage", () => {
   it("surfaces a per-field 400 error from the API in the alert region", async () => {
     const user = userEvent.setup();
     api.fetchAdminConfig.mockResolvedValueOnce([makeAllowRegistrationField({ value: true })]);
+    // apiFetch (src/lib/api/client.ts) formats a dict `detail` into readable
+    // "field: message" lines before constructing ApiError — mirror that here
+    // since this test mocks updateAdminConfig above the client layer.
     api.updateAdminConfig.mockRejectedValueOnce(
-      new ApiError(400, JSON.stringify({ allow_registration: "must be a boolean" })),
+      new ApiError(400, formatApiErrorDetail({ allow_registration: "must be a boolean" })),
     );
 
     render(<AdminSettingsPage />);
@@ -115,6 +119,8 @@ describe("AdminSettingsPage", () => {
     await user.click(checkbox);
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("must be a boolean");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("allow_registration: must be a boolean");
+    expect(alert.textContent).not.toMatch(/[{}]/);
   });
 });

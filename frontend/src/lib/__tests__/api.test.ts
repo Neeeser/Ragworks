@@ -172,6 +172,28 @@ describe("api", () => {
     await expect(loginRequest(testEmail, testPassword)).rejects.toThrow("Unable to sign in.");
   });
 
+  it("formats a per-field dict error detail into readable lines instead of raw JSON", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+    fetchMock.mockResolvedValueOnce(
+      createErrorResponse(badRequestStatus, {
+        detail: { allow_registration: "must be a boolean" },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await fetchCollection("token", "col-1");
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiError = caught as ApiError;
+    expect(apiError.detail).toBe("allow_registration: must be a boolean");
+    expect(apiError.detail).not.toMatch(/[{}]/);
+  });
+
   it("sets JSON headers for authenticated requests", async () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof fetch;
@@ -219,16 +241,14 @@ describe("api", () => {
     });
   });
 
-  it("stringifies non-string apiFetch errors", async () => {
+  it("formats a non-string dict apiFetch error detail into readable lines", async () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof fetch;
     fetchMock.mockResolvedValueOnce(
       createErrorResponse(badRequestStatus, { detail: { message: "bad" } }),
     );
 
-    await expect(fetchCollection("token", "col-1")).rejects.toThrow(
-      JSON.stringify({ message: "bad" }),
-    );
+    await expect(fetchCollection("token", "col-1")).rejects.toThrow("message: bad");
   });
 
   it("falls back to default apiFetch error messages", async () => {
