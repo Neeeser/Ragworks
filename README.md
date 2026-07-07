@@ -71,28 +71,76 @@ Both graphs are yours to rewire. Swap the chunking strategy, change the embeddin
 
 The supported way to run Ragworks. You need Docker with the compose plugin — nothing else.
 
-1. Download `docker-compose.yml` and `env.example` from the
-   [latest release](https://github.com/Neeeser/Ragworks/releases/latest)
-   (or grab `docker-compose.yml` and `.env.example` from the repo root).
-2. Copy the template and fill in the two required values:
+Save this as `docker-compose.yml`:
 
-   ```bash
-   cp env.example .env
-   # set JWT_SECRET_KEY (openssl rand -hex 32) and POSTGRES_PASSWORD
-   ```
+```yaml
+name: ragworks
 
-3. Start the stack:
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ragworks
+      # Only reachable inside the compose network (no published port).
+      POSTGRES_PASSWORD: ragworks
+      POSTGRES_DB: ragworks
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragworks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-   ```bash
-   docker compose up -d
-   ```
+  backend:
+    image: ghcr.io/neeeser/ragworks-backend:latest
+    environment:
+      DATABASE_URL: postgresql+psycopg://ragworks:ragworks@postgres:5432/ragworks
+    volumes:
+      # Bulk uploads (reclaimable) and small app state (e.g. the
+      # auto-generated auth secret) kept apart on purpose.
+      - document-storage:/data/storage
+      - backend-config:/data/config
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-4. Open <http://localhost:3000>, create an account, and add your OpenRouter and
-   Pinecone API keys on the settings page.
+  frontend:
+    image: ghcr.io/neeeser/ragworks-frontend:latest
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "7247:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  document-storage:
+  backend-config:
+```
+
+Then start the stack:
+
+```bash
+docker compose up -d
+```
+
+Open <http://localhost:7247>, create an account, and add your OpenRouter and
+Pinecone API keys on the settings page. The auth signing secret is generated
+automatically on first boot and persisted in the `backend-config` volume
+(set `JWT_SECRET_KEY` on the backend service to supply your own).
 
 Documents and the database persist in named Docker volumes across restarts and
-upgrades. To upgrade, set `RAGWORKS_VERSION` in `.env` to the new version (no `v` prefix, e.g. `0.2.0`) and
-run `docker compose pull && docker compose up -d`.
+upgrades. To upgrade:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+To pin a specific version instead of `latest`, set the image tags in your
+compose file (e.g. `ghcr.io/neeeser/ragworks-backend:0.2.0`) — releases are
+listed on the [releases page](https://github.com/Neeeser/Ragworks/releases).
 
 ## 🛠️ Development setup
 
@@ -103,21 +151,13 @@ git clone https://github.com/Neeeser/Ragworks.git
 cd Ragworks
 
 make env       # install backend (uv) + frontend (npm) dependencies
-```
-
-Create `.env.local` in the repo root:
-
-```ini
-JWT_SECRET_KEY=change-me
-DATABASE_URL=postgresql+psycopg://localhost:5432/ragworks
-FILE_STORAGE_PATH=./storage
-```
-
-Then run everything:
-
-```bash
 make run       # backend on :8000, frontend on :3000
 ```
+
+No configuration needed — dev runs with sensible defaults (local Postgres,
+`./storage`, debug mode). Optional overrides (custom database URL, log level,
+default models) are plain environment variables; see
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 Open **http://localhost:3000**, register, add your OpenRouter + Pinecone keys in settings, create a collection, and drop in a document. Then open the trace of the ingestion run you just triggered — that's the whole idea.
 
@@ -133,6 +173,7 @@ Engineering practices are documented next to the code they govern: [`AGENTS.md`]
 
 ## 🗺️ Roadmap
 
+- [ ] **Central runtime config** — a typed, DB-backed `AppConfig` (defaults, beta/feature flags, limits, UI settings) editable from an admin settings page, with env-pinned values shown read-only
 - [ ] **More ingestion sources & formats** — HTML, Markdown, Office docs, URLs, and connector-based sources beyond file upload
 - [ ] **Pipeline-level correction loops** — edit a node's config and re-run a past ingestion from its trace
 - [ ] **More node types** — alternative embedders, hybrid retrieval, custom chunkers

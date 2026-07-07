@@ -15,8 +15,7 @@ Before finishing any backend change, run `make verify` — it chains, in order:
    pyupgrade, simplify) plus a slim `pylint` kept only for the design checks ruff
    doesn't cover (`too-many-arguments/branches/statements/locals`), at
    `--fail-under=10`. Module *length* is enforced by a guard test instead (below).
-3. `make test` — the unit suite (`uv run pytest`), which excludes `tests/integration/`
-   by default (see below).
+3. `make test` — the test suite (`uv run pytest`).
 
 All three must be green; `make verify` exits non-zero if any stage fails. Run
 `make coverage` separately and review the `term-missing` output for untested lines you
@@ -25,15 +24,15 @@ below the last measured suite-wide percentage, so coverage can drift slightly bu
 silently collapse. Lowering `fail_under` to make a change pass is not a fix; investigate
 why coverage dropped first.
 
-**The live integration suite is opt-in, not part of the gate.** `tests/integration/`
-hits real OpenRouter/Pinecone and needs `TEST_OPENROUTER_API_KEY`/`TEST_PINECONE_API_KEY`
-configured; run it explicitly with `make test-integration`. Every test under
-`tests/integration/` carries `pytestmark = pytest.mark.integration`, and its fixtures
-(live `client`, `user_context`, `collection_factory`, the Pinecone namespace tracker,
-etc.) live in `tests/integration/conftest.py`, not the root `tests/conftest.py`. The
-root conftest only does environment bootstrapping (env file loading, DB/storage
-redirection) and the function-scoped `session` fixture — it must never grow a hard
-requirement on live credentials, or the whole unit suite stops collecting without them.
+**The suite never hits live providers.** OpenRouter/Pinecone are stubbed at the
+client boundary; no API credentials are needed to run any test. (A live-credential
+`tests/integration/` suite existed once and was removed — it had rotted against
+current model ids and wasn't part of any gate. If live smoke tests come back, they
+return as an explicitly opt-in, marker-gated suite with its own conftest, never as
+a credential requirement on the root `tests/conftest.py` — the root conftest only
+does environment bootstrapping (DB/storage redirection, `DEBUG=true`) and the
+function-scoped `session` fixture, so the suite always collects and runs without
+secrets.)
 
 **mypy overrides are for permanent third-party-stub gaps only, never a place to park
 code you don't want to type.** The Phase 2–7 burn-down list of `ignore_errors = true`
@@ -212,9 +211,18 @@ invert it:
   live under `app/api`, which forced every module that needed config —
   `db/engine.py`, `core/security.py`, `pipelines/`, `services/` — to import upward
   from `app.api`; moved in Phase 2.)
-- **Deployments must set `DEBUG=false`.** The fail-fast guard on the default JWT
-  secret only fires outside debug mode, and `debug` defaults to `True` — under the
-  default the guard is a no-op.
+- **`DEBUG` defaults to `false` — deployments are secure by default.** An unset
+  `JWT_SECRET_KEY` is auto-generated on first boot and persisted under the config
+  path (`_load_or_create_jwt_secret` in `app/core/config.py`), so a paste-and-run
+  install signs tokens with a real secret; the fail-fast guard rejects an explicit
+  `changeme` placeholder unless `DEBUG=true` is set. Dev entry points opt into
+  debug: `make server` exports `DEBUG=true` and the test suite sets it in
+  `tests/conftest.py`. Never flip the default back to `True`.
+- **`config_path` (small persistent app state) is deliberately separate from
+  `storage_path` (bulk, reclaimable uploads)** — in Docker they are different
+  volumes (`backend-config` vs `document-storage`), so clearing document storage
+  to reclaim space never destroys identity material like the JWT secret. New
+  persistent app state (not user uploads) goes under `config_path`.
 - **Routes are thin — target ≤ ~25 lines each: parse → one service call → shape/
   translate.** A route parses/validates input (via its Pydantic schema and `Depends`),
   calls one service function, and shapes the response or translates a domain error. No

@@ -10,16 +10,17 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 
 FROM python:3.12-slim
 RUN useradd --create-home --uid 1000 appuser \
-    && mkdir -p /data/storage \
+    && mkdir -p /data/storage /data/config \
     && chown -R appuser:appuser /data
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY app ./app
 ENV PATH="/app/.venv/bin:$PATH" \
     FILE_STORAGE_PATH=/data/storage \
+    CONFIG_PATH=/data/config \
     PYTHONUNBUFFERED=1
 USER appuser
-VOLUME /data/storage
+VOLUME /data/storage /data/config
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"

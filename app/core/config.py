@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,8 +15,6 @@ class Settings(BaseSettings):
     """Application-wide configuration loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.local"),
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
@@ -63,10 +63,28 @@ class Settings(BaseSettings):
     storage_path: Path = Field(
         default=Path("./storage"),
         validation_alias="FILE_STORAGE_PATH",
+        description="Bulk document storage — large and reclaimable.",
+    )
+    config_path: Path = Field(
+        default=Path("./config"),
+        validation_alias="CONFIG_PATH",
+        description=(
+            "Small persistent app state (e.g. the auto-generated JWT secret). "
+            "Deliberately separate from storage_path so clearing bulk document "
+            "storage never destroys identity material."
+        ),
     )
 
     # Auth / security
-    jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY", default="changeme")
+    jwt_secret_key: str = Field(
+        validation_alias="JWT_SECRET_KEY",
+        default="",
+        description=(
+            "Secret used to sign access tokens. Leave unset to auto-generate "
+            "one on first boot, persisted under the storage path so it "
+            "survives restarts and upgrades."
+        ),
+    )
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(
         default=60 * 24,
@@ -83,11 +101,14 @@ class Settings(BaseSettings):
 
     # Application mode / web
     debug: bool = Field(
-        default=True,
+        default=False,
         validation_alias="DEBUG",
         description=(
-            "Development mode flag. When false, startup fails fast on insecure "
-            "defaults (e.g. an unset JWT secret) instead of silently running with them."
+            "Development mode flag, off by default so a deployment is secure "
+            "out of the box: unless DEBUG=true is set explicitly, startup fails "
+            "fast on insecure defaults (e.g. an unset JWT secret) instead of "
+            "silently running with them. Dev entry points (make server, the "
+            "test suite) opt in."
         ),
     )
     cors_origins: list[str] = Field(
@@ -118,11 +139,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_jwt_secret_outside_debug(self) -> Settings:
-        """Fail fast on the default JWT secret once debug mode is off.
+        """Fail fast on the known-placeholder JWT secret once debug mode is off.
 
-        `changeme` is a fine default for local development, but it must never
-        reach a non-debug (i.e. deployed) process — that would mean every
-        issued access token is forgeable by anyone who has read this file.
+        An *unset* secret is fine — `get_settings` auto-generates and persists
+        one. But an explicit `changeme` reaching a non-debug (i.e. deployed)
+        process would mean every issued access token is forgeable by anyone
+        who has read this file.
         """
         if self.debug is False and self.jwt_secret_key == "changeme":
             raise ValueError(
@@ -131,9 +153,40 @@ class Settings(BaseSettings):
         return self
 
 
+def _load_or_create_jwt_secret(config_path: Path) -> str:
+    """Return the install's auto-generated JWT secret, minting it on first boot.
+
+    The secret lives in the config path — a persistent volume in Docker,
+    separate from bulk document storage — so restarts, image upgrades, and
+    document-volume cleanups all keep issued tokens valid. Created with
+    owner-only permissions; a concurrent first boot that loses the exclusive
+    create simply reads the winner's secret.
+    """
+    secret_file = config_path / ".jwt-secret"
+    try:
+        fd = os.open(secret_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        existing = secret_file.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+        # Corrupt (empty) secret file: re-mint rather than sign with "".
+        fd = os.open(secret_file, os.O_WRONLY | os.O_TRUNC, 0o600)
+    secret = secrets.token_hex(32)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(secret)
+    return secret
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return cached application settings."""
+    """Return cached application settings.
+
+    Owns the boot-time side effects: creating the storage/config directories
+    and resolving an unset JWT secret to the persisted auto-generated one.
+    """
     settings = Settings()
     settings.storage_path.mkdir(parents=True, exist_ok=True)
+    settings.config_path.mkdir(parents=True, exist_ok=True)
+    if not settings.jwt_secret_key:
+        settings.jwt_secret_key = _load_or_create_jwt_secret(settings.config_path)
     return settings

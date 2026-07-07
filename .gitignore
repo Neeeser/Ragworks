@@ -30,10 +30,9 @@ htmlcov/
 *.swo
 *~
 
-# Local environment files
+# Local environment files (the app reads real env vars only; never commit these)
 .env
 .env.*
-!.env.example
 .DS_Store
 
 # Database files
@@ -41,9 +40,10 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
-# File storage
+# File storage / local app state
 storage/
 uploads/
+config/
 
 # Logs
 *.log

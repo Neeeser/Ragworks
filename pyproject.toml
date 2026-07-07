@@ -85,8 +85,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-q", "--strict-markers", "-m", "not integration"]
-markers = ["integration: hits live OpenRouter/Pinecone; needs TEST_* credentials"]
+addopts = ["-q", "--strict-markers"]
 
 [tool.coverage.run]
 branch = true

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 import pytest
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,6 +44,56 @@ def test_get_settings_creates_storage_path(tmp_path, monkeypatch) -> None:
     get_settings.cache_clear()
     monkeypatch.delenv("FILE_STORAGE_PATH", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+
+
+def test_unset_jwt_secret_is_generated_and_persisted(tmp_path, monkeypatch) -> None:
+    """With no JWT_SECRET_KEY configured, first boot mints a real secret.
+
+    The secret is written under the config path — a separate volume from
+    document storage — so every subsequent boot reuses it, and clearing the
+    (bulk, reclaimable) document volume never rotates it.
+    """
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.setenv("CONFIG_PATH", str(tmp_path / "config"))
+    monkeypatch.setenv("FILE_STORAGE_PATH", str(tmp_path / "storage"))
+    get_settings.cache_clear()
+
+    first = get_settings().jwt_secret_key
+
+    # Wiping document storage (the space-reclaim case) must not touch it.
+    shutil.rmtree(tmp_path / "storage")
+
+    get_settings.cache_clear()
+    second = get_settings().jwt_secret_key
+
+    assert len(first) >= 32
+    assert first != "changeme"
+    assert second == first
+    assert (tmp_path / "config" / ".jwt-secret").read_text().strip() == first
+
+    get_settings.cache_clear()
+
+
+def test_explicit_jwt_secret_wins_over_generated_one(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "operator-supplied-secret")
+    monkeypatch.setenv("FILE_STORAGE_PATH", str(tmp_path / "storage"))
+    get_settings.cache_clear()
+
+    assert get_settings().jwt_secret_key == "operator-supplied-secret"
+
+    get_settings.cache_clear()
+
+
+def test_debug_defaults_off_so_default_jwt_secret_is_rejected(monkeypatch) -> None:
+    """An unconfigured deployment must fail fast, not silently run insecure.
+
+    The test suite exports DEBUG=true (tests/conftest.py); remove it so this
+    exercises the true out-of-the-box default.
+    """
+    monkeypatch.delenv("DEBUG", raising=False)
+
+    with pytest.raises(ValueError, match="JWT_SECRET_KEY must be set"):
+        Settings.model_validate({"JWT_SECRET_KEY": "changeme"})
 
 
 def test_default_jwt_secret_allowed_in_debug_mode() -> None:

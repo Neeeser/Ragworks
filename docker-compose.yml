@@ -1,3 +1,4 @@
+# Ragworks — the same file is pasted into README.md's quick start; keep them in sync.
 name: ragworks
 
 services:
@@ -5,7 +6,8 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: ragworks
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Only reachable inside the compose network (no published port).
+      POSTGRES_PASSWORD: ragworks
       POSTGRES_DB: ragworks
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -16,27 +18,28 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/neeeser/ragworks-backend:${RAGWORKS_VERSION:-latest}
+    image: ghcr.io/neeeser/ragworks-backend:latest
     environment:
-      DATABASE_URL: postgresql+psycopg://ragworks:${POSTGRES_PASSWORD}@postgres:5432/ragworks
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
-      DEBUG: "false"
-      FILE_STORAGE_PATH: /data/storage
+      DATABASE_URL: postgresql+psycopg://ragworks:ragworks@postgres:5432/ragworks
     volumes:
+      # Bulk uploads (reclaimable) and small app state (e.g. the
+      # auto-generated auth secret) kept apart on purpose.
       - document-storage:/data/storage
+      - backend-config:/data/config
     depends_on:
       postgres:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/neeeser/ragworks-frontend:${RAGWORKS_VERSION:-latest}
+    image: ghcr.io/neeeser/ragworks-frontend:latest
     environment:
       API_PROXY_TARGET: http://backend:8000
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "7247:3000"
     depends_on:
       - backend
 
 volumes:
   postgres-data:
   document-storage:
+  backend-config:

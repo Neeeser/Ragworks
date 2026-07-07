@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-integration test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -9,6 +9,8 @@ UV_PYTHON_FLAG := $(if $(PYTHON),-p $(PYTHON),)
 API_HOST ?= 127.0.0.1
 API_PORT ?= 8000
 NEXT_PUBLIC_API_BASE_URL ?= http://$(API_HOST):$(API_PORT)
+# Dev opts into debug mode; the app default is production-safe (DEBUG=false).
+DEBUG ?= true
 
 help:
 	@echo "Targets:"
@@ -20,9 +22,8 @@ help:
 	@echo "  make postgres  - ensure Postgres is running"
 	@echo "  make frontend  - run Next.js dev server"
 	@echo "  make run       - run server + frontend together"
-	@echo "  make test      - run pytest (unit suite; integration excluded)"
+	@echo "  make test      - run pytest"
 	@echo "  make test-verbose - run pytest with verbose output and durations"
-	@echo "  make test-integration - run the live-credential integration suite"
 	@echo "  make test-frontend - run frontend tests (vitest)"
 	@echo "  make coverage  - pytest + missing lines + html report"
 	@echo "  make coverage-report - same, but never fails"
@@ -50,7 +51,7 @@ postgres: env-backend
 	$(UV) run python scripts/ensure_postgres.py
 
 server: postgres
-	$(UV) run uvicorn app.api.main:app --reload --host $(API_HOST) --port $(API_PORT)
+	DEBUG="$(DEBUG)" $(UV) run uvicorn app.api.main:app --reload --host $(API_HOST) --port $(API_PORT)
 
 frontend: env-frontend
 	NEXT_PUBLIC_API_BASE_URL="$(NEXT_PUBLIC_API_BASE_URL)" $(NPM) --prefix frontend run dev
@@ -63,9 +64,6 @@ test: postgres
 
 test-verbose: postgres
 	$(UV) run pytest -vv --durations=0
-
-test-integration: postgres
-	$(UV) run pytest -m integration
 
 test-frontend: env-frontend
 	$(NPM) --prefix frontend run test:run

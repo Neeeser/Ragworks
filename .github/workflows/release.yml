@@ -148,10 +148,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pin the release version in the env template
-        run: |
-          # Image tags carry no v prefix, so strip it from the git tag.
-          sed -i "s|^#RAGWORKS_VERSION=.*|RAGWORKS_VERSION=${GITHUB_REF_NAME#v}|" .env.example
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -160,11 +156,8 @@ jobs:
           case "$GITHUB_REF_NAME" in
             *-*) PRERELEASE_FLAG="--prerelease" ;;
           esac
-          # GitHub strips/renames leading-dot asset names (.env.example
-          # becomes "default.env.example"), so attach it dot-free.
-          cp .env.example env.example
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --generate-notes \
             $PRERELEASE_FLAG \
-            docker-compose.yml env.example
+            docker-compose.yml
