@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { AdminNav } from "@/components/admin/AdminNav";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ReactNode } from "react";
@@ -21,5 +22,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   if (!user || user.role !== "admin") {
     return null;
   }
-  return <>{children}</>;
+  return (
+    <div className="space-y-6">
+      <AdminNav />
+      {children}
+    </div>
+  );
 }

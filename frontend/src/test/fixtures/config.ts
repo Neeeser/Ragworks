@@ -1,4 +1,4 @@
-import type { PublicConfig } from "@/lib/types";
+import type { ConfigFieldRead, PublicConfig } from "@/lib/types";
 
 /** Matches backend code defaults (`app/schemas/app_config.py`): open/enabled. */
 export function makePublicConfig(overrides: Partial<PublicConfig> = {}): PublicConfig {
@@ -12,6 +12,22 @@ export function makePublicConfig(overrides: Partial<PublicConfig> = {}): PublicC
       umap_visualizations: true,
       chat_branching: true,
     },
+    ...overrides,
+  };
+}
+
+/** One admin config catalog entry (`app/schemas/admin.py: ConfigFieldRead`). */
+export function makeConfigField(overrides: Partial<ConfigFieldRead> = {}): ConfigFieldRead {
+  return {
+    key: "auth.allow_registration",
+    label: "Allow sign-ups",
+    description: "When off, new account registration is disabled.",
+    kind: "bool",
+    public: true,
+    env_var: null,
+    value: true,
+    default: true,
+    source: "default",
     ...overrides,
   };
 }
