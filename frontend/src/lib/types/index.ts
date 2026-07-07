@@ -4,3 +4,4 @@ export * from "@/lib/types/collections";
 export * from "@/lib/types/chat";
 export * from "@/lib/types/pipelines";
 export * from "@/lib/types/traces";
+export * from "@/lib/types/config";

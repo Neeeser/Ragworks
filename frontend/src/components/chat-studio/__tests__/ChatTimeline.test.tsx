@@ -1,12 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
 import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
+import { makePublicConfig } from "@/test/fixtures";
+import { resetMockAppConfig, setMockAppConfig } from "@/test/mocks";
 
 import type { ChatEntry } from "@/components/chat-studio/lib/chat-types";
 import type { ChatMessage, ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
+
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 vi.mock("@/components/chat-studio/Tooling", () => ({
   ToolCallBubble: ({ label, footer }: { label: string; footer?: React.ReactNode }) => (
@@ -100,6 +104,10 @@ const baseProps = (overrides: Partial<ChatTimelineProps> = {}): ChatTimelineProp
 });
 
 describe("ChatTimeline", () => {
+  beforeEach(() => {
+    resetMockAppConfig();
+  });
+
   it("renders empty state with overrides", () => {
     const onModelSelect = vi.fn();
     const onOverrideSelect = vi.fn();
@@ -332,6 +340,33 @@ describe("ChatTimeline", () => {
     const branchButtons = screen.getAllByRole("button", { name: /Branch chat/ });
     fireEvent.click(branchButtons[0]);
     expect(onBranchMessage).toHaveBeenCalledWith("u2");
+  });
+
+  it("hides the branch control when the chat_branching feature flag is disabled", () => {
+    setMockAppConfig({
+      config: makePublicConfig({ features: { umap_visualizations: true, chat_branching: false } }),
+    });
+
+    const userMessage = buildMessage("user", "Hi", { id: "u8" });
+    const entry: ChatEntry = {
+      id: "entry-user-no-branch",
+      type: "user",
+      message: userMessage,
+      content: userMessage.content,
+      createdAt: userMessage.created_at,
+    };
+
+    render(
+      <ChatTimeline
+        {...baseProps({
+          chatEntryOrder: [entry.id],
+          chatEntryMap: new Map([[entry.id, entry]]),
+          selectedSessionId: "session-1",
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Branch chat/ })).not.toBeInTheDocument();
   });
 
   it("renders streaming bubbles", () => {

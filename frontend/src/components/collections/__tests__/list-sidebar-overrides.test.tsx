@@ -11,6 +11,8 @@ import { getMockRouter } from "@/test/test-utils";
 
 import type { NodeSpec, Pipeline } from "@/lib/types";
 
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
+
 const NODE_TYPE = "node.type";
 const NODE_EMPTY_TYPE = "node.empty";
 

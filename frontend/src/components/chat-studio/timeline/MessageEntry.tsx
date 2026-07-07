@@ -6,6 +6,7 @@ import { BranchedFromBanner } from "@/components/chat-studio/timeline/BranchedFr
 import { roleVariants, UsageInline } from "@/components/chat-studio/timeline/timeline-constants";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAppConfig } from "@/providers/config-provider";
 
 import type { ChatMessageEntry } from "@/components/chat-studio/lib/chat-types";
 import type { Components } from "react-markdown";
@@ -51,6 +52,9 @@ export const MessageEntry = ({
   branchedFromOrigin,
   onNavigateToSession,
 }: MessageEntryProps) => {
+  const { config } = useAppConfig();
+  const branchingEnabled = config.features.chat_branching !== false;
+
   const variant = roleVariants[entry.type] ?? roleVariants.system;
   const isUser = entry.type === "user";
   const isAssistant = entry.type === "assistant";
@@ -59,20 +63,21 @@ export const MessageEntry = ({
   const usage = entry.message.usage;
   const headerLabel = entry.message.role === "user" ? "You" : entry.message.role.toUpperCase();
 
-  const branchFooter = selectedSessionId ? (
-    <div className="absolute left-0 right-0 top-full mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-      {usage && <UsageInline usage={usage} />}
-      <button
-        type="button"
-        className="pointer-events-auto inline-flex items-center justify-center rounded-full border border-white/20 p-1 text-white/80 hover:border-white/60"
-        onClick={() => onBranchMessage(entry.message.id)}
-        disabled={sending}
-        aria-label="Branch chat"
-      >
-        <GitBranch className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  ) : null;
+  const branchFooter =
+    selectedSessionId && branchingEnabled ? (
+      <div className="absolute left-0 right-0 top-full mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+        {usage && <UsageInline usage={usage} />}
+        <button
+          type="button"
+          className="pointer-events-auto inline-flex items-center justify-center rounded-full border border-white/20 p-1 text-white/80 hover:border-white/60"
+          onClick={() => onBranchMessage(entry.message.id)}
+          disabled={sending}
+          aria-label="Branch chat"
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    ) : null;
   const hasBranchFooter = Boolean(branchFooter);
 
   const shouldShowBranchedFrom =

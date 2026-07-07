@@ -423,5 +423,7 @@ export function makeChatCompletion(
   };
 }
 
+export * from "@/test/fixtures/config";
+
 // Rich chat-studio scenario fixtures (relocated from chat-studio/__tests__).
 export * from "@/test/fixtures/chat-scenarios";

@@ -21,6 +21,11 @@
  *   vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
  *   import { setMockAuth, resetMockAuth } from "@/test/mocks";
  *   // beforeEach(resetMockAuth); per test: setMockAuth({ token: null, user: null });
+ *
+ * App config (permissive defaults; pass overrides to change):
+ *   vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
+ *   import { setMockAppConfig, resetMockAppConfig } from "@/test/mocks";
+ *   // beforeEach(resetMockAppConfig); per test: setMockAppConfig({ config: makePublicConfig({...}) });
  */
 import { vi } from "vitest";
 
@@ -37,6 +42,7 @@ import {
   makePipeline,
   makePromptDetails,
   makeProviderDirectory,
+  makePublicConfig,
   makeQueryResult,
   makeTraceResponse,
   makeUmapVisualization,
@@ -44,7 +50,7 @@ import {
   makeValidation,
 } from "@/test/fixtures";
 
-import type { User } from "@/lib/types";
+import type { PublicConfig, User } from "@/lib/types";
 
 type AuthValue = {
   user: User | null;
@@ -123,6 +129,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEmbeddingModels: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
     listModelEndpoints: vi.fn(async () => ({ data: makeProviderDirectory() })),
+    // config
+    fetchPublicConfig: vi.fn(async () => makePublicConfig()),
+    fetchAdminConfig: vi.fn(async () => []),
+    updateAdminConfig: vi.fn(async () => []),
     ...overrides,
   };
 }
@@ -163,5 +173,45 @@ export function mockAuth(overrides: Partial<AuthValue> = {}) {
   authValue = buildAuthValue(overrides);
   return {
     useAuth: () => authValue,
+  };
+}
+
+type AppConfigValue = {
+  config: PublicConfig;
+  loading: boolean;
+};
+
+function buildAppConfigValue(overrides: Partial<AppConfigValue> = {}): AppConfigValue {
+  return {
+    config: makePublicConfig(),
+    loading: false,
+    ...overrides,
+  };
+}
+
+let appConfigValue: AppConfigValue = buildAppConfigValue();
+let appConfigDefaults: Partial<AppConfigValue> = {};
+
+/** Replace the current mocked config value (merged onto the file default). */
+export function setMockAppConfig(overrides: Partial<AppConfigValue> = {}) {
+  appConfigValue = buildAppConfigValue({ ...appConfigDefaults, ...overrides });
+  return appConfigValue;
+}
+
+/** Reset config to the file default captured by the last `mockAppConfig(...)` call. */
+export function resetMockAppConfig() {
+  appConfigValue = buildAppConfigValue(appConfigDefaults);
+}
+
+/**
+ * `@/providers/config-provider` module mock. `overrides` become the file
+ * default (restored by `resetMockAppConfig`); `setMockAppConfig` adjusts per
+ * test.
+ */
+export function mockAppConfig(overrides: Partial<AppConfigValue> = {}) {
+  appConfigDefaults = overrides;
+  appConfigValue = buildAppConfigValue(overrides);
+  return {
+    useAppConfig: () => appConfigValue,
   };
 }

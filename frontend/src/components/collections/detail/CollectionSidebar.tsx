@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { GlassCard } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
+import { useAppConfig } from "@/providers/config-provider";
 
 import type { Collection } from "@/lib/types";
 
@@ -16,7 +17,7 @@ type CollectionSidebarProps = {
   onSelectView: (view: CollectionView) => void;
 };
 
-const navItems: Array<{
+const baseNavItems: Array<{
   id: CollectionView;
   label: string;
   description: string;
@@ -40,13 +41,14 @@ const navItems: Array<{
     description: "Inspect ingested sources.",
     icon: Files,
   },
-  {
-    id: "visualize",
-    label: "Visualize",
-    description: "Explore the embedding map.",
-    icon: ScatterChart,
-  },
 ];
+
+const visualizeNavItem = {
+  id: "visualize" as const,
+  label: "Visualize",
+  description: "Explore the embedding map.",
+  icon: ScatterChart,
+};
 
 export function CollectionSidebar({
   collection,
@@ -54,6 +56,11 @@ export function CollectionSidebar({
   onSelectView,
 }: CollectionSidebarProps) {
   const router = useRouter();
+  const { config } = useAppConfig();
+  const navItems =
+    config.features.umap_visualizations === false
+      ? baseNavItems
+      : [...baseNavItems, visualizeNavItem];
 
   return (
     <GlassCard className="rounded-3xl border border-white/10 p-5">
