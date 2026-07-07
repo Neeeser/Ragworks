@@ -86,7 +86,17 @@ def test_admin_config_lists_full_catalog(
 def test_patch_config_round_trips_through_public_get(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:
+    """Verify a PATCH is visible immediately through the public endpoint.
+
+    The config cache is invalidated on update, not left to the TTL: a warm
+    cache lookup after PATCH proves the invalidation call happened and took
+    effect, not that we got lucky with a cold cache read.
+    """
     _promote(session, auth_user)
+
+    # Warm the cache with the pre-PATCH value.
+    pre_patch = client.get("/api/config").json()
+    assert pre_patch["auth"]["allow_registration"] is True
 
     response = client.patch(
         "/api/admin/config", json={"auth": {"allow_registration": False}}
@@ -95,6 +105,8 @@ def test_patch_config_round_trips_through_public_get(
     updated = {entry["key"]: entry for entry in response.json()}
     assert updated["auth.allow_registration"]["value"] is False
 
+    # Post-PATCH GET hits the warm cache and only passes if invalidation
+    # cleared it and forced a fresh read from the DB.
     public = client.get("/api/config").json()
     assert public["auth"]["allow_registration"] is False
 
