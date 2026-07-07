@@ -10,6 +10,7 @@ their domain module and re-exported here.
 
 from __future__ import annotations
 
+from app.db.repositories.app_setting import AppSettingRepository
 from app.db.repositories.base import Repository
 from app.db.repositories.chat import ChatRepository
 from app.db.repositories.collection import CollectionRepository, CollectionStats
@@ -23,6 +24,7 @@ from app.db.repositories.query import QueryRepository
 from app.db.repositories.user import UserRepository
 
 __all__ = [
+    "AppSettingRepository",
     "ChatRepository",
     "ChunkRepository",
     "CollectionRepository",
