@@ -121,11 +121,14 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.name.outputs.image }}
-          # Tags: vX.Y.Z + X.Y + latest on release tags; vX.Y.Z-rc.N only on
-          # pre-releases (metadata-action skips latest/X.Y for pre-release
-          # semver); edge on main pushes.
+          # Image tags carry no v prefix (registry convention, and
+          # metadata-action ignores a pattern prefix for pre-releases anyway
+          # — a v{{version}} pattern published v0.1.1 for stable but bare
+          # 0.1.1-rc.2 for rc tags, breaking the release's pinned compose
+          # env). Tags: X.Y.Z + X.Y + latest on release tags; X.Y.Z-rc.N
+          # only on pre-releases (no latest/X.Y); edge on main pushes.
           tags: |
-            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=edge,enable={{is_default_branch}}
       - name: Create multi-arch manifest
@@ -147,7 +150,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Pin the release version in the env template
         run: |
-          sed -i "s|^#TRANSPARENTRAG_VERSION=.*|TRANSPARENTRAG_VERSION=${GITHUB_REF_NAME}|" .env.example
+          # Image tags carry no v prefix, so strip it from the git tag.
+          sed -i "s|^#TRANSPARENTRAG_VERSION=.*|TRANSPARENTRAG_VERSION=${GITHUB_REF_NAME#v}|" .env.example
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

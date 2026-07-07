@@ -91,7 +91,7 @@ The supported way to run TransparentRAG. You need Docker with the compose plugin
    Pinecone API keys on the settings page.
 
 Documents and the database persist in named Docker volumes across restarts and
-upgrades. To upgrade, set `TRANSPARENTRAG_VERSION` in `.env` to the new tag and
+upgrades. To upgrade, set `TRANSPARENTRAG_VERSION` in `.env` to the new version (no `v` prefix, e.g. `0.2.0`) and
 run `docker compose pull && docker compose up -d`.
 
 ## 🛠️ Development setup
