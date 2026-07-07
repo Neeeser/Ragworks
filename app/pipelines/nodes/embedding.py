@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.core.config import get_settings
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.payloads import (
@@ -32,12 +31,15 @@ from app.pipelines.tracing.summaries import (
     summarize_text,
 )
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
+from app.services.app_config import get_app_config
 
 
 class EmbedderConfig(BaseModel):
     """Configuration for embedding nodes."""
 
-    model_name: str = Field(default_factory=lambda: get_settings().default_embedding_model)
+    model_name: str = Field(
+        default_factory=lambda: get_app_config().models.default_embedding_model
+    )
     dimension: int | None = Field(
         default=None,
         gt=0,

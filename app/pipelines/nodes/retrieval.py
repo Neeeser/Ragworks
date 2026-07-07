@@ -25,6 +25,7 @@ from app.retrieval.indexers.pinecone_indexer import PineconeIndexConfig
 from app.retrieval.models import QueryRequest
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 from app.retrieval.retrievers.pinecone_retriever import PineconeRetriever
+from app.services.app_config import get_app_config
 
 if TYPE_CHECKING:
     # Deferred: registry.py imports this module to build the node catalog,
@@ -294,7 +295,7 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
 class ChatSettingsConfig(BaseModel):
     """Configuration for chat model settings."""
 
-    chat_model: str = Field(default_factory=lambda: get_settings().default_chat_model)
+    chat_model: str = Field(default_factory=lambda: get_app_config().models.default_chat_model)
     context_window: int = Field(default=8192, gt=0)
 
 
