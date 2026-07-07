@@ -413,7 +413,7 @@ export function makeChatCompletion(
 ): ChatCompletionPayload {
   return {
     session: makeChatSession(),
-    messages: [makeChatMessage({ role: USER_ROLE, content: "Hi" }), makeChatMessage()],
+    messages: [makeChatMessage({ role: "user", content: "Hi" }), makeChatMessage()],
     tool_traces: [],
     usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.01 },
     provider: PROVIDER_A,
