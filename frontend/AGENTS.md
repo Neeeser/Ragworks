@@ -251,6 +251,10 @@ chat-stream-reducer.ts`) with focused tests. New features follow this shape: add
 - **This app's data flow is deliberately client-side** (token in localStorage →
   `apiFetch`), so don't introduce one-off server-side data fetching or route handlers
   for a single feature; that's an architecture change, not a feature.
+- **Admin pages live under `(console)/admin/` and are double-gated.**
+  `admin/layout.tsx` redirects non-admins client-side (UX only); the API's
+  `require_admin` is the real enforcement — never treat the client gate as
+  security. The Admin nav link renders only when `user.role === "admin"`.
 
 ## Logging & debug artifacts
 

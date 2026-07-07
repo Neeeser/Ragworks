@@ -230,6 +230,16 @@ invert it:
   orchestration in a route. (Pragmatism over dogma on the line count — a route that
   reads top-to-bottom as those three moves is fine; one that hides a fourth is the
   smell.)
+- **Admin-only surface hangs off one router.** `/api/admin/*` routes live in
+  `app/api/routes/admin.py`, whose router carries
+  `dependencies=[Depends(require_admin)]` — a new admin route added to it is
+  gated by construction. Never add a per-route admin check somewhere else;
+  extend this router. Roles are the `UserRole` enum (`app/schemas/enums.py`)
+  stored as a string column on `User`. The first registered user becomes admin
+  (count check and insert share one transaction in `AccountService.register`);
+  `ensure_admin_exists` promotes the earliest account on startup for upgraded
+  deployments. `AdminUserService` owns the last-admin invariant: demoting or
+  deactivating the only remaining active admin is an `InvalidInputError`.
 - **Destructive, multi-step operations are services with named steps.** A deletion
   cascade that spans stores (Pinecone namespace + file storage + relational rows, like
   `CollectionDeletionService`) is never inlined in a route: it's a service whose steps
@@ -618,6 +628,10 @@ construction site.
 
 ## Known gaps (deliberate, tracked — not license to add more)
 
+- **Admins cannot hard-delete users.** `PATCH /api/admin/users/{id}` supports
+  deactivation only; deleting an account means cascading Pinecone namespaces,
+  file storage, and relational rows (a `CollectionDeletionService`-scale job).
+  Add the cascade service and its tests together when prioritized.
 - **Document upload enforces no content-type or size limit.** `routes/documents.py`'s
   `upload_document` passes `file.content_type` straight through (defaulting to
   `text/plain` only when the header is absent) and streams `file.file` to storage with
