@@ -107,13 +107,13 @@ format-check-frontend: env-frontend
 	$(NPM) --prefix frontend run format:check
 
 bump-patch:
-	$(UV) run python scripts/bump_version.py patch
+	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py patch
 
 bump-minor:
-	$(UV) run python scripts/bump_version.py minor
+	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py minor
 
 bump-major:
-	$(UV) run python scripts/bump_version.py major
+	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py major
 
 bump-rc:
-	$(UV) run python scripts/bump_version.py rc
+	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py rc

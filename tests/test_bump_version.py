@@ -49,3 +49,24 @@ def test_bump_rejects_unknown_version_shape() -> None:
 def test_bump_rejects_unknown_part() -> None:
     with pytest.raises(ValueError, match="Unknown part"):
         bump_version.bump("1.2.3", "banana")
+
+
+def test_lockfile_pins_current_project_version() -> None:
+    """uv.lock records the root project's version; a bump that skips `uv lock`
+    breaks every `uv sync --locked` (this failed the v0.1.1-rc.1 release run)."""
+    import re
+    import tomllib
+
+    root = Path(__file__).resolve().parent.parent
+    pyproject_version = re.search(
+        r'^version = "([^"]+)"$',
+        (root / "pyproject.toml").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert pyproject_version is not None
+    lock = tomllib.loads((root / "uv.lock").read_text(encoding="utf-8"))
+    locked = next(p["version"] for p in lock["package"] if p["name"] == "transparent-rag")
+
+    from packaging.version import Version
+
+    assert Version(locked) == Version(pyproject_version.group(1))

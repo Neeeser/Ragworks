@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,6 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 PACKAGE_JSON = ROOT / "frontend" / "package.json"
+UV_LOCK = ROOT / "uv.lock"
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$")
 PYPROJECT_VERSION_RE = re.compile(r'^version = "(?P<version>[^"]+)"$', re.MULTILINE)
@@ -96,6 +98,17 @@ def _write_versions(new_version: str) -> None:
     PACKAGE_JSON.write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
 
 
+def _refresh_lockfile() -> None:
+    """Re-lock so uv.lock's pinned root-project version matches pyproject.
+
+    Skipping this breaks every `uv sync --locked` (CI's install step) — the
+    v0.1.1-rc.1 release run failed exactly this way. The uv binary comes from
+    $UV_BIN (set by the Makefile) since `uv run` doesn't put uv itself on PATH.
+    """
+    uv_bin = os.environ.get("UV_BIN", "uv")
+    subprocess.run([uv_bin, "lock"], check=True, capture_output=True, cwd=ROOT)
+
+
 def main() -> None:
     """Validate repo state, bump versions, commit, and tag."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -120,7 +133,8 @@ def main() -> None:
         _fail(f"tag {tag} already exists")
 
     _write_versions(new_version)
-    _run("git", "add", str(PYPROJECT), str(PACKAGE_JSON))
+    _refresh_lockfile()
+    _run("git", "add", str(PYPROJECT), str(PACKAGE_JSON), str(UV_LOCK))
     _run("git", "commit", "-m", f"chore: release {tag}")
     _run("git", "tag", "-a", tag, "-m", tag)
 
