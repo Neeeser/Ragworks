@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
-from sqlmodel import select
+from sqlalchemy import func
+from sqlmodel import col, select
 
 from app.db import models
 from app.db.repositories.base import Repository
@@ -35,6 +36,14 @@ class DocumentRepository(Repository):
         if not document or document.user_id != user_id:
             return None
         return document
+
+    def count_by_user(self) -> dict[UUID, int]:
+        """Return a mapping of user id -> number of documents they own."""
+        statement = select(
+            models.Document.user_id,
+            func.count(),  # pylint: disable=not-callable
+        ).group_by(col(models.Document.user_id))
+        return {user_id: count for user_id, count in self.session.exec(statement).all()}
 
 
 class ChunkRepository(Repository):

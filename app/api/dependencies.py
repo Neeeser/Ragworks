@@ -14,6 +14,7 @@ from app.core.security import create_access_token
 from app.db.engine import get_session as get_session  # re-exported for routes
 from app.db.models import User
 from app.db.repositories import UserRepository
+from app.schemas.enums import UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
@@ -91,6 +92,16 @@ def require_user_api_keys(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
+        )
+    return current_user
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Return the authenticated user, rejecting non-admins with a 403."""
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required.",
         )
     return current_user
 

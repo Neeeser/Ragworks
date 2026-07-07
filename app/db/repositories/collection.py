@@ -146,6 +146,14 @@ class CollectionRepository(Repository):
         )
         return self.session.exec(statement).first() is not None
 
+    def count_by_user(self) -> dict[UUID, int]:
+        """Return a mapping of user id -> number of collections they own."""
+        statement = select(
+            models.Collection.user_id,
+            func.count(),  # pylint: disable=not-callable
+        ).group_by(col(models.Collection.user_id))
+        return {user_id: count for user_id, count in self.session.exec(statement).all()}
+
     def stats_for(
         self,
         user_id: UUID,

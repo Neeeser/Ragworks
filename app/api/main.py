@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    admin,
     auth,
     chat,
     collections,
@@ -80,6 +81,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(models.router)
 app.include_router(pipelines.router)
 app.include_router(indexes.router)
