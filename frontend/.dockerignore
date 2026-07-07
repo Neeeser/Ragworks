@@ -9,3 +9,4 @@ Dockerfile
 .dockerignore
 tsconfig.tsbuildinfo
 .env*
+.eslintcache
