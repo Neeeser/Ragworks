@@ -173,6 +173,7 @@ Engineering practices are documented next to the code they govern: [`AGENTS.md`]
 
 ## 🗺️ Roadmap
 
+- [ ] **Central runtime config** — a typed, DB-backed `AppConfig` (defaults, beta/feature flags, limits, UI settings) editable from an admin settings page, with env-pinned values shown read-only
 - [ ] **More ingestion sources & formats** — HTML, Markdown, Office docs, URLs, and connector-based sources beyond file upload
 - [ ] **Pipeline-level correction loops** — edit a node's config and re-run a past ingestion from its trace
 - [ ] **More node types** — alternative embedders, hybrid retrieval, custom chunkers

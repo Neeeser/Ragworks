@@ -64,6 +64,35 @@ the runtime `API_PROXY_TARGET` proxy in `frontend/src/middleware.ts` (a Next.js
 can't see an env var set when the container starts — middleware runs per request
 instead).
 
+# Configuration architecture
+
+The project is heading toward being fully config-driven (runtime-editable settings,
+beta/feature flags, defaults). The layering below is settled — build toward it, don't
+drift from it:
+
+- **Layer 1 — bootstrap/infrastructure: environment variables.** Only what the process
+  needs before it can serve, or what binds it to infrastructure: `DATABASE_URL`,
+  `FILE_STORAGE_PATH`, `CONFIG_PATH`, `DEBUG`, `JWT_SECRET_KEY` (optional override),
+  ports. Not runtime-editable. Never grow this layer with application behavior
+  settings.
+- **Layer 2 — runtime application config: Postgres (future `app_settings` table).**
+  The central, UI-editable config — defaults, feature/beta flags, upload limits,
+  frontend/UI settings — is a typed `AppConfig` schema (code defaults) with the DB
+  storing overrides only, served via `GET /api/config` and edited via an admin-gated
+  `PATCH`. Precedence: env-pinned (locked, read-only in the UI) → DB override → code
+  default. Do **not** introduce file-based runtime config (config.yaml in a volume) —
+  the DB is the config store.
+- **Layer 3 — per-user settings** (provider API keys, session preferences) — already
+  exists; stays per-user, never migrates into global config.
+- **The frontend is an API client, never a config owner.** Frontend-related settings
+  are fields in the central config fetched over the API. The frontend container mounts
+  no volumes and reads no config files; sharing a volume between frontend and backend
+  is an anti-pattern (two writers, no validation, file-level secret exposure).
+- **The `backend-config` volume (`CONFIG_PATH`) is *not* the central config store** and
+  must stay narrow: machine-generated state that must exist before the DB is reachable
+  (today: the auto-generated JWT secret). It is named after its single owning service
+  on purpose — one volume, one writer.
+
 # Cross-cutting constraints
 
 - **External API changes (Pinecone, OpenRouter):** read the locally downloaded docs in
