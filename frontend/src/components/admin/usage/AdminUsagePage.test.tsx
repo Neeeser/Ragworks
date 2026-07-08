@@ -23,6 +23,26 @@ describe("AdminUsagePage", () => {
     expect(screen.getByText("Active users")).toBeInTheDocument();
   });
 
+  it("renders every event type in the activity list, including novel ones", async () => {
+    const { makeAdminUsageSummary } = await import("@/test/fixtures");
+    vi.mocked(api.fetchAdminUsageSummary).mockResolvedValue(
+      makeAdminUsageSummary({
+        event_counts: {
+          "chat.turn_completed": 12,
+          // An event type this frontend has never heard of — it must render
+          // anyway: the activity list is generic, not a per-event registry.
+          "webhook.delivered": 3,
+        },
+      }),
+    );
+
+    render(<AdminUsagePage />);
+
+    expect(await screen.findByText("Chat · turn completed")).toBeInTheDocument();
+    expect(screen.getByText("Webhook · delivered")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+  });
+
   it("refetches both endpoints when the window changes", async () => {
     const user = userEvent.setup();
     render(<AdminUsagePage />);

@@ -16,10 +16,20 @@ function formatDay(iso: string): string {
   return iso.slice(0, 10);
 }
 
+/** "chat.turn_completed" -> "Chat · turn completed" — readable without a
+per-event label registry, so unknown/new event types render fine. */
+function prettyEventType(eventType: string): string {
+  const [domain, ...rest] = eventType.split(".");
+  const action = rest.join(".").replaceAll("_", " ");
+  const domainLabel = domain.charAt(0).toUpperCase() + domain.slice(1);
+  return action ? `${domainLabel} · ${action}` : domainLabel;
+}
+
 export function AdminUsagePage() {
   const { windowDays, setWindowDays, summary, points, loading, error } = useAdminUsage();
 
   const maxTokens = Math.max(1, ...points.map((point) => point.total_tokens));
+  const eventCounts = Object.entries(summary?.event_counts ?? {}).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-6">
@@ -91,6 +101,28 @@ export function AdminUsagePage() {
               />
             ))}
           </div>
+        )}
+      </GlassCard>
+
+      <GlassCard className="px-5 py-4">
+        <h2 className="text-sm font-medium text-white">Activity</h2>
+        <p className="text-xs text-slate-400">
+          Every recorded event type in this window — new telemetry events appear here automatically.
+        </p>
+        {eventCounts.length === 0 ? (
+          <p className="py-4 text-sm text-slate-400">No activity in this window yet.</p>
+        ) : (
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {eventCounts.map(([eventType, count]) => (
+              <li
+                key={eventType}
+                className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm"
+              >
+                <span className="text-slate-300">{prettyEventType(eventType)}</span>
+                <span className="font-semibold text-white">{tokenFormat.format(count)}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </GlassCard>
 
