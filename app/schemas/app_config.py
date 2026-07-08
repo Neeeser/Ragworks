@@ -12,7 +12,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.enums import IndexBackend
 
 # Code defaults for the model fields mirror app/core/config.py's Settings
 # defaults so an un-overridden install behaves identically either way.
@@ -103,6 +105,31 @@ class ModelDefaults(BaseModel):
     )
 
 
+class IndexingSettings(BaseModel):
+    """Vector-index backend policy for newly scaffolded pipelines."""
+
+    default_backend: str = Field(
+        default=IndexBackend.PGVECTOR.value,
+        json_schema_extra=_meta(
+            "Default index backend",
+            "Vector store new default pipelines index into: 'pgvector' "
+            "(built into the shipped Postgres, no account needed) or "
+            "'pinecone' (requires a per-user API key). Existing pipelines "
+            "are unaffected.",
+            public=True,
+        ),
+    )
+
+    @field_validator("default_backend")
+    @classmethod
+    def _known_backend(cls, value: str) -> str:
+        """Restrict the field to registered `IndexBackend` values."""
+        allowed = {backend.value for backend in IndexBackend}
+        if value not in allowed:
+            raise ValueError(f"must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+
 class FeatureFlags(BaseModel):
     """Feature toggles served to the frontend and enforced at their routes."""
 
@@ -152,6 +179,7 @@ class AppConfig(BaseModel):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     uploads: UploadSettings = Field(default_factory=UploadSettings)
     models: ModelDefaults = Field(default_factory=ModelDefaults)
+    indexing: IndexingSettings = Field(default_factory=IndexingSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
 
@@ -242,6 +270,12 @@ class PublicUploadConfig(BaseModel):
     allowed_content_types: list[str]
 
 
+class PublicIndexingConfig(BaseModel):
+    """Public indexing section: the wizard preselects the default backend."""
+
+    default_backend: str
+
+
 class PublicFeatureFlags(BaseModel):
     """Public feature flags the frontend gates UI on."""
 
@@ -260,6 +294,7 @@ class PublicConfig(BaseModel):
 
     auth: PublicAuthConfig
     uploads: PublicUploadConfig
+    indexing: PublicIndexingConfig
     features: PublicFeatureFlags
 
     @classmethod
@@ -270,6 +305,9 @@ class PublicConfig(BaseModel):
             uploads=PublicUploadConfig(
                 max_upload_size_mb=config.uploads.max_upload_size_mb,
                 allowed_content_types=config.uploads.allowed_content_types,
+            ),
+            indexing=PublicIndexingConfig(
+                default_backend=config.indexing.default_backend,
             ),
             features=PublicFeatureFlags(
                 umap_visualizations=config.features.umap_visualizations,

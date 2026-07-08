@@ -13,6 +13,12 @@ export interface PublicUploadConfig {
   allowed_content_types: string[];
 }
 
+export interface PublicIndexingConfig {
+  default_backend: IndexBackendId;
+}
+
+export type IndexBackendId = "pinecone" | "pgvector";
+
 export interface PublicFeatureFlags {
   umap_visualizations: boolean;
   chat_branching: boolean;
@@ -21,6 +27,7 @@ export interface PublicFeatureFlags {
 export interface PublicConfig {
   auth: PublicAuthConfig;
   uploads: PublicUploadConfig;
+  indexing: PublicIndexingConfig;
   features: PublicFeatureFlags;
 }
 

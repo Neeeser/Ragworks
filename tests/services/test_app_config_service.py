@@ -107,6 +107,21 @@ def test_patch_writes_overrides_and_null_resets(session: Session) -> None:
     assert service.effective_config().auth.allow_registration is True
 
 
+def test_default_backend_flips_via_override_and_rejects_invalid(session: Session) -> None:
+    admin = _make_admin(session)
+    service = AppConfigService(session)
+    assert service.effective_config().indexing.default_backend == "pgvector"
+
+    updated = service.apply_update({"indexing": {"default_backend": "pinecone"}}, admin.id)
+    assert updated.indexing.default_backend == "pinecone"
+    invalidate_app_config_cache()
+    assert get_app_config().indexing.default_backend == "pinecone"
+
+    with pytest.raises(InvalidInputError) as exc_info:
+        service.apply_update({"indexing": {"default_backend": "chroma"}}, admin.id)
+    assert "indexing.default_backend" in exc_info.value.detail
+
+
 def test_invalid_db_override_is_dropped_with_warning(
     session: Session, caplog: pytest.LogCaptureFixture
 ) -> None:
