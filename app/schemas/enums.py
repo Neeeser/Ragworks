@@ -67,6 +67,13 @@ class PipelineIOType(str, Enum):
     OUTPUT = "output"
 
 
+class IndexBackend(str, Enum):
+    """Vector-store backends a pipeline can index into and query from."""
+
+    PINECONE = "pinecone"
+    PGVECTOR = "pgvector"
+
+
 class UserRole(str, Enum):
     """Privilege tiers for user accounts."""
 
