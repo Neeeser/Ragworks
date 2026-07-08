@@ -1,6 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
 
-import type { AdminUser, AdminUserUpdate } from "@/lib/types";
+import type {
+  AdminUsageSummary,
+  AdminUsageTimeseries,
+  AdminUser,
+  AdminUserUpdate,
+} from "@/lib/types";
 
 export function fetchAdminUsers(token: string): Promise<AdminUser[]> {
   return apiFetch<AdminUser[]>("/api/admin/users", { token });
@@ -16,4 +21,15 @@ export function updateAdminUser(
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+export function fetchAdminUsageSummary(token: string, days: number): Promise<AdminUsageSummary> {
+  return apiFetch<AdminUsageSummary>(`/api/admin/usage/summary?days=${days}`, { token });
+}
+
+export function fetchAdminUsageTimeseries(
+  token: string,
+  days: number,
+): Promise<AdminUsageTimeseries> {
+  return apiFetch<AdminUsageTimeseries>(`/api/admin/usage/timeseries?days=${days}`, { token });
 }

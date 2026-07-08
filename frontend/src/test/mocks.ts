@@ -30,6 +30,8 @@
 import { vi } from "vitest";
 
 import {
+  makeAdminUsageSummary,
+  makeAdminUsageTimeseries,
   makeAdminUser,
   makeChatCompletion,
   makeChatSession,
@@ -71,6 +73,8 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     API_BASE_URL: "http://api.test",
     // admin
     fetchAdminUsers: vi.fn(async () => []),
+    fetchAdminUsageSummary: vi.fn(async () => makeAdminUsageSummary()),
+    fetchAdminUsageTimeseries: vi.fn(async () => makeAdminUsageTimeseries()),
     updateAdminUser: vi.fn(async () => makeAdminUser()),
     // auth
     loginRequest: vi.fn(async () => ({ access_token: "test-token", token_type: "bearer" })),
