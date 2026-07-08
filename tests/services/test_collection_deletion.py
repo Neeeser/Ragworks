@@ -192,6 +192,7 @@ def test_delete_ignores_missing_namespace(monkeypatch, session: Session) -> None
     user = _create_user(session)
     _use_pinecone_default(session)
     collection = _create_collection(session, user)
+    _add_document(session, user, collection, models.DocumentStatus.READY)
 
     monkeypatch.setattr(
         registry_module, "get_pinecone_client", lambda *_a, **_k: _StubPineconeMissingNamespace("key")
@@ -207,6 +208,7 @@ def test_delete_surfaces_pinecone_error(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     _use_pinecone_default(session)
     collection = _create_collection(session, user)
+    _add_document(session, user, collection, models.DocumentStatus.READY)
 
     monkeypatch.setattr(
         registry_module, "get_pinecone_client", lambda *_a, **_k: _StubPineconeError("key")
@@ -291,6 +293,7 @@ def test_delete_purges_pgvector_namespace_without_pinecone(
             )
         ],
     )
+    _add_document(session, user, collection, models.DocumentStatus.READY)
     session.commit()
 
     def _no_pinecone(*_a, **_k):
@@ -303,3 +306,75 @@ def test_delete_purges_pgvector_namespace_without_pinecone(
 
     assert session.get(models.Collection, collection.id) is None
     assert store.query("ragworks", namespace, embedding=[0.1, 0.2], top_k=5).matches == []
+
+
+def _add_document(session: Session, user, collection, status) -> models.Document:
+    document = models.Document(
+        collection_id=collection.id,
+        user_id=user.id,
+        name="doc.txt",
+        content_type="text/plain",
+        status=status,
+        num_chunks=0,
+        num_tokens=0,
+        chunk_size=128,
+        chunk_overlap=8,
+        chunk_strategy=models.ChunkStrategy.TOKEN,
+        embedding_model="embed-model",
+        source_path="/tmp/doc.txt",
+    )
+    session.add(document)
+    session.commit()
+    session.refresh(document)
+    return document
+
+
+def _keyless_user(session: Session) -> models.User:
+    user = models.User(
+        email="keyless@example.com",
+        full_name="Keyless",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key=None,
+    )
+    UserRepository(session).add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def test_delete_skips_vector_purge_when_nothing_was_indexed(monkeypatch, session: Session) -> None:
+    """A Pinecone-backed collection whose ingests all FAILED holds no vectors,
+    so deleting it must not demand a Pinecone key (regression: users without a
+    key were unable to delete collections stuck on a Pinecone default)."""
+    user = _keyless_user(session)
+    _use_pinecone_default(session)
+    collection = _create_collection(session, user)
+    _add_document(session, user, collection, models.DocumentStatus.FAILED)
+
+    def _no_client(*_a, **_k):
+        raise AssertionError("No vector store should be constructed for an unindexed collection")
+
+    monkeypatch.setattr(deletion_module, "get_vector_store", _no_client)
+    monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
+
+    CollectionDeletionService(session).delete(user, collection)
+
+    assert session.get(models.Collection, collection.id) is None
+
+
+def test_delete_with_indexed_documents_still_requires_the_backend(
+    monkeypatch, session: Session
+) -> None:
+    """READY documents mean vectors exist upstream — the purge (and its key
+    requirement) must not be skipped, or Pinecone data would be stranded."""
+    user = _keyless_user(session)
+    _use_pinecone_default(session)
+    collection = _create_collection(session, user)
+    _add_document(session, user, collection, models.DocumentStatus.READY)
+    monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
+
+    with pytest.raises(InvalidInputError, match="Pinecone API key"):
+        CollectionDeletionService(session).delete(user, collection)
+
+    assert session.get(models.Collection, collection.id) is not None

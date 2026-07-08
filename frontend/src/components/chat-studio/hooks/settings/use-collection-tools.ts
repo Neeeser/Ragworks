@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { PINECONE_KEY_REQUIRED_MESSAGE } from "@/components/chat-studio/lib/chat-constants";
 import { areArraysEqual, parseCollectionIdsParam } from "@/components/chat-studio/lib/chat-helpers";
 import { fetchCollections, fetchDocuments, fetchPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -23,7 +22,6 @@ const resolveChatSettings = (pipeline: Pipeline | null) => {
 interface UseCollectionToolsParams {
   authToken: string;
   authLoading: boolean;
-  pineconeConfigured: boolean;
   selectedSessionId: string | null;
   urlCollectionsValue: string | null;
   setSessions: React.Dispatch<React.SetStateAction<ChatSession[]>>;
@@ -62,7 +60,6 @@ interface UseCollectionToolsResult {
 export function useCollectionTools({
   authToken,
   authLoading,
-  pineconeConfigured,
   selectedSessionId,
   urlCollectionsValue,
   setSessions,
@@ -148,10 +145,10 @@ export function useCollectionTools({
     if (authLoading) {
       return;
     }
-    if (!authToken || !pineconeConfigured) {
+    if (!authToken) {
       setCollections([]);
       setCollectionsLoading(false);
-      setCollectionsError(pineconeConfigured ? null : PINECONE_KEY_REQUIRED_MESSAGE);
+      setCollectionsError(null);
       return;
     }
     let cancelled = false;
@@ -177,7 +174,7 @@ export function useCollectionTools({
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, pineconeConfigured]);
+  }, [authLoading, authToken]);
 
   useEffect(() => {
     if (collections.length === 0) {

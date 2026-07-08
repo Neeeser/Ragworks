@@ -11,7 +11,7 @@ const pipeline = [
   { label: "Embed", description: "OpenRouter embeddings with audit-friendly storage", icon: Bot },
   {
     label: "Index",
-    description: "Deterministic Pinecone orchestration per namespace",
+    description: "Deterministic vector-index orchestration per namespace",
     icon: Radar,
   },
   { label: "Chat", description: "Tool-aware conversations with telemetry & usage", icon: Sparkles },
@@ -21,7 +21,7 @@ const highlights = [
   "Observe every chunk, embedding, and tool call.",
   "Per-user workspaces with JWT + row-level isolation.",
   "Collections tuned with chunk size, overlap, and metadata.",
-  "Realtime retriever & chat visibility powered by Pinecone + OpenRouter.",
+  "Realtime retriever & chat visibility powered by pgvector/Pinecone + OpenRouter.",
 ];
 
 export default function LandingPage() {

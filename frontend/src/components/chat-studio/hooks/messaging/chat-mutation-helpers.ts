@@ -38,7 +38,6 @@ export interface UseChatMutationParams {
   authToken: string;
   user: { id: string } | null | undefined;
   toolsEnabled: boolean;
-  pineconeConfigured: boolean;
   // Run settings
   activeModelId: string | null;
   buildParameterPayload: (overrides?: ParameterOverrides, modelId?: string) => ParameterOverrides;

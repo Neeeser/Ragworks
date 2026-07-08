@@ -71,7 +71,6 @@ export function ChatStudio() {
 
   const authToken = token ?? "";
   const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
-  const pineconeConfigured = Boolean(!authLoading && user?.pinecone_configured);
 
   const {
     chatEntryMap,
@@ -136,7 +135,6 @@ export function ChatStudio() {
   const collectionTools = useCollectionTools({
     authToken,
     authLoading,
-    pineconeConfigured,
     selectedSessionId,
     urlCollectionsValue,
     setSessions,
@@ -241,7 +239,6 @@ export function ChatStudio() {
     authToken,
     user,
     toolsEnabled,
-    pineconeConfigured,
     activeModelId,
     buildParameterPayload: modelParameters.buildParameterPayload,
     providerRuleCount: providerPreferences.providerRuleCount,
@@ -280,7 +277,6 @@ export function ChatStudio() {
     promptEditor,
     collectionTools,
     panel,
-    pineconeConfigured,
     streamingEnabled,
     setStreamingEnabled,
     usage,

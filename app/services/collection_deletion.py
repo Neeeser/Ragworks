@@ -44,12 +44,20 @@ class CollectionDeletionService:
             raise InvalidInputError("Ingestion pipeline namespace is not configured.")
 
         collection_id = collection.id
-        self._purge_vectors(
-            user,
-            backend=resolved.settings.backend,
-            index_name=resolved.settings.index_name,
-            namespace=namespace,
+        # Only ingests that reached READY ever wrote vectors; a collection with
+        # none holds nothing to purge, so don't demand backend prerequisites
+        # (e.g. a Pinecone key) just to delete a collection whose ingests failed.
+        has_indexed_documents = any(
+            document.status == models.DocumentStatus.READY
+            for document in self.documents.list_for_collection(collection.id)
         )
+        if has_indexed_documents:
+            self._purge_vectors(
+                user,
+                backend=resolved.settings.backend,
+                index_name=resolved.settings.index_name,
+                namespace=namespace,
+            )
         self._purge_files(collection)
         self._purge_rows(collection)
         self.session.commit()

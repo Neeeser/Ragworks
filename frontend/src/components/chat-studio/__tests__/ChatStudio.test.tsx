@@ -268,17 +268,21 @@ describe("ChatStudio", () => {
       expect(api.listModels).not.toHaveBeenCalled();
     });
 
-    it("warns when sending without a Pinecone key but tools are selected", async () => {
+    it("loads collections and sends with tools even without a Pinecone key", async () => {
+      // Pinecone is optional: collections may be pgvector-backed, so the
+      // client never gates tools on the Pinecone key — the backend enforces
+      // it only when a selected collection actually retrieves from Pinecone.
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
       setAuthState({ user: { ...baseUser, pinecone_configured: false } });
 
       render(<ChatStudio />);
-      typeAndSend("Test");
+      await flushPromises();
 
+      expect(api.fetchCollections).toHaveBeenCalled();
+
+      typeAndSend("Test");
       await waitFor(() => {
-        expect(screen.getByTestId("notification")).toHaveTextContent(
-          "Add your Pinecone API key in Settings to enable collection tools.",
-        );
+        expect(api.streamChat).toHaveBeenCalled();
       });
     });
 

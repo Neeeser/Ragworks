@@ -148,6 +148,23 @@ def _resolve_backend_node_config(
     raise ValueError(f"No registered node found for backend '{default_backend.value}'.")
 
 
+def resolve_definition_backend(
+    definition: PipelineDefinition,
+    registry: NodeRegistry,
+    kind: models.PipelineKind,
+) -> IndexBackend:
+    """Return the vector-store backend a pipeline definition indexes/queries.
+
+    Falls back to the configured default backend when the definition has no
+    indexer/retriever node (same fallback the settings resolvers use).
+    """
+    base_class: type[BaseIndexerNode] | type[BaseRetrieverNode] = (
+        BaseIndexerNode if kind is models.PipelineKind.INGESTION else BaseRetrieverNode
+    )
+    backend, _ = _resolve_backend_node_config(definition, registry, base_class)
+    return backend
+
+
 def resolve_ingestion_settings(
     definition: PipelineDefinition,
     collection: models.Collection,
@@ -203,6 +220,7 @@ def resolve_retrieval_settings(
 __all__ = [
     "IngestionPipelineSettings",
     "RetrievalPipelineSettings",
+    "resolve_definition_backend",
     "resolve_ingestion_settings",
     "resolve_retrieval_settings",
 ]

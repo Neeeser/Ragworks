@@ -21,6 +21,10 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.registry import default_registry
+from app.pipelines.settings import resolve_definition_backend
+from app.schemas.enums import IndexBackend
+from app.services.app_config import get_app_config
 from app.services.errors import NotFoundError
 
 
@@ -151,9 +155,25 @@ class PipelineService:
         return pipeline
 
     def ensure_default_pipelines(self, user: models.User) -> DefaultPipelines:
-        """Ensure the default ingestion/retrieval pipelines exist for a user."""
-        ingestion = self._pipelines.get_default(user.id, models.PipelineKind.INGESTION)
-        retrieval = self._pipelines.get_default(user.id, models.PipelineKind.RETRIEVAL)
+        """Ensure default ingestion/retrieval pipelines on the configured backend.
+
+        A stored default whose vector-store backend no longer matches the
+        deployment's `indexing.default_backend` is demoted (kept, renamed with
+        its backend, still referenced by existing collections) and a fresh
+        default is scaffolded — so new collections always index into the
+        configured backend while old collections keep their data.
+        """
+        configured = IndexBackend(get_app_config().indexing.default_backend)
+        ingestion = self._demote_if_backend_stale(
+            self._pipelines.get_default(user.id, models.PipelineKind.INGESTION),
+            models.PipelineKind.INGESTION,
+            configured,
+        )
+        retrieval = self._demote_if_backend_stale(
+            self._pipelines.get_default(user.id, models.PipelineKind.RETRIEVAL),
+            models.PipelineKind.RETRIEVAL,
+            configured,
+        )
 
         if ingestion is None:
             ingestion = self.create_pipeline(
@@ -176,6 +196,25 @@ class PipelineService:
                 is_default=True,
             )
         return DefaultPipelines(ingestion=ingestion, retrieval=retrieval)
+
+    def _demote_if_backend_stale(
+        self,
+        pipeline: models.Pipeline | None,
+        kind: models.PipelineKind,
+        configured: IndexBackend,
+    ) -> models.Pipeline | None:
+        """Demote a default pipeline whose backend no longer matches config."""
+        if pipeline is None:
+            return None
+        version = self.get_current_version(pipeline)
+        definition = PipelineDefinition.model_validate(version.definition)
+        backend = resolve_definition_backend(definition, default_registry(), kind)
+        if backend is configured:
+            return pipeline
+        pipeline.is_default = False
+        pipeline.name = f"{pipeline.name} ({backend.value})"
+        self.session.add(pipeline)
+        return None
 
     def ensure_collection_pipelines(
         self,

@@ -81,7 +81,6 @@ const TelemetryPanelComponent = ({
     onClearToolCollections,
     collectionsLoading,
     collectionsError,
-    pineconeConfigured,
     collectionToolsOpen,
     onCollectionToolsToggle,
     vitalsOpen,
@@ -191,7 +190,6 @@ const TelemetryPanelComponent = ({
           selectedCollectionIds={selectedToolCollectionIds}
           onToggle={onToggleToolCollection}
           onClear={onClearToolCollections}
-          pineconeConfigured={pineconeConfigured}
           collectionsLoading={collectionsLoading}
           collectionsError={collectionsError}
         />

@@ -224,3 +224,79 @@ def test_backfill_default_pipelines_assigns_for_existing_collection(session: Ses
     assert refreshed is not None
     assert refreshed.ingestion_pipeline_id is not None
     assert refreshed.retrieval_pipeline_id is not None
+
+
+class TestDefaultBackendRotation:
+    """Stale per-user defaults follow the deployment's configured backend.
+
+    Regression: users whose defaults were scaffolded while Pinecone was the
+    default kept attaching Pinecone pipelines to every NEW collection after
+    the deployment default moved to pgvector — uploads/search then failed
+    with 'Pinecone API key is not configured' despite pgvector being the
+    default. Existing collections keep their (demoted) old pipeline.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _invalidate_cache(self):
+        from app.services.app_config import invalidate_app_config_cache
+
+        invalidate_app_config_cache()
+        yield
+        invalidate_app_config_cache()
+
+    @staticmethod
+    def _set_backend(session: Session, backend: str) -> None:
+        from app.db.repositories import AppSettingRepository
+        from app.services.app_config import invalidate_app_config_cache
+
+        AppSettingRepository(session).upsert("indexing.default_backend", backend, updated_by=None)
+        session.commit()
+        invalidate_app_config_cache()
+
+    def _node_types(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
+        version = service.get_current_version(pipeline)
+        return {node["type"] for node in version.definition["nodes"]}
+
+    def test_stale_defaults_rotate_to_configured_backend(self, session: Session) -> None:
+        user = _create_user(session)
+        service = PipelineService(session)
+
+        self._set_backend(session, "pinecone")
+        old = service.ensure_default_pipelines(user)
+        session.commit()
+        collection = _create_collection(
+            session,
+            user,
+            ingestion_pipeline_id=old.ingestion.id,
+            retrieval_pipeline_id=old.retrieval.id,
+        )
+        assert "indexer.pinecone" in self._node_types(service, old.ingestion)
+
+        self._set_backend(session, "pgvector")
+        new = service.ensure_default_pipelines(user)
+        session.commit()
+
+        assert new.ingestion.id != old.ingestion.id
+        assert new.retrieval.id != old.retrieval.id
+        assert "indexer.pgvector" in self._node_types(service, new.ingestion)
+        assert "retriever.pgvector" in self._node_types(service, new.retrieval)
+
+        # The old defaults survive, demoted, and existing collections keep them.
+        session.refresh(old.ingestion)
+        session.refresh(old.retrieval)
+        assert old.ingestion.is_default is False
+        assert old.retrieval.is_default is False
+        session.refresh(collection)
+        assert collection.ingestion_pipeline_id == old.ingestion.id
+        assert collection.retrieval_pipeline_id == old.retrieval.id
+
+    def test_matching_defaults_are_left_alone(self, session: Session) -> None:
+        user = _create_user(session)
+        service = PipelineService(session)
+
+        first = service.ensure_default_pipelines(user)
+        session.commit()
+        second = service.ensure_default_pipelines(user)
+
+        assert second.ingestion.id == first.ingestion.id
+        assert second.retrieval.id == first.retrieval.id

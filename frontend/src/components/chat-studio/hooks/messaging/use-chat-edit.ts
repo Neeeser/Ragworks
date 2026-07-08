@@ -6,10 +6,7 @@ import {
   type PerformChatMutation,
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/messaging/chat-mutation-helpers";
-import {
-  DEFAULT_STREAMING_ENABLED,
-  PINECONE_KEY_REQUIRED_MESSAGE,
-} from "@/components/chat-studio/lib/chat-constants";
+import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/lib/chat-constants";
 import {
   calculateSessionUsage,
   pruneHistoryForEdit,
@@ -35,8 +32,6 @@ export interface UseChatEditResult {
 export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
   const {
     authToken,
-    toolsEnabled,
-    pineconeConfigured,
     activeModelId,
     buildParameterPayload,
     providerRuleCount,
@@ -87,10 +82,6 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
     ) => {
       const sessionId = overrides.sessionId ?? selectedSessionId;
       if (!authToken || !sessionId) return;
-      if (toolsEnabled && !pineconeConfigured) {
-        setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
-        return;
-      }
       const targetModelId = overrides.modelId ?? activeModelId;
       if (!targetModelId) {
         setStatus("Select a chat model before sending a message.");
@@ -140,7 +131,6 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
       deriveToolTraces,
       messages,
       performChatMutation,
-      pineconeConfigured,
       providerPayload,
       providerRuleCount,
       selectedSessionId,
@@ -152,7 +142,6 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
       skipHistoryFetchSessionRef,
       streamingEnabled,
       syncMessages,
-      toolsEnabled,
     ],
   );
 
