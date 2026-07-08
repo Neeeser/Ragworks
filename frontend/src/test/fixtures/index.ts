@@ -35,8 +35,8 @@ export const USER_ID = "user-1";
 export const USER_EMAIL = "user@example.com";
 const USER_ROLE = "user";
 const PROVIDER_A = "provider-a";
-const CHAT_SETTINGS_TYPE = "chat.settings";
-const CHAT_SETTINGS_LABEL = "Chat settings";
+const RETRIEVER_TYPE = "retriever.vector";
+const RETRIEVER_LABEL = "Retriever";
 
 export function makeUser(overrides: Partial<User> = {}): User {
   return {
@@ -168,9 +168,9 @@ export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
       nodes: [
         {
           id: "node-1",
-          type: CHAT_SETTINGS_TYPE,
-          name: CHAT_SETTINGS_LABEL,
-          config: { chat_model: "model-1", context_window: 4096 },
+          type: RETRIEVER_TYPE,
+          name: RETRIEVER_LABEL,
+          config: { backend: "pgvector", index_name: "ragworks" },
         },
       ],
       edges: [],
@@ -188,21 +188,23 @@ export function makePipelineVersion(overrides: Partial<PipelineVersion> = {}): P
     updated_at: TIMESTAMP,
     change_summary: null,
     created_by: USER_ID,
+    changes: [],
     ...overrides,
   };
 }
 
 export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
   return {
-    type: CHAT_SETTINGS_TYPE,
-    label: CHAT_SETTINGS_LABEL,
-    category: "chat",
-    description: "Configure chat model",
+    type: RETRIEVER_TYPE,
+    label: RETRIEVER_LABEL,
+    category: "retrieval",
+    description: "Query a vector index",
     example: "",
     input_ports: [{ key: "in", label: "In", data_type: "any", required: false }],
     output_ports: [{ key: "out", label: "Out", data_type: "any", required: false }],
     config_schema: {},
     default_config: {},
+    hidden: false,
     ...overrides,
   };
 }
@@ -356,8 +358,8 @@ export function makeNodeRunTrace(
     id: "node-run-1",
     run_id: "run-1",
     node_id: "node-1",
-    node_type: CHAT_SETTINGS_TYPE,
-    node_name: CHAT_SETTINGS_LABEL,
+    node_type: RETRIEVER_TYPE,
+    node_name: RETRIEVER_LABEL,
     sequence_index: 0,
     status: "completed",
     started_at: TIMESTAMP,

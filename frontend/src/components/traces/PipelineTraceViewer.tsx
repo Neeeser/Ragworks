@@ -1,22 +1,21 @@
 "use client";
 
-import { Background, Controls, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
-import { FileText, Pause, Play, StepForward, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
-import { toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
-import { pipelineNodeTypes } from "@/components/pipelines/PipelineNode";
-import { buildFallbackPosition } from "@/components/traces/trace-payload-utils";
+import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { layoutPipelineNodes, needsAutoLayout } from "@/components/pipelines/lib/pipeline-layout";
+import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
 import { TraceIOColumn } from "@/components/traces/TraceIOColumn";
-import { useTraceFlowGraph } from "@/components/traces/use-trace-flow-graph";
-import { useTracePlayback } from "@/components/traces/use-trace-playback";
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchPipelineNodes } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { NodeSpec, PipelineTraceResponse } from "@/lib/types";
+import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
+import type { NodeSpec, PipelineNodeIOTrace, PipelineTraceResponse } from "@/lib/types";
+import type { Node } from "@xyflow/react";
 
 type PipelineTraceViewerProps = {
   trace: PipelineTraceResponse | null;
@@ -29,15 +28,9 @@ type PipelineTraceViewerProps = {
   highlightChunkId?: string | null;
 };
 
-const TraceCursorNode = () => (
-  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-200/70 bg-cyan-500/20 text-cyan-100 shadow-lg">
-    <FileText className="h-4 w-4" />
-  </div>
-);
-
-const traceNodeTypes = {
-  pipelineNode: pipelineNodeTypes.pipelineNode,
-  traceCursor: TraceCursorNode,
+type IOGroup = {
+  inputs: PipelineNodeIOTrace[];
+  outputs: PipelineNodeIOTrace[];
 };
 
 export function PipelineTraceViewer({
@@ -53,13 +46,9 @@ export function PipelineTraceViewer({
   const [fetchedNodeSpecs, setFetchedNodeSpecs] = useState<NodeSpec[]>([]);
   const [specsLoaded, setSpecsLoaded] = useState(false);
   const [nodeSpecsError, setNodeSpecsError] = useState<string | null>(null);
-  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [showInputPayloads, setShowInputPayloads] = useState(false);
   const [showOutputPayloads, setShowOutputPayloads] = useState(false);
-  const resetPayloadToggles = useCallback(() => {
-    setShowInputPayloads(false);
-    setShowOutputPayloads(false);
-  }, []);
 
   const nodeSpecs = providedNodeSpecs ?? fetchedNodeSpecs;
 
@@ -93,47 +82,48 @@ export function PipelineTraceViewer({
     [trace],
   );
 
-  // Node positions/status only - deliberately excludes the "active" highlight flag so
-  // it can be computed before we know the active node (see useTracePlayback below).
-  const positionedNodes = useMemo(() => {
-    if (!trace) return [];
-    const nodes = trace.definition.nodes.map((node, index) => ({
-      ...node,
-      position: node.position ?? buildFallbackPosition(index),
-    }));
-    const definition = { ...trace.definition, nodes };
-    const flowNodes = toFlowNodes(definition, nodeSpecs);
+  const { nodes, edges } = useMemo(() => {
+    if (!trace) return { nodes: [], edges: [] };
     const runMap = new Map(orderedRuns.map((run) => [run.node_id, run]));
-    return flowNodes.map((node) => ({
-      ...node,
-      data: { ...node.data, status: runMap.get(node.id)?.status },
-    }));
+    let flowNodes: Node<PipelineNodeData>[] = toFlowNodes(trace.definition, nodeSpecs).map(
+      (node) => ({
+        ...node,
+        data: { ...node.data, status: runMap.get(node.id)?.status },
+      }),
+    );
+    const flowEdges = toFlowEdges(trace.definition, nodeSpecs);
+    if (needsAutoLayout(flowNodes)) {
+      flowNodes = layoutPipelineNodes(flowNodes, flowEdges);
+    }
+    return { nodes: flowNodes, edges: flowEdges };
   }, [trace, nodeSpecs, orderedRuns]);
 
-  const {
-    activeIndex,
-    activeNodeId,
-    isPlaying,
-    togglePlaying,
-    handleNodeClick,
-    handleStepForward,
-  } = useTracePlayback({
-    orderedRuns,
-    flowInstance,
-    baseNodes: positionedNodes,
-    resetPayloadToggles,
-  });
+  const steps = useMemo(() => orderedRuns.map((run) => ({ nodeId: run.node_id })), [orderedRuns]);
 
-  const { nodes, edges, ioByNode } = useTraceFlowGraph({
-    trace,
-    positionedNodes,
-    orderedRuns,
-    activeIndex,
-    activeNodeId,
-  });
+  const ioByNode = useMemo(() => {
+    const grouped = new Map<string, IOGroup>();
+    if (!trace) return grouped;
+    trace.node_io.forEach((record) => {
+      const entry = grouped.get(record.node_id) ?? { inputs: [], outputs: [] };
+      if (record.io_type === "input") {
+        entry.inputs.push(record);
+      } else {
+        entry.outputs.push(record);
+      }
+      grouped.set(record.node_id, entry);
+    });
+    return grouped;
+  }, [trace]);
 
-  const selectedIO = activeNodeId ? ioByNode.get(activeNodeId) : undefined;
-  const activeSummary = orderedRuns[activeIndex]?.summary ?? { inputs: [], outputs: [] };
+  const handleActiveStepChange = useCallback((index: number) => {
+    setActiveIndex(index);
+    setShowInputPayloads(false);
+    setShowOutputPayloads(false);
+  }, []);
+
+  const activeRun = orderedRuns[activeIndex];
+  const selectedIO = activeRun ? ioByNode.get(activeRun.node_id) : undefined;
+  const activeSummary = activeRun?.summary ?? { inputs: [], outputs: [] };
 
   if (!isOpen || !trace) {
     return null;
@@ -154,10 +144,17 @@ export function PipelineTraceViewer({
               {trace.run.status.toUpperCase()} trace
             </h2>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2">
-            <X className="h-4 w-4" />
-            Close
-          </Button>
+          <div className="flex items-center gap-3">
+            {highlightChunkId && (
+              <span className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-cyan-200">
+                chunk {highlightChunkId}
+              </span>
+            )}
+            <Button variant="ghost" size="sm" onClick={onClose} className="gap-2">
+              <X className="h-4 w-4" />
+              Close
+            </Button>
+          </div>
         </div>
 
         <div className="flex h-[calc(100%-64px)] flex-col gap-4 overflow-y-auto p-6">
@@ -167,44 +164,13 @@ export function PipelineTraceViewer({
             </div>
           )}
           <GlassCard className="relative min-h-[420px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80">
-            <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={togglePlaying}
-                className="flex items-center gap-2"
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {isPlaying ? "Pause trace" : "Play trace"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleStepForward}
-                className="flex items-center gap-2"
-              >
-                <StepForward className="h-4 w-4" />
-                Step
-              </Button>
-            </div>
-            {highlightChunkId && (
-              <div className="absolute right-4 top-4 z-10 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-cyan-200">
-                chunk {highlightChunkId}
-              </div>
-            )}
             <div className="h-full min-h-[420px]">
-              <ReactFlow
+              <FlowPlayer
                 nodes={nodes}
                 edges={edges}
-                nodeTypes={traceNodeTypes}
-                onNodeClick={handleNodeClick}
-                onInit={setFlowInstance}
-                fitView
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background gap={18} size={1} color="#1f2937" />
-                <Controls className="pipeline-controls" />
-              </ReactFlow>
+                steps={steps}
+                onActiveStepChange={handleActiveStepChange}
+              />
             </div>
           </GlassCard>
 
@@ -213,12 +179,12 @@ export function PipelineTraceViewer({
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Active node</p>
                 <h3 className="text-lg font-semibold text-white">
-                  {orderedRuns[activeIndex]?.node_name || activeNodeId || "—"}
+                  {activeRun?.node_name || activeRun?.node_id || "—"}
                 </h3>
               </div>
-              {orderedRuns[activeIndex] && (
+              {activeRun && (
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300">
-                  {orderedRuns[activeIndex]?.status}
+                  {activeRun.status}
                 </span>
               )}
             </div>

@@ -48,7 +48,7 @@ const validateDimensionConnection = (
 ) => {
   if (!sourceNode || !targetNode) return null;
   if (sourceNode.data.nodeType !== "embedder.openrouter") return null;
-  if (!["indexer.pinecone", "indexer.pgvector"].includes(targetNode.data.nodeType)) return null;
+  if (!targetNode.data.nodeType.startsWith("indexer.")) return null;
   const sourceConfig = resolveNodeConfig(sourceNode, configOverrides);
   const targetConfig = resolveNodeConfig(targetNode, configOverrides);
   const sourceDim = resolveDimension(sourceConfig);
@@ -132,13 +132,8 @@ export const validatePipelineConfig = (
 ) => {
   const nodeErrors: Record<string, string[]> = {};
   nodes.forEach((node) => {
-    const indexNodeTypes = [
-      "indexer.pinecone",
-      "indexer.pgvector",
-      "retriever.pinecone",
-      "retriever.pgvector",
-    ];
-    if (!indexNodeTypes.includes(node.data.nodeType)) {
+    const { nodeType } = node.data;
+    if (!nodeType.startsWith("indexer.") && !nodeType.startsWith("retriever.")) {
       return;
     }
     const config = resolveNodeConfig(node, configOverrides);

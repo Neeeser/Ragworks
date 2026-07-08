@@ -5,15 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PipelineInspector } from "@/components/pipelines/PipelineInspector";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
+import type { VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 const NODE_TYPE_EMBEDDER = "embedder.openrouter";
-const NODE_TYPE_INDEXER = "indexer.pinecone";
+const NODE_TYPE_INDEXER = "indexer.vector";
 const NODE_TYPE_PARSER = "parser.document";
+const INDEX_SELECT_LABEL = "Vector index";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
+
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 vi.mock("@/components/ui/parameter-controls", () => ({
   ParameterFieldCard: ({
@@ -56,6 +59,29 @@ vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   },
 }));
 
+const makeNode = (
+  nodeType: string,
+  config: Record<string, unknown> = {},
+  configSchema: Record<string, unknown> = {},
+): Node<PipelineNodeData> => ({
+  id: "node-1",
+  type: "pipelineNode",
+  position: { x: 0, y: 0 },
+  data: {
+    label: "Node",
+    nodeType,
+    inputs: [],
+    outputs: [],
+    config,
+    configSchema,
+  },
+});
+
+const indexes: VectorIndex[] = [
+  { name: "alpha", backend: "pinecone", dimension: 768 },
+  { name: "local", backend: "pgvector", dimension: 384 },
+];
+
 describe("PipelineInspector", () => {
   beforeEach(() => {
     parameterInputMock.mockClear();
@@ -66,480 +92,181 @@ describe("PipelineInspector", () => {
     render(
       <PipelineInspector
         selectedNode={null}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
+        onConfigChange={() => undefined}
         onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
       />,
     );
     expect(screen.getByText(/Select a node/)).toBeInTheDocument();
   });
 
-  it("renders preview mode for embedder nodes", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-1",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Embedder",
-        nodeType: NODE_TYPE_EMBEDDER,
-        description: "",
-        example: { input: "input", output: "output" },
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          properties: {
-            model_name: { type: "string" },
-            dimension: { type: "integer" },
-            temperature: { type: "number", default: 0.5 },
-          },
-        },
-      },
-    };
-
+  it("applies schema field edits immediately, with no Apply button", () => {
+    const onConfigChange = vi.fn();
     render(
       <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
+        selectedNode={makeNode(
+          NODE_TYPE_PARSER,
+          { mode: "auto" },
+          { properties: { mode: { type: "string" } } },
+        )}
+        onConfigChange={onConfigChange}
         onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /apply/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("trigger-text"));
+    expect(onConfigChange).toHaveBeenCalledWith({ mode: "text" });
+  });
+
+  it("filters the index picker to the node's configured backend and applies the pick", () => {
+    const onConfigChange = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" })}
+        onConfigChange={onConfigChange}
+        onLabelChange={() => undefined}
+        vectorIndexes={indexes}
+      />,
+    );
+
+    const select = screen.getByLabelText(INDEX_SELECT_LABEL);
+    expect(screen.getByRole("option", { name: /alpha/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /local/ })).not.toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: "alpha" } });
+    expect(onConfigChange).toHaveBeenCalledWith({
+      backend: "pinecone",
+      index_name: "alpha",
+      dimension: 768,
+    });
+  });
+
+  it("switching the backend clears the previously selected index", () => {
+    const onConfigChange = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_INDEXER, {
+          backend: "pinecone",
+          index_name: "alpha",
+          dimension: 768,
+        })}
+        onConfigChange={onConfigChange}
+        onLabelChange={() => undefined}
+        vectorIndexes={indexes}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /pgvector/i }));
+    expect(onConfigChange).toHaveBeenCalledWith({ backend: "pgvector" });
+  });
+
+  it("legacy backend-pinned nodes get the index picker but no backend picker", () => {
+    render(
+      <PipelineInspector
+        selectedNode={makeNode("retriever.pgvector", {})}
+        onConfigChange={() => undefined}
+        onLabelChange={() => undefined}
+        vectorIndexes={indexes}
+      />,
+    );
+
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
+  });
+
+  it("opens the index manager from the create sentinel", () => {
+    const onOpenIndexManager = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" })}
+        onConfigChange={() => undefined}
+        onLabelChange={() => undefined}
+        vectorIndexes={indexes}
+        onOpenIndexManager={onOpenIndexManager}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), {
+      target: { value: "__create__" },
+    });
+    expect(onOpenIndexManager).toHaveBeenCalled();
+  });
+
+  it("clearing the index removes index_name and dimension", () => {
+    const onConfigChange = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_INDEXER, {
+          backend: "pinecone",
+          index_name: "alpha",
+          dimension: 768,
+        })}
+        onConfigChange={onConfigChange}
+        onLabelChange={() => undefined}
+        vectorIndexes={indexes}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), { target: { value: "" } });
+    expect(onConfigChange).toHaveBeenCalledWith({ backend: "pinecone" });
+  });
+
+  it("renders the embedding selector for embedder nodes and forwards the pick", () => {
+    const onSelectEmbeddingModel = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_EMBEDDER, { model_name: "emb-1" })}
+        onConfigChange={() => undefined}
+        onLabelChange={() => undefined}
+        embeddingModels={[{ id: "emb-1", name: "Embedding One", dimension: 768 }]}
+        onSelectEmbeddingModel={onSelectEmbeddingModel}
+      />,
+    );
+
+    expect(screen.getByTestId("embedding-selector")).toBeInTheDocument();
+    expect(lastEmbeddingProps).toMatchObject({ selectedModelKey: "emb-1" });
+    (lastEmbeddingProps?.onSelectModel as (id: string) => void)("emb-2");
+    expect(onSelectEmbeddingModel).toHaveBeenCalledWith("emb-2");
+  });
+
+  it("edits the node label", () => {
+    const onLabelChange = vi.fn();
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_PARSER)}
+        onConfigChange={() => undefined}
+        onLabelChange={onLabelChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Node"), { target: { value: "Renamed" } });
+    expect(onLabelChange).toHaveBeenCalledWith("Renamed");
+  });
+
+  it("surfaces validation errors", () => {
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" })}
+        onConfigChange={() => undefined}
+        onLabelChange={() => undefined}
+        validationErrors={["An index is required."]}
+      />,
+    );
+
+    expect(screen.getByText("An index is required.")).toBeInTheDocument();
+  });
+
+  it("renders preview mode read-only", () => {
+    render(
+      <PipelineInspector
+        selectedNode={makeNode(NODE_TYPE_PARSER)}
+        onConfigChange={() => undefined}
+        onLabelChange={() => undefined}
         isPreview
       />,
     );
 
     expect(screen.getByText(/Preview only/)).toBeInTheDocument();
-    expect(screen.getByTestId("embedding-selector")).toBeInTheDocument();
-    expect(screen.getByText(/Temperature/)).toBeInTheDocument();
-    expect(screen.getByText("input")).toBeInTheDocument();
-    expect(screen.getByText("output")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Apply config/ })).not.toBeInTheDocument();
-  });
-
-  it("defaults the embedding select handler to a no-op when the caller omits one", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-embed",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Embedder",
-        nodeType: NODE_TYPE_EMBEDDER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          properties: {
-            model_name: { type: "string" },
-            dimension: { type: "integer" },
-          },
-        },
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-      />,
-    );
-
-    expect(lastEmbeddingProps).not.toBeNull();
-    expect(() => {
-      (lastEmbeddingProps?.onSelectModel as (value: string) => void)("model-1");
-    }).not.toThrow();
-  });
-
-  it("handles config changes and index selection", () => {
-    const onConfigDraftChange = vi.fn();
-    const onLabelChange = vi.fn();
-    const onApplyConfig = vi.fn();
-    const onOpenIndexManager = vi.fn();
-
-    const node: Node<PipelineNodeData> = {
-      id: "node-2",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Indexer",
-        nodeType: NODE_TYPE_INDEXER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: { index_name: "alpha" },
-        configSchema: {
-          properties: {
-            index_name: { type: "string" },
-            dimension: { type: "integer" },
-            temperature: { type: "number", default: 0.7 },
-            enabled: { type: "boolean" },
-          },
-        },
-      },
-    };
-
-    const indexes: VectorIndex[] = [
-      {
-        name: "alpha",
-        backend: "pinecone",
-        dimension: 768,
-        metric: "cosine",
-        host: null,
-        spec: null,
-        status: null,
-      },
-    ];
-    const models: EmbeddingModelInfo[] = [];
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{ index_name: "alpha" }}
-        onConfigDraftChange={onConfigDraftChange}
-        onLabelChange={onLabelChange}
-        onApplyConfig={onApplyConfig}
-        validationErrors={["Error"]}
-        applyDisabled
-        pineconeIndexes={indexes}
-        onOpenIndexManager={onOpenIndexManager}
-        embeddingModels={models}
-      />,
-    );
-
-    const indexSelect = screen.getByRole("combobox");
-    fireEvent.change(indexSelect, { target: { value: "__create__" } });
-    expect(onOpenIndexManager).toHaveBeenCalled();
-
-    fireEvent.change(indexSelect, { target: { value: "" } });
-    expect(onConfigDraftChange).toHaveBeenCalledWith({});
-
-    fireEvent.change(indexSelect, { target: { value: "alpha" } });
-    expect(onConfigDraftChange).toHaveBeenCalledWith({ index_name: "alpha", dimension: 768 });
-
-    fireEvent.click(screen.getByText("trigger-number"));
-    expect(onConfigDraftChange).toHaveBeenCalled();
-
-    const applyButton = screen.getByRole("button", { name: /Apply config/ });
-    expect(applyButton).toBeDisabled();
-
-    fireEvent.change(screen.getByDisplayValue("Indexer"), { target: { value: "New label" } });
-    expect(onLabelChange).toHaveBeenCalledWith("New label");
-
-    expect(screen.getByText("Error")).toBeInTheDocument();
-  });
-
-  it("handles integer, boolean, and nullable text inputs", () => {
-    const onConfigDraftChange = vi.fn();
-    const node: Node<PipelineNodeData> = {
-      id: "node-3",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Parser",
-        nodeType: NODE_TYPE_PARSER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          properties: {
-            retries: { type: "integer", default: 1 },
-            enabled: { type: "boolean" },
-            note: { type: ["string", "null"] },
-          },
-        },
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={onConfigDraftChange}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("trigger-integer"));
-    expect(onConfigDraftChange).toHaveBeenCalledWith({ retries: 3 });
-
-    fireEvent.click(screen.getByText("trigger-boolean"));
-    expect(onConfigDraftChange).toHaveBeenCalledWith({ enabled: true });
-
-    fireEvent.click(screen.getByText("trigger-text"));
-    expect(onConfigDraftChange).toHaveBeenCalledWith({ note: "text" });
-
-    const lastProps = parameterInputMock.mock.calls.find(
-      ([props]) => props.input === "text",
-    )?.[0] as { onChange: (value: string) => void } | undefined;
-    lastProps?.onChange("");
-    expect(onConfigDraftChange).toHaveBeenCalledWith({});
-  });
-
-  it("renders required helpers for missing indexes and fields", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-4",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Indexer",
-        nodeType: NODE_TYPE_INDEXER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          required: ["api_key"],
-          properties: {
-            index_name: { type: "string" },
-            api_key: { type: "string" },
-          },
-        },
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-        pineconeIndexes={[]}
-      />,
-    );
-
-    expect(screen.getAllByText("Required").length).toBeGreaterThan(0);
-  });
-
-  it("renders empty config message for nodes without fields", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-5",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Empty",
-        nodeType: NODE_TYPE_PARSER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {},
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-      />,
-    );
-
-    expect(screen.getByText("This node has no configurable settings.")).toBeInTheDocument();
-  });
-
-  it("shows index dimension fallback when missing", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-6",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Indexer",
-        nodeType: NODE_TYPE_INDEXER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: { index_name: "alpha" },
-        configSchema: {
-          properties: {
-            index_name: { type: "string" },
-          },
-        },
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{ index_name: "alpha" }}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-        pineconeIndexes={[
-          { name: "alpha", backend: "pinecone", dimension: null, metric: "cosine", host: null },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText("Dimension: n/a")).toBeInTheDocument();
-  });
-
-  it("clears invalid numeric values and removes missing dimensions", () => {
-    const onConfigDraftChange = vi.fn();
-    const node: Node<PipelineNodeData> = {
-      id: "node-7",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Indexer",
-        nodeType: NODE_TYPE_INDEXER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: { temperature: 0.5 },
-        configSchema: {
-          properties: {
-            temperature: { type: "number" },
-            index_name: { type: "string" },
-            dimension: { type: "integer" },
-          },
-        },
-      },
-    };
-    const indexes: VectorIndex[] = [
-      {
-        name: "alpha",
-        backend: "pinecone",
-        dimension: null,
-        metric: "cosine",
-        host: null,
-        spec: null,
-        status: null,
-      },
-    ];
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{ index_name: "alpha" }}
-        onConfigDraftChange={onConfigDraftChange}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-        pineconeIndexes={indexes}
-      />,
-    );
-
-    const numberProps = parameterInputMock.mock.calls.find(
-      ([props]) => props.input === "number",
-    )?.[0] as { onChange?: (value: string | boolean) => void } | undefined;
-    numberProps?.onChange?.("NaN");
-
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "alpha" } });
-
-    const calls = onConfigDraftChange.mock.calls.map(([value]) => value as Record<string, unknown>);
-    expect(calls.some((call) => !("temperature" in call))).toBe(true);
-    expect(calls.some((call) => call.index_name === "alpha" && !("dimension" in call))).toBe(true);
-  });
-
-  it("uses draft values for parameter inputs and clears empty numbers", () => {
-    const onConfigDraftChange = vi.fn();
-    const node: Node<PipelineNodeData> = {
-      id: "node-9",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Config",
-        nodeType: NODE_TYPE_PARSER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          properties: {
-            temperature: { type: "number", default: 0.7 },
-          },
-        },
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{ temperature: 0.9 }}
-        onConfigDraftChange={onConfigDraftChange}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-      />,
-    );
-
-    const numberProps = parameterInputMock.mock.calls.find(
-      ([props]) => props.input === "number",
-    )?.[0] as { value?: unknown; onChange?: (value: string | boolean) => void } | undefined;
-
-    expect(numberProps?.value).toBe(0.9);
-    numberProps?.onChange?.("");
-    expect(onConfigDraftChange).toHaveBeenCalledWith({});
-  });
-
-  it("omits empty-config messaging for embedder nodes", () => {
-    const node: Node<PipelineNodeData> = {
-      id: "node-8",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Embedder",
-        nodeType: NODE_TYPE_EMBEDDER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {},
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{}}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-      />,
-    );
-
-    expect(screen.queryByText("This node has no configurable settings.")).not.toBeInTheDocument();
-  });
-
-  it("passes embedder selection state and callbacks", () => {
-    const onSelectEmbeddingModel = vi.fn();
-    const embeddingModels: EmbeddingModelInfo[] = [{ id: "emb-1", name: "Embed" }];
-    const node: Node<PipelineNodeData> = {
-      id: "node-10",
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Embedder",
-        nodeType: NODE_TYPE_EMBEDDER,
-        description: "",
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {},
-      },
-    };
-
-    render(
-      <PipelineInspector
-        selectedNode={node}
-        configDraft={{ model_name: "emb-1" }}
-        onConfigDraftChange={() => undefined}
-        onLabelChange={() => undefined}
-        onApplyConfig={() => undefined}
-        embeddingModels={embeddingModels}
-        onSelectEmbeddingModel={onSelectEmbeddingModel}
-      />,
-    );
-
-    expect(lastEmbeddingProps?.selectedModelKey).toBe("emb-1");
-    expect(lastEmbeddingProps?.models).toBe(embeddingModels);
-    expect(lastEmbeddingProps?.onSelectModel).toBe(onSelectEmbeddingModel);
+    expect(screen.getByDisplayValue("Node")).toHaveAttribute("readonly");
   });
 });

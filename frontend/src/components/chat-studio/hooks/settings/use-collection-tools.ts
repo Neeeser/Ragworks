@@ -3,21 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { areArraysEqual, parseCollectionIdsParam } from "@/components/chat-studio/lib/chat-helpers";
-import { fetchCollections, fetchDocuments, fetchPipeline } from "@/lib/api";
+import { fetchCollections, fetchDocuments } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { ChatSession, Collection, Pipeline } from "@/lib/types";
-
-const resolveChatSettings = (pipeline: Pipeline | null) => {
-  if (!pipeline) {
-    return { contextWindow: 0 };
-  }
-  const settingsNode = pipeline.definition.nodes.find((node) => node.type === "chat.settings");
-  const contextWindow = settingsNode?.config?.context_window;
-  return {
-    contextWindow: typeof contextWindow === "number" ? contextWindow : 0,
-  };
-};
+import type { ChatSession, Collection } from "@/lib/types";
 
 interface UseCollectionToolsParams {
   authToken: string;
@@ -207,31 +196,12 @@ export function useCollectionTools({
     };
   }, [authToken, primaryCollection]);
 
+  // The context window comes from each chat response (the provider's model
+  // catalog is the source of truth); reset it when the collection changes so
+  // a stale window from another collection's model never lingers.
   useEffect(() => {
-    if (!authToken || !primaryCollection) {
-      setContextWindow(0);
-      return;
-    }
-    if (!primaryCollection.retrieval_pipeline_id) {
-      setContextWindow(0);
-      return;
-    }
-    let cancelled = false;
-    fetchPipeline(authToken, primaryCollection.retrieval_pipeline_id)
-      .then((pipeline) => {
-        if (!cancelled) {
-          setContextWindow(resolveChatSettings(pipeline).contextWindow);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setContextWindow(0);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authToken, primaryCollection]);
+    setContextWindow(0);
+  }, [primaryCollection?.id]);
 
   const toggleToolCollection = useCallback(
     (collectionId: string) => {

@@ -2,9 +2,10 @@
 
 import { useCallback, useState, type DragEvent } from "react";
 
+import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { NodeSpec } from "@/lib/types";
-import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
+import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type FlowPosition = { x: number; y: number };
 
@@ -21,7 +22,7 @@ type LegacyReactFlowInstance = {
 // screenToFlowPosition non-optional, which would make the fallback branch
 // statically unreachable (and thus untypeable) under `in`-based narrowing.
 const resolveFlowPosition = (
-  instance: ReactFlowInstance<Node<PipelineNodeData>, Edge>,
+  instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>,
   point: FlowPosition,
 ) =>
   typeof instance.screenToFlowPosition === "function"
@@ -35,7 +36,7 @@ const pointFromEvent = (event: DragEvent<HTMLDivElement>): FlowPosition => ({
 
 interface UseCanvasDragDropParams {
   catalogSpecs: NodeSpec[];
-  reactFlowInstance: ReactFlowInstance<Node<PipelineNodeData>, Edge> | null;
+  reactFlowInstance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType> | null;
   onAddNode: (spec: NodeSpec, position?: FlowPosition) => void;
   onUnknownNodeType: () => void;
 }

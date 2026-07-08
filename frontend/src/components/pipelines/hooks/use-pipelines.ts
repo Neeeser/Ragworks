@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   activatePipelineVersion,
@@ -14,11 +14,14 @@ import {
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import { toPipelineDefinition } from "../lib/pipeline-utils";
-
-import type { PipelineNodeData } from "../PipelineNode";
-import type { Collection, NodeSpec, Pipeline, PipelineKind, PipelineVersion } from "@/lib/types";
-import type { Edge, Node } from "@xyflow/react";
+import type {
+  Collection,
+  NodeSpec,
+  Pipeline,
+  PipelineDefinition,
+  PipelineKind,
+  PipelineVersion,
+} from "@/lib/types";
 
 interface UsePipelinesParams {
   token: string | null;
@@ -45,20 +48,17 @@ export interface UsePipelinesResult {
   handleDeletePipeline: (pipeline: Pipeline) => void;
   cancelDeletePipeline: () => void;
   handleConfirmDelete: () => Promise<void>;
-  handleSavePipeline: (
-    nodes: Node<PipelineNodeData>[],
-    edges: Edge[],
-    nodeErrors: Record<string, string[]>,
-  ) => Promise<void>;
+  handleSavePipeline: (definition: PipelineDefinition, fallbackSummary: string) => Promise<void>;
+  /** Silently persist a layout-only definition (node drags, auto-layout). */
+  persistLayout: (definition: PipelineDefinition) => Promise<void>;
   handleActivateVersion: (version: PipelineVersion) => Promise<void>;
 }
 
 /**
  * Owns the pipeline catalog (pipelines/nodeSpecs/collections), the selected pipeline's
  * version history, and the CRUD-ish flows around it: create-completion, delete
- * (with confirm gating), save-as-new-version, and version activation. `message` is the
- * single notice surfaced by the canvas, shared across all of these flows the same way
- * the original inline implementation did.
+ * (with confirm gating), save-as-new-version, silent layout persistence, and version
+ * activation. `message` is the single notice surfaced by the canvas.
  */
 export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesResult {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -72,6 +72,11 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
   const [message, setMessage] = useState<string | null>(null);
   const [changeSummary, setChangeSummary] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Pipeline | null>(null);
+  const [versionsReloadKey, setVersionsReloadKey] = useState(0);
+  // Layout saves overlap freely with user edits; serialize them so an older
+  // response can never clobber a newer one.
+  const layoutSaveInFlight = useRef(false);
+  const pendingLayout = useRef<PipelineDefinition | null>(null);
 
   useEffect(() => {
     const authToken = token ?? "";
@@ -106,18 +111,19 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     };
   }, [token, kind]);
 
+  const selectedPipelineId = selectedPipeline?.id ?? null;
+
   useEffect(() => {
     const authToken = token ?? "";
-    if (!authToken || !selectedPipeline) {
+    if (!authToken || !selectedPipelineId) {
       setVersions([]);
       return;
     }
-    const pipelineId = selectedPipeline.id;
     let cancelled = false;
 
     async function loadVersions() {
       try {
-        const data = await listPipelineVersions(authToken, pipelineId);
+        const data = await listPipelineVersions(authToken, selectedPipelineId as string);
         if (!cancelled) setVersions(data);
       } catch (error) {
         if (!cancelled) {
@@ -130,7 +136,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     return () => {
       cancelled = true;
     };
-  }, [selectedPipeline, token]);
+  }, [selectedPipelineId, token, versionsReloadKey]);
 
   const pipelineUsage = useMemo(() => {
     const usage = new Set<string>();
@@ -144,6 +150,13 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     });
     return usage;
   }, [collections]);
+
+  const applyUpdatedPipeline = useCallback((updated: Pipeline) => {
+    setPipelines((prev) =>
+      prev.map((pipeline) => (pipeline.id === updated.id ? updated : pipeline)),
+    );
+    setSelectedPipeline((prev) => (prev && prev.id === updated.id ? updated : prev));
+  }, []);
 
   const handlePipelineCreated = (created: Pipeline) => {
     setPipelines((prev) => [created, ...prev]);
@@ -189,22 +202,12 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     }
   };
 
-  const handleSavePipeline = async (
-    nodes: Node<PipelineNodeData>[],
-    edges: Edge[],
-    nodeErrors: Record<string, string[]>,
-  ) => {
+  const handleSavePipeline = async (definition: PipelineDefinition, fallbackSummary: string) => {
     const authToken = token ?? "";
     if (!authToken || !selectedPipeline) return;
-    const validationErrors = Object.values(nodeErrors).flat();
-    if (validationErrors.length > 0) {
-      setMessage(validationErrors[0]);
-      return;
-    }
     setValidating(true);
     setMessage(null);
     try {
-      const definition = toPipelineDefinition(nodes, edges);
       const validation = await validatePipeline(authToken, definition);
       if (!validation.valid) {
         setMessage(`Validation failed: ${validation.errors.join(" ")}`);
@@ -216,17 +219,15 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
       setSaving(true);
       const updated = await updatePipeline(authToken, selectedPipeline.id, {
         definition,
-        change_summary: changeSummary || "Updated pipeline definition.",
+        change_summary: changeSummary || fallbackSummary || "Updated pipeline definition.",
       });
-      setPipelines((prev) =>
-        prev.map((pipeline) => (pipeline.id === updated.id ? updated : pipeline)),
-      );
-      setSelectedPipeline(updated);
+      applyUpdatedPipeline(updated);
       setChangeSummary("");
+      setVersionsReloadKey((prev) => prev + 1);
       setMessage(
         warningText
-          ? `Pipeline saved as a new version. ${warningText}`
-          : "Pipeline saved as a new version.",
+          ? `Saved as v${updated.current_version}. ${warningText}`
+          : `Saved as v${updated.current_version}.`,
       );
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to save pipeline."));
@@ -235,6 +236,36 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
       setValidating(false);
     }
   };
+
+  const persistLayout = useCallback(
+    async (definition: PipelineDefinition) => {
+      const authToken = token ?? "";
+      if (!authToken || !selectedPipelineId) return;
+      if (layoutSaveInFlight.current) {
+        pendingLayout.current = definition;
+        return;
+      }
+      layoutSaveInFlight.current = true;
+      try {
+        let next: PipelineDefinition | null = definition;
+        while (next) {
+          const payload = next;
+          pendingLayout.current = null;
+          const updated = await updatePipeline(authToken, selectedPipelineId, {
+            definition: payload,
+          });
+          applyUpdatedPipeline(updated);
+          next = pendingLayout.current;
+        }
+      } catch {
+        // Layout persistence is best-effort background work; positions still
+        // ride along with the next explicit save if this fails.
+      } finally {
+        layoutSaveInFlight.current = false;
+      }
+    },
+    [token, selectedPipelineId, applyUpdatedPipeline],
+  );
 
   const handleActivateVersion = async (version: PipelineVersion) => {
     const authToken = token ?? "";
@@ -247,10 +278,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
         selectedPipeline.id,
         version.version,
       );
-      setPipelines((prev) =>
-        prev.map((pipeline) => (pipeline.id === updated.id ? updated : pipeline)),
-      );
-      setSelectedPipeline(updated);
+      applyUpdatedPipeline(updated);
       setMessage(`Activated version ${version.version}.`);
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to activate version."));
@@ -280,6 +308,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     cancelDeletePipeline,
     handleConfirmDelete,
     handleSavePipeline,
+    persistLayout,
     handleActivateVersion,
   };
 }

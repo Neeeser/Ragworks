@@ -24,11 +24,14 @@ vi.mock("@/providers/auth-provider", async () =>
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: Record<string, unknown>) => {
     lastReactFlowProps = props;
-    const TraceCursor = (props.nodeTypes as { traceCursor?: React.FC } | undefined)?.traceCursor;
-    return <div data-testid="reactflow">{TraceCursor ? <TraceCursor /> : null}</div>;
+    return <div data-testid="reactflow" />;
   },
   Background: () => <div data-testid="background" />,
   Controls: () => <div data-testid="controls" />,
+  Handle: () => <div />,
+  Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
+  BaseEdge: () => <div />,
+  getBezierPath: () => ["M0 0"],
 }));
 
 const trace: PipelineTraceResponse = makeTraceResponse({
@@ -215,13 +218,8 @@ describe("PipelineTraceViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Close/ }));
     expect(onClose).toHaveBeenCalled();
 
-    act(() => {
-      (lastReactFlowProps?.onNodeClick as (event: unknown, node: { id: string }) => void)?.(null, {
-        id: nodeTwoId,
-      });
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Step/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(screen.getByText("Index")).toBeInTheDocument();
   });
 
   it("renders text summaries and finishes playback", async () => {
@@ -250,34 +248,34 @@ describe("PipelineTraceViewer", () => {
     expect(screen.getByText(/length/)).toBeInTheDocument();
 
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Play trace" }));
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Play pipeline" }));
+      expect(screen.getByRole("button", { name: "Pause playback" })).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
+      // Each act flushes one playback phase (process -> travel -> ...); the
+      // chain schedules its next timer only after effects run.
+      for (let i = 0; i < 6; i += 1) {
+        act(() => {
+          vi.advanceTimersByTime(1100);
+        });
+      }
 
-    expect(screen.getByRole("button", { name: "Play trace" })).toBeInTheDocument();
-    vi.useRealTimers();
+      // Playback pauses itself after the last step.
+      expect(screen.getByRole("button", { name: "Play pipeline" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("focuses neighboring nodes when initializing the flow", async () => {
-    const fitView = vi.fn();
+  it("fits the whole graph once instead of chasing the active node", async () => {
     render(<PipelineTraceViewer trace={trace} token="token" isOpen onClose={() => undefined} />);
 
     await waitFor(() => {
       expect(lastReactFlowProps).not.toBeNull();
-      expect(api.fetchPipelineNodes).toHaveBeenCalled();
     });
 
-    act(() => {
-      (lastReactFlowProps?.onInit as ((instance: { fitView: () => void }) => void) | undefined)?.({
-        fitView,
-      });
-    });
-
-    await waitFor(() => {
-      expect(fitView).toHaveBeenCalled();
-    });
+    expect(lastReactFlowProps?.fitView).toBe(true);
+    expect(lastReactFlowProps?.nodesDraggable).toBe(false);
   });
 
   it("handles fetch errors by surfacing a non-blocking notice", async () => {

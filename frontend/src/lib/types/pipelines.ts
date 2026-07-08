@@ -100,6 +100,12 @@ export interface Pipeline {
   definition: PipelineDefinition;
 }
 
+/** One structural change a version introduced (`PipelineChangeRead`). */
+export interface PipelineChange {
+  kind: string;
+  summary: string;
+}
+
 export interface PipelineVersion {
   id: UUID;
   pipeline_id: UUID;
@@ -108,6 +114,7 @@ export interface PipelineVersion {
   updated_at: string;
   change_summary?: string | null;
   created_by?: UUID | null;
+  changes: PipelineChange[];
 }
 
 export interface NodePort {
@@ -127,6 +134,7 @@ export interface NodeSpec {
   output_ports: NodePort[];
   config_schema: Record<string, unknown>;
   default_config: Record<string, unknown>;
+  hidden: boolean;
 }
 
 export interface PipelineValidationResult {

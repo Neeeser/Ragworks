@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PipelineCanvas } from "@/components/pipelines/PipelineCanvas";
 
+import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { Edge, Node } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 import type { ReactNode } from "react";
 
 let lastReactFlowProps: Record<string, unknown> | null = null;
@@ -22,7 +23,7 @@ describe("PipelineCanvas", () => {
   it("renders pipeline header and notice", () => {
     const onNodeSelect = vi.fn();
     const nodes: Node<PipelineNodeData>[] = [];
-    const edges: Edge[] = [];
+    const edges: TypedEdgeType[] = [];
 
     render(
       <PipelineCanvas
@@ -52,8 +53,7 @@ describe("PipelineCanvas", () => {
       />,
     );
 
-    expect(screen.getByText(/Editing Pipeline/)).toBeInTheDocument();
-    expect(screen.getByText(/0 nodes/)).toBeInTheDocument();
+    expect(screen.getByText(/Pipeline · v1/)).toBeInTheDocument();
     expect(screen.getByText("Hello")).toBeInTheDocument();
     expect(screen.getByTestId("background")).toBeInTheDocument();
     expect(screen.getByTestId("controls")).toBeInTheDocument();

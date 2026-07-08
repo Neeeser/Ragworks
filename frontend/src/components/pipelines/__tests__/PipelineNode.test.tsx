@@ -14,7 +14,7 @@ import type { Node, NodeProps } from "@xyflow/react";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id, type }: { id: string; type: string }) => <div data-testid={`${type}-${id}`} />,
-  Position: { Top: "top", Bottom: "bottom" },
+  Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
 }));
 
 const parserNodeType = "parser.document";
@@ -63,7 +63,7 @@ describe("PipelineNode", () => {
     render(<PipelineNode {...props} />);
 
     expect(screen.getByText("Node")).toBeInTheDocument();
-    expect(screen.getByText(parserNodeType)).toBeInTheDocument();
+    expect(screen.getByText("Parsers")).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
     // PipelineNode now reuses the shared lib/utils truncate, which appends a single
     // ellipsis character rather than three literal dots.
@@ -130,7 +130,9 @@ describe("PipelineNode", () => {
     };
 
     render(<PipelineNode {...props} />);
-    expect(screen.getByText("Settings")).toBeInTheDocument();
+    // With no config and no defaults the card renders no config panel at all.
+    expect(screen.getByText("Empty")).toBeInTheDocument();
+    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 });
 

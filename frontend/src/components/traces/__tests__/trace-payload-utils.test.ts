@@ -1,29 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildCursorNode,
-  buildFallbackPosition,
   buildPreviewPayload,
   containsChunkId,
   EMBEDDING_PREVIEW_COUNT,
   formatPayload,
-  getNodeAnchor,
-  getNodeCenter,
   renderScalarValue,
-  resolveNodeSize,
   resolveTextSummary,
   TEXT_PREVIEW_LIMIT,
 } from "@/components/traces/trace-payload-utils";
-
-import type { Node } from "@xyflow/react";
-
-const makeNode = (overrides: Partial<Node> = {}): Node => ({
-  id: "n1",
-  type: "pipelineNode",
-  position: { x: 10, y: 20 },
-  data: {},
-  ...overrides,
-});
 
 describe("containsChunkId", () => {
   it("returns false for empty chunkId or non-object values", () => {
@@ -156,42 +141,5 @@ describe("renderScalarValue", () => {
 
   it("returns null for values needing a JSON block", () => {
     expect(renderScalarValue({ nested: true }, false)).toBeNull();
-  });
-});
-
-describe("geometry helpers", () => {
-  it("builds a fallback grid position based on index", () => {
-    expect(buildFallbackPosition(0)).toEqual({ x: 0, y: 0 });
-    expect(buildFallbackPosition(3)).toEqual({ x: 0, y: 180 });
-    expect(buildFallbackPosition(4)).toEqual({ x: 220, y: 180 });
-  });
-
-  it("falls back to default node dimensions when unset", () => {
-    expect(resolveNodeSize(makeNode())).toEqual({ width: 220, height: 120 });
-    expect(resolveNodeSize(makeNode({ width: 50, height: 60 }))).toEqual({
-      width: 50,
-      height: 60,
-    });
-  });
-
-  it("anchors source at the bottom and target at the top of a node", () => {
-    const node = makeNode({ position: { x: 0, y: 0 } });
-    expect(getNodeAnchor(node, "source")).toEqual({ x: 110, y: 120 });
-    expect(getNodeAnchor(node, "target")).toEqual({ x: 110, y: 0 });
-  });
-
-  it("centers on the middle of the node", () => {
-    const node = makeNode({ position: { x: 0, y: 0 } });
-    expect(getNodeCenter(node)).toEqual({ x: 110, y: 60 });
-  });
-
-  it("builds a cursor node centered on the given position", () => {
-    const cursor = buildCursorNode({ x: 100, y: 100 });
-    expect(cursor?.position).toEqual({ x: 85, y: 85 });
-    expect(cursor?.type).toBe("traceCursor");
-  });
-
-  it("returns null when no position is given", () => {
-    expect(buildCursorNode(undefined)).toBeNull();
   });
 });

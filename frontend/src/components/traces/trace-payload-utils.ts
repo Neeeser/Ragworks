@@ -1,21 +1,9 @@
 import { prettyJson, truncate } from "@/lib/utils";
 
-import type { Node } from "@xyflow/react";
-
-export const TRACE_CURSOR_ID = "trace-cursor";
 export const EMBEDDING_PREVIEW_COUNT = 12;
-export const NODE_WIDTH = 220;
-export const NODE_HEIGHT = 120;
-export const CURSOR_SIZE = 30;
 export const TEXT_PREVIEW_LIMIT = 240;
 
 export type TextSummary = { preview: string; length: number; full?: string };
-
-/** Grid fallback for nodes whose trace definition omits a saved layout position. */
-export const buildFallbackPosition = (index: number) => ({
-  x: 220 * (index % 3),
-  y: 180 * Math.floor(index / 3),
-});
 
 /**
  * Recursively searches a trace payload for a matching chunk_id/chunkId field so the
@@ -109,43 +97,4 @@ export const renderScalarValue = (value: unknown, expanded: boolean): string | n
     return String(value);
   }
   return null;
-};
-
-export const resolveNodeSize = (node: Node) => ({
-  width: node.width ?? NODE_WIDTH,
-  height: node.height ?? NODE_HEIGHT,
-});
-
-export const getNodeAnchor = (node: Node, position: "source" | "target") => {
-  const { width, height } = resolveNodeSize(node);
-  return {
-    x: node.position.x + width / 2,
-    y: node.position.y + (position === "source" ? height : 0),
-  };
-};
-
-export const getNodeCenter = (node: Node) => {
-  const { width, height } = resolveNodeSize(node);
-  return {
-    x: node.position.x + width / 2,
-    y: node.position.y + height / 2,
-  };
-};
-
-/** Builds the synthetic "cursor" node that animates between trace steps. */
-export const buildCursorNode = (position?: { x: number; y: number }): Node | null => {
-  if (!position) return null;
-  return {
-    id: TRACE_CURSOR_ID,
-    type: "traceCursor",
-    position: {
-      x: position.x - CURSOR_SIZE / 2,
-      y: position.y - CURSOR_SIZE / 2,
-    },
-    draggable: false,
-    selectable: false,
-    focusable: false,
-    data: {},
-    style: { transition: "transform 0.9s ease", zIndex: 30 },
-  };
 };

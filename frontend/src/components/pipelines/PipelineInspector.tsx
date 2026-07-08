@@ -1,13 +1,15 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 
-import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+import { useAppConfig } from "@/providers/config-provider";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
+import { PineconeIcon } from "./icons/PineconeIcon";
+import { PostgresIcon } from "./icons/PostgresIcon";
 import {
   buildPipelineConfigFields,
   coerceFieldValue,
@@ -19,19 +21,16 @@ import { sortIndexesByName } from "./lib/pipeline-utils";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
+import type { EmbeddingModelInfo, IndexBackend, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 type PipelineInspectorProps = {
   selectedNode: Node<PipelineNodeData> | null;
-  configDraft: Record<string, unknown>;
-  onConfigDraftChange: (value: Record<string, unknown>) => void;
+  onConfigChange: (config: Record<string, unknown>) => void;
   onLabelChange: (value: string) => void;
-  onApplyConfig: () => void;
   isPreview?: boolean;
   validationErrors?: string[];
-  applyDisabled?: boolean;
-  pineconeIndexes?: VectorIndex[];
+  vectorIndexes?: VectorIndex[];
   onOpenIndexManager?: () => void;
   embeddingModels?: EmbeddingModelInfo[];
   embeddingModelsLoading?: boolean;
@@ -39,57 +38,78 @@ type PipelineInspectorProps = {
   onSelectEmbeddingModel?: (modelId: string) => void;
 };
 
+const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
+  { value: "pgvector", label: "pgvector", hint: "Built-in Postgres" },
+  { value: "pinecone", label: "Pinecone", hint: "Managed cloud" },
+];
+
+/**
+ * Node inspector. Edits apply to the canvas immediately -- there is no Apply
+ * step; the Save panel is the only commit point for the pipeline itself.
+ */
 export function PipelineInspector({
   selectedNode,
-  configDraft,
-  onConfigDraftChange,
+  onConfigChange,
   onLabelChange,
-  onApplyConfig,
   isPreview = false,
   validationErrors = [],
-  applyDisabled = false,
   embeddingModels = [],
   embeddingModelsLoading = false,
   embeddingModelsError = null,
-  pineconeIndexes = [],
+  vectorIndexes = [],
   onOpenIndexManager,
   onSelectEmbeddingModel = () => undefined,
 }: PipelineInspectorProps) {
-  const isEmbedder = selectedNode?.data.nodeType === "embedder.openrouter";
-  const isIndexNode =
-    selectedNode?.data.nodeType === "indexer.pinecone" ||
-    selectedNode?.data.nodeType === "indexer.pgvector" ||
-    selectedNode?.data.nodeType === "retriever.pinecone" ||
-    selectedNode?.data.nodeType === "retriever.pgvector";
+  const { config: appConfig } = useAppConfig();
+  const nodeType = selectedNode?.data.nodeType ?? "";
+  const config = useMemo<Record<string, unknown>>(
+    () => selectedNode?.data.config ?? {},
+    [selectedNode],
+  );
+  const isEmbedder = nodeType === "embedder.openrouter";
+  const isVectorNode = nodeType.startsWith("indexer.") || nodeType.startsWith("retriever.");
+  // Unified nodes select their backend in config; legacy nodes have it pinned
+  // in the type id and get no picker.
+  const backendSelectable = nodeType.endsWith(".vector");
+  const nodeBackend: IndexBackend = backendSelectable
+    ? ((config.backend as IndexBackend) ?? appConfig.indexing.default_backend)
+    : nodeType.endsWith(".pgvector")
+      ? "pgvector"
+      : "pinecone";
+
   const fields = selectedNode?.data.configSchema
     ? buildPipelineConfigFields(selectedNode.data.configSchema)
     : [];
   const filteredFields = fields.filter((field) => {
     const embedderHidden = isEmbedder && ["model_name", "dimension"].includes(field.key);
-    const indexHidden = isIndexNode && ["index_name", "dimension"].includes(field.key);
-    return !(embedderHidden || indexHidden);
+    const vectorHidden = isVectorNode && ["backend", "index_name", "dimension"].includes(field.key);
+    return !(embedderHidden || vectorHidden);
   });
-  const selectedEmbeddingModelKey =
-    typeof configDraft.model_name === "string" ? configDraft.model_name : "";
-  // The index select only offers indexes on the node's own backend
-  // (indexer.pgvector nodes pick pgvector indexes, Pinecone nodes Pinecone's).
-  const nodeBackend = selectedNode?.data.nodeType.endsWith(".pgvector") ? "pgvector" : "pinecone";
-  const sortedIndexes = useMemo(
-    () => sortIndexesByName(pineconeIndexes.filter((index) => index.backend === nodeBackend)),
-    [pineconeIndexes, nodeBackend],
+  const selectedEmbeddingModelKey = typeof config.model_name === "string" ? config.model_name : "";
+  const backendIndexes = useMemo(
+    () => sortIndexesByName(vectorIndexes.filter((index) => index.backend === nodeBackend)),
+    [vectorIndexes, nodeBackend],
   );
-  const indexValue = typeof configDraft.index_name === "string" ? configDraft.index_name : "";
-  const selectedIndex = sortedIndexes.find((index) => index.name === indexValue) ?? null;
+  const indexValue = typeof config.index_name === "string" ? config.index_name : "";
+  const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
 
   const handleConfigChange = (field: PipelineConfigField, rawValue: string | boolean) => {
     const nextValue = coerceFieldValue(field, rawValue);
-    const nextDraft = { ...configDraft };
+    const nextConfig = { ...config };
     if (nextValue === undefined) {
-      delete nextDraft[field.key];
+      delete nextConfig[field.key];
     } else {
-      nextDraft[field.key] = nextValue;
+      nextConfig[field.key] = nextValue;
     }
-    onConfigDraftChange(nextDraft);
+    onConfigChange(nextConfig);
+  };
+
+  const handleBackendChange = (backend: IndexBackend) => {
+    if (backend === nodeBackend) return;
+    const nextConfig: Record<string, unknown> = { ...config, backend };
+    delete nextConfig.index_name;
+    delete nextConfig.dimension;
+    onConfigChange(nextConfig);
   };
 
   const handleIndexChange = (value: string) => {
@@ -97,25 +117,32 @@ export function PipelineInspector({
       onOpenIndexManager?.();
       return;
     }
-    const nextDraft = { ...configDraft };
+    const nextConfig = { ...config };
     if (!value) {
-      delete nextDraft.index_name;
-      delete nextDraft.dimension;
+      delete nextConfig.index_name;
+      delete nextConfig.dimension;
     } else {
-      nextDraft.index_name = value;
-      const index = sortedIndexes.find((item) => item.name === value);
+      nextConfig.index_name = value;
+      const index = backendIndexes.find((item) => item.name === value);
       if (typeof index?.dimension === "number") {
-        nextDraft.dimension = index.dimension;
+        nextConfig.dimension = index.dimension;
       } else {
-        delete nextDraft.dimension;
+        delete nextConfig.dimension;
       }
     }
-    onConfigDraftChange(nextDraft);
+    onConfigChange(nextConfig);
   };
 
   return (
     <GlassCard className="rounded-3xl p-5">
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Inspector</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Inspector</p>
+        {selectedNode && !isPreview ? (
+          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+            <Check className="h-3 w-3 text-emerald-300" /> changes apply instantly
+          </span>
+        ) : null}
+      </div>
       {selectedNode ? (
         <div className="mt-4 space-y-3 text-sm">
           {isPreview ? (
@@ -131,10 +158,6 @@ export function PipelineInspector({
               onChange={(event) => onLabelChange(event.target.value)}
               readOnly={isPreview}
             />
-          </div>
-          <div>
-            <p className="text-xs text-slate-400">Node type</p>
-            <p className="text-sm text-white">{selectedNode.data.nodeType}</p>
           </div>
           <div>
             <p className="text-xs text-slate-400">Description</p>
@@ -181,11 +204,52 @@ export function PipelineInspector({
                 />
               </div>
             ) : null}
-            {isIndexNode ? (
+            {isVectorNode && backendSelectable ? (
+              <div className="mt-2">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Vector store
+                </p>
+                <div
+                  className="mt-2 grid grid-cols-2 gap-2"
+                  role="radiogroup"
+                  aria-label="Vector store backend"
+                >
+                  {BACKEND_OPTIONS.map((option) => {
+                    const active = option.value === nodeBackend;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        disabled={isPreview}
+                        onClick={() => handleBackendChange(option.value)}
+                        className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs transition ${
+                          active
+                            ? "border-violet-400/70 bg-violet-500/10 text-white"
+                            : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30"
+                        }`}
+                      >
+                        {option.value === "pgvector" ? (
+                          <PostgresIcon className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <PineconeIcon className="h-4 w-4 shrink-0 text-slate-100" />
+                        )}
+                        <span>
+                          <span className="block font-semibold">{option.label}</span>
+                          <span className="block text-[10px] text-slate-500">{option.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            {isVectorNode ? (
               <div className="mt-2 space-y-3">
                 <ParameterFieldCard
-                  label="Pinecone index"
-                  description="Select an index to target for retrieval or ingestion."
+                  label="Index"
+                  description="The vector index this node reads from or writes to."
                   helper={
                     indexValue
                       ? selectedIndex?.dimension
@@ -202,11 +266,13 @@ export function PipelineInspector({
                     value={indexValue}
                     onChange={(event) => handleIndexChange(event.target.value)}
                     disabled={isPreview}
+                    aria-label="Vector index"
                   >
                     <option value="">Select an index</option>
-                    {sortedIndexes.map((index) => (
+                    {backendIndexes.map((index) => (
                       <option key={index.name} value={index.name}>
                         {index.name}
+                        {typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""}
                       </option>
                     ))}
                     <option value={CREATE_SENTINEL}>+ Add new index...</option>
@@ -217,7 +283,7 @@ export function PipelineInspector({
             {filteredFields.length > 0 ? (
               <div className="mt-2 space-y-3">
                 {filteredFields.map((field) => {
-                  const value = getInputValue(field, configDraft);
+                  const value = getInputValue(field, config);
                   const helper =
                     field.defaultValue !== undefined
                       ? `Default: ${formatConfigValue(field.defaultValue)}`
@@ -247,7 +313,7 @@ export function PipelineInspector({
                   );
                 })}
               </div>
-            ) : !isEmbedder ? (
+            ) : !isEmbedder && !isVectorNode ? (
               <p className="mt-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
                 This node has no configurable settings.
               </p>
@@ -259,11 +325,6 @@ export function PipelineInspector({
                 <p key={error}>{error}</p>
               ))}
             </div>
-          ) : null}
-          {!isPreview ? (
-            <Button variant="secondary" onClick={onApplyConfig} disabled={applyDisabled}>
-              Apply config
-            </Button>
           ) : null}
         </div>
       ) : (
