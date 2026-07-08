@@ -15,10 +15,13 @@ from sqlmodel import Session, select
 
 from app.db import models
 from app.pipelines.defaults import build_default_ingestion_pipeline
+from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
+from app.vectorstores.base import IndexSpec
+from app.vectorstores.pgvector import PgvectorStore
 
 
 class _StubOpenRouterClient:
@@ -39,37 +42,6 @@ class _StubOpenRouterClient:
             }
         )
 
-
-class _StubPineconeMatch:
-    """Stand-in for the Pinecone SDK's `ScoredVector`."""
-
-    def __init__(self, match_id: str, score: float, metadata: dict[str, object]) -> None:
-        self.id = match_id
-        self.score = score
-        self.metadata = metadata
-
-
-class _StubPineconeQueryResult:
-    def __init__(self, matches: list[_StubPineconeMatch]) -> None:
-        self.matches = matches
-
-
-class _StubPineconeIndex:
-    def __init__(self, matches: list[_StubPineconeMatch]) -> None:
-        self._matches = matches
-
-    def query(self, **_kwargs: object) -> _StubPineconeQueryResult:
-        return _StubPineconeQueryResult(self._matches)
-
-
-class _StubPineconeClient:
-    """Stand-in for the Pinecone SDK client at the client boundary."""
-
-    def __init__(self, matches: list[_StubPineconeMatch]) -> None:
-        self._index = _StubPineconeIndex(matches)
-
-    def Index(self, _name: str) -> _StubPineconeIndex:
-        return self._index
 
 
 def _create_user(session: Session) -> models.User:
@@ -102,29 +74,36 @@ def _create_collection(session: Session, user: models.User, **overrides: object)
 
 
 def test_query_collection_happy_path_maps_chunks_and_records_event(
-    monkeypatch, session: Session
+    monkeypatch, pgvector_session: Session
 ) -> None:
-    """A successful query maps Pinecone matches onto `RetrievedChunk`s and
+    """A successful query maps vector-store matches onto `RetrievedChunk`s and
     records a `QueryEvent` carrying the same latency/usage/pipeline-run data
     the response reports."""
+    session = pgvector_session
     monkeypatch.setattr(
         "app.services.retrieval.get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
-    )
-    matches = [
-        _StubPineconeMatch(
-            "chunk-1",
-            0.87,
-            {"text": "Paris is the capital of France.", "document_id": "doc-1", "order": 0},
-        )
-    ]
-    monkeypatch.setattr(
-        "app.services.retrieval.get_pinecone_client",
-        lambda **_k: _StubPineconeClient(matches),
     )
 
     user = _create_user(session)
     collection = _create_collection(session, user)
     service = RetrievalService(session)
+
+    store = PgvectorStore(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
+    store.upsert(
+        "ragworks",
+        f"col-{collection.id}",
+        [
+            DocumentChunk(
+                document_id="doc-1",
+                chunk_id="chunk-1",
+                text="Paris is the capital of France.",
+                order=0,
+                metadata=DocumentMetadata(data={}),
+                embedding=[0.1, 0.2, 0.3],
+            )
+        ],
+    )
 
     response = service.query_collection(user, collection, query="capital of France", top_k=3)
 
@@ -134,7 +113,7 @@ def test_query_collection_happy_path_maps_chunks_and_records_event(
     chunk = response.chunks[0]
     assert chunk.chunk_id == "chunk-1"
     assert chunk.document_id == "doc-1"
-    assert chunk.score == pytest.approx(0.87)
+    assert chunk.score == pytest.approx(1.0, abs=1e-6)  # identical vectors: cosine similarity 1
     assert chunk.text == "Paris is the capital of France."
     assert response.usage == {"prompt_tokens": 5, "total_tokens": 5}
     assert response.query_event_id is not None
@@ -186,7 +165,6 @@ def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Se
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
     monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr("app.services.retrieval.get_pinecone_client", lambda *_args, **_kwargs: object())
 
     with pytest.raises(RuntimeError, match="boom"):
         service.query_collection(user, collection, query="hello")
@@ -222,7 +200,6 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
     monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr("app.services.retrieval.get_pinecone_client", lambda *_args, **_kwargs: object())
 
     with pytest.raises(ExternalServiceError, match="Pinecone is unavailable"):
         service.query_collection(user, collection, query="hello")
@@ -253,7 +230,6 @@ def test_query_collection_skips_failed_run_update(monkeypatch, session: Session)
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
     monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr("app.services.retrieval.get_pinecone_client", lambda *_args, **_kwargs: object())
 
     with pytest.raises(RuntimeError, match="boom"):
         service.query_collection(user, collection, query="hello")

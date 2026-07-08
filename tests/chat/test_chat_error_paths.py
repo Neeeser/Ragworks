@@ -14,6 +14,7 @@ from app.chat.service import ChatService
 from app.chat.setup import ChatSetupBuilder
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
 from app.services.errors import ExternalServiceError, InvalidInputError
 from tests.chat.conftest import (
@@ -174,3 +175,64 @@ def test_resolve_session_model_raises_when_edit_session_missing() -> None:
             default_chat_model="m",
             primary_collection_id=None,
         )
+
+
+def _keyless_user(session: Session) -> models.User:
+    """A user with an OpenRouter key but no Pinecone key."""
+    user = models.User(
+        email="keyless@example.com",
+        full_name="Keyless",
+        hashed_password="hashed",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key=None,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def test_pinecone_backed_tools_require_pinecone_key(
+    session: Session, make_collection, install_chat_flow, stream
+) -> None:
+    user = _keyless_user(session)
+    collection = make_collection(user)
+    install_chat_flow(
+        openrouter=StubOpenRouter(tool_model_info(), {}),
+        chat_model="test-model",
+        backend=IndexBackend.PINECONE,
+    )
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
+
+    with pytest.raises(InvalidInputError, match="Pinecone API key is not configured"):
+        _drive(service, user, payload, stream=stream)
+
+
+def test_pgvector_backed_tools_need_no_pinecone_key(
+    session: Session, make_collection, install_chat_flow
+) -> None:
+    """A user with no Pinecone key can chat with tools over a pgvector-backed
+    collection -- the key check is per-backend, not global."""
+    user = _keyless_user(session)
+    collection = make_collection(user)
+    response = {
+        "id": "resp-1",
+        "provider": "openrouter",
+        "model": "test-model",
+        "choices": [
+            {"index": 0, "message": {"content": "Answer"}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    install_chat_flow(
+        openrouter=StubOpenRouter(tool_model_info(), response),
+        chat_model="test-model",
+        backend=IndexBackend.PGVECTOR,
+    )
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
+
+    result = service.send_message(user=user, payload=payload)
+
+    assert result.messages[-1].content == "Answer"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pinecone import Pinecone
 from sqlmodel import Session
 
 from app.clients.openrouter import OpenRouterClient
@@ -12,6 +11,7 @@ from app.core.config import Settings
 from app.db import models
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.utils.file_storage import FileStorage
+from app.vectorstores.registry import VectorStoreProvider
 
 
 @dataclass
@@ -25,7 +25,7 @@ class PipelineRunContext:
     query: str | None
     top_k: int | None
     openrouter: OpenRouterClient
-    pinecone: Pinecone
+    vector_stores: VectorStoreProvider
     storage: FileStorage
     settings: Settings
     trace: PipelineTraceRecorder | None = None

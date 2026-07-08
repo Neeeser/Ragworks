@@ -46,6 +46,7 @@ from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import (
@@ -131,11 +132,6 @@ class ChatSetupBuilder:
         if not collection_ids:
             return [], []
 
-        if not (user.pinecone_api_key or "").strip():
-            raise InvalidInputError(
-                "Pinecone API key is not configured. Update it in Settings to enable tools."
-            )
-
         collections = self.collection_repo.list_by_ids(user.id, collection_ids)
         collection_map = {collection.id: collection for collection in collections}
         missing = [
@@ -147,6 +143,15 @@ class ChatSetupBuilder:
             raise InvalidInputError("Selected collections are not available.")
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
         contexts = [self._build_tool_collection_context(user, collection) for collection in ordered]
+        # A Pinecone key is only required when one of the selected collections
+        # actually retrieves from Pinecone; pgvector-backed collections need none.
+        needs_pinecone = any(
+            context.retrieval_settings.backend is IndexBackend.PINECONE for context in contexts
+        )
+        if needs_pinecone and not (user.pinecone_api_key or "").strip():
+            raise InvalidInputError(
+                "Pinecone API key is not configured. Update it in Settings to enable tools."
+            )
         return contexts, collection_ids
 
     def _resolve_session_model(

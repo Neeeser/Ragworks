@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.schemas.enums import IndexBackend
 from app.services.prompts import (
     DEFAULT_BASE_PROMPT_TEMPLATE,
     DEFAULT_SYSTEM_PROMPT_TEMPLATE,
@@ -55,6 +56,7 @@ def _ingestion_settings(**overrides: Any) -> IngestionPipelineSettings:
         "chunk_size": 1024,
         "chunk_overlap": 200,
         "embedding_model": "text-embed",
+        "backend": IndexBackend.PINECONE,
         "index_name": "pinecone-index",
         "namespace": "pinecone-namespace",
         "dimension": 1536,
@@ -67,6 +69,7 @@ def _ingestion_settings(**overrides: Any) -> IngestionPipelineSettings:
 def _retrieval_settings(**overrides: Any) -> RetrievalPipelineSettings:
     defaults: dict[str, Any] = {
         "embedding_model": "text-embed",
+        "backend": IndexBackend.PINECONE,
         "index_name": "pinecone-index",
         "namespace": "pinecone-namespace",
         "dimension": 1536,

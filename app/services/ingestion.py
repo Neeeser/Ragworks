@@ -8,7 +8,6 @@ from typing import BinaryIO
 from sqlmodel import Session
 
 from app.clients.openrouter import get_openrouter_client
-from app.clients.pinecone import get_pinecone_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import ChunkRepository
@@ -23,6 +22,7 @@ from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
+from app.vectorstores.registry import VectorStoreProvider
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         handle: PipelineRunHandle | None = None
         try:
             openrouter = get_openrouter_client(user.openrouter_api_key or "")
-            pinecone = get_pinecone_client(api_key=user.pinecone_api_key or "")
+            vector_stores = VectorStoreProvider(user, self.session)
             version = resolved.service.get_current_version(resolved.pipeline)
             handle = runner.start(
                 pipeline=resolved.pipeline,
@@ -72,7 +72,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 collection=collection,
                 settings=self.settings,
                 openrouter=openrouter,
-                pinecone=pinecone,
+                vector_stores=vector_stores,
                 storage=self.storage,
                 document=document,
             )
@@ -102,6 +102,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                     document_id=document.id,
                     status=models.DocumentStatus.READY.value,
                     chunk_count=len(chunk_records),
+                    index_backend=resolved.settings.backend.value,
                 )
             )
 
@@ -121,6 +122,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                     collection_id=collection.id,
                     document_id=document.id,
                     status=models.DocumentStatus.FAILED.value,
+                    index_backend=resolved.settings.backend.value,
                 )
             )
             if is_external_provider_error(exc):

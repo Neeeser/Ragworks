@@ -27,6 +27,7 @@ from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.services.pipelines import PipelineService
+from app.vectorstores.pgvector import PgvectorStore
 
 
 class _StubOpenRouterClient:
@@ -48,27 +49,12 @@ class _StubOpenRouterClient:
         )
 
 
-class _StubPineconeIndexHandle:
-    """Records upserts instead of talking to Pinecone."""
-
     def __init__(self) -> None:
         self.upserted: list[dict[str, object]] = []
 
     def upsert(self, vectors: object, namespace: str | None = None) -> None:
         self.upserted.append({"vectors": vectors, "namespace": namespace})
 
-
-class _StubPineconeClient:
-    """Stand-in for the Pinecone SDK client at the client boundary."""
-
-    def __init__(self) -> None:
-        self.index = _StubPineconeIndexHandle()
-
-    def has_index(self, _name: str) -> bool:
-        return True
-
-    def Index(self, _name: str) -> _StubPineconeIndexHandle:
-        return self.index
 
 
 def _create_user(session: Session) -> models.User:
@@ -100,15 +86,17 @@ def _create_collection(session: Session, user: models.User, **overrides: object)
     return collection
 
 
-def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(monkeypatch, session: Session) -> None:
-    """A successful upload embeds, indexes, and persists chunks; the document
-    ends `READY` with a chunk count matching what's actually in the DB, and the
-    `IngestionResponse` reflects the same numbers."""
+def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """A successful upload embeds, indexes into the default pgvector backend,
+    and persists chunks; the document ends `READY` with a chunk count matching
+    what's actually in the DB, and the `IngestionResponse` reflects the same
+    numbers."""
+    session = pgvector_session
     monkeypatch.setattr(
         ingestion_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
     )
-    pinecone_client = _StubPineconeClient()
-    monkeypatch.setattr(ingestion_module, "get_pinecone_client", lambda **_k: pinecone_client)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -140,7 +128,16 @@ def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(monkeypatch, s
     assert all(record.embedding == [0.1, 0.2, 0.3] for record in chunk_records)
     assert all(record.text for record in chunk_records)
 
-    assert pinecone_client.index.upserted  # the indexer actually upserted the chunks
+    # The indexer actually upserted the chunks into the pgvector index.
+    store = PgvectorStore(session)
+    assert store.describe_index("ragworks").dimension == 3
+    indexed = store.query(
+        "ragworks",
+        f"col-{collection.id}",
+        embedding=[0.1, 0.2, 0.3],
+        top_k=50,
+    )
+    assert len(indexed.matches) == response.chunk_count
 
     event = session.exec(select(models.IngestionEvent)).first()
     assert event is not None
@@ -165,11 +162,6 @@ def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, 
             raise RuntimeError("parse failed")
 
     monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
-    monkeypatch.setattr(
-        ingestion_module,
-        "get_pinecone_client",
-        lambda **_kwargs: _StubPineconeClient(),
-    )
     monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
@@ -224,11 +216,6 @@ def test_ingest_upload_wraps_pinecone_outage_as_external_service_error(
             raise PineconeException("Pinecone is unavailable")
 
     monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
-    monkeypatch.setattr(
-        ingestion_module,
-        "get_pinecone_client",
-        lambda **_kwargs: _StubPineconeClient(),
-    )
     monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 

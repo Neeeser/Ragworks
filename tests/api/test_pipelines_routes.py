@@ -128,12 +128,12 @@ def test_validate_pipeline_returns_success() -> None:
 def test_validate_pipeline_requires_index_name() -> None:
     definition = build_default_ingestion_pipeline()
     for node in definition.nodes:
-        if node.type == "indexer.pinecone":
+        if node.type.startswith("indexer."):
             node.config = {**(node.config or {}), "index_name": ""}
     response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
     assert response.valid is False
-    assert any("must specify a Pinecone index" in error for error in response.errors)
+    assert any("must specify an index" in error for error in response.errors)
 
 
 def test_validate_pipeline_returns_warnings() -> None:

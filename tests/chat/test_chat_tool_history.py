@@ -9,6 +9,7 @@ from app.chat.service import ChatService
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.enums import IndexBackend
 from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.retrieval import CollectionQueryResponse
 
@@ -142,6 +143,7 @@ def _stub_pipeline_helpers(monkeypatch) -> None:
         chunk_size=256,
         chunk_overlap=64,
         embedding_model="embed-model",
+        backend=IndexBackend.PINECONE,
         index_name="idx",
         namespace="ns",
         dimension=128,
@@ -149,6 +151,7 @@ def _stub_pipeline_helpers(monkeypatch) -> None:
     )
     retrieval_settings = RetrievalPipelineSettings(
         embedding_model="embed-model",
+        backend=IndexBackend.PINECONE,
         index_name="idx",
         namespace="ns",
         dimension=128,

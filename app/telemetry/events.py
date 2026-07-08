@@ -43,6 +43,7 @@ class DocumentIngested(_BaseEvent):
     status: str
     chunk_count: int | None = None
     size_bytes: int | None = None
+    index_backend: str | None = None
 
 
 class RetrievalQueryRan(_BaseEvent):
@@ -52,6 +53,7 @@ class RetrievalQueryRan(_BaseEvent):
     collection_id: UUID
     latency_ms: float | None = None
     top_k: int | None = None
+    index_backend: str | None = None
 
 
 class UserRegistered(_BaseEvent):

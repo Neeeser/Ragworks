@@ -26,6 +26,7 @@ from app.pipelines.tracing import (
     serialize_payload,
 )
 from app.utils.file_storage import FileStorage
+from tests.pipelines.conftest import StubVectorStoreProvider
 
 
 class InputConfig(BaseModel):
@@ -191,7 +192,7 @@ def test_pipeline_trace_records_node_io(session: Session, tmp_path) -> None:
         query=None,
         top_k=None,
         openrouter=object(),
-        pinecone=object(),
+        vector_stores=StubVectorStoreProvider(),
         storage=FileStorage(base_path=tmp_path),
         settings=get_settings(),
         trace=trace,
