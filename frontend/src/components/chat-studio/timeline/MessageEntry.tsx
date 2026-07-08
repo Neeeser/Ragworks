@@ -231,7 +231,9 @@ export const MessageEntry = (props: MessageEntryProps) => {
   const isEditing = isUser && editingMessageId === entry.message.id;
 
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start", showBranchFooter && "mb-5")}>
+    <div
+      className={cn("flex", isUser ? "justify-end" : "justify-start", showBranchFooter && "mb-5")}
+    >
       <div className={cn("group relative max-w-[75%]", isEditing && "w-full")}>
         {banner.above}
         <div
