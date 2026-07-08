@@ -11,10 +11,13 @@ import { GlassCard } from "@/components/ui/panel";
 import { registerUser } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
+import { useAppConfig } from "@/providers/config-provider";
 
 export default function SignInPage() {
   const router = useRouter();
   const { signIn, loading } = useAuth();
+  const { config } = useAppConfig();
+  const allowRegistration = config.auth.allow_registration;
   const [mode, setMode] = useState<"login" | "register">("login");
   const [form, setForm] = useState({ email: "", password: "", full_name: "" });
   const [message, setMessage] = useState<string | null>(null);
@@ -82,59 +85,79 @@ export default function SignInPage() {
             </div>
           </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <Field label="Email">
-              <TextInput
-                type="email"
-                required
-                className="text-base"
-                value={form.email}
-                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-              />
-            </Field>
-            {mode === "register" && (
-              <Field label="Full name">
-                <TextInput
-                  type="text"
-                  className="text-base"
-                  value={form.full_name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                />
-              </Field>
-            )}
-            <Field label="Password">
-              <TextInput
-                type="password"
-                required
-                className="text-base"
-                minLength={8}
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-              />
-            </Field>
-
-            {message && (
+          {mode === "register" && !allowRegistration ? (
+            <div className="space-y-5">
               <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                {message}
+                Registration is disabled. Ask an administrator for an invite.
               </p>
-            )}
-
-            <div className="flex flex-col gap-4">
-              <Button type="submit" loading={submitting || loading} size="lg">
-                {mode === "login" ? "Enter dashboard" : "Create workspace"}
-              </Button>
               <button
                 type="button"
                 className="text-sm text-slate-400 underline-offset-4 hover:text-white hover:underline"
                 onClick={() => {
-                  setMode((prev) => (prev === "login" ? "register" : "login"));
+                  setMode("login");
                   setMessage(null);
                 }}
               >
-                {mode === "login" ? "Need an account?" : "Already have access?"}
+                Already have access?
               </button>
             </div>
-          </form>
+          ) : (
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <Field label="Email">
+                <TextInput
+                  type="email"
+                  required
+                  className="text-base"
+                  value={form.email}
+                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                />
+              </Field>
+              {mode === "register" && (
+                <Field label="Full name">
+                  <TextInput
+                    type="text"
+                    className="text-base"
+                    value={form.full_name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                  />
+                </Field>
+              )}
+              <Field label="Password">
+                <TextInput
+                  type="password"
+                  required
+                  className="text-base"
+                  minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                />
+              </Field>
+
+              {message && (
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                  {message}
+                </p>
+              )}
+
+              <div className="flex flex-col gap-4">
+                <Button type="submit" loading={submitting || loading} size="lg">
+                  {mode === "login" ? "Enter dashboard" : "Create workspace"}
+                </Button>
+                {allowRegistration && (
+                  <button
+                    type="button"
+                    className="text-sm text-slate-400 underline-offset-4 hover:text-white hover:underline"
+                    onClick={() => {
+                      setMode((prev) => (prev === "login" ? "register" : "login"));
+                      setMessage(null);
+                    }}
+                  >
+                    {mode === "login" ? "Need an account?" : "Already have access?"}
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
 
           <p className="text-center text-xs text-slate-500">
             Lost?{" "}

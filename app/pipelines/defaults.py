@@ -9,11 +9,13 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
+from app.services.app_config import get_app_config
 
 
 def build_default_ingestion_pipeline() -> PipelineDefinition:
     """Return the default ingestion pipeline definition."""
     settings = get_settings()
+    model_defaults = get_app_config().models
     nodes = [
         PipelineNodeDefinition(
             id="ingest-input",
@@ -42,7 +44,7 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
             type="embedder.openrouter",
             name="Embedder",
             position={"x": 720, "y": 0},
-            config={"model_name": settings.default_embedding_model},
+            config={"model_name": model_defaults.default_embedding_model},
         ),
         PipelineNodeDefinition(
             id="index-chunks",
@@ -106,6 +108,7 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
 def build_default_retrieval_pipeline() -> PipelineDefinition:
     """Return the default retrieval pipeline definition."""
     settings = get_settings()
+    model_defaults = get_app_config().models
     nodes = [
         PipelineNodeDefinition(
             id="query-input",
@@ -118,7 +121,7 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             type="embedder.openrouter",
             name="Embedder",
             position={"x": 280, "y": 0},
-            config={"model_name": settings.default_embedding_model},
+            config={"model_name": model_defaults.default_embedding_model},
         ),
         PipelineNodeDefinition(
             id="pinecone-retriever",
@@ -136,7 +139,7 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             name="Chat Settings",
             position={"x": 560, "y": 120},
             config={
-                "chat_model": settings.default_chat_model,
+                "chat_model": model_defaults.default_chat_model,
                 "context_window": 8192,
             },
         ),

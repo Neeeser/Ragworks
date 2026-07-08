@@ -75,13 +75,17 @@ drift from it:
   `FILE_STORAGE_PATH`, `CONFIG_PATH`, `DEBUG`, `JWT_SECRET_KEY` (optional override),
   ports. Not runtime-editable. Never grow this layer with application behavior
   settings.
-- **Layer 2 — runtime application config: Postgres (future `app_settings` table).**
-  The central, UI-editable config — defaults, feature/beta flags, upload limits,
-  frontend/UI settings — is a typed `AppConfig` schema (code defaults) with the DB
-  storing overrides only, served via `GET /api/config` and edited via an admin-gated
-  `PATCH`. Precedence: env-pinned (locked, read-only in the UI) → DB override → code
-  default. Do **not** introduce file-based runtime config (config.yaml in a volume) —
-  the DB is the config store.
+- **Layer 2 — runtime application config: Postgres (`app_settings` table).**
+  The central, UI-editable config is `AppConfig` (`app/schemas/app_config.py`), the
+  single source of truth for both code defaults and the field catalog the admin UI
+  renders from — one section model per concern today (`auth`, `uploads`, `models`,
+  `features`). The sparse `app_settings` table stores overrides only, keyed by dotted
+  field name; `AppConfigService.effective_config()` merges precedence env-pinned →
+  DB override → code default. `GET /api/config` serves the public subset
+  (`PublicConfig`) unauthenticated; `GET /api/admin/config` and `PATCH
+  /api/admin/config` (admin-gated) serve/edit the full field catalog. Do **not**
+  introduce file-based runtime config (config.yaml in a volume) — the DB is the
+  config store.
 - **Layer 3 — per-user settings** (provider API keys, session preferences) — already
   exists; stays per-user, never migrates into global config.
 - **The frontend is an API client, never a config owner.** Frontend-related settings

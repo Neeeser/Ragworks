@@ -15,6 +15,7 @@ from __future__ import annotations
 # PipelineRunStatus are imported (not redefined) below so existing `models.ChatRole`
 # -style access keeps working -- the enums themselves live in app.schemas.enums
 # (db.models imports them, never the reverse; see app/AGENTS.md).
+from app.db.models.app_setting import AppSetting
 from app.db.models.chat import ChatMessage, ChatSession, ChatSessionCollection
 from app.db.models.collection import Collection
 from app.db.models.document import Document, DocumentChunkRecord
@@ -39,6 +40,7 @@ from app.schemas.enums import (
 )
 
 __all__ = [
+    "AppSetting",
     "ChatMessage",
     "ChatMode",
     "ChatRole",

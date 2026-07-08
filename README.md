@@ -142,6 +142,15 @@ To pin a specific version instead of `latest`, set the image tags in your
 compose file (e.g. `ghcr.io/neeeser/ragworks-backend:0.2.0`) — releases are
 listed on the [releases page](https://github.com/Neeeser/Ragworks/releases).
 
+### ⚙️ Configuration
+
+The first account you register becomes the admin. Runtime settings —
+registration policy, upload limits, feature flags, and default models — live
+in **Admin → Settings** and take effect immediately, no restart required. Two
+env vars pin the default chat and embedding models read-only, useful for a
+locked-down deployment: `OPENROUTER_DEFAULT_CHAT_MODEL` and
+`OPENROUTER_DEFAULT_EMBEDDING_MODEL`.
+
 ## 🛠️ Development setup
 
 **Prerequisites:** Python 3.11+, Node 22, Postgres, [uv](https://docs.astral.sh/uv/), an [OpenRouter](https://openrouter.ai/) key and a [Pinecone](https://www.pinecone.io/) key (entered per-user in the UI).
@@ -173,7 +182,6 @@ Engineering practices are documented next to the code they govern: [`AGENTS.md`]
 
 ## 🗺️ Roadmap
 
-- [ ] **Central runtime config** — a typed, DB-backed `AppConfig` (defaults, beta/feature flags, limits, UI settings) editable from an admin settings page, with env-pinned values shown read-only
 - [ ] **More ingestion sources & formats** — HTML, Markdown, Office docs, URLs, and connector-based sources beyond file upload
 - [ ] **Pipeline-level correction loops** — edit a node's config and re-run a past ingestion from its trace
 - [ ] **More node types** — alternative embedders, hybrid retrieval, custom chunkers

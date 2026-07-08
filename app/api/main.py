@@ -14,6 +14,7 @@ from app.api.routes import (
     auth,
     chat,
     collections,
+    config,
     documents,
     health,
     indexes,
@@ -80,6 +81,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(config.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(models.router)

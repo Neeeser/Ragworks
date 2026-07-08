@@ -9,6 +9,7 @@ from openai import RateLimitError
 from sqlmodel import Session
 
 from app.chat import service as service_module
+from app.chat import setup as chat_setup_module
 from app.chat.service import ChatService
 from app.chat.setup import ChatSetupBuilder
 from app.db import models
@@ -117,11 +118,20 @@ def test_rejects_model_without_tool_support(
 def test_rejects_when_no_chat_model_configured(
     session: Session, chat_user, monkeypatch, stub_pipeline_settings, stream
 ) -> None:
-    monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings(default_chat_model=""))
+    monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
         service_module, "get_openrouter_client", lambda *_a, **_k: StubOpenRouter(tool_model_info(), {})
     )
     monkeypatch.setattr(service_module, "RetrievalService", StubRetrievalService)
+    # `default_chat_model` now comes from get_app_config().models, not Settings
+    # -- AppConfig's schema rejects an empty string (min_length=1), so the
+    # "no model configured" branch is driven with a stub carrying the same
+    # shape setup.py reads (`.models.default_chat_model`).
+    monkeypatch.setattr(
+        chat_setup_module,
+        "get_app_config",
+        lambda: SimpleNamespace(models=SimpleNamespace(default_chat_model="")),
+    )
     stub_pipeline_settings(chat_model=None)
     chat_session = models.ChatSession(user_id=chat_user.id, title="S", chat_model="")
     session.add(chat_session)
@@ -153,7 +163,6 @@ def test_resolve_session_model_raises_when_edit_session_missing() -> None:
         session=SimpleNamespace(),
         chat_repo=_Repo(),
         collection_repo=SimpleNamespace(),
-        settings=SimpleNamespace(default_chat_model="m"),
         reasoning_effort=None,
     )
     payload = ChatMessageCreate(content="hi", edit_message_id=uuid4())

@@ -34,6 +34,7 @@ from app.schemas.chat import (
 )
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 from app.services.accounts import AccountService
+from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.services.prompts import (
     apply_prompt_template,
@@ -44,6 +45,16 @@ from app.services.prompts import (
 )
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+
+def require_chat_branching_enabled() -> None:
+    """Gate the branch route behind the chat-branching feature flag.
+
+    404, not 403: a disabled feature is indistinguishable from an absent
+    one -- the common OSS shape for feature-flagged routes.
+    """
+    if not get_app_config().features.chat_branching:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
 @router.get("/chat/prompt", response_model=PromptTemplateRead)
@@ -186,7 +197,11 @@ def get_chat_history(
     return [ChatMessageRead.from_model(message) for message in messages]
 
 
-@router.post("/chat/sessions/{session_id}/branch", response_model=ChatBranchResponse)
+@router.post(
+    "/chat/sessions/{session_id}/branch",
+    response_model=ChatBranchResponse,
+    dependencies=[Depends(require_chat_branching_enabled)],
+)
 def branch_chat_session(
     session_id: UUID,
     payload: ChatBranchCreate,

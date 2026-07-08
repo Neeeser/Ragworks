@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_user_api_keys
@@ -16,10 +16,26 @@ from app.schemas.visualization import (
     UmapProjectionRead,
     UmapVisualizationRead,
 )
+from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.visualization.umap.service import UmapConfig, UmapService
 
-router = APIRouter(prefix="/api/collections", tags=["visualizations"])
+
+def require_umap_enabled() -> None:
+    """Gate every route on this router behind the UMAP feature flag.
+
+    404, not 403: a disabled feature is indistinguishable from an absent
+    one -- the common OSS shape for feature-flagged routes.
+    """
+    if not get_app_config().features.umap_visualizations:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+router = APIRouter(
+    prefix="/api/collections",
+    tags=["visualizations"],
+    dependencies=[Depends(require_umap_enabled)],
+)
 
 
 @router.get("/{collection_id}/visualizations/umap", response_model=UmapVisualizationRead)

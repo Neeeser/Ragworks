@@ -334,6 +334,41 @@ The expected shape, in order:
 
 Then run the gate (`make verify`, `make coverage`).
 
+## Adding a config setting
+
+Runtime-editable behavior is a field on `AppConfig` (`app/schemas/app_config.py`),
+never a new `Settings` field in `app/core/config.py` — see "Configuration
+architecture" in the root `AGENTS.md` for why the two layers stay separate.
+
+1. **Field** — add it to the right section model (`AuthSettings`, `UploadSettings`,
+   `ModelDefaults`, `FeatureFlags`, or a new section) with `Field(default=...,
+   json_schema_extra=_meta(label, description, public=..., env_var=...))`. The code
+   default here is what an un-overridden install runs with; `env_var` names a
+   `Settings` field that pins it read-only when that variable is set (see
+   `_ENV_PINNED_SETTINGS_ATTR` in `app/services/app_config.py`, which needs the
+   matching one-line entry).
+2. **Enforcement/read site** — read it through `get_app_config()` at the point of
+   use, never `get_settings()` — that's the whole point of a runtime-editable
+   setting. Never cache the returned `AppConfig` object across requests or at
+   import time; call `get_app_config()` fresh at each read (it's already
+   TTL-cached internally, see the FastAPI pitfall below).
+3. **Public wire model** — if the field is public (the frontend needs it before or
+   without auth), add it to `PublicConfig`'s section model in
+   `app/schemas/app_config.py` *and* its hand-mirror in
+   `frontend/src/lib/types/config.ts` in the same PR. A field with no `public=True`
+   never reaches `PublicConfig.from_app_config` — that's deliberate (see the class
+   docstring), not an oversight to "fix" by making everything public.
+4. **Test the enforcement red-green** — same rule as any behavior change: a test
+   that flips the field via `AppSettingRepository.upsert` (or a PATCH through the
+   admin route), invalidates the cache, and asserts the enforcement site's actual
+   behavior (403/400/413/404, or the resolved default), not just that
+   `effective_config()` returns the right value.
+
+The admin settings page needs no frontend work for a new field beyond the
+`PublicConfig` mirror above — it renders from `GET /api/admin/config`'s catalog
+(`iter_config_fields()`), so a new leaf just appears. It only needs new frontend
+code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today).
+
 ## Fixing a bug
 
 Follow the root rule: **regression test in the same commit, verified red-green.**
@@ -507,6 +542,22 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   lock) that calls `close()` on whatever it evicts, and never key a long-lived cache on
   a raw secret you can't invalidate on demand (a rotated/leaked API key stays cached
   until it ages out).
+- **`get_app_config()` is TTL-cached (30s) at module scope** (`app/services/
+  app_config.py`) — a test that mutates a DB override via `AppSettingRepository`
+  (or PATCHes `/api/admin/config`) and then asserts on the new value must call
+  `invalidate_app_config_cache()` after the write, or it reads the stale cached
+  config. `tests/api/test_config_routes.py`, `tests/api/test_config_enforcement.py`,
+  `tests/services/test_app_config_service.py`, and `tests/pipelines/
+  test_defaults_config.py` each carry the same autouse fixture (clear on setup
+  *and* teardown, since the module-level cache otherwise leaks into whichever test
+  runs next):
+  ```python
+  @pytest.fixture(autouse=True)
+  def _invalidate_cache() -> Iterator[None]:
+      invalidate_app_config_cache()
+      yield
+      invalidate_app_config_cache()
+  ```
 - **Import-time `settings = get_settings()` snapshots are forbidden**, even though
   `get_settings()` is itself `lru_cache`d and cheap to call repeatedly. A module-level
   `settings = get_settings()` captures the value once at import time; code that reads it
@@ -634,15 +685,6 @@ construction site.
   deactivation only; deleting an account means cascading Pinecone namespaces,
   file storage, and relational rows (a `CollectionDeletionService`-scale job).
   Add the cascade service and its tests together when prioritized.
-- **Document upload enforces no content-type or size limit.** `routes/documents.py`'s
-  `upload_document` passes `file.content_type` straight through (defaulting to
-  `text/plain` only when the header is absent) and streams `file.file` to storage with
-  no cap — an arbitrarily large or mistyped upload reaches `IngestionService` unchecked.
-  Noted here rather than fixed in Task 7.1: adding a limit is a product decision (what
-  size, what content-types, what error shape) that wasn't in scope for a test-pruning
-  pass, not a one-line fix. Add both the guard and its test together when this is
-  prioritized — don't let the guard land without the regression test that proves an
-  oversized/mistyped upload is actually rejected.
 - **Provider API keys are stored plaintext at rest.** `User.openrouter_api_key` and
   `User.pinecone_api_key` (`app/db/models/user.py`) are plain `Text` columns with no
   encryption-at-rest. Pre-existing and tracked, not introduced by this pass; the wire

@@ -43,10 +43,10 @@ from app.chat.state import (
     ToolCollectionContext,
 )
 from app.chat.tools import ToolExecutor
-from app.core.config import Settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
 from app.schemas.chat import ChatMessageCreate
+from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import (
     resolve_ingestion_pipeline,
@@ -70,14 +70,12 @@ class ChatSetupBuilder:
         session: Session,
         chat_repo: ChatRepository,
         collection_repo: CollectionRepository,
-        settings: Settings,
         reasoning_effort: str | None,
     ) -> None:
         """Store the collaborators setup resolution reads and writes through."""
         self.session = session
         self.chat_repo = chat_repo
         self.collection_repo = collection_repo
-        self.settings = settings
         self.reasoning_effort = reasoning_effort
 
     def _resolve_pipeline_context(
@@ -322,13 +320,13 @@ class ChatSetupBuilder:
             default_chat_model = (
                 primary_context.retrieval_settings.chat_model
                 if primary_context and primary_context.retrieval_settings.chat_model
-                else self.settings.default_chat_model
+                else get_app_config().models.default_chat_model
             )
             fallback_context_window = (
                 primary_context.retrieval_settings.context_window if primary_context else 0
             )
         else:
-            default_chat_model = self.settings.default_chat_model
+            default_chat_model = get_app_config().models.default_chat_model
             fallback_context_window = 0
 
         session_model, edit_target = self._resolve_session_model(

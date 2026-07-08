@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getErrorMessage, isAbortError } from "@/lib/errors";
+import { formatApiErrorDetail, getErrorMessage, isAbortError } from "@/lib/errors";
 
 describe("getErrorMessage", () => {
   it("returns the message for an Error instance", () => {
@@ -16,6 +16,27 @@ describe("getErrorMessage", () => {
     expect(getErrorMessage(null, "fallback")).toBe("fallback");
     expect(getErrorMessage(undefined, "fallback")).toBe("fallback");
     expect(getErrorMessage({ message: "not an error" }, "fallback")).toBe("fallback");
+  });
+});
+
+describe("formatApiErrorDetail", () => {
+  it("passes a plain string detail through unchanged", () => {
+    expect(formatApiErrorDetail("nope")).toBe("nope");
+  });
+
+  it("joins a per-field dict detail into readable 'field: message' lines", () => {
+    expect(formatApiErrorDetail({ allow_registration: "must be a boolean" })).toBe(
+      "allow_registration: must be a boolean",
+    );
+  });
+
+  it("joins multiple field errors on separate lines", () => {
+    expect(
+      formatApiErrorDetail({
+        allow_registration: "must be a boolean",
+        max_upload_size_mb: "must be positive",
+      }),
+    ).toBe("allow_registration: must be a boolean\nmax_upload_size_mb: must be positive");
   });
 });
 

@@ -20,6 +20,7 @@ from app.schemas.auth import (
 )
 from app.schemas.enums import UserRole
 from app.services.accounts import AccountService
+from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.services.provider_keys import validate_user_keys
 
@@ -50,6 +51,11 @@ def _build_user_read(user: models.User) -> UserRead:
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register_user(payload: UserCreate, session: Session = Depends(get_session)) -> UserRead:
     """Register a new user account."""
+    if not get_app_config().auth.allow_registration:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled on this server.",
+        )
     try:
         user = AccountService(session).register(payload)
     except ServiceError as exc:

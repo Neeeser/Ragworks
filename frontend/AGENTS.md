@@ -188,6 +188,14 @@ chat-stream-reducer.ts`) with focused tests. New features follow this shape: add
   times before we centralized it.
 - **`"use client"` belongs on components/hooks only** — never on plain `lib/` modules; it
   forecloses server-side use for no benefit.
+- **Admin settings render from the config catalog, not per-field forms.**
+  `AdminSettingsPage` (`components/admin/settings/`) fetches `GET /api/admin/config`
+  (a `ConfigFieldRead[]`) and renders one `ConfigFieldControl` per entry, dispatched
+  on `field.kind` (`bool`/`int`/`string`/`string_list`) — a new backend config field
+  needs no new frontend form code, only the `PublicConfig` mirror in
+  `src/lib/types/config.ts` if it's public. It only needs new component work when it
+  introduces a `kind` `ConfigFieldControl` doesn't handle yet. Env-pinned fields
+  render disabled with a "Pinned by {env_var}" badge instead of a save control.
 
 ## Data fetching in components
 
@@ -199,6 +207,16 @@ chat-stream-reducer.ts`) with focused tests. New features follow this shape: add
 - **Never swallow a fetch error.** Every failure surfaces to the user through the
   component's error channel (message state, notice banner). A `.catch` that only flips a
   boolean, or a `try/finally` with no `catch`, is a bug we've had to fix — twice.
+- **Public runtime config comes from `useAppConfig()`** (`src/providers/
+config-provider.tsx`), never a one-off `fetchPublicConfig()` call — the provider
+  fetches `GET /api/config` once, keeps `DEFAULT_PUBLIC_CONFIG` (permissive: open
+  registration, every feature flag on) as the value until the fetch resolves and as
+  the fallback if it fails, so the UI never blocks on or breaks over the config
+  service being slow or down. Feature-gated UI checks the flag against an explicit
+  `=== false` / `!== false`, not truthiness — `config.features.umap_visualizations
+=== false` (`CollectionSidebar.tsx`), `config.features.chat_branching !== false`
+  (`MessageEntry.tsx`) — so the permissive default and the loading window never
+  flash a feature off before the real value arrives.
 
 ## UI primitives — use them, don't re-roll them
 
