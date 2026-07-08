@@ -2,9 +2,6 @@
 
 import type { RunSettingsSectionKey } from "@/lib/types";
 
-export const PINECONE_KEY_REQUIRED_MESSAGE =
-  "Add your Pinecone API key in Settings to enable collection tools.";
-
 /** Shared small-uppercase pill styling used for chip-like badges across chat-studio
  * (history filters, collection tool chips, system-prompt section chips). */
 export const chipClass =

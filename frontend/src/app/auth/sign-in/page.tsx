@@ -67,7 +67,7 @@ export default function SignInPage() {
           <div className="grid gap-4 rounded-2xl border border-white/5 bg-gradient-to-br from-white/5 via-transparent to-white/5 p-5">
             {[
               "JWT-secured per-user telemetry",
-              "Collection-scoped Pinecone namespaces",
+              "Collection-scoped vector namespaces (pgvector or Pinecone)",
               "Query + chat history with usage accounting",
             ].map((item) => (
               <p key={item} className="text-sm text-slate-300">

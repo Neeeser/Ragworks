@@ -30,7 +30,6 @@ export interface UseTelemetryGroupsParams {
   promptEditor: PromptEditor;
   collectionTools: CollectionTools;
   panel: UsePanelControlsResult;
-  pineconeConfigured: boolean;
   streamingEnabled: boolean;
   setStreamingEnabled: (enabled: boolean) => void;
   usage: UsageBreakdown | null;
@@ -64,7 +63,6 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
     promptEditor,
     collectionTools,
     panel,
-    pineconeConfigured,
     streamingEnabled,
     setStreamingEnabled,
     usage,
@@ -174,7 +172,6 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
       onClearToolCollections: clearToolCollections,
       collectionsLoading,
       collectionsError,
-      pineconeConfigured,
       collectionToolsOpen,
       onCollectionToolsToggle: toggleCollectionTools,
       vitalsOpen,
@@ -190,7 +187,6 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
       collectionsError,
       collectionsLoading,
       documentCount,
-      pineconeConfigured,
       primaryCollection,
       selectedToolCollectionIds,
       toggleCollectionTools,

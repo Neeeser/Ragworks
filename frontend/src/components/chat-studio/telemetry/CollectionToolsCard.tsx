@@ -10,7 +10,6 @@ interface CollectionToolsCardProps {
   selectedCollectionIds: string[];
   onToggle: (collectionId: string) => void;
   onClear: () => void;
-  pineconeConfigured: boolean;
   collectionsLoading: boolean;
   collectionsError: string | null;
 }
@@ -20,18 +19,9 @@ export const CollectionToolsCard = ({
   selectedCollectionIds,
   onToggle,
   onClear,
-  pineconeConfigured,
   collectionsLoading,
   collectionsError,
 }: CollectionToolsCardProps) => {
-  if (!pineconeConfigured) {
-    return (
-      <p className="text-sm text-slate-400">
-        Add your Pinecone API key in Settings to enable collection tools.
-      </p>
-    );
-  }
-
   if (collectionsLoading) {
     return <p className="text-sm text-slate-400">Loading collections…</p>;
   }

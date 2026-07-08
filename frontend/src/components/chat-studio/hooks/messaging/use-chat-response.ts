@@ -7,10 +7,7 @@ import {
   type PerformChatMutation,
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/messaging/chat-mutation-helpers";
-import {
-  DEFAULT_STREAMING_ENABLED,
-  PINECONE_KEY_REQUIRED_MESSAGE,
-} from "@/components/chat-studio/lib/chat-constants";
+import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/lib/chat-constants";
 import {
   attachUsageToLastAssistantMessage,
   calculateSessionUsage,
@@ -34,8 +31,6 @@ export interface UseChatResponseResult {
 export function useChatResponse(params: UseChatMutationParams): UseChatResponseResult {
   const {
     authToken,
-    toolsEnabled,
-    pineconeConfigured,
     contextWindow,
     setContextWindow,
     toolCollectionsDirtyRef,
@@ -163,10 +158,6 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
       if (!authToken) {
         throw new Error("Missing authentication context.");
       }
-      if (toolsEnabled && !pineconeConfigured) {
-        setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
-        throw new Error("Pinecone API key is not configured.");
-      }
       const controller = new AbortController();
       abortControllerRef.current?.abort();
       abortControllerRef.current = controller;
@@ -229,7 +220,6 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
       handleToken,
       handleToolCall,
       handleToolResult,
-      pineconeConfigured,
       selectedToolCollectionIds,
       setIsStopping,
       setSending,
@@ -237,7 +227,6 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
       startProgressPolling,
       stopProgressPolling,
       toolCollectionsDirtyRef,
-      toolsEnabled,
     ],
   );
 

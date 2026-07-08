@@ -6,7 +6,6 @@ import {
   type PerformChatMutation,
   type UseChatMutationParams,
 } from "@/components/chat-studio/hooks/messaging/chat-mutation-helpers";
-import { PINECONE_KEY_REQUIRED_MESSAGE } from "@/components/chat-studio/lib/chat-constants";
 import { ensureMessageOrder } from "@/components/chat-studio/lib/chat-entry-helpers";
 import {
   generateClientMessageId,
@@ -30,8 +29,6 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
   const {
     authToken,
     user,
-    toolsEnabled,
-    pineconeConfigured,
     activeModelId,
     buildParameterPayload,
     providerRuleCount,
@@ -64,10 +61,6 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
 
   const handleSend = useCallback(async () => {
     if (!authToken || !user) return;
-    if (toolsEnabled && !pineconeConfigured) {
-      setStatus(PINECONE_KEY_REQUIRED_MESSAGE);
-      return;
-    }
     const targetModelId = activeModelId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
@@ -168,7 +161,6 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     nextMessageOrderRef,
     pendingSessionIdsRef,
     performChatMutation,
-    pineconeConfigured,
     providerPayload,
     providerRuleCount,
     resetLiveMessage,
@@ -184,7 +176,6 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     setUsage,
     sortSessions,
     streamingEnabled,
-    toolsEnabled,
     user,
   ]);
 

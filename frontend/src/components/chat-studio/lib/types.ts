@@ -77,7 +77,6 @@ export interface TelemetryCollectionsProps {
   onClearToolCollections: () => void;
   collectionsLoading: boolean;
   collectionsError: string | null;
-  pineconeConfigured: boolean;
   collectionToolsOpen: boolean;
   onCollectionToolsToggle: () => void;
   vitalsOpen: boolean;

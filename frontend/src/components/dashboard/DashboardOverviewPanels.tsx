@@ -32,7 +32,7 @@ export function DashboardOverviewPanels({
     {
       label: "Embed",
       status: "OpenRouter",
-      detail: "Stored locally + Pinecone",
+      detail: "Stored locally + your vector store",
       active: collectionCount > 0,
     },
     {

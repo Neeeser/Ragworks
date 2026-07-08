@@ -100,6 +100,9 @@ export function ApiKeysForm({
             <>
               <Cloud className="h-4 w-4 text-cyan-300" />
               Pinecone API key
+              <span className="text-xs font-normal normal-case tracking-normal text-slate-400">
+                (optional — only for Pinecone-backed pipelines; pgvector needs no key)
+              </span>
             </>
           }
           labelClassName="flex items-center gap-2 text-sm text-white"

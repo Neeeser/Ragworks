@@ -100,20 +100,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={[]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured={false}
-        collectionsLoading={false}
-        collectionsError={null}
-      />,
-    );
-    expect(screen.getByText(/Pinecone API key/)).toBeInTheDocument();
-
-    rerender(
-      <CollectionToolsCard
-        collections={collections}
-        selectedCollectionIds={[]}
-        onToggle={onToggle}
-        onClear={onClear}
-        pineconeConfigured
         collectionsLoading
         collectionsError={null}
       />,
@@ -126,7 +112,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={[]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured
         collectionsLoading={false}
         collectionsError="Error"
       />,
@@ -139,7 +124,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={["col-1"]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured
         collectionsLoading={false}
         collectionsError={null}
       />,
@@ -157,7 +141,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={["col-1", "missing"]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured
         collectionsLoading={false}
         collectionsError={null}
       />,
@@ -171,7 +154,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={[]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured
         collectionsLoading={false}
         collectionsError={null}
       />,
@@ -185,7 +167,6 @@ describe("Telemetry cards", () => {
         selectedCollectionIds={[]}
         onToggle={onToggle}
         onClear={onClear}
-        pineconeConfigured
         collectionsLoading={false}
         collectionsError={null}
       />,
