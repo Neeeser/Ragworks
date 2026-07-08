@@ -23,7 +23,12 @@ ConfigT = TypeVar("ConfigT", bound=BaseModel)
 
 
 class NodeSpec(BaseModel):
-    """Metadata describing an available pipeline node type."""
+    """Metadata describing an available pipeline node type.
+
+    `hidden` marks node types that stay registered (persisted definitions
+    reference type ids permanently) but should not be offered in the editor's
+    catalog -- deprecated backend-specific variants and internal nodes.
+    """
 
     type: str
     label: str
@@ -34,6 +39,7 @@ class NodeSpec(BaseModel):
     output_ports: list[NodePort] = Field(default_factory=list)
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
+    hidden: bool = False
 
 
 class PipelineValidationIssue(BaseModel):
@@ -63,6 +69,7 @@ class PipelineNodeBase(Generic[ConfigT]):
     input_ports: Sequence[NodePort] = ()
     output_ports: Sequence[NodePort] = ()
     config_model: builtins.type[BaseModel] = EmptyConfig
+    hidden: bool = False
 
     def __init__(self, config: ConfigT) -> None:
         """Initialize the node with its config."""
@@ -116,4 +123,5 @@ class PipelineNodeBase(Generic[ConfigT]):
             output_ports=list(cls.output_ports),
             config_schema=schema,
             default_config=default_config,
+            hidden=cls.hidden,
         )

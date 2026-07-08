@@ -15,16 +15,16 @@ from app.pipelines.nodes.chunking import (
     TokenChunkerNode,
 )
 from app.pipelines.nodes.embedding import EmbedderNode
-from app.pipelines.nodes.indexing import IndexerNode, PgvectorIndexerNode
+from app.pipelines.nodes.indexing import IndexerNode, PgvectorIndexerNode, VectorIndexerNode
 from app.pipelines.nodes.io import IngestionInputNode, IngestionOutputNode
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.retrieval import (
-    ChatSettingsNode,
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
     RerankerNode,
     RetrievalInputNode,
     RetrievalOutputNode,
+    VectorRetrieverNode,
 )
 
 
@@ -74,15 +74,16 @@ def build_default_registry() -> NodeRegistry:
             ParagraphChunkerNode,
             SemanticChunkerNode,
             EmbedderNode,
+            VectorIndexerNode,
             IndexerNode,
             PgvectorIndexerNode,
             IngestionOutputNode,
             RetrievalInputNode,
+            VectorRetrieverNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,
             RerankerNode,
             RetrievalOutputNode,
-            ChatSettingsNode,
         ]
     )
 

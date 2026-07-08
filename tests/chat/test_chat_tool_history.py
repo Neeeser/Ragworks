@@ -155,8 +155,6 @@ def _stub_pipeline_helpers(monkeypatch) -> None:
         index_name="idx",
         namespace="ns",
         dimension=128,
-        chat_model="openrouter/test-model",
-        context_window=8192,
     )
 
     monkeypatch.setattr(
@@ -230,7 +228,11 @@ def test_tool_call_history_replayed_for_follow_up(monkeypatch) -> None:
     )
     service.session = _NoOpSession([collection])
     service.collection_repo = _StubCollectionRepository([collection])
-    payload = ChatMessageCreate(content="Lookup docs", tool_collection_ids=[collection.id])
+    payload = ChatMessageCreate(
+        content="Lookup docs",
+        chat_model="openrouter/test-model",
+        tool_collection_ids=[collection.id],
+    )
 
     service.send_message(user=user, payload=payload)
 

@@ -20,7 +20,9 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.nodes.embedding import EmbedderConfig
-from app.pipelines.nodes.retrieval import ChatSettingsConfig
+from app.pipelines.nodes.indexing import VectorIndexerConfig
+from app.pipelines.nodes.retrieval import VectorRetrieverConfig
+from app.schemas.enums import IndexBackend
 from app.services.app_config import invalidate_app_config_cache
 
 
@@ -46,12 +48,23 @@ def test_embedder_config_default_reads_app_config(session: Session) -> None:
     assert config.model_name == "override/embedding-model"
 
 
-def test_chat_settings_config_default_reads_app_config(session: Session) -> None:
-    _set_override(session, "models.default_chat_model", "override/chat-model")
+def test_vector_configs_default_backend_reads_app_config(session: Session) -> None:
+    _set_override(session, "indexing.default_backend", "pinecone")
 
-    config = ChatSettingsConfig()
+    indexer = VectorIndexerConfig()
+    retriever = VectorRetrieverConfig()
 
-    assert config.chat_model == "override/chat-model"
+    assert indexer.backend is IndexBackend.PINECONE
+    assert retriever.backend is IndexBackend.PINECONE
+
+
+def test_vector_configs_require_an_explicit_index_name(session: Session) -> None:
+    """The unified nodes never invent an index: blank stays blank (validation flags it)."""
+    assert VectorIndexerConfig(backend=IndexBackend.PGVECTOR).index_name == ""
+    assert VectorRetrieverConfig(backend=IndexBackend.PGVECTOR).index_name == ""
+    assert VectorIndexerConfig(backend=IndexBackend.PINECONE, index_name="kept").index_name == (
+        "kept"
+    )
 
 
 def test_build_default_ingestion_pipeline_uses_overridden_embedding_model(
@@ -66,18 +79,16 @@ def test_build_default_ingestion_pipeline_uses_overridden_embedding_model(
 
 
 def test_default_pipelines_scaffold_pgvector_by_default(session: Session) -> None:
-    """Un-overridden installs index into pgvector — no Pinecone node anywhere."""
+    """Un-overridden installs index into pgvector via the unified vector nodes."""
     ingestion = build_default_ingestion_pipeline()
     retrieval = build_default_retrieval_pipeline()
 
-    ingestion_types = {node.type for node in ingestion.nodes}
-    retrieval_types = {node.type for node in retrieval.nodes}
-    assert "indexer.pgvector" in ingestion_types
-    assert "indexer.pinecone" not in ingestion_types
-    assert "retriever.pgvector" in retrieval_types
-    assert "retriever.pinecone" not in retrieval_types
-
     indexer_node = next(node for node in ingestion.nodes if node.id == "index-chunks")
+    retriever_node = next(node for node in retrieval.nodes if node.id == "vector-retriever")
+    assert indexer_node.type == "indexer.vector"
+    assert retriever_node.type == "retriever.vector"
+    assert indexer_node.config["backend"] == "pgvector"
+    assert retriever_node.config["backend"] == "pgvector"
     assert indexer_node.config["index_name"] == "ragworks"
 
 
@@ -88,17 +99,23 @@ def test_default_pipelines_follow_overridden_backend(session: Session) -> None:
     ingestion = build_default_ingestion_pipeline()
     retrieval = build_default_retrieval_pipeline()
 
-    assert any(node.type == "indexer.pinecone" for node in ingestion.nodes)
-    assert any(node.type == "retriever.pinecone" for node in retrieval.nodes)
+    indexer_node = next(node for node in ingestion.nodes if node.id == "index-chunks")
+    retriever_node = next(node for node in retrieval.nodes if node.id == "vector-retriever")
+    assert indexer_node.config["backend"] == "pinecone"
+    assert retriever_node.config["backend"] == "pinecone"
+
+
+def test_default_retrieval_pipeline_has_no_chat_settings_node(session: Session) -> None:
+    """The chat model is a chat-UI concern; scaffolds carry no chat.settings node."""
+    definition = build_default_retrieval_pipeline()
+
+    assert all(node.type != "chat.settings" for node in definition.nodes)
 
 
 def test_build_default_retrieval_pipeline_uses_overridden_models(session: Session) -> None:
     _set_override(session, "models.default_embedding_model", "override/embedding-model")
-    _set_override(session, "models.default_chat_model", "override/chat-model")
 
     definition = build_default_retrieval_pipeline()
 
     embedder_node = next(node for node in definition.nodes if node.id == "embed-query")
-    chat_settings_node = next(node for node in definition.nodes if node.id == "chat-settings")
     assert embedder_node.config["model_name"] == "override/embedding-model"
-    assert chat_settings_node.config["chat_model"] == "override/chat-model"

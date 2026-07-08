@@ -61,6 +61,10 @@ from app.services.prompts import (
     system_prompt_context,
 )
 
+# Context-window fallback when the provider's model catalog does not report
+# one; matches the old `chat.settings` node's default.
+DEFAULT_CONTEXT_WINDOW = 8192
+
 
 class ChatSetupBuilder:
     """Resolve the shared context a chat turn runs against."""
@@ -317,22 +321,15 @@ class ChatSetupBuilder:
         primary_context: ToolCollectionContext | None = None
         tool_collections: list[ToolCollectionContext]
         tool_collection_ids: list[UUID]
+        # The chat model is a session-level choice (chat UI), never pipeline
+        # config -- the old per-pipeline `chat.settings` node is gone.
+        default_chat_model = get_app_config().models.default_chat_model
+        fallback_context_window = DEFAULT_CONTEXT_WINDOW
         if explicit_ids:
             tool_collections, tool_collection_ids = self._resolve_tool_collections(
                 user=user, payload=payload, session_model=None
             )
             primary_context = tool_collections[0] if tool_collections else None
-            default_chat_model = (
-                primary_context.retrieval_settings.chat_model
-                if primary_context and primary_context.retrieval_settings.chat_model
-                else get_app_config().models.default_chat_model
-            )
-            fallback_context_window = (
-                primary_context.retrieval_settings.context_window if primary_context else 0
-            )
-        else:
-            default_chat_model = get_app_config().models.default_chat_model
-            fallback_context_window = 0
 
         session_model, edit_target = self._resolve_session_model(
             user=user,
@@ -345,8 +342,6 @@ class ChatSetupBuilder:
             tool_collections, tool_collection_ids = self._resolve_tool_collections(
                 user=user, payload=payload, session_model=session_model
             )
-            if tool_collections:
-                fallback_context_window = tool_collections[0].retrieval_settings.context_window
         else:
             self.chat_repo.replace_session_collections(
                 session_id=session_model.id, collection_ids=tool_collection_ids

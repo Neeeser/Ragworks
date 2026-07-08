@@ -161,6 +161,9 @@ class ChunkerNode(BaseChunkerNode[ChunkerConfig]):
     description = "Chunk documents using the node configuration."
     example = "ParsedDocumentPayload(text='Hello world') -> ChunkPayload(chunks=['Hello', 'world'])."
     config_model = ChunkerConfig
+    # Internal configurable variant; the editor catalog offers the fixed-strategy
+    # chunkers instead.
+    hidden = True
 
     def _resolve_strategy(self) -> ChunkStrategy:
         """Read the chunking strategy from the node's own config."""

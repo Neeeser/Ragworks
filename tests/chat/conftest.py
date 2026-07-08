@@ -21,11 +21,13 @@ from sqlmodel import Session
 from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.db import models
+from app.db.repositories import AppSettingRepository
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.retrieval import CollectionQueryResponse
+from app.services.app_config import invalidate_app_config_cache
 
 
 @dataclass
@@ -139,21 +141,29 @@ def make_collection_fixture(session: Session):
 
 
 @pytest.fixture(name="stub_pipeline_settings")
-def stub_pipeline_settings_fixture(monkeypatch):
+def stub_pipeline_settings_fixture(monkeypatch, session: Session):
     """Return a factory that patches pipeline resolution in setup.
 
     Patches `resolve_ingestion_pipeline` / `resolve_retrieval_pipeline` (the
     consolidated resolver from `app.services.pipeline_resolution`) as imported
     by `app.chat.setup` -- chat's setup only reads `.settings` off the resolved
     result, so the stubs return a namespace carrying just that.
+
+    `chat_model` writes the app-config default chat model (the pipeline no
+    longer carries chat settings -- the session/chat UI owns the model, and
+    the app config supplies the default).
     """
 
     def _stub(
         *,
         chat_model: str | None,
-        context_window: int = 1024,
         backend: IndexBackend = IndexBackend.PINECONE,
     ) -> None:
+        AppSettingRepository(session).upsert(
+            "models.default_chat_model", chat_model or "", updated_by=None
+        )
+        session.commit()
+        invalidate_app_config_cache()
         ingestion_settings = IngestionPipelineSettings(
             chunk_strategy=models.ChunkStrategy.TOKEN,
             chunk_size=128,
@@ -171,8 +181,6 @@ def stub_pipeline_settings_fixture(monkeypatch):
             index_name="idx",
             namespace="ns",
             dimension=128,
-            chat_model=chat_model,
-            context_window=context_window,
         )
         monkeypatch.setattr(
             setup_module,
@@ -185,7 +193,8 @@ def stub_pipeline_settings_fixture(monkeypatch):
             lambda *_a, **_k: SimpleNamespace(settings=retrieval_settings),
         )
 
-    return _stub
+    yield _stub
+    invalidate_app_config_cache()
 
 
 @pytest.fixture(name="install_chat_flow")
@@ -197,14 +206,11 @@ def install_chat_flow_fixture(monkeypatch, stub_pipeline_settings):
         openrouter: object,
         chat_model: str,
         retrieval_cls: type = StubRetrievalService,
-        context_window: int = 1024,
         backend: IndexBackend = IndexBackend.PINECONE,
     ) -> None:
         monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
         monkeypatch.setattr(service_module, "get_openrouter_client", lambda *_a, **_k: openrouter)
         monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
-        stub_pipeline_settings(
-            chat_model=chat_model, context_window=context_window, backend=backend
-        )
+        stub_pipeline_settings(chat_model=chat_model, backend=backend)
 
     return _install

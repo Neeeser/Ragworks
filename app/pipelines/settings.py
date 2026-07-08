@@ -28,12 +28,16 @@ from app.pipelines.nodes.chunking import (
     FixedChunkerConfig,
 )
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.nodes.indexing import BaseIndexerNode, IndexerConfig
+from app.pipelines.nodes.indexing import (
+    BaseIndexerNode,
+    IndexerConfig,
+    VectorIndexerNode,
+    default_index_name,
+)
 from app.pipelines.nodes.retrieval import (
     BaseRetrieverNode,
-    ChatSettingsConfig,
-    ChatSettingsNode,
     RetrieverConfig,
+    VectorRetrieverNode,
 )
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template
@@ -59,16 +63,19 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass(frozen=True)
-class RetrievalPipelineSettings:  # pylint: disable=too-many-instance-attributes
-    """Resolved settings for retrieval pipelines."""
+class RetrievalPipelineSettings:
+    """Resolved settings for retrieval pipelines.
+
+    Chat model and context window deliberately live outside the pipeline --
+    they are session-level choices made in the chat UI, not retrieval
+    behavior (the old `chat.settings` node was removed for this reason).
+    """
 
     embedding_model: str
     backend: IndexBackend
     index_name: str
     namespace: str | None
     dimension: int | None
-    chat_model: str
-    context_window: int
 
 
 def _resolve_node_config(
@@ -122,30 +129,32 @@ def _resolve_backend_node_config(
     registry: NodeRegistry,
     base_class: type[BaseIndexerNode] | type[BaseRetrieverNode],
 ) -> tuple[IndexBackend, BaseModel]:
-    """Resolve `(backend, config)` from whichever backend variant is present.
+    """Resolve `(backend, config)` from the definition's indexer/retriever node.
 
-    Walks the registry's node classes (like `_resolve_chunker_config` does for
-    chunkers) so a new backend's node is picked up without a type-id table
-    here. When the definition has no matching node at all, falls back to the
-    app-config default backend's node class with its config defaults.
+    Walks the definition's nodes and matches whichever registered class
+    subclasses `base_class` -- the unified `*.vector` node carries its backend
+    in config, legacy backend-pinned variants on the class -- and asks the
+    class via `resolve_backend`. When the definition has no matching node at
+    all, falls back to the unified node's config defaults on the app-config
+    default backend.
     """
-    node_classes = [
-        node_cls
-        for node_type in registry.node_types()
-        if (node_cls := registry.get_node_class(node_type)) is not None
-        and issubclass(node_cls, base_class)
-    ]
-    for node_cls in node_classes:
-        for candidate in definition.nodes:
-            if candidate.type == node_cls.type:
-                return node_cls.backend, node_cls.config_model.model_validate(
-                    candidate.config or {}
-                )
+    for candidate in definition.nodes:
+        node_cls = registry.get_node_class(candidate.type)
+        if node_cls is None or not issubclass(node_cls, base_class):
+            continue
+        # The two issubclass branches are how mypy correlates each base's
+        # config model with its `resolve_backend` signature.
+        if issubclass(node_cls, BaseIndexerNode):
+            indexer_config = node_cls.config_model.model_validate(candidate.config or {})
+            return node_cls.resolve_backend(indexer_config), indexer_config
+        if issubclass(node_cls, BaseRetrieverNode):
+            retriever_config = node_cls.config_model.model_validate(candidate.config or {})
+            return node_cls.resolve_backend(retriever_config), retriever_config
     default_backend = IndexBackend(get_app_config().indexing.default_backend)
-    for node_cls in node_classes:
-        if node_cls.backend is default_backend:
-            return default_backend, node_cls.config_model()
-    raise ValueError(f"No registered node found for backend '{default_backend.value}'.")
+    fallback_cls = VectorIndexerNode if base_class is BaseIndexerNode else VectorRetrieverNode
+    return default_backend, fallback_cls.config_model.model_validate(
+        {"backend": default_backend.value, "index_name": default_index_name(default_backend)}
+    )
 
 
 def resolve_definition_backend(
@@ -201,7 +210,6 @@ def resolve_retrieval_settings(
     backend, retriever_model = _resolve_backend_node_config(definition, registry, BaseRetrieverNode)
     retriever = RetrieverConfig.model_validate(retriever_model.model_dump())
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
-    chat_settings = _resolve_node_config(definition, ChatSettingsNode.type, ChatSettingsConfig)
     index_name = (
         resolve_collection_template(retriever.index_name, collection) or retriever.index_name
     )
@@ -212,8 +220,6 @@ def resolve_retrieval_settings(
         index_name=index_name,
         namespace=namespace,
         dimension=embedder.dimension,
-        chat_model=chat_settings.chat_model,
-        context_window=chat_settings.context_window,
     )
 
 

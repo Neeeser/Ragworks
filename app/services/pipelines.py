@@ -21,11 +21,13 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.diff import DefinitionChange, diff_definitions, material_changes
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_definition_backend
+from app.pipelines.upgrades import upgrade_definition
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
-from app.services.errors import NotFoundError
+from app.services.errors import InvalidInputError, NotFoundError
 
 
 @dataclass
@@ -112,28 +114,67 @@ class PipelineService:
         change_summary: str | None = None,
         actor_id: UUID | None = None,
     ) -> models.Pipeline:
-        """Update pipeline metadata and optionally create a new version."""
+        """Update pipeline metadata and optionally create a new version.
+
+        A definition identical to the current version is rejected (saving
+        should never mint an empty revision), and a definition whose only
+        difference is layout (node positions) updates the current version in
+        place instead of creating a new one -- dragging nodes around is not a
+        revision of what the pipeline does.
+        """
+        metadata_changed = name is not None or description is not None
         if name is not None:
             pipeline.name = name
         if description is not None:
             pipeline.description = description
         if definition is not None:
-            next_version = pipeline.current_version + 1
-            version = models.PipelineVersion(
-                pipeline_id=pipeline.id,
-                version=next_version,
-                definition=definition.model_dump(mode="json"),
-                change_summary=change_summary,
-                created_by=actor_id,
-            )
-            self._versions.add(version)
-            pipeline.current_version = next_version
+            current_row = self.get_current_version(pipeline)
+            current = PipelineDefinition.model_validate(current_row.definition)
+            changes = diff_definitions(current, definition)
+            if not changes and not metadata_changed:
+                raise InvalidInputError(
+                    "No changes to save — the pipeline already matches this definition."
+                )
+            if material_changes(changes):
+                next_version = pipeline.current_version + 1
+                version = models.PipelineVersion(
+                    pipeline_id=pipeline.id,
+                    version=next_version,
+                    definition=definition.model_dump(mode="json"),
+                    change_summary=change_summary,
+                    created_by=actor_id,
+                )
+                self._versions.add(version)
+                pipeline.current_version = next_version
+            elif changes:
+                current_row.definition = definition.model_dump(mode="json")
+                self.session.add(current_row)
         self.session.add(pipeline)
         return pipeline
 
     def list_versions(self, pipeline: models.Pipeline) -> Iterable[models.PipelineVersion]:
         """List versions for a pipeline."""
         return self._versions.list_for_pipeline(pipeline.id)
+
+    def list_versions_with_changes(
+        self,
+        pipeline: models.Pipeline,
+    ) -> list[tuple[models.PipelineVersion, list[DefinitionChange]]]:
+        """List versions newest-first, each with its diff against the prior version."""
+        versions = self._versions.list_for_pipeline(pipeline.id)
+        by_number = {version.version: version for version in versions}
+        result: list[tuple[models.PipelineVersion, list[DefinitionChange]]] = []
+        for version in versions:
+            previous = by_number.get(version.version - 1)
+            if previous is None:
+                changes = [DefinitionChange(kind="created", summary="Initial version")]
+            else:
+                changes = diff_definitions(
+                    PipelineDefinition.model_validate(previous.definition),
+                    PipelineDefinition.model_validate(version.definition),
+                )
+            result.append((version, changes))
+        return result
 
     def pipeline_in_use(self, pipeline_id: UUID) -> bool:
         """Return True if any collection references the pipeline."""
@@ -238,3 +279,26 @@ def backfill_default_pipelines(session: Session) -> None:
         defaults = service.ensure_default_pipelines(user)
         for collection in collection_repo.list_for_user(user.id):
             service.ensure_collection_pipelines(collection, defaults)
+
+
+def upgrade_stored_pipeline_definitions(session: Session) -> int:
+    """Rewrite stored pipeline versions to the current node vocabulary.
+
+    Applies `app.pipelines.upgrades.upgrade_definition` to every stored
+    version in place (legacy backend-pinned indexer/retriever types become the
+    unified `*.vector` nodes; removed `chat.settings` nodes are dropped).
+    In-place because this is a mechanical vocabulary migration, not a user
+    edit -- version history and pinned trace definitions stay aligned.
+    Idempotent; returns the number of versions rewritten.
+    """
+    versions = PipelineVersionRepository(session)
+    upgraded_count = 0
+    for version in versions.list_all():
+        definition = PipelineDefinition.model_validate(version.definition)
+        upgraded = upgrade_definition(definition)
+        if upgraded is None:
+            continue
+        version.definition = upgraded.model_dump(mode="json")
+        session.add(version)
+        upgraded_count += 1
+    return upgraded_count

@@ -62,6 +62,17 @@ class PipelineRead(DateTimeConfigMixin, BaseModel):
     definition: PipelineDefinition
 
 
+class PipelineChangeRead(BaseModel):
+    """One structural change a pipeline version introduced.
+
+    Mapped from the engine's `app.pipelines.diff.DefinitionChange`; `kind`
+    mirrors its change taxonomy (node_added, node_config, edge_removed, ...).
+    """
+
+    kind: str
+    summary: str
+
+
 class PipelineVersionRead(DateTimeConfigMixin, BaseModel):
     """Pipeline version details returned to clients."""
 
@@ -72,6 +83,7 @@ class PipelineVersionRead(DateTimeConfigMixin, BaseModel):
     updated_at: datetime
     change_summary: str | None
     created_by: UUID | None
+    changes: list[PipelineChangeRead] = Field(default_factory=list)
 
 
 class NodePortRead(BaseModel):
@@ -100,6 +112,7 @@ class NodeSpecRead(BaseModel):
     output_ports: list[NodePortRead] = Field(default_factory=list)
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
+    hidden: bool = False
 
 
 class PipelineNodesResponse(BaseModel):

@@ -26,6 +26,7 @@ from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collectio
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_embeddings
 from app.schemas.enums import IndexBackend
+from app.services.app_config import get_app_config
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
 
@@ -37,6 +38,13 @@ if TYPE_CHECKING:
 # Default logical index name for pgvector-backed pipelines (the Pinecone
 # nodes default to `settings.pinecone_index_name` instead).
 DEFAULT_PGVECTOR_INDEX_NAME = "ragworks"
+
+
+def default_index_name(backend: IndexBackend) -> str:
+    """Return the default index name a pipeline targets on a backend."""
+    if backend is IndexBackend.PGVECTOR:
+        return DEFAULT_PGVECTOR_INDEX_NAME
+    return get_settings().pinecone_index_name
 
 
 class IndexerConfig(BaseModel):
@@ -53,6 +61,21 @@ class PgvectorIndexerConfig(IndexerConfig):
     """Configuration for pgvector indexing nodes (local default index name)."""
 
     index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME)
+
+
+class VectorIndexerConfig(IndexerConfig):
+    """Unified indexer config: the target backend is data, not a node subtype.
+
+    `index_name` deliberately defaults to empty -- an index must be chosen
+    explicitly, and validation flags a blank one (`missing_index_issue`).
+    Legacy definitions that relied on the old per-backend defaults get theirs
+    filled by the startup migration (`app.pipelines.upgrades`).
+    """
+
+    backend: IndexBackend = Field(
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+    )
+    index_name: str = ""
 
 
 def _dimension_issue(
@@ -93,14 +116,28 @@ def _dimension_issue(
 
 
 class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
-    """Shared indexing behavior; subclasses bind a vector-store backend."""
+    """Shared indexing behavior.
 
-    backend: ClassVar[IndexBackend]
+    Legacy subclasses pin a backend as a ClassVar; the unified
+    `VectorIndexerNode` leaves it `None` and reads the backend off its
+    config (`VectorIndexerConfig.backend`) via `resolve_backend`.
+    """
+
+    backend: ClassVar[IndexBackend | None] = None
     category = "ingestion"
     input_ports = (NodePort(key="embedded", label="Embedded", data_type="embedded_batch"),)
     output_ports = (NodePort(key="indexed", label="Indexed", data_type="indexed_batch"),)
     # Narrowed from the base's `type[BaseModel]` so validation reads typed fields.
     config_model: builtins.type[IndexerConfig] = IndexerConfig
+
+    @classmethod
+    def resolve_backend(cls, config: IndexerConfig) -> IndexBackend:
+        """Return the backend this node writes to: class-pinned or config-selected."""
+        if cls.backend is not None:
+            return cls.backend
+        if isinstance(config, VectorIndexerConfig):
+            return config.backend
+        raise ValueError(f"Node type '{cls.type}' does not declare a vector-store backend.")
 
     @classmethod
     def validation_issues_for_node(
@@ -112,13 +149,14 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         """Validate index config against backend capabilities and the embedder."""
         issues: list[PipelineValidationIssue] = []
         indexer_config = cls.config_model.model_validate(node.config or {})
+        backend = cls.resolve_backend(indexer_config)
         index_issue = missing_index_issue(indexer_config.index_name, node.id, "Indexer")
         if index_issue:
             issues.append(index_issue)
         issues.extend(
             capability_issues(
-                CAPABILITIES_BY_BACKEND[cls.backend],
-                backend_label=cls.backend.value,
+                CAPABILITIES_BY_BACKEND[backend],
+                backend_label=backend.value,
                 node_id=node.id,
                 dimension=indexer_config.dimension,
                 metric=indexer_config.metric,
@@ -159,7 +197,7 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
             or self.config.index_name
         )
 
-        store = context.vector_stores.get(self.backend)
+        store = context.vector_stores.get(self.resolve_backend(self.config))
         spec = IndexSpec(name=index_name, dimension=int(dimension), metric=self.config.metric)
         if self.config.ensure_index:
             store.ensure_index(spec)
@@ -193,24 +231,46 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
             outputs=[
                 NodeTraceValue(
                     label="Indexed chunks",
-                    value={"count": len(output_payload.chunks), "backend": self.backend.value},
+                    value={
+                        "count": len(output_payload.chunks),
+                        "backend": self.resolve_backend(self.config).value,
+                    },
                 )
             ],
         )
 
 
+class VectorIndexerNode(BaseIndexerNode):
+    """Upsert embedded chunks into the selected vector-store backend."""
+
+    type = "indexer.vector"
+    label = "Indexer"
+    description = "Write embeddings into a vector index (pgvector or Pinecone)."
+    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs')."
+    config_model = VectorIndexerConfig
+
+
 class IndexerNode(BaseIndexerNode):
-    """Upsert embedded chunks into Pinecone."""
+    """Deprecated Pinecone-pinned indexer; new pipelines use `indexer.vector`.
+
+    Kept registered because node type ids are permanent -- persisted pipeline
+    versions may still reference it -- but hidden from the editor catalog.
+    """
 
     backend: ClassVar[IndexBackend] = IndexBackend.PINECONE
     type = "indexer.pinecone"
     label = "Pinecone Indexer"
     description = "Upsert embeddings into Pinecone."
     example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pinecone')."
+    hidden = True
 
 
 class PgvectorIndexerNode(BaseIndexerNode):
-    """Upsert embedded chunks into pgvector (the app's own Postgres)."""
+    """Deprecated pgvector-pinned indexer; new pipelines use `indexer.vector`.
+
+    Kept registered because node type ids are permanent -- persisted pipeline
+    versions may still reference it -- but hidden from the editor catalog.
+    """
 
     backend: ClassVar[IndexBackend] = IndexBackend.PGVECTOR
     type = "indexer.pgvector"
@@ -218,3 +278,4 @@ class PgvectorIndexerNode(BaseIndexerNode):
     description = "Upsert embeddings into the built-in Postgres (pgvector)."
     example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pgvector')."
     config_model = PgvectorIndexerConfig
+    hidden = True

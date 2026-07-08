@@ -227,11 +227,14 @@ def test_update_pipeline_updates_definition(session: Session) -> None:
     pipeline = _create_pipeline(session, user)
     previous_version = pipeline.current_version
 
+    definition = build_default_ingestion_pipeline()
+    chunker = next(node for node in definition.nodes if node.id == "chunk-document")
+    chunker.config = {**chunker.config, "chunk_size": 512}
     updated = pipelines_routes.update_pipeline(
         pipelines_routes.PipelineUpdate(
             name="Updated",
             description="Updated description",
-            definition=build_default_ingestion_pipeline(),
+            definition=definition,
             change_summary="Updated pipeline",
         ),
         pipeline=pipeline,
@@ -240,6 +243,22 @@ def test_update_pipeline_updates_definition(session: Session) -> None:
     )
 
     assert updated.current_version == previous_version + 1
+
+
+def test_update_pipeline_rejects_no_change_save(session: Session) -> None:
+    """Regression: an unchanged definition used to mint an empty revision; now 400."""
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes.update_pipeline(
+            pipelines_routes.PipelineUpdate(definition=build_default_ingestion_pipeline()),
+            pipeline=pipeline,
+            current_user=user,
+            session=session,
+        )
+
+    assert excinfo.value.status_code == 400
 
 
 def test_list_pipeline_versions_returns_entries(session: Session) -> None:

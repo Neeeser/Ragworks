@@ -28,7 +28,10 @@ from app.core.config import get_settings
 from app.db.bootstrap import init_db
 from app.db.engine import session_scope
 from app.services.accounts import ensure_admin_exists
-from app.services.pipelines import backfill_default_pipelines
+from app.services.pipelines import (
+    backfill_default_pipelines,
+    upgrade_stored_pipeline_definitions,
+)
 from app.telemetry import purge_expired as purge_expired_telemetry
 
 settings = get_settings()
@@ -61,6 +64,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level or "")
     init_db()
     with session_scope() as session:
+        upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
         ensure_admin_exists(session)
     purge_expired_telemetry()
