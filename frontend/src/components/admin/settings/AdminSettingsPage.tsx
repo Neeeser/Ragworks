@@ -3,7 +3,6 @@
 import { useAdminConfig } from "@/components/admin/hooks/use-admin-config";
 import { ConfigFieldControl } from "@/components/admin/settings/ConfigFieldControl";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/panel";
 
 function titleCase(section: string): string {
   return section
@@ -12,7 +11,12 @@ function titleCase(section: string): string {
     .join(" ");
 }
 
-/** Admin-only, schema-driven settings page: one card per config section. */
+/** Admin-only, schema-driven settings page.
+
+One continuous scrollable list: section headings are dividers derived from the
+catalog's key prefixes, so new backend config fields — or whole new sections —
+appear here automatically. Edits accumulate across sections and save together
+from the sticky bar that appears when anything is dirty. */
 export function AdminSettingsPage() {
   const {
     sections,
@@ -20,22 +24,24 @@ export function AdminSettingsPage() {
     loadError,
     error,
     success,
-    savingSection,
+    saving,
+    dirtyCount,
     setDraft,
-    sectionIsDirty,
     draftValue,
-    save,
+    saveAll,
+    discardAll,
     reset,
   } = useAdminConfig();
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-8 pb-24">
       <div>
         <h1 className="text-2xl font-semibold text-white">Settings</h1>
         <p className="text-sm text-slate-400">
           Runtime application configuration. Env-pinned values are read-only here.
         </p>
       </div>
+
       {(loadError || error) && (
         <p
           role="alert"
@@ -45,40 +51,60 @@ export function AdminSettingsPage() {
         </p>
       )}
       {success && (
-        <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <p
+          role="status"
+          className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+        >
           {success}
         </p>
       )}
+
       {loading ? (
-        <p className="px-4 py-6 text-sm text-slate-400">Loading settings…</p>
+        <p className="px-1 py-6 text-sm text-slate-400">Loading settings…</p>
       ) : (
-        Array.from(sections.entries()).map(([section, fields]) => (
-          <GlassCard key={section} className="space-y-4 p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">{titleCase(section)}</h2>
-              <Button
-                size="sm"
-                disabled={!sectionIsDirty(section)}
-                loading={savingSection === section}
-                onClick={() => save(section)}
+        <div className="space-y-10">
+          {Array.from(sections.entries()).map(([section, fields]) => (
+            <section key={section} aria-labelledby={`config-section-${section}`}>
+              <h2
+                id={`config-section-${section}`}
+                className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"
               >
-                Save
+                {titleCase(section)}
+              </h2>
+              <div className="mt-2 divide-y divide-white/5 border-t border-white/5">
+                {fields.map((field) => (
+                  <div key={field.key} className="py-5">
+                    <ConfigFieldControl
+                      field={field}
+                      value={draftValue(field)}
+                      onChange={(value) => setDraft(field.key, value)}
+                      onReset={() => reset(field.key)}
+                      resetting={saving}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {dirtyCount > 0 && (
+        <div className="sticky bottom-4 z-10">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/95 px-5 py-3 shadow-xl backdrop-blur">
+            <p className="text-sm text-slate-300">
+              {dirtyCount} unsaved {dirtyCount === 1 ? "change" : "changes"}
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" disabled={saving} onClick={discardAll}>
+                Discard
+              </Button>
+              <Button size="sm" loading={saving} onClick={saveAll}>
+                Save changes
               </Button>
             </div>
-            <div className="space-y-4">
-              {fields.map((field) => (
-                <ConfigFieldControl
-                  key={field.key}
-                  field={field}
-                  value={draftValue(field)}
-                  onChange={(value) => setDraft(field.key, value)}
-                  onReset={() => reset(field.key)}
-                  resetting={savingSection === section}
-                />
-              ))}
-            </div>
-          </GlassCard>
-        ))
+          </div>
+        </div>
       )}
     </div>
   );

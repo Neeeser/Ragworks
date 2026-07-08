@@ -14,6 +14,8 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 const api = vi.mocked(apiModule);
 const ALLOW_REGISTRATION_KEY = "auth.allow_registration";
 const ALLOW_REGISTRATION_LABEL = "Allow sign-ups";
+const MAX_UPLOAD_LABEL = "Max upload size (MB)";
+const SAVE_BUTTON = "Save changes";
 
 function makeAllowRegistrationField(overrides: Parameters<typeof makeConfigField>[0] = {}) {
   return makeConfigField({
@@ -29,7 +31,7 @@ describe("AdminSettingsPage", () => {
       makeAllowRegistrationField(),
       makeConfigField({
         key: "uploads.max_upload_size_mb",
-        label: "Max upload size (MB)",
+        label: MAX_UPLOAD_LABEL,
         kind: "int",
         value: 50,
         default: 50,
@@ -41,7 +43,7 @@ describe("AdminSettingsPage", () => {
     expect(await screen.findByRole("heading", { name: "Auth" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Uploads" })).toBeInTheDocument();
     expect(screen.getAllByText(ALLOW_REGISTRATION_LABEL).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Max upload size (MB)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(MAX_UPLOAD_LABEL).length).toBeGreaterThan(0);
   });
 
   it("disables an env-locked field and shows its pin badge", async () => {
@@ -64,24 +66,57 @@ describe("AdminSettingsPage", () => {
     expect(screen.getByText("Pinned by OPENROUTER_DEFAULT_CHAT_MODEL")).toBeInTheDocument();
   });
 
-  it("saves exactly the dirty field in its section when toggling a bool", async () => {
+  it("saves exactly the dirty fields — across sections — in one patch", async () => {
     const user = userEvent.setup();
-    api.fetchAdminConfig.mockResolvedValueOnce([makeAllowRegistrationField({ value: true })]);
+    api.fetchAdminConfig.mockResolvedValueOnce([
+      makeAllowRegistrationField({ value: true }),
+      makeConfigField({
+        key: "features.chat_branching",
+        label: "Chat branching",
+        value: true,
+        default: true,
+      }),
+      makeConfigField({
+        key: "uploads.max_upload_size_mb",
+        label: MAX_UPLOAD_LABEL,
+        kind: "int",
+        value: 50,
+        default: 50,
+      }),
+    ]);
     api.updateAdminConfig.mockResolvedValueOnce([
       makeAllowRegistrationField({ value: false, source: "db" }),
     ]);
 
     render(<AdminSettingsPage />);
 
-    const checkbox = await screen.findByRole("checkbox", { name: ALLOW_REGISTRATION_LABEL });
-    await user.click(checkbox);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(await screen.findByRole("checkbox", { name: ALLOW_REGISTRATION_LABEL }));
+    await user.click(screen.getByRole("checkbox", { name: "Chat branching" }));
+    expect(screen.getByText("2 unsaved changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     await waitFor(() => {
+      // One sparse patch carrying both sections; the untouched int is absent.
       expect(api.updateAdminConfig).toHaveBeenCalledWith("test-token", {
         auth: { allow_registration: false },
+        features: { chat_branching: false },
       });
     });
+  });
+
+  it("discard clears pending edits without calling the API", async () => {
+    const user = userEvent.setup();
+    api.fetchAdminConfig.mockResolvedValueOnce([makeAllowRegistrationField({ value: true })]);
+
+    render(<AdminSettingsPage />);
+
+    await user.click(await screen.findByRole("checkbox", { name: ALLOW_REGISTRATION_LABEL }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(screen.queryByRole("button", { name: SAVE_BUTTON })).not.toBeInTheDocument();
+    expect(api.updateAdminConfig).not.toHaveBeenCalled();
+    // The control shows the server value again.
+    expect(screen.getByRole("checkbox", { name: ALLOW_REGISTRATION_LABEL })).toBeChecked();
   });
 
   it("resets a field to default with a null-valued patch", async () => {
@@ -117,7 +152,7 @@ describe("AdminSettingsPage", () => {
 
     const checkbox = await screen.findByRole("checkbox", { name: ALLOW_REGISTRATION_LABEL });
     await user.click(checkbox);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("allow_registration: must be a boolean");

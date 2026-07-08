@@ -15,12 +15,17 @@ function splitKey(key: string): { section: string; leaf: string } {
   return { section: key.slice(0, dot), leaf: key.slice(dot + 1) };
 }
 
-/** Owns the admin config catalog, local dirty edits, and save/reset mutations. */
+/** Owns the admin config catalog, local dirty edits, and save/reset mutations.
+
+The catalog (and therefore the page) is entirely schema-driven: sections are
+derived from key prefixes, so a new backend config field — or a whole new
+section — renders here with zero frontend changes. Edits accumulate across
+sections into one dirty map and save as a single sparse patch. */
 export function useAdminConfig() {
   const { token } = useAuth();
   const [fields, setFields] = useState<ConfigFieldRead[] | null>(null);
   const [dirty, setDirty] = useState<Record<string, unknown>>({});
-  const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -31,54 +36,41 @@ export function useAdminConfig() {
   } = useApiQuery(() => fetchAdminConfig(token ?? ""), [token], { enabled: Boolean(token) });
 
   const setDraft = useCallback((key: string, value: unknown) => {
+    setSuccess(null);
     setDirty((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const isDirty = useCallback((key: string) => Object.hasOwn(dirty, key), [dirty]);
 
-  const sectionIsDirty = useCallback(
-    (section: string) => Object.keys(dirty).some((key) => splitKey(key).section === section),
-    [dirty],
-  );
+  const dirtyCount = Object.keys(dirty).length;
 
-  const clearSectionDirty = useCallback((section: string) => {
-    setDirty((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        if (splitKey(key).section === section) {
-          delete next[key];
-        }
-      }
-      return next;
-    });
+  const discardAll = useCallback(() => {
+    setDirty({});
+    setError(null);
+    setSuccess(null);
   }, []);
 
-  const save = useCallback(
-    async (section: string) => {
-      if (!token) return;
-      setError(null);
-      setSuccess(null);
-      const patch: AppConfigUpdate = { [section]: {} };
-      for (const [key, value] of Object.entries(dirty)) {
-        const parts = splitKey(key);
-        if (parts.section !== section) continue;
-        patch[section][parts.leaf] = value;
-      }
-      if (Object.keys(patch[section]).length === 0) return;
-      setSavingSection(section);
-      try {
-        const refreshed = await updateAdminConfig(token, patch);
-        setFields(refreshed);
-        clearSectionDirty(section);
-        setSuccess("Settings saved.");
-      } catch (err) {
-        setError(getErrorMessage(err, "Failed to save settings."));
-      } finally {
-        setSavingSection(null);
-      }
-    },
-    [token, dirty, clearSectionDirty],
-  );
+  const saveAll = useCallback(async () => {
+    if (!token || Object.keys(dirty).length === 0) return;
+    setError(null);
+    setSuccess(null);
+    const patch: AppConfigUpdate = {};
+    for (const [key, value] of Object.entries(dirty)) {
+      const { section, leaf } = splitKey(key);
+      patch[section] = { ...patch[section], [leaf]: value };
+    }
+    setSaving(true);
+    try {
+      const refreshed = await updateAdminConfig(token, patch);
+      setFields(refreshed);
+      setDirty({});
+      setSuccess("Settings saved.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to save settings."));
+    } finally {
+      setSaving(false);
+    }
+  }, [token, dirty]);
 
   const reset = useCallback(
     async (fieldKey: string) => {
@@ -86,7 +78,7 @@ export function useAdminConfig() {
       setError(null);
       setSuccess(null);
       const { section, leaf } = splitKey(fieldKey);
-      setSavingSection(section);
+      setSaving(true);
       try {
         const refreshed = await updateAdminConfig(token, { [section]: { [leaf]: null } });
         setFields(refreshed);
@@ -99,7 +91,7 @@ export function useAdminConfig() {
       } catch (err) {
         setError(getErrorMessage(err, "Failed to reset setting."));
       } finally {
-        setSavingSection(null);
+        setSaving(false);
       }
     },
     [token],
@@ -130,12 +122,13 @@ export function useAdminConfig() {
     loadError,
     error,
     success,
-    savingSection,
+    saving,
+    dirtyCount,
     setDraft,
     isDirty,
-    sectionIsDirty,
     draftValue,
-    save,
+    saveAll,
+    discardAll,
     reset,
   };
 }
