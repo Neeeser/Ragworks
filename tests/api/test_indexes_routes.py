@@ -1,135 +1,170 @@
+"""HTTP contract for the backend-aware `/api/indexes` routes."""
+
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterator
 
 import pytest
-from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
-from app.api.routes import indexes as indexes_routes
+from app.api.dependencies import get_current_user, get_session
+from app.api.main import app
 from app.db import models
+from app.db.repositories import UserRepository
 
 
-def _create_user_with_key() -> models.User:
-    return models.User(
-        email="pinecone@example.com",
-        full_name="Pinecone User",
+@pytest.fixture(name="keyless_user")
+def keyless_user_fixture(session: Session) -> models.User:
+    user = models.User(
+        email="keyless@example.com",
+        full_name="Keyless",
         hashed_password="hashed",
-        pinecone_api_key="pinecone-key",
+        openrouter_api_key="openrouter-key",
+        pinecone_api_key=None,
+    )
+    UserRepository(session).add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@pytest.fixture(name="keyless_client")
+def keyless_client_fixture(session: Session, keyless_user: models.User) -> Iterator[TestClient]:
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: keyless_user
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_backends_endpoint_reports_capabilities_and_configuration(
+    keyless_client: TestClient,
+) -> None:
+    response = keyless_client.get("/api/indexes/backends")
+
+    assert response.status_code == 200
+    backends = {entry["backend"]: entry for entry in response.json()["backends"]}
+    assert set(backends) == {"pgvector", "pinecone"}
+
+    pgvector = backends["pgvector"]
+    assert pgvector["configured"] is True
+    assert pgvector["capabilities"]["max_dimension"] == 2000
+    assert pgvector["capabilities"]["requires_api_key"] is False
+    assert pgvector["capabilities"]["supported_vector_types"] == ["dense"]
+
+    pinecone = backends["pinecone"]
+    assert pinecone["configured"] is False  # no key stored
+    assert pinecone["capabilities"]["max_dimension"] == 20000
+    assert "sparse" in pinecone["capabilities"]["supported_vector_types"]
+
+
+def test_pgvector_index_crud_round_trip(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    created = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 8, "metric": "cosine"},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["backend"] == "pgvector"
+    assert body["dimension"] == 8
+
+    listed = keyless_client.get("/api/indexes", params={"backend": "pgvector"})
+    assert [index["name"] for index in listed.json()["indexes"]] == ["docs"]
+
+    described = keyless_client.get("/api/indexes/docs", params={"backend": "pgvector"})
+    assert described.status_code == 200
+    assert described.json()["metric"] == "cosine"
+
+    deleted = keyless_client.delete("/api/indexes/docs", params={"backend": "pgvector"})
+    assert deleted.status_code == 200
+    assert (
+        keyless_client.get("/api/indexes", params={"backend": "pgvector"}).json()["indexes"] == []
     )
 
 
-class _StubPinecone:
-    """Mimics the shape `Pinecone.list_indexes()`/friends return: a plain iterable
-    of dicts, matching what `IndexDescription.from_sdk` expects at the client edge."""
-
-    def __init__(self) -> None:
-        self.created: dict[str, Any] | None = None
-        self.deleted: str | None = None
-
-    def list_indexes(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": "alpha",
-                "metric": "cosine",
-                "dimension": 1536,
-                "vector_type": "dense",
-                "status": {"ready": True, "state": "Ready"},
-                "spec": {"serverless": {"cloud": "aws", "region": "us-east-1"}},
-            }
-        ]
-
-    def describe_index(self, name: str) -> dict[str, Any]:
-        return {"name": name, "metric": "cosine", "vector_type": "dense"}
-
-    def create_index(self, **kwargs: Any) -> None:
-        self.created = kwargs
-
-    def delete_index(self, name: str) -> None:
-        self.deleted = name
-
-
-def test_list_indexes_requires_key() -> None:
-    user = models.User(email="no-key@example.com", full_name="No Key", hashed_password="hashed")
-
-    with pytest.raises(HTTPException) as excinfo:
-        indexes_routes.list_indexes(current_user=user)
-
-    assert excinfo.value.status_code == 400
-
-
-def test_list_indexes_returns_serialized(monkeypatch) -> None:
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: _StubPinecone())
-
-    response = indexes_routes.list_indexes(current_user=_create_user_with_key())
-
-    assert response.indexes
-    assert response.indexes[0].name == "alpha"
-
-
-def test_describe_index_returns_entry(monkeypatch) -> None:
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: _StubPinecone())
-
-    response = indexes_routes.describe_index("alpha", current_user=_create_user_with_key())
-
-    assert response.name == "alpha"
-
-
-def test_describe_index_missing_raises_404(monkeypatch) -> None:
-    class _StubMissing:
-        def describe_index(self, name: str) -> None:
-            raise KeyError(f"no such index: {name}")
-
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: _StubMissing())
-
-    with pytest.raises(HTTPException) as excinfo:
-        indexes_routes.describe_index("missing", current_user=_create_user_with_key())
-
-    assert excinfo.value.status_code == 404
-
-
-def test_create_index_uses_defaults(monkeypatch) -> None:
-    stub = _StubPinecone()
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: stub)
-
-    payload = indexes_routes.PineconeIndexCreateRequest(
-        name="alpha",
-        dimension=768,
-        metric="cosine",
-        vector_type="dense",
-        deletion_protection="enabled",
-        tags={"env": "test"},
+def test_index_lifecycle_records_telemetry(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 8},
     )
-    response = indexes_routes.create_index(payload, current_user=_create_user_with_key())
+    keyless_client.delete("/api/indexes/docs", params={"backend": "pgvector"})
 
-    assert response.name == "alpha"
-    assert stub.created is not None
-    assert stub.created["name"] == "alpha"
-    assert stub.created["dimension"] == 768
-    assert stub.created["deletion_protection"] == "enabled"
-    assert stub.created["tags"] == {"env": "test"}
+    rows = pgvector_session.exec(select(models.TelemetryEventRow)).all()
+    events = {row.event_type: row for row in rows}
+    assert "index.created" in events
+    assert events["index.created"].payload["backend"] == "pgvector"
+    assert events["index.created"].payload["index_name"] == "docs"
+    assert events["index.created"].payload["dimension"] == 8
+    assert "index.deleted" in events
+    assert events["index.deleted"].payload["backend"] == "pgvector"
 
 
-def test_create_index_allows_sparse_without_dimension(monkeypatch) -> None:
-    stub = _StubPinecone()
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: stub)
-
-    payload = indexes_routes.PineconeIndexCreateRequest(
-        name="sparse-index",
-        vector_type="sparse",
-        metric="dotproduct",
+def test_create_rejects_dimension_over_backend_max(keyless_client: TestClient) -> None:
+    response = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 2001},
     )
-    response = indexes_routes.create_index(payload, current_user=_create_user_with_key())
-
-    assert response.name == "sparse-index"
-    assert stub.created is not None
-    # dimension is passed through as None rather than omitted -- see
-    # PineconeIndexAdmin.create_index for why that's behaviorally identical.
-    assert stub.created["dimension"] is None
+    assert response.status_code == 400
+    assert "2000" in response.json()["detail"]
 
 
-def test_delete_index_returns_deleted_response(monkeypatch) -> None:
-    monkeypatch.setattr(indexes_routes, "get_pinecone_client", lambda _api_key: _StubPinecone())
+def test_create_rejects_unsupported_metric(keyless_client: TestClient) -> None:
+    response = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 8, "metric": "euclidean"},
+    )
+    assert response.status_code == 400
+    assert "metric" in response.json()["detail"].lower()
 
-    response = indexes_routes.delete_index("alpha", current_user=_create_user_with_key())
 
-    assert response.status == "deleted"
+def test_create_rejects_sparse_on_pgvector(keyless_client: TestClient) -> None:
+    response = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "vector_type": "sparse"},
+    )
+    assert response.status_code == 400
+    assert "vector type" in response.json()["detail"].lower()
+
+
+def test_pinecone_operations_require_key(keyless_client: TestClient) -> None:
+    listed = keyless_client.get("/api/indexes", params={"backend": "pinecone"})
+    assert listed.status_code == 400
+    assert "Pinecone API key" in listed.json()["detail"]
+
+    created = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pinecone", "name": "docs", "dimension": 1536},
+    )
+    assert created.status_code == 400
+
+
+def test_list_without_backend_returns_usable_backends_only(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    """With no Pinecone key, the unfiltered list covers pgvector alone —
+    no 400, no Pinecone client construction."""
+    keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 8},
+    )
+    response = keyless_client.get("/api/indexes")
+    assert response.status_code == 200
+    assert [(idx["backend"], idx["name"]) for idx in response.json()["indexes"]] == [
+        ("pgvector", "docs")
+    ]
+
+
+def test_describe_missing_index_is_404(keyless_client: TestClient) -> None:
+    response = keyless_client.get("/api/indexes/missing", params={"backend": "pgvector"})
+    assert response.status_code == 404
+
+
+def test_indexes_require_auth(unauthed_client: TestClient) -> None:
+    assert unauthed_client.get("/api/indexes").status_code == 401
+    assert unauthed_client.get("/api/indexes/backends").status_code == 401

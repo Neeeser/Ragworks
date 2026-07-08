@@ -1,12 +1,13 @@
 import type { ModelPricing } from "@/lib/types/chat";
-import type { UUID } from "@/lib/types/common";
+import type { IndexBackend, UUID } from "@/lib/types/common";
 
 export type PipelineKind = "ingestion" | "retrieval";
 export type PipelineRunStatus = "running" | "completed" | "failed";
 export type PipelineIOType = "input" | "output";
 
-export interface PineconeIndex {
+export interface VectorIndex {
   name: string;
+  backend: IndexBackend;
   vector_type?: string | null;
   metric?: string | null;
   dimension?: number | null;
@@ -15,10 +16,10 @@ export interface PineconeIndex {
   spec?: Record<string, unknown> | null;
   deletion_protection?: string | null;
   tags?: Record<string, string> | null;
-  embed?: Record<string, unknown> | null;
 }
 
-export interface PineconeIndexCreatePayload {
+export interface IndexCreatePayload {
+  backend: IndexBackend;
   name: string;
   vector_type?: string;
   dimension?: number;
@@ -27,6 +28,25 @@ export interface PineconeIndexCreatePayload {
   region?: string;
   deletion_protection?: string;
   tags?: Record<string, string>;
+}
+
+/** A backend's hard limits (`BackendCapabilitiesRead` in `app/schemas/indexes.py`). */
+export interface BackendCapabilities {
+  max_dimension: number;
+  supported_metrics: string[];
+  supported_vector_types: string[];
+  index_name_max_length: number;
+  max_upsert_batch: number;
+  max_top_k: number;
+  requires_api_key: boolean;
+}
+
+export interface BackendInfo {
+  backend: IndexBackend;
+  label: string;
+  available: boolean;
+  configured: boolean;
+  capabilities: BackendCapabilities;
 }
 
 export interface EmbeddingModelInfo {

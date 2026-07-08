@@ -9,7 +9,6 @@ from time import perf_counter
 from sqlmodel import Session
 
 from app.clients.openrouter import get_openrouter_client
-from app.clients.pinecone import get_pinecone_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import QueryRepository
@@ -22,6 +21,7 @@ from app.services.pipeline_resolution import ResolvedRetrievalPipeline, resolve_
 from app.telemetry import record
 from app.telemetry.events import RetrievalQueryRan
 from app.utils.file_storage import FileStorage
+from app.vectorstores.registry import VectorStoreProvider
 
 
 class RetrievalService:  # pylint: disable=too-few-public-methods
@@ -65,6 +65,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                     collection_id=collection.id,
                     latency_ms=latency_ms,
                     top_k=top_k,
+                    index_backend=resolved.settings.backend.value,
                 )
             )
             return CollectionQueryResponse(
@@ -101,7 +102,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the retrieval pipeline run."""
         openrouter = get_openrouter_client(user.openrouter_api_key or "")
-        pinecone = get_pinecone_client(api_key=user.pinecone_api_key or "")
+        vector_stores = VectorStoreProvider(user, self.session)
         version = resolved.service.get_current_version(resolved.pipeline)
         return runner.start(
             pipeline=resolved.pipeline,
@@ -112,7 +113,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             collection=collection,
             settings=self.settings,
             openrouter=openrouter,
-            pinecone=pinecone,
+            vector_stores=vector_stores,
             storage=FileStorage(),
             query=query,
             top_k=top_k,

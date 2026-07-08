@@ -7,7 +7,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreatePipelineWizard } from "./CreatePipelineWizard";
 import { IndexManagerModal } from "./index-manager/IndexManagerModal";
 
-import type { EmbeddingModelInfo, PineconeIndex, Pipeline, PipelineKind } from "@/lib/types";
+import type {
+  BackendInfo,
+  EmbeddingModelInfo,
+  Pipeline,
+  PipelineKind,
+  VectorIndex,
+} from "@/lib/types";
 
 export type PipelineModalsHandle = {
   openCreatePipeline: () => void;
@@ -17,7 +23,8 @@ export type PipelineModalsHandle = {
 type PipelineModalsProps = {
   kind: PipelineKind;
   token: string;
-  indexes: PineconeIndex[];
+  indexes: VectorIndex[];
+  backends: BackendInfo[];
   embeddingModels: EmbeddingModelInfo[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
@@ -46,6 +53,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
       kind,
       token,
       indexes,
+      backends,
       embeddingModels,
       embeddingModelsLoading,
       embeddingModelsError,
@@ -99,6 +107,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           token={token}
           kind={kind}
           indexes={indexes}
+          backends={backends}
           onClose={() => setShowCreatePipeline(false)}
           onCreated={onPipelineCreated}
           onOpenIndexManager={() => {
@@ -111,6 +120,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           open={showIndexManager}
           token={token}
           indexes={indexes}
+          backends={backends}
           embeddingModels={embeddingModels}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}

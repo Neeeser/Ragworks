@@ -19,7 +19,7 @@ import { sortIndexesByName } from "./lib/pipeline-utils";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
+import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 type PipelineInspectorProps = {
@@ -31,7 +31,7 @@ type PipelineInspectorProps = {
   isPreview?: boolean;
   validationErrors?: string[];
   applyDisabled?: boolean;
-  pineconeIndexes?: PineconeIndex[];
+  pineconeIndexes?: VectorIndex[];
   onOpenIndexManager?: () => void;
   embeddingModels?: EmbeddingModelInfo[];
   embeddingModelsLoading?: boolean;
@@ -58,7 +58,9 @@ export function PipelineInspector({
   const isEmbedder = selectedNode?.data.nodeType === "embedder.openrouter";
   const isIndexNode =
     selectedNode?.data.nodeType === "indexer.pinecone" ||
-    selectedNode?.data.nodeType === "retriever.pinecone";
+    selectedNode?.data.nodeType === "indexer.pgvector" ||
+    selectedNode?.data.nodeType === "retriever.pinecone" ||
+    selectedNode?.data.nodeType === "retriever.pgvector";
   const fields = selectedNode?.data.configSchema
     ? buildPipelineConfigFields(selectedNode.data.configSchema)
     : [];
@@ -69,7 +71,13 @@ export function PipelineInspector({
   });
   const selectedEmbeddingModelKey =
     typeof configDraft.model_name === "string" ? configDraft.model_name : "";
-  const sortedIndexes = useMemo(() => sortIndexesByName(pineconeIndexes), [pineconeIndexes]);
+  // The index select only offers indexes on the node's own backend
+  // (indexer.pgvector nodes pick pgvector indexes, Pinecone nodes Pinecone's).
+  const nodeBackend = selectedNode?.data.nodeType.endsWith(".pgvector") ? "pgvector" : "pinecone";
+  const sortedIndexes = useMemo(
+    () => sortIndexesByName(pineconeIndexes.filter((index) => index.backend === nodeBackend)),
+    [pineconeIndexes, nodeBackend],
+  );
   const indexValue = typeof configDraft.index_name === "string" ? configDraft.index_name : "";
   const selectedIndex = sortedIndexes.find((index) => index.name === indexValue) ?? null;
 

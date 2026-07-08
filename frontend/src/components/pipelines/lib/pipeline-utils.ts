@@ -2,7 +2,13 @@ import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
 import type { PipelineNodeData } from "../PipelineNode";
-import type { NodeSpec, PineconeIndex, PipelineDefinition, PipelineKind } from "@/lib/types";
+import type {
+  IndexBackend,
+  NodeSpec,
+  PipelineDefinition,
+  PipelineKind,
+  VectorIndex,
+} from "@/lib/types";
 import type { Edge, Node } from "@xyflow/react";
 
 const PORT_SOURCE = "source";
@@ -15,7 +21,7 @@ const PORT_REQUEST = "request";
 const PORT_RESULTS = "results";
 const NODE_QUERY_INPUT = "query-input";
 const NODE_EMBED_QUERY = "embed-query";
-const NODE_PINECONE_RETRIEVER = "pinecone-retriever";
+const NODE_VECTOR_RETRIEVER = "vector-retriever";
 const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
 const NODE_PARSE_DOCUMENT = "parse-document";
@@ -35,6 +41,7 @@ export const createId = () => {
 
 export const buildDefaultDefinition = (
   kind: PipelineKind,
+  backend: IndexBackend,
   indexName?: string,
   indexDimension?: number,
 ): PipelineDefinition => {
@@ -63,9 +70,9 @@ export const buildDefaultDefinition = (
           position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING },
         },
         {
-          id: NODE_PINECONE_RETRIEVER,
-          type: "retriever.pinecone",
-          name: "Pinecone Retriever",
+          id: NODE_VECTOR_RETRIEVER,
+          type: `retriever.${backend}`,
+          name: "Retriever",
           config: indexConfig,
           position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
         },
@@ -88,13 +95,13 @@ export const buildDefaultDefinition = (
         {
           id: "edge-retrieval-embedder",
           source: NODE_EMBED_QUERY,
-          target: NODE_PINECONE_RETRIEVER,
+          target: NODE_VECTOR_RETRIEVER,
           source_port: PORT_QUERY_EMBEDDING,
           target_port: PORT_QUERY_EMBEDDING,
         },
         {
           id: "edge-retrieval-output",
-          source: NODE_PINECONE_RETRIEVER,
+          source: NODE_VECTOR_RETRIEVER,
           target: NODE_RETRIEVAL_OUTPUT,
           source_port: PORT_RESULTS,
           target_port: PORT_RESULTS,
@@ -139,7 +146,7 @@ export const buildDefaultDefinition = (
       },
       {
         id: NODE_INDEX_CHUNKS,
-        type: "indexer.pinecone",
+        type: `indexer.${backend}`,
         name: "Indexer",
         config: indexConfig,
         position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 4 },
@@ -285,7 +292,7 @@ export const specToNodeData = (spec: NodeSpec): PipelineNodeData => ({
   configSchema: spec.config_schema ?? {},
 });
 
-/** Sorts Pinecone indexes alphabetically by name; used anywhere an index <select> needs a
+/** Sorts vector indexes alphabetically by name; used anywhere an index <select> needs a
  * stable, human-friendly ordering. */
-export const sortIndexesByName = <T extends Pick<PineconeIndex, "name">>(indexes: T[]): T[] =>
+export const sortIndexesByName = <T extends Pick<VectorIndex, "name">>(indexes: T[]): T[] =>
   [...indexes].sort((a, b) => a.name.localeCompare(b.name));

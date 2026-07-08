@@ -1,38 +1,29 @@
 """The collection-deletion cascade, expressed as named purge steps.
 
 Deleting a collection tears down three stores that don't share a transaction:
-the Pinecone namespace (vectors), the file store (uploaded documents), and the
-relational rows. Each is a named step so the sequence reads top-to-bottom and a
-future change lands in exactly one place. Vector-purge failures are classified:
-a missing namespace is benign (nothing to delete), any other Pinecone error is
-surfaced as a 502 via `ExternalServiceError`.
+the vector namespace (dispatched to whichever backend the collection's
+ingestion pipeline indexes into), the file store (uploaded documents), and
+the relational rows. Each is a named step so the sequence reads top-to-bottom
+and a future change lands in exactly one place. Vector-purge failure
+classification lives with each backend: a missing Pinecone namespace is
+swallowed by `PineconeStore.delete_namespace` (nothing to delete), any other
+Pinecone error surfaces as a 502 via `ExternalServiceError`; a pgvector
+delete of zero rows is naturally idempotent.
 """
 
 from __future__ import annotations
 
 from sqlmodel import Session
 
-from app.clients.pinecone import get_pinecone_client
 from app.db import models
 from app.db.repositories import CollectionRepository, DocumentRepository
+from app.schemas.enums import IndexBackend
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.telemetry import record
 from app.telemetry.events import CollectionDeleted
 from app.utils.file_storage import FileStorage
-
-
-def _is_missing_pinecone_namespace(error: Exception) -> bool:
-    """Return True when a Pinecone delete error means the namespace is absent."""
-    message = str(error).lower()
-    if "namespace not found" in message:
-        return True
-    status_code = getattr(error, "status_code", None) or getattr(error, "status", None)
-    if status_code == 404 and "namespace" in message:
-        return True
-    response = getattr(error, "response", None)
-    response_status = getattr(response, "status_code", None) if response else None
-    return response_status == 404 and "namespace" in message
+from app.vectorstores.registry import get_vector_store
 
 
 class CollectionDeletionService:
@@ -53,25 +44,36 @@ class CollectionDeletionService:
             raise InvalidInputError("Ingestion pipeline namespace is not configured.")
 
         collection_id = collection.id
-        self._purge_vectors(user, index_name=resolved.settings.index_name, namespace=namespace)
+        self._purge_vectors(
+            user,
+            backend=resolved.settings.backend,
+            index_name=resolved.settings.index_name,
+            namespace=namespace,
+        )
         self._purge_files(collection)
         self._purge_rows(collection)
         self.session.commit()
         record(CollectionDeleted(user_id=user.id, collection_id=collection_id))
 
-    def _purge_vectors(self, user: models.User, *, index_name: str, namespace: str) -> None:
-        """Delete the collection's Pinecone namespace, tolerating a missing one."""
-        client = get_pinecone_client(api_key=user.pinecone_api_key or "")
+    def _purge_vectors(
+        self,
+        user: models.User,
+        *,
+        backend: IndexBackend,
+        index_name: str,
+        namespace: str,
+    ) -> None:
+        """Delete the collection's vector namespace on its ingestion backend."""
+        store = get_vector_store(backend, user=user, session=self.session)
         try:
-            index = client.Index(index_name)
-            index.delete(namespace=namespace, delete_all=True)
+            store.delete_namespace(index_name, namespace)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            # Pinecone raises provider-specific error types; a missing namespace
-            # is benign (nothing to purge), anything else is a real upstream fault.
-            if not _is_missing_pinecone_namespace(exc):
-                raise ExternalServiceError(
-                    f"Failed to purge Pinecone namespace: {exc}"
-                ) from exc
+            # The Pinecone store already swallowed the benign missing-namespace
+            # case; anything that still raises from it is a real upstream fault.
+            # pgvector errors are our own database's and surface as themselves.
+            if backend is IndexBackend.PINECONE:
+                raise ExternalServiceError(f"Failed to purge Pinecone namespace: {exc}") from exc
+            raise
 
     def _purge_files(self, collection: models.Collection) -> None:
         """Remove every stored upload for the collection's documents."""

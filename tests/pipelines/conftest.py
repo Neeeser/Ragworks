@@ -1,15 +1,24 @@
 """Shared stub factories for pipeline node/execution tests.
 
-`OpenRouterEmbedder` and `PineconeIndexer` get monkeypatched out in several
-node tests with slightly different canned results. Before this, each test
-re-declared its own `_StubEmbedder`/`_StubIndexer` class body (8 copies across
-`test_pipeline_nodes.py`); these factories build a fresh stub class per call
-so each test shapes only the behavior it needs.
+`OpenRouterEmbedder` gets monkeypatched out in several node tests with
+slightly different canned results; vector-store access goes through the run
+context, so `StubVectorStore`/`StubVectorStoreProvider` stand in for a real
+backend without any monkeypatching.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Sequence
+from typing import Any, ClassVar
+
+from app.retrieval.models import DocumentChunk, RetrievalResponse, ScoredChunk
+from app.schemas.enums import IndexBackend
+from app.vectorstores.base import (
+    IndexSpec,
+    VectorIndexDescription,
+    VectorStoreBackend,
+    VectorStoreCapabilities,
+)
 
 
 def make_stub_embedder(
@@ -48,23 +57,75 @@ def make_stub_embedder(
     return _StubEmbedder
 
 
-def make_stub_indexer(
-    *,
-    on_ensure_index: Callable[[object], None] | None = None,
-    on_upsert: Callable[[dict[str, object]], None] | None = None,
-) -> type:
-    """Build a stand-in class for PineconeIndexer that records calls via callbacks."""
+class StubVectorStore(VectorStoreBackend):
+    """Recording in-memory `VectorStoreBackend` for node/execution tests."""
 
-    class _StubIndexer:
-        def __init__(self, client: object) -> None:
-            self.client = client
+    backend: ClassVar[IndexBackend] = IndexBackend.PGVECTOR
+    capabilities: ClassVar[VectorStoreCapabilities] = VectorStoreCapabilities(
+        max_dimension=2000,
+        supported_metrics=("cosine", "l2", "dotproduct"),
+        requires_api_key=False,
+    )
 
-        def ensure_index(self, config: object) -> None:
-            if on_ensure_index:
-                on_ensure_index(config)
+    def __init__(self, query_matches: list[ScoredChunk] | None = None) -> None:
+        self.query_matches = query_matches or []
+        self.ensure_calls: list[IndexSpec] = []
+        self.upsert_calls: list[dict[str, Any]] = []
+        self.query_calls: list[dict[str, Any]] = []
+        self.deleted_namespaces: list[tuple[str, str]] = []
 
-        def upsert(self, **kwargs: object) -> None:
-            if on_upsert:
-                on_upsert(kwargs)
+    def list_indexes(self) -> list[VectorIndexDescription]:
+        return []
 
-    return _StubIndexer
+    def describe_index(self, name: str) -> VectorIndexDescription:
+        return VectorIndexDescription(name=name, backend=self.backend)
+
+    def create_index(self, spec: IndexSpec) -> VectorIndexDescription:
+        self.ensure_calls.append(spec)
+        return VectorIndexDescription(name=spec.name, backend=self.backend)
+
+    def delete_index(self, name: str) -> None:  # pragma: no cover - unused in tests
+        del name
+
+    def ensure_index(self, spec: IndexSpec) -> None:
+        self.ensure_calls.append(spec)
+
+    def upsert(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
+        self.upsert_calls.append(
+            {"index": index, "namespace": namespace, "chunks": list(chunks)}
+        )
+
+    def query(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        embedding: Sequence[float],
+        top_k: int,
+        filter: dict[str, Any] | None = None,
+    ) -> RetrievalResponse:
+        self.query_calls.append(
+            {
+                "index": index,
+                "namespace": namespace,
+                "embedding": list(embedding),
+                "top_k": top_k,
+                "filter": filter,
+            }
+        )
+        return RetrievalResponse(matches=list(self.query_matches))
+
+    def delete_namespace(self, index: str, namespace: str) -> None:
+        self.deleted_namespaces.append((index, namespace))
+
+
+class StubVectorStoreProvider:
+    """Stands in for `VectorStoreProvider`: one shared store for any backend."""
+
+    def __init__(self, store: StubVectorStore | None = None) -> None:
+        self.store = store or StubVectorStore()
+        self.requested_backends: list[IndexBackend] = []
+
+    def get(self, backend: IndexBackend) -> StubVectorStore:
+        self.requested_backends.append(backend)
+        return self.store

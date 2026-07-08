@@ -1,4 +1,9 @@
-"""Ragworks retrieval module."""
+"""Ragworks retrieval module.
+
+Vector-index access (indexing/querying) lives in `app/vectorstores/`; this
+package holds the other pluggable RAG stages: parsers, chunkers, embedders,
+and rerankers, plus the shared domain models.
+"""
 
 # NOTE: Keep imports lightweight so optional dependencies (e.g.
 # sentence-transformers) are not pulled in when the retrieval package is
@@ -7,7 +12,6 @@
 
 from .chunkers import DocumentChunker
 from .embedders import Embedder
-from .indexers import Indexer, PineconeIndexConfig, PineconeIndexer, VectorIndexConfig
 from .models import (
     Document,
     DocumentChunk,
@@ -18,7 +22,6 @@ from .models import (
 )
 from .parsers import DocumentParser, DocumentSource
 from .rerankers import Reranker
-from .retrievers import PineconeRetriever, Retriever
 
 __all__ = [
     "Document",
@@ -28,14 +31,8 @@ __all__ = [
     "DocumentParser",
     "DocumentSource",
     "Embedder",
-    "Indexer",
-    "PineconeIndexConfig",
-    "PineconeIndexer",
-    "PineconeRetriever",
     "QueryRequest",
     "Reranker",
     "RetrievalResponse",
-    "Retriever",
     "ScoredChunk",
-    "VectorIndexConfig",
 ]

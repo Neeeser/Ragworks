@@ -1,3 +1,5 @@
+import type { IndexBackend } from "@/lib/types/common";
+
 /**
  * Runtime application config wire types, hand-mirrored from
  * `app/schemas/app_config.py` (public shape) and `app/schemas/admin.py`
@@ -13,6 +15,10 @@ export interface PublicUploadConfig {
   allowed_content_types: string[];
 }
 
+export interface PublicIndexingConfig {
+  default_backend: IndexBackend;
+}
+
 export interface PublicFeatureFlags {
   umap_visualizations: boolean;
   chat_branching: boolean;
@@ -21,6 +27,7 @@ export interface PublicFeatureFlags {
 export interface PublicConfig {
   auth: PublicAuthConfig;
   uploads: PublicUploadConfig;
+  indexing: PublicIndexingConfig;
   features: PublicFeatureFlags;
 }
 

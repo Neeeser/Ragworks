@@ -9,19 +9,21 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
-import { deletePineconeIndex } from "@/lib/api";
+import { deleteIndex } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { useAppConfig } from "@/providers/config-provider";
 
 import { CreateIndexForm } from "./CreateIndexForm";
 import { IndexDetailsPanel } from "./IndexDetailsPanel";
 import { IndexListPanel } from "./IndexListPanel";
 
-import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
+import type { BackendInfo, EmbeddingModelInfo, IndexBackend, VectorIndex } from "@/lib/types";
 
 type IndexManagerModalProps = {
   open: boolean;
   token: string;
-  indexes: PineconeIndex[];
+  indexes: VectorIndex[];
+  backends: BackendInfo[];
   embeddingModels: EmbeddingModelInfo[];
   embeddingModelsLoading?: boolean;
   embeddingModelsError?: string | null;
@@ -41,6 +43,7 @@ export function IndexManagerModal({
   open,
   token,
   indexes,
+  backends,
   embeddingModels,
   embeddingModelsLoading = false,
   embeddingModelsError = null,
@@ -50,6 +53,8 @@ export function IndexManagerModal({
   onRefresh,
 }: IndexManagerModalProps) {
   const titleId = useId();
+  const { config } = useAppConfig();
+  const [activeBackend, setActiveBackend] = useState<IndexBackend>(config.indexing.default_backend);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -58,8 +63,11 @@ export function IndexManagerModal({
   const [viewMode, setViewMode] = useState<"details" | "create">("details");
   const wasOpenRef = useRef(false);
 
-  const sortedIndexes = sortIndexesByName(indexes);
+  const sortedIndexes = sortIndexesByName(
+    indexes.filter((index) => index.backend === activeBackend),
+  );
   const selectedIndex = sortedIndexes.find((index) => index.name === selectedName) ?? null;
+  const activeBackendInfo = backends.find((info) => info.backend === activeBackend) ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +92,7 @@ export function IndexManagerModal({
     setNotificationMessage(null);
     setLocalError(null);
     try {
-      await deletePineconeIndex(token, indexName);
+      await deleteIndex(token, activeBackend, indexName);
       setDeleteTarget(null);
       onRefresh();
       setSelectedName(null);
@@ -116,10 +124,10 @@ export function IndexManagerModal({
             <div>
               <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Manage indexes</p>
               <h2 id={titleId} className="mt-2 text-2xl font-semibold">
-                Pinecone index manager
+                Vector index manager
               </h2>
               <p className="text-sm text-slate-400">
-                Create, review, and delete serverless indexes tied to this API key.
+                Create, review, and delete indexes on any configured vector store.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -136,6 +144,46 @@ export function IndexManagerModal({
                 Close
               </Button>
             </div>
+          </div>
+
+          <div
+            role="tablist"
+            aria-label="Vector store backend"
+            className="mt-4 flex items-center gap-1 rounded-full border border-white/10 bg-black/40 p-1 text-sm self-start"
+          >
+            {backends.map((info) => {
+              const usable = info.available && info.configured;
+              const isActive = info.backend === activeBackend;
+              return (
+                <button
+                  key={info.backend}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  disabled={!usable}
+                  title={
+                    usable
+                      ? undefined
+                      : !info.available
+                        ? "Unavailable on this deployment."
+                        : "API key required — add it in Settings."
+                  }
+                  onClick={() => {
+                    setActiveBackend(info.backend);
+                    setSelectedName(null);
+                    const hasIndexes = indexes.some((index) => index.backend === info.backend);
+                    setViewMode(hasIndexes ? "details" : "create");
+                  }}
+                  className={`rounded-full px-4 py-1.5 transition ${
+                    isActive
+                      ? "bg-violet-500/30 text-white"
+                      : "text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  }`}
+                >
+                  {info.backend === "pgvector" ? "pgvector" : "Pinecone"}
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-4 flex-1 overflow-y-auto pr-2">
@@ -169,9 +217,11 @@ export function IndexManagerModal({
               <div className="space-y-6">
                 {viewMode === "details" ? (
                   <IndexDetailsPanel index={selectedIndex} onDelete={setDeleteTarget} />
-                ) : (
+                ) : activeBackendInfo ? (
                   <CreateIndexForm
+                    key={activeBackend}
                     token={token}
+                    backendInfo={activeBackendInfo}
                     embeddingModels={embeddingModels}
                     embeddingModelsLoading={embeddingModelsLoading}
                     embeddingModelsError={embeddingModelsError}
@@ -185,7 +235,7 @@ export function IndexManagerModal({
                     }}
                     onError={(nextMessage) => setLocalError(nextMessage)}
                   />
-                )}
+                ) : null}
               </div>
             </div>
           </div>

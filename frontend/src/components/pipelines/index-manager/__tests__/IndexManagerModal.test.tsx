@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IndexManagerModal } from "@/components/pipelines/index-manager/IndexManagerModal";
 import * as apiModule from "@/lib/api";
-import { makePineconeIndex } from "@/test/fixtures";
+import { makeBackendInfo, makePineconeBackendInfo, makeVectorIndex } from "@/test/fixtures";
 
-import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
+import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
 
 let lastEmbeddingProps: Record<string, unknown> | null = null;
 const deleteIndexLabel = "Delete index";
@@ -14,6 +14,7 @@ const createIndexName = "index";
 const confirmDeletionText = /Confirm index deletion/;
 const createIndexButtonName = /Create index/;
 
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
@@ -30,8 +31,8 @@ vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
 const api = vi.mocked(apiModule);
 
 describe("IndexManagerModal", () => {
-  const indexes: PineconeIndex[] = [
-    makePineconeIndex({ name: "alpha", dimension: 768, host: "host", status: { state: "READY" } }),
+  const indexes: VectorIndex[] = [
+    makeVectorIndex({ name: "alpha", dimension: 768, host: "host", status: { state: "READY" } }),
   ];
 
   const embeddingModels: EmbeddingModelInfo[] = [
@@ -54,6 +55,7 @@ describe("IndexManagerModal", () => {
         open={false}
         token="token"
         indexes={[]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={[]}
         onClose={() => undefined}
         onRefresh={() => undefined}
@@ -68,6 +70,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={[]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         loading
         onClose={() => undefined}
@@ -86,6 +89,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={indexes}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={() => undefined}
         onRefresh={onRefresh}
@@ -108,25 +112,26 @@ describe("IndexManagerModal", () => {
     await user.type(confirmInput, "wrong");
     expect(lastButton(deleteIndexLabel)).toBeDisabled();
 
-    api.deletePineconeIndex.mockResolvedValueOnce({ status: "deleted" });
+    api.deleteIndex.mockResolvedValueOnce({ status: "deleted" });
     await user.clear(confirmInput);
     await user.type(confirmInput, "alpha");
     await user.click(lastButton(deleteIndexLabel));
 
     await waitFor(() => {
-      expect(api.deletePineconeIndex).toHaveBeenCalledWith("token", "alpha");
+      expect(api.deleteIndex).toHaveBeenCalledWith("token", "pgvector", "alpha");
       expect(onRefresh).toHaveBeenCalled();
     });
   });
 
   it("surfaces delete errors", async () => {
     const user = userEvent.setup();
-    api.deletePineconeIndex.mockRejectedValueOnce("Delete failed");
+    api.deleteIndex.mockRejectedValueOnce("Delete failed");
     render(
       <IndexManagerModal
         open
         token="token"
         indexes={indexes}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={() => undefined}
         onRefresh={() => undefined}
@@ -148,6 +153,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={[]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={() => undefined}
         onRefresh={onRefresh}
@@ -156,17 +162,20 @@ describe("IndexManagerModal", () => {
 
     expect(screen.getByText(/Create new index/)).toBeInTheDocument();
 
+    // Sparse indexes and cloud placement are Pinecone-only; switch tabs first.
+    await user.click(screen.getByRole("tab", { name: "Pinecone" }));
+
     const nameInput = screen.getByPlaceholderText("research-vault");
     const getVectorTypeSelect = () => screen.getAllByRole("combobox")[0];
     await user.type(nameInput, createIndexName);
 
     await user.selectOptions(getVectorTypeSelect(), "sparse");
 
-    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    api.createIndex.mockResolvedValueOnce(makeVectorIndex());
     await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
-      expect(api.createPineconeIndex).toHaveBeenCalled();
+      expect(api.createIndex).toHaveBeenCalled();
       expect(onRefresh).toHaveBeenCalled();
     });
 
@@ -200,15 +209,15 @@ describe("IndexManagerModal", () => {
 
     await user.click(screen.getByRole("button", { name: "Manual" }));
 
-    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    api.createIndex.mockResolvedValueOnce(makeVectorIndex());
     await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
-      expect(api.createPineconeIndex).toHaveBeenCalledTimes(2);
+      expect(api.createIndex).toHaveBeenCalledTimes(2);
       expect(onRefresh).toHaveBeenCalledTimes(2);
     });
 
-    api.createPineconeIndex.mockRejectedValueOnce(new Error("Boom"));
+    api.createIndex.mockRejectedValueOnce(new Error("Boom"));
     await user.clear(nameInput);
     await user.type(nameInput, createIndexName);
     await user.click(lastButton(createIndexButtonName));
@@ -223,6 +232,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={[]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={() => undefined}
         onRefresh={onRefresh}
@@ -232,11 +242,11 @@ describe("IndexManagerModal", () => {
     const nameInput = screen.getByPlaceholderText("research-vault");
     await user.type(nameInput, createIndexName);
 
-    api.createPineconeIndex.mockRejectedValueOnce(new Error("Boom"));
+    api.createIndex.mockRejectedValueOnce(new Error("Boom"));
     await user.click(lastButton(createIndexButtonName));
     expect(await screen.findByText("Boom")).toBeInTheDocument();
 
-    api.createPineconeIndex.mockResolvedValueOnce(makePineconeIndex());
+    api.createIndex.mockResolvedValueOnce(makeVectorIndex());
     await user.click(lastButton(createIndexButtonName));
 
     await waitFor(() => {
@@ -253,6 +263,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={indexes}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={() => undefined}
         onRefresh={() => undefined}
@@ -274,6 +285,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={indexes}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         onClose={onClose}
         onRefresh={() => undefined}
@@ -287,7 +299,7 @@ describe("IndexManagerModal", () => {
     // index manager itself stays open.
     await user.keyboard("{Escape}");
     expect(screen.queryByText(confirmDeletionText)).not.toBeInTheDocument();
-    expect(screen.getByText("Pinecone index manager")).toBeInTheDocument();
+    expect(screen.getByText("Vector index manager")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
@@ -300,6 +312,7 @@ describe("IndexManagerModal", () => {
         open
         token="token"
         indexes={[]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
         embeddingModels={embeddingModels}
         error="Unable to load indexes."
         onClose={() => undefined}

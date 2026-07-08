@@ -103,14 +103,24 @@ app/
                    pipeline stage: io.py, parsing.py, chunking.py, embedding.py,
                    indexing.py, retrieval.py, plus validators.py for the
                    validation helpers shared across those stage modules)
-  retrieval/       RAG components: chunkers, embedders, indexers, parsers,
-                   rerankers, retrievers — one folder per pluggable stage.
-                   chunkers/base.py holds the `DocumentChunker` protocol;
-                   chunkers/strategies.py holds every concrete strategy
-                   (Token/Sentence/Paragraph/Semantic + `build_chunker`) —
-                   chunker implementations live here and nowhere else (they
-                   used to also exist as `app/services/chunking.py`, which
-                   was a lockstep-drift risk, not a real second concern)
+  retrieval/       RAG components: chunkers, embedders, parsers, rerankers —
+                   one folder per pluggable stage, plus the shared domain
+                   models (models.py). chunkers/base.py holds the
+                   `DocumentChunker` protocol; chunkers/strategies.py holds
+                   every concrete strategy (Token/Sentence/Paragraph/Semantic
+                   + `build_chunker`) — chunker implementations live here and
+                   nowhere else. (Vector-index access used to live here as
+                   indexers/ + retrievers/; it moved to vectorstores/, which
+                   owns both data and control plane per backend.)
+  vectorstores/    vector-database backends behind one interface: base.py
+                   (`VectorStoreBackend` ABC + `VectorStoreCapabilities` +
+                   IndexSpec/VectorIndexDescription + spec validation),
+                   registry.py (get_vector_store — the single construction
+                   and prerequisite-enforcement point — plus the lazy
+                   per-run `VectorStoreProvider` and `backend_statuses`),
+                   pinecone/ (store.py over app/clients/pinecone), pgvector/
+                   (store.py + repository.py: catalog rows + dynamic
+                   `vec_<name>` tables in the app's own Postgres)
   visualization/   embedding-visualization subsystems, one package per technique:
     umap/          UMAP projection compute (service.py, UmapService) + persistence
                    (repository.py, UmapRepository) — a subsystem package like
@@ -368,6 +378,45 @@ The admin settings page needs no frontend work for a new field beyond the
 `PublicConfig` mirror above — it renders from `GET /api/admin/config`'s catalog
 (`iter_config_fields()`), so a new leaf just appears. It only needs new frontend
 code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today).
+
+## Vector-store backends (`app/vectorstores/`)
+
+- **Adding a backend is a checklist, not a scavenger hunt:** implement
+  `VectorStoreBackend` in a new package under `app/vectorstores/`, declare its
+  `VectorStoreCapabilities`, register it in `registry.py`, add its `IndexBackend`
+  enum value, and add one indexer + one retriever node subclass in
+  `app/pipelines/nodes/` (the shared bases own run/summarize/validation). The
+  wizard and index manager pick it up from `GET /api/indexes/backends`.
+- **Capabilities are data, declared once.** A backend's hard limits (max indexed
+  dimension, supported metrics/vector types, name rule, batch/top_k caps) live
+  only on its `VectorStoreCapabilities`. Every enforcement site — create-index
+  validation, pipeline node validation, upsert batching, the frontend forms —
+  reads them off the backend; re-hardcoding a limit anywhere else (including the
+  frontend) is a lockstep bug. Verified values: pgvector caps at 2,000 indexed
+  dimensions (HNSW; the `vector` type stores up to 16,000), Pinecone at 20,000.
+- **`get_vector_store` is the single prerequisite gate.** Requesting Pinecone
+  without a user key, or pgvector while the extension is unavailable, raises
+  `InvalidInputError` there (→ 400). Routes never check provider keys for vector
+  access up front — `require_openrouter_key` is the only key gate on collection/
+  document/search routes, and Pinecone is enforced lazily when a pipeline
+  actually resolves to it (`chat/setup.py` mirrors this for tool collections).
+- **pgvector dynamic DDL is safe only because names are validated first.** Data
+  tables are `vec_<name>` with `-`→`_`; every identifier derives from an index
+  name that already passed the strict `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` rule
+  (≤45 chars, shared with Pinecone so names stay portable). Values always travel
+  as bound parameters; embeddings bind as pgvector text (`"[0.1,0.2]"`) with a
+  `::vector` cast — no pgvector Python dependency.
+- **The extension is best-effort at bootstrap.** `ensure_pgvector_extension`
+  (`app/db/bootstrap.py`) runs `CREATE EXTENSION IF NOT EXISTS vector` (pgvector
+  is not a trusted extension, so this needs superuser — true in the shipped
+  compose); on failure it logs and flips `app/db/pgvector_support.py`'s
+  availability flag instead of failing startup. Dev machines need the extension
+  for the full suite (`brew install pgvector` for Homebrew Postgres);
+  pgvector-dependent tests use the root `pgvector_session` fixture and skip
+  with a named reason when it's missing.
+- **Node type ids are permanent.** Persisted pipeline definitions reference
+  `indexer.pinecone`/`retriever.pinecone`/`indexer.pgvector`/`retriever.pgvector`
+  by string; a new backend adds new ids, never renames existing ones.
 
 ## Hooking into telemetry
 

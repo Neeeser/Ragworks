@@ -2,14 +2,14 @@
 
 import { Trash2 } from "lucide-react";
 
-import type { PineconeIndex } from "@/lib/types";
+import type { VectorIndex } from "@/lib/types";
 
 type IndexDetailsPanelProps = {
-  index: PineconeIndex | null;
+  index: VectorIndex | null;
   onDelete: (name: string) => void;
 };
 
-/** Read-only detail card for the selected Pinecone index, plus the entry point into
+/** Read-only detail card for the selected vector index, plus the entry point into
  * the delete-confirmation flow (owned by the parent IndexManagerModal). */
 export function IndexDetailsPanel({ index, onDelete }: IndexDetailsPanelProps) {
   return (
@@ -36,6 +36,12 @@ export function IndexDetailsPanel({ index, onDelete }: IndexDetailsPanelProps) {
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Status</p>
             <p className="text-sm text-slate-200">
               {(index.status as { state?: string } | null)?.state ?? "Unknown"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Backend</p>
+            <p className="text-sm text-slate-200">
+              {index.backend === "pgvector" ? "pgvector (PostgreSQL)" : "Pinecone"}
             </p>
           </div>
           <div>

@@ -56,8 +56,15 @@ describe("pipeline-utils", () => {
     });
   });
 
+  it("builds pgvector node types when the pgvector backend is chosen", () => {
+    const retrieval = buildDefaultDefinition("retrieval", "pgvector", "docs", 384);
+    expect(retrieval.nodes.some((node) => node.type === "retriever.pgvector")).toBe(true);
+    const ingestion = buildDefaultDefinition("ingestion", "pgvector", "docs");
+    expect(ingestion.nodes.some((node) => node.type === "indexer.pgvector")).toBe(true);
+  });
+
   it("builds default definitions for retrieval and ingestion pipelines", () => {
-    const retrieval = buildDefaultDefinition("retrieval", "index-a", 384);
+    const retrieval = buildDefaultDefinition("retrieval", "pinecone", "index-a", 384);
     expect(retrieval.nodes).toHaveLength(4);
     expect(retrieval.edges).toHaveLength(3);
     const retriever = retrieval.nodes.find((node) => node.type === "retriever.pinecone");
@@ -73,7 +80,7 @@ describe("pipeline-utils", () => {
       }),
     );
 
-    const ingestion = buildDefaultDefinition("ingestion", "index-b");
+    const ingestion = buildDefaultDefinition("ingestion", "pinecone", "index-b");
     expect(ingestion.nodes).toHaveLength(6);
     expect(ingestion.edges).toHaveLength(5);
     const indexer = ingestion.nodes.find((node) => node.type === "indexer.pinecone");
@@ -81,7 +88,7 @@ describe("pipeline-utils", () => {
   });
 
   it("omits index config when the index name is empty", () => {
-    const ingestion = buildDefaultDefinition("ingestion", "   ");
+    const ingestion = buildDefaultDefinition("ingestion", "pinecone", "   ");
     const indexer = ingestion.nodes.find((node) => node.type === "indexer.pinecone");
     expect(indexer?.config).toEqual({});
   });

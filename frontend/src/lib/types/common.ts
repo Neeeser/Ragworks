@@ -1,5 +1,8 @@
 export type UUID = string;
 
+/** Vector-store backends, mirroring `IndexBackend` in `app/schemas/enums.py`. */
+export type IndexBackend = "pinecone" | "pgvector";
+
 export type RunSettingsSectionKey =
   | "systemPrompt"
   | "collectionTools"

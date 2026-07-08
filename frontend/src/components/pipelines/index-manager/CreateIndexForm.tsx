@@ -6,17 +6,13 @@ import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingMode
 import { Button } from "@/components/ui/button";
 import { Field, Select, TextInput } from "@/components/ui/field";
 
-import {
-  CLOUD_OPTIONS,
-  METRIC_OPTIONS,
-  REGION_OPTIONS,
-  useCreateIndexForm,
-} from "./use-create-index-form";
+import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
-import type { EmbeddingModelInfo } from "@/lib/types";
+import type { BackendInfo, EmbeddingModelInfo } from "@/lib/types";
 
 type CreateIndexFormProps = {
   token: string;
+  backendInfo: BackendInfo;
   embeddingModels: EmbeddingModelInfo[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
@@ -27,12 +23,13 @@ type CreateIndexFormProps = {
 
 const FIELD_LABEL_CLASS = "text-xs uppercase tracking-[0.3em] text-slate-400";
 
-/** The "create new index" form: name/vector-type/metric/cloud/region plus the
- * dimension picker (manual number or matched to an embedding model). All of the
- * vector-type/cloud/dimension coupling logic lives in `useCreateIndexForm`; this
- * component is purely presentational. */
+/** The "create new index" form. Everything the backend constrains — metric
+ * options, the dimension ceiling, sparse support, cloud placement — renders
+ * from the backend's served capabilities; the coupling logic lives in
+ * `useCreateIndexForm` and this component is purely presentational. */
 export function CreateIndexForm({
   token,
+  backendInfo,
   embeddingModels,
   embeddingModelsLoading,
   embeddingModelsError,
@@ -40,12 +37,24 @@ export function CreateIndexForm({
   onCreated,
   onError,
 }: CreateIndexFormProps) {
-  const form = useCreateIndexForm({ token, embeddingModels, onCreateStart, onCreated, onError });
-  const isDense = form.createForm.vector_type !== "sparse";
+  const form = useCreateIndexForm({
+    token,
+    backendInfo,
+    embeddingModels,
+    onCreateStart,
+    onCreated,
+    onError,
+  });
+  const isDense = !form.supportsSparse || form.createForm.vector_type !== "sparse";
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Create new index</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Create new index</p>
+        <p className="text-xs text-slate-400">
+          {backendInfo.label} · up to {form.maxDimension.toLocaleString()} dimensions
+        </p>
+      </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <Field label="Index name" labelClassName={FIELD_LABEL_CLASS}>
@@ -56,22 +65,24 @@ export function CreateIndexForm({
             />
           </Field>
         </div>
-        <Field label="Vector type" labelClassName={FIELD_LABEL_CLASS}>
-          <Select
-            value={form.createForm.vector_type ?? "dense"}
-            onChange={(event) => form.handleVectorTypeChange(event.target.value)}
-          >
-            <option value="dense">Dense</option>
-            <option value="sparse">Sparse</option>
-          </Select>
-        </Field>
+        {form.supportsSparse ? (
+          <Field label="Vector type" labelClassName={FIELD_LABEL_CLASS}>
+            <Select
+              value={form.createForm.vector_type ?? "dense"}
+              onChange={(event) => form.handleVectorTypeChange(event.target.value)}
+            >
+              <option value="dense">Dense</option>
+              <option value="sparse">Sparse</option>
+            </Select>
+          </Field>
+        ) : null}
         <Field label="Metric" labelClassName={FIELD_LABEL_CLASS}>
           {isDense ? (
             <Select
               value={form.createForm.metric ?? "cosine"}
               onChange={(event) => form.setMetric(event.target.value)}
             >
-              {METRIC_OPTIONS.map((metric) => (
+              {form.metricOptions.map((metric) => (
                 <option key={metric} value={metric}>
                   {metric}
                 </option>
@@ -96,7 +107,8 @@ export function CreateIndexForm({
                   ) : null}
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  Enter it manually or match an embedding model.
+                  Enter it manually or match an embedding model. Max{" "}
+                  {form.maxDimension.toLocaleString()}.
                 </p>
               </div>
               <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/40 p-1 text-[11px] uppercase tracking-[0.3em] text-slate-400">
@@ -139,6 +151,7 @@ export function CreateIndexForm({
                 type="number"
                 className="mt-2"
                 value={form.createForm.dimension ?? ""}
+                max={form.maxDimension}
                 onChange={(event) =>
                   form.setDimension(event.target.value ? Number(event.target.value) : undefined)
                 }
@@ -147,30 +160,34 @@ export function CreateIndexForm({
             )}
           </div>
         ) : null}
-        <Field label="Cloud" labelClassName={FIELD_LABEL_CLASS}>
-          <Select
-            value={form.createForm.cloud ?? "aws"}
-            onChange={(event) => form.handleCloudChange(event.target.value)}
-          >
-            {CLOUD_OPTIONS.map((cloud) => (
-              <option key={cloud} value={cloud}>
-                {cloud}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Region" labelClassName={FIELD_LABEL_CLASS}>
-          <Select
-            value={form.createForm.region ?? ""}
-            onChange={(event) => form.setRegion(event.target.value)}
-          >
-            {(REGION_OPTIONS[form.createForm.cloud ?? "aws"] ?? []).map((region) => (
-              <option key={region} value={region}>
-                {region}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {form.supportsCloudPlacement ? (
+          <>
+            <Field label="Cloud" labelClassName={FIELD_LABEL_CLASS}>
+              <Select
+                value={form.createForm.cloud ?? "aws"}
+                onChange={(event) => form.handleCloudChange(event.target.value)}
+              >
+                {CLOUD_OPTIONS.map((cloud) => (
+                  <option key={cloud} value={cloud}>
+                    {cloud}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Region" labelClassName={FIELD_LABEL_CLASS}>
+              <Select
+                value={form.createForm.region ?? ""}
+                onChange={(event) => form.setRegion(event.target.value)}
+              >
+                {(REGION_OPTIONS[form.createForm.cloud ?? "aws"] ?? []).map((region) => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        ) : null}
       </div>
       {form.createDisabledReason ? (
         <p className="mt-3 text-xs text-slate-400">{form.createDisabledReason}</p>

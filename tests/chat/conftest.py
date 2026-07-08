@@ -22,6 +22,7 @@ from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.retrieval import CollectionQueryResponse
@@ -147,12 +148,18 @@ def stub_pipeline_settings_fixture(monkeypatch):
     result, so the stubs return a namespace carrying just that.
     """
 
-    def _stub(*, chat_model: str | None, context_window: int = 1024) -> None:
+    def _stub(
+        *,
+        chat_model: str | None,
+        context_window: int = 1024,
+        backend: IndexBackend = IndexBackend.PINECONE,
+    ) -> None:
         ingestion_settings = IngestionPipelineSettings(
             chunk_strategy=models.ChunkStrategy.TOKEN,
             chunk_size=128,
             chunk_overlap=8,
             embedding_model="embed",
+            backend=backend,
             index_name="idx",
             namespace="ns",
             dimension=128,
@@ -160,6 +167,7 @@ def stub_pipeline_settings_fixture(monkeypatch):
         )
         retrieval_settings = RetrievalPipelineSettings(
             embedding_model="embed",
+            backend=backend,
             index_name="idx",
             namespace="ns",
             dimension=128,
@@ -190,10 +198,13 @@ def install_chat_flow_fixture(monkeypatch, stub_pipeline_settings):
         chat_model: str,
         retrieval_cls: type = StubRetrievalService,
         context_window: int = 1024,
+        backend: IndexBackend = IndexBackend.PINECONE,
     ) -> None:
         monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
         monkeypatch.setattr(service_module, "get_openrouter_client", lambda *_a, **_k: openrouter)
         monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
-        stub_pipeline_settings(chat_model=chat_model, context_window=context_window)
+        stub_pipeline_settings(
+            chat_model=chat_model, context_window=context_window, backend=backend
+        )
 
     return _install

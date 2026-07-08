@@ -28,15 +28,17 @@ from app.pipelines.nodes.chunking import (
     FixedChunkerConfig,
 )
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+from app.pipelines.nodes.indexing import BaseIndexerNode, IndexerConfig
 from app.pipelines.nodes.retrieval import (
+    BaseRetrieverNode,
     ChatSettingsConfig,
     ChatSettingsNode,
-    PineconeRetrieverNode,
     RetrieverConfig,
 )
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template
+from app.schemas.enums import IndexBackend
+from app.services.app_config import get_app_config
 
 ConfigModel = TypeVar("ConfigModel", bound=BaseModel)
 
@@ -49,6 +51,7 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
     chunk_size: int
     chunk_overlap: int
     embedding_model: str
+    backend: IndexBackend
     index_name: str
     namespace: str | None
     dimension: int | None
@@ -60,6 +63,7 @@ class RetrievalPipelineSettings:  # pylint: disable=too-many-instance-attributes
     """Resolved settings for retrieval pipelines."""
 
     embedding_model: str
+    backend: IndexBackend
     index_name: str
     namespace: str | None
     dimension: int | None
@@ -113,6 +117,37 @@ def _resolve_chunker_config(
     return _resolve_node_config(definition, ChunkerNode.type, ChunkerConfig)
 
 
+def _resolve_backend_node_config(
+    definition: PipelineDefinition,
+    registry: NodeRegistry,
+    base_class: type[BaseIndexerNode] | type[BaseRetrieverNode],
+) -> tuple[IndexBackend, BaseModel]:
+    """Resolve `(backend, config)` from whichever backend variant is present.
+
+    Walks the registry's node classes (like `_resolve_chunker_config` does for
+    chunkers) so a new backend's node is picked up without a type-id table
+    here. When the definition has no matching node at all, falls back to the
+    app-config default backend's node class with its config defaults.
+    """
+    node_classes = [
+        node_cls
+        for node_type in registry.node_types()
+        if (node_cls := registry.get_node_class(node_type)) is not None
+        and issubclass(node_cls, base_class)
+    ]
+    for node_cls in node_classes:
+        for candidate in definition.nodes:
+            if candidate.type == node_cls.type:
+                return node_cls.backend, node_cls.config_model.model_validate(
+                    candidate.config or {}
+                )
+    default_backend = IndexBackend(get_app_config().indexing.default_backend)
+    for node_cls in node_classes:
+        if node_cls.backend is default_backend:
+            return default_backend, node_cls.config_model()
+    raise ValueError(f"No registered node found for backend '{default_backend.value}'.")
+
+
 def resolve_ingestion_settings(
     definition: PipelineDefinition,
     collection: models.Collection,
@@ -121,7 +156,8 @@ def resolve_ingestion_settings(
     """Resolve ingestion settings from a pipeline definition."""
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
-    indexer = _resolve_node_config(definition, IndexerNode.type, IndexerConfig)
+    backend, indexer_model = _resolve_backend_node_config(definition, registry, BaseIndexerNode)
+    indexer = IndexerConfig.model_validate(indexer_model.model_dump())
     index_name = (
         resolve_collection_template(indexer.index_name, collection) or indexer.index_name
     )
@@ -131,6 +167,7 @@ def resolve_ingestion_settings(
         chunk_size=chunker.chunk_size,
         chunk_overlap=chunker.chunk_overlap,
         embedding_model=embedder.model_name,
+        backend=backend,
         index_name=index_name,
         namespace=namespace,
         dimension=indexer.dimension,
@@ -144,7 +181,8 @@ def resolve_retrieval_settings(
     registry: NodeRegistry,
 ) -> RetrievalPipelineSettings:
     """Resolve retrieval settings from a pipeline definition."""
-    retriever = _resolve_node_config(definition, PineconeRetrieverNode.type, RetrieverConfig)
+    backend, retriever_model = _resolve_backend_node_config(definition, registry, BaseRetrieverNode)
+    retriever = RetrieverConfig.model_validate(retriever_model.model_dump())
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
     chat_settings = _resolve_node_config(definition, ChatSettingsNode.type, ChatSettingsConfig)
     index_name = (
@@ -153,6 +191,7 @@ def resolve_retrieval_settings(
     namespace = resolve_collection_template(retriever.namespace, collection)
     return RetrievalPipelineSettings(
         embedding_model=embedder.model_name,
+        backend=backend,
         index_name=index_name,
         namespace=namespace,
         dimension=embedder.dimension,

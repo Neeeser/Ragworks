@@ -70,7 +70,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Ragworks API",
     version="0.2.0",
-    description="User-centric RAG backend on FastAPI + Pinecone + OpenRouter.",
+    description="User-centric RAG backend on FastAPI + pgvector/Pinecone + OpenRouter.",
     lifespan=lifespan,
 )
 

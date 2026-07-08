@@ -14,7 +14,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![mypy](https://img.shields.io/badge/mypy-strict%20·%200%20errors-blue)](https://mypy-lang.org/)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](#quality)
-[![Pinecone](https://img.shields.io/badge/Pinecone-vector%20store-000000?logo=pinecone)](https://www.pinecone.io/)
+[![pgvector](https://img.shields.io/badge/pgvector-default%20vector%20store-336791?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
+[![Pinecone](https://img.shields.io/badge/Pinecone-optional%20vector%20store-000000?logo=pinecone)](https://www.pinecone.io/)
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-any%20model-6467F2)](https://openrouter.ai/)
 
 [Why](#-why-ragworks) · [Features](#-features) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [Roadmap](#-roadmap) · [Development](docs/DEVELOPMENT.md)
@@ -50,10 +51,10 @@ Multi-turn chat with tool calling: the LLM queries your collections mid-conversa
 Project a collection's chunk embeddings into 2D with UMAP and see your knowledge base's shape — clusters, outliers, and where a query actually landed.
 
 ### 🔑 Bring your own keys
-Runs on **OpenRouter** (any embedding or chat model, swappable per collection, live model catalog with context lengths and pricing) and **Pinecone** (namespace-per-collection isolation). Keys are per-user and validated live.
+Runs on **OpenRouter** (any embedding or chat model, swappable per collection, live model catalog with context lengths and pricing) with pluggable vector stores: **pgvector** by default (built into the shipped Postgres — no vector-DB account needed) or **Pinecone** per pipeline (namespace-per-collection isolation either way). Keys are per-user and validated live.
 
 ### 🗂️ Collections & documents
-Multi-tenant workspaces with JWT auth. Upload PDFs and text; every chunk, embedding reference, and vector ID is stored relationally alongside Pinecone, so the UI can always show you exactly what's in the index and where it came from.
+Multi-tenant workspaces with JWT auth. Upload PDFs and text; every chunk, embedding reference, and vector ID is stored relationally alongside the vector index, so the UI can always show you exactly what's in the index and where it came from.
 
 ## ⚙️ How it works
 
@@ -65,7 +66,7 @@ Your RAG stack **is** a directed graph — so that's exactly how you build it. D
 
 Both graphs are yours to rewire. Swap the chunking strategy, change the embedding model, drop in a reranker — the validator checks the wiring, versions pin what actually ran, and the next run traces the new graph end to end, node by node.
 
-**Stack:** FastAPI + Pydantic v2 + SQLModel + Postgres on the backend, Next.js (App Router) + React 19 + TypeScript on the frontend, Pinecone for vectors, OpenRouter for models.
+**Stack:** FastAPI + Pydantic v2 + SQLModel + Postgres on the backend, Next.js (App Router) + React 19 + TypeScript on the frontend, pgvector (default) or Pinecone for vectors, OpenRouter for models.
 
 ## 🚀 Quick start (Docker)
 
@@ -78,7 +79,9 @@ name: ragworks
 
 services:
   postgres:
-    image: postgres:17
+    # pgvector-enabled Postgres: the default vector-index backend stores
+    # embeddings right here, so a fresh install needs no vector-DB account.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ragworks
       # Only reachable inside the compose network (no published port).
@@ -127,7 +130,7 @@ docker compose up -d
 ```
 
 Open <http://localhost:7247>, create an account, and add your OpenRouter and
-Pinecone API keys on the settings page. The auth signing secret is generated
+(optionally) Pinecone API keys on the settings page. The auth signing secret is generated
 automatically on first boot and persisted in the `backend-config` volume
 (set `JWT_SECRET_KEY` on the backend service to supply your own).
 
@@ -158,7 +161,7 @@ sent externally. Admins can turn it off or tune its retention in
 
 ## 🛠️ Development setup
 
-**Prerequisites:** Python 3.11+, Node 22, Postgres, [uv](https://docs.astral.sh/uv/), an [OpenRouter](https://openrouter.ai/) key and a [Pinecone](https://www.pinecone.io/) key (entered per-user in the UI).
+**Prerequisites:** Python 3.11+, Node 22, Postgres, [uv](https://docs.astral.sh/uv/), the [pgvector](https://github.com/pgvector/pgvector) extension for your Postgres (`brew install pgvector` on macOS), an [OpenRouter](https://openrouter.ai/) key (entered per-user in the UI), and optionally a [Pinecone](https://www.pinecone.io/) key if you want Pinecone-backed pipelines.
 
 ```bash
 git clone https://github.com/Neeeser/Ragworks.git
@@ -173,7 +176,7 @@ No configuration needed — dev runs with sensible defaults (local Postgres,
 default models) are plain environment variables; see
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-Open **http://localhost:3000**, register, add your OpenRouter + Pinecone keys in settings, create a collection, and drop in a document. Then open the trace of the ingestion run you just triggered — that's the whole idea.
+Open **http://localhost:3000**, register, add your OpenRouter key in settings (Pinecone is optional), create a collection, and drop in a document. Then open the trace of the ingestion run you just triggered — that's the whole idea.
 
 ## 🧪 Quality
 

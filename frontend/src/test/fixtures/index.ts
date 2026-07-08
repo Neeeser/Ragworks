@@ -19,7 +19,6 @@ import type {
   ModelEndpointDirectory,
   ModelInfo,
   NodeSpec,
-  PineconeIndex,
   Pipeline,
   PipelineNodeRunTrace,
   PipelineTraceResponse,
@@ -204,19 +203,6 @@ export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
     output_ports: [{ key: "out", label: "Out", data_type: "any", required: false }],
     config_schema: {},
     default_config: {},
-    ...overrides,
-  };
-}
-
-export function makePineconeIndex(overrides: Partial<PineconeIndex> = {}): PineconeIndex {
-  return {
-    name: "index-1",
-    vector_type: "dense",
-    metric: "cosine",
-    dimension: 1536,
-    status: { ready: true, state: "Ready" },
-    host: "index-1.pinecone.io",
-    deletion_protection: "disabled",
     ...overrides,
   };
 }
@@ -427,3 +413,5 @@ export * from "@/test/fixtures/config";
 
 // Rich chat-studio scenario fixtures (relocated from chat-studio/__tests__).
 export * from "@/test/fixtures/chat-scenarios";
+
+export { makeBackendInfo, makePineconeBackendInfo, makeVectorIndex } from "./indexes";

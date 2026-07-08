@@ -1,8 +1,9 @@
 # Ragworks
 
 Ragworks is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`).
-The goal is an easy-to-use RAG interface for power users. Its backbones are Pinecone
-for vector storage and OpenRouter for embeddings and LLMs.
+The goal is an easy-to-use RAG interface for power users. Its backbones are pluggable
+vector stores — pgvector in the shipped Postgres by default, Pinecone optionally —
+and OpenRouter for embeddings and LLMs.
 
 This file holds only repo-wide rules. Area-specific engineering practices live next to
 the code they govern — load the one for the code you're touching:

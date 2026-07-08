@@ -10,7 +10,8 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useEmbeddingModelCatalog } from "./hooks/use-embedding-model-catalog";
-import { usePineconeIndexes } from "./hooks/use-pinecone-indexes";
+import { useIndexBackends } from "./hooks/use-index-backends";
+import { useIndexes } from "./hooks/use-indexes";
 import { usePipelines } from "./hooks/use-pipelines";
 import {
   validatePipelineConfig,
@@ -74,7 +75,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const { embeddingModels, embeddingModelsLoading, embeddingModelsError } =
     useEmbeddingModelCatalog(token);
 
-  const { indexes, indexesLoading, indexesError, refreshIndexes } = usePineconeIndexes(token);
+  const { indexes, indexesLoading, indexesError, refreshIndexes } = useIndexes(token);
+  const { backends } = useIndexBackends(token);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -296,6 +298,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         kind={kind}
         token={token ?? ""}
         indexes={indexes}
+        backends={backends}
         embeddingModels={embeddingModels}
         embeddingModelsLoading={embeddingModelsLoading}
         embeddingModelsError={embeddingModelsError}

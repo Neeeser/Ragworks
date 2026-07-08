@@ -2,26 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listPineconeIndexes } from "@/lib/api";
+import { listIndexes } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { PineconeIndex } from "@/lib/types";
+import type { VectorIndex } from "@/lib/types";
 
-export interface UsePineconeIndexesResult {
-  indexes: PineconeIndex[];
+export interface UseIndexesResult {
+  indexes: VectorIndex[];
   indexesLoading: boolean;
   indexesError: string | null;
   refreshIndexes: () => void;
 }
 
 /**
- * Loads the Pinecone index list for the current API key. Both the initial load and
- * manual "Refresh" action go through the single `load` function below - the original
- * component had two near-identical fetch/loading/error blocks (one for the mount
- * effect, one for the refresh callback) that have been unified here.
+ * Loads the vector-index list across every backend the user can use (pgvector
+ * always; Pinecone when a key is configured). Both the initial load and the
+ * manual "Refresh" action go through the single `load` function below.
  */
-export function usePineconeIndexes(token: string | null): UsePineconeIndexesResult {
-  const [indexes, setIndexes] = useState<PineconeIndex[]>([]);
+export function useIndexes(token: string | null): UseIndexesResult {
+  const [indexes, setIndexes] = useState<VectorIndex[]>([]);
   const [indexesLoading, setIndexesLoading] = useState(false);
   const [indexesError, setIndexesError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -31,7 +30,7 @@ export function usePineconeIndexes(token: string | null): UsePineconeIndexesResu
     setIndexesLoading(true);
     setIndexesError(null);
     try {
-      const data = await listPineconeIndexes(authToken);
+      const data = await listIndexes(authToken);
       if (requestIdRef.current !== requestId) return;
       setIndexes(data);
     } catch (error) {

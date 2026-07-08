@@ -15,14 +15,35 @@ import pytest
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
-from app.services import collection_deletion as deletion_module
-from app.services.collection_deletion import (
-    CollectionDeletionService,
-    _is_missing_pinecone_namespace,
+from app.db.repositories import (
+    AppSettingRepository,
+    ChatRepository,
+    CollectionRepository,
+    UserRepository,
 )
+from app.services import collection_deletion as deletion_module
+from app.services.app_config import invalidate_app_config_cache
+from app.services.collection_deletion import CollectionDeletionService
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
+from app.vectorstores import registry as registry_module
+from app.vectorstores.base import IndexSpec
+from app.vectorstores.pgvector import PgvectorStore
+from app.vectorstores.pinecone.store import is_missing_namespace_error
+
+
+@pytest.fixture(autouse=True)
+def _invalidate_cache():
+    """Config-cache hygiene: tests below override indexing.default_backend."""
+    invalidate_app_config_cache()
+    yield
+    invalidate_app_config_cache()
+
+
+def _use_pinecone_default(session: Session) -> None:
+    AppSettingRepository(session).upsert("indexing.default_backend", "pinecone", updated_by=None)
+    session.commit()
+    invalidate_app_config_cache()
 
 
 class _StubPinecone:
@@ -108,12 +129,12 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
 
 
 def test_is_missing_pinecone_namespace_variants() -> None:
-    assert _is_missing_pinecone_namespace(Exception("Namespace not found")) is True
-    assert _is_missing_pinecone_namespace(Exception("missing namespace")) is False
-    assert _is_missing_pinecone_namespace(_StatusCodeError("namespace missing", 404)) is True
-    assert _is_missing_pinecone_namespace(_StatusCodeError("namespace missing", 500)) is False
-    assert _is_missing_pinecone_namespace(_ResponseStatusError("namespace missing", 404)) is True
-    assert _is_missing_pinecone_namespace(_ResponseStatusError("namespace missing", 500)) is False
+    assert is_missing_namespace_error(Exception("Namespace not found")) is True
+    assert is_missing_namespace_error(Exception("missing namespace")) is False
+    assert is_missing_namespace_error(_StatusCodeError("namespace missing", 404)) is True
+    assert is_missing_namespace_error(_StatusCodeError("namespace missing", 500)) is False
+    assert is_missing_namespace_error(_ResponseStatusError("namespace missing", 404)) is True
+    assert is_missing_namespace_error(_ResponseStatusError("namespace missing", 500)) is False
 
 
 def test_delete_purges_rows_and_detaches_sessions(monkeypatch, session: Session) -> None:
@@ -153,7 +174,6 @@ def test_delete_purges_rows_and_detaches_sessions(monkeypatch, session: Session)
     session.commit()
 
     storage = _StubFileStorage()
-    monkeypatch.setattr(deletion_module, "get_pinecone_client", lambda **_k: _StubPinecone("key"))
     monkeypatch.setattr(deletion_module, "FileStorage", lambda: storage)
 
     CollectionDeletionService(session).delete(user, collection)
@@ -170,10 +190,11 @@ def test_delete_purges_rows_and_detaches_sessions(monkeypatch, session: Session)
 
 def test_delete_ignores_missing_namespace(monkeypatch, session: Session) -> None:
     user = _create_user(session)
+    _use_pinecone_default(session)
     collection = _create_collection(session, user)
 
     monkeypatch.setattr(
-        deletion_module, "get_pinecone_client", lambda **_k: _StubPineconeMissingNamespace("key")
+        registry_module, "get_pinecone_client", lambda *_a, **_k: _StubPineconeMissingNamespace("key")
     )
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
 
@@ -184,9 +205,12 @@ def test_delete_ignores_missing_namespace(monkeypatch, session: Session) -> None
 
 def test_delete_surfaces_pinecone_error(monkeypatch, session: Session) -> None:
     user = _create_user(session)
+    _use_pinecone_default(session)
     collection = _create_collection(session, user)
 
-    monkeypatch.setattr(deletion_module, "get_pinecone_client", lambda **_k: _StubPineconeError("key"))
+    monkeypatch.setattr(
+        registry_module, "get_pinecone_client", lambda *_a, **_k: _StubPineconeError("key")
+    )
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
 
     with pytest.raises(ExternalServiceError):
@@ -231,9 +255,51 @@ def test_delete_rejects_missing_namespace(monkeypatch, session: Session) -> None
 
     monkeypatch.setattr(
         "app.services.pipeline_resolution.resolve_ingestion_settings",
-        lambda *_a, **_k: SimpleNamespace(namespace=None, index_name="index"),
+        lambda *_a, **_k: SimpleNamespace(namespace=None, index_name="index", backend=None),
     )
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
 
     with pytest.raises(InvalidInputError):
         CollectionDeletionService(session).delete(user, collection)
+
+
+def test_delete_purges_pgvector_namespace_without_pinecone(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """A pgvector-backed collection's deletion purges its namespace rows and
+    never constructs a Pinecone client."""
+    session = pgvector_session
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    store = PgvectorStore(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=2, metric="cosine"))
+    from app.retrieval.models import DocumentChunk, DocumentMetadata
+
+    namespace = f"col-{collection.id}"
+    store.upsert(
+        "ragworks",
+        namespace,
+        [
+            DocumentChunk(
+                document_id="doc",
+                chunk_id="doc:0",
+                text="x",
+                order=0,
+                metadata=DocumentMetadata(),
+                embedding=[0.1, 0.2],
+            )
+        ],
+    )
+    session.commit()
+
+    def _no_pinecone(*_a, **_k):
+        raise AssertionError("Pinecone client must not be constructed for pgvector purge")
+
+    monkeypatch.setattr(registry_module, "get_pinecone_client", _no_pinecone)
+    monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
+
+    CollectionDeletionService(session).delete(user, collection)
+
+    assert session.get(models.Collection, collection.id) is None
+    assert store.query("ragworks", namespace, embedding=[0.1, 0.2], top_k=5).matches == []

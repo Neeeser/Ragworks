@@ -270,8 +270,8 @@ describe("pipeline-io", () => {
     ];
 
     const { nodeErrors } = validatePipelineConfig(nodes);
-    expect(nodeErrors.indexer[0]).toContain("Pinecone index is required");
-    expect(nodeErrors.retriever[0]).toContain("Pinecone index is required");
+    expect(nodeErrors.indexer[0]).toContain("An index is required");
+    expect(nodeErrors.retriever[0]).toContain("An index is required");
     expect(nodeErrors.parser).toBeUndefined();
 
     const overrides = { retriever: { index_name: "index-a" } };

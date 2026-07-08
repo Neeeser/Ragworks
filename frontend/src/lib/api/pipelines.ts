@@ -1,14 +1,16 @@
 import { apiFetch } from "@/lib/api/client";
 
 import type {
+  BackendInfo,
+  IndexBackend,
+  IndexCreatePayload,
   NodeSpec,
-  PineconeIndex,
-  PineconeIndexCreatePayload,
   Pipeline,
   PipelineDefinition,
   PipelineKind,
   PipelineValidationResult,
   PipelineVersion,
+  VectorIndex,
 } from "@/lib/types";
 
 export async function fetchPipelines(token: string, kind?: PipelineKind): Promise<Pipeline[]> {
@@ -25,34 +27,42 @@ export async function fetchPipelineNodes(token: string): Promise<NodeSpec[]> {
   return response.nodes;
 }
 
-export async function listPineconeIndexes(token: string): Promise<PineconeIndex[]> {
-  const response = await apiFetch<{ indexes: PineconeIndex[] }>("/api/indexes", { token });
+export async function listIndexes(token: string, backend?: IndexBackend): Promise<VectorIndex[]> {
+  const params = backend ? `?backend=${backend}` : "";
+  const response = await apiFetch<{ indexes: VectorIndex[] }>(`/api/indexes${params}`, { token });
   return response.indexes ?? [];
 }
 
-export async function describePineconeIndex(
-  token: string,
-  indexName: string,
-): Promise<PineconeIndex> {
-  return apiFetch<PineconeIndex>(`/api/indexes/${indexName}`, { token });
+export async function fetchIndexBackends(token: string): Promise<BackendInfo[]> {
+  const response = await apiFetch<{ backends: BackendInfo[] }>("/api/indexes/backends", { token });
+  return response.backends ?? [];
 }
 
-export async function createPineconeIndex(
+export async function describeIndex(
   token: string,
-  payload: PineconeIndexCreatePayload,
-): Promise<PineconeIndex> {
-  return apiFetch<PineconeIndex>("/api/indexes", {
+  backend: IndexBackend,
+  indexName: string,
+): Promise<VectorIndex> {
+  return apiFetch<VectorIndex>(`/api/indexes/${indexName}?backend=${backend}`, { token });
+}
+
+export async function createIndex(
+  token: string,
+  payload: IndexCreatePayload,
+): Promise<VectorIndex> {
+  return apiFetch<VectorIndex>("/api/indexes", {
     method: "POST",
     token,
     body: JSON.stringify(payload),
   });
 }
 
-export async function deletePineconeIndex(
+export async function deleteIndex(
   token: string,
+  backend: IndexBackend,
   indexName: string,
 ): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/api/indexes/${indexName}`, {
+  return apiFetch<{ status: string }>(`/api/indexes/${indexName}?backend=${backend}`, {
     method: "DELETE",
     token,
   });

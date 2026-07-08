@@ -3,6 +3,9 @@
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { BackendCard } from "@/components/pipelines/BackendCard";
+import { PineconeIcon } from "@/components/pipelines/icons/PineconeIcon";
+import { PostgresIcon } from "@/components/pipelines/icons/PostgresIcon";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import {
   buildDefaultDefinition,
@@ -13,14 +16,16 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { useAppConfig } from "@/providers/config-provider";
 
-import type { PineconeIndex, Pipeline, PipelineKind } from "@/lib/types";
+import type { BackendInfo, IndexBackend, Pipeline, PipelineKind, VectorIndex } from "@/lib/types";
 
 type CreatePipelineWizardProps = {
   open: boolean;
   token: string;
   kind: PipelineKind;
-  indexes: PineconeIndex[];
+  indexes: VectorIndex[];
+  backends: BackendInfo[];
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
   onOpenIndexManager: () => void;
@@ -28,22 +33,31 @@ type CreatePipelineWizardProps = {
 
 const steps: WizardStep[] = [
   { id: "basics", label: "Basics", description: "Name the pipeline." },
-  { id: "index", label: "Index", description: "Select the Pinecone index to target." },
+  { id: "store", label: "Vector store", description: "Pick where vectors live." },
   { id: "review", label: "Review", description: "Confirm pipeline details." },
 ];
+
+const BACKEND_TITLES: Record<IndexBackend, string> = {
+  pgvector: "pgvector (PostgreSQL)",
+  pinecone: "Pinecone",
+};
 
 export function CreatePipelineWizard({
   open,
   token,
   kind,
   indexes,
+  backends,
   onClose,
   onCreated,
   onOpenIndexManager,
 }: CreatePipelineWizardProps) {
+  const { config } = useAppConfig();
+  const defaultBackend = config.indexing.default_backend;
   const [stepIndex, setStepIndex] = useState(0);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
   const [form, setForm] = useState({ name: "", index_name: "" });
   const wasOpen = useRef(false);
 
@@ -51,15 +65,20 @@ export function CreatePipelineWizard({
     if (open && !wasOpen.current) {
       setStepIndex(0);
       setMessage(null);
+      setBackend(defaultBackend);
       setForm({ name: "", index_name: "" });
     }
     wasOpen.current = open;
-  }, [open]);
+  }, [open, defaultBackend]);
 
-  const sortedIndexes = useMemo(() => sortIndexesByName(indexes), [indexes]);
+  const backendInfo = backends.find((info) => info.backend === backend) ?? null;
+  const backendIndexes = useMemo(
+    () => sortIndexesByName(indexes.filter((index) => index.backend === backend)),
+    [indexes, backend],
+  );
   const selectedIndex = useMemo(
-    () => sortedIndexes.find((index) => index.name === form.index_name) ?? null,
-    [sortedIndexes, form.index_name],
+    () => backendIndexes.find((index) => index.name === form.index_name) ?? null,
+    [backendIndexes, form.index_name],
   );
 
   const canProceed = () => {
@@ -75,6 +94,7 @@ export function CreatePipelineWizard({
     try {
       const definition = buildDefaultDefinition(
         kind,
+        backend,
         form.index_name.trim(),
         selectedIndex?.dimension ?? undefined,
       );
@@ -91,6 +111,12 @@ export function CreatePipelineWizard({
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleBackendSelect = (nextBackend: IndexBackend) => {
+    if (nextBackend === backend) return;
+    setBackend(nextBackend);
+    setForm((prev) => ({ ...prev, index_name: "" }));
   };
 
   const handleIndexSelect = (value: string) => {
@@ -145,8 +171,21 @@ export function CreatePipelineWizard({
 
       {stepIndex === 1 && (
         <div className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Vector store</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {backends.map((info) => (
+                <BackendCard
+                  key={info.backend}
+                  info={info}
+                  selected={info.backend === backend}
+                  onSelect={handleBackendSelect}
+                />
+              ))}
+            </div>
+          </div>
           <Field
-            label="Pinecone index"
+            label={`${BACKEND_TITLES[backend]} index`}
             labelClassName="text-xs uppercase tracking-[0.3em] text-slate-400"
           >
             <Select
@@ -154,17 +193,24 @@ export function CreatePipelineWizard({
               onChange={(event) => handleIndexSelect(event.target.value)}
             >
               <option value="">Select an index</option>
-              {sortedIndexes.map((index) => (
+              {backendIndexes.map((index) => (
                 <option key={index.name} value={index.name}>
                   {index.name}
+                  {typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""}
                 </option>
               ))}
               <option value={CREATE_SENTINEL}>+ Add new index...</option>
             </Select>
           </Field>
-          {sortedIndexes.length === 0 ? (
+          {backendInfo ? (
+            <p className="text-xs text-slate-400">
+              Up to {backendInfo.capabilities.max_dimension.toLocaleString()} dimensions · metrics:{" "}
+              {backendInfo.capabilities.supported_metrics.join(", ")}
+            </p>
+          ) : null}
+          {backendIndexes.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              <p>No Pinecone indexes found for this API key.</p>
+              <p>No {BACKEND_TITLES[backend]} indexes found.</p>
               <Button
                 variant="secondary"
                 onClick={onOpenIndexManager}
@@ -193,7 +239,18 @@ export function CreatePipelineWizard({
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Pinecone index</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Vector store</p>
+              <p className="flex items-center gap-2 text-sm text-white">
+                {backend === "pgvector" ? (
+                  <PostgresIcon className="h-4 w-4" />
+                ) : (
+                  <PineconeIcon className="h-4 w-4 text-slate-100" />
+                )}
+                {BACKEND_TITLES[backend]}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Index</p>
               <p className="text-sm text-white">{form.index_name || "Not selected"}</p>
             </div>
           </div>

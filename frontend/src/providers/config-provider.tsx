@@ -20,6 +20,9 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
     max_upload_size_mb: 50,
     allowed_content_types: ["text/plain", "text/markdown", "text/csv", "application/pdf"],
   },
+  indexing: {
+    default_backend: "pgvector",
+  },
   features: {
     umap_visualizations: true,
     chat_branching: true,

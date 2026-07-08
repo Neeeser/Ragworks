@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
-from app.api.dependencies import get_session, require_user_api_keys
+from app.api.dependencies import get_session, require_openrouter_key
 from app.api.routes.utils import get_collection_or_404, to_http_exception
 from app.db import models
 from app.schemas.retrieval import CollectionQueryRequest, CollectionQueryResponse
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/collections", tags=["search"])
 def run_collection_query(
     collection_id: UUID,
     payload: CollectionQueryRequest,
-    current_user: models.User = Depends(require_user_api_keys),
+    current_user: models.User = Depends(require_openrouter_key),
     session: Session = Depends(get_session),
 ) -> CollectionQueryResponse:
     """Run a retrieval query against a collection."""

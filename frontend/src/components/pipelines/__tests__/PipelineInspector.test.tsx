@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PipelineInspector } from "@/components/pipelines/PipelineInspector";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { EmbeddingModelInfo, PineconeIndex } from "@/lib/types";
+import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 const NODE_TYPE_EMBEDDER = "embedder.openrouter";
@@ -182,8 +182,16 @@ describe("PipelineInspector", () => {
       },
     };
 
-    const indexes: PineconeIndex[] = [
-      { name: "alpha", dimension: 768, metric: "cosine", host: null, spec: null, status: null },
+    const indexes: VectorIndex[] = [
+      {
+        name: "alpha",
+        backend: "pinecone",
+        dimension: 768,
+        metric: "cosine",
+        host: null,
+        spec: null,
+        status: null,
+      },
     ];
     const models: EmbeddingModelInfo[] = [];
 
@@ -365,7 +373,9 @@ describe("PipelineInspector", () => {
         onConfigDraftChange={() => undefined}
         onLabelChange={() => undefined}
         onApplyConfig={() => undefined}
-        pineconeIndexes={[{ name: "alpha", dimension: null, metric: "cosine", host: null }]}
+        pineconeIndexes={[
+          { name: "alpha", backend: "pinecone", dimension: null, metric: "cosine", host: null },
+        ]}
       />,
     );
 
@@ -394,8 +404,16 @@ describe("PipelineInspector", () => {
         },
       },
     };
-    const indexes: PineconeIndex[] = [
-      { name: "alpha", dimension: null, metric: "cosine", host: null, spec: null, status: null },
+    const indexes: VectorIndex[] = [
+      {
+        name: "alpha",
+        backend: "pinecone",
+        dimension: null,
+        metric: "cosine",
+        host: null,
+        spec: null,
+        status: null,
+      },
     ];
 
     render(

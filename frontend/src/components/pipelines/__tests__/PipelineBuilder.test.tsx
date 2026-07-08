@@ -326,7 +326,7 @@ describe("PipelineBuilder", () => {
     api.fetchPipelineNodes.mockResolvedValue(nodeSpecs);
     api.fetchCollections.mockResolvedValue([]);
     api.fetchEmbeddingModels.mockResolvedValue([]);
-    api.listPineconeIndexes.mockResolvedValue([]);
+    api.listIndexes.mockResolvedValue([]);
     api.listPipelineVersions.mockResolvedValue([makePipelineVersion({ id: "v1" })]);
     api.validatePipeline.mockResolvedValue({ valid: true, errors: [], warnings: [] });
     api.updatePipeline.mockResolvedValue(pipeline);
@@ -531,7 +531,7 @@ describe("PipelineBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open indexes from wizard" }));
     expect(screen.getByRole("button", { name: "Refresh indexes" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Refresh indexes" }));
-    expect(api.listPineconeIndexes).toHaveBeenCalled();
+    expect(api.listIndexes).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close indexes" }));
     expect(screen.getByRole("button", { name: "Finish create" })).toBeInTheDocument();
 

@@ -62,8 +62,9 @@ class _ToDictLike(Protocol):
 class IndexDescription(BaseModel):
     """Typed description of a Pinecone index -- the control-plane `IndexModel` shape.
 
-    Field set mirrors `app.schemas.pinecone_indexes.PineconeIndex`, the stable wire
-    schema; this is the internal typed form the route layer maps onto that schema.
+    Field set mirrors `app.schemas.indexes.IndexRead`, the stable wire schema
+    (minus `backend`, which the store layer adds); this is the internal typed
+    form `PineconeStore` maps onto `VectorIndexDescription`.
     """
 
     name: str

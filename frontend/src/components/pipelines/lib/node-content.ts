@@ -88,6 +88,14 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: "Indexed batch\n- upserted: 2\n- index: rag-prod\n- namespace: docs",
     },
   },
+  "indexer.pgvector": {
+    description:
+      "Upserts embedded chunks into the built-in Postgres (pgvector) index and namespace. It can auto-create the index and returns the indexing payload for final persistence.",
+    example: {
+      input: "Embedded chunks (2 vectors)\nTarget index: ragworks / docs",
+      output: "Indexed batch\n- upserted: 2\n- index: ragworks\n- namespace: docs",
+    },
+  },
   "ingestion.output": {
     description:
       "Terminal node that passes indexed chunks through as the pipeline result. Use it to finish ingestion runs.",
@@ -107,6 +115,14 @@ const NODE_CONTENT: Record<string, NodeContent> = {
   "retriever.pinecone": {
     description:
       "Queries Pinecone with a precomputed query embedding and returns scored matches with usage metadata.",
+    example: {
+      input: "Query embedding: [0.12, -0.03, 0.44, ...]",
+      output: "Retrieval results\n- chunk A (score 0.82)\n- chunk B (score 0.79)\n- ...",
+    },
+  },
+  "retriever.pgvector": {
+    description:
+      "Queries the built-in Postgres (pgvector) index with a precomputed query embedding and returns scored matches with usage metadata.",
     example: {
       input: "Query embedding: [0.12, -0.03, 0.44, ...]",
       output: "Retrieval results\n- chunk A (score 0.82)\n- chunk B (score 0.79)\n- ...",

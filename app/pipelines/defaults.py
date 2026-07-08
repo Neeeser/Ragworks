@@ -8,13 +8,27 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
+from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
+
+
+def _default_backend() -> IndexBackend:
+    """Return the deployment's configured default index backend."""
+    return IndexBackend(get_app_config().indexing.default_backend)
+
+
+def _default_index_name(backend: IndexBackend) -> str:
+    """Return the default index name a scaffolded pipeline targets."""
+    if backend is IndexBackend.PGVECTOR:
+        return DEFAULT_PGVECTOR_INDEX_NAME
+    return get_settings().pinecone_index_name
 
 
 def build_default_ingestion_pipeline() -> PipelineDefinition:
     """Return the default ingestion pipeline definition."""
-    settings = get_settings()
+    backend = _default_backend()
     model_defaults = get_app_config().models
     nodes = [
         PipelineNodeDefinition(
@@ -48,11 +62,11 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
         ),
         PipelineNodeDefinition(
             id="index-chunks",
-            type="indexer.pinecone",
+            type=f"indexer.{backend.value}",
             name="Indexer",
             position={"x": 960, "y": 0},
             config={
-                "index_name": settings.pinecone_index_name,
+                "index_name": _default_index_name(backend),
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
                 "metric": "cosine",
                 "ensure_index": True,
@@ -107,7 +121,7 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
 
 def build_default_retrieval_pipeline() -> PipelineDefinition:
     """Return the default retrieval pipeline definition."""
-    settings = get_settings()
+    backend = _default_backend()
     model_defaults = get_app_config().models
     nodes = [
         PipelineNodeDefinition(
@@ -124,12 +138,12 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             config={"model_name": model_defaults.default_embedding_model},
         ),
         PipelineNodeDefinition(
-            id="pinecone-retriever",
-            type="retriever.pinecone",
-            name="Pinecone Retriever",
+            id="vector-retriever",
+            type=f"retriever.{backend.value}",
+            name="Retriever",
             position={"x": 560, "y": 0},
             config={
-                "index_name": settings.pinecone_index_name,
+                "index_name": _default_index_name(backend),
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
             },
         ),
@@ -161,13 +175,13 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
         PipelineEdgeDefinition(
             id="edge-retrieval-embedder",
             source="embed-query",
-            target="pinecone-retriever",
+            target="vector-retriever",
             source_port="query_embedding",
             target_port="query_embedding",
         ),
         PipelineEdgeDefinition(
             id="edge-retrieval-output",
-            source="pinecone-retriever",
+            source="vector-retriever",
             target="retrieval-output",
             source_port="results",
             target_port="results",

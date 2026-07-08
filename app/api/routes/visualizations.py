@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlmodel import Session
 
-from app.api.dependencies import get_session, require_user_api_keys
+from app.api.dependencies import get_session, require_openrouter_key
 from app.api.routes.utils import get_collection_or_404, to_http_exception
 from app.db import models
 from app.schemas.visualization import (
@@ -41,7 +41,7 @@ router = APIRouter(
 @router.get("/{collection_id}/visualizations/umap", response_model=UmapVisualizationRead)
 def get_collection_umap(
     collection_id: UUID,
-    current_user: models.User = Depends(require_user_api_keys),
+    current_user: models.User = Depends(require_openrouter_key),
     session: Session = Depends(get_session),
 ) -> UmapVisualizationRead:
     """Return the latest UMAP projection for a collection."""
@@ -65,7 +65,7 @@ def get_collection_umap(
 def compute_collection_umap(
     collection_id: UUID,
     payload: UmapComputeRequest = Body(default_factory=UmapComputeRequest),
-    current_user: models.User = Depends(require_user_api_keys),
+    current_user: models.User = Depends(require_openrouter_key),
     session: Session = Depends(get_session),
 ) -> UmapVisualizationRead:
     """Compute and persist a UMAP projection for a collection."""

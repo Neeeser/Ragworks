@@ -7,12 +7,12 @@ import {
   computeCollectionUmap,
   createCollection,
   createPipeline,
-  createPineconeIndex,
+  createIndex,
   deleteChatSession,
   deleteCollection,
   deletePipeline,
-  deletePineconeIndex,
-  describePineconeIndex,
+  deleteIndex,
+  describeIndex,
   fetchChunkDetail,
   fetchCollection,
   fetchCollectionStats,
@@ -36,7 +36,8 @@ import {
   listModelEndpoints,
   listModels,
   listPipelineVersions,
-  listPineconeIndexes,
+  listIndexes,
+  fetchIndexBackends,
   loginRequest,
   registerUser,
   runCollectionQuery,
@@ -301,10 +302,11 @@ describe("api", () => {
       fetchPipelineNodes("token"),
       fetchEmbeddingModels("token"),
       fetchEmbeddingModels("token", true),
-      listPineconeIndexes("token"),
-      describePineconeIndex("token", "index"),
-      createPineconeIndex("token", { name: "index" }),
-      deletePineconeIndex("token", "index"),
+      listIndexes("token"),
+      fetchIndexBackends("token"),
+      describeIndex("token", "pgvector", "index"),
+      createIndex("token", { backend: "pgvector", name: "index", dimension: 8 }),
+      deleteIndex("token", "pgvector", "index"),
       validatePipeline("token", pipelineDefinition),
       createPipeline("token", {
         name: "Pipeline",
@@ -321,7 +323,7 @@ describe("api", () => {
     globalThis.fetch = fetchMock as typeof fetch;
     fetchMock.mockResolvedValueOnce(createJsonResponse({ indexes: [{ name: "idx" }] }));
 
-    const indexes = await listPineconeIndexes("token");
+    const indexes = await listIndexes("token");
     expect(indexes).toHaveLength(1);
   });
 

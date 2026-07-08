@@ -442,7 +442,7 @@ def test_pipeline_validator_requires_retriever_index() -> None:
     result = PipelineValidator(registry).validate(definition)
 
     assert result.valid is False
-    assert any("must specify a Pinecone index" in error for error in result.errors)
+    assert any("must specify an index" in error for error in result.errors)
 
 
 def test_indexer_node_omitted_index_name_resolves_from_default_settings() -> None:
@@ -458,7 +458,7 @@ def test_indexer_node_omitted_index_name_resolves_from_default_settings() -> Non
     issues = IndexerNode.validation_issues_for_node(node, definition, registry)
 
     assert IndexerConfig().index_name.strip()
-    assert not any("must specify a Pinecone index" in issue.message for issue in issues)
+    assert not any("must specify an index" in issue.message for issue in issues)
 
 
 def test_retriever_node_omitted_index_name_resolves_from_default_settings() -> None:
@@ -470,7 +470,7 @@ def test_retriever_node_omitted_index_name_resolves_from_default_settings() -> N
     issues = PineconeRetrieverNode.validation_issues_for_node(node, definition, registry)
 
     assert RetrieverConfig().index_name.strip()
-    assert not any("must specify a Pinecone index" in issue.message for issue in issues)
+    assert not any("must specify an index" in issue.message for issue in issues)
 
 
 def test_pipeline_validator_detects_cycles() -> None:

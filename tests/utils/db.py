@@ -36,6 +36,13 @@ def reset_database(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
+    # Dropping `public` cascade removes the pgvector extension's objects, so
+    # re-install it best-effort; pgvector-marked tests skip when unavailable.
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
     SQLModel.metadata.create_all(engine)
 
 

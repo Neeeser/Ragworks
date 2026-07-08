@@ -5,14 +5,40 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 from sqlmodel import SQLModel, create_engine
 
 from app.db.engine import database_url, engine
 from app.db.migrations import apply_missing_columns, ensure_foreign_keys, ensure_indexes
+from app.db.pgvector_support import set_pgvector_available
 from app.db.schema import SchemaValidationResult, build_expected_schema, inspect_database_schema
 
 logger = logging.getLogger(__name__)
+
+
+def ensure_pgvector_extension(target_engine: Engine) -> bool:
+    """Best-effort `CREATE EXTENSION vector`; record and return availability.
+
+    pgvector is not a trusted extension, so this needs superuser (true for the
+    shipped docker-compose bootstrap user). On an external database without
+    the extension this logs a warning and marks the pgvector backend
+    unavailable instead of failing startup.
+    """
+    try:
+        with target_engine.begin() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Deliberately broad: any failure (permissions, extension not
+        # installed on the server) means the same thing — pgvector is off.
+        logger.warning(
+            "pgvector extension unavailable (%s); the pgvector index backend is disabled.",
+            exc,
+        )
+        set_pgvector_available(False)
+        return False
+    set_pgvector_available(True)
+    return True
 
 
 def _safe_database_name(raw_name: str) -> str:
@@ -62,6 +88,7 @@ def _format_validation_error(validation: SchemaValidationResult) -> str:
 def init_db() -> None:
     """Initialize database schema metadata."""
     ensure_database_exists(database_url)
+    ensure_pgvector_extension(engine)
     expected = build_expected_schema()
     actual = inspect_database_schema(engine)
     validation = SchemaValidationResult.from_schemas(expected, actual)

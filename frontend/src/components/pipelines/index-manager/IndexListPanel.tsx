@@ -4,10 +4,10 @@ import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import type { PineconeIndex } from "@/lib/types";
+import type { VectorIndex } from "@/lib/types";
 
 type IndexListPanelProps = {
-  indexes: PineconeIndex[];
+  indexes: VectorIndex[];
   loading: boolean;
   viewMode: "details" | "create";
   selectedName: string | null;
