@@ -1,7 +1,6 @@
 import { ArrowRight, Github } from "lucide-react";
 import Link from "next/link";
 
-import { CapabilityStrip } from "@/components/landing/CapabilityStrip";
 import { HeroFlowBackdrop } from "@/components/landing/HeroFlowBackdrop";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingTopBar } from "@/components/landing/LandingTopBar";
@@ -39,7 +38,7 @@ export function LandingPage() {
               style={{ animationDelay: "0ms" }}
             >
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60 motion-reduce:animate-none" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
               </span>
               Open-source RAG workbench
@@ -59,44 +58,31 @@ export function LandingPage() {
           {/* The clear band the running pipeline flows through. */}
           <div className="h-24 w-full sm:h-32" aria-hidden />
 
-          {/* Below the flow band. */}
-          <div className="flex flex-col items-center gap-8">
-            <p
-              className="landing-rise max-w-2xl text-pretty text-base leading-relaxed text-slate-300 sm:text-lg"
-              style={{ animationDelay: "160ms" }}
+          {/* Below the flow band — actions only. The running pipeline says what
+              the product does; words don't need to repeat it. */}
+          <div
+            className="landing-rise flex flex-wrap items-center justify-center gap-3"
+            style={{ animationDelay: "160ms" }}
+          >
+            <Link
+              href={CONSOLE_HREF}
+              className="group flex items-center gap-2 rounded-full bg-violet-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
             >
-              Watch a document move through parsing, chunking, embedding, indexing, and retrieval —
-              then into a grounded answer. Every step is traceable, end to end.
-            </p>
-
-            <div
-              className="landing-rise flex flex-wrap items-center justify-center gap-3"
-              style={{ animationDelay: "240ms" }}
+              Launch console
+              <ArrowRight
+                className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                aria-hidden
+              />
+            </Link>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-6 py-3 text-base font-medium text-white transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
             >
-              <Link
-                href={CONSOLE_HREF}
-                className="group flex items-center gap-2 rounded-full bg-violet-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
-              >
-                Launch console
-                <ArrowRight
-                  className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                  aria-hidden
-                />
-              </Link>
-              <a
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-6 py-3 text-base font-medium text-white transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
-              >
-                <Github className="h-4 w-4" aria-hidden />
-                View source
-              </a>
-            </div>
-
-            <div className="landing-rise pt-6" style={{ animationDelay: "320ms" }}>
-              <CapabilityStrip />
-            </div>
+              <Github className="h-4 w-4" aria-hidden />
+              View source
+            </a>
           </div>
         </section>
 

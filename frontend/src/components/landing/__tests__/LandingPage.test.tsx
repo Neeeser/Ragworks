@@ -42,13 +42,6 @@ describe("LandingPage", () => {
     expect(screen.getByTestId("reactflow")).toBeInTheDocument();
   });
 
-  it("names the pipeline stages that the flow runs", () => {
-    render(<LandingPage />);
-    ["Parse", "Chunk", "Embed", "Index", "Retrieve", "Chat"].forEach((stage) => {
-      expect(screen.getByText(stage)).toBeInTheDocument();
-    });
-  });
-
   it("renders with no network calls — the page carries no real data", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     render(<LandingPage />);
