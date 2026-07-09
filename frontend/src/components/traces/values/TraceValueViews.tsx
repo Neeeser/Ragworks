@@ -206,7 +206,7 @@ export function MatchListValue({ value, highlightChunkId }: TraceValueViewProps)
               )}
             >
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-slate-200">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold leading-none text-slate-200">
                   {match.rank}
                 </span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
