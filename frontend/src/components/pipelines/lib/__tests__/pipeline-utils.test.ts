@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDefaultDefinition,
   buildNodeCatalog,
-  createDefaultNodePosition,
   createId,
+  nextNodePosition,
   toFlowEdges,
   toFlowNodes,
   toPipelineDefinition,
@@ -15,6 +15,8 @@ import type { NodeSpec, PipelineDefinition } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 const utilityNodeType = "utility.custom";
+const RETRIEVER_TYPE = "retriever.vector";
+const INDEXER_TYPE = "indexer.vector";
 const pipelineNodeId = "node-1";
 const pipelineEdgeId = "edge-1";
 
@@ -56,21 +58,38 @@ describe("pipeline-utils", () => {
     });
   });
 
-  it("builds pgvector node types when the pgvector backend is chosen", () => {
-    const retrieval = buildDefaultDefinition("retrieval", "pgvector", "docs", 384);
-    expect(retrieval.nodes.some((node) => node.type === "retriever.pgvector")).toBe(true);
-    const ingestion = buildDefaultDefinition("ingestion", "pgvector", "docs");
-    expect(ingestion.nodes.some((node) => node.type === "indexer.pgvector")).toBe(true);
+  it("scaffolds unified vector nodes carrying the chosen backend in config", () => {
+    const retrieval = buildDefaultDefinition("retrieval", "pgvector", { indexName: "docs" });
+    const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
+    expect(retriever?.config).toEqual({ backend: "pgvector", index_name: "docs" });
+    const ingestion = buildDefaultDefinition("ingestion", "pgvector", { indexName: "docs" });
+    const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
+    expect(indexer?.config).toEqual({ backend: "pgvector", index_name: "docs" });
   });
 
   it("builds default definitions for retrieval and ingestion pipelines", () => {
-    const retrieval = buildDefaultDefinition("retrieval", "pinecone", "index-a", 384);
+    const retrieval = buildDefaultDefinition("retrieval", "pinecone", {
+      indexName: "index-a",
+      indexDimension: 384,
+    });
     expect(retrieval.nodes).toHaveLength(4);
     expect(retrieval.edges).toHaveLength(3);
-    const retriever = retrieval.nodes.find((node) => node.type === "retriever.pinecone");
-    expect(retriever?.config).toEqual({ index_name: "index-a", dimension: 384 });
+    const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
+    expect(retriever?.config).toEqual({ backend: "pinecone", index_name: "index-a" });
+    const ingestionCheck = buildDefaultDefinition("ingestion", "pinecone", {
+      indexName: "index-a",
+      indexDimension: 384,
+    });
+    const dimIndexer = ingestionCheck.nodes.find((node) => node.type === INDEXER_TYPE);
+    expect(dimIndexer?.config).toEqual({
+      backend: "pinecone",
+      index_name: "index-a",
+      dimension: 384,
+    });
     const embedder = retrieval.nodes.find((node) => node.type === "embedder.openrouter");
-    expect(embedder).toBeDefined();
+    // The dimension never lands on the embedder: an explicit `dimensions`
+    // param is rejected by most OpenRouter embedding models.
+    expect(embedder?.config).toEqual({});
     expect(retrieval.edges).toContainEqual(
       expect.objectContaining({
         source: embedder?.id,
@@ -80,17 +99,26 @@ describe("pipeline-utils", () => {
       }),
     );
 
-    const ingestion = buildDefaultDefinition("ingestion", "pinecone", "index-b");
+    const ingestion = buildDefaultDefinition("ingestion", "pinecone", {
+      indexName: "index-b",
+      chunkSize: 512,
+      chunkOverlap: 32,
+      embeddingModel: "openai/text-embedding-3-small",
+    });
     expect(ingestion.nodes).toHaveLength(6);
     expect(ingestion.edges).toHaveLength(5);
-    const indexer = ingestion.nodes.find((node) => node.type === "indexer.pinecone");
-    expect(indexer?.config).toEqual({ index_name: "index-b" });
+    const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
+    expect(indexer?.config).toEqual({ backend: "pinecone", index_name: "index-b" });
+    const chunker = ingestion.nodes.find((node) => node.type === "chunker.token");
+    expect(chunker?.config).toEqual({ chunk_size: 512, chunk_overlap: 32 });
+    const ingestEmbedder = ingestion.nodes.find((node) => node.type === "embedder.openrouter");
+    expect(ingestEmbedder?.config).toEqual({ model_name: "openai/text-embedding-3-small" });
   });
 
-  it("omits index config when the index name is empty", () => {
-    const ingestion = buildDefaultDefinition("ingestion", "pinecone", "   ");
-    const indexer = ingestion.nodes.find((node) => node.type === "indexer.pinecone");
-    expect(indexer?.config).toEqual({});
+  it("omits index name config when it is blank", () => {
+    const ingestion = buildDefaultDefinition("ingestion", "pinecone", { indexName: "   " });
+    const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
+    expect(indexer?.config).toEqual({ backend: "pinecone" });
   });
 
   it("maps pipeline definitions to flow nodes and edges", () => {
@@ -137,6 +165,7 @@ describe("pipeline-utils", () => {
         ],
         config_schema: { input: { type: "string" } },
         default_config: {},
+        hidden: false,
       },
     ];
 
@@ -146,7 +175,7 @@ describe("pipeline-utils", () => {
     expect(nodes[0].data.description).toContain("Starts ingestion");
     expect(nodes[1].data.description).toBeUndefined();
 
-    const edges = toFlowEdges(definition);
+    const edges = toFlowEdges(definition, specs);
     expect(edges).toEqual([
       expect.objectContaining({
         id: "e1",
@@ -154,16 +183,22 @@ describe("pipeline-utils", () => {
         target: "n2",
         sourceHandle: "source",
         targetHandle: "document",
-        type: "smoothstep",
+        type: "typed",
+        data: { dataType: "document" },
       }),
     ]);
 
-    const edgesWithoutHandles = toFlowEdges({
-      ...definition,
-      edges: [{ id: "e2", source: "n1", target: "n2" }],
-    });
+    const edgesWithoutHandles = toFlowEdges(
+      {
+        ...definition,
+        edges: [{ id: "e2", source: "n1", target: "n2" }],
+      },
+      specs,
+    );
     expect(edgesWithoutHandles[0]?.sourceHandle).toBeUndefined();
     expect(edgesWithoutHandles[0]?.targetHandle).toBeUndefined();
+    // Falls back to the source node's first output type for the wire color.
+    expect(edgesWithoutHandles[0]?.data?.dataType).toBe("document");
   });
 
   it("defaults missing node position and config when mapping to flow nodes", () => {
@@ -232,10 +267,10 @@ describe("pipeline-utils", () => {
     expect(definitionWithoutHandles.edges[0]?.target_port).toBeUndefined();
   });
 
-  it("builds node catalogs in family order and creates default positions", () => {
+  it("builds node catalogs in family order and places new nodes one column right", () => {
     const specs: NodeSpec[] = [
       {
-        type: "retriever.pinecone",
+        type: RETRIEVER_TYPE,
         label: "Retriever",
         category: "retrieval",
         description: "",
@@ -244,6 +279,7 @@ describe("pipeline-utils", () => {
         output_ports: [],
         config_schema: {},
         default_config: {},
+        hidden: false,
       },
       {
         type: "chunker.token",
@@ -255,6 +291,7 @@ describe("pipeline-utils", () => {
         output_ports: [],
         config_schema: {},
         default_config: {},
+        hidden: false,
       },
       {
         type: utilityNodeType,
@@ -266,12 +303,28 @@ describe("pipeline-utils", () => {
         output_ports: [],
         config_schema: {},
         default_config: {},
+        hidden: false,
       },
     ];
 
     const catalog = buildNodeCatalog(specs);
     expect(catalog.map((entry) => entry.family)).toEqual(["chunker", "retriever", "utility"]);
 
-    expect(createDefaultNodePosition(2)).toEqual({ x: 160, y: 420 });
+    expect(nextNodePosition([])).toEqual({ x: 0, y: 0 });
+    const placed = nextNodePosition([
+      {
+        id: "a",
+        type: "pipelineNode",
+        position: { x: 368, y: 40 },
+        data: {
+          label: "A",
+          nodeType: utilityNodeType,
+          inputs: [],
+          outputs: [],
+          config: {},
+        },
+      },
+    ]);
+    expect(placed).toEqual({ x: 736, y: 40 });
   });
 });

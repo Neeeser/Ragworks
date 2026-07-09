@@ -100,8 +100,13 @@ vi.mock("@/components/pipelines/PipelineInspector", () => ({
     lastInspectorProps = props;
     return (
       <div>
-        <button type="button" onClick={() => (props.onApplyConfig as () => void)?.()}>
-          Apply config
+        <button
+          type="button"
+          onClick={() =>
+            (props.onConfigChange as (config: Record<string, unknown>) => void)?.({ mode: "x" })
+          }
+        >
+          Set config
         </button>
         <button
           type="button"
@@ -392,8 +397,9 @@ describe("PipelineBuilder", () => {
     await waitFor(() => expect(lastInspectorProps).not.toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Select node" }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply config" }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => expect(screen.getByTestId("canvas")).toHaveTextContent("Missing"));
+    expect(api.validatePipeline).not.toHaveBeenCalled();
 
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
     fireEvent.click(screen.getByRole("button", { name: "Change label" }));
@@ -422,9 +428,7 @@ describe("PipelineBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(api.updatePipeline).toHaveBeenCalled();
-      expect(screen.getByTestId("canvas")).toHaveTextContent(
-        "Pipeline saved as a new version. Warnings: Be careful",
-      );
+      expect(screen.getByTestId("canvas")).toHaveTextContent("Saved as v1. Warnings: Be careful");
     });
 
     api.validatePipeline.mockResolvedValueOnce({ valid: true, errors: [], warnings: [] });
@@ -523,8 +527,10 @@ describe("PipelineBuilder", () => {
     await waitFor(() => expect(lastCanvasProps).not.toBeNull());
 
     await waitFor(() => {
-      const edges = lastCanvasProps?.edges as Array<{ id: string; className?: string }> | undefined;
-      expect(edges?.some((edge) => edge.className?.includes("pipeline-edge-error"))).toBe(true);
+      const edges = lastCanvasProps?.edges as
+        | Array<{ id: string; data?: { error?: boolean } }>
+        | undefined;
+      expect(edges?.some((edge) => edge.data?.error)).toBe(true);
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Create pipeline" }));
@@ -559,26 +565,20 @@ describe("PipelineBuilder", () => {
       ).onEmbeddingModelSortChange?.("dimension");
     });
 
+    const selectedNodeConfig = () =>
+      (lastInspectorProps as { selectedNode?: { data?: { config?: Record<string, unknown> } } })
+        .selectedNode?.data?.config ?? {};
+
     act(() => {
       (
         lastInspectorProps as { onSelectEmbeddingModel?: (value: string) => void }
       ).onSelectEmbeddingModel?.("emb-1");
     });
     await waitFor(() => {
-      expect(
-        (lastInspectorProps as { configDraft?: Record<string, unknown> }).configDraft?.dimension,
-      ).toBe(512);
-    });
-
-    act(() => {
-      (
-        lastInspectorProps as { onSelectEmbeddingModel?: (value: string) => void }
-      ).onSelectEmbeddingModel?.("emb-2");
-    });
-    await waitFor(() => {
-      expect(
-        (lastInspectorProps as { configDraft?: Record<string, unknown> }).configDraft?.dimension,
-      ).toBeUndefined();
+      expect(selectedNodeConfig().model_name).toBe("emb-1");
+      // Never an explicit dimension: OpenRouter rejects a `dimensions`
+      // override for most embedding models.
+      expect(selectedNodeConfig().dimension).toBeUndefined();
     });
 
     const emptyDragEvent = buildDragEvent("");

@@ -71,6 +71,7 @@ export function TraceIOColumn({
               highlight={
                 Boolean(highlightChunkId) && containsChunkId(item.value, highlightChunkId ?? "")
               }
+              highlightChunkId={highlightChunkId}
             />
           ))
         ) : (
@@ -93,6 +94,7 @@ export function TraceIOColumn({
                       Boolean(highlightChunkId) &&
                       containsChunkId(record.payload, highlightChunkId ?? "")
                     }
+                    highlightChunkId={highlightChunkId}
                   />
                 </div>
               ))

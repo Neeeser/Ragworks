@@ -16,6 +16,7 @@ from app.pipelines.validation import PipelineValidator
 from app.schemas.pipelines import (
     NodeSpecRead,
     PipelineActivateRequest,
+    PipelineChangeRead,
     PipelineCreate,
     PipelineDeleteResponse,
     PipelineNodesResponse,
@@ -159,14 +160,17 @@ def update_pipeline(
     service = PipelineService(session)
     if payload.definition is not None:
         _validate_definition_or_400(payload.definition)
-    service.update_pipeline(
-        pipeline=pipeline,
-        name=payload.name,
-        description=payload.description,
-        definition=payload.definition,
-        change_summary=payload.change_summary,
-        actor_id=current_user.id,
-    )
+    try:
+        service.update_pipeline(
+            pipeline=pipeline,
+            name=payload.name,
+            description=payload.description,
+            definition=payload.definition,
+            change_summary=payload.change_summary,
+            actor_id=current_user.id,
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
     session.commit()
     session.refresh(pipeline)
     definition = service.get_definition(pipeline)
@@ -178,9 +182,9 @@ def list_pipeline_versions(
     pipeline: models.Pipeline = Depends(get_pipeline_or_404),
     session: Session = Depends(get_session),
 ) -> list[PipelineVersionRead]:
-    """List versions for a pipeline."""
+    """List versions for a pipeline, each with its diff against the prior version."""
     service = PipelineService(session)
-    versions = service.list_versions(pipeline)
+    versions = service.list_versions_with_changes(pipeline)
     return [
         PipelineVersionRead(
             id=version.id,
@@ -190,8 +194,12 @@ def list_pipeline_versions(
             updated_at=version.updated_at,
             change_summary=version.change_summary,
             created_by=version.created_by,
+            changes=[
+                PipelineChangeRead(kind=change.kind, summary=change.summary)
+                for change in changes
+            ],
         )
-        for version in versions
+        for version, changes in versions
     ]
 
 

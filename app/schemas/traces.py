@@ -99,3 +99,24 @@ class PipelineTraceResponse(BaseModel):
     definition: PipelineDefinition
     node_runs: list[PipelineNodeRunRead]
     node_io: list[PipelineNodeIORead]
+
+
+class TraceOriginRead(BaseModel):
+    """Where a retrieved chunk came from: its source document and the
+    ingestion run that put it into the index."""
+
+    document_id: UUID
+    document_name: str | None
+    chunk_id: str | None
+    trace: PipelineTraceResponse
+
+
+class EndToEndTraceResponse(BaseModel):
+    """A retrieval trace joined with the origin ingestion trace.
+
+    `origin` is None when the source document (or its ingestion run) can't be
+    resolved -- the retrieval trace still stands on its own.
+    """
+
+    retrieval: PipelineTraceResponse
+    origin: TraceOriginRead | None = None

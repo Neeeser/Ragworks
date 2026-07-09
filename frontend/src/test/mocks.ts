@@ -110,6 +110,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchPipelineRunTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentTrace: vi.fn(async () => makeTraceResponse()),
     fetchQueryEventTrace: vi.fn(async () => makeTraceResponse()),
+    fetchQueryEventEndToEndTrace: vi.fn(async () => ({
+      retrieval: makeTraceResponse(),
+      origin: null,
+    })),
     // pipelines
     fetchPipelines: vi.fn(async () => []),
     fetchPipeline: vi.fn(async () => makePipeline()),

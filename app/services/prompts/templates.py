@@ -90,11 +90,6 @@ COLLECTION_PROMPT_VARIABLES: list[PromptVariable] = [
         example="text-embedding-3-large",
     ),
     PromptVariable(
-        name="collection.chat_model",
-        description="Default chat model used by the retrieval pipeline.",
-        example="meta-llama/llama-3.1-70b-instruct",
-    ),
-    PromptVariable(
         name="collection.chunk.strategy",
         description="Chunking strategy label configured in the ingestion pipeline.",
         example="token",
@@ -108,11 +103,6 @@ COLLECTION_PROMPT_VARIABLES: list[PromptVariable] = [
         name="collection.chunk.overlap",
         description="Token overlap between consecutive chunks in the ingestion pipeline.",
         example="200",
-    ),
-    PromptVariable(
-        name="collection.context_window",
-        description="Context window configured for the retrieval pipeline.",
-        example="8192",
     ),
     PromptVariable(
         name="collection.pinecone.index",
@@ -137,10 +127,8 @@ DEFAULT_SYSTEM_PROMPT_TEMPLATE = (
     "- Tool name: {{collection.tool_name}}\n"
     "- Description: {{collection.description}}\n"
     "- Embedding model: {{collection.embedding_model}}\n"
-    "- Chat model: {{collection.chat_model}}\n"
     "- Chunking: {{collection.chunk.strategy}} "
     "({{collection.chunk.size}}/{{collection.chunk.overlap}})\n"
-    "- Context window: {{collection.context_window}} tokens\n"
     "- Pinecone index: {{collection.pinecone.index}}\n"
     "- Namespace: {{collection.pinecone.namespace}}\n"
     "- Embedding dimension: {{metadata.embedding_dimension}}\n\n"

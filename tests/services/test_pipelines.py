@@ -7,8 +7,17 @@ from sqlmodel import Session, select
 
 from app.db import models
 from app.pipelines.defaults import build_default_ingestion_pipeline
-from app.services.errors import NotFoundError
+from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
+from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
+
+
+def _revised_ingestion_definition() -> PipelineDefinition:
+    """Default ingestion definition with a material config change."""
+    definition = build_default_ingestion_pipeline()
+    chunker = next(node for node in definition.nodes if node.id == "chunk-document")
+    chunker.config = {**chunker.config, "chunk_size": 512}
+    return definition
 
 
 def _create_user(session: Session) -> models.User:
@@ -65,7 +74,7 @@ def test_update_pipeline_creates_new_version(session: Session) -> None:
     pipeline = defaults.ingestion
     service.update_pipeline(
         pipeline=pipeline,
-        definition=build_default_ingestion_pipeline(),
+        definition=_revised_ingestion_definition(),
         change_summary="Second revision",
         actor_id=user.id,
     )
@@ -114,7 +123,7 @@ def test_activate_version_switches_current(session: Session) -> None:
     pipeline = defaults.ingestion
     service.update_pipeline(
         pipeline=pipeline,
-        definition=build_default_ingestion_pipeline(),
+        definition=_revised_ingestion_definition(),
         change_summary="Second revision",
         actor_id=user.id,
     )
@@ -179,7 +188,7 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
     )
     service.update_pipeline(
         pipeline=pipeline,
-        definition=build_default_ingestion_pipeline(),
+        definition=_revised_ingestion_definition(),
         change_summary="Second revision",
         actor_id=user.id,
     )
@@ -253,9 +262,13 @@ class TestDefaultBackendRotation:
         session.commit()
         invalidate_app_config_cache()
 
-    def _node_types(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
+    def _node_backends(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
         version = service.get_current_version(pipeline)
-        return {node["type"] for node in version.definition["nodes"]}
+        return {
+            str(node["config"].get("backend"))
+            for node in version.definition["nodes"]
+            if node["type"] in {"indexer.vector", "retriever.vector"}
+        }
 
     def test_stale_defaults_rotate_to_configured_backend(self, session: Session) -> None:
         user = _create_user(session)
@@ -270,7 +283,7 @@ class TestDefaultBackendRotation:
             ingestion_pipeline_id=old.ingestion.id,
             retrieval_pipeline_id=old.retrieval.id,
         )
-        assert "indexer.pinecone" in self._node_types(service, old.ingestion)
+        assert self._node_backends(service, old.ingestion) == {"pinecone"}
 
         self._set_backend(session, "pgvector")
         new = service.ensure_default_pipelines(user)
@@ -278,8 +291,8 @@ class TestDefaultBackendRotation:
 
         assert new.ingestion.id != old.ingestion.id
         assert new.retrieval.id != old.retrieval.id
-        assert "indexer.pgvector" in self._node_types(service, new.ingestion)
-        assert "retriever.pgvector" in self._node_types(service, new.retrieval)
+        assert self._node_backends(service, new.ingestion) == {"pgvector"}
+        assert self._node_backends(service, new.retrieval) == {"pgvector"}
 
         # The old defaults survive, demoted, and existing collections keep them.
         session.refresh(old.ingestion)
@@ -300,3 +313,70 @@ class TestDefaultBackendRotation:
 
         assert second.ingestion.id == first.ingestion.id
         assert second.retrieval.id == first.retrieval.id
+
+
+def test_update_pipeline_rejects_definition_with_no_changes(session: Session) -> None:
+    """Regression: saving an unchanged definition used to mint an empty revision."""
+    user = _create_user(session)
+    service = PipelineService(session)
+    defaults = service.ensure_default_pipelines(user)
+    session.commit()
+
+    pipeline = defaults.ingestion
+    with pytest.raises(InvalidInputError, match="No changes to save"):
+        service.update_pipeline(
+            pipeline=pipeline,
+            definition=service.get_definition(pipeline),
+            actor_id=user.id,
+        )
+
+    versions = session.exec(
+        select(models.PipelineVersion).where(models.PipelineVersion.pipeline_id == pipeline.id)
+    ).all()
+    assert len(versions) == 1
+
+
+def test_update_pipeline_layout_only_updates_current_version_in_place(
+    session: Session,
+) -> None:
+    """Dragging nodes persists positions without minting a new revision."""
+    user = _create_user(session)
+    service = PipelineService(session)
+    defaults = service.ensure_default_pipelines(user)
+    session.commit()
+
+    pipeline = defaults.ingestion
+    moved = service.get_definition(pipeline)
+    moved.nodes[0].position = PipelineNodePosition(x=42.0, y=77.0)
+    service.update_pipeline(pipeline=pipeline, definition=moved, actor_id=user.id)
+    session.commit()
+
+    refreshed = session.get(models.Pipeline, pipeline.id)
+    assert refreshed is not None
+    assert refreshed.current_version == 1
+    stored = service.get_definition(refreshed)
+    assert stored.nodes[0].position is not None
+    assert stored.nodes[0].position.x == 42.0
+
+
+def test_list_versions_with_changes_describes_each_revision(session: Session) -> None:
+    user = _create_user(session)
+    service = PipelineService(session)
+    defaults = service.ensure_default_pipelines(user)
+    session.commit()
+
+    pipeline = defaults.ingestion
+    service.update_pipeline(
+        pipeline=pipeline,
+        definition=_revised_ingestion_definition(),
+        change_summary="Shrink chunks",
+        actor_id=user.id,
+    )
+    session.commit()
+
+    listed = service.list_versions_with_changes(pipeline)
+    assert [version.version for version, _ in listed] == [2, 1]
+    v2_changes = listed[0][1]
+    assert any("chunk_size" in change.summary for change in v2_changes)
+    v1_changes = listed[1][1]
+    assert [change.kind for change in v1_changes] == ["created"]

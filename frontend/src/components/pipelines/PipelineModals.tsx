@@ -10,6 +10,7 @@ import { IndexManagerModal } from "./index-manager/IndexManagerModal";
 import type {
   BackendInfo,
   EmbeddingModelInfo,
+  NodeSpec,
   Pipeline,
   PipelineKind,
   VectorIndex,
@@ -25,6 +26,7 @@ type PipelineModalsProps = {
   token: string;
   indexes: VectorIndex[];
   backends: BackendInfo[];
+  nodeSpecs: NodeSpec[];
   embeddingModels: EmbeddingModelInfo[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
@@ -54,6 +56,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
       token,
       indexes,
       backends,
+      nodeSpecs,
       embeddingModels,
       embeddingModelsLoading,
       embeddingModelsError,
@@ -108,6 +111,10 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           kind={kind}
           indexes={indexes}
           backends={backends}
+          nodeSpecs={nodeSpecs}
+          embeddingModels={embeddingModels}
+          embeddingModelsLoading={embeddingModelsLoading}
+          embeddingModelsError={embeddingModelsError}
           onClose={() => setShowCreatePipeline(false)}
           onCreated={onPipelineCreated}
           onOpenIndexManager={() => {

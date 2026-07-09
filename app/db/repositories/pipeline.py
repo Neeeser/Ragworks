@@ -67,6 +67,10 @@ class PipelineVersionRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def list_all(self) -> list[models.PipelineVersion]:
+        """List every stored version (startup definition migrations)."""
+        return list(self.session.exec(select(models.PipelineVersion)).all())
+
     def get_by_version(
         self,
         pipeline_id: UUID,

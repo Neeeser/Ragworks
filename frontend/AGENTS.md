@@ -39,6 +39,15 @@ New code goes in the feature folder that owns it. Promote to `components/ui/` or
 `lib/` only on second use (see Duplication). A single-file folder isn't a feature —
 colocate the file with its only consumer.
 
+**Trace value displays are a registry, not a switch.** Pipeline trace
+inputs/outputs render through `components/traces/values/`: an ordered
+`{ match, Component }` registry (`TraceValueView.tsx`) picks the most specific
+view for each value by *shape* (`shape-guards.ts`), with a normalized-JSON
+fallback last. A new node's summary/payload shape gets a polished display by
+adding one renderer entry + guard — never by branching inside the IO blocks.
+Every view caps its own height and scrolls internally so a large value can't
+reflow the viewer (whose graph region is pinned; only the IO region scrolls).
+
 ## Adding a feature end-to-end
 
 The expected shape, in order:

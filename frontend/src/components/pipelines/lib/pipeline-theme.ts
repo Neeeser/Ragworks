@@ -137,6 +137,38 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string }> = {
   retrieval_results: { bg: "bg-fuchsia-400", ring: "border-fuchsia-400/60" },
 };
 
+/**
+ * Hex twins of PORT_TYPE_STYLES for SVG strokes/fills (edges, trace dot) --
+ * Tailwind classes can't color an SVG path. Keep the two maps in sync.
+ */
+const PORT_TYPE_HEX: Record<string, string> = {
+  document_source: "#38bdf8",
+  document: "#34d399",
+  chunk_batch: "#2dd4bf",
+  embedded_batch: "#fbbf24",
+  indexed_batch: "#22d3ee",
+  query_request: "#818cf8",
+  query_embedding: "#fbbf24",
+  retrieval_results: "#e879f9",
+};
+
+const PORT_TYPE_LABELS: Record<string, string> = {
+  document_source: "Source file",
+  document: "Parsed document",
+  chunk_batch: "Chunks",
+  embedded_batch: "Embedded chunks",
+  indexed_batch: "Indexed chunks",
+  query_request: "Query",
+  query_embedding: "Query embedding",
+  retrieval_results: "Results",
+};
+
+export const getPortTypeHex = (dataType?: string) =>
+  (dataType && PORT_TYPE_HEX[dataType]) || "#64748b";
+
+export const getPortTypeLabel = (dataType?: string) =>
+  (dataType && PORT_TYPE_LABELS[dataType]) || dataType || "data";
+
 export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   const prefix = nodeType.split(".")[0];
   if (prefix === "chunker") return "chunker";

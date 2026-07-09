@@ -23,10 +23,12 @@ from app.db.repositories import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.traces import (
+    EndToEndTraceResponse,
     PipelineNodeIORead,
     PipelineNodeRunRead,
     PipelineRunRead,
     PipelineTraceResponse,
+    TraceOriginRead,
 )
 from app.services.pipelines import PipelineService
 
@@ -71,6 +73,44 @@ class TraceService:
         if not event.pipeline_run_id:
             raise TraceNotFoundError("Trace not found.")
         return self.get_run_trace(event.pipeline_run_id, user_id)
+
+    def get_query_event_end_to_end_trace(
+        self,
+        query_event_id: UUID,
+        user_id: UUID,
+        chunk_id: str | None = None,
+    ) -> EndToEndTraceResponse:
+        """Return the retrieval trace joined with the chunk's ingestion trace.
+
+        `chunk_id` identifies which retrieved chunk to trace back (chunk ids
+        are `{document_id}:{index}`). The origin side is best-effort: a
+        missing/foreign document, a chunk id in an unexpected format, or a
+        document without a recorded ingestion run degrade to `origin=None`
+        rather than failing the retrieval trace.
+        """
+        retrieval = self.get_query_event_trace(query_event_id, user_id)
+        origin = self._resolve_origin(chunk_id, user_id) if chunk_id else None
+        return EndToEndTraceResponse(retrieval=retrieval, origin=origin)
+
+    def _resolve_origin(self, chunk_id: str, user_id: UUID) -> TraceOriginRead | None:
+        """Resolve a chunk id back to its document's ingestion trace."""
+        try:
+            document_id = UUID(chunk_id.split(":", 1)[0])
+        except ValueError:
+            return None
+        document = self._documents.get_for_user(document_id, user_id)
+        if not document or not document.ingestion_run_id:
+            return None
+        try:
+            trace = self.get_run_trace(document.ingestion_run_id, user_id)
+        except TraceNotFoundError:
+            return None
+        return TraceOriginRead(
+            document_id=document.id,
+            document_name=document.name,
+            chunk_id=chunk_id,
+            trace=trace,
+        )
 
     def _resolve_definition(self, run: models.PipelineRun) -> PipelineDefinition:
         """Resolve the pipeline definition a run executed against."""

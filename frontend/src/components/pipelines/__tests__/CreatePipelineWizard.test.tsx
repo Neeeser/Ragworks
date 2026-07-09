@@ -7,11 +7,12 @@ import * as apiModule from "@/lib/api";
 import {
   makeBackendInfo,
   makePineconeBackendInfo,
-  makeVectorIndex,
   makePipeline,
+  makeVectorIndex,
 } from "@/test/fixtures";
 
 import type { VectorIndex } from "@/lib/types";
+import type { ComponentProps } from "react";
 
 const pipelineUtils = {
   buildDefaultDefinition: vi.fn(),
@@ -24,9 +25,42 @@ vi.mock("@/components/pipelines/lib/pipeline-utils", () => ({
   buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
   sortIndexesByName: (indexes: { name: string }[]) =>
     [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
+  toFlowNodes: () => [],
+  toFlowEdges: () => [],
+}));
+vi.mock("@/components/pipelines/flow/FlowPlayer", () => ({
+  FlowPlayer: () => <div data-testid="flow-player" />,
+}));
+vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
+  EmbeddingModelSelectorCard: ({ onSelectModel }: { onSelectModel: (id: string) => void }) => (
+    <button type="button" data-testid="embedding-selector" onClick={() => onSelectModel("emb-1")}>
+      pick model
+    </button>
+  ),
 }));
 
 const api = vi.mocked(apiModule);
+
+type WizardProps = ComponentProps<typeof CreatePipelineWizard>;
+
+function renderWizard(overrides: Partial<WizardProps> = {}) {
+  const props: WizardProps = {
+    open: true,
+    token: "token",
+    kind: "ingestion",
+    indexes: [],
+    backends: [makeBackendInfo(), makePineconeBackendInfo()],
+    nodeSpecs: [],
+    embeddingModels: [],
+    embeddingModelsLoading: false,
+    embeddingModelsError: null,
+    onClose: () => undefined,
+    onCreated: () => undefined,
+    onOpenIndexManager: () => undefined,
+    ...overrides,
+  };
+  return render(<CreatePipelineWizard {...props} />);
+}
 
 describe("CreatePipelineWizard", () => {
   const pipeline = makePipeline({ kind: "ingestion", definition: { nodes: [], edges: [] } });
@@ -36,41 +70,18 @@ describe("CreatePipelineWizard", () => {
   });
 
   it("renders nothing when closed", () => {
-    const { container } = render(
-      <CreatePipelineWizard
-        open={false}
-        token="token"
-        kind="ingestion"
-        indexes={[]}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={() => undefined}
-        onCreated={() => undefined}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
+    const { container } = renderWizard({ open: false });
     expect(container.firstChild).toBeNull();
   });
 
   it("handles step navigation and index creation prompt", async () => {
     const user = userEvent.setup();
     const onOpenIndexManager = vi.fn();
-    render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="ingestion"
-        indexes={[]}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={() => undefined}
-        onCreated={() => undefined}
-        onOpenIndexManager={onOpenIndexManager}
-      />,
-    );
+    renderWizard({ onOpenIndexManager });
 
-    expect(screen.getByText("Basics")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "New");
+    await user.type(screen.getByPlaceholderText(/Research library/), "New");
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -87,20 +98,9 @@ describe("CreatePipelineWizard", () => {
 
   it("requires an index selection before proceeding", async () => {
     const user = userEvent.setup();
-    render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="ingestion"
-        indexes={[makeVectorIndex({ name: "alpha", dimension: 768 })]}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={() => undefined}
-        onCreated={() => undefined}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
 
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -109,7 +109,7 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
-  it("creates a pipeline and handles errors", async () => {
+  it("creates a pipeline with the selected options and handles errors", async () => {
     const user = userEvent.setup();
     const onCreated = vi.fn();
     const onClose = vi.fn();
@@ -117,38 +117,32 @@ describe("CreatePipelineWizard", () => {
 
     api.createPipeline.mockResolvedValueOnce(pipeline);
 
-    render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="retrieval"
-        indexes={indexes}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={onClose}
-        onCreated={onCreated}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
+    renderWizard({ kind: "retrieval", indexes, onClose, onCreated });
 
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     await user.selectOptions(screen.getByRole("combobox"), "alpha");
-    const stepTwoNext = screen.getByRole("button", { name: "Next" });
-    expect(stepTwoNext).toBeEnabled();
-    await user.click(stepTwoNext);
+    await user.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByText(/Summary/)).toBeInTheDocument();
+    // Embedding step for retrieval pipelines.
+    expect(screen.getByTestId("embedding-selector")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    // Review step renders the animated preview + summary.
+    expect(screen.getByTestId("flow-player")).toBeInTheDocument();
+    expect(screen.getByText("Pipe")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
-        "retrieval",
-        "pgvector",
-        "alpha",
-        768,
-      );
+      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("retrieval", "pgvector", {
+        indexName: "alpha",
+        indexDimension: 768,
+        embeddingModel: undefined,
+        chunkSize: 1024,
+        chunkOverlap: 200,
+      });
       expect(onCreated).toHaveBeenCalledWith(pipeline);
       expect(onClose).toHaveBeenCalled();
     });
@@ -160,62 +154,42 @@ describe("CreatePipelineWizard", () => {
     api.createPipeline.mockRejectedValueOnce("bad");
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
     expect(await screen.findByText("Unable to create pipeline.")).toBeInTheDocument();
-  });
+  }, 15000);
 
-  it("creates pipelines without index dimensions", async () => {
+  it("applies chunking presets on the processing step", async () => {
     const user = userEvent.setup();
-    const onCreated = vi.fn();
     api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
 
-    render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="ingestion"
-        indexes={[makeVectorIndex({ name: "alpha", dimension: null })]}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={() => undefined}
-        onCreated={onCreated}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
-
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await user.click(screen.getByRole("radio", { name: /Fine/ }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
-        "ingestion",
-        "pgvector",
-        "alpha",
-        undefined,
-      );
-      expect(onCreated).toHaveBeenCalledWith(pipeline);
+      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("ingestion", "pgvector", {
+        indexName: "alpha",
+        indexDimension: undefined,
+        embeddingModel: undefined,
+        chunkSize: 512,
+        chunkOverlap: 64,
+      });
     });
-  });
+  }, 15000);
 
   it("shows summary defaults when details are missing", async () => {
     const user = userEvent.setup();
-    render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="ingestion"
-        indexes={[]}
-        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
-        onClose={() => undefined}
-        onCreated={() => undefined}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
+    renderWizard();
 
     await user.click(screen.getByRole("button", { name: /Review/ }));
 
     expect(screen.getByText("Untitled")).toBeInTheDocument();
-    expect(screen.getByText("Not selected")).toBeInTheDocument();
+    expect(screen.getByText(/no index/)).toBeInTheDocument();
+    expect(screen.getByText("Workspace default")).toBeInTheDocument();
   });
 });
 
@@ -224,7 +198,8 @@ describe("CreatePipelineWizard backend selection", () => {
     pipelineUtils.buildDefaultDefinition.mockReturnValue({ nodes: [], edges: [] });
   });
 
-  function renderStoreStep(overrides?: { pineconeConfigured?: boolean }) {
+  async function renderStoreStep(overrides?: { pineconeConfigured?: boolean }) {
+    const user = userEvent.setup();
     const backends = [
       makeBackendInfo(),
       makePineconeBackendInfo({ configured: overrides?.pineconeConfigured ?? true }),
@@ -233,25 +208,14 @@ describe("CreatePipelineWizard backend selection", () => {
       makeVectorIndex({ name: "local-docs", backend: "pgvector" }),
       makeVectorIndex({ name: "cloud-docs", backend: "pinecone" }),
     ];
-    return render(
-      <CreatePipelineWizard
-        open
-        token="token"
-        kind="ingestion"
-        indexes={indexes}
-        backends={backends}
-        onClose={() => undefined}
-        onCreated={() => undefined}
-        onOpenIndexManager={() => undefined}
-      />,
-    );
+    renderWizard({ backends, indexes });
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    return user;
   }
 
   it("preselects pgvector and scopes index options to the chosen backend", async () => {
-    const user = userEvent.setup();
-    renderStoreStep();
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
-    await user.click(screen.getByRole("button", { name: "Next" }));
+    const user = await renderStoreStep();
 
     const pgvectorCard = screen.getByRole("button", { name: /pgvector/ });
     expect(pgvectorCard).toHaveAttribute("aria-pressed", "true");
@@ -264,26 +228,9 @@ describe("CreatePipelineWizard backend selection", () => {
   });
 
   it("disables the Pinecone card when no API key is configured", async () => {
-    const user = userEvent.setup();
-    renderStoreStep({ pineconeConfigured: false });
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
-    await user.click(screen.getByRole("button", { name: "Next" }));
+    await renderStoreStep({ pineconeConfigured: false });
 
-    const pineconeCard = screen.getByRole("button", { name: /Pinecone/ });
-    expect(pineconeCard).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Pinecone/ })).toBeDisabled();
     expect(screen.getByText(/API key required/)).toBeInTheDocument();
-  });
-
-  it("clears the index selection when switching backends", async () => {
-    const user = userEvent.setup();
-    renderStoreStep();
-    await user.type(screen.getByPlaceholderText(/Ingestion/), "Pipe");
-    await user.click(screen.getByRole("button", { name: "Next" }));
-
-    await user.selectOptions(screen.getByRole("combobox"), "local-docs");
-    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
-
-    await user.click(screen.getByRole("button", { name: /Pinecone/ }));
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 });

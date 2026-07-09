@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { PipelineTraceViewer } from "@/components/traces/PipelineTraceViewer";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
-import { fetchQueryEventTrace, runCollectionQuery } from "@/lib/api";
+import { fetchQueryEventEndToEndTrace, fetchQueryEventTrace, runCollectionQuery } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { truncate } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [trace, setTrace] = useState<PipelineTraceResponse | null>(null);
+  const [originTrace, setOriginTrace] = useState<PipelineTraceResponse | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceChunkId, setTraceChunkId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -38,6 +39,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
       const result = await runCollectionQuery(token, collectionId, { query, top_k: topK });
       setQueryResult(result);
       setTrace(null);
+      setOriginTrace(null);
       setTraceChunkId(null);
       setTraceOpen(false);
     } catch (error) {
@@ -55,8 +57,22 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
     setTraceLoading(true);
     setMessage(null);
     try {
-      const payload = await fetchQueryEventTrace(token, queryResult.query_event_id);
-      setTrace(payload);
+      if (chunkId) {
+        // Tracing a specific chunk: join retrieval with the ingestion run that
+        // produced it, so the whole document → chunk → index → retrieval path
+        // plays as one flow.
+        const payload = await fetchQueryEventEndToEndTrace(
+          token,
+          queryResult.query_event_id,
+          chunkId,
+        );
+        setTrace(payload.retrieval);
+        setOriginTrace(payload.origin?.trace ?? null);
+      } else {
+        const payload = await fetchQueryEventTrace(token, queryResult.query_event_id);
+        setTrace(payload);
+        setOriginTrace(null);
+      }
       setTraceChunkId(chunkId ?? null);
       setTraceOpen(true);
     } catch (error) {
@@ -185,8 +201,9 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
         </div>
       </GlassCard>
       <PipelineTraceViewer
-        key={trace?.run.id ?? "trace"}
+        key={`${trace?.run.id ?? "trace"}-${originTrace?.run.id ?? "solo"}`}
         trace={trace}
+        originTrace={originTrace}
         isOpen={traceOpen}
         onClose={() => setTraceOpen(false)}
         highlightChunkId={traceChunkId}

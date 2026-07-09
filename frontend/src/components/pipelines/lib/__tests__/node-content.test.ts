@@ -19,6 +19,7 @@ describe("node-content", () => {
       output_ports: [],
       config_schema: {},
       default_config: {},
+      hidden: false,
     };
     const description = resolveNodeDescription(spec);
     const example = resolveNodeExample(spec);
@@ -42,6 +43,7 @@ describe("node-content", () => {
       output_ports: [],
       config_schema: {},
       default_config: {},
+      hidden: false,
     };
     expect(resolveNodeDescription(spec)).toBe("Custom description");
     expect(resolveNodeExample(spec)).toBeUndefined();

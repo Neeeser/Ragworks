@@ -10,6 +10,7 @@ import type {
   CollectionStats,
   CollectionUpdatePayload,
   Document,
+  EndToEndTrace,
   IngestionResponse,
   PipelineTraceResponse,
   PromptDetails,
@@ -181,4 +182,15 @@ export async function fetchQueryEventTrace(
   queryEventId: string,
 ): Promise<PipelineTraceResponse> {
   return apiFetch<PipelineTraceResponse>(`/api/query-events/${queryEventId}/trace`, { token });
+}
+
+export async function fetchQueryEventEndToEndTrace(
+  token: string,
+  queryEventId: string,
+  chunkId?: string | null,
+): Promise<EndToEndTrace> {
+  const params = chunkId ? `?chunk_id=${encodeURIComponent(chunkId)}` : "";
+  return apiFetch<EndToEndTrace>(`/api/query-events/${queryEventId}/trace/full${params}`, {
+    token,
+  });
 }

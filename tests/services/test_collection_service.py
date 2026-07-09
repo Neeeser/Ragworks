@@ -78,7 +78,7 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
     ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
     retrieval_definition = pipeline_service.get_definition(defaults.retrieval)
     chunker = next(n for n in ingestion_definition.nodes if n.type == "chunker.token")
-    chat = next(n for n in retrieval_definition.nodes if n.type == "chat.settings")
+    retriever = next(n for n in retrieval_definition.nodes if n.type == "retriever.vector")
 
     created = CollectionService(session).create(
         user,
@@ -86,7 +86,9 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
             name="Overrides Collection",
             pipeline_overrides=CollectionPipelineOverrides(
                 ingestion=[PipelineNodeOverride(node_id=chunker.id, config={"chunk_size": 2048})],
-                retrieval=[PipelineNodeOverride(node_id=chat.id, config={"context_window": 4096})],
+                retrieval=[
+                    PipelineNodeOverride(node_id=retriever.id, config={"namespace": "custom-ns"})
+                ],
             ),
         ),
     )
@@ -102,14 +104,15 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
         n for n in pipeline_service.get_definition(ingestion_pipeline).nodes
         if n.type == "chunker.token"
     )
-    updated_chat = next(
+    updated_retriever = next(
         n for n in pipeline_service.get_definition(retrieval_pipeline).nodes
-        if n.type == "chat.settings"
+        if n.type == "retriever.vector"
     )
     # Merged, not replaced: the untouched sibling field survives the override.
     assert updated_chunker.config["chunk_size"] == 2048
     assert updated_chunker.config["chunk_overlap"] == 200
-    assert updated_chat.config["context_window"] == 4096
+    assert updated_retriever.config["namespace"] == "custom-ns"
+    assert updated_retriever.config["backend"] == "pgvector"
 
 
 def test_create_with_ingestion_overrides_only(session: Session) -> None:
@@ -141,9 +144,9 @@ def test_create_with_retrieval_overrides_only(session: Session) -> None:
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(user)
     session.commit()
-    chat = next(
+    retriever = next(
         n for n in pipeline_service.get_definition(defaults.retrieval).nodes
-        if n.type == "chat.settings"
+        if n.type == "retriever.vector"
     )
 
     created = CollectionService(session).create(
@@ -151,7 +154,9 @@ def test_create_with_retrieval_overrides_only(session: Session) -> None:
         CollectionCreate(
             name="Overrides",
             pipeline_overrides=CollectionPipelineOverrides(
-                retrieval=[PipelineNodeOverride(node_id=chat.id, config={"context_window": 4096})],
+                retrieval=[
+                    PipelineNodeOverride(node_id=retriever.id, config={"namespace": "custom-ns"})
+                ],
             ),
         ),
     )

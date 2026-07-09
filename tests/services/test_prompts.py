@@ -73,8 +73,6 @@ def _retrieval_settings(**overrides: Any) -> RetrievalPipelineSettings:
         "index_name": "pinecone-index",
         "namespace": "pinecone-namespace",
         "dimension": 1536,
-        "chat_model": "chat-model",
-        "context_window": 8192,
     }
     defaults.update(overrides)
     return RetrievalPipelineSettings(**defaults)

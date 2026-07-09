@@ -100,10 +100,30 @@ class PgvectorRetrieverConfig(RetrieverConfig):
     index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME)
 
 
-class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
-    """Shared retrieval behavior; subclasses bind a vector-store backend."""
+class VectorRetrieverConfig(RetrieverConfig):
+    """Unified retriever config: the target backend is data, not a node subtype.
 
-    backend: ClassVar[IndexBackend]
+    `index_name` deliberately defaults to empty -- an index must be chosen
+    explicitly, and validation flags a blank one (`missing_index_issue`).
+    Legacy definitions that relied on the old per-backend defaults get theirs
+    filled by the startup migration (`app.pipelines.upgrades`).
+    """
+
+    backend: IndexBackend = Field(
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+    )
+    index_name: str = ""
+
+
+class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
+    """Shared retrieval behavior.
+
+    Legacy subclasses pin a backend as a ClassVar; the unified
+    `VectorRetrieverNode` leaves it `None` and reads the backend off its
+    config (`VectorRetrieverConfig.backend`) via `resolve_backend`.
+    """
+
+    backend: ClassVar[IndexBackend | None] = None
     category = "retrieval"
     input_ports = (
         NodePort(key="query_embedding", label="Query Embedding", data_type="query_embedding"),
@@ -111,6 +131,15 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
     output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
     # Narrowed from the base's `type[BaseModel]` so validation reads typed fields.
     config_model: builtins.type[RetrieverConfig] = RetrieverConfig
+
+    @classmethod
+    def resolve_backend(cls, config: RetrieverConfig) -> IndexBackend:
+        """Return the backend this node queries: class-pinned or config-selected."""
+        if cls.backend is not None:
+            return cls.backend
+        if isinstance(config, VectorRetrieverConfig):
+            return config.backend
+        raise ValueError(f"Node type '{cls.type}' does not declare a vector-store backend.")
 
     @classmethod
     def validation_issues_for_node(
@@ -136,7 +165,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
             or self.config.index_name
         )
 
-        store = context.vector_stores.get(self.backend)
+        store = context.vector_stores.get(self.resolve_backend(self.config))
         response = store.query(
             index_name,
             namespace or "",
@@ -179,8 +208,25 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
 
+class VectorRetrieverNode(BaseRetrieverNode):
+    """Retrieve relevant chunks from the selected vector-store backend."""
+
+    type = "retriever.vector"
+    label = "Retriever"
+    description = "Query a vector index (pgvector or Pinecone) for matching chunks."
+    example = (
+        "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
+        "RetrievalPayload(matches=[chunk_a, chunk_b])."
+    )
+    config_model: builtins.type[RetrieverConfig] = VectorRetrieverConfig
+
+
 class PineconeRetrieverNode(BaseRetrieverNode):
-    """Retrieve relevant chunks from Pinecone."""
+    """Deprecated Pinecone-pinned retriever; new pipelines use `retriever.vector`.
+
+    Kept registered because node type ids are permanent -- persisted pipeline
+    versions may still reference it -- but hidden from the editor catalog.
+    """
 
     backend: ClassVar[IndexBackend] = IndexBackend.PINECONE
     type = "retriever.pinecone"
@@ -190,10 +236,15 @@ class PineconeRetrieverNode(BaseRetrieverNode):
         "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
         "RetrievalPayload(matches=[chunk_a, chunk_b])."
     )
+    hidden = True
 
 
 class PgvectorRetrieverNode(BaseRetrieverNode):
-    """Retrieve relevant chunks from pgvector (the app's own Postgres)."""
+    """Deprecated pgvector-pinned retriever; new pipelines use `retriever.vector`.
+
+    Kept registered because node type ids are permanent -- persisted pipeline
+    versions may still reference it -- but hidden from the editor catalog.
+    """
 
     backend: ClassVar[IndexBackend] = IndexBackend.PGVECTOR
     type = "retriever.pgvector"
@@ -204,6 +255,7 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
         "RetrievalPayload(matches=[chunk_a, chunk_b])."
     )
     config_model: builtins.type[RetrieverConfig] = PgvectorRetrieverConfig
+    hidden = True
 
 
 class RerankerConfig(BaseModel):
@@ -315,43 +367,3 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
         )
 
 
-class ChatSettingsConfig(BaseModel):
-    """Configuration for chat model settings."""
-
-    chat_model: str = Field(default_factory=lambda: get_app_config().models.default_chat_model)
-    context_window: int = Field(default=8192, gt=0)
-
-
-class ChatSettingsNode(PipelineNodeBase[ChatSettingsConfig]):
-    """Configure chat model settings for the retrieval pipeline."""
-
-    type = "chat.settings"
-    label = "Chat Settings"
-    category = "retrieval"
-    description = "Configure the chat model and context window used for generation."
-    example = "chat_model='openai/gpt-oss-120b', context_window=8192."
-    input_ports = ()
-    output_ports = ()
-    config_model = ChatSettingsConfig
-
-    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """No-op node for storing chat settings in pipeline definitions."""
-        return {}
-
-    def summarize_io(
-        self,
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize chat settings configuration."""
-        return NodeTraceSummary(
-            outputs=[
-                NodeTraceValue(
-                    label="Chat settings",
-                    value={
-                        "chat_model": self.config.chat_model,
-                        "context_window": self.config.context_window,
-                    },
-                )
-            ]
-        )

@@ -365,15 +365,15 @@ describe("ChatStudio", () => {
       });
     });
 
-    it("resets document and context counts when document or pipeline loads fail", async () => {
+    it("resets document and context counts when the document load fails", async () => {
+      // The context window now comes from chat responses (model catalog), not
+      // a pipeline fetch, so it simply starts at 0 for a fresh collection.
       api.fetchDocuments.mockRejectedValueOnce(new Error("Docs down"));
-      api.fetchPipeline.mockRejectedValueOnce(new Error("Pipeline down"));
 
       render(<ChatStudio />);
 
       await waitFor(() => {
         expect(api.fetchDocuments).toHaveBeenCalled();
-        expect(api.fetchPipeline).toHaveBeenCalled();
       });
 
       const telemetryProps = mockTelemetryPanelProps as {

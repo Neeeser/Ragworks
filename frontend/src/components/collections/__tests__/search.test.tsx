@@ -78,13 +78,18 @@ describe("CollectionSearch", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: closeTraceLabel }));
 
+    // Tracing a specific chunk joins retrieval with the chunk's ingestion
+    // origin, so it calls the end-to-end endpoint with the chunk id.
     fireEvent.click(screen.getAllByRole("button", { name: "Trace result" })[0]);
     await waitFor(() => {
       expect(screen.getByTestId(traceViewerTestId)).toBeInTheDocument();
     });
-    expect(api.fetchQueryEventTrace).toHaveBeenLastCalledWith("token", "event-1");
+    expect(api.fetchQueryEventEndToEndTrace).toHaveBeenLastCalledWith(
+      "token",
+      "event-1",
+      "chunk-1",
+    );
     fireEvent.click(screen.getByRole("button", { name: closeTraceLabel }));
-    expect(api.fetchQueryEventTrace).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Trace result" })[2]);
     await waitFor(() => {

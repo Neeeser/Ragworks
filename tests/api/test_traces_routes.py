@@ -355,3 +355,114 @@ def test_get_query_event_trace_missing_pipeline_run_id(session: Session) -> None
         traces_routes.get_query_event_trace(event.id, current_user=user, session=session)
 
     assert excinfo.value.status_code == 404
+
+
+def _create_document_with_run(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    run: models.PipelineRun,
+) -> models.Document:
+    document = models.Document(
+        collection_id=collection.id,
+        user_id=user.id,
+        name="handbook.txt",
+        content_type="text/plain",
+        embedding_model="embed-model",
+        ingestion_run_id=run.id,
+    )
+    session.add(document)
+    session.commit()
+    session.refresh(document)
+    return document
+
+
+def _create_query_event(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    run: models.PipelineRun,
+) -> models.QueryEvent:
+    event = models.QueryEvent(
+        user_id=user.id,
+        collection_id=collection.id,
+        query_text="query",
+        top_k=3,
+        model="embed-model",
+        context_tokens=0,
+        latency_ms=0.0,
+        response_payload={},
+        pipeline_run_id=run.id,
+    )
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def test_end_to_end_trace_joins_retrieval_with_chunk_origin(session: Session) -> None:
+    """Tracing a retrieved chunk returns the retrieval run AND the ingestion
+    run of the document the chunk came from (chunk ids are `{document_id}:{i}`)."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = _create_pipeline(session, user)
+    ingestion_run = _create_run(session, user, pipeline, collection)
+    retrieval_run = _create_run(session, user, pipeline, collection)
+    document = _create_document_with_run(session, user, collection, ingestion_run)
+    event = _create_query_event(session, user, collection, retrieval_run)
+
+    response = TraceService(session).get_query_event_end_to_end_trace(
+        event.id, user.id, chunk_id=f"{document.id}:0"
+    )
+
+    assert response.retrieval.run.id == retrieval_run.id
+    assert response.origin is not None
+    assert response.origin.document_id == document.id
+    assert response.origin.document_name == "handbook.txt"
+    assert response.origin.chunk_id == f"{document.id}:0"
+    assert response.origin.trace.run.id == ingestion_run.id
+
+
+def test_end_to_end_trace_degrades_gracefully_without_origin(session: Session) -> None:
+    """A malformed chunk id, a foreign document, or no chunk id at all still
+    yields the retrieval trace with origin=None -- never a 404."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = _create_pipeline(session, user)
+    retrieval_run = _create_run(session, user, pipeline, collection)
+    event = _create_query_event(session, user, collection, retrieval_run)
+
+    service = TraceService(session)
+    assert service.get_query_event_end_to_end_trace(event.id, user.id).origin is None
+    assert (
+        service.get_query_event_end_to_end_trace(event.id, user.id, chunk_id="not-a-uuid:0").origin
+        is None
+    )
+    assert (
+        service.get_query_event_end_to_end_trace(event.id, user.id, chunk_id=f"{uuid4()}:0").origin
+        is None
+    )
+
+    # A document owned by someone else must not leak through the origin side.
+    other_user = _create_user(session)
+    other_collection = _create_collection(session, other_user)
+    other_pipeline = _create_pipeline(session, other_user)
+    other_run = _create_run(session, other_user, other_pipeline, other_collection)
+    foreign_document = _create_document_with_run(session, other_user, other_collection, other_run)
+    assert (
+        service.get_query_event_end_to_end_trace(
+            event.id, user.id, chunk_id=f"{foreign_document.id}:0"
+        ).origin
+        is None
+    )
+
+
+def test_end_to_end_trace_route_translates_missing_event(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        traces_routes.get_query_event_end_to_end_trace(
+            uuid4(), chunk_id=None, current_user=user, session=session
+        )
+
+    assert excinfo.value.status_code == 404

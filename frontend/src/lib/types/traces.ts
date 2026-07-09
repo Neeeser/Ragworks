@@ -68,3 +68,17 @@ export interface PipelineTraceResponse {
   node_runs: PipelineNodeRunTrace[];
   node_io: PipelineNodeIOTrace[];
 }
+
+/** `TraceOriginRead` — the source document + ingestion trace for a chunk. */
+export interface TraceOrigin {
+  document_id: UUID;
+  document_name?: string | null;
+  chunk_id?: string | null;
+  trace: PipelineTraceResponse;
+}
+
+/** `EndToEndTraceResponse` — retrieval trace joined with chunk origin. */
+export interface EndToEndTrace {
+  retrieval: PipelineTraceResponse;
+  origin?: TraceOrigin | null;
+}

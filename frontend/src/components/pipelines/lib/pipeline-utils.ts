@@ -1,6 +1,7 @@
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
+import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { PipelineNodeData } from "../PipelineNode";
 import type {
   IndexBackend,
@@ -9,7 +10,7 @@ import type {
   PipelineKind,
   VectorIndex,
 } from "@/lib/types";
-import type { Edge, Node } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 
 const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
@@ -29,8 +30,13 @@ const NODE_CHUNK_DOCUMENT = "chunk-document";
 const NODE_EMBED_CHUNKS = "embed-chunks";
 const NODE_INDEX_CHUNKS = "index-chunks";
 const NODE_INGEST_OUTPUT = "ingest-output";
-const DEFAULT_NODE_X = 0;
-const DEFAULT_NODE_Y_SPACING = 140;
+
+/** Unified vector-store node types (backend selected in config). */
+export const INDEXER_NODE_TYPE = "indexer.vector";
+export const RETRIEVER_NODE_TYPE = "retriever.vector";
+
+// Horizontal spacing between scaffolded nodes; matches the layout module.
+const SCAFFOLD_SPACING_X = 368;
 
 export const createId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -39,20 +45,40 @@ export const createId = () => {
   return `node-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
+export type DefaultDefinitionOptions = {
+  indexName?: string;
+  indexDimension?: number;
+  embeddingModel?: string;
+  chunkSize?: number;
+  chunkOverlap?: number;
+};
+
+const scaffoldPosition = (index: number) => ({ x: SCAFFOLD_SPACING_X * index, y: 0 });
+
 export const buildDefaultDefinition = (
   kind: PipelineKind,
   backend: IndexBackend,
-  indexName?: string,
-  indexDimension?: number,
+  options: DefaultDefinitionOptions = {},
 ): PipelineDefinition => {
-  const indexConfig =
-    typeof indexName === "string" && indexName.trim()
-      ? {
-          index_name: indexName.trim(),
-          ...(typeof indexDimension === "number" ? { dimension: indexDimension } : {}),
-        }
-      : {};
+  const indexConfig: Record<string, unknown> = { backend };
+  if (typeof options.indexName === "string" && options.indexName.trim()) {
+    indexConfig.index_name = options.indexName.trim();
+  }
+  const embedderConfig: Record<string, unknown> = {};
+  if (options.embeddingModel) {
+    embedderConfig.model_name = options.embeddingModel;
+  }
+  // Only the indexer carries the dimension. Setting it on the embedder would
+  // send an explicit `dimensions` param to OpenRouter, which many embedding
+  // models reject outright (no matryoshka support) -- models emit their
+  // native dimension without it.
+  if (typeof options.indexDimension === "number") {
+    indexConfig.dimension = options.indexDimension;
+  }
+
   if (kind === "retrieval") {
+    const retrieverConfig = { ...indexConfig };
+    delete retrieverConfig.dimension;
     return {
       nodes: [
         {
@@ -60,28 +86,28 @@ export const buildDefaultDefinition = (
           type: "retrieval.input",
           name: "Retrieval Input",
           config: {},
-          position: { x: DEFAULT_NODE_X, y: 0 },
+          position: scaffoldPosition(0),
         },
         {
           id: NODE_EMBED_QUERY,
           type: "embedder.openrouter",
           name: "Embedder",
-          config: {},
-          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING },
+          config: embedderConfig,
+          position: scaffoldPosition(1),
         },
         {
           id: NODE_VECTOR_RETRIEVER,
-          type: `retriever.${backend}`,
+          type: RETRIEVER_NODE_TYPE,
           name: "Retriever",
-          config: indexConfig,
-          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
+          config: retrieverConfig,
+          position: scaffoldPosition(2),
         },
         {
           id: NODE_RETRIEVAL_OUTPUT,
           type: "retrieval.output",
           name: "Retrieval Output",
           config: {},
-          position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 3 },
+          position: scaffoldPosition(3),
         },
       ],
       edges: [
@@ -118,45 +144,45 @@ export const buildDefaultDefinition = (
         type: "ingestion.input",
         name: "Ingestion Input",
         config: {},
-        position: { x: DEFAULT_NODE_X, y: 0 },
+        position: scaffoldPosition(0),
       },
       {
         id: NODE_PARSE_DOCUMENT,
         type: "parser.document",
         name: "Document Parser",
         config: {},
-        position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING },
+        position: scaffoldPosition(1),
       },
       {
         id: NODE_CHUNK_DOCUMENT,
         type: "chunker.token",
         name: "Token Chunker",
         config: {
-          chunk_size: 1024,
-          chunk_overlap: 200,
+          chunk_size: options.chunkSize ?? 1024,
+          chunk_overlap: options.chunkOverlap ?? 200,
         },
-        position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 2 },
+        position: scaffoldPosition(2),
       },
       {
         id: NODE_EMBED_CHUNKS,
         type: "embedder.openrouter",
         name: "Embedder",
-        config: {},
-        position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 3 },
+        config: embedderConfig,
+        position: scaffoldPosition(3),
       },
       {
         id: NODE_INDEX_CHUNKS,
-        type: `indexer.${backend}`,
+        type: INDEXER_NODE_TYPE,
         name: "Indexer",
         config: indexConfig,
-        position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 4 },
+        position: scaffoldPosition(4),
       },
       {
         id: NODE_INGEST_OUTPUT,
         type: "ingestion.output",
         name: "Ingestion Output",
         config: {},
-        position: { x: DEFAULT_NODE_X, y: DEFAULT_NODE_Y_SPACING * 5 },
+        position: scaffoldPosition(5),
       },
     ],
     edges: [
@@ -223,26 +249,36 @@ export const toFlowNodes = (
     };
   });
 
-export const toFlowEdges = (definition: PipelineDefinition): Edge[] =>
-  definition.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.source_port ?? undefined,
-    targetHandle: edge.target_port ?? undefined,
-    type: "smoothstep",
-  }));
+/**
+ * Convert definition edges to typed flow edges. The wire's color comes from
+ * the data type leaving the source port, resolved via the node specs.
+ */
+export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): TypedEdgeType[] =>
+  definition.edges.map((edge) => {
+    const sourceNode = definition.nodes.find((node) => node.id === edge.source);
+    const spec = sourceNode ? specs.find((item) => item.type === sourceNode.type) : undefined;
+    const port = spec?.output_ports.find((entry) => entry.key === edge.source_port);
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.source_port ?? undefined,
+      targetHandle: edge.target_port ?? undefined,
+      type: "typed" as const,
+      data: { dataType: port?.data_type ?? spec?.output_ports[0]?.data_type },
+    };
+  });
 
 export const toPipelineDefinition = (
   nodes: Node<PipelineNodeData>[],
-  edges: Edge[],
+  edges: TypedEdgeType[],
 ): PipelineDefinition => ({
   nodes: nodes.map((node) => ({
     id: node.id,
     type: node.data.nodeType,
     name: node.data.label,
     config: node.data.config,
-    position: node.position,
+    position: { x: node.position.x, y: node.position.y },
   })),
   edges: edges.map((edge) => ({
     id: edge.id,
@@ -274,10 +310,14 @@ export const buildNodeCatalog = (specs: NodeSpec[]) => {
     }));
 };
 
-export const createDefaultNodePosition = (count: number) => ({
-  x: 160,
-  y: 140 + count * 140,
-});
+/** Place a new node one column to the right of the current graph. */
+export const nextNodePosition = (nodes: Node<PipelineNodeData>[]) => {
+  if (nodes.length === 0) return { x: 0, y: 0 };
+  const maxX = Math.max(...nodes.map((node) => node.position.x));
+  const rightmost = nodes.filter((node) => node.position.x === maxX);
+  const avgY = rightmost.reduce((sum, node) => sum + node.position.y, 0) / rightmost.length;
+  return { x: maxX + SCAFFOLD_SPACING_X, y: avgY };
+};
 
 /** Builds the flow-node `data` payload for a node spec, shared by the sidebar's drag
  * preview node and by the node actually added to the canvas. */

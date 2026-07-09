@@ -1,11 +1,18 @@
 "use client";
 
 import { Handle, Position } from "@xyflow/react";
+import { AlertTriangle, Check, Loader2 } from "lucide-react";
 
 import { cn, truncate } from "@/lib/utils";
 
 import { buildPipelineConfigFields, formatConfigValue } from "./lib/pipeline-config";
-import { getNodeFamilyStyles, getPortTypeClasses, resolveNodeFamily } from "./lib/pipeline-theme";
+import {
+  getNodeFamilyLabel,
+  getNodeFamilyStyles,
+  getPortTypeClasses,
+  getPortTypeLabel,
+  resolveNodeFamily,
+} from "./lib/pipeline-theme";
 
 import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
 import type { Node, NodeProps } from "@xyflow/react";
@@ -19,6 +26,15 @@ export type DropPreviewNodeData = {
   label?: string;
 };
 
+/** Live connection-drag context injected into every node while a wire is dragged. */
+export type ConnectingContext = {
+  /** Data type flowing from the picked-up handle. */
+  dataType: string;
+  /** Which side was picked up: a source handle looks for targets, and vice versa. */
+  from: "source" | "target";
+  nodeId: string;
+};
+
 export type PipelineNodeData = {
   label: string;
   nodeType: string;
@@ -30,139 +46,215 @@ export type PipelineNodeData = {
   configSchema?: Record<string, unknown>;
   status?: PipelineRunStatus;
   active?: boolean;
+  connecting?: ConnectingContext | null;
+  errors?: string[];
 };
 
-const portLeftPercent = (index: number, total: number) => `${((index + 1) / (total + 1)) * 100}%`;
-const CONFIG_PREVIEW_LIMIT = 48;
+const CONFIG_PREVIEW_LIMIT = 40;
+const CONFIG_ROW_LIMIT = 5;
 
-export function PipelineNode({ data }: NodeProps<Node<PipelineNodeData>>) {
-  const family = resolveNodeFamily(data.nodeType);
-  const familyStyles = getNodeFamilyStyles(family);
-  const configEntries = Object.entries(data.config ?? {});
-  const defaultConfigEntries = buildPipelineConfigFields(data.configSchema).flatMap((field) =>
-    field.defaultValue === undefined ? [] : [[field.key, field.defaultValue] as const],
+const statusBadge = (status: PipelineRunStatus) => {
+  if (status === "completed") {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-300">
+        <Check className="h-3 w-3" /> done
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-medium text-rose-300">
+        <AlertTriangle className="h-3 w-3" /> failed
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[10px] font-medium text-cyan-300">
+      <Loader2 className="h-3 w-3 animate-spin" /> running
+    </span>
   );
+};
+
+type PortRowProps = {
+  portKey: string;
+  label: string;
+  dataType: string;
+  required: boolean;
+  side: "input" | "output";
+  connecting?: ConnectingContext | null;
+  nodeId: string;
+  connectable: boolean;
+};
+
+/**
+ * One port row: label + typed color dot, with its xyflow Handle anchored on the
+ * card edge at the row's height. While a wire is dragged, compatible handles
+ * swell and pulse; incompatible ones fade so valid drop targets are obvious.
+ */
+function PortRow({
+  portKey,
+  label,
+  dataType,
+  required,
+  side,
+  connecting,
+  nodeId,
+  connectable,
+}: PortRowProps) {
+  const portClasses = getPortTypeClasses(dataType);
+  const isTargetSide = side === "input";
+  const wanted =
+    connecting &&
+    connecting.nodeId !== nodeId &&
+    ((connecting.from === "source" && isTargetSide) ||
+      (connecting.from === "target" && !isTargetSide));
+  const compatible = wanted && connecting.dataType === dataType;
+  const incompatible = Boolean(connecting) && !compatible;
+
   return (
     <div
       className={cn(
-        "relative min-w-[180px] rounded-2xl border bg-slate-900/90 pl-4 pr-3 py-3 text-xs text-slate-200 shadow-lg",
-        familyStyles.border,
-        familyStyles.glow,
-        data.active && "ring-2 ring-cyan-300/70",
+        "relative flex items-center gap-1.5 py-0.5 text-[10px] leading-4",
+        isTargetSide ? "justify-start" : "justify-end",
+        incompatible && "opacity-40",
       )}
     >
-      <div
+      {isTargetSide ? (
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
+      ) : null}
+      <span className="truncate text-slate-400" title={`${label} · ${getPortTypeLabel(dataType)}`}>
+        {label}
+        {!required && isTargetSide ? <span className="text-slate-600"> (optional)</span> : null}
+      </span>
+      {!isTargetSide ? (
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
+      ) : null}
+      <Handle
+        type={isTargetSide ? "target" : "source"}
+        position={isTargetSide ? Position.Left : Position.Right}
+        id={portKey}
+        isConnectable={connectable}
         className={cn(
-          "absolute left-0 top-3 h-[calc(100%-24px)] w-1 rounded-full",
-          familyStyles.accent,
+          "!absolute !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-slate-950 !transition-all",
+          portClasses.handle,
+          isTargetSide ? "!-left-[19px]" : "!-right-[19px]",
+          compatible && "!h-4 !w-4 animate-pulse !ring-2 !ring-white/70",
+          incompatible && "!opacity-30",
         )}
       />
-      {data.inputs.map((port, index) => {
-        const portClasses = getPortTypeClasses(port.data_type);
-        return (
-          <Handle
-            key={`input-${port.key}`}
-            type="target"
-            position={Position.Top}
-            id={port.key}
-            className={cn(
-              "h-2 w-2 rounded-full border",
-              portClasses.handle,
-              !port.required && "opacity-60",
-            )}
-            style={{ left: portLeftPercent(index, data.inputs.length) }}
-          />
+    </div>
+  );
+}
+
+export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNodeData>>) {
+  const family = resolveNodeFamily(data.nodeType);
+  const familyStyles = getNodeFamilyStyles(family);
+  const configEntries = Object.entries(data.config ?? {});
+  const displayedEntries =
+    configEntries.length > 0
+      ? configEntries
+      : buildPipelineConfigFields(data.configSchema).flatMap((field) =>
+          field.defaultValue === undefined ? [] : [[field.key, field.defaultValue] as const],
         );
-      })}
-      {data.outputs.map((port, index) => {
-        const portClasses = getPortTypeClasses(port.data_type);
-        return (
-          <Handle
-            key={`output-${port.key}`}
-            type="source"
-            position={Position.Bottom}
-            id={port.key}
-            className={cn(
-              "h-2 w-2 rounded-full border",
-              portClasses.handle,
-              !port.required && "opacity-60",
-            )}
-            style={{ left: portLeftPercent(index, data.outputs.length) }}
-          />
-        );
-      })}
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-white">{data.label}</span>
-        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-400">
-          {data.nodeType}
-        </span>
-      </div>
-      {data.status && (
-        <p className="mt-2 text-[10px] uppercase tracking-[0.3em] text-slate-400">{data.status}</p>
+  const connecting = data.connecting ?? null;
+  const hasErrors = (data.errors?.length ?? 0) > 0;
+  const dimWholeNode =
+    connecting !== null &&
+    connecting.nodeId !== id &&
+    !(connecting.from === "source"
+      ? data.inputs.some((port) => port.data_type === connecting.dataType)
+      : data.outputs.some((port) => port.data_type === connecting.dataType));
+
+  return (
+    <div
+      className={cn(
+        "relative w-[264px] rounded-2xl border bg-slate-900/95 px-3 pb-2.5 pt-3 text-xs text-slate-200 shadow-lg transition-opacity duration-150",
+        familyStyles.border,
+        familyStyles.glow,
+        selected && "ring-2 ring-violet-400/70",
+        data.active && "ring-2 ring-cyan-300/80 shadow-[0_0_32px_rgba(103,232,249,0.25)]",
+        hasErrors && "border-rose-400/60",
+        dimWholeNode && "opacity-40",
       )}
-      <div className="mt-2 space-y-1">
-        {data.inputs.map((port) => {
-          const portClasses = getPortTypeClasses(port.data_type);
-          return (
-            <div key={port.key} className="flex items-center justify-between text-[10px]">
-              <span className="flex items-center gap-2 text-slate-500">
-                <span className={cn("h-2 w-2 rounded-full", portClasses.dot)} />
-                {port.label}
+    >
+      {/* Fixed-height header so every card's port rows start at the same
+          offset from the top -- with top-aligned layout columns this makes
+          matching ports line up into straight, factory-style runs. */}
+      <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-white">{data.label}</p>
+          <p className={cn("truncate text-[10px] uppercase tracking-[0.2em]", familyStyles.badge)}>
+            {getNodeFamilyLabel(family)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {hasErrors ? <AlertTriangle className="h-3.5 w-3.5 text-rose-300" /> : null}
+          {data.status ? statusBadge(data.status) : null}
+        </div>
+      </div>
+
+      {data.inputs.length > 0 || data.outputs.length > 0 ? (
+        <div className="mt-1.5 grid grid-cols-2 gap-x-3 border-t border-white/5 pt-1.5">
+          <div>
+            {data.inputs.map((port) => (
+              <PortRow
+                key={`in-${port.key}`}
+                portKey={port.key}
+                label={port.label}
+                dataType={port.data_type}
+                required={port.required}
+                side="input"
+                connecting={connecting}
+                nodeId={id}
+                connectable={!data.status}
+              />
+            ))}
+          </div>
+          <div>
+            {data.outputs.map((port) => (
+              <PortRow
+                key={`out-${port.key}`}
+                portKey={port.key}
+                label={port.label}
+                dataType={port.data_type}
+                required={port.required}
+                side="output"
+                connecting={connecting}
+                nodeId={id}
+                connectable={!data.status}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {displayedEntries.length > 0 ? (
+        <div className="mt-2 space-y-0.5 rounded-xl bg-white/[0.04] px-2 py-1.5">
+          {displayedEntries.slice(0, CONFIG_ROW_LIMIT).map(([key, value]) => (
+            <div
+              key={key}
+              className="flex items-center justify-between gap-2 text-[10px] leading-4"
+            >
+              <span className="truncate text-slate-500">{key}</span>
+              <span className="max-w-[130px] truncate text-slate-300">
+                {truncate(formatConfigValue(value), CONFIG_PREVIEW_LIMIT)}
               </span>
-              <span className="text-slate-400">{port.data_type}</span>
             </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 space-y-1">
-        {data.outputs.map((port) => {
-          const portClasses = getPortTypeClasses(port.data_type);
-          return (
-            <div key={port.key} className="flex items-center justify-between text-[10px]">
-              <span className="flex items-center gap-2 text-slate-500">
-                <span className={cn("h-2 w-2 rounded-full", portClasses.dot)} />
-                {port.label}
-              </span>
-              <span className="text-slate-400">{port.data_type}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Settings</p>
-        {configEntries.length > 0
-          ? configEntries.map(([key, value]) => (
-              <div
-                key={key}
-                className="flex items-center justify-between text-[10px] text-slate-400"
-              >
-                <span className="truncate">{key}</span>
-                <span className="max-w-[120px] truncate text-slate-300">
-                  {truncate(formatConfigValue(value), CONFIG_PREVIEW_LIMIT)}
-                </span>
-              </div>
-            ))
-          : defaultConfigEntries.length > 0
-            ? defaultConfigEntries.map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between text-[10px] text-slate-400"
-                >
-                  <span className="truncate">{key}</span>
-                  <span className="max-w-[120px] truncate text-slate-300">
-                    {truncate(formatConfigValue(value), CONFIG_PREVIEW_LIMIT)}
-                  </span>
-                </div>
-              ))
-            : null}
-      </div>
+          ))}
+          {displayedEntries.length > CONFIG_ROW_LIMIT ? (
+            <p className="text-[10px] text-slate-600">
+              +{displayedEntries.length - CONFIG_ROW_LIMIT} more
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 export function DropPreviewNode({ data }: NodeProps<Node<DropPreviewNodeData>>) {
   return (
-    <div className="pointer-events-none flex min-w-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-400/60 bg-slate-900/40 px-3 py-6 text-xs uppercase tracking-[0.3em] text-slate-300">
+    <div className="pointer-events-none flex w-[264px] items-center justify-center rounded-2xl border border-dashed border-slate-400/60 bg-slate-900/40 px-3 py-8 text-xs uppercase tracking-[0.3em] text-slate-300">
       {data.label ?? "Drop here"}
     </div>
   );

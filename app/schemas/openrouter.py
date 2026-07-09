@@ -128,6 +128,8 @@ class OpenRouterEmbeddingsResponse(BaseModel):
     data: list[OpenRouterEmbeddingItem] | None = None
     model: str | None = None
     usage: OpenRouterUsage | None = None
+    # Provider error envelope returned in place of `data` on failed requests.
+    error: dict[str, Any] | None = None
 
 
 class OpenRouterKeyRateLimit(BaseModel):

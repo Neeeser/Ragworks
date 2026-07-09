@@ -1,15 +1,21 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { FileText, MessageCircleQuestion, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BackendCard } from "@/components/pipelines/BackendCard";
-import { PineconeIcon } from "@/components/pipelines/icons/PineconeIcon";
-import { PostgresIcon } from "@/components/pipelines/icons/PostgresIcon";
+import {
+  BACKEND_TITLES,
+  CHUNK_PRESETS,
+  WizardProcessingStep,
+  WizardReviewStep,
+} from "@/components/pipelines/CreatePipelineWizardSteps";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import {
   buildDefaultDefinition,
   sortIndexesByName,
+  toFlowEdges,
+  toFlowNodes,
 } from "@/components/pipelines/lib/pipeline-utils";
 import { Button } from "@/components/ui/button";
 import { Field, Select, TextInput } from "@/components/ui/field";
@@ -18,7 +24,15 @@ import { createPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAppConfig } from "@/providers/config-provider";
 
-import type { BackendInfo, IndexBackend, Pipeline, PipelineKind, VectorIndex } from "@/lib/types";
+import type {
+  BackendInfo,
+  EmbeddingModelInfo,
+  IndexBackend,
+  NodeSpec,
+  Pipeline,
+  PipelineKind,
+  VectorIndex,
+} from "@/lib/types";
 
 type CreatePipelineWizardProps = {
   open: boolean;
@@ -26,20 +40,31 @@ type CreatePipelineWizardProps = {
   kind: PipelineKind;
   indexes: VectorIndex[];
   backends: BackendInfo[];
+  nodeSpecs: NodeSpec[];
+  embeddingModels: EmbeddingModelInfo[];
+  embeddingModelsLoading: boolean;
+  embeddingModelsError: string | null;
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
   onOpenIndexManager: () => void;
 };
 
-const steps: WizardStep[] = [
-  { id: "basics", label: "Basics", description: "Name the pipeline." },
-  { id: "store", label: "Vector store", description: "Pick where vectors live." },
-  { id: "review", label: "Review", description: "Confirm pipeline details." },
-];
-
-const BACKEND_TITLES: Record<IndexBackend, string> = {
-  pgvector: "pgvector (PostgreSQL)",
-  pinecone: "Pinecone",
+const KIND_COPY: Record<
+  PipelineKind,
+  { headline: string; explainer: string; namePlaceholder: string }
+> = {
+  ingestion: {
+    headline: "How your documents become searchable",
+    explainer:
+      "When you upload a document, this pipeline parses it, splits it into chunks, turns each chunk into an embedding, and writes them into your vector index.",
+    namePlaceholder: "e.g. Research library ingestion",
+  },
+  retrieval: {
+    headline: "How questions find the right chunks",
+    explainer:
+      "When you search or chat, this pipeline embeds the question and pulls the closest matching chunks out of your vector index.",
+    namePlaceholder: "e.g. Research library retrieval",
+  },
 };
 
 export function CreatePipelineWizard({
@@ -48,17 +73,39 @@ export function CreatePipelineWizard({
   kind,
   indexes,
   backends,
+  nodeSpecs,
+  embeddingModels,
+  embeddingModelsLoading,
+  embeddingModelsError,
   onClose,
   onCreated,
   onOpenIndexManager,
 }: CreatePipelineWizardProps) {
   const { config } = useAppConfig();
   const defaultBackend = config.indexing.default_backend;
+  const copy = KIND_COPY[kind];
+  const steps: WizardStep[] = useMemo(
+    () => [
+      { id: "basics", label: "Name", description: "What this pipeline is for." },
+      { id: "store", label: "Vector store", description: "Where the vectors live." },
+      kind === "ingestion"
+        ? { id: "processing", label: "Processing", description: "Chunking and embedding." }
+        : { id: "model", label: "Embedding", description: "The model that embeds queries." },
+      { id: "review", label: "Review", description: "Watch it flow, then create." },
+    ],
+    [kind],
+  );
+
   const [stepIndex, setStepIndex] = useState(0);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
-  const [form, setForm] = useState({ name: "", index_name: "" });
+  const [name, setName] = useState("");
+  const [indexName, setIndexName] = useState("");
+  const [embeddingModel, setEmbeddingModel] = useState("");
+  const [chunkSize, setChunkSize] = useState(1024);
+  const [chunkOverlap, setChunkOverlap] = useState(200);
+  const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -66,7 +113,12 @@ export function CreatePipelineWizard({
       setStepIndex(0);
       setMessage(null);
       setBackend(defaultBackend);
-      setForm({ name: "", index_name: "" });
+      setName("");
+      setIndexName("");
+      setEmbeddingModel("");
+      setChunkSize(1024);
+      setChunkOverlap(200);
+      setShowAdvancedChunking(false);
     }
     wasOpen.current = open;
   }, [open, defaultBackend]);
@@ -77,14 +129,38 @@ export function CreatePipelineWizard({
     [indexes, backend],
   );
   const selectedIndex = useMemo(
-    () => backendIndexes.find((index) => index.name === form.index_name) ?? null,
-    [backendIndexes, form.index_name],
+    () => backendIndexes.find((index) => index.name === indexName) ?? null,
+    [backendIndexes, indexName],
+  );
+  const selectedModel = embeddingModels.find((model) => model.id === embeddingModel) ?? null;
+  const activeChunkPreset =
+    CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
+    null;
+
+  const definition = useMemo(
+    () =>
+      buildDefaultDefinition(kind, backend, {
+        indexName: indexName.trim() || undefined,
+        indexDimension: selectedIndex?.dimension ?? undefined,
+        embeddingModel: embeddingModel || undefined,
+        chunkSize,
+        chunkOverlap,
+      }),
+    [kind, backend, indexName, selectedIndex, embeddingModel, chunkSize, chunkOverlap],
+  );
+
+  const preview = useMemo(
+    () => ({
+      nodes: toFlowNodes(definition, nodeSpecs),
+      edges: toFlowEdges(definition, nodeSpecs),
+      steps: definition.nodes.map((node) => ({ nodeId: node.id })),
+    }),
+    [definition, nodeSpecs],
   );
 
   const canProceed = () => {
-    if (stepIndex === 0) return form.name.trim().length > 0;
-    if (stepIndex === 1) return form.index_name.trim().length > 0;
-    /* c8 ignore next -- final step uses create action instead of Next */
+    if (stepIndex === 0) return name.trim().length > 0;
+    if (stepIndex === 1) return indexName.trim().length > 0;
     return true;
   };
 
@@ -92,14 +168,8 @@ export function CreatePipelineWizard({
     setCreating(true);
     setMessage(null);
     try {
-      const definition = buildDefaultDefinition(
-        kind,
-        backend,
-        form.index_name.trim(),
-        selectedIndex?.dimension ?? undefined,
-      );
       const created = await createPipeline(token, {
-        name: form.name.trim(),
+        name: name.trim(),
         kind,
         definition,
         change_summary: "Initial pipeline scaffold.",
@@ -116,7 +186,7 @@ export function CreatePipelineWizard({
   const handleBackendSelect = (nextBackend: IndexBackend) => {
     if (nextBackend === backend) return;
     setBackend(nextBackend);
-    setForm((prev) => ({ ...prev, index_name: "" }));
+    setIndexName("");
   };
 
   const handleIndexSelect = (value: string) => {
@@ -124,14 +194,14 @@ export function CreatePipelineWizard({
       onOpenIndexManager();
       return;
     }
-    setForm((prev) => ({ ...prev, index_name: value }));
+    setIndexName(value);
   };
 
   return (
     <WizardShell
       open={open}
-      title="Create pipeline"
-      subtitle={`New ${kind === "ingestion" ? "ingestion" : "retrieval"} pipeline`}
+      title={kind === "ingestion" ? "Create an ingestion pipeline" : "Create a retrieval pipeline"}
+      subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}
       message={message}
@@ -155,18 +225,28 @@ export function CreatePipelineWizard({
       }
     >
       {stepIndex === 0 && (
-        <Field
-          label="Pipeline name"
-          labelClassName="text-xs uppercase tracking-[0.3em] text-slate-400"
-        >
-          <TextInput
-            type="text"
-            placeholder="Ingestion: Research sync"
-            required
-            value={form.name}
-            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-          />
-        </Field>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            {kind === "ingestion" ? (
+              <FileText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-300" />
+            ) : (
+              <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-violet-300" />
+            )}
+            <p className="text-sm leading-relaxed text-slate-300">{copy.explainer}</p>
+          </div>
+          <Field
+            label="Pipeline name"
+            labelClassName="text-xs uppercase tracking-[0.3em] text-slate-400"
+          >
+            <TextInput
+              type="text"
+              placeholder={copy.namePlaceholder}
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+        </div>
       )}
 
       {stepIndex === 1 && (
@@ -188,10 +268,7 @@ export function CreatePipelineWizard({
             label={`${BACKEND_TITLES[backend]} index`}
             labelClassName="text-xs uppercase tracking-[0.3em] text-slate-400"
           >
-            <Select
-              value={form.index_name}
-              onChange={(event) => handleIndexSelect(event.target.value)}
-            >
+            <Select value={indexName} onChange={(event) => handleIndexSelect(event.target.value)}>
               <option value="">Select an index</option>
               {backendIndexes.map((index) => (
                 <option key={index.name} value={index.name}>
@@ -210,7 +287,7 @@ export function CreatePipelineWizard({
           ) : null}
           {backendIndexes.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-              <p>No {BACKEND_TITLES[backend]} indexes found.</p>
+              <p>No {BACKEND_TITLES[backend]} indexes yet — create one to continue.</p>
               <Button
                 variant="secondary"
                 onClick={onOpenIndexManager}
@@ -225,36 +302,38 @@ export function CreatePipelineWizard({
       )}
 
       {stepIndex === 2 && (
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Summary</p>
-          <div className="mt-3 space-y-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Pipeline name</p>
-              <p className="text-base font-semibold text-white">{form.name || "Untitled"}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Pipeline type</p>
-              <p className="text-sm text-white">
-                {kind === "ingestion" ? "Ingestion" : "Retrieval"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Vector store</p>
-              <p className="flex items-center gap-2 text-sm text-white">
-                {backend === "pgvector" ? (
-                  <PostgresIcon className="h-4 w-4" />
-                ) : (
-                  <PineconeIcon className="h-4 w-4 text-slate-100" />
-                )}
-                {BACKEND_TITLES[backend]}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Index</p>
-              <p className="text-sm text-white">{form.index_name || "Not selected"}</p>
-            </div>
-          </div>
-        </div>
+        <WizardProcessingStep
+          kind={kind}
+          chunkSize={chunkSize}
+          chunkOverlap={chunkOverlap}
+          onChunkChange={(size, overlap) => {
+            setChunkSize(size);
+            setChunkOverlap(overlap);
+          }}
+          showAdvancedChunking={showAdvancedChunking}
+          onToggleAdvancedChunking={() => setShowAdvancedChunking((prev) => !prev)}
+          embeddingModel={embeddingModel}
+          onSelectEmbeddingModel={setEmbeddingModel}
+          embeddingModels={embeddingModels}
+          embeddingModelsLoading={embeddingModelsLoading}
+          embeddingModelsError={embeddingModelsError}
+          selectedIndex={selectedIndex}
+          indexName={indexName}
+        />
+      )}
+
+      {stepIndex === 3 && (
+        <WizardReviewStep
+          kind={kind}
+          name={name}
+          backend={backend}
+          indexName={indexName}
+          selectedModelName={selectedModel?.name ?? null}
+          chunkPresetLabel={activeChunkPreset?.label ?? null}
+          chunkSize={chunkSize}
+          chunkOverlap={chunkOverlap}
+          preview={preview}
+        />
       )}
     </WizardShell>
   );

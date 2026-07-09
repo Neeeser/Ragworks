@@ -22,6 +22,7 @@ describe("PipelineNodeLibrary", () => {
             output_ports: [],
             config_schema: {},
             default_config: {},
+            hidden: false,
           } satisfies NodeSpec,
         ],
       },

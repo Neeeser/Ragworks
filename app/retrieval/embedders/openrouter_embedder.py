@@ -9,6 +9,7 @@ from app.clients.openrouter import OpenRouterClient
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
+from app.services.errors import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,17 @@ class OpenRouterEmbedder(Embedder):
         """
         data = response.data
         if data is None:
+            if response.error is not None:
+                # The envelope carried a provider error instead of vectors --
+                # surface it as the external failure it is (502, with the
+                # provider's own message) rather than an internal ValueError.
+                message = (
+                    response.error.get("message")
+                    if isinstance(response.error, dict)
+                    else str(response.error)
+                )
+                logger.error("OpenRouter embeddings request failed: %s", response.error)
+                raise ExternalServiceError(f"OpenRouter embeddings request failed: {message}")
             logger.error("OpenRouter embeddings response missing 'data': %s", response)
             raise ValueError(
                 "OpenRouter returned an embeddings payload without a 'data' array."

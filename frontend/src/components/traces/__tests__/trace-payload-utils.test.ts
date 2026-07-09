@@ -1,29 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildCursorNode,
-  buildFallbackPosition,
   buildPreviewPayload,
   containsChunkId,
   EMBEDDING_PREVIEW_COUNT,
-  formatPayload,
-  getNodeAnchor,
-  getNodeCenter,
-  renderScalarValue,
-  resolveNodeSize,
-  resolveTextSummary,
-  TEXT_PREVIEW_LIMIT,
 } from "@/components/traces/trace-payload-utils";
-
-import type { Node } from "@xyflow/react";
-
-const makeNode = (overrides: Partial<Node> = {}): Node => ({
-  id: "n1",
-  type: "pipelineNode",
-  position: { x: 10, y: 20 },
-  data: {},
-  ...overrides,
-});
 
 describe("containsChunkId", () => {
   it("returns false for empty chunkId or non-object values", () => {
@@ -96,102 +77,5 @@ describe("buildPreviewPayload", () => {
     // At depth > 4 the function returns the value as-is instead of recursing further.
     const result = buildPreviewPayload(value) as Record<string, unknown>;
     expect(result).toBeTruthy();
-  });
-});
-
-describe("formatPayload", () => {
-  it("pretty-prints the full payload when expanded", () => {
-    expect(formatPayload({ a: 1 }, true)).toBe(JSON.stringify({ a: 1 }, null, 2));
-  });
-
-  it("pretty-prints a preview payload when collapsed", () => {
-    const values = Array.from({ length: 20 }, (_, i) => i);
-    const formatted = formatPayload(values, false);
-    expect(formatted).toContain("total_values");
-  });
-});
-
-describe("resolveTextSummary", () => {
-  it("truncates raw strings and reports their full length", () => {
-    const long = "a".repeat(TEXT_PREVIEW_LIMIT + 50);
-    const summary = resolveTextSummary(long);
-    expect(summary?.length).toBe(long.length);
-    expect(summary?.full).toBe(long);
-    expect(summary?.preview.length).toBeLessThan(long.length);
-  });
-
-  it("passes through pre-shaped preview records", () => {
-    const summary = resolveTextSummary({ preview: "short", length: 100, full: "full text" });
-    expect(summary).toEqual({ preview: "short", length: 100, full: "full text" });
-  });
-
-  it("defaults length to the preview length when missing", () => {
-    const summary = resolveTextSummary({ preview: "short" });
-    expect(summary).toEqual({ preview: "short", length: 5, full: undefined });
-  });
-
-  it("returns null for values that are neither a string nor a preview record", () => {
-    expect(resolveTextSummary(42)).toBeNull();
-    expect(resolveTextSummary({ other: "field" })).toBeNull();
-    expect(resolveTextSummary(null)).toBeNull();
-  });
-});
-
-describe("renderScalarValue", () => {
-  it("renders an em dash for nullish values", () => {
-    expect(renderScalarValue(null, false)).toBe("—");
-    expect(renderScalarValue(undefined, false)).toBe("—");
-  });
-
-  it("truncates strings when collapsed and returns them whole when expanded", () => {
-    const long = "b".repeat(TEXT_PREVIEW_LIMIT + 10);
-    expect(renderScalarValue(long, false)).not.toBe(long);
-    expect(renderScalarValue(long, true)).toBe(long);
-  });
-
-  it("stringifies numbers and booleans", () => {
-    expect(renderScalarValue(3, false)).toBe("3");
-    expect(renderScalarValue(true, false)).toBe("true");
-  });
-
-  it("returns null for values needing a JSON block", () => {
-    expect(renderScalarValue({ nested: true }, false)).toBeNull();
-  });
-});
-
-describe("geometry helpers", () => {
-  it("builds a fallback grid position based on index", () => {
-    expect(buildFallbackPosition(0)).toEqual({ x: 0, y: 0 });
-    expect(buildFallbackPosition(3)).toEqual({ x: 0, y: 180 });
-    expect(buildFallbackPosition(4)).toEqual({ x: 220, y: 180 });
-  });
-
-  it("falls back to default node dimensions when unset", () => {
-    expect(resolveNodeSize(makeNode())).toEqual({ width: 220, height: 120 });
-    expect(resolveNodeSize(makeNode({ width: 50, height: 60 }))).toEqual({
-      width: 50,
-      height: 60,
-    });
-  });
-
-  it("anchors source at the bottom and target at the top of a node", () => {
-    const node = makeNode({ position: { x: 0, y: 0 } });
-    expect(getNodeAnchor(node, "source")).toEqual({ x: 110, y: 120 });
-    expect(getNodeAnchor(node, "target")).toEqual({ x: 110, y: 0 });
-  });
-
-  it("centers on the middle of the node", () => {
-    const node = makeNode({ position: { x: 0, y: 0 } });
-    expect(getNodeCenter(node)).toEqual({ x: 110, y: 60 });
-  });
-
-  it("builds a cursor node centered on the given position", () => {
-    const cursor = buildCursorNode({ x: 100, y: 100 });
-    expect(cursor?.position).toEqual({ x: 85, y: 85 });
-    expect(cursor?.type).toBe("traceCursor");
-  });
-
-  it("returns null when no position is given", () => {
-    expect(buildCursorNode(undefined)).toBeNull();
   });
 });

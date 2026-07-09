@@ -91,12 +91,6 @@ def system_prompt_context(
             "collection.description": _stringify(collection.description),
             "collection.tool_name": _stringify(tool_name or collection_tool_name(collection.id)),
             "collection.embedding_model": _stringify(embedding_model),
-            "collection.chat_model": _stringify(
-                retrieval_settings.chat_model if retrieval_settings else None
-            ),
-            "collection.context_window": _stringify(
-                retrieval_settings.context_window if retrieval_settings else None
-            ),
             "collection.chunk.strategy": _stringify(_chunk_strategy_label(ingestion_settings)),
             "collection.chunk.size": _stringify(
                 ingestion_settings.chunk_size if ingestion_settings else None

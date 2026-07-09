@@ -608,6 +608,14 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   callables so it stays unit-testable without a fake HTTP client. Before changing these
   integrations, read the local docs in `docs/external-api/` first — behavior
   there trumps memory.
+- **Never send OpenRouter an explicit embeddings `dimensions` unless the user
+  asked for one.** Most embedding models reject the parameter outright ("does
+  not support matryoshka representation") — the wizard/inspector deliberately
+  set only `model_name` and let the model emit its native dimension; the
+  indexer node alone carries `dimension` (for index creation/validation). And
+  when the embeddings envelope carries an `error` instead of `data`,
+  `OpenRouterEmbedder` raises `ExternalServiceError` with the provider's
+  message (502), never a bare `ValueError` (500).
 - **Never feature-detect a pinned SDK with `inspect.signature`.** `app/clients/pinecone/`
   used to probe `create_index`'s parameters at runtime (twice — once in the route, once
   in the indexer) to decide whether `metadata_config` was supported; on the SDK version

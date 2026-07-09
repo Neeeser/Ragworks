@@ -2,28 +2,25 @@
 
 from __future__ import annotations
 
-from app.core.config import get_settings
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
-from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
+from app.pipelines.nodes.indexing import VectorIndexerNode, default_index_name
+from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
+
+# Horizontal spacing between scaffolded nodes; comfortably wider than the
+# editor's rendered node cards so default pipelines never overlap.
+NODE_SPACING_X = 340
 
 
 def _default_backend() -> IndexBackend:
     """Return the deployment's configured default index backend."""
     return IndexBackend(get_app_config().indexing.default_backend)
-
-
-def _default_index_name(backend: IndexBackend) -> str:
-    """Return the default index name a scaffolded pipeline targets."""
-    if backend is IndexBackend.PGVECTOR:
-        return DEFAULT_PGVECTOR_INDEX_NAME
-    return get_settings().pinecone_index_name
 
 
 def build_default_ingestion_pipeline() -> PipelineDefinition:
@@ -41,13 +38,13 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
             id="parse-document",
             type="parser.document",
             name="Document Parser",
-            position={"x": 240, "y": 0},
+            position={"x": NODE_SPACING_X, "y": 0},
         ),
         PipelineNodeDefinition(
             id="chunk-document",
             type="chunker.token",
             name="Token Chunker",
-            position={"x": 480, "y": 0},
+            position={"x": NODE_SPACING_X * 2, "y": 0},
             config={
                 "chunk_size": 1024,
                 "chunk_overlap": 200,
@@ -57,16 +54,17 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
             id="embed-chunks",
             type="embedder.openrouter",
             name="Embedder",
-            position={"x": 720, "y": 0},
+            position={"x": NODE_SPACING_X * 3, "y": 0},
             config={"model_name": model_defaults.default_embedding_model},
         ),
         PipelineNodeDefinition(
             id="index-chunks",
-            type=f"indexer.{backend.value}",
+            type=VectorIndexerNode.type,
             name="Indexer",
-            position={"x": 960, "y": 0},
+            position={"x": NODE_SPACING_X * 4, "y": 0},
             config={
-                "index_name": _default_index_name(backend),
+                "backend": backend.value,
+                "index_name": default_index_name(backend),
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
                 "metric": "cosine",
                 "ensure_index": True,
@@ -76,7 +74,7 @@ def build_default_ingestion_pipeline() -> PipelineDefinition:
             id="ingest-output",
             type="ingestion.output",
             name="Ingestion Output",
-            position={"x": 1200, "y": 0},
+            position={"x": NODE_SPACING_X * 5, "y": 0},
         ),
     ]
     edges = [
@@ -134,34 +132,25 @@ def build_default_retrieval_pipeline() -> PipelineDefinition:
             id="embed-query",
             type="embedder.openrouter",
             name="Embedder",
-            position={"x": 280, "y": 0},
+            position={"x": NODE_SPACING_X, "y": 0},
             config={"model_name": model_defaults.default_embedding_model},
         ),
         PipelineNodeDefinition(
             id="vector-retriever",
-            type=f"retriever.{backend.value}",
+            type=VectorRetrieverNode.type,
             name="Retriever",
-            position={"x": 560, "y": 0},
+            position={"x": NODE_SPACING_X * 2, "y": 0},
             config={
-                "index_name": _default_index_name(backend),
+                "backend": backend.value,
+                "index_name": default_index_name(backend),
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
-            },
-        ),
-        PipelineNodeDefinition(
-            id="chat-settings",
-            type="chat.settings",
-            name="Chat Settings",
-            position={"x": 560, "y": 120},
-            config={
-                "chat_model": model_defaults.default_chat_model,
-                "context_window": 8192,
             },
         ),
         PipelineNodeDefinition(
             id="retrieval-output",
             type="retrieval.output",
             name="Retrieval Output",
-            position={"x": 840, "y": 0},
+            position={"x": NODE_SPACING_X * 3, "y": 0},
         ),
     ]
     edges = [

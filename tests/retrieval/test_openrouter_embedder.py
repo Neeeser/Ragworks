@@ -9,6 +9,7 @@ import pytest
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.models import DocumentChunk
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
+from app.services.errors import ExternalServiceError
 
 
 @dataclass
@@ -64,7 +65,8 @@ def test_embed_documents_returns_vectors_and_usage() -> None:
 
 
 def test_embed_documents_raises_when_payload_missing_data() -> None:
-    payload = {"data": None, "error": {"message": "model unavailable"}}
+    """No data and no error envelope: an internal contract violation, not a 502."""
+    payload = {"data": None}
     client = StubOpenRouterClient(responses=[payload])
     embedder = OpenRouterEmbedder(client, "qwen/qwen3-embedding-0.6b")
 
@@ -106,3 +108,20 @@ def test_embed_documents_short_circuits_on_empty_chunks() -> None:
     assert embedder.embed_documents([]) == []
 
 
+
+
+def test_embed_documents_surfaces_provider_error_envelope() -> None:
+    """Regression: a provider error envelope (no `data`) used to raise a bare
+    ValueError that reached the API as a 500; it must surface as the external
+    failure it is, carrying the provider's message."""
+    payload = {
+        "error": {
+            "message": 'HTTP 400: Model "x" does not support matryoshka representation',
+            "code": 400,
+        }
+    }
+    client = StubOpenRouterClient(responses=[payload])
+    embedder = OpenRouterEmbedder(client, "baai/bge-base-en-v1.5", dimensions=768)
+
+    with pytest.raises(ExternalServiceError, match="matryoshka"):
+        embedder.embed_documents([_chunk("text", "chunk-0")])
