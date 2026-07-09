@@ -14,6 +14,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -89,7 +90,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
+      <div className="flex min-h-screen items-center justify-center text-muted">
         Preparing your workspace…
       </div>
     );
@@ -103,19 +104,21 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   return (
     <div
       className={cn(
-        "flex min-h-screen flex-col bg-slate-950 text-slate-100",
+        "flex min-h-screen flex-col bg-canvas text-body",
         isChatRoute && "h-screen",
         isPipelinesRoute && "xl:h-screen",
       )}
     >
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-slate-950/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
-          <Link href="/dashboard" className="flex items-center gap-3 text-white">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-violet-300">
+          <Link href="/dashboard" className="flex items-center gap-3 text-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-violet/15 text-accent-violet">
               <Bot className="h-6 w-6" />
             </div>
             <div className="hidden lg:block">
-              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Ragworks</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                Ragworks
+              </p>
               <p className="text-lg font-semibold">Control Room</p>
             </div>
             <span className="sr-only">Ragworks Control Room</span>
@@ -130,8 +133,8 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
                   className={cn(
                     "rounded-full px-4 py-2 font-medium transition whitespace-nowrap",
                     isActive
-                      ? "bg-white/15 text-white shadow shadow-violet-500/40"
-                      : "text-slate-400 hover:bg-white/5 hover:text-white",
+                      ? "bg-surface-strong text-primary shadow-glow"
+                      : "text-muted hover:bg-surface hover:text-primary",
                   )}
                 >
                   {link.label}
@@ -141,15 +144,16 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           </nav>
           <div className="flex items-center gap-3">
             <div className="hidden text-right text-xs lg:block">
-              <p className="font-semibold text-white">{user.full_name || user.email}</p>
-              <p className="text-slate-400">{user.email}</p>
+              <p className="font-semibold text-primary">{user.full_name || user.email}</p>
+              <p className="text-muted">{user.email}</p>
             </div>
+            <ThemeToggle />
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
                 className={cn(
-                  "rounded-full border border-white/10 p-0.5 transition focus-visible:outline-none",
-                  menuOpen ? "border-violet-400" : "hover:border-white/30",
+                  "rounded-full border border-hairline p-0.5 transition focus-visible:outline-none",
+                  menuOpen ? "border-accent-violet" : "hover:border-strong",
                 )}
                 onClick={() => setMenuOpen((prev) => !prev)}
                 aria-haspopup="menu"
@@ -163,24 +167,24 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
                 </div>
               </button>
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-xl">
+                <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-hairline bg-canvas-raised/95 p-2 shadow-elevation-2">
                   <Link
                     href="/settings"
-                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-white/5"
+                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-body transition hover:bg-surface"
                     onClick={() => setMenuOpen(false)}
                   >
-                    <Settings className="h-4 w-4 text-slate-300" />
+                    <Settings className="h-4 w-4 text-muted" />
                     Settings
                   </Link>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/5"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-body transition hover:bg-surface"
                     onClick={() => {
                       setMenuOpen(false);
                       signOut();
                     }}
                   >
-                    <LogOut className="h-4 w-4 text-slate-300" />
+                    <LogOut className="h-4 w-4 text-muted" />
                     Sign out
                   </button>
                 </div>

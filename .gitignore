@@ -80,3 +80,4 @@ docs/external-api/
 # Local agent working files (keep local, never commit)
 .superpowers/
 docs/superpowers/
+.playwright-mcp/

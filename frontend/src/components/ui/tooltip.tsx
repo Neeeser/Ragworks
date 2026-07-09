@@ -38,9 +38,9 @@ export function Tooltip({ content, children, side = "top", className }: TooltipP
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-20 whitespace-nowrap rounded-2xl border border-white/10",
-          "bg-slate-950/95 px-3 py-2 text-[11px] font-semibold text-slate-200",
-          "shadow-[0_18px_40px_rgba(6,9,22,0.65)] backdrop-blur",
+          "pointer-events-none absolute z-20 whitespace-nowrap rounded-2xl border border-hairline",
+          "bg-canvas-raised/95 px-3 py-2 text-[11px] font-semibold text-body",
+          "shadow-elevation-2 backdrop-blur",
           "opacity-0 transition duration-150 group-hover:opacity-100 group-hover:scale-100",
           "group-focus-within:opacity-100 group-focus-within:scale-100",
           "origin-center scale-95",
@@ -51,7 +51,7 @@ export function Tooltip({ content, children, side = "top", className }: TooltipP
         {content}
         <span
           className={cn(
-            "absolute h-2.5 w-2.5 rotate-45 border border-white/10 bg-slate-950/95",
+            "absolute h-2.5 w-2.5 rotate-45 border border-hairline bg-canvas-raised/95",
             arrowClasses[side],
           )}
         />

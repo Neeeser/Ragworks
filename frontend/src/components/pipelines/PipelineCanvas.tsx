@@ -20,7 +20,7 @@ import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 
 import { pipelineEdgeTypes } from "./flow/TypedEdge";
-import { getPortTypeHex, getPortTypeLabel } from "./lib/pipeline-theme";
+import { getPortTypeColorVar, getPortTypeLabel } from "./lib/pipeline-theme";
 import { pipelineNodeTypes } from "./PipelineNode";
 
 import type { TypedEdgeType } from "./flow/TypedEdge";
@@ -120,7 +120,7 @@ export function PipelineCanvas({
               <span key={dataType} className="flex items-center gap-1.5 text-[10px] text-slate-400">
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: getPortTypeHex(dataType) }}
+                  style={{ backgroundColor: getPortTypeColorVar(dataType) }}
                 />
                 {getPortTypeLabel(dataType)}
               </span>

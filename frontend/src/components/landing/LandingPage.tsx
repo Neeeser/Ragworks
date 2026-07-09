@@ -12,18 +12,33 @@ import { CONSOLE_HREF, GITHUB_URL } from "@/components/landing/lib/constants";
  * a document flow the same way the trace viewer renders a real one. Everything
  * else stays quiet so the running pipeline is the thing you remember. No
  * marketing copy — this is an open-source tool advertising what it does.
+ *
+ * All color comes from design tokens (see globals.css), so the page follows the
+ * active theme; the atmospheric blooms mix the accent tokens over the canvas.
  */
 export function LandingPage() {
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#05060a] text-slate-100">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-canvas text-body">
       {/* Layer 0: the signature running pipeline. */}
       <HeroFlowBackdrop />
 
       {/* Layer 1: atmospheric blooms in the product's violet/cyan trace colors. */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(60%_50%_at_18%_12%,rgba(139,92,246,0.22),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(55%_45%_at_85%_10%,rgba(34,211,238,0.16),transparent_60%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#05060a] to-transparent" />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(60% 50% at 18% 12%, color-mix(in srgb, var(--accent-violet) 22%, transparent), transparent 60%)",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(55% 45% at 85% 10%, color-mix(in srgb, var(--accent-cyan) 16%, transparent), transparent 60%)",
+          }}
+        />
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-canvas to-transparent" />
       </div>
 
       {/* Layer 2: content. */}
@@ -34,22 +49,22 @@ export function LandingPage() {
           {/* Above the flow band. */}
           <div className="flex flex-col items-center gap-6">
             <p
-              className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-slate-400 sm:text-xs"
+              className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted sm:text-xs"
               style={{ animationDelay: "0ms" }}
             >
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
               </span>
               Open-source RAG workbench
             </p>
 
             <h1
-              className="landing-rise max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-white sm:text-6xl md:text-7xl"
+              className="landing-rise max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-primary sm:text-6xl md:text-7xl"
               style={{ animationDelay: "80ms" }}
             >
               Every RAG signal,{" "}
-              <span className="bg-gradient-to-r from-violet-300 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
                 surfaced.
               </span>
             </h1>
@@ -66,7 +81,7 @@ export function LandingPage() {
           >
             <Link
               href={CONSOLE_HREF}
-              className="group flex items-center gap-2 rounded-full bg-violet-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
+              className="group flex items-center gap-2 rounded-full bg-accent-violet px-6 py-3 text-base font-semibold text-white shadow-glow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
               Launch console
               <ArrowRight
@@ -78,7 +93,7 @@ export function LandingPage() {
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-6 py-3 text-base font-medium text-white transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
+              className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-6 py-3 text-base font-medium text-primary transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
               <Github className="h-4 w-4" aria-hidden />
               View source

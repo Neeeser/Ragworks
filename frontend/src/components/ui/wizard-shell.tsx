@@ -109,19 +109,19 @@ export function WizardShell({
 
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-5xl rounded-[2.5rem] border border-white/10 bg-slate-950/95 p-6 text-white">
+      <GlassCard className="w-full max-w-5xl rounded-[2.5rem] border border-hairline bg-canvas-raised/95 p-6 text-primary">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-slate-400">{title}</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">{title}</p>
             <h2 id={titleId} className="mt-2 text-2xl font-semibold">
               {subtitle}
             </h2>
-            <p className="text-sm text-slate-400">{activeStep?.description}</p>
+            <p className="text-sm text-muted">{activeStep?.description}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/10 p-2 text-slate-300 transition hover:border-white/30 hover:text-white"
+            className="rounded-full border border-hairline p-2 text-muted transition hover:border-strong hover:text-primary"
             aria-label="Close wizard"
           >
             <X className="h-4 w-4" />
@@ -129,7 +129,7 @@ export function WizardShell({
         </div>
 
         {message ? (
-          <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+          <div className="mt-4 rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
             {message}
           </div>
         ) : null}
@@ -147,15 +147,15 @@ export function WizardShell({
                   className={cn(
                     "w-full rounded-2xl border px-4 py-3 text-left transition",
                     isActive
-                      ? "border-violet-400 bg-violet-500/10 text-white"
-                      : "border-white/10 bg-white/5 text-slate-300 hover:border-white/30",
+                      ? "border-accent-violet bg-accent-violet/10 text-primary"
+                      : "border-hairline bg-surface text-body hover:border-strong",
                   )}
                 >
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
                     Step {index + 1}
                   </p>
                   <p className="text-base font-semibold">{step.label}</p>
-                  <p className="text-xs text-slate-400">{isComplete ? "Complete" : "Pending"}</p>
+                  <p className="text-xs text-muted">{isComplete ? "Complete" : "Pending"}</p>
                 </button>
               );
             })}

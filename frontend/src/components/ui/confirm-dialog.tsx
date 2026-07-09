@@ -46,20 +46,20 @@ export function ConfirmDialog({
 
   return (
     <ModalOverlay open={open} onClose={onCancel} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 text-white">
+      <GlassCard className="w-full max-w-lg rounded-[2rem] border border-hairline bg-canvas-raised/95 p-6 text-primary">
         <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Confirm action</p>
-          <h2 id={titleId} className="text-xl font-semibold text-white">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+            Confirm action
+          </p>
+          <h2 id={titleId} className="text-xl font-semibold text-primary">
             {title}
           </h2>
-          {description ? (
-            <p className="text-sm leading-relaxed text-slate-300">{description}</p>
-          ) : null}
+          {description ? <p className="text-sm leading-relaxed text-body">{description}</p> : null}
           {confirmText ? (
             <Field
               label={
                 <>
-                  Type <span className="font-semibold text-white">{confirmText}</span> to confirm
+                  Type <span className="font-semibold text-primary">{confirmText}</span> to confirm
                 </>
               }
             >
@@ -82,7 +82,7 @@ export function ConfirmDialog({
             disabled={confirmBlocked}
             className={cn(
               confirmVariant === "danger" &&
-                "bg-rose-500 text-white shadow-lg shadow-rose-500/30 hover:bg-rose-400",
+                "bg-data-neg text-white shadow-lg shadow-data-neg/30 hover:brightness-110",
             )}
           >
             {confirmLabel}

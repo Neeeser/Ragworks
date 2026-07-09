@@ -1,16 +1,20 @@
 # Ragworks UI — Component recipes
 
 Copy-paste-ready snippets for the deep-space look. All classes are Tailwind v4 as used in
-`frontend/`. Prefer the shared primitives (`Button`, `Field`, `GlassCard`) where one
-exists; these recipes are for link-CTAs, new compositions, and the atmosphere layers that
-have no primitive yet. Reference implementations live in
+`frontend/`, and **all colors are semantic design tokens** (see `tokens.md`) so every
+snippet works in both light and dark. Prefer the shared primitives (`Button`, `Field`,
+`GlassCard`) where one exists; these recipes are for link-CTAs, new compositions, and the
+atmosphere layers that have no primitive yet. Reference implementations live in
 `frontend/src/components/landing/`.
+
+> If you catch yourself typing a raw `bg-white/N`, `text-slate-N`, `bg-[#…]`, or
+> `border-white/N` for chrome, stop — swap it for the token (`tokens.md` has the table).
 
 ## Eyebrow / section kicker (mono instrument label)
 
 ```tsx
-<p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-slate-400">
-  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
+<p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted">
+  <span className="h-1.5 w-1.5 rounded-full bg-accent-cyan" aria-hidden />
   Open-source RAG workbench
 </p>
 ```
@@ -21,19 +25,19 @@ like entrances do:
 
 ```tsx
 <span className="relative flex h-1.5 w-1.5">
-  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60 motion-reduce:animate-none" />
-  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
+  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
 </span>
 ```
 
 ## Headline with one gradient word
 
-Spend the gradient on a single word — the rest stays white.
+Spend the gradient on a single word — the rest stays `text-primary`.
 
 ```tsx
-<h1 className="max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-white sm:text-6xl md:text-7xl">
+<h1 className="max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-primary sm:text-6xl md:text-7xl">
   Every RAG signal,{" "}
-  <span className="bg-gradient-to-r from-violet-300 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
+  <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
     surfaced.
   </span>
 </h1>
@@ -44,57 +48,28 @@ Spend the gradient on a single word — the rest stays white.
 ```tsx
 <Link
   href="/auth/sign-in"
-  className="group flex items-center gap-2 rounded-full bg-violet-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
+  className="group flex items-center gap-2 rounded-full bg-accent-violet px-6 py-3 text-base font-semibold text-white shadow-glow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
 >
   Launch console
   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
 </Link>
 ```
 
-For real `<button>`s use `<Button variant="primary">` from `components/ui/button.tsx`.
+`text-white` stays literal here — the violet fill needs white text in both themes. For real
+`<button>`s use `<Button variant="primary">` from `components/ui/button.tsx`.
 
-## Secondary CTA (hairline outline, glass fill)
+## Secondary CTA (hairline outline, surface fill)
 
 ```tsx
 <a
   href={GITHUB_URL}
   target="_blank"
   rel="noreferrer"
-  className="flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-6 py-3 text-base font-medium text-white transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
+  className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-6 py-3 text-base font-medium text-primary transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
 >
   <Github className="h-4 w-4" aria-hidden />
   View source
 </a>
-```
-
-## Stage/label strip (color-coded, mono)
-
-Use this **only where the screen is genuinely about the pipeline stages** (a pipeline view,
-a stage legend, a trace). It is not decoration — do not drop it onto unrelated screens
-(login, generic empty states) to add color; that's the filler this design language avoids
-(see design-language.md §2, principle 1).
-
-```tsx
-const STAGES = [
-  { label: "Parse", dotClass: "bg-sky-400" },
-  { label: "Chunk", dotClass: "bg-teal-400" },
-  { label: "Embed", dotClass: "bg-amber-400" },
-  { label: "Index", dotClass: "bg-cyan-400" },
-  { label: "Retrieve", dotClass: "bg-emerald-400" },
-  { label: "Chat", dotClass: "bg-rose-400" },
-];
-
-<ul className="flex flex-wrap items-center justify-center gap-x-1 gap-y-3 font-mono text-[11px] uppercase tracking-[0.28em] text-slate-400">
-  {STAGES.map((s, i) => (
-    <li key={s.label} className="flex items-center">
-      <span className="flex items-center gap-2">
-        <span className={`h-1.5 w-1.5 rounded-full ${s.dotClass}`} aria-hidden />
-        {s.label}
-      </span>
-      {i < STAGES.length - 1 && <span className="mx-3 text-slate-700" aria-hidden>/</span>}
-    </li>
-  ))}
-</ul>
 ```
 
 ## Card / panel
@@ -102,20 +77,40 @@ const STAGES = [
 Prefer `GlassCard` from `components/ui/panel.tsx`. Inline equivalent:
 
 ```tsx
-<div className="rounded-3xl border border-white/10 bg-white/5 p-6">…</div>
+<div className="rounded-3xl border border-hairline bg-surface p-6">…</div>
 ```
 
 ## Atmosphere layers (blooms + bottom fade)
 
-Place behind content inside a `relative overflow-hidden` container:
+Blooms mix an accent token over the canvas (via inline `style`, since `color-mix` in an
+arbitrary class is awkward) so they invert with the theme. Place behind content inside a
+`relative overflow-hidden` container:
 
 ```tsx
 <div className="pointer-events-none absolute inset-0" aria-hidden>
-  <div className="absolute inset-0 bg-[radial-gradient(60%_50%_at_18%_12%,rgba(139,92,246,0.22),transparent_60%)]" />
-  <div className="absolute inset-0 bg-[radial-gradient(55%_45%_at_85%_10%,rgba(34,211,238,0.16),transparent_60%)]" />
-  <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#05060a] to-transparent" />
+  <div
+    className="absolute inset-0"
+    style={{
+      backgroundImage:
+        "radial-gradient(60% 50% at 18% 12%, color-mix(in srgb, var(--accent-violet) 22%, transparent), transparent 60%)",
+    }}
+  />
+  <div
+    className="absolute inset-0"
+    style={{
+      backgroundImage:
+        "radial-gradient(55% 45% at 85% 10%, color-mix(in srgb, var(--accent-cyan) 16%, transparent), transparent 60%)",
+    }}
+  />
+  <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-canvas to-transparent" />
 </div>
 ```
+
+## Theme toggle
+
+Drop `<ThemeToggle />` (`components/ui/theme-toggle.tsx`) into a top bar. It reads/writes
+the theme via `useTheme()` (`providers/theme-provider.tsx`); the pre-paint script in
+`app/layout.tsx` sets the initial theme with no flash. Don't build a bespoke toggle.
 
 ## Staggered entrance
 
@@ -128,13 +123,11 @@ Place behind content inside a `relative overflow-hidden` container:
 <p className="landing-rise …" style={{ animationDelay: "160ms" }}>…</p>
 ```
 
-If you copy this look into a fresh project that lacks the keyframe, add it to `globals.css`
-(see design-language.md §9).
-
 ## Reduced-motion preference (hydration-safe)
 
 Never read the preference in a `useState` initializer or a `setState`-in-effect (both trip
-lint / cause hydration mismatch). Use `useSyncExternalStore`:
+lint / cause hydration mismatch). Use `useSyncExternalStore` — the same pattern the theme
+store uses:
 
 ```tsx
 function usePrefersReducedMotion(): boolean {
@@ -174,8 +167,7 @@ with zero network calls.
 ```
 
 - Leave a **clear band** in the hero layout for the flow to run through, so nodes never sit
-  under a line of text (the landing hero inserts a `h-24 sm:h-32` spacer between headline
-  and subhead for exactly this).
+  under a line of text (the landing hero inserts a `h-24 sm:h-32` spacer for exactly this).
 - Because it's the same component the trace viewer uses, improvements to the pipeline
   visuals flow to both places automatically. Keep it that way — don't fork a "landing-only"
   copy.

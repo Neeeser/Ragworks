@@ -48,18 +48,18 @@ export function Notification({
   return (
     <GlassCard
       className={cn(
-        "flex items-center gap-4 rounded-full border border-white/10 bg-slate-950/85 px-4 py-3 text-slate-100 shadow-[0_18px_40px_rgba(6,9,22,0.45)] backdrop-blur",
+        "flex items-center gap-4 rounded-full border border-hairline bg-canvas-raised/95 px-4 py-3 text-body shadow-elevation-2 backdrop-blur",
         "transition-all duration-200",
         closing ? "opacity-0 -translate-y-1" : "opacity-100 translate-y-0",
         className,
       )}
     >
-      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-violet-200">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-surface text-accent-violet">
         {icon ?? <Bell className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        {title ? <p className="text-sm font-semibold text-white">{title}</p> : null}
-        <p className={cn("text-xs text-slate-300", title ? "mt-1" : "")}>{message}</p>
+        {title ? <p className="text-sm font-semibold text-primary">{title}</p> : null}
+        <p className={cn("text-xs text-body", title ? "mt-1" : "")}>{message}</p>
       </div>
       <div className="flex items-center gap-2">
         {action}
@@ -68,7 +68,7 @@ export function Notification({
             type="button"
             onClick={handleDismiss}
             aria-label="Dismiss notification"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-white/40 hover:text-white"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hairline text-muted transition hover:border-strong hover:text-primary"
           >
             <X className="h-4 w-4" />
           </button>

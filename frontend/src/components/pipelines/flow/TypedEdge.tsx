@@ -2,7 +2,7 @@
 
 import { BaseEdge, getSmoothStepPath } from "@xyflow/react";
 
-import { getPortTypeHex } from "../lib/pipeline-theme";
+import { getPortTypeColorVar } from "../lib/pipeline-theme";
 
 import type { Edge, EdgeProps } from "@xyflow/react";
 
@@ -50,7 +50,9 @@ export function TypedEdge({
     targetPosition,
     borderRadius: 6,
   });
-  const color = data?.error ? "#f87171" : getPortTypeHex(data?.dataType);
+  // Theme-aware color via CSS var; applied through `style` (var() is invalid in
+  // SVG presentation attributes like fill=/stroke=, valid only in inline style).
+  const color = data?.error ? "var(--data-neg)" : getPortTypeColorVar(data?.dataType);
   const emphasized = Boolean(data?.active || data?.error || selected);
   const lit = emphasized || Boolean(data?.visited);
   const travelMs = data?.travelMs ?? 700;
@@ -69,10 +71,10 @@ export function TypedEdge({
       />
       {data?.traveling ? (
         <g>
-          <circle r={9} fill={color} opacity={0.25}>
+          <circle r={9} style={{ fill: color }} opacity={0.25}>
             <animateMotion dur={`${travelMs}ms`} fill="freeze" path={path} />
           </circle>
-          <circle r={4.5} fill={color} stroke="#020617" strokeWidth={1}>
+          <circle r={4.5} strokeWidth={1} style={{ fill: color, stroke: "var(--canvas)" }}>
             <animateMotion dur={`${travelMs}ms`} fill="freeze" path={path} />
           </circle>
         </g>
