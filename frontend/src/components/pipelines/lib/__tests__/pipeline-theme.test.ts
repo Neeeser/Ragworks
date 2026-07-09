@@ -43,8 +43,8 @@ describe("pipeline-theme", () => {
 
   it("builds port type classes with and without a known type", () => {
     const withType = getPortTypeClasses("document");
-    expect(withType.handle).toContain("bg-emerald-400");
+    expect(withType.handle).toContain("bg-stage-retrieve");
     const withoutType = getPortTypeClasses();
-    expect(withoutType.handle).toContain("bg-slate-700");
+    expect(withoutType.handle).toContain("bg-stage-neutral");
   });
 });

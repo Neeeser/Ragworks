@@ -30,22 +30,20 @@ export function ParameterFieldCard({
   children,
 }: ParameterFieldCardProps) {
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className="space-y-3 rounded-2xl border border-hairline bg-surface p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-white">{label}</p>
-            {overrideActive && (
-              <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-            )}
+            <p className="text-sm font-semibold text-primary">{label}</p>
+            {overrideActive && <span className="h-2 w-2 rounded-full bg-data-pos" />}
           </div>
-          {description ? <p className="text-xs text-slate-400">{description}</p> : null}
-          {helper ? <p className="text-[11px] text-slate-500">{helper}</p> : null}
+          {description ? <p className="text-xs text-muted">{description}</p> : null}
+          {helper ? <p className="text-[11px] text-meta">{helper}</p> : null}
         </div>
         {actionLabel && onAction ? (
           <button
             type="button"
-            className="text-xs text-slate-400 transition hover:text-white disabled:opacity-40"
+            className="text-xs text-muted transition hover:text-primary disabled:opacity-40"
             disabled={actionDisabled}
             onClick={onAction}
           >
@@ -73,7 +71,7 @@ type ParameterInputProps = {
 };
 
 const inputClasses =
-  "w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-2xl border border-hairline bg-surface-strong px-4 py-3 text-sm text-primary outline-none focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30 disabled:cursor-not-allowed disabled:opacity-60";
 
 export function ParameterInput({
   input,
@@ -106,10 +104,10 @@ export function ParameterInput({
 
   if (input === "boolean") {
     return (
-      <label className="flex items-center gap-3 text-sm text-slate-200">
+      <label className="flex items-center gap-3 text-sm text-body">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-white/30 bg-transparent"
+          className="h-4 w-4 rounded border-strong bg-transparent accent-[var(--accent-violet)]"
           checked={value === true}
           disabled={disabled}
           onChange={(event) => onChange(event.target.checked)}

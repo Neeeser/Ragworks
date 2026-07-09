@@ -226,3 +226,22 @@ export function mockAppConfig(overrides: Partial<AppConfigValue> = {}) {
     useAppConfig: () => appConfigValue,
   };
 }
+
+/**
+ * `@/providers/theme-provider` module mock — a pass-through provider and a
+ * fixed dark `useTheme`. Lets components that render a ThemeToggle mount in
+ * tests without the real provider (and without touching matchMedia/storage):
+ *   vi.mock("@/providers/theme-provider", async () =>
+ *     (await import("@/test/mocks")).mockTheme());
+ */
+export function mockTheme() {
+  return {
+    ThemeProvider: ({ children }: { children: unknown }) => children,
+    useTheme: () => ({
+      theme: "dark" as const,
+      resolvedTheme: "dark" as const,
+      setTheme: vi.fn(),
+      toggleTheme: vi.fn(),
+    }),
+  };
+}

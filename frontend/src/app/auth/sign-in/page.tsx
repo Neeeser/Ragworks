@@ -7,17 +7,18 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { GlassCard } from "@/components/ui/panel";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { registerUser } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 import { useAppConfig } from "@/providers/config-provider";
 
 // Mono instrument voice for the form labels (design system §5).
-const fieldLabelClass = "font-mono text-[11px] uppercase tracking-[0.28em] text-slate-400";
+const fieldLabelClass = "font-mono text-[11px] uppercase tracking-[0.28em] text-muted";
 
 // A quiet text button for toggling between modes / returning to login.
 const toggleClass =
-  "rounded text-sm text-slate-400 underline-offset-4 transition hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]";
+  "rounded text-sm text-muted underline-offset-4 transition hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -52,30 +53,46 @@ export default function SignInPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#05060a] px-6 py-12 text-slate-100">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-6 py-12 text-body">
       {/* Atmospheric blooms in the product's violet/cyan trace colors. */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(60%_50%_at_18%_12%,rgba(139,92,246,0.22),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(55%_45%_at_85%_10%,rgba(34,211,238,0.16),transparent_60%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#05060a] to-transparent" />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(60% 50% at 18% 12%, color-mix(in srgb, var(--accent-violet) 22%, transparent), transparent 60%)",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(55% 45% at 85% 10%, color-mix(in srgb, var(--accent-cyan) 16%, transparent), transparent 60%)",
+          }}
+        />
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-canvas to-transparent" />
       </div>
 
-      <GlassCard className="relative z-10 flex w-full max-w-md flex-col gap-8 rounded-3xl border-white/10 p-8 sm:p-10">
+      <div className="absolute right-6 top-6 z-10">
+        <ThemeToggle />
+      </div>
+
+      <GlassCard className="relative z-10 flex w-full max-w-md flex-col gap-8 rounded-3xl border-hairline p-8 sm:p-10">
         {/* Eyebrow — live instrument label. */}
         <p
-          className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-slate-400"
+          className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted"
           style={{ animationDelay: "0ms" }}
         >
           <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60 motion-reduce:animate-none" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
           </span>
           Ragworks console
         </p>
 
         {/* Heading — no subhead; the form itself is self-evident. */}
         <h1
-          className="landing-rise text-balance text-3xl font-semibold tracking-tight text-white"
+          className="landing-rise text-balance text-3xl font-semibold tracking-tight text-primary"
           style={{ animationDelay: "80ms" }}
         >
           {isLogin ? "Sign in" : "Create your account"}
@@ -83,7 +100,7 @@ export default function SignInPage() {
 
         {mode === "register" && !allowRegistration ? (
           <div className="landing-rise space-y-5" style={{ animationDelay: "160ms" }}>
-            <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <p className="rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-body">
               Registration is disabled. Ask an administrator for an invite.
             </p>
             <button
@@ -131,7 +148,7 @@ export default function SignInPage() {
             </Field>
 
             {message && (
-              <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <p className="rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-body">
                 {message}
               </p>
             )}
@@ -159,7 +176,7 @@ export default function SignInPage() {
         {/* Footer: just the way back — nothing decorative. */}
         <Link
           href="/"
-          className="landing-rise inline-block rounded font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05060a]"
+          className="landing-rise inline-block rounded font-mono text-[11px] uppercase tracking-[0.28em] text-meta transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
           style={{ animationDelay: "240ms" }}
         >
           Back to home

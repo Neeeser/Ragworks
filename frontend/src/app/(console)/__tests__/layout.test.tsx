@@ -7,6 +7,7 @@ import { setMockAuth } from "@/test/mocks";
 import { getMockRouter, setMockPathname } from "@/test/test-utils";
 
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+vi.mock("@/providers/theme-provider", async () => (await import("@/test/mocks")).mockTheme());
 
 const signOutName = "Sign out";
 

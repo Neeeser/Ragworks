@@ -1,7 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { themeScript } from "@/lib/theme-script";
 import { AuthProvider } from "@/providers/auth-provider";
 import { ConfigProvider } from "@/providers/config-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
 
 import "./globals.css";
 
@@ -29,13 +31,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the pre-paint theme script sets data-theme on
+    // <html> before React hydrates, which is an intentional server/client diff.
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-950 text-slate-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-canvas text-body`}
       >
-        <AuthProvider>
-          <ConfigProvider>{children}</ConfigProvider>
-        </AuthProvider>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <ThemeProvider>
+          <AuthProvider>
+            <ConfigProvider>{children}</ConfigProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

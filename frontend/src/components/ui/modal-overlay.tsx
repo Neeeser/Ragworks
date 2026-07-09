@@ -95,7 +95,7 @@ export function ModalOverlay({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-10 backdrop-blur-sm",
+        "fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-4 py-10 backdrop-blur-sm",
         backdropClassName,
       )}
       role="presentation"

@@ -16,6 +16,7 @@ const needAnAccountText = "Need an account?";
 
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
+vi.mock("@/providers/theme-provider", async () => (await import("@/test/mocks")).mockTheme());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 describe("SignInPage", () => {

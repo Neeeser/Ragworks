@@ -19,13 +19,13 @@ interface DataTableProps<Row> {
 /** Minimal semantic table for admin/list views; column content via render(). */
 export function DataTable<Row>({ columns, rows, rowKey, emptyMessage }: DataTableProps<Row>) {
   if (rows.length === 0) {
-    return <p className="px-4 py-6 text-sm text-slate-400">{emptyMessage}</p>;
+    return <p className="px-4 py-6 text-sm text-muted">{emptyMessage}</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-400">
+          <tr className="border-b border-hairline font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             {columns.map((column) => (
               <th
                 key={column.key}
@@ -39,9 +39,9 @@ export function DataTable<Row>({ columns, rows, rowKey, emptyMessage }: DataTabl
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} className="border-b border-white/5 last:border-b-0">
+            <tr key={rowKey(row)} className="border-b border-hairline last:border-b-0">
               {columns.map((column) => (
-                <td key={column.key} className={cn("px-4 py-3 text-slate-200", column.className)}>
+                <td key={column.key} className={cn("px-4 py-3 text-body", column.className)}>
                   {column.render
                     ? column.render(row)
                     : String((row as Record<string, unknown>)[column.key] ?? "")}

@@ -13,7 +13,7 @@ import type {
 } from "react";
 
 export const inputClass =
-  "w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-violet-400";
+  "w-full rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-primary outline-none transition placeholder:text-meta focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30";
 
 const DESCRIBED_BY = "aria-describedby" as const;
 
@@ -54,7 +54,7 @@ export function Field({
   });
 
   const labelElement = (
-    <label htmlFor={controlId} className={cn("block text-sm text-slate-300", labelClassName)}>
+    <label htmlFor={controlId} className={cn("block text-sm text-body", labelClassName)}>
       {label}
     </label>
   );
@@ -71,7 +71,7 @@ export function Field({
       )}
       {control}
       {description ? (
-        <p id={descriptionId} className={cn("text-xs", error ? "text-rose-300" : "text-slate-400")}>
+        <p id={descriptionId} className={cn("text-xs", error ? "text-data-neg" : "text-muted")}>
           {description}
         </p>
       ) : null}

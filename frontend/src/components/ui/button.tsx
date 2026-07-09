@@ -23,12 +23,12 @@ export function Button({
   return (
     <button
       className={cn(
-        "rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:cursor-not-allowed",
+        "rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed",
         {
-          primary: "bg-violet-500 text-white hover:bg-violet-400 shadow-lg shadow-violet-500/30",
+          primary: "bg-accent-violet text-white hover:brightness-110 shadow-glow",
           secondary:
-            "border border-white/10 bg-white/5 text-white hover:border-white/30 hover:bg-white/10",
-          ghost: "text-slate-400 hover:text-white hover:bg-white/5",
+            "border border-hairline bg-surface text-primary hover:border-strong hover:bg-surface-strong",
+          ghost: "text-muted hover:text-primary hover:bg-surface",
         }[variant],
         {
           sm: "px-3 py-1.5 text-sm",

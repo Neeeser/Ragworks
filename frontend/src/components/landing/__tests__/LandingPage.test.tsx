@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LandingPage } from "@/components/landing/LandingPage";
 
+vi.mock("@/providers/theme-provider", async () => (await import("@/test/mocks")).mockTheme());
+
 // The hero backdrop renders the real FlowPlayer, which mounts ReactFlow. Stub
 // the library so the page renders in jsdom without a layout engine — we assert
 // the page's content, not ReactFlow's internals.

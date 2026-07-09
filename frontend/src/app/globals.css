@@ -1,22 +1,177 @@
 @import "tailwindcss";
 
+/* =====================================================================
+   Design tokens — the single source of truth for the visual language.
+   Every color/elevation is a semantic CSS variable, so a theme (or a
+   brand-new palette) is a values-only edit here — components never
+   hardcode a color. Dark is the default (:root); light overrides via
+   [data-theme="light"], set pre-paint by the no-flash script so there
+   is no hydration mismatch and no flash of the wrong theme.
+   ===================================================================== */
+
 :root {
-  --background: #030712;
-  --surface: rgba(9, 16, 36, 0.85);
-  --surface-alt: rgba(15, 23, 42, 0.8);
-  --foreground: #f8fafc;
-  --accent: #7c3aed;
-  --accent-soft: rgba(124, 58, 237, 0.2);
-  --border: rgba(226, 232, 240, 0.12);
+  /* Canvas & chrome */
+  --canvas: #05060a;
+  --canvas-raised: #0b0d14;
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-strong: rgba(255, 255, 255, 0.08);
+  --border-hairline: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.3);
+
+  /* Text ramp */
+  --text-primary: #ffffff;
+  --text-body: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-meta: #64748b;
+  --text-faint: #334155;
+
+  /* Accents (spent sparingly) */
+  --accent-violet: #8b5cf6;
+  --accent-cyan: #22d3ee;
+  --accent-fuchsia: #e9a5f1;
+  --grad-from: #c4b5fd;
+  --grad-via: #f5d0fe;
+  --grad-to: #67e8f9;
+  --glow: rgba(139, 92, 246, 0.3);
+
+  /* Elevation — glow in dark, shadow in light. */
+  --elevation-1: 0 0 0 rgba(0, 0, 0, 0);
+  --elevation-2: 0 0 40px var(--glow);
+
+  /* Data-viz — pipeline stage / port colors. Meaning is fixed; the hex
+     shifts per theme for legibility. Never reassign a stage's semantics. */
+  --stage-parse: #38bdf8;
+  --stage-chunk: #2dd4bf;
+  --stage-embed: #fbbf24;
+  --stage-index: #22d3ee;
+  --stage-retrieve: #34d399;
+  --stage-chat: #fb7185;
+  --stage-rerank: #e879f9;
+  --stage-router: #60a5fa;
+  --stage-neutral: #94a3b8;
+
+  /* Port data-types (edges/handles across editor + trace + demo flow). */
+  --port-document-source: #38bdf8;
+  --port-document: #34d399;
+  --port-chunk-batch: #2dd4bf;
+  --port-embedded-batch: #fbbf24;
+  --port-indexed-batch: #22d3ee;
+  --port-query-request: #818cf8;
+  --port-query-embedding: #fbbf24;
+  --port-retrieval-results: #e879f9;
+  --port-default: #64748b;
+
+  /* Semantic status */
+  --data-pos: #34d399;
+  --data-neg: #fb7185;
+  --data-warn: #fbbf24;
+
+  color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  --canvas: #f6f7fb;
+  --canvas-raised: #ffffff;
+  --surface: rgba(15, 23, 42, 0.03);
+  --surface-strong: rgba(15, 23, 42, 0.06);
+  --border-hairline: rgba(15, 23, 42, 0.1);
+  --border-strong: rgba(15, 23, 42, 0.22);
+
+  --text-primary: #0f172a;
+  --text-body: #334155;
+  --text-muted: #475569;
+  --text-meta: #64748b;
+  --text-faint: #cbd5e1;
+
+  --accent-violet: #7c3aed;
+  --accent-cyan: #0891b2;
+  --accent-fuchsia: #c026d3;
+  --grad-from: #7c3aed;
+  --grad-via: #d946ef;
+  --grad-to: #0891b2;
+  --glow: rgba(124, 58, 237, 0.18);
+
+  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --elevation-2: 0 8px 24px rgba(15, 23, 42, 0.1);
+
+  --stage-parse: #0284c7;
+  --stage-chunk: #0d9488;
+  --stage-embed: #d97706;
+  --stage-index: #0e7490;
+  --stage-retrieve: #059669;
+  --stage-chat: #e11d48;
+  --stage-rerank: #c026d3;
+  --stage-router: #2563eb;
+  --stage-neutral: #64748b;
+
+  --port-document-source: #0284c7;
+  --port-document: #059669;
+  --port-chunk-batch: #0d9488;
+  --port-embedded-batch: #d97706;
+  --port-indexed-batch: #0e7490;
+  --port-query-request: #4f46e5;
+  --port-query-embedding: #d97706;
+  --port-retrieval-results: #c026d3;
+  --port-default: #64748b;
+
+  --data-pos: #059669;
+  --data-neg: #e11d48;
+  --data-warn: #d97706;
+
+  color-scheme: light;
+}
+
+/* Tailwind v4 utility generation. Mapping a token to --color-* emits the
+   bg-/text-/border- utilities (e.g. bg-canvas, text-body, border-hairline,
+   from-grad-from). --shadow-* emits shadow utilities. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-canvas-raised: var(--canvas-raised);
   --color-surface: var(--surface);
-  --color-surface-alt: var(--surface-alt);
-  --color-accent: var(--accent);
-  --color-border: var(--border);
+  --color-surface-strong: var(--surface-strong);
+  --color-hairline: var(--border-hairline);
+  --color-strong: var(--border-strong);
+
+  --color-primary: var(--text-primary);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-meta: var(--text-meta);
+  --color-faint: var(--text-faint);
+
+  --color-accent-violet: var(--accent-violet);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-fuchsia: var(--accent-fuchsia);
+  --color-grad-from: var(--grad-from);
+  --color-grad-via: var(--grad-via);
+  --color-grad-to: var(--grad-to);
+
+  --color-stage-parse: var(--stage-parse);
+  --color-stage-chunk: var(--stage-chunk);
+  --color-stage-embed: var(--stage-embed);
+  --color-stage-index: var(--stage-index);
+  --color-stage-retrieve: var(--stage-retrieve);
+  --color-stage-chat: var(--stage-chat);
+  --color-stage-rerank: var(--stage-rerank);
+  --color-stage-router: var(--stage-router);
+  --color-stage-neutral: var(--stage-neutral);
+
+  --color-data-pos: var(--data-pos);
+  --color-data-neg: var(--data-neg);
+  --color-data-warn: var(--data-warn);
+
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-glow: 0 10px 30px -10px var(--glow);
+
+  /* Legacy aliases — keep pre-migration classes (bg-surface, bg-background,
+     text-foreground, bg-accent, border-border) working while the folder
+     sweep is in flight. Removed once every usage is migrated. */
+  --color-background: var(--canvas);
+  --color-surface-alt: var(--surface-strong);
+  --color-foreground: var(--text-primary);
+  --color-accent: var(--accent-violet);
+  --color-border: var(--border-hairline);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -30,8 +185,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, #111827 0%, #020617 45%, #000 100%);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--text-body);
   font-family:
     var(--font-geist-sans),
     system-ui,
@@ -51,11 +206,13 @@ html {
   }
 }
 
+/* Legacy alias class — points at the token surface + elevation so existing
+   .glass-panel markup keeps working until migrated to bg-surface/shadow. */
 .glass-panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-hairline);
   border-radius: 1.25rem;
-  box-shadow: 0 25px 80px rgba(2, 6, 23, 0.6);
+  box-shadow: var(--elevation-2);
   backdrop-filter: blur(18px);
 }
 
@@ -68,7 +225,7 @@ html {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(circle, rgba(124, 58, 237, 0.25), transparent 60%);
+  background: radial-gradient(circle, var(--glow), transparent 60%);
   opacity: 0.65;
   z-index: -1;
 }
@@ -96,7 +253,7 @@ html {
   bottom: 0;
   height: 2.5rem;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(2, 6, 23, 0.85) 100%);
+  background: linear-gradient(180deg, transparent 0%, var(--canvas) 100%);
   opacity: 0;
 }
 
@@ -165,16 +322,16 @@ html {
 }
 
 .pipeline-controls {
-  background: rgba(2, 6, 23, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--canvas-raised);
+  border: 1px solid var(--border-hairline);
   border-radius: 1rem;
-  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.6);
+  box-shadow: var(--elevation-2);
 }
 
 .pipeline-controls .react-flow__controls-button {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-body);
   transition:
     border-color 0.2s ease,
     color 0.2s ease,
@@ -182,9 +339,9 @@ html {
 }
 
 .pipeline-controls .react-flow__controls-button:hover {
-  background: rgba(124, 58, 237, 0.15);
-  border-color: rgba(124, 58, 237, 0.65);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--accent-violet) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent-violet) 65%, transparent);
+  color: var(--text-primary);
 }
 
 .pipeline-controls .react-flow__controls-button svg {
@@ -192,11 +349,11 @@ html {
 }
 
 .react-flow__edge.pipeline-edge-error .react-flow__edge-path {
-  stroke: #f87171;
+  stroke: var(--data-neg);
 }
 
-/* Landing page hero: staggered entrance for the eyebrow, headline, subhead,
-   CTAs, and capability strip. Delay is set per-element via inline style. */
+/* Staggered first-paint entrance (eyebrow → headline → actions). Delay is
+   set per-element via inline style. No-ops under reduced motion. */
 @keyframes landingRise {
   from {
     opacity: 0;

@@ -24,6 +24,9 @@ deliberately; everything quiet stays quiet so the signal reads.
 This skill is the working playbook. For the full rationale, the complete token set, and
 the motion/atmosphere techniques, read:
 
+- `references/tokens.md` — the design-token system (**read this first**): the raw→token
+  cheat sheet, the data-viz tokens, and the light/dark theming rules. Colors are semantic
+  tokens now, not hardcoded classes.
 - `references/design-language.md` — the detailed spec (the *why* + every token).
 - `references/component-recipes.md` — copy-paste-ready snippets for each element.
 
@@ -57,28 +60,34 @@ Reference implementation: `frontend/src/components/landing/`. Shared primitives:
 
 ## Token quick-reference
 
-Use these exact values (full table in `design-language.md §3–6`):
+Color is a **semantic token**, never a hardcoded class — this is how light/dark (and any
+future palette) swap without touching components. Full cheat sheet + theming rules in
+`tokens.md`; the essentials:
 
-- **Base:** `bg-[#05060a]`. **Surfaces:** `bg-white/5`, faintest `bg-white/[0.04]`.
-  **Borders:** `border-white/10` (hairline), `white/12`, hover `white/30`.
-- **Text:** white → `slate-300` (body) → `slate-400` (labels) → `slate-500` (meta) →
-  `slate-700` (separators).
-- **Accents (sparingly):** violet `#8b5cf6` (`violet-500`, primary/ingestion), cyan
-  `#22d3ee` (`cyan-300/400`, retrieval/live). **Accent gradient** (one element per view):
-  `from-violet-300 via-fuchsia-200 to-cyan-300`.
+- **Base:** `bg-canvas`. **Raised/floating:** `bg-canvas-raised`. **Surfaces:** `bg-surface`,
+  stronger `bg-surface-strong`. **Borders:** `border-hairline`, hover `border-strong`.
+- **Text:** `text-primary` → `text-body` → `text-muted` (labels) → `text-meta` →
+  `text-faint` (separators).
+- **Accents (sparingly):** `text-/bg-accent-violet` (primary), `text-/bg-accent-cyan`
+  (retrieval/live). **Accent gradient** (one element per view):
+  `from-grad-from via-grad-via to-grad-to`. Hover a filled accent with `hover:brightness-110`.
 - **Pipeline stage colors (semantic, shared with the editor/trace viewer — never
-  reassign):** Parse `sky-400`, Chunk `teal-400`, Embed `amber-400`, Index `cyan-400`,
-  Retrieve `emerald-400`, Chat `rose-400`.
+  reassign):** `stage-parse/chunk/embed/index/retrieve/chat` tokens. For nodes/ports/edges
+  go through `pipelines/lib/pipeline-theme.ts`, never inline hex.
 - **Type:** Geist Sans (display/body) + Geist Mono (labels) — already loaded, **add no
-  fonts**. Headlines `font-semibold tracking-tight` + `text-balance`; body `text-slate-300
+  fonts**. Headlines `font-semibold tracking-tight` + `text-balance`; body `text-body
   leading-relaxed text-pretty`.
 - **Radii:** `rounded-full` (buttons/badges), `rounded-2xl` (inputs), `rounded-3xl`
-  (cards). **Shadow = glow only** (`shadow-violet-500/30` under the primary button).
+  (cards). **Elevation = token:** `shadow-glow` (primary button), `shadow-elevation-2`
+  (floating) — glow on dark, soft shadow on light. Never hand-write an rgba shadow.
+- **Both themes are the contract.** Verify every screen in light *and* dark (toggle the
+  `ThemeToggle` or set `document.documentElement.dataset.theme`). A raw color class is the
+  bug that breaks light mode — see `tokens.md`.
 
 ## The instrument label (memorize this)
 
 ```
-font-mono text-[11px] uppercase tracking-[0.28em] text-slate-400
+font-mono text-[11px] uppercase tracking-[0.28em] text-muted
 ```
 
 Tracking scales with prominence (`0.28em` dense → `0.4em` hero eyebrow); size stays small.
@@ -91,7 +100,7 @@ of the work of matching the look.
   secondary recipes in `component-recipes.md`.
 - **Forms →** `Field`/`TextInput`/`Select`/`TextArea` and the exported `inputClass`. Never
   hand-roll the input class string.
-- **Cards →** `GlassCard` or `rounded-3xl border-white/10 bg-white/5`.
+- **Cards →** `GlassCard` or `rounded-3xl border border-hairline bg-surface`.
 - **Atmosphere & entrance →** blooms, the `landing-rise` stagger, and the reduced-motion
   hook are in `component-recipes.md`. Spend **one** accent per view.
 - **A living backdrop →** render the real product component (`FlowPlayer`) faint, looping,
@@ -103,8 +112,9 @@ of the work of matching the look.
 1. **Cut text first.** Remove subheads/captions/feature-lists/label-strips that restate what
    the UI already shows (principle 1). This is the highest-value step and the easiest to skip.
 2. Rewrite the labels you *keep* in the instrument voice.
-3. Normalize color to the palette (base → `#05060a`, text ramp, `white/10` borders);
-   delete stray accents that carry no meaning.
+3. Normalize color to the **tokens** (`bg-canvas`, the `text-primary→faint` ramp,
+   `border-hairline`) — replace every raw `bg-white/N` / `text-slate-N` / `bg-[#…]`; delete
+   stray accents that carry no meaning. This is what makes light mode work (`tokens.md`).
 4. Swap to shared primitives + the button/input recipes; delete bespoke styles.
 5. At most one deliberate accent, and only if it adds meaning — usually a single gradient
    word. Do not add a decorative stage-dot strip or any label row that just names things the
@@ -115,14 +125,14 @@ of the work of matching the look.
 
 ## Quality floor (part of "done")
 
-- `focus-visible:ring-2 ring-violet-300/400` + `ring-offset` on every interactive element;
-  `aria-label` on icon-only buttons.
+- `focus-visible:ring-2 ring-accent-violet` + `ring-offset-canvas` on every interactive
+  element; `aria-label` on icon-only buttons.
 - Entrances/loops no-op under `prefers-reduced-motion` (read it via `useSyncExternalStore`,
   not `useState`+effect). This includes infinite CSS accents like a pinging status dot —
   gate them with `motion-reduce:animate-none`. Decorative layers get `aria-hidden` +
   `pointer-events-none`.
 - Fluid type, wrapping strips, no horizontal page scroll; `overflow-hidden` around animated
-  layers. Body text is `slate-300`, not `slate-500`.
+  layers. Body text is `text-body`, not `text-meta`. Verify light **and** dark.
 - Sentence-case copy, plain verbs, no marketing adjectives — it's an open-source tool.
 - Finish with `npm run verify` (from `frontend/`) and a keyboard-focus + reduced-motion pass.
 
