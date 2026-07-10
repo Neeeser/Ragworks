@@ -404,10 +404,13 @@ describe("PipelineBuilder", () => {
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
     fireEvent.click(screen.getByRole("button", { name: "Change label" }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
-    await waitFor(() => {
-      expect(api.validatePipeline).toHaveBeenCalled();
-      expect(screen.getByTestId("canvas")).toHaveTextContent(/Validation failed/);
-    });
+    await waitFor(() => expect(api.validatePipeline).toHaveBeenCalled());
+    // Generous timeout: the failure banner lands a few async hops after the
+    // API resolves, which can exceed waitFor's 1s default on slow CI runners.
+    await waitFor(
+      () => expect(screen.getByTestId("canvas")).toHaveTextContent(/Validation failed/),
+      { timeout: 5000 },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => expect(api.activatePipelineVersion).toHaveBeenCalled());
