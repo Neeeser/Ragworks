@@ -1,7 +1,8 @@
 """Bump the project version and create the matching release tag.
 
-Owns the semver logic in one place and writes both version files
-(pyproject.toml and frontend/package.json) so they cannot drift.
+Owns the semver logic in one place and writes every file that records the
+version (pyproject.toml, frontend/package.json, and the root-project entries
+in frontend/package-lock.json) so they cannot drift.
 
 Semantics:
   patch  0.1.0 -> 0.1.1        0.2.0-rc.1 -> 0.2.0 (finalizes; rc is always
@@ -40,6 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 PACKAGE_JSON = ROOT / "frontend" / "package.json"
+PACKAGE_LOCK = ROOT / "frontend" / "package-lock.json"
 UV_LOCK = ROOT / "uv.lock"
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$")
@@ -96,6 +98,13 @@ def _write_versions(new_version: str) -> None:
     package = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
     package["version"] = new_version
     PACKAGE_JSON.write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
+    # npm records the root project's version twice in package-lock.json;
+    # skipping it leaves the lockfile drifting until the next `npm install`
+    # regenerates it as an unrelated diff (this happened after v0.1.1).
+    lock = json.loads(PACKAGE_LOCK.read_text(encoding="utf-8"))
+    lock["version"] = new_version
+    lock["packages"][""]["version"] = new_version
+    PACKAGE_LOCK.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
 
 
 def _refresh_lockfile() -> None:
@@ -134,7 +143,7 @@ def main() -> None:
 
     _write_versions(new_version)
     _refresh_lockfile()
-    _run("git", "add", str(PYPROJECT), str(PACKAGE_JSON), str(UV_LOCK))
+    _run("git", "add", str(PYPROJECT), str(PACKAGE_JSON), str(PACKAGE_LOCK), str(UV_LOCK))
     _run("git", "commit", "-m", f"chore: release {tag}")
     _run("git", "tag", "-a", tag, "-m", tag)
 

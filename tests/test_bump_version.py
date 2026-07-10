@@ -70,3 +70,17 @@ def test_lockfile_pins_current_project_version() -> None:
     from packaging.version import Version
 
     assert Version(locked) == Version(pyproject_version.group(1))
+
+
+def test_package_lock_pins_current_frontend_version() -> None:
+    """package-lock.json records the root project's version twice; a bump that
+    skips it leaves the lockfile stale until the next `npm install` regenerates
+    it as an unrelated diff (this happened after the v0.1.1 release)."""
+    import json
+
+    frontend = Path(__file__).resolve().parent.parent / "frontend"
+    version = json.loads((frontend / "package.json").read_text(encoding="utf-8"))["version"]
+    lock = json.loads((frontend / "package-lock.json").read_text(encoding="utf-8"))
+
+    assert lock["version"] == version
+    assert lock["packages"][""]["version"] == version
