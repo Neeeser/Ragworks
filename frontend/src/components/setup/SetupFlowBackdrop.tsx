@@ -4,39 +4,19 @@ import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo } from "react";
 
-import { buildDemoFlow } from "@/components/landing/lib/demo-flow";
 import { pipelineEdgeTypes } from "@/components/pipelines/flow/TypedEdge";
 import { useFlowDotColor } from "@/components/pipelines/flow/use-flow-dot-color";
 import { pipelineNodeTypes } from "@/components/pipelines/PipelineNode";
+import { buildSetupFlow } from "@/components/setup/lib/setup-flow";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 
 import type { SetupStepId } from "@/components/setup/lib/setup-wizard-reducer";
 
-/**
- * Which demo-pipeline node each wizard step is "about". `null` frames the
- * whole pipeline (the welcome overview). The camera flies between them as
- * the user advances, so the backdrop narrates what the current choice wires
- * up: the key powers chat, the model powers embedding, the index stores
- * vectors, the collection starts at the document source.
- */
-const FOCUS_BY_STEP: Record<SetupStepId, string | null> = {
-  welcome: null,
-  key: "chat",
-  model: "embed",
-  index: "index",
-  launch: "source",
-};
-
 const FLY_MS = 900;
 const FOCUS_ZOOM = 1.05;
-const OVERVIEW_ZOOM = 0.5;
-// Flow-space offsets so the focused node hovers up-right of the step copy
-// (which is centered) instead of hiding behind it. Y is large on purpose:
-// the band should clear even the tallest step (the model list).
-// On wide screens the focused node settles up-right of the centered copy;
-// on narrow screens it centers (there is no "beside the copy" to aim for).
-const OFFSET_X_DESKTOP = -330;
-// Screen-space pixels the focused node is lifted above the viewport center.
+// Screen-space pixels the focused node is lifted above the viewport center,
+// so it sits centered above the step copy instead of hiding behind it. Large
+// on purpose: the band should clear even the tallest step (the model list).
 const SCREEN_LIFT_PX = 290;
 
 function ViewportDirector({ step }: { step: SetupStepId }) {
@@ -45,19 +25,16 @@ function ViewportDirector({ step }: { step: SetupStepId }) {
 
   useEffect(() => {
     const duration = reducedMotion ? 0 : FLY_MS;
-    // The overview centers on the middle node zoomed out; focused steps fly
-    // to their node. Both keep the band high so it never crowds the copy.
-    const focusId = FOCUS_BY_STEP[step] ?? "index";
-    const zoom = FOCUS_BY_STEP[step] ? FOCUS_ZOOM : OVERVIEW_ZOOM;
-    const node = getNode(focusId);
+    // Node ids double as step ids, so the camera glides strictly left to
+    // right (or back) along the line — never skipping around the graph.
+    const node = getNode(step);
     if (!node) return;
     const width = node.measured?.width ?? 260;
     const height = node.measured?.height ?? 150;
-    const offsetX = FOCUS_BY_STEP[step] && window.innerWidth >= 768 ? OFFSET_X_DESKTOP : 0;
     void setCenter(
-      node.position.x + width / 2 + offsetX,
-      node.position.y + height / 2 + SCREEN_LIFT_PX / zoom,
-      { zoom, duration },
+      node.position.x + width / 2,
+      node.position.y + height / 2 + SCREEN_LIFT_PX / FOCUS_ZOOM,
+      { zoom: FOCUS_ZOOM, duration },
     );
   }, [step, reducedMotion, setCenter, getNode]);
 
@@ -65,15 +42,14 @@ function ViewportDirector({ step }: { step: SetupStepId }) {
 }
 
 /**
- * The wizard's living backdrop: the same synthetic pipeline the landing hero
- * uses, but with the camera flying to the node the current step configures
- * (that node glows as `active`). Non-interactive and aria-hidden — decoration
+ * The wizard's living backdrop: a synthetic pipeline with one node per setup
+ * step, in step order, with the camera flying to the current step's node
+ * (which glows as `active`). Non-interactive and aria-hidden — decoration
  * built from the real product component, never a fake illustration.
  */
 export function SetupFlowBackdrop({ step }: { step: SetupStepId }) {
-  const { nodes, edges } = useMemo(() => buildDemoFlow(), []);
+  const { nodes, edges } = useMemo(() => buildSetupFlow(), []);
   const dotColor = useFlowDotColor();
-  const focusId = FOCUS_BY_STEP[step];
 
   const decoratedNodes = useMemo(
     () =>
@@ -81,9 +57,9 @@ export function SetupFlowBackdrop({ step }: { step: SetupStepId }) {
         ...node,
         draggable: false,
         connectable: false,
-        data: { ...node.data, active: node.id === focusId },
+        data: { ...node.data, active: node.id === step },
       })),
-    [nodes, focusId],
+    [nodes, step],
   );
 
   return (
