@@ -71,7 +71,7 @@ export function LandingPage() {
           </div>
 
           {/* The clear band the running pipeline flows through. */}
-          <div className="h-24 w-full sm:h-32" aria-hidden />
+          <div className="h-32 w-full sm:h-44" aria-hidden />
 
           {/* Below the flow band — actions only. The running pipeline says what
               the product does; words don't need to repeat it. */}

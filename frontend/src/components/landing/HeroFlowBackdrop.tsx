@@ -24,10 +24,11 @@ export function HeroFlowBackdrop() {
     // short ellipse: the flow reads as a band running across the hero's middle,
     // fading out above and below (clearing the headline and subhead) and at the
     // left/right edges. The hero copy leaves a clear gap here for it to run
-    // through — see LandingPage.
+    // through — see LandingPage. The layer is nudged down slightly so the band
+    // runs through the clear gap below the headline instead of across it.
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 opacity-30 [mask-image:radial-gradient(105%_42%_at_50%_50%,black_45%,transparent_85%)]"
+      className="pointer-events-none absolute inset-0 translate-y-[3%] opacity-30 [mask-image:radial-gradient(105%_42%_at_50%_50%,black_45%,transparent_85%)]"
     >
       <FlowPlayer nodes={nodes} edges={edges} steps={steps} ambient autoPlay={animate} />
     </div>
