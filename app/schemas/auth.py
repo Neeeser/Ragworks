@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -85,6 +85,13 @@ class ProviderKeyStatus(BaseModel):
     configured: bool
     valid: bool
     message: str | None = None
+
+
+class ProviderKeyValidateRequest(BaseModel):
+    """A pasted (not yet saved) provider key to probe."""
+
+    provider: Literal["openrouter", "pinecone"]
+    api_key: str = Field(min_length=1)
 
 
 class UserKeyValidation(BaseModel):

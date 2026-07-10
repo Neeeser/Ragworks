@@ -2,13 +2,18 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+// The key step probes @/lib/api validateProviderKey as the user types.
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+
 import { initialSetupWizardState } from "@/components/setup/lib/setup-wizard-reducer";
-import { StepModel } from "@/components/setup/SetupSteps";
+import { StepKey, StepModel } from "@/components/setup/SetupSteps";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
 import type { BackendInfo, EmbeddingModelInfo } from "@/lib/types";
 
 const MINILM = "sentence-transformers/all-minilm-l6-v2";
+const GOOD_KEY = "sk-or-good";
 
 const models: EmbeddingModelInfo[] = [
   { id: "openai/text-embedding-3-large", name: "Embedding 3 Large", dimension: 3072 },
@@ -75,5 +80,29 @@ describe("StepModel", () => {
 
     expect(screen.queryByText("Embedding 3 Large")).not.toBeInTheDocument();
     expect(screen.getByText("all-MiniLM-L6-v2")).toBeInTheDocument();
+  });
+});
+
+describe("StepKey", () => {
+  it("keeps Save & continue disabled until the pasted key verifies, then enables it", async () => {
+    const { validateProviderKey } = await import("@/lib/api");
+    vi.mocked(validateProviderKey).mockImplementation(async (_t, _p, key) => ({
+      configured: true,
+      valid: key === GOOD_KEY,
+      message: key === GOOD_KEY ? null : "Invalid OpenRouter API key.",
+    }));
+    const wizard = makeWizard({ keyConfigured: false });
+    render(<StepKey wizard={wizard} />);
+    const save = () => screen.getByRole("button", { name: /save & continue/i });
+
+    expect(save()).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/openrouter api key/i), "sk-or-bad");
+    expect(await screen.findByText("Invalid OpenRouter API key.")).toBeInTheDocument();
+    expect(save()).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText(/openrouter api key/i));
+    await userEvent.type(screen.getByLabelText(/openrouter api key/i), GOOD_KEY);
+    expect(await screen.findByText("Key verified.")).toBeInTheDocument();
+    expect(save()).toBeEnabled();
   });
 });

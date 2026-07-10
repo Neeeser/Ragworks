@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useOpenRouterKeyValidation } from "@/components/setup/hooks/use-key-validation";
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export function StepWelcome({ wizard }: { wizard: SetupWizardApi }) {
 
 export function StepKey({ wizard }: { wizard: SetupWizardApi }) {
   const [key, setKey] = useState("");
+  const validation = useOpenRouterKeyValidation(key);
   return (
     <SetupStepShell
       stepKey="key"
@@ -62,7 +64,7 @@ export function StepKey({ wizard }: { wizard: SetupWizardApi }) {
             <Button
               size="lg"
               loading={wizard.busy}
-              disabled={!key.trim()}
+              disabled={validation.state !== "valid"}
               onClick={() => void wizard.saveKey(key)}
             >
               Save & continue
@@ -90,6 +92,18 @@ export function StepKey({ wizard }: { wizard: SetupWizardApi }) {
           autoComplete="off"
         />
       </Field>
+      <div aria-live="polite">
+        {validation.state === "checking" ? (
+          <p className="text-sm text-muted">Checking the key with OpenRouter…</p>
+        ) : null}
+        {validation.state === "valid" ? (
+          <p className="flex items-center gap-2 text-sm text-body">
+            <Check aria-hidden className="h-4 w-4 text-accent-cyan" />
+            Key verified.
+          </p>
+        ) : null}
+        <SetupNotice message={validation.state === "invalid" ? validation.message : null} />
+      </div>
       <SetupNotice message={wizard.error} />
     </SetupStepShell>
   );

@@ -95,3 +95,36 @@ def test_login_records_a_user_signed_in_telemetry_event(
     with Session(session.get_bind()) as fresh:
         rows = TelemetryRepository(fresh).list_by_type("user.signed_in")
     assert [row.user_id for row in rows] == [user.id]
+
+
+def test_validate_key_probe_requires_auth(unauthed_client) -> None:
+    response = unauthed_client.post(
+        "/api/auth/keys/validate",
+        json={"provider": "openrouter", "api_key": "sk-or-x"},
+    )
+    assert response.status_code == 401
+
+
+def test_validate_key_probe_checks_without_persisting(client, auth_user, session, monkeypatch) -> None:
+    """The wizard probes a pasted key before save; the probe must not store it."""
+    from app.schemas.auth import ProviderKeyStatus
+
+    monkeypatch.setattr(
+        "app.api.routes.auth.validate_key",
+        lambda provider, api_key: ProviderKeyStatus(
+            configured=True, valid=api_key == "sk-or-good", message=None
+        ),
+    )
+
+    good = client.post(
+        "/api/auth/keys/validate", json={"provider": "openrouter", "api_key": "sk-or-good"}
+    )
+    bad = client.post(
+        "/api/auth/keys/validate", json={"provider": "openrouter", "api_key": "sk-or-bad"}
+    )
+
+    assert good.status_code == 200
+    assert good.json()["valid"] is True
+    assert bad.json()["valid"] is False
+    session.refresh(auth_user)
+    assert auth_user.openrouter_api_key == "openrouter-key"  # unchanged fixture key

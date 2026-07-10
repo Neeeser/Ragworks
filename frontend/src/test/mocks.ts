@@ -84,6 +84,11 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     getProfile: vi.fn(async () => makeUser()),
     updateUserSettings: vi.fn(async () => makeUser()),
     updateRunSettingsOrder: vi.fn(async () => makeUser()),
+    validateProviderKey: vi.fn(async () => ({
+      configured: true,
+      valid: true,
+      message: null,
+    })),
     validateUserKeys: vi.fn(async () => ({
       openrouter: { configured: true, valid: true },
       pinecone: { configured: true, valid: true },

@@ -1,6 +1,11 @@
 import { apiFetch, API_BASE_URL, parseError } from "@/lib/api/client";
 
-import type { RunSettingsSectionKey, User, UserKeyValidation } from "@/lib/types";
+import type {
+  ProviderKeyStatus,
+  RunSettingsSectionKey,
+  User,
+  UserKeyValidation,
+} from "@/lib/types";
 
 interface LoginResponse {
   access_token: string;
@@ -71,4 +76,16 @@ export async function updateRunSettingsOrder(
 
 export async function validateUserKeys(token: string): Promise<UserKeyValidation> {
   return apiFetch<UserKeyValidation>("/api/auth/me/keys/validate", { token });
+}
+
+export async function validateProviderKey(
+  token: string,
+  provider: "openrouter" | "pinecone",
+  apiKey: string,
+): Promise<ProviderKeyStatus> {
+  return apiFetch<ProviderKeyStatus>("/api/auth/keys/validate", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  });
 }

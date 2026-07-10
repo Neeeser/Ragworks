@@ -12,6 +12,8 @@ from app.core.security import create_access_token, verify_password
 from app.db import models
 from app.db.repositories import UserRepository
 from app.schemas.auth import (
+    ProviderKeyStatus,
+    ProviderKeyValidateRequest,
     Token,
     UserCreate,
     UserKeyValidation,
@@ -22,7 +24,7 @@ from app.schemas.enums import UserRole
 from app.services.accounts import AccountService
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
-from app.services.provider_keys import validate_user_keys
+from app.services.provider_keys import Provider, validate_key, validate_user_keys
 from app.telemetry import record
 from app.telemetry.events import UserSignedIn
 
@@ -102,6 +104,15 @@ def validate_current_user_keys(
 ) -> UserKeyValidation:
     """Validate stored API keys for the authenticated user."""
     return validate_user_keys(current_user)
+
+
+@router.post("/keys/validate", response_model=ProviderKeyStatus)
+def validate_provider_key(
+    payload: ProviderKeyValidateRequest,
+    _current_user: models.User = Depends(get_current_user),
+) -> ProviderKeyStatus:
+    """Probe a pasted provider key against its provider without saving it."""
+    return validate_key(Provider(payload.provider), payload.api_key)
 
 
 @router.patch("/me", response_model=UserRead)
