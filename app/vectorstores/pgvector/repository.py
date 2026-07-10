@@ -21,12 +21,20 @@ from sqlmodel import Session, select
 
 from app.db.models import VectorIndexRecord
 from app.retrieval.models import DocumentChunk
+from app.services.errors import InvalidInputError
 
-# Canonical metric id -> (HNSW operator class, distance operator).
-_METRIC_OPS: dict[str, tuple[str, str]] = {
-    "cosine": ("vector_cosine_ops", "<=>"),
-    "l2": ("vector_l2_ops", "<->"),
-    "dotproduct": ("vector_ip_ops", "<#>"),
+# HNSW over an fp32 `vector` column caps at 2,000 dimensions. Above that the
+# index is built over a `halfvec` (fp16) cast expression instead — the column
+# stays full-precision fp32; only the ANN index quantizes — which raises the
+# indexable ceiling to halfvec's 4,096.
+HNSW_FP32_MAX_DIMENSION = 2000
+HNSW_HALFVEC_MAX_DIMENSION = 4096
+
+# Canonical metric id -> (vector opclass, halfvec opclass, distance operator).
+_METRIC_OPS: dict[str, tuple[str, str, str]] = {
+    "cosine": ("vector_cosine_ops", "halfvec_cosine_ops", "<=>"),
+    "l2": ("vector_l2_ops", "halfvec_l2_ops", "<->"),
+    "dotproduct": ("vector_ip_ops", "halfvec_ip_ops", "<#>"),
 }
 
 
@@ -66,7 +74,7 @@ class PgvectorRepository:
 
     def create_index(self, name: str, dimension: int, metric: str) -> VectorIndexRecord:
         """Create the data table, its indexes, and the catalog row."""
-        opclass, _ = _METRIC_OPS[metric]
+        vector_opclass, halfvec_opclass, _ = _METRIC_OPS[metric]
         table = data_table_name(name)
         self._session.exec(  # type: ignore[call-overload]
             text(
@@ -82,10 +90,15 @@ class PgvectorRepository:
                 """
             )
         )
+        if dimension > HNSW_FP32_MAX_DIMENSION:
+            self._ensure_halfvec_available(dimension)
+            index_target = f"((embedding::halfvec({dimension})) {halfvec_opclass})"
+        else:
+            index_target = f"(embedding {vector_opclass})"
         self._session.exec(  # type: ignore[call-overload]
             text(
                 f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx ON {table} "
-                f"USING hnsw (embedding {opclass})"
+                f"USING hnsw {index_target}"
             )
         )
         self._session.exec(  # type: ignore[call-overload]
@@ -95,6 +108,22 @@ class PgvectorRepository:
         self._session.add(record)
         self._session.flush()
         return record
+
+    def _ensure_halfvec_available(self, dimension: int) -> None:
+        """Reject a >2,000-dim index with a clear error when halfvec is missing.
+
+        halfvec shipped in pgvector 0.7.0; without this check an old server
+        surfaces the raw HNSW dimension error as an opaque 500.
+        """
+        available = self._session.exec(  # type: ignore[call-overload]
+            text("SELECT 1 FROM pg_type WHERE typname = 'halfvec'")
+        ).first()
+        if available is None:
+            raise InvalidInputError(
+                f"Indexes above {HNSW_FP32_MAX_DIMENSION} dimensions need the halfvec "
+                f"type (pgvector >= 0.7.0), which this Postgres server's pgvector "
+                f"does not provide; requested dimension {dimension}."
+            )
 
     def drop_index(self, name: str) -> None:
         """Drop the data table and catalog row; missing index is a no-op."""
@@ -141,20 +170,28 @@ class PgvectorRepository:
 
     def query_chunks(
         self,
-        name: str,
+        record: VectorIndexRecord,
         namespace: str,
         *,
-        metric: str,
         embedding: Sequence[float],
         top_k: int,
     ) -> list[tuple[str, str, str, dict[str, Any], float]]:
         """Return `(chunk_id, document_id, text, metadata, distance)` rows, nearest first."""
-        _, operator = _METRIC_OPS[metric]
-        table = data_table_name(name)
+        _, _, operator = _METRIC_OPS[record.metric]
+        table = data_table_name(record.name)
+        if record.dimension > HNSW_FP32_MAX_DIMENSION:
+            # Must match the halfvec expression the HNSW index was built over,
+            # or the planner falls back to a sequential scan.
+            distance = (
+                f"embedding::halfvec({record.dimension}) {operator} "
+                f"CAST(:embedding AS halfvec({record.dimension}))"
+            )
+        else:
+            distance = f"embedding {operator} :embedding"
         statement = text(
             f"""
             SELECT chunk_id, document_id, text, metadata,
-                   embedding {operator} :embedding AS distance
+                   {distance} AS distance
             FROM {table}
             WHERE namespace = :namespace
             ORDER BY distance

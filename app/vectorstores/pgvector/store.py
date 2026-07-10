@@ -25,10 +25,11 @@ from app.vectorstores.base import (
 )
 from app.vectorstores.pgvector.repository import PgvectorRepository, to_similarity
 
-# HNSW indexes cap at 2,000 dimensions (pgvector v0.8; the vector type itself
-# stores up to 16,000, but every Ragworks index gets an HNSW index).
+# HNSW over fp32 caps at 2,000 dimensions; above that the repository builds
+# the index over a halfvec (fp16) cast expression, which raises the indexable
+# ceiling to 4,096 (the column itself stays full-precision `vector`).
 PGVECTOR_CAPABILITIES = VectorStoreCapabilities(
-    max_dimension=2000,
+    max_dimension=4096,
     supported_metrics=("cosine", "l2", "dotproduct"),
     requires_api_key=False,
 )
@@ -105,9 +106,8 @@ class PgvectorStore(VectorStoreBackend):
         """Return the nearest chunks in a namespace, highest score first."""
         record = self._require_record(index)
         rows = self._repo.query_chunks(
-            index,
+            record,
             namespace,
-            metric=record.metric,
             embedding=embedding,
             top_k=min(top_k, self.capabilities.max_top_k),
         )

@@ -45,11 +45,11 @@ def _definition(node: PipelineNodeDefinition) -> PipelineDefinition:
 
 
 def test_pgvector_indexer_rejects_dimension_over_backend_max() -> None:
-    node = _node("indexer.pgvector", {"index_name": "docs", "dimension": 2001})
+    node = _node("indexer.pgvector", {"index_name": "docs", "dimension": 4097})
     issues = PgvectorIndexerNode.validation_issues_for_node(
         node, _definition(node), default_registry()
     )
-    assert any("2000" in issue.message and issue.severity == "error" for issue in issues)
+    assert any("4096" in issue.message and issue.severity == "error" for issue in issues)
 
 
 def test_pgvector_indexer_rejects_unsupported_metric() -> None:

@@ -50,7 +50,7 @@ def test_backends_endpoint_reports_capabilities_and_configuration(
 
     pgvector = backends["pgvector"]
     assert pgvector["configured"] is True
-    assert pgvector["capabilities"]["max_dimension"] == 2000
+    assert pgvector["capabilities"]["max_dimension"] == 4096
     assert pgvector["capabilities"]["requires_api_key"] is False
     assert pgvector["capabilities"]["supported_vector_types"] == ["dense"]
 
@@ -108,10 +108,10 @@ def test_index_lifecycle_records_telemetry(
 def test_create_rejects_dimension_over_backend_max(keyless_client: TestClient) -> None:
     response = keyless_client.post(
         "/api/indexes",
-        json={"backend": "pgvector", "name": "docs", "dimension": 2001},
+        json={"backend": "pgvector", "name": "docs", "dimension": 4097},
     )
     assert response.status_code == 400
-    assert "2000" in response.json()["detail"]
+    assert "4096" in response.json()["detail"]
 
 
 def test_create_rejects_unsupported_metric(keyless_client: TestClient) -> None:

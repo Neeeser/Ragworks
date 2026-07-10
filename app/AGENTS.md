@@ -392,8 +392,12 @@ code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today
   only on its `VectorStoreCapabilities`. Every enforcement site — create-index
   validation, pipeline node validation, upsert batching, the frontend forms —
   reads them off the backend; re-hardcoding a limit anywhere else (including the
-  frontend) is a lockstep bug. Verified values: pgvector caps at 2,000 indexed
-  dimensions (HNSW; the `vector` type stores up to 16,000), Pinecone at 20,000.
+  frontend) is a lockstep bug. Verified values: pgvector caps at 4,096 indexed
+  dimensions (fp32 HNSW stops at 2,000; above that the repository builds the
+  HNSW index over a `halfvec` fp16 cast expression while the column stays
+  full-precision `vector`, and queries must go through the same cast or the
+  planner won't use the index — needs pgvector >= 0.7.0, checked with a clear
+  `InvalidInputError` at create time), Pinecone at 20,000.
 - **`get_vector_store` is the single prerequisite gate.** Requesting Pinecone
   without a user key, or pgvector while the extension is unavailable, raises
   `InvalidInputError` there (→ 400). Routes never check provider keys for vector

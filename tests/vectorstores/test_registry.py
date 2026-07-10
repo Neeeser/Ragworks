@@ -66,7 +66,7 @@ def test_backend_statuses_reports_configuration(session: Session) -> None:
 
     pgvector = statuses[IndexBackend.PGVECTOR]
     assert pgvector.configured is True
-    assert pgvector.capabilities.max_dimension == 2000
+    assert pgvector.capabilities.max_dimension == 4096
     assert pgvector.capabilities.requires_api_key is False
 
     pinecone = statuses[IndexBackend.PINECONE]

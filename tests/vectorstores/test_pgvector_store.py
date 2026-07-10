@@ -148,3 +148,61 @@ def test_schema_inspection_recognizes_vector_columns(pgvector_session: Session) 
         inspector = sqlalchemy.inspect(pgvector_session.connection())
         columns = {column["name"] for column in inspector.get_columns("vec_docs")}
     assert "embedding" in columns
+
+
+def _halfvec_available(session: Session) -> bool:
+    """True when the server's pgvector ships the halfvec type (>= 0.7.0)."""
+    return (
+        session.exec(  # type: ignore[call-overload]
+            sqlalchemy.text("SELECT 1 FROM pg_type WHERE typname = 'halfvec'")
+        ).first()
+        is not None
+    )
+
+
+def _index_definition(session: Session, index_name: str) -> str:
+    row = session.exec(  # type: ignore[call-overload]
+        sqlalchemy.text("SELECT indexdef FROM pg_indexes WHERE indexname = :name"),
+        params={"name": index_name},
+    ).first()
+    assert row is not None, f"index {index_name} not found"
+    return str(row[0])
+
+
+def test_high_dimension_index_round_trips_via_halfvec(pgvector_session: Session) -> None:
+    """Dimensions above the fp32 HNSW cap get a halfvec expression index.
+
+    The column stays full-precision `vector`; only the ANN index quantizes to
+    fp16, so >2,000-dim embedding models work on the default backend.
+    """
+    if not _halfvec_available(pgvector_session):
+        pytest.skip("pgvector on the test server predates halfvec (0.7.0)")
+    store = PgvectorStore(pgvector_session)
+    dimension = 3072
+    _make_index(store, name="big", dimension=dimension)
+
+    definition = _index_definition(pgvector_session, "vec_big_embedding_idx")
+    assert "hnsw" in definition
+    assert "halfvec" in definition
+
+    nearest = [0.0] * dimension
+    nearest[0] = 1.0
+    farther = [0.0] * dimension
+    farther[1] = 1.0
+    store.upsert("big", "ns-1", [_chunk("a", nearest), _chunk("b", farther)])
+
+    query = [0.0] * dimension
+    query[0] = 0.9
+    query[1] = 0.1
+    response = store.query("big", "ns-1", embedding=query, top_k=2)
+    assert [match.chunk.chunk_id for match in response.matches] == ["a", "b"]
+
+
+def test_low_dimension_index_keeps_full_precision_hnsw(pgvector_session: Session) -> None:
+    """Dimensions within the fp32 HNSW cap keep the plain vector index."""
+    store = PgvectorStore(pgvector_session)
+    _make_index(store, name="docs", dimension=3)
+
+    definition = _index_definition(pgvector_session, "vec_docs_embedding_idx")
+    assert "hnsw" in definition
+    assert "halfvec" not in definition
