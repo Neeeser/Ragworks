@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -74,26 +75,40 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
         ) : (
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
             {(chunksQuery.data?.chunks ?? []).map((chunk) => (
-              <details
-                key={chunk.id}
-                className="rounded-2xl border border-hairline bg-canvas px-4 py-2.5"
-              >
-                <summary className="cursor-pointer text-sm text-body">
-                  Chunk #{chunk.chunk_index} — {truncate(chunk.text, 90)}
+              <details key={chunk.id} className="group rounded-2xl border border-hairline bg-canvas">
+                <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:bg-surface [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk" />
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                    Chunk {String(chunk.chunk_index).padStart(2, "0")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-body">
+                    {truncate(chunk.text, 110)}
+                  </span>
+                  <ChevronRight
+                    className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-open:rotate-90"
+                    aria-hidden
+                  />
                 </summary>
-                <div className="mt-3 space-y-3">
-                  <p className="whitespace-pre-wrap text-sm text-primary">{chunk.text}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      router.push(
-                        `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(chunk.id)}`,
-                      )
-                    }
-                  >
-                    Trace this chunk
-                  </Button>
+                <div className="border-t border-hairline px-4 py-3">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary">
+                    {chunk.text}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
+                      {chunk.text.length} chars · {chunk.chunk_strategy}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        router.push(
+                          `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(chunk.id)}`,
+                        )
+                      }
+                    >
+                      Trace this chunk
+                    </Button>
+                  </div>
                 </div>
               </details>
             ))}
