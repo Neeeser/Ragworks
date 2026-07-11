@@ -48,6 +48,20 @@ adding one renderer entry + guard — never by branching inside the IO blocks.
 Every view caps its own height and scrolls internally so a large value can't
 reflow the viewer (whose graph region is pinned; only the IO region scrolls).
 
+**File previews are a matcher list, not an if-ladder.** The Files page resolves
+a preview renderer per file through `components/files/lib/preview.ts`: an
+ordered list of `{kind, types, typePrefix, extensions}` matchers (content type
+first, extension fallback). A new previewable type is one matcher entry plus a
+branch in `FilePreviewContent` — and only *safe* renderers: HTML renders as
+source and SVG only through `<img>`, never live; anything unmatched gets the
+metadata card + download, never a faked preview. Preview bytes are fetched
+authenticated via `fetchFileBlob` → object URL (media elements can't send an
+Authorization header); the content component is keyed by node id so it remounts
+into its loading state instead of a setState-in-effect reset. And never nest a
+`<button>` in a tile/row that contains the `IngestionBadge` — the badge's
+retry X is itself a button (invalid HTML; shipped as a hydration error once);
+use a `role="button"` div with keyboard activation like `FileGridView`.
+
 ## Adding a feature end-to-end
 
 The expected shape, in order:

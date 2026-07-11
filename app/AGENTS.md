@@ -74,7 +74,13 @@ app/
                    per-scope PromptVariable catalogs + get/set helpers),
                    context.py (render-context construction from domain models),
                    render.py (substitution + render_system_prompt's PromptContext
-                   model) — package __init__.py re-exports the flat surface
+                   model) — package __init__.py re-exports the flat surface.
+                   The collection file tree splits the same way: files.py
+                   (FileSystemService — tree reads, folders, uploads, moves,
+                   path resolution), file_deletion.py (the per-node purge
+                   cascade, mirroring collection_deletion.py), file_search.py
+                   (name/folder/content search), file_backfill.py (lifespan
+                   backfill of pre-tree documents)
   db/              engine.py (process-wide Engine + session_scope/get_session),
                    bootstrap.py (init_db/ensure_database_exists), migrations.py,
                    schema.py (schema validation)
@@ -423,6 +429,34 @@ code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today
 - **Node type ids are permanent.** Persisted pipeline definitions reference
   `indexer.pinecone`/`retriever.pinecone`/`indexer.pgvector`/`retriever.pgvector`
   by string; a new backend adds new ids, never renames existing ones.
+- **Per-document vector deletion goes through `delete_document_vectors`** on the
+  backend ABC (chunk vector ids are `{document_id}:{order}` — Pinecone lists by
+  id prefix, pgvector filters its `document_id` column). Never delete a whole
+  namespace to remove one file.
+
+## The collection file tree (`file_nodes` + `documents`)
+
+- **A `FileNode` is identity and hierarchy; a `Document` is the ingestion
+  record.** Files exist regardless of ingestion: no document row = type not
+  eligible for the pipeline; `failed` always carries `error_message`; `ready`
+  always means indexed chunks. Never create a state that reads as "ingested
+  with zero chunks" — that ghost is what this split removed.
+- **Uploads always persist; eligibility only gates auto-ingestion.**
+  `uploads.allowed_content_types` is the auto-ingest list, not an upload gate
+  (`is_ingestible` in `app/services/files.py`). `POST /api/files/{id}/ingest`
+  force-attempts regardless, so a pipeline upgraded to support a type just
+  works — the parser's own error is the honest outcome otherwise.
+- **Background ingestion opens its own `session_scope`** (`run_document_ingestion`
+  in `app/services/ingestion.py`) — a FastAPI background task runs after the
+  request session is gone. It never re-raises: the FAILED document row *is* the
+  outcome; the wrapper only logs.
+- **Stored bytes are keyed by node id** (`collections/{cid}/files/{node_id}`),
+  so rename/move never touches disk. Sibling-name uniqueness is enforced in
+  `FileSystemService` (Postgres unique indexes treat NULL `parent_id` as
+  distinct, so a DB constraint can't cover root siblings).
+- **The `?parent_id` listing + `FileSystemService.resolve_path` are the
+  model-navigation surface** (`ls`/`cd` semantics for future chat tools) — keep
+  their shapes stable; extend rather than fork them.
 
 ## Hooking into telemetry
 
