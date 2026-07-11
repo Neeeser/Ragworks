@@ -17,122 +17,93 @@ vi.mock("@xyflow/react", () => ({
   Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
 }));
 
-const parserNodeType = "parser.document";
+const nodeProps = (data: PipelineNodeData, id = "node-1"): NodeProps<Node<PipelineNodeData>> => ({
+  id,
+  type: "pipelineNode",
+  data,
+  selected: false,
+  selectable: true,
+  deletable: true,
+  draggable: true,
+  dragging: false,
+  zIndex: 0,
+  isConnectable: true,
+  positionAbsoluteX: 0,
+  positionAbsoluteY: 0,
+});
 
 describe("PipelineNode", () => {
-  it("renders node content with config values", () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
+  it("renders the signature readout, ports, and status", () => {
+    render(
+      <PipelineNode
+        {...nodeProps({
+          label: "Embedder",
+          nodeType: "embedder.openrouter",
+          inputs: [
+            { key: "chunks", label: "Chunks", data_type: "chunk_batch", required: false },
+            { key: "request", label: "Request", data_type: "query_request", required: false },
+          ],
+          outputs: [
+            { key: "embedded", label: "Embedded", data_type: "embedded_batch", required: false },
+          ],
+          config: { model_name: "openai/text-embedding-3-small" },
+          status: "running",
+          active: true,
+        })}
+      />,
+    );
 
-    const props: NodeProps<Node<PipelineNodeData>> = {
-      id: "node-1",
-      type: "pipelineNode",
-      data: {
-        label: "Node",
-        nodeType: parserNodeType,
-        description: "Desc",
-        example: { input: "In", output: "Out" },
-        inputs: [
-          { key: "in", label: "In", data_type: "document", required: true },
-          { key: "opt", label: "Optional", data_type: "text", required: false },
-        ],
-        outputs: [{ key: "out", label: "Out", data_type: "document", required: false }],
-        config: {
-          long: "x".repeat(80),
-          count: 2,
-          enabled: false,
-          empty: null,
-          circular,
-          meta: { foo: "bar" },
-          missing: undefined,
-        },
-        status: "running",
-        active: true,
-      },
-      selected: false,
-      selectable: true,
-      deletable: true,
-      draggable: true,
-      dragging: false,
-      zIndex: 0,
-      isConnectable: true,
-      positionAbsoluteX: 0,
-      positionAbsoluteY: 0,
-    };
-
-    render(<PipelineNode {...props} />);
-
-    expect(screen.getByText("Node")).toBeInTheDocument();
-    expect(screen.getByText("Parsers")).toBeInTheDocument();
+    expect(screen.getByText("Embedder")).toBeInTheDocument();
+    expect(screen.getByText("Embedders")).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
-    // PipelineNode now reuses the shared lib/utils truncate, which appends a single
-    // ellipsis character rather than three literal dots.
-    expect(screen.getByText(/…/)).toBeInTheDocument();
-    expect(screen.getByTestId("target-in")).toBeInTheDocument();
-    expect(screen.getByTestId("source-out")).toBeInTheDocument();
+    expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByText("openai/text-embedding-3-small")).toBeInTheDocument();
+    expect(screen.getByTestId("target-chunks")).toBeInTheDocument();
+    expect(screen.getByTestId("source-embedded")).toBeInTheDocument();
   });
 
-  it("renders default config entries when config is empty", () => {
-    const props: NodeProps<Node<PipelineNodeData>> = {
-      id: "node-2",
-      type: "pipelineNode",
-      data: {
-        label: "Defaults",
-        nodeType: parserNodeType,
-        inputs: [],
-        outputs: [],
-        config: {},
-        configSchema: {
-          properties: {
-            depth: { type: "integer", default: 3 },
-            mode: { type: "string" },
-          },
+  it("hides at-default settings but counts edited ones", () => {
+    const data: PipelineNodeData = {
+      label: "Parser",
+      nodeType: "parser.document",
+      inputs: [],
+      outputs: [],
+      config: { encoding: "utf-8" },
+      configSchema: {
+        properties: {
+          mode: { type: "string", default: "auto" },
+          encoding: { type: "string", default: "utf-8" },
         },
       },
-      selected: false,
-      selectable: true,
-      deletable: true,
-      draggable: true,
-      dragging: false,
-      zIndex: 0,
-      isConnectable: true,
-      positionAbsoluteX: 0,
-      positionAbsoluteY: 0,
     };
 
-    render(<PipelineNode {...props} />);
-    expect(screen.getByText("depth")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.queryByText("mode")).not.toBeInTheDocument();
+    const { rerender } = render(<PipelineNode {...nodeProps(data)} />);
+    // encoding matches its default, so nothing hints at hidden settings.
+    expect(screen.queryByText(/edited setting/)).not.toBeInTheDocument();
+    expect(screen.queryByText("utf-8")).not.toBeInTheDocument();
+    // The signature readout resolves mode from the schema default.
+    expect(screen.getByText("auto")).toBeInTheDocument();
+
+    rerender(<PipelineNode {...nodeProps({ ...data, config: { encoding: "latin-1" } })} />);
+    expect(screen.getByText("· 1 edited setting")).toBeInTheDocument();
+    expect(screen.queryByText("latin-1")).not.toBeInTheDocument();
   });
 
-  it("handles empty config without defaults", () => {
-    const props: NodeProps<Node<PipelineNodeData>> = {
-      id: "node-3",
-      type: "pipelineNode",
-      data: {
-        label: "Empty",
-        nodeType: parserNodeType,
-        inputs: [],
-        outputs: [],
-        config: undefined as unknown as Record<string, unknown>,
-        configSchema: {},
-      },
-      selected: false,
-      selectable: true,
-      deletable: true,
-      draggable: true,
-      dragging: false,
-      zIndex: 0,
-      isConnectable: true,
-      positionAbsoluteX: 0,
-      positionAbsoluteY: 0,
-    };
-
-    render(<PipelineNode {...props} />);
-    // With no config and no defaults the card renders no config panel at all.
-    expect(screen.getByText("Empty")).toBeInTheDocument();
-    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+  it("renders no readout for nodes without a signature", () => {
+    render(
+      <PipelineNode
+        {...nodeProps({
+          label: "Input",
+          nodeType: "ingestion.input",
+          inputs: [],
+          outputs: [],
+          config: undefined as unknown as Record<string, unknown>,
+        })}
+      />,
+    );
+    expect(screen.getByText("Input")).toBeInTheDocument();
+    expect(screen.queryByText("Model")).not.toBeInTheDocument();
+    expect(screen.queryByText(/edited setting/)).not.toBeInTheDocument();
   });
 });
 

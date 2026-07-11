@@ -3,9 +3,12 @@
 import { Handle, Position } from "@xyflow/react";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 
-import { cn, truncate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-import { buildPipelineConfigFields, formatConfigValue } from "./lib/pipeline-config";
+import { PineconeIcon } from "./icons/PineconeIcon";
+import { PostgresIcon } from "./icons/PostgresIcon";
+import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
+import { buildPipelineConfigFields } from "./lib/pipeline-config";
 import {
   getNodeFamilyLabel,
   getNodeFamilyStyles,
@@ -50,8 +53,10 @@ export type PipelineNodeData = {
   errors?: string[];
 };
 
-const CONFIG_PREVIEW_LIMIT = 40;
-const CONFIG_ROW_LIMIT = 5;
+const BACKEND_ICONS = {
+  pinecone: PineconeIcon,
+  pgvector: PostgresIcon,
+} as const;
 
 const statusBadge = (status: PipelineRunStatus) => {
   if (status === "completed") {
@@ -149,13 +154,11 @@ function PortRow({
 export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNodeData>>) {
   const family = resolveNodeFamily(data.nodeType);
   const familyStyles = getNodeFamilyStyles(family);
-  const configEntries = Object.entries(data.config ?? {});
-  const displayedEntries =
-    configEntries.length > 0
-      ? configEntries
-      : buildPipelineConfigFields(data.configSchema).flatMap((field) =>
-          field.defaultValue === undefined ? [] : [[field.key, field.defaultValue] as const],
-        );
+  const config = data.config ?? {};
+  const configFields = buildPipelineConfigFields(data.configSchema);
+  const signature = resolveNodeSignature(data.nodeType, config, configFields);
+  const hiddenOverrides = countHiddenOverrides(config, configFields, signature?.consumedKeys ?? []);
+  const BackendIcon = signature?.backend ? BACKEND_ICONS[signature.backend] : null;
   const connecting = data.connecting ?? null;
   const hasErrors = (data.errors?.length ?? 0) > 0;
   const dimWholeNode =
@@ -228,25 +231,35 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         </div>
       ) : null}
 
-      {displayedEntries.length > 0 ? (
-        <div className="mt-2 space-y-0.5 rounded-xl bg-surface px-2 py-1.5">
-          {displayedEntries.slice(0, CONFIG_ROW_LIMIT).map(([key, value]) => (
-            <div
-              key={key}
-              className="flex items-center justify-between gap-2 text-[10px] leading-4"
+      {signature ? (
+        <div className="mt-2 rounded-xl bg-surface px-2.5 py-2">
+          <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-muted">
+            {signature.label}
+          </p>
+          <div className="mt-1 flex items-center gap-1.5">
+            {BackendIcon ? <BackendIcon className="h-3.5 w-3.5 shrink-0" /> : null}
+            <p
+              className={cn(
+                "truncate font-mono text-[11px] leading-4",
+                signature.missing ? "text-meta italic" : familyStyles.badge,
+              )}
+              title={signature.value}
             >
-              <span className="truncate text-meta">{key}</span>
-              <span className="max-w-[130px] truncate text-body">
-                {truncate(formatConfigValue(value), CONFIG_PREVIEW_LIMIT)}
-              </span>
-            </div>
-          ))}
-          {displayedEntries.length > CONFIG_ROW_LIMIT ? (
-            <p className="text-[10px] text-faint">
-              +{displayedEntries.length - CONFIG_ROW_LIMIT} more
+              {signature.value}
+            </p>
+          </div>
+          {signature.detail ? (
+            <p className="truncate text-[10px] leading-4 text-meta" title={signature.detail}>
+              {signature.detail}
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {hiddenOverrides > 0 ? (
+        <p className="mt-1.5 text-[10px] leading-4 text-faint">
+          · {hiddenOverrides} edited setting{hiddenOverrides === 1 ? "" : "s"}
+        </p>
       ) : null}
     </div>
   );
