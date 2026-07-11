@@ -9,13 +9,13 @@ test in this module for the same reason: route tests hit the module-level
 cache, not a fresh service per call.
 
 Upload-limit note: `UploadFile.size` (Starlette) is `None` for some transports;
-the size cap enforced in `upload_document` is best-effort and falls through
-when `size` is unavailable -- the content-type check still applies regardless.
+the size cap enforced in `upload_file` is best-effort and falls through when
+`size` is unavailable. Content types are no longer an upload gate at all --
+`uploads.allowed_content_types` decides which uploads get *auto-ingested*.
 """
 
 from __future__ import annotations
 
-import datetime
 from collections.abc import Iterator
 from uuid import uuid4
 
@@ -23,10 +23,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.api.routes import documents as documents_routes
+from app.api.routes import files as files_routes
 from app.db import models
 from app.db.repositories import AppSettingRepository
-from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.app_config import invalidate_app_config_cache
 
 
@@ -57,43 +56,10 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     return collection
 
 
-class _StubIngestionService:
-    """Stand-in for IngestionService so upload tests never hit real ingestion."""
-
-    def __init__(self, _session: Session) -> None:
-        pass
-
-    def ingest_upload(
-        self,
-        *,
-        user: models.User,
-        collection: models.Collection,
-        filename: str | None,
-        content_type: str | None,
-        stream: object,
-    ) -> IngestionResponse:
-        now = datetime.datetime.now(datetime.UTC)
-        document = DocumentRead(
-            id=uuid4(),
-            collection_id=collection.id,
-            name=filename or "doc.txt",
-            content_type=content_type or "text/plain",
-            status=models.DocumentStatus.READY,
-            num_chunks=1,
-            num_tokens=1,
-            chunk_size=100,
-            chunk_overlap=0,
-            chunk_strategy=models.ChunkStrategy.TOKEN,
-            created_at=now,
-            updated_at=now,
-        )
-        return IngestionResponse(
-            document=document,
-            chunk_count=1,
-            pinecone_namespace="ns",
-            embedding_model="test-embed",
-            usage={},
-        )
+@pytest.fixture(name="no_background_ingestion")
+def _no_background_ingestion(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep TestClient from running real ingestion after the response."""
+    monkeypatch.setattr(files_routes, "run_document_ingestion", lambda document_id: None)
 
 
 # --- Enforcement 1: registration flag -----------------------------------
@@ -125,51 +91,56 @@ def test_register_succeeds_when_registration_enabled(
     assert response.status_code == 201
 
 
-# --- Enforcement 2: upload size and content-type limits -----------------
+# --- Enforcement 2: upload size cap and ingestion eligibility ------------
 
 
-def test_upload_rejects_disallowed_content_type(
-    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.usefixtures("no_background_ingestion")
+def test_upload_stores_disallowed_type_without_auto_ingestion(
+    client: TestClient, session: Session, auth_user: models.User
 ) -> None:
-    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+    """Any type uploads fine; a non-eligible type gets no ingestion record."""
     collection = _create_collection(session, auth_user)
 
     response = client.post(
-        f"/api/collections/{collection.id}/documents",
-        files={"file": ("virus.exe", b"data", "application/x-msdownload")},
+        f"/api/collections/{collection.id}/files",
+        files={"file": ("tool.exe", b"data", "application/x-msdownload")},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 201
+    assert response.json()["file"]["ingestion"] is None
 
 
 def test_upload_rejects_oversized_file(
-    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, session: Session, auth_user: models.User
 ) -> None:
-    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
     _set_override(session, "uploads.max_upload_size_mb", 1)
     collection = _create_collection(session, auth_user)
     oversized = b"x" * (2 * 1024 * 1024)
 
     response = client.post(
-        f"/api/collections/{collection.id}/documents",
+        f"/api/collections/{collection.id}/files",
         files={"file": ("big.txt", oversized, "text/plain")},
     )
 
     assert response.status_code == 413
 
 
-def test_upload_allows_small_permitted_file(
-    client: TestClient, session: Session, auth_user: models.User, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.usefixtures("no_background_ingestion")
+def test_upload_queues_ingestion_for_eligible_type(
+    client: TestClient, session: Session, auth_user: models.User
 ) -> None:
-    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
+    """An eligible type is stored *and* gets a pending ingestion record."""
     collection = _create_collection(session, auth_user)
 
     response = client.post(
-        f"/api/collections/{collection.id}/documents",
+        f"/api/collections/{collection.id}/files",
         files={"file": ("doc.txt", b"hello world", "text/plain")},
     )
 
     assert response.status_code == 201
+    ingestion = response.json()["file"]["ingestion"]
+    assert ingestion is not None
+    assert ingestion["status"] == "pending"
 
 
 # --- Enforcement 4: feature flags gate visualization and branching ------

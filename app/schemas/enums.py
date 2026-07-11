@@ -20,6 +20,13 @@ class ChunkStrategy(str, Enum):
     SEMANTIC = "semantic"
 
 
+class FileNodeKind(str, Enum):
+    """Node kinds in a collection's file tree."""
+
+    FOLDER = "folder"
+    FILE = "file"
+
+
 class DocumentStatus(str, Enum):
     """Status values for document processing."""
 

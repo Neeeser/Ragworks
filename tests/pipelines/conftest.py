@@ -73,6 +73,7 @@ class StubVectorStore(VectorStoreBackend):
         self.upsert_calls: list[dict[str, Any]] = []
         self.query_calls: list[dict[str, Any]] = []
         self.deleted_namespaces: list[tuple[str, str]] = []
+        self.deleted_documents: list[tuple[str, str, str]] = []
 
     def list_indexes(self) -> list[VectorIndexDescription]:
         return []
@@ -117,6 +118,9 @@ class StubVectorStore(VectorStoreBackend):
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         self.deleted_namespaces.append((index, namespace))
+
+    def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
+        self.deleted_documents.append((index, namespace, document_id))
 
 
 class StubVectorStoreProvider:

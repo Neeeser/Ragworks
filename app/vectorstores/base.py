@@ -167,3 +167,12 @@ class VectorStoreBackend(ABC):
     @abstractmethod
     def delete_namespace(self, index: str, namespace: str) -> None:
         """Delete every vector in a namespace; missing namespace is a no-op."""
+
+    @abstractmethod
+    def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
+        """Delete every vector belonging to one document; absent is a no-op.
+
+        Chunk vector ids are `{document_id}:{order}` (see
+        `app/retrieval/chunkers/strategies.py`), so backends can target one
+        document's vectors by id prefix or stored document id.
+        """

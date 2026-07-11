@@ -20,9 +20,11 @@ class DocumentRead(DateTimeConfigMixin, BaseModel):
 
     id: UUID
     collection_id: UUID
+    file_id: UUID | None = None
     name: str
     content_type: str
     status: DocumentStatus
+    error_message: str | None = None
     num_chunks: int
     num_tokens: int
     chunk_size: int
@@ -38,9 +40,11 @@ class DocumentRead(DateTimeConfigMixin, BaseModel):
         return cls(
             id=document.id,
             collection_id=document.collection_id,
+            file_id=document.file_id,
             name=document.name,
             content_type=document.content_type,
             status=document.status,
+            error_message=document.error_message,
             num_chunks=document.num_chunks,
             num_tokens=document.num_tokens,
             chunk_size=document.chunk_size,
@@ -93,11 +97,3 @@ class ChunkDetailRead(BaseModel):
     chunk: ChunkRead
 
 
-class IngestionResponse(BaseModel):
-    """Response payload for ingestion completion."""
-
-    document: DocumentRead
-    chunk_count: int
-    pinecone_namespace: str
-    embedding_model: str
-    usage: dict[str, int]

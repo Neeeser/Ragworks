@@ -16,7 +16,7 @@ from __future__ import annotations
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import CollectionRepository, DocumentRepository
+from app.db.repositories import CollectionRepository, DocumentRepository, FileNodeRepository
 from app.schemas.enums import IndexBackend
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
@@ -84,9 +84,14 @@ class CollectionDeletionService:
             raise
 
     def _purge_files(self, collection: models.Collection) -> None:
-        """Remove every stored upload for the collection's documents."""
-        for document in self.documents.list_for_collection(collection.id):
-            self.storage.delete_path(document.source_path)
+        """Remove every stored upload in the collection's file tree.
+
+        Legacy documents' `source_path` and their backfilled file node's
+        `storage_path` point at the same file, so deleting by node covers
+        both eras (`delete_path` is a no-op on already-missing paths).
+        """
+        for node in FileNodeRepository(self.session).list_for_collection(collection.id):
+            self.storage.delete_path(node.storage_path)
 
     def _purge_rows(self, collection: models.Collection) -> None:
         """Delete related rows, detach chat sessions, and delete the collection."""

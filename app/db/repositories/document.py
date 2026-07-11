@@ -37,6 +37,18 @@ class DocumentRepository(Repository):
             return None
         return document
 
+    def get_for_file(self, file_id: UUID) -> models.Document | None:
+        """Return the ingestion record for a file node, if one exists."""
+        statement = select(models.Document).where(models.Document.file_id == file_id)
+        return self.session.exec(statement).first()
+
+    def list_missing_file(self) -> list[models.Document]:
+        """Return documents that predate the file tree (no `file_id` yet)."""
+        statement = select(models.Document).where(
+            col(models.Document.file_id).is_(None)
+        )
+        return list(self.session.exec(statement).all())
+
     def count_by_user(self) -> dict[UUID, int]:
         """Return a mapping of user id -> number of documents they own."""
         statement = select(
@@ -64,3 +76,9 @@ class ChunkRepository(Repository):
             models.DocumentChunkRecord.document_id == document_id,
         )
         return list(self.session.exec(statement).all())
+
+    def delete_for_document(self, document_id: UUID) -> None:
+        """Delete every stored chunk for a document (retry/delete paths)."""
+        for chunk in self.list_for_document(document_id):
+            self.session.delete(chunk)
+        self.session.flush()

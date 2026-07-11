@@ -93,10 +93,12 @@ def test_ingest_and_search_on_pgvector_without_pinecone_key(
     collection_id = created.json()["id"]
 
     uploaded = keyless_client.post(
-        f"/api/collections/{collection_id}/documents",
+        f"/api/collections/{collection_id}/files",
         files={"file": ("doc.txt", b"Paris is the capital of France.", "text/plain")},
     )
     assert uploaded.status_code == 201, uploaded.text
+    # TestClient runs the queued background ingestion before returning, so
+    # the document is fully indexed by the time the query below runs.
 
     searched = keyless_client.post(
         f"/api/collections/{collection_id}/query",

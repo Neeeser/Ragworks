@@ -15,6 +15,7 @@ from app.db.repositories.base import Repository
 from app.db.repositories.chat import ChatRepository
 from app.db.repositories.collection import CollectionRepository, CollectionStats
 from app.db.repositories.document import ChunkRepository, DocumentRepository
+from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.pipeline import (
     PipelineRepository,
     PipelineRunRepository,
@@ -31,6 +32,7 @@ __all__ = [
     "CollectionRepository",
     "CollectionStats",
     "DocumentRepository",
+    "FileNodeRepository",
     "PipelineRepository",
     "PipelineRunRepository",
     "PipelineVersionRepository",

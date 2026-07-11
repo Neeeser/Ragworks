@@ -1,7 +1,7 @@
 """Database models for Ragworks, re-exported as a flat namespace.
 
 The tables live one-per-domain in sibling modules (`user`, `collection`,
-`document`, `pipeline`, `chat`, `visualization`, `events`); this module
+`document`, `files`, `pipeline`, `chat`, `visualization`, `events`); this module
 re-exports every table class plus the enum aliases below so existing call
 sites keep working unchanged: `from app.db import models; models.User` and
 `from app.db.models import User` are both permanent, supported import shapes
@@ -20,6 +20,7 @@ from app.db.models.chat import ChatMessage, ChatSession, ChatSessionCollection
 from app.db.models.collection import Collection
 from app.db.models.document import Document, DocumentChunkRecord
 from app.db.models.events import IngestionEvent, QueryEvent
+from app.db.models.files import FileNode
 from app.db.models.pipeline import (
     Pipeline,
     PipelineNodeIO,
@@ -36,6 +37,7 @@ from app.schemas.enums import (
     ChatRole,
     ChunkStrategy,
     DocumentStatus,
+    FileNodeKind,
     PipelineIOType,
     PipelineKind,
     PipelineRunStatus,
@@ -53,6 +55,8 @@ __all__ = [
     "Document",
     "DocumentChunkRecord",
     "DocumentStatus",
+    "FileNode",
+    "FileNodeKind",
     "IngestionEvent",
     "Pipeline",
     "PipelineIOType",

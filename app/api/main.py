@@ -16,6 +16,7 @@ from app.api.routes import (
     collections,
     config,
     documents,
+    files,
     health,
     indexes,
     models,
@@ -29,6 +30,7 @@ from app.core.config import get_settings
 from app.db.bootstrap import init_db
 from app.db.engine import session_scope
 from app.services.accounts import ensure_admin_exists
+from app.services.file_backfill import backfill_file_nodes
 from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
@@ -67,6 +69,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     with session_scope() as session:
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
+        backfill_file_nodes(session)
         ensure_admin_exists(session)
     purge_expired_telemetry()
     yield
@@ -96,6 +99,7 @@ app.include_router(pipelines.router)
 app.include_router(indexes.router)
 app.include_router(collections.router)
 app.include_router(documents.router)
+app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)
 app.include_router(traces.router)

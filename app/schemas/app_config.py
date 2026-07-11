@@ -56,7 +56,12 @@ class AuthSettings(BaseModel):
 
 
 class UploadSettings(BaseModel):
-    """Document upload limits, enforced at the upload route."""
+    """Upload limits and ingestion eligibility.
+
+    Any file type may be uploaded to a collection's file tree (subject to the
+    size cap); `allowed_content_types` decides which types are *auto-ingested*
+    by the collection's pipeline, not which uploads are accepted.
+    """
 
     max_upload_size_mb: int = Field(
         default=50,
@@ -64,7 +69,7 @@ class UploadSettings(BaseModel):
         le=1024,
         json_schema_extra=_meta(
             "Max upload size (MB)",
-            "Uploads larger than this are rejected before ingestion.",
+            "Uploads larger than this are rejected.",
             public=True,
         ),
     )
@@ -76,8 +81,10 @@ class UploadSettings(BaseModel):
             "application/pdf",
         ],
         json_schema_extra=_meta(
-            "Allowed content types",
-            "Uploads whose MIME type is not in this list are rejected.",
+            "Auto-ingested content types",
+            "Uploads whose MIME type is in this list are automatically run "
+            "through the collection's ingestion pipeline; other types are "
+            "stored without indexing (and can be ingested manually).",
             public=True,
         ),
     )

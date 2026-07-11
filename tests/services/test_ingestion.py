@@ -1,13 +1,11 @@
-"""Behavior of ``IngestionService`` (happy path, pipeline resolution, failures).
+"""Behavior of ``IngestionService`` (happy path, retries, failures).
 
-Merged from `test_ingestion_service_coverage.py`: pure-function edge tests
-(`resolve_ingestion_pipeline`, `_extract_indexing_payload`) moved here
-unchanged; the private `_record_failure` tests were dropped because they
-duplicated coverage that already exists at two other layers -- run-status
-transitions are asserted directly on `PipelineTraceRecorder` in
-`tests/pipelines/test_pipeline_trace.py`, and the document-status/event side
-effects `_record_failure` owns are exercised through the public
-`ingest_upload` failure path below (which now also asserts the run status).
+Ingestion runs against a document row created by
+`FileSystemService.register_upload` / `ensure_pending_document`; these tests
+drive that same public path. The failure tests pin the honest-failure
+contract: the uploaded *file* always persists, and the document row lands
+`FAILED` with a descriptive `error_message` — never a "ready" row with zero
+chunks (the pre-file-tree behavior this feature replaced).
 """
 
 from __future__ import annotations
@@ -24,6 +22,7 @@ from app.pipelines.defaults import build_default_retrieval_pipeline
 from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services import ingestion as ingestion_module
 from app.services.errors import ExternalServiceError, InvalidInputError
+from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.services.pipelines import PipelineService
@@ -47,14 +46,6 @@ class _StubOpenRouterClient:
                 "usage": {"prompt_tokens": len(texts) * 3, "total_tokens": len(texts) * 3},
             }
         )
-
-
-    def __init__(self) -> None:
-        self.upserted: list[dict[str, object]] = []
-
-    def upsert(self, vectors: object, namespace: str | None = None) -> None:
-        self.upserted.append({"vectors": vectors, "namespace": namespace})
-
 
 
 def _create_user(session: Session) -> models.User:
@@ -86,13 +77,29 @@ def _create_collection(session: Session, user: models.User, **overrides: object)
     return collection
 
 
-def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(
+def _upload_pending_document(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    content: bytes = b"content",
+) -> tuple[models.FileNode, models.Document]:
+    """Register a text upload and return its file node + pending document."""
+    result = FileSystemService(session).register_upload(
+        user,
+        collection,
+        UploadSpec(filename="doc.txt", content_type="text/plain"),
+        io.BytesIO(content),
+    )
+    assert result.document is not None
+    return result.file, result.document
+
+
+def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
     monkeypatch, pgvector_session: Session
 ) -> None:
-    """A successful upload embeds, indexes into the default pgvector backend,
+    """A successful ingest embeds, indexes into the default pgvector backend,
     and persists chunks; the document ends `READY` with a chunk count matching
-    what's actually in the DB, and the `IngestionResponse` reflects the same
-    numbers."""
+    what's actually in the DB."""
     session = pgvector_session
     monkeypatch.setattr(
         ingestion_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
@@ -100,31 +107,25 @@ def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(
 
     user = _create_user(session)
     collection = _create_collection(session, user)
-    service = IngestionService(session)
-
     content = b"Paris is the capital of France. It is known for the Eiffel Tower."
-    response = service.ingest_upload(
-        user=user,
-        collection=collection,
-        filename="doc.txt",
-        content_type="text/plain",
-        stream=io.BytesIO(content),
+    _file, document = _upload_pending_document(session, user, collection, content)
+
+    IngestionService(session).ingest_document(
+        user=user, collection=collection, document=document
     )
 
-    document = session.get(models.Document, response.document.id)
-    assert document is not None
-    assert document.status == DocumentStatus.READY
-    assert document.num_chunks == response.chunk_count
-    assert response.chunk_count > 0
-    assert response.embedding_model
-    assert response.usage == {"prompt_tokens": response.chunk_count * 3, "total_tokens": response.chunk_count * 3}
+    refreshed = session.get(models.Document, document.id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.error_message is None
+    assert refreshed.num_chunks > 0
 
     chunk_records = session.exec(
         select(models.DocumentChunkRecord).where(
             models.DocumentChunkRecord.document_id == document.id
         )
     ).all()
-    assert len(chunk_records) == response.chunk_count
+    assert len(chunk_records) == refreshed.num_chunks
     assert all(record.embedding == [0.1, 0.2, 0.3] for record in chunk_records)
     assert all(record.text for record in chunk_records)
 
@@ -137,22 +138,21 @@ def test_ingest_upload_happy_path_persists_chunks_and_marks_ready(
         embedding=[0.1, 0.2, 0.3],
         top_k=50,
     )
-    assert len(indexed.matches) == response.chunk_count
+    assert len(indexed.matches) == refreshed.num_chunks
 
     event = session.exec(select(models.IngestionEvent)).first()
     assert event is not None
     assert event.event_type == "ingestion_complete"
     assert event.status == "success"
-    assert event.details["chunks"] == response.chunk_count
+    assert event.details["chunks"] == refreshed.num_chunks
 
 
-def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, tmp_path) -> None:
-    class _StubStorage:
-        def __init__(self) -> None:
-            self.base_path = tmp_path
-
-        def save_stream(self, _stream: object, _relative_path: str):
-            return tmp_path / "upload.txt"
+def test_failed_ingestion_keeps_file_and_records_descriptive_error(
+    monkeypatch, session: Session
+) -> None:
+    """The honest-failure regression: a pipeline failure leaves the uploaded
+    file in the tree and marks the document `FAILED` with the failure's
+    message — no ready-with-zero-chunks ghost, no vanished upload."""
 
     class _FailingExecutor:
         def __init__(self, _registry: object) -> None:
@@ -161,26 +161,31 @@ def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, 
         def execute(self, _definition: object, _context: object) -> None:
             raise RuntimeError("parse failed")
 
-    monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
-    service = IngestionService(session)
+    file_node, document = _upload_pending_document(session, user, collection)
 
     with pytest.raises(RuntimeError, match="parse failed"):
-        service.ingest_upload(
-            user=user,
-            collection=collection,
-            filename="doc.txt",
-            content_type="text/plain",
-            stream=io.BytesIO(b"content"),
+        IngestionService(session).ingest_document(
+            user=user, collection=collection, document=document
         )
 
-    document = session.exec(select(models.Document)).first()
-    assert document is not None
-    assert document.status == DocumentStatus.FAILED
+    refreshed = session.get(models.Document, document.id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message == "parse failed"
+    assert refreshed.num_chunks == 0
+
+    # The file itself survives the failure and still lists in the tree.
+    tree = FileSystemService(session).tree(collection)
+    listed = {node.id: node for node in tree.nodes}
+    assert file_node.id in listed
+    assert listed[file_node.id].ingestion is not None
+    assert listed[file_node.id].ingestion.status == DocumentStatus.FAILED
+    assert listed[file_node.id].ingestion.error_message == "parse failed"
 
     run = session.exec(select(models.PipelineRun)).first()
     assert run is not None
@@ -194,19 +199,44 @@ def test_ingest_upload_marks_document_failed_on_exception(monkeypatch, session, 
     assert "parse failed" in event.details["error"]
 
 
-def test_ingest_upload_wraps_pinecone_outage_as_external_service_error(
-    monkeypatch, session, tmp_path
+def test_retry_after_failure_resets_the_same_document_row(
+    monkeypatch, session: Session
 ) -> None:
-    """A Pinecone outage mid-upload must surface as a 502-mapped
+    """Re-queueing a failed file reuses its document row: status back to
+    `pending`, error cleared — the X-badge retry path."""
+
+    class _FailingExecutor:
+        def __init__(self, _registry: object) -> None:
+            self.registry = _registry
+
+        def execute(self, _definition: object, _context: object) -> None:
+            raise RuntimeError("parse failed")
+
+    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
+    monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    file_node, document = _upload_pending_document(session, user, collection)
+    with pytest.raises(RuntimeError):
+        IngestionService(session).ingest_document(
+            user=user, collection=collection, document=document
+        )
+
+    retried = FileSystemService(session).ensure_pending_document(user, collection, file_node)
+    session.commit()
+
+    assert retried.id == document.id
+    assert retried.status == DocumentStatus.PENDING
+    assert retried.error_message is None
+
+
+def test_ingest_document_wraps_pinecone_outage_as_external_service_error(
+    monkeypatch, session: Session
+) -> None:
+    """A Pinecone outage mid-ingest must surface as a 502-mapped
     `ExternalServiceError`, not the raw SDK exception -- while still marking
     the document and run FAILED, same as any other pipeline failure."""
-
-    class _StubStorage:
-        def __init__(self) -> None:
-            self.base_path = tmp_path
-
-        def save_stream(self, _stream: object, _relative_path: str):
-            return tmp_path / "upload.txt"
 
     class _FailingExecutor:
         def __init__(self, _registry: object) -> None:
@@ -215,26 +245,22 @@ def test_ingest_upload_wraps_pinecone_outage_as_external_service_error(
         def execute(self, _definition: object, _context: object) -> None:
             raise PineconeException("Pinecone is unavailable")
 
-    monkeypatch.setattr(ingestion_module, "FileStorage", _StubStorage)
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
-    service = IngestionService(session)
+    _file, document = _upload_pending_document(session, user, collection)
 
     with pytest.raises(ExternalServiceError, match="Pinecone is unavailable"):
-        service.ingest_upload(
-            user=user,
-            collection=collection,
-            filename="doc.txt",
-            content_type="text/plain",
-            stream=io.BytesIO(b"content"),
+        IngestionService(session).ingest_document(
+            user=user, collection=collection, document=document
         )
 
-    document = session.exec(select(models.Document)).first()
-    assert document is not None
-    assert document.status == DocumentStatus.FAILED
+    refreshed = session.get(models.Document, document.id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message is not None
 
     run = session.exec(select(models.PipelineRun)).first()
     assert run is not None
@@ -268,6 +294,6 @@ def test_extract_indexing_payload_raises_for_missing_result() -> None:
     typed domain error rather than a raw `KeyError`/`ValidationError`. Kept as
     a direct test of the static method -- it's pure data-in/data-out logic,
     not wiring, and the malformed-payload shape isn't reachable through the
-    public `ingest_upload` path with any real pipeline definition."""
+    public `ingest_document` path with any real pipeline definition."""
     with pytest.raises(InvalidInputError, match="ingestion result payload"):
         IngestionService._extract_indexing_payload({"node": {"data": {}}})

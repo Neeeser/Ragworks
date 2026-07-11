@@ -214,3 +214,13 @@ class PgvectorRepository:
             text(f"DELETE FROM {data_table_name(name)} WHERE namespace = :namespace"),
             params={"namespace": namespace},
         )
+
+    def delete_document(self, name: str, namespace: str, document_id: str) -> None:
+        """Delete one document's rows in a namespace (idempotent)."""
+        self._session.exec(  # type: ignore[call-overload]
+            text(
+                f"DELETE FROM {data_table_name(name)} "
+                "WHERE namespace = :namespace AND document_id = :document_id"
+            ),
+            params={"namespace": namespace, "document_id": document_id},
+        )

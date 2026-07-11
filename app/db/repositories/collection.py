@@ -94,6 +94,15 @@ class CollectionRepository(Repository):
                 col(models.Document.collection_id) == collection_id,
             )
         )
+        # After documents (documents.file_id references file_nodes). The
+        # self-referential parent_id FK is safe in one statement: NO ACTION
+        # constraints are checked at statement end, when parents and children
+        # are gone together.
+        execute(
+            sa_delete(models.FileNode).where(
+                col(models.FileNode.collection_id) == collection_id,
+            )
+        )
         run_ids = list(
             self.session.exec(
                 select(col(models.PipelineRun.id)).where(

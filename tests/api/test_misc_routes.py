@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-import io
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from sqlmodel import Session
 
 from app.api.routes import documents as documents_routes
@@ -121,52 +119,6 @@ def test_documents_routes_raise_for_missing_collection_and_document(session: Ses
     with pytest.raises(HTTPException) as excinfo:
         documents_routes.get_document_chunks(uuid4(), current_user=user, session=session)
     assert excinfo.value.status_code == 404
-
-
-def test_upload_document_raises_for_missing_collection(session: Session) -> None:
-    user = _create_user(session)
-    upload = UploadFile(filename="doc.txt", file=io.BytesIO(b"data"))
-
-    async def _call():
-        return await documents_routes.upload_document(
-            uuid4(),
-            upload,
-            current_user=user,
-            session=session,
-        )
-
-    with pytest.raises(HTTPException) as excinfo:
-        asyncio.run(_call())
-
-    assert excinfo.value.status_code == 404
-
-
-def test_upload_document_translates_ingestion_value_error(monkeypatch, session: Session) -> None:
-    user = _create_user(session)
-    collection = _create_collection(session, user)
-    upload = UploadFile(filename="doc.txt", file=io.BytesIO(b"data"))
-
-    class _StubIngestionService:
-        def __init__(self, _session) -> None:
-            pass
-
-        def ingest_upload(self, *, user, collection, filename, content_type, stream):
-            raise InvalidInputError("Ingestion pipeline could not be resolved.")
-
-    monkeypatch.setattr(documents_routes, "IngestionService", _StubIngestionService)
-
-    async def _call():
-        return await documents_routes.upload_document(
-            collection.id,
-            upload,
-            current_user=user,
-            session=session,
-        )
-
-    with pytest.raises(HTTPException) as excinfo:
-        asyncio.run(_call())
-
-    assert excinfo.value.status_code == 400
 
 
 def test_search_route_translates_retrieval_value_error(monkeypatch, session: Session) -> None:

@@ -13,13 +13,26 @@ from app.schemas.enums import ChunkStrategy, DocumentStatus
 
 
 class Document(SQLModel, TimestampMixin, table=True):
-    """Document metadata stored for ingestion."""
+    """The ingestion record for a file: status, chunk stats, and run lineage.
+
+    One row per ingested (or ingestion-attempted) file, pointed at by
+    `file_id` and reused on retry. File identity and hierarchy live on
+    `FileNode` (`app/db/models/files.py`); rows created before the file tree
+    existed keep their legacy `name`/`content_type`/`source_path` columns as
+    the backfill source.
+    """
 
     __tablename__ = "documents"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     collection_id: UUID = Field(foreign_key="collections.id", nullable=False, index=True)
     user_id: UUID = Field(foreign_key="users.id", nullable=False, index=True)
+    file_id: UUID | None = Field(
+        default=None,
+        foreign_key="file_nodes.id",
+        nullable=True,
+        index=True,
+    )
     name: str = Field(sa_column=Column(String, nullable=False))
     content_type: str = Field(sa_column=Column(String, nullable=False))
     source_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
@@ -27,6 +40,7 @@ class Document(SQLModel, TimestampMixin, table=True):
         default=DocumentStatus.PENDING,
         sa_column=Column(String, nullable=False),
     )
+    error_message: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     num_chunks: int = Field(default=0, nullable=False)
     num_tokens: int = Field(default=0, nullable=False)
     chunk_size: int = Field(default=1024, nullable=False)

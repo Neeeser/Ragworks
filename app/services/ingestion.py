@@ -1,24 +1,31 @@
-"""Ingestion service for uploaded documents."""
+"""Ingestion service: run a file's ingestion pipeline and record the outcome.
+
+Uploads persist files first (`FileSystemService.register_upload`); ingestion
+runs afterwards — normally in a background task via `run_document_ingestion`,
+which owns its own session. A document row is the honest record of the
+attempt: `ready` always means chunks were indexed; any failure lands as
+`failed` with a descriptive `error_message`, and the file itself stays.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import BinaryIO
+from uuid import UUID
 
 from sqlmodel import Session
 
 from app.clients.openrouter import get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
+from app.db.engine import session_scope
 from app.db.repositories import ChunkRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import IngestionPipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.retrieval.models import DocumentChunk
-from app.schemas.documents import DocumentRead, IngestionResponse
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
-from app.services.pipeline_resolution import resolve_ingestion_pipeline
+from app.services.pipeline_resolution import ResolvedIngestionPipeline, resolve_ingestion_pipeline
 from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
@@ -27,8 +34,34 @@ from app.vectorstores.registry import VectorStoreProvider
 logger = logging.getLogger(__name__)
 
 
+def run_document_ingestion(document_id: UUID) -> None:
+    """Background-task entry point: ingest one pending document, never raise.
+
+    Opens its own `session_scope` — background tasks run after the request
+    (and its session) are gone. Failures are already recorded on the document
+    row by `ingest_document`; this wrapper only keeps the worker quiet.
+    """
+    with session_scope() as session:
+        document = session.get(models.Document, document_id)
+        if document is None or document.status != models.DocumentStatus.PENDING:
+            return
+        user = session.get(models.User, document.user_id)
+        collection = session.get(models.Collection, document.collection_id)
+        if user is None or collection is None:
+            return
+        try:
+            IngestionService(session).ingest_document(
+                user=user, collection=collection, document=document
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            # Deliberately broad: the outcome is already persisted as a
+            # FAILED document with an error message; a background task has
+            # no caller left to re-raise to.
+            logger.exception("Background ingestion failed for document %s", document_id)
+
+
 class IngestionService:  # pylint: disable=too-few-public-methods
-    """Service for ingesting and indexing uploaded documents."""
+    """Service for running a document's ingestion pipeline."""
 
     def __init__(self, session: Session) -> None:
         """Initialize the ingestion service with shared clients."""
@@ -37,31 +70,35 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         self.storage = FileStorage()
         self.chunks = ChunkRepository(session)
 
-    # pylint: disable=too-many-locals
-    def ingest_upload(
+    def ingest_document(
         self,
         *,
         user: models.User,
         collection: models.Collection,
-        filename: str | None,
-        content_type: str | None,
-        stream: BinaryIO,
-    ) -> IngestionResponse:
-        """Ingest a document upload and index its chunks.
+        document: models.Document,
+    ) -> models.Document:
+        """Run the collection's ingestion pipeline for one document row.
 
-        Takes the raw filename/content-type/byte stream rather than a framework
-        `UploadFile`, so the service depends on nothing in `app.api`.
+        The row is expected `pending` with its file fields synced
+        (`FileSystemService.ensure_pending_document`); retry reuses the same
+        row, so a previous attempt's chunk rows and vectors are cleared first.
         """
         resolved = resolve_ingestion_pipeline(self.session, user, collection)
-        document = self._create_document_record(
-            user, collection, filename, content_type, resolved.settings
-        )
-        self._save_document_upload(collection, document, stream)
+        is_retry = document.ingestion_run_id is not None
+        self._apply_settings(document, resolved.settings)
+        document.status = models.DocumentStatus.PROCESSING
+        document.error_message = None
+        self.chunks.delete_for_document(document.id)
+        self.session.add(document)
+        self.session.commit()  # make `processing` visible to pollers mid-run
+
         runner = PipelineRunner(self.session)
         handle: PipelineRunHandle | None = None
         try:
             openrouter = get_openrouter_client(user.openrouter_api_key or "")
             vector_stores = VectorStoreProvider(user, self.session)
+            if is_retry:
+                self._purge_previous_vectors(vector_stores, resolved, document)
             version = resolved.service.get_current_version(resolved.pipeline)
             handle = runner.start(
                 pipeline=resolved.pipeline,
@@ -80,18 +117,13 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             self.session.add(document)
             result = runner.execute(resolved.definition, handle)
             payload = self._extract_indexing_payload(result.terminal_outputs)
-            enriched_chunks = payload.chunks
-            usage = payload.usage.model_dump()
             chunk_records = self._persist_chunks(
-                document,
-                collection,
-                enriched_chunks,
-                resolved.settings,
+                document, collection, payload.chunks, resolved.settings
             )
             self._record_success(
                 document,
                 resolved.settings.embedding_model,
-                usage,
+                payload.usage.model_dump(),
                 chunk_records,
             )
             self.session.commit()
@@ -105,14 +137,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                     index_backend=resolved.settings.backend.value,
                 )
             )
-
-            return IngestionResponse(
-                document=DocumentRead.from_model(document),
-                chunk_count=len(chunk_records),
-                pinecone_namespace=resolved.settings.namespace or "",
-                embedding_model=resolved.settings.embedding_model,
-                usage=usage,
-            )
+            return document
         except Exception as exc:
             self._record_failure(document, handle.trace if handle else None, exc)
             self.session.commit()
@@ -129,41 +154,43 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 raise ExternalServiceError(f"Ingestion pipeline failed: {exc}") from exc
             raise
 
-    def _create_document_record(
-        self,
-        user: models.User,
-        collection: models.Collection,
-        filename: str | None,
-        content_type: str | None,
-        resolved: IngestionPipelineSettings,
-    ) -> models.Document:
-        """Create and persist a document record for ingestion."""
-        document = models.Document(
-            collection_id=collection.id,
-            user_id=user.id,
-            name=filename or "uploaded-document",
-            content_type=content_type or "text/plain",
-            status=models.DocumentStatus.PROCESSING,
-            chunk_size=resolved.chunk_size,
-            chunk_overlap=resolved.chunk_overlap,
-            chunk_strategy=resolved.chunk_strategy,
-            embedding_model=resolved.embedding_model,
-        )
-        self.session.add(document)
-        self.session.flush()
-        return document
-
-    def _save_document_upload(
-        self,
-        collection: models.Collection,
-        document: models.Document,
-        stream: BinaryIO,
+    @staticmethod
+    def _apply_settings(
+        document: models.Document, resolved: IngestionPipelineSettings
     ) -> None:
-        """Persist the uploaded file stream to storage."""
-        relative_path = f"collections/{collection.id}/documents/{document.id}/{document.name}"
-        path = self.storage.save_stream(stream, relative_path)
-        document.source_path = str(path)
-        self.session.add(document)
+        """Sync the document's pipeline-derived columns for this attempt."""
+        document.chunk_size = resolved.chunk_size
+        document.chunk_overlap = resolved.chunk_overlap
+        document.chunk_strategy = resolved.chunk_strategy
+        document.embedding_model = resolved.embedding_model
+
+    @staticmethod
+    def _purge_previous_vectors(
+        vector_stores: VectorStoreProvider,
+        resolved: ResolvedIngestionPipeline,
+        document: models.Document,
+    ) -> None:
+        """Best-effort purge of a previous attempt's vectors before re-indexing.
+
+        Re-ingestion upserts the same `{document_id}:{order}` ids, so at worst
+        a failed purge leaves stale tail chunks when the new run produces
+        fewer chunks — never corruption. That's why (documented exception to
+        the never-swallow rule) purge failure logs and continues instead of
+        blocking the retry: the common cause is an index that was never
+        created because the first attempt failed before indexing.
+        """
+        namespace = resolved.settings.namespace
+        if not namespace:
+            return
+        try:
+            store = vector_stores.get(resolved.settings.backend)
+            store.delete_document_vectors(
+                resolved.settings.index_name, namespace, str(document.id)
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning(
+                "Could not purge previous vectors for document %s: %s", document.id, exc
+            )
 
     def _persist_chunks(
         self,
@@ -228,9 +255,10 @@ class IngestionService:  # pylint: disable=too-few-public-methods
 
         Run-status transitions belong to the trace recorder (`mark_run_failed`
         is a no-op on an already-failed run); this method owns only the
-        document status and the ingestion event.
+        document status/error and the ingestion event.
         """
         document.status = models.DocumentStatus.FAILED
+        document.error_message = str(exc) or exc.__class__.__name__
         if trace:
             trace.mark_run_failed(exc)
         self.session.add(

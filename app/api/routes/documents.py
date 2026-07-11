@@ -1,14 +1,18 @@
-"""Document ingestion and listing API routes."""
+"""Document (ingestion-record) listing and chunk API routes.
+
+Uploads moved to the file-tree routes (`app/api/routes/files.py`); a
+document row here is the ingestion record for a file node.
+"""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_openrouter_key
-from app.api.routes.utils import get_collection_or_404, to_http_exception
+from app.api.routes.utils import get_collection_or_404
 from app.db import models
 from app.db.repositories import ChunkRepository, DocumentRepository
 from app.schemas.documents import (
@@ -16,54 +20,9 @@ from app.schemas.documents import (
     ChunkRead,
     ChunkVisualization,
     DocumentRead,
-    IngestionResponse,
 )
-from app.services.app_config import get_app_config
-from app.services.errors import ServiceError
-from app.services.ingestion import IngestionService
 
 router = APIRouter(prefix="/api", tags=["documents"])
-
-
-@router.post(
-    "/collections/{collection_id}/documents",
-    response_model=IngestionResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def upload_document(
-    collection_id: UUID,
-    file: UploadFile = File(...),
-    current_user: models.User = Depends(require_openrouter_key),
-    session: Session = Depends(get_session),
-) -> IngestionResponse:
-    """Upload and ingest a document into a collection."""
-    collection = get_collection_or_404(collection_id, current_user.id, session)
-    upload_config = get_app_config().uploads
-    content_type = file.content_type or "text/plain"
-    if content_type not in upload_config.allowed_content_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Content type {content_type} is not allowed.",
-        )
-    # `UploadFile.size` (Starlette) can be None depending on the transport;
-    # the cap is best-effort here and falls through when unavailable -- the
-    # content-type check above still applies regardless.
-    max_bytes = upload_config.max_upload_size_mb * 1024 * 1024
-    if file.size is not None and file.size > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"Upload exceeds the maximum size of {upload_config.max_upload_size_mb}MB.",
-        )
-    try:
-        return IngestionService(session).ingest_upload(
-            user=current_user,
-            collection=collection,
-            filename=file.filename,
-            content_type=file.content_type,
-            stream=file.file,
-        )
-    except ServiceError as exc:
-        raise to_http_exception(exc) from exc
 
 
 @router.get("/collections/{collection_id}/documents", response_model=list[DocumentRead])

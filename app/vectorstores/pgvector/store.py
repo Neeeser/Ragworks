@@ -121,6 +121,12 @@ class PgvectorStore(VectorStoreBackend):
             return
         self._repo.delete_namespace(index, namespace)
 
+    def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
+        """Delete one document's rows; a missing index means nothing to purge."""
+        if self._repo.get_record(index) is None:
+            return
+        self._repo.delete_document(index, namespace, document_id)
+
     # -- helpers -------------------------------------------------------------
 
     @staticmethod

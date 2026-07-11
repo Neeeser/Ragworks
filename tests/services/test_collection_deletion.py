@@ -156,6 +156,21 @@ def test_delete_purges_rows_and_detaches_sessions(monkeypatch, session: Session)
         source_path="/tmp/doc.txt",
     )
     session.add(document)
+    session.flush()
+    # File purge walks the file tree, so give the document its file node
+    # (what the lifespan backfill creates for pre-tree documents).
+    file_node = models.FileNode(
+        collection_id=collection.id,
+        user_id=user.id,
+        kind=models.FileNodeKind.FILE,
+        name="doc.txt",
+        content_type="text/plain",
+        storage_path="/tmp/doc.txt",
+    )
+    session.add(file_node)
+    session.flush()
+    document.file_id = file_node.id
+    session.add(document)
 
     chat_session = models.ChatSession(
         user_id=user.id,

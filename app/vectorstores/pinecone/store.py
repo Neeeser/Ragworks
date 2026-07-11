@@ -184,6 +184,24 @@ class PineconeStore(VectorStoreBackend):
             if not is_missing_namespace_error(exc):
                 raise
 
+    def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
+        """Delete one document's vectors by chunk-id prefix.
+
+        Serverless indexes support `list` by id prefix
+        (docs/external-api/pinecone/guides/manage-data/list-record-ids.md);
+        each yielded batch is deleted by ids. A missing namespace means
+        nothing was ever indexed — a no-op, matching `delete_namespace`.
+        """
+        handle = self._get_index(index)
+        try:
+            for id_batch in handle.list(prefix=f"{document_id}:", namespace=namespace):
+                ids = list(id_batch)
+                if ids:
+                    handle.delete(ids=ids, namespace=namespace)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            if not is_missing_namespace_error(exc):
+                raise
+
     # -- helpers -------------------------------------------------------------
 
     def _get_index(self, name: str) -> Any:
