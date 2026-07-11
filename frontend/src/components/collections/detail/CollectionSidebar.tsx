@@ -9,13 +9,17 @@ import { useAppConfig } from "@/providers/config-provider";
 
 import type { Collection } from "@/lib/types";
 
-type CollectionView = "overview" | "search" | "documents" | "visualize";
+type CollectionView = "overview" | "search" | "visualize";
 
 type CollectionSidebarProps = {
   collection: Collection | null;
   activeView: CollectionView;
   onSelectView: (view: CollectionView) => void;
 };
+
+const navItemClass =
+  "flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+const navItemIdleClass = "border-hairline bg-surface text-body hover:border-strong";
 
 const baseNavItems: Array<{
   id: CollectionView;
@@ -34,12 +38,6 @@ const baseNavItems: Array<{
     label: "Search",
     description: "Run retrieval queries.",
     icon: Search,
-  },
-  {
-    id: "documents",
-    label: "Documents",
-    description: "Inspect ingested sources.",
-    icon: Files,
   },
 ];
 
@@ -84,6 +82,23 @@ export function CollectionSidebar({
       </div>
 
       <div className="mt-6 space-y-2">
+        <button
+          type="button"
+          onClick={() => collection && router.push(`/collections/${collection.id}/files`)}
+          disabled={!collection}
+          className={cn(
+            navItemClass,
+            collection
+              ? navItemIdleClass
+              : "cursor-not-allowed border-hairline bg-surface text-faint",
+          )}
+        >
+          <Files className="mt-0.5 h-4 w-4 text-accent-violet" />
+          <div>
+            <p className="text-sm font-semibold">Files</p>
+            <p className="text-xs text-muted">Browse, upload, and manage sources.</p>
+          </div>
+        </button>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
@@ -93,10 +108,10 @@ export function CollectionSidebar({
               type="button"
               onClick={() => onSelectView(item.id)}
               className={cn(
-                "flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+                navItemClass,
                 isActive
                   ? "border-accent-violet bg-accent-violet/10 text-primary"
-                  : "border-hairline bg-surface text-body hover:border-strong",
+                  : navItemIdleClass,
               )}
             >
               <Icon className="mt-0.5 h-4 w-4 text-accent-violet" />
@@ -117,9 +132,9 @@ export function CollectionSidebar({
           }
           disabled={!collection}
           className={cn(
-            "flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+            navItemClass,
             collection
-              ? "border-hairline bg-surface text-body hover:border-strong"
+              ? navItemIdleClass
               : "cursor-not-allowed border-hairline bg-surface text-faint",
           )}
         >

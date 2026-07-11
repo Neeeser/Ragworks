@@ -3,6 +3,8 @@
  * object each call and accepts a partial override. Prefer builders over inline
  * object literals in tests so the canonical shape lives in one place.
  */
+import { TIMESTAMP } from "./files";
+
 import type {
   AdminUser,
   ChatCompletionPayload,
@@ -15,7 +17,6 @@ import type {
   CollectionQueryResult,
   CollectionStats,
   Document,
-  IngestionResponse,
   ModelEndpointDirectory,
   ModelInfo,
   NodeSpec,
@@ -30,7 +31,8 @@ import type {
   User,
 } from "@/lib/types";
 
-export const TIMESTAMP = "2024-01-01T00:00:00.000Z";
+export * from "./files";
+
 export const USER_ID = "user-1";
 export const USER_EMAIL = "user@example.com";
 const USER_ROLE = "user";
@@ -312,19 +314,6 @@ export function makeQueryResult(
     usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
     query_event_id: "event-1",
     pipeline_run_id: "run-1",
-    ...overrides,
-  };
-}
-
-export function makeIngestionResponse(
-  overrides: Partial<IngestionResponse> = {},
-): IngestionResponse {
-  return {
-    document: makeDocument(),
-    chunk_count: 4,
-    pinecone_namespace: "col-1",
-    embedding_model: "embed-1",
-    usage: {},
     ...overrides,
   };
 }

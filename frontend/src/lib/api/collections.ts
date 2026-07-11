@@ -11,7 +11,6 @@ import type {
   CollectionUpdatePayload,
   Document,
   EndToEndTrace,
-  IngestionResponse,
   PipelineTraceResponse,
   PromptDetails,
   UmapComputePayload,
@@ -103,20 +102,6 @@ export async function deleteCollection(
 
 export async function fetchDocuments(token: string, collectionId: string): Promise<Document[]> {
   return apiFetch<Document[]>(`/api/collections/${collectionId}/documents`, { token });
-}
-
-export async function uploadDocument(
-  token: string,
-  collectionId: string,
-  file: File,
-): Promise<IngestionResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch<IngestionResponse>(`/api/collections/${collectionId}/documents`, {
-    method: "POST",
-    body: formData,
-    token,
-  });
 }
 
 export async function fetchDocumentChunks(

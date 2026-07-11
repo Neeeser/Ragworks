@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderKanban, Trash2 } from "lucide-react";
+import { Files, FolderKanban, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -17,6 +17,9 @@ type CollectionsListProps = {
   statsById: Record<string, CollectionStats | undefined>;
   onDeleteRequest: (collection: Collection) => void;
 };
+
+const focusRingClass =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 export function CollectionsList({ collections, statsById, onDeleteRequest }: CollectionsListProps) {
   const router = useRouter();
@@ -48,7 +51,7 @@ export function CollectionsList({ collections, statsById, onDeleteRequest }: Col
             className={cn(
               "group rounded-3xl border border-hairline bg-surface p-5 text-left transition",
               "hover:border-strong hover:bg-surface-strong",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+              focusRingClass,
             )}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -64,21 +67,39 @@ export function CollectionsList({ collections, statsById, onDeleteRequest }: Col
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDeleteRequest(collection);
-                }}
-                className={cn(
-                  "inline-flex h-10 w-10 items-center justify-center rounded-full border",
-                  "border-hairline text-muted transition hover:border-data-neg/60 hover:text-data-neg",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-                )}
-                aria-label={`Delete ${collection.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    router.push(`/collections/${collection.id}/files`);
+                  }}
+                  className={cn(
+                    "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm",
+                    "border-hairline text-body transition hover:border-strong hover:text-primary",
+                    focusRingClass,
+                  )}
+                  aria-label={`Browse files in ${collection.name}`}
+                >
+                  <Files className="h-4 w-4" aria-hidden />
+                  Files
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDeleteRequest(collection);
+                  }}
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-full border",
+                    "border-hairline text-muted transition hover:border-data-neg/60 hover:text-data-neg",
+                    focusRingClass,
+                  )}
+                  aria-label={`Delete ${collection.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

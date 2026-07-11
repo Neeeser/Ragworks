@@ -48,7 +48,7 @@ import {
   updatePipeline,
   updateRunSettingsOrder,
   updateUserSettings,
-  uploadDocument,
+  uploadFile,
   validatePipeline,
   validateUserKeys,
 } from "@/lib/api";
@@ -213,7 +213,7 @@ describe("api", () => {
     fetchMock.mockResolvedValueOnce(createJsonResponse({ id: "doc-1" }));
     const file = new File(["hello"], "note.txt", { type: "text/plain" });
 
-    await uploadDocument("token", "col-1", file);
+    await uploadFile("token", "col-1", file);
     const [, options] = fetchMock.mock.calls[0];
     const headers = options?.headers as Headers;
     expect(headers.get("Content-Type")).toBeNull();

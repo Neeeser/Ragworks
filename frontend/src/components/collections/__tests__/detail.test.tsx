@@ -19,7 +19,7 @@ vi.mock("@/components/collections/detail/CollectionSidebar", () => ({
   CollectionSidebar: ({
     onSelectView,
   }: {
-    onSelectView: (view: "overview" | "search" | "documents" | "visualize") => void;
+    onSelectView: (view: "overview" | "search" | "visualize") => void;
   }) => (
     <div>
       <button type="button" onClick={() => onSelectView("overview")}>
@@ -27,9 +27,6 @@ vi.mock("@/components/collections/detail/CollectionSidebar", () => ({
       </button>
       <button type="button" onClick={() => onSelectView("search")}>
         Show search
-      </button>
-      <button type="button" onClick={() => onSelectView("documents")}>
-        Show documents
       </button>
       <button type="button" onClick={() => onSelectView("visualize")}>
         Show visualize
@@ -44,10 +41,6 @@ vi.mock("@/components/collections/detail/CollectionOverview", () => ({
 
 vi.mock("@/components/collections/detail/CollectionSearch", () => ({
   CollectionSearch: () => <div data-testid="search" />,
-}));
-
-vi.mock("@/components/collections/detail/CollectionDocuments", () => ({
-  CollectionDocuments: () => <div data-testid="documents" />,
 }));
 
 vi.mock("@/components/collections/detail/visualize/CollectionVisualization", () => ({
@@ -91,9 +84,6 @@ describe("CollectionDetail", () => {
 
     fireEvent.click(screen.getByText("Show search"));
     expect(screen.getByTestId("search")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Show documents"));
-    expect(screen.getByTestId("documents")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Show visualize"));
     expect(screen.getByTestId("visualize")).toBeInTheDocument();

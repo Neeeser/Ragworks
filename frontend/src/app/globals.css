@@ -410,3 +410,30 @@ html {
     opacity: 1 !important;
   }
 }
+
+/* Files browser: a short staggered rise on folder-content mount (delay is
+   set per-row via inline style, capped so deep folders don't crawl).
+   No-ops under reduced motion. */
+@keyframes filesRise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.files-rise {
+  opacity: 0;
+  animation: filesRise 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .files-rise {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

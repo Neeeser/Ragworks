@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { CollectionDocuments } from "@/components/collections/detail/CollectionDocuments";
 import { CollectionOverview } from "@/components/collections/detail/CollectionOverview";
 import { CollectionSearch } from "@/components/collections/detail/CollectionSearch";
 import {
@@ -113,9 +112,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           />
         )}
         {activeView === "search" && <CollectionSearch collectionId={collection.id} token={token} />}
-        {activeView === "documents" && (
-          <CollectionDocuments collectionId={collection.id} token={token} />
-        )}
         {activeView === "visualize" && (
           <CollectionVisualization collectionId={collection.id} token={token} />
         )}

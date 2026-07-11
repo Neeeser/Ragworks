@@ -70,9 +70,11 @@ export interface CollectionUpdatePayload {
 export interface Document {
   id: UUID;
   collection_id: UUID;
+  file_id?: UUID | null;
   name: string;
   content_type: string;
   status: DocumentStatus;
+  error_message?: string | null;
   num_chunks: number;
   num_tokens: number;
   chunk_size: number;
@@ -158,12 +160,4 @@ export interface CollectionQueryResult {
   usage: UsageBreakdown;
   query_event_id?: UUID;
   pipeline_run_id?: UUID;
-}
-
-export interface IngestionResponse {
-  document: Document;
-  chunk_count: number;
-  pinecone_namespace: string;
-  embedding_model: string;
-  usage: Record<string, unknown>;
 }
