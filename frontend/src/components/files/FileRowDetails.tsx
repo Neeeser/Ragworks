@@ -75,7 +75,10 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
         ) : (
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
             {(chunksQuery.data?.chunks ?? []).map((chunk) => (
-              <details key={chunk.id} className="group rounded-2xl border border-hairline bg-canvas">
+              <details
+                key={chunk.id}
+                className="group rounded-2xl border border-hairline bg-canvas"
+              >
                 <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:bg-surface [&::-webkit-details-marker]:hidden">
                   <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk" />
                   <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
