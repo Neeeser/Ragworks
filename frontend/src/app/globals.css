@@ -437,3 +437,28 @@ html {
     transform: none !important;
   }
 }
+
+/* Node editor drawer: one slide-in from the right on open. No-ops under
+   reduced motion. */
+@keyframes drawerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.drawer-slide-in {
+  animation: drawerSlideIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-slide-in {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
@@ -14,26 +14,24 @@ import { useEmbeddingModelCatalog } from "./hooks/use-embedding-model-catalog";
 import { useIndexBackends } from "./hooks/use-index-backends";
 import { useIndexes } from "./hooks/use-indexes";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
+import { useNodeEditing } from "./hooks/use-node-editing";
 import { usePipelines } from "./hooks/use-pipelines";
+import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
 import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
 import { validatePipelineConfig, validatePipelineEdges } from "./lib/pipeline-io";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
 import { layoutPipelineNodes, needsAutoLayout } from "./lib/pipeline-layout";
 import {
   buildNodeCatalog,
-  createId,
-  nextNodePosition,
-  specToNodeData,
   toFlowEdges,
   toFlowNodes,
   toPipelineDefinition,
 } from "./lib/pipeline-utils";
+import { NodeEditorDrawer } from "./NodeEditorDrawer";
 import { PipelineCanvas } from "./PipelineCanvas";
+import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
 import { PipelineHeader } from "./PipelineHeader";
-import { PipelineInspector } from "./PipelineInspector";
 import { PipelineModals } from "./PipelineModals";
-import { PipelineRevisions } from "./PipelineRevisions";
-import { PipelineSavePanel } from "./PipelineSavePanel";
 import { PipelineSidebar } from "./PipelineSidebar";
 
 import type { TypedEdgeType } from "./flow/TypedEdge";
@@ -81,8 +79,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<TypedEdgeType>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [previewSpec, setPreviewSpec] = useState<NodeSpec | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
     Node<PipelineNodeData>,
     TypedEdgeType
@@ -97,22 +95,17 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const edgesRef = useRef(edges);
   edgesRef.current = edges;
 
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId],
-  );
-  const previewNode = useMemo(() => {
-    if (!previewSpec) return null;
-    const node: Node<PipelineNodeData> = {
-      id: `preview-${previewSpec.type}`,
-      type: "pipelineNode",
-      position: { x: 0, y: 0 },
-      data: specToNodeData(previewSpec),
-    };
-    return node;
-  }, [previewSpec]);
-  const inspectedNode = previewNode ?? selectedNode;
-  const isPreview = Boolean(previewNode);
+  const {
+    selectedNode,
+    previewSpec,
+    inspectedNode,
+    isPreview,
+    selectNode,
+    previewNodeSpec,
+    closeEditor,
+    addNode,
+    applyNodeEdits,
+  } = useNodeEditing({ nodes, setNodes });
 
   const catalogSpecs = useMemo(
     () => nodeSpecs.filter((spec) => spec.category === kind && !spec.hidden),
@@ -124,16 +117,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   // this is safe because handleAddNode only reads `dragDrop` when invoked (from an event
   // handler), by which point this render has already assigned it via closure.
   const handleAddNode = (spec: NodeSpec, position?: { x: number; y: number }) => {
-    const nodeId = createId();
-    const newNode: Node<PipelineNodeData> = {
-      id: nodeId,
-      type: "pipelineNode",
-      position: position ?? nextNodePosition(nodes),
-      data: specToNodeData(spec),
-    };
-    setNodes((prev) => [...prev, newNode]);
-    setSelectedNodeId(nodeId);
-    setPreviewSpec(null);
+    addNode(spec, position);
     dragDrop.handleDragLeave();
   };
 
@@ -178,15 +162,14 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     }
     setNodes(flowNodes);
     setEdges(flowEdges);
-    setSelectedNodeId(null);
-    setPreviewSpec(null);
+    closeEditor();
     dragDrop.handleDragLeave();
     // The camera re-fits via PipelineCanvas's remount key (id+version), which
     // waits for the freshly mounted nodes to be measured.
     // dragDrop.handleDragLeave is intentionally omitted: it is stable. Keyed
     // on id + version so layout-only saves don't reset in-progress edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPipelineId, selectedPipelineVersion, nodeSpecs, setNodes, setEdges]);
+  }, [selectedPipelineId, selectedPipelineVersion, nodeSpecs, setNodes, setEdges, closeEditor]);
 
   const { edgeErrors, nodeErrors } = useMemo(() => {
     const edgeValidation = validatePipelineEdges(nodes, edges);
@@ -203,6 +186,14 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     return diffDefinitions(selectedPipeline.definition, toPipelineDefinition(nodes, edges));
   }, [selectedPipeline, nodes, edges]);
   const pendingMaterialChanges = useMemo(() => materialChanges(pendingChanges), [pendingChanges]);
+  const dirty = pendingMaterialChanges.length > 0;
+
+  const { guard, confirmOpen, confirmDiscard, cancelDiscard } = useUnsavedChangesGuard(dirty);
+
+  const handleSelectPipeline = (pipeline: typeof selectedPipeline) => {
+    if (pipeline?.id === selectedPipeline?.id) return;
+    guard(() => setSelectedPipeline(pipeline));
+  };
 
   const { connecting, validateConnection, handleConnect, handleConnectStart, handleConnectEnd } =
     useConnectionTyping({
@@ -220,59 +211,25 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     persistLayout,
   });
 
-  const handleNodeConfigChange = useCallback(
-    (nodeId: string, config: Record<string, unknown>) => {
-      setNodes((prev) =>
-        prev.map((node) =>
-          node.id === nodeId ? { ...node, data: { ...node.data, config } } : node,
-        ),
-      );
-    },
-    [setNodes],
-  );
-
-  const handleLabelChange = (label: string) => {
-    if (!selectedNode) return;
-    setNodes((prev) =>
-      prev.map((node) =>
-        node.id === selectedNode.id ? { ...node, data: { ...node.data, label } } : node,
-      ),
-    );
-  };
-
-  const handleSelectEmbeddingModel = (modelId: string) => {
-    if (!selectedNode || selectedNode.data.nodeType !== "embedder.openrouter") return;
-    // Deliberately set only the model — and clear any stored dimension: an
-    // explicit `dimension` is sent to OpenRouter as a `dimensions` override,
-    // which most embedding models reject (no matryoshka support). Models emit
-    // their native size without it.
-    const nextConfig: Record<string, unknown> = {
-      ...selectedNode.data.config,
-      model_name: modelId,
-    };
-    delete nextConfig.dimension;
-    handleNodeConfigChange(selectedNode.id, nextConfig);
-  };
-
-  const handlePreviewNode = (spec: NodeSpec) => {
-    setPreviewSpec(spec);
-    setSelectedNodeId(null);
-  };
-
   const handleOpenIndexManager = (returnToWizard?: boolean) =>
     modalsRef.current?.openIndexManager(returnToWizard);
 
-  const handleSave = () => {
+  const handleOpenSave = () => {
     const validationErrors = Object.values(nodeErrors).flat();
     if (validationErrors.length > 0) {
       setMessage(validationErrors[0]);
       return;
     }
+    setSaveDialogOpen(true);
+  };
+
+  const handleSave = async () => {
     const fallbackSummary = pendingMaterialChanges
       .slice(0, 3)
       .map((change) => change.summary)
       .join("; ");
-    void handleSavePipeline(toPipelineDefinition(nodes, edges), fallbackSummary);
+    await handleSavePipeline(toPipelineDefinition(nodes, edges), fallbackSummary);
+    setSaveDialogOpen(false);
   };
 
   const selectedNodeErrors = selectedNode ? (nodeErrors[selectedNode.id] ?? []) : [];
@@ -338,6 +295,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         kind={kind}
         onCreatePipeline={() => modalsRef.current?.openCreatePipeline()}
         onManageIndexes={() => handleOpenIndexManager()}
+        unsavedCount={pendingMaterialChanges.length}
+        onOpenSave={handleOpenSave}
+        onOpenHistory={() => setHistoryOpen(true)}
+        hasPipeline={Boolean(selectedPipeline)}
       />
 
       {loading ? (
@@ -347,16 +308,16 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           </GlassCard>
         </div>
       ) : (
-        <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[280px_1fr_320px]">
+        <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[280px_1fr]">
           <div className="min-h-0">
             <PipelineSidebar
               pipelines={pipelines}
               selectedPipelineId={selectedPipeline?.id}
               catalog={catalogByFamily}
-              onSelectPipeline={setSelectedPipeline}
+              onSelectPipeline={handleSelectPipeline}
               onDeletePipeline={handleDeletePipeline}
               pipelineUsage={pipelineUsage}
-              onPreviewNode={handlePreviewNode}
+              onPreviewNode={previewNodeSpec}
             />
           </div>
 
@@ -373,10 +334,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
             onConnectStart={handleConnectStart}
             onConnectEnd={handleConnectEnd}
             isValidConnection={(connection) => validateConnection(connection).valid}
-            onNodeSelect={(nodeId) => {
-              setSelectedNodeId(nodeId);
-              setPreviewSpec(null);
-            }}
+            onNodeSelect={selectNode}
             onNodeDragStop={scheduleLayoutSave}
             onAutoLayout={handleAutoLayout}
             onDrop={dragDrop.handleDrop}
@@ -384,44 +342,41 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
             onDragLeave={dragDrop.handleDragLeave}
             onInit={setReactFlowInstance}
           />
-
-          <div className="flex min-h-0 flex-col gap-6 xl:overflow-y-auto">
-            <PipelineInspector
-              selectedNode={inspectedNode}
-              onConfigChange={
-                isPreview
-                  ? () => undefined
-                  : (config) => selectedNode && handleNodeConfigChange(selectedNode.id, config)
-              }
-              onLabelChange={isPreview ? () => undefined : handleLabelChange}
-              isPreview={isPreview}
-              validationErrors={selectedNodeErrors}
-              vectorIndexes={indexes}
-              onOpenIndexManager={handleOpenIndexManager}
-              embeddingModels={embeddingModels}
-              embeddingModelsLoading={embeddingModelsLoading}
-              embeddingModelsError={embeddingModelsError}
-              onSelectEmbeddingModel={handleSelectEmbeddingModel}
-            />
-
-            <PipelineSavePanel
-              changeSummary={changeSummary}
-              onChangeSummary={setChangeSummary}
-              pendingChanges={pendingMaterialChanges}
-              onSave={handleSave}
-              saving={saving}
-              validating={validating}
-            />
-
-            <PipelineRevisions
-              versions={versions}
-              currentVersion={selectedPipeline?.current_version}
-              saving={saving}
-              onActivate={handleActivateVersion}
-            />
-          </div>
         </div>
       )}
+
+      <NodeEditorDrawer
+        node={inspectedNode}
+        onClose={closeEditor}
+        onApply={applyNodeEdits}
+        isPreview={isPreview}
+        onAddToCanvas={previewSpec ? () => handleAddNode(previewSpec) : undefined}
+        validationErrors={selectedNodeErrors}
+        vectorIndexes={indexes}
+        onOpenIndexManager={handleOpenIndexManager}
+        embeddingModels={embeddingModels}
+        embeddingModelsLoading={embeddingModelsLoading}
+        embeddingModelsError={embeddingModelsError}
+      />
+
+      <PipelineEditorDialogs
+        saveOpen={saveDialogOpen}
+        onCloseSave={() => setSaveDialogOpen(false)}
+        pendingChanges={pendingMaterialChanges}
+        changeSummary={changeSummary}
+        onChangeSummary={setChangeSummary}
+        onSave={() => void handleSave()}
+        saving={saving || validating}
+        historyOpen={historyOpen}
+        onCloseHistory={() => setHistoryOpen(false)}
+        versions={versions}
+        currentVersion={selectedPipeline?.current_version}
+        activating={saving}
+        onActivate={handleActivateVersion}
+        discardOpen={confirmOpen}
+        onConfirmDiscard={confirmDiscard}
+        onCancelDiscard={cancelDiscard}
+      />
     </div>
   );
 }

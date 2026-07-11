@@ -2,8 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PipelineNotice } from "@/components/pipelines/PipelineNotice";
-import { PipelineRevisions } from "@/components/pipelines/PipelineRevisions";
-import { PipelineSavePanel } from "@/components/pipelines/PipelineSavePanel";
+import { RevisionHistoryDialog } from "@/components/pipelines/RevisionHistoryDialog";
+import { SaveVersionDialog } from "@/components/pipelines/SaveVersionDialog";
 import { makePipelineVersion } from "@/test/fixtures";
 
 import type { PendingChange } from "@/components/pipelines/lib/pipeline-diff";
@@ -22,23 +22,23 @@ describe("pipeline panels", () => {
     expect(screen.getByText("Hello")).toBeInTheDocument();
   });
 
-  it("lists pending changes and saves through the panel", () => {
+  it("lists pending changes and saves through the dialog", () => {
     const onChangeSummary = vi.fn();
     const onSave = vi.fn();
 
     render(
-      <PipelineSavePanel
+      <SaveVersionDialog
+        open
+        onClose={() => undefined}
+        pendingChanges={pendingChanges}
         changeSummary=""
         onChangeSummary={onChangeSummary}
-        pendingChanges={pendingChanges}
         onSave={onSave}
         saving={false}
-        validating={false}
       />,
     );
 
     expect(screen.getByText("Token Chunker: chunk_size 1024 → 512")).toBeInTheDocument();
-    expect(screen.getByText(/1 unsaved change/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText(/Describe this revision/), {
       target: { value: "Update" },
@@ -49,23 +49,28 @@ describe("pipeline panels", () => {
     expect(onSave).toHaveBeenCalled();
   });
 
-  it("disables saving when there are no pending changes", () => {
+  it("closes the save dialog without saving via cancel", () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn();
+
     render(
-      <PipelineSavePanel
+      <SaveVersionDialog
+        open
+        onClose={onClose}
+        pendingChanges={pendingChanges}
         changeSummary=""
         onChangeSummary={() => undefined}
-        pendingChanges={[]}
-        onSave={() => undefined}
+        onSave={onSave}
         saving={false}
-        validating={false}
       />,
     );
 
-    expect(screen.getByRole("button", { name: SAVE_BUTTON })).toBeDisabled();
-    expect(screen.getByText(/Everything is saved/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("renders revisions with their change lists and activation actions", () => {
+  it("renders revision history with change lists and activation actions", () => {
     const onActivate = vi.fn();
     const versions: PipelineVersion[] = [
       makePipelineVersion({
@@ -88,7 +93,9 @@ describe("pipeline panels", () => {
     ];
 
     const { rerender } = render(
-      <PipelineRevisions
+      <RevisionHistoryDialog
+        open
+        onClose={() => undefined}
         versions={[]}
         currentVersion={undefined}
         saving={false}
@@ -96,10 +103,12 @@ describe("pipeline panels", () => {
       />,
     );
 
-    expect(screen.getByText("No revisions loaded.")).toBeInTheDocument();
+    expect(screen.getByText("No revisions yet.")).toBeInTheDocument();
 
     rerender(
-      <PipelineRevisions
+      <RevisionHistoryDialog
+        open
+        onClose={() => undefined}
         versions={versions}
         currentVersion={2}
         saving={false}
@@ -122,8 +131,29 @@ describe("pipeline panels", () => {
     expect(onActivate).toHaveBeenCalledWith(versions[0]);
 
     rerender(
-      <PipelineRevisions versions={versions} currentVersion={2} saving onActivate={onActivate} />,
+      <RevisionHistoryDialog
+        open
+        onClose={() => undefined}
+        versions={versions}
+        currentVersion={2}
+        saving
+        onActivate={onActivate}
+      />,
     );
     expect(screen.getByRole("button", { name: "Activate" })).toBeDisabled();
+  });
+
+  it("renders nothing while the history dialog is closed", () => {
+    render(
+      <RevisionHistoryDialog
+        open={false}
+        onClose={() => undefined}
+        versions={[]}
+        currentVersion={undefined}
+        saving={false}
+        onActivate={() => undefined}
+      />,
+    );
+    expect(screen.queryByText("Revision history")).not.toBeInTheDocument();
   });
 });

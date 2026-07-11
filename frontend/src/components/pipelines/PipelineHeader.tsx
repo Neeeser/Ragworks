@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { History, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,23 @@ type PipelineHeaderProps = {
   kind: PipelineKind;
   onCreatePipeline: () => void;
   onManageIndexes: () => void;
+  /** Material changes since the saved revision; drives the pill + save button. */
+  unsavedCount: number;
+  onOpenSave: () => void;
+  onOpenHistory: () => void;
+  /** False while no pipeline is selected -- the save/history cluster hides. */
+  hasPipeline: boolean;
 };
 
-export function PipelineHeader({ kind, onCreatePipeline, onManageIndexes }: PipelineHeaderProps) {
+export function PipelineHeader({
+  kind,
+  onCreatePipeline,
+  onManageIndexes,
+  unsavedCount,
+  onOpenSave,
+  onOpenHistory,
+  hasPipeline,
+}: PipelineHeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -41,7 +55,23 @@ export function PipelineHeader({ kind, onCreatePipeline, onManageIndexes }: Pipe
           ))}
         </div>
       </div>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {hasPipeline ? (
+          <>
+            {unsavedCount > 0 ? (
+              <span className="rounded-full border border-data-warn/40 bg-data-warn/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-data-warn">
+                {unsavedCount} unsaved
+              </span>
+            ) : null}
+            <Button variant="secondary" onClick={onOpenHistory}>
+              <History className="h-4 w-4" />
+              History
+            </Button>
+            <Button onClick={onOpenSave} disabled={unsavedCount === 0}>
+              Save version
+            </Button>
+          </>
+        ) : null}
         <Button variant="secondary" onClick={onManageIndexes}>
           Manage indexes
         </Button>

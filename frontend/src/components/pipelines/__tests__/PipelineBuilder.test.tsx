@@ -16,11 +16,15 @@ const io = {
 };
 
 let lastCanvasProps: Record<string, unknown> | null = null;
-let lastInspectorProps: Record<string, unknown> | null = null;
+let lastDrawerProps: Record<string, unknown> | null = null;
 let lastSidebarProps: Record<string, unknown> | null = null;
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
 const embedderType = "embedder.openrouter";
 const savePipelineLabel = "Save pipeline";
+const openSaveLabel = "Open save dialog";
+const openHistoryLabel = "Open history";
+const saveNodeEditsLabel = "Save node edits";
+const selectNodeLabel = "Select node";
 const deletePipelineLabel = "Delete pipeline";
 const buildDragEvent = (type: string) =>
   ({
@@ -32,6 +36,10 @@ const buildDragEvent = (type: string) =>
     clientX: 200,
     clientY: 150,
   }) as unknown as DragEvent<HTMLDivElement>;
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 vi.mock("@/providers/auth-provider", async () =>
   (await import("@/test/mocks")).mockAuth({ token: "token" }),
@@ -95,19 +103,16 @@ vi.mock("@/components/pipelines/PipelineCanvas", () => ({
   },
 }));
 
-vi.mock("@/components/pipelines/PipelineInspector", () => ({
-  PipelineInspector: (props: Record<string, unknown>) => {
-    lastInspectorProps = props;
+vi.mock("@/components/pipelines/NodeEditorDrawer", () => ({
+  NodeEditorDrawer: (props: Record<string, unknown>) => {
+    lastDrawerProps = props;
+    const node = props.node as { id?: string; data?: { config?: Record<string, unknown> } } | null;
+    const apply = props.onApply as (
+      nodeId: string,
+      edits: { label: string; config: Record<string, unknown> },
+    ) => void;
     return (
       <div>
-        <button
-          type="button"
-          onClick={() =>
-            (props.onConfigChange as (config: Record<string, unknown>) => void)?.({ mode: "x" })
-          }
-        >
-          Set config
-        </button>
         <button
           type="button"
           onClick={() => (props.onOpenIndexManager as (flag?: boolean) => void)?.(true)}
@@ -116,41 +121,45 @@ vi.mock("@/components/pipelines/PipelineInspector", () => ({
         </button>
         <button
           type="button"
-          onClick={() => (props.onSelectEmbeddingModel as (id: string) => void)?.("emb-1")}
+          onClick={() =>
+            node?.id &&
+            apply(node.id, {
+              label: "Label",
+              config: { ...node.data?.config, model_name: "emb-1" },
+            })
+          }
         >
-          Select embedding
-        </button>
-        <button
-          type="button"
-          onClick={() => (props.onLabelChange as (value: string) => void)?.("Label")}
-        >
-          Change label
+          Save node edits
         </button>
       </div>
     );
   },
 }));
 
-vi.mock("@/components/pipelines/PipelineSavePanel", () => ({
-  PipelineSavePanel: ({ onSave }: { onSave: () => void }) => (
-    <button type="button" onClick={onSave}>
-      Save pipeline
-    </button>
-  ),
+vi.mock("@/components/pipelines/SaveVersionDialog", () => ({
+  SaveVersionDialog: ({ open, onSave }: { open: boolean; onSave: () => void }) =>
+    open ? (
+      <button type="button" onClick={onSave}>
+        Save pipeline
+      </button>
+    ) : null,
 }));
 
-vi.mock("@/components/pipelines/PipelineRevisions", () => ({
-  PipelineRevisions: ({
+vi.mock("@/components/pipelines/RevisionHistoryDialog", () => ({
+  RevisionHistoryDialog: ({
+    open,
     onActivate,
     versions,
   }: {
+    open: boolean;
     onActivate: (version: PipelineVersion) => void;
     versions: PipelineVersion[];
-  }) => (
-    <button type="button" onClick={() => onActivate(versions[0])}>
-      Activate
-    </button>
-  ),
+  }) =>
+    open ? (
+      <button type="button" onClick={() => onActivate(versions[0])}>
+        Activate
+      </button>
+    ) : null,
 }));
 
 vi.mock("@/components/pipelines/PipelineSidebar", () => ({
@@ -193,9 +202,13 @@ vi.mock("@/components/pipelines/PipelineHeader", () => ({
   PipelineHeader: ({
     onCreatePipeline,
     onManageIndexes,
+    onOpenSave,
+    onOpenHistory,
   }: {
     onCreatePipeline: () => void;
     onManageIndexes: () => void;
+    onOpenSave: () => void;
+    onOpenHistory: () => void;
   }) => (
     <div>
       <button type="button" onClick={onCreatePipeline}>
@@ -203,6 +216,12 @@ vi.mock("@/components/pipelines/PipelineHeader", () => ({
       </button>
       <button type="button" onClick={onManageIndexes}>
         Manage indexes
+      </button>
+      <button type="button" onClick={onOpenSave}>
+        Open save dialog
+      </button>
+      <button type="button" onClick={onOpenHistory}>
+        Open history
       </button>
     </div>
   ),
@@ -325,7 +344,7 @@ const nodeSpecs: NodeSpec[] = [
 describe("PipelineBuilder", () => {
   beforeEach(() => {
     lastCanvasProps = null;
-    lastInspectorProps = null;
+    lastDrawerProps = null;
     lastSidebarProps = null;
     api.fetchPipelines.mockResolvedValue([pipeline]);
     api.fetchPipelineNodes.mockResolvedValue(nodeSpecs);
@@ -366,6 +385,7 @@ describe("PipelineBuilder", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => expect(api.updatePipeline).toHaveBeenCalled());
 
@@ -394,15 +414,23 @@ describe("PipelineBuilder", () => {
 
     render(<PipelineBuilder kind="ingestion" />);
 
-    await waitFor(() => expect(lastInspectorProps).not.toBeNull());
+    await waitFor(() => expect(lastDrawerProps).not.toBeNull());
+    // Wait for the async pipeline load to land its nodes on the canvas --
+    // label edits no-op until the selected node actually exists.
+    await waitFor(() =>
+      expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Select node" }));
-    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
+    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    // With node errors present, opening the save dialog is refused with a notice.
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     await waitFor(() => expect(screen.getByTestId("canvas")).toHaveTextContent("Missing"));
+    expect(screen.queryByRole("button", { name: savePipelineLabel })).not.toBeInTheDocument();
     expect(api.validatePipeline).not.toHaveBeenCalled();
 
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
-    fireEvent.click(screen.getByRole("button", { name: "Change label" }));
+    fireEvent.click(screen.getByRole("button", { name: saveNodeEditsLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => expect(api.validatePipeline).toHaveBeenCalled());
     // Generous timeout: the failure banner lands a few async hops after the
@@ -412,6 +440,7 @@ describe("PipelineBuilder", () => {
       { timeout: 5000 },
     );
 
+    fireEvent.click(screen.getByRole("button", { name: openHistoryLabel }));
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => expect(api.activatePipelineVersion).toHaveBeenCalled());
   });
@@ -428,6 +457,7 @@ describe("PipelineBuilder", () => {
 
     await waitFor(() => expect(lastCanvasProps).not.toBeNull());
 
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(api.updatePipeline).toHaveBeenCalled();
@@ -437,6 +467,7 @@ describe("PipelineBuilder", () => {
     api.validatePipeline.mockResolvedValueOnce({ valid: true, errors: [], warnings: [] });
     api.updatePipeline.mockRejectedValueOnce("Save failed");
 
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
       expect(screen.getByTestId("canvas")).toHaveTextContent("Unable to save pipeline.");
@@ -453,6 +484,7 @@ describe("PipelineBuilder", () => {
       expect(api.listPipelineVersions).toHaveBeenCalled();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: openHistoryLabel }));
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => {
       expect(screen.getByTestId("canvas")).toHaveTextContent("Unable to activate version.");
@@ -462,13 +494,14 @@ describe("PipelineBuilder", () => {
   it("opens index manager and selects embedding models", async () => {
     render(<PipelineBuilder kind="ingestion" />);
 
-    await waitFor(() => expect(lastInspectorProps).not.toBeNull());
+    await waitFor(() => expect(lastDrawerProps).not.toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Open index manager" }));
     fireEvent.click(screen.getByRole("button", { name: "Close indexes" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Select embedding" }));
-    expect(lastInspectorProps?.selectedNode).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: saveNodeEditsLabel }));
+    expect(lastDrawerProps?.node).toBeDefined();
   });
 
   it("prevents deletion when pipeline is in use", async () => {
@@ -551,37 +584,21 @@ describe("PipelineBuilder", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Preview node" }));
     await waitFor(() => {
-      expect((lastInspectorProps as { isPreview?: boolean }).isPreview).toBe(true);
+      expect((lastDrawerProps as { isPreview?: boolean }).isPreview).toBe(true);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Select node" }));
+    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
     await waitFor(() => {
-      expect((lastInspectorProps as { selectedNode?: unknown }).selectedNode).toBeDefined();
-    });
-
-    act(() => {
-      (
-        lastInspectorProps as { onEmbeddingSearchChange?: (value: string) => void }
-      ).onEmbeddingSearchChange?.("alpha");
-      (
-        lastInspectorProps as { onEmbeddingModelSortChange?: (value: string) => void }
-      ).onEmbeddingModelSortChange?.("dimension");
+      expect((lastDrawerProps as { node?: unknown }).node).toBeDefined();
     });
 
     const selectedNodeConfig = () =>
-      (lastInspectorProps as { selectedNode?: { data?: { config?: Record<string, unknown> } } })
-        .selectedNode?.data?.config ?? {};
+      (lastDrawerProps as { node?: { data?: { config?: Record<string, unknown> } } }).node?.data
+        ?.config ?? {};
 
-    act(() => {
-      (
-        lastInspectorProps as { onSelectEmbeddingModel?: (value: string) => void }
-      ).onSelectEmbeddingModel?.("emb-1");
-    });
+    fireEvent.click(screen.getByRole("button", { name: saveNodeEditsLabel }));
     await waitFor(() => {
       expect(selectedNodeConfig().model_name).toBe("emb-1");
-      // Never an explicit dimension: OpenRouter rejects a `dimensions`
-      // override for most embedding models.
-      expect(selectedNodeConfig().dimension).toBeUndefined();
     });
 
     const emptyDragEvent = buildDragEvent("");

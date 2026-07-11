@@ -20,7 +20,7 @@ type EmbeddingModelSelectorCardProps = {
 /**
  * Owns the search/sort state for an embedding model catalog. Previously this
  * filter+sort pipeline was duplicated across PipelineBuilder, IndexManagerModal, and
- * (via prop drilling) PipelineInspector; centralizing it here lets every caller just
+ * (via prop drilling) the node editor; centralizing it here lets every caller just
  * pass the raw model list.
  */
 export function useEmbeddingModelFilter(models: EmbeddingModelInfo[]) {
