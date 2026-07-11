@@ -52,7 +52,7 @@ reflow the viewer (whose graph region is pinned; only the IO region scrolls).
 a preview renderer per file through `components/files/lib/preview.ts`: an
 ordered list of `{kind, types, typePrefix, extensions}` matchers (content type
 first, extension fallback). A new previewable type is one matcher entry plus a
-branch in `FilePreviewContent` — and only *safe* renderers: HTML renders as
+branch in `FilePreviewContent` — and only _safe_ renderers: HTML renders as
 source and SVG only through `<img>`, never live; anything unmatched gets the
 metadata card + download, never a faked preview. Preview bytes are fetched
 authenticated via `fetchFileBlob` → object URL (media elements can't send an
