@@ -75,6 +75,7 @@ const toPort = (port: SetupPort): NodePort => ({
   label: port.label,
   data_type: port.dataType,
   required: true,
+  accepts_many: false,
 });
 
 export type SetupFlow = {

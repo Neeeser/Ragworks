@@ -36,8 +36,20 @@ class VectorStoreCapabilities(BaseModel):
     supported_vector_types: tuple[str, ...] = ("dense",)
     index_name_max_length: int = 45
     max_upsert_batch: int = 1000
+    # Text-record (lexical) upserts can carry a tighter provider cap than
+    # vector upserts (Pinecone: 96 records with text vs 1000 with vectors).
+    max_lexical_upsert_batch: int = 1000
     max_top_k: int = 10000
     requires_api_key: bool
+
+    @property
+    def supports_lexical(self) -> bool:
+        """Whether the backend can host sparse (BM25/lexical) indexes.
+
+        Derived from `supported_vector_types` so there is exactly one place a
+        backend declares it — a separate flag could silently disagree.
+        """
+        return "sparse" in self.supported_vector_types
 
 
 class IndexSpec(BaseModel):
@@ -105,7 +117,9 @@ def validate_index_spec(spec: IndexSpec, capabilities: VectorStoreCapabilities) 
             f"Dimension {spec.dimension} exceeds this backend's maximum of "
             f"{capabilities.max_dimension}."
         )
-    if spec.metric not in capabilities.supported_metrics:
+    # Sparse indexes score lexically (BM25 for pgvector, Pinecone's sparse
+    # dotproduct) — the dense metric catalog does not apply to them.
+    if spec.vector_type != "sparse" and spec.metric not in capabilities.supported_metrics:
         supported = ", ".join(capabilities.supported_metrics)
         raise InvalidInputError(
             f"Unsupported metric '{spec.metric}'; this backend supports: {supported}."
@@ -163,6 +177,31 @@ class VectorStoreBackend(ABC):
         filter: dict[str, Any] | None = None,
     ) -> RetrievalResponse:
         """Return the nearest chunks for a query embedding."""
+
+    # -- lexical (sparse/BM25) data plane ------------------------------------
+    #
+    # Backends whose capabilities include the "sparse" vector type implement
+    # these against a sparse index created via `ensure_index`/`create_index`
+    # with `vector_type="sparse"`. Chunks upsert by raw text (no embeddings);
+    # queries are raw query text scored lexically (BM25 or equivalent).
+    # `delete_namespace`/`delete_document_vectors` apply to sparse indexes
+    # exactly as to dense ones.
+
+    @abstractmethod
+    def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
+        """Upsert chunk texts into a sparse index namespace."""
+
+    @abstractmethod
+    def lexical_query(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        text: str,
+        top_k: int,
+        filter: dict[str, Any] | None = None,
+    ) -> RetrievalResponse:
+        """Return the lexically best-matching chunks for raw query text."""
 
     @abstractmethod
     def delete_namespace(self, index: str, namespace: str) -> None:

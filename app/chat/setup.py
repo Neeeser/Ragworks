@@ -148,9 +148,12 @@ class ChatSetupBuilder:
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
         contexts = [self._build_tool_collection_context(user, collection) for collection in ordered]
         # A Pinecone key is only required when one of the selected collections
-        # actually retrieves from Pinecone; pgvector-backed collections need none.
+        # actually retrieves from Pinecone (any of its index targets, dense or
+        # BM25); pgvector-backed collections need none.
         needs_pinecone = any(
-            context.retrieval_settings.backend is IndexBackend.PINECONE for context in contexts
+            target.backend is IndexBackend.PINECONE
+            for context in contexts
+            for target in context.retrieval_settings.index_targets
         )
         if needs_pinecone and not (user.pinecone_api_key or "").strip():
             raise InvalidInputError(

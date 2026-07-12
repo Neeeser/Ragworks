@@ -19,8 +19,12 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.embedding import EmbedderConfig
-from app.pipelines.nodes.validators import capability_issues, missing_index_issue
-from app.pipelines.payloads import EmbeddingPayload, IndexingPayload
+from app.pipelines.nodes.validators import (
+    capability_issues,
+    lexical_support_issue,
+    missing_index_issue,
+)
+from app.pipelines.payloads import ChunkPayload, EmbeddingPayload, IndexingPayload
 from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -39,9 +43,13 @@ if TYPE_CHECKING:
 # nodes default to `settings.pinecone_index_name` instead).
 DEFAULT_PGVECTOR_INDEX_NAME = "ragworks"
 
+# Suffix distinguishing a pipeline's sparse (BM25) index from its dense
+# sibling (e.g. `ragworks` + `ragworks-bm25`).
+BM25_INDEX_SUFFIX = "-bm25"
+
 
 def default_index_name(backend: IndexBackend) -> str:
-    """Return the default index name a pipeline targets on a backend."""
+    """Return the default dense index name a pipeline targets on a backend."""
     if backend is IndexBackend.PGVECTOR:
         return DEFAULT_PGVECTOR_INDEX_NAME
     return get_settings().pinecone_index_name
@@ -248,6 +256,107 @@ class VectorIndexerNode(BaseIndexerNode):
     description = "Write embeddings into a vector index (pgvector or Pinecone)."
     example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs')."
     config_model = VectorIndexerConfig
+
+
+class Bm25IndexerConfig(BaseModel):
+    """Configuration for BM25 (sparse/lexical) indexing nodes.
+
+    No dimension or metric: sparse indexes are text-scored (pg_search BM25 /
+    Pinecone's integrated sparse model). `index_name` defaults to empty like
+    the unified dense indexer — an index must be chosen explicitly.
+    """
+
+    backend: IndexBackend = Field(
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+    )
+    index_name: str = ""
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
+    ensure_index: bool = True
+
+
+class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
+    """Index chunk text into a sparse (BM25) index for lexical search.
+
+    Taps the chunker's output directly — the lexical path never needs
+    embeddings, so it runs in parallel with the embed → dense-index branch.
+    """
+
+    type = "indexer.bm25"
+    label = "BM25 Indexer"
+    category = "ingestion"
+    description = (
+        "Write chunk text into a sparse BM25 index for exact-term (lexical) "
+        "search — no embeddings involved."
+    )
+    example = "ChunkPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs-bm25')."
+    input_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
+    output_ports = (NodePort(key="indexed", label="Indexed", data_type="indexed_batch"),)
+    config_model = Bm25IndexerConfig
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        node: PipelineNodeDefinition,
+        _definition: PipelineDefinition,
+        _registry: NodeRegistry,
+    ) -> list[PipelineValidationIssue]:
+        """Validate index selection and the backend's lexical support."""
+        config = cls.config_model.model_validate(node.config or {})
+        issues: list[PipelineValidationIssue] = []
+        index_issue = missing_index_issue(config.index_name, node.id, "BM25 indexer")
+        if index_issue:
+            issues.append(index_issue)
+        support_issue = lexical_support_issue(
+            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+        )
+        if support_issue:
+            issues.append(support_issue)
+        return issues
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        """Upsert chunk texts into the backend's sparse index."""
+        payload = ChunkPayload.model_validate(inputs.get("chunks"))
+        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        index_name = (
+            resolve_collection_template(self.config.index_name, context.collection)
+            or self.config.index_name
+        )
+
+        store = context.vector_stores.get(self.config.backend)
+        if self.config.ensure_index:
+            store.ensure_index(IndexSpec(name=index_name, vector_type="sparse"))
+        batch_size = store.capabilities.max_lexical_upsert_batch
+        chunks = payload.chunks
+        for start in range(0, len(chunks), batch_size):
+            store.upsert_lexical(index_name, namespace or "", chunks[start : start + batch_size])
+        return {"indexed": IndexingPayload(document=payload.document, chunks=chunks)}
+
+    def summarize_io(
+        self,
+        inputs: dict[str, object],
+        outputs: dict[str, object],
+    ) -> NodeTraceSummary:
+        """Summarize BM25 indexer inputs and outputs."""
+        input_payload = ChunkPayload.model_validate(inputs.get("chunks"))
+        output_payload = IndexingPayload.model_validate(outputs.get("indexed"))
+        return NodeTraceSummary(
+            inputs=[
+                NodeTraceValue(
+                    label="Chunks",
+                    value={"count": len(input_payload.chunks)},
+                )
+            ],
+            outputs=[
+                NodeTraceValue(
+                    label="Indexed chunks",
+                    value={
+                        "count": len(output_payload.chunks),
+                        "backend": self.config.backend.value,
+                        "index_type": "bm25",
+                    },
+                )
+            ],
+        )
 
 
 class IndexerNode(BaseIndexerNode):

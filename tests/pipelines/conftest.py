@@ -67,11 +67,20 @@ class StubVectorStore(VectorStoreBackend):
         requires_api_key=False,
     )
 
-    def __init__(self, query_matches: list[ScoredChunk] | None = None) -> None:
+    def __init__(
+        self,
+        query_matches: list[ScoredChunk] | None = None,
+        lexical_matches: list[ScoredChunk] | None = None,
+    ) -> None:
         self.query_matches = query_matches or []
+        self.lexical_matches = lexical_matches or []
+        self.query_error: Exception | None = None
+        self.lexical_query_error: Exception | None = None
         self.ensure_calls: list[IndexSpec] = []
         self.upsert_calls: list[dict[str, Any]] = []
+        self.upsert_lexical_calls: list[dict[str, Any]] = []
         self.query_calls: list[dict[str, Any]] = []
+        self.lexical_query_calls: list[dict[str, Any]] = []
         self.deleted_namespaces: list[tuple[str, str]] = []
         self.deleted_documents: list[tuple[str, str, str]] = []
 
@@ -114,7 +123,36 @@ class StubVectorStore(VectorStoreBackend):
                 "filter": filter,
             }
         )
+        if self.query_error is not None:
+            raise self.query_error
         return RetrievalResponse(matches=list(self.query_matches))
+
+    def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
+        self.upsert_lexical_calls.append(
+            {"index": index, "namespace": namespace, "chunks": list(chunks)}
+        )
+
+    def lexical_query(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        text: str,
+        top_k: int,
+        filter: dict[str, Any] | None = None,
+    ) -> RetrievalResponse:
+        self.lexical_query_calls.append(
+            {
+                "index": index,
+                "namespace": namespace,
+                "text": text,
+                "top_k": top_k,
+                "filter": filter,
+            }
+        )
+        if self.lexical_query_error is not None:
+            raise self.lexical_query_error
+        return RetrievalResponse(matches=list(self.lexical_matches))
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         self.deleted_namespaces.append((index, namespace))

@@ -54,6 +54,21 @@ class TokenUsage(BaseModel):
         return data
 
 
+def combine_usage(usages: Sequence[TokenUsage]) -> TokenUsage:
+    """Sum token usage across parallel pipeline branches.
+
+    A field stays `None` (omitted on serialization) only when no branch
+    reported it, so an all-lexical run still serializes usage as `{}`.
+    """
+    combined = TokenUsage()
+    for usage in usages:
+        if usage.prompt_tokens is not None:
+            combined.prompt_tokens = (combined.prompt_tokens or 0) + usage.prompt_tokens
+        if usage.total_tokens is not None:
+            combined.total_tokens = (combined.total_tokens or 0) + usage.total_tokens
+    return combined
+
+
 def preview_text(text: str, limit: int = 240) -> str:
     """Return a truncated preview of text."""
     if len(text) <= limit:

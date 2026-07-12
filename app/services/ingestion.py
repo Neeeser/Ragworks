@@ -182,15 +182,14 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         namespace = resolved.settings.namespace
         if not namespace:
             return
-        try:
-            store = vector_stores.get(resolved.settings.backend)
-            store.delete_document_vectors(
-                resolved.settings.index_name, namespace, str(document.id)
-            )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning(
-                "Could not purge previous vectors for document %s: %s", document.id, exc
-            )
+        for target in resolved.settings.index_targets:
+            try:
+                store = vector_stores.get(target.backend)
+                store.delete_document_vectors(target.index_name, namespace, str(document.id))
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.warning(
+                    "Could not purge previous vectors for document %s: %s", document.id, exc
+                )
 
     def _persist_chunks(
         self,

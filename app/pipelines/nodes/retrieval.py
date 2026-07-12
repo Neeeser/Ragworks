@@ -1,4 +1,8 @@
-"""Pipeline nodes for retrieval workflows."""
+"""Retriever and reranker pipeline nodes.
+
+The retrieval boundary nodes (`retrieval.input`/`retrieval.output`) live in
+`io.py` with the ingestion boundaries; fusion nodes live in `fusion.py`.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
-from app.pipelines.nodes.validators import missing_index_issue
+from app.pipelines.nodes.validators import lexical_support_issue, missing_index_issue
 from app.pipelines.payloads import (
     QueryEmbeddingPayload,
     RetrievalPayload,
@@ -23,10 +27,12 @@ from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_match_order, summarize_matches, summarize_text
-from app.retrieval.models import QueryRequest
+from app.retrieval.models import RetrievalResponse
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
+from app.services.errors import InvalidInputError, NotFoundError
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
 
 if TYPE_CHECKING:
     # Deferred: registry.py imports this module to build the node catalog,
@@ -34,57 +40,6 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
-
-
-class RetrievalInputConfig(BaseModel):
-    """Configuration for retrieval input nodes."""
-
-
-class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
-    """Build the query request from the retrieval context."""
-
-    type = "retrieval.input"
-    label = "Retrieval Input"
-    category = "retrieval"
-    description = "Provide the query payload for retrieval."
-    example = "Query='coffee', top_k=3 -> QueryRequest(text='coffee', top_k=3)."
-    input_ports = ()
-    output_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
-    config_model = RetrievalInputConfig
-
-    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Create a QueryRequest from context."""
-        if context.query is None:
-            raise ValueError("Retrieval context is missing a query string.")
-        top_k = context.top_k or 5
-        request = QueryRequest(
-            text=context.query,
-            top_k=top_k,
-            namespace=None,
-        )
-        return {"request": RetrievalRequestPayload(request=request)}
-
-    def summarize_io(
-        self,
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize the query request inputs and outputs."""
-        payload = RetrievalRequestPayload.model_validate(outputs.get("request"))
-        request = payload.request
-        return NodeTraceSummary(
-            outputs=[
-                NodeTraceValue(
-                    label="Query",
-                    value=summarize_text(request.text, 200),
-                    kind="text",
-                ),
-                NodeTraceValue(
-                    label="Top K",
-                    value=request.top_k,
-                ),
-            ]
-        )
 
 
 class RetrieverConfig(BaseModel):
@@ -166,13 +121,19 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
-        response = store.query(
-            index_name,
-            namespace or "",
-            embedding=embedding,
-            top_k=request.top_k,
-            filter=request.filter,
-        )
+        try:
+            response = store.query(
+                index_name,
+                namespace or "",
+                embedding=embedding,
+                top_k=request.top_k,
+                filter=request.filter,
+            )
+        except NotFoundError:
+            # The index is created by the first ingest; querying before then
+            # is an honest empty result, not an error.
+            logger.info("Index '%s' does not exist yet; returning no matches.", index_name)
+            response = RetrievalResponse(matches=[])
         logger.info(
             "Pipeline retrieval returned %s matches for query.",
             len(response.matches),
@@ -258,6 +219,121 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
     hidden = True
 
 
+class Bm25RetrieverConfig(BaseModel):
+    """Configuration for BM25 (sparse/lexical) retriever nodes."""
+
+    backend: IndexBackend = Field(
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+    )
+    index_name: str = ""
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
+
+
+class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
+    """Retrieve chunks by lexical (BM25) match on the raw query text.
+
+    Takes the query request directly — no embedding step — so it runs in
+    parallel with the embed → dense-retrieve branch and feeds a fusion node.
+    """
+
+    type = "retriever.bm25"
+    label = "BM25 Retriever"
+    category = "retrieval"
+    description = (
+        "Query a sparse BM25 index with the raw query text for exact-term "
+        "(lexical) matches — no embeddings involved."
+    )
+    example = "QueryRequest(text='error E1042') -> RetrievalPayload(matches=[chunk_a])."
+    input_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
+    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    config_model = Bm25RetrieverConfig
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        node: PipelineNodeDefinition,
+        _definition: PipelineDefinition,
+        _registry: NodeRegistry,
+    ) -> list[PipelineValidationIssue]:
+        """Validate index selection and the backend's lexical support."""
+        config = cls.config_model.model_validate(node.config or {})
+        issues: list[PipelineValidationIssue] = []
+        index_issue = missing_index_issue(config.index_name, node.id, "BM25 retriever")
+        if index_issue:
+            issues.append(index_issue)
+        support_issue = lexical_support_issue(
+            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+        )
+        if support_issue:
+            issues.append(support_issue)
+        return issues
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        """Retrieve lexically matching chunks for the query request."""
+        payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        request = payload.request
+
+        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        index_name = (
+            resolve_collection_template(self.config.index_name, context.collection)
+            or self.config.index_name
+        )
+
+        store = context.vector_stores.get(self.config.backend)
+        try:
+            response = store.lexical_query(
+                index_name,
+                namespace or "",
+                text=request.text,
+                top_k=request.top_k,
+                filter=request.filter,
+            )
+        except NotFoundError:
+            # The sparse index is created by the first ingest (ensure_index on
+            # the BM25 indexer); querying before then means nothing has been
+            # lexically indexed yet — an honest empty branch, not an error.
+            logger.info("BM25 index '%s' does not exist yet; returning no matches.", index_name)
+            response = RetrievalResponse(matches=[])
+        except InvalidInputError as exc:
+            # A misconfigured branch (e.g. the name resolves to a dense index)
+            # degrades to empty rather than failing the whole fused query.
+            logger.warning("BM25 branch on index '%s' skipped: %s", index_name, exc)
+            response = RetrievalResponse(matches=[])
+        logger.info(
+            "Pipeline BM25 retrieval returned %s matches for query.",
+            len(response.matches),
+        )
+        return {"results": RetrievalPayload(response=response)}
+
+    def summarize_io(
+        self,
+        inputs: dict[str, object],
+        outputs: dict[str, object],
+    ) -> NodeTraceSummary:
+        """Summarize BM25 retrieval inputs and outputs."""
+        input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
+        return NodeTraceSummary(
+            inputs=[
+                NodeTraceValue(
+                    label="Query",
+                    value=summarize_text(input_payload.request.text, 200),
+                    kind="text",
+                ),
+                NodeTraceValue(
+                    label="Top K",
+                    value=input_payload.request.top_k,
+                ),
+            ],
+            outputs=[
+                NodeTraceValue(
+                    label="Matches",
+                    value=summarize_matches(output_payload.response.matches),
+                )
+            ],
+        )
+
+
 class RerankerConfig(BaseModel):
     """Configuration for reranking nodes."""
 
@@ -321,49 +397,3 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
                 ),
             ],
         )
-
-
-class RetrievalOutputConfig(BaseModel):
-    """Configuration for retrieval output nodes."""
-
-
-class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
-    """Terminal node for retrieval pipelines."""
-
-    type = "retrieval.output"
-    label = "Retrieval Output"
-    category = "retrieval"
-    description = "Emit retrieval results for the API."
-    example = "RetrievalPayload(matches=2) -> Result(RetrievalPayload(matches=2))."
-    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
-    output_ports = (NodePort(key="result", label="Result", data_type="retrieval_results"),)
-    config_model = RetrievalOutputConfig
-
-    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Return the retrieval payload."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
-        return {"result": payload}
-
-    def summarize_io(
-        self,
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize retrieval output payloads."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
-        return NodeTraceSummary(
-            inputs=[
-                NodeTraceValue(
-                    label="Matches",
-                    value=summarize_matches(payload.response.matches),
-                )
-            ],
-            outputs=[
-                NodeTraceValue(
-                    label="Result",
-                    value=summarize_matches(payload.response.matches),
-                )
-            ],
-        )
-
-

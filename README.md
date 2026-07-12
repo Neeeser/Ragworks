@@ -79,9 +79,11 @@ name: ragworks
 
 services:
   postgres:
-    # pgvector-enabled Postgres: the default vector-index backend stores
-    # embeddings right here, so a fresh install needs no vector-DB account.
-    image: pgvector/pgvector:pg17
+    # ParadeDB Postgres bundles pgvector (dense vectors) and pg_search
+    # (BM25/lexical), so the default hybrid search runs right here with no
+    # vector-DB account. Same Postgres 17 major as the previous
+    # pgvector/pgvector image — existing data volumes keep working.
+    image: paradedb/paradedb:latest-pg17
     environment:
       POSTGRES_USER: ragworks
       # Only reachable inside the compose network (no published port).
@@ -162,6 +164,8 @@ sent externally. Admins can turn it off or tune its retention in
 ## 🛠️ Development setup
 
 **Prerequisites:** Python 3.11+, Node 22, Postgres, [uv](https://docs.astral.sh/uv/), the [pgvector](https://github.com/pgvector/pgvector) extension for your Postgres (`brew install pgvector` on macOS), an [OpenRouter](https://openrouter.ai/) key (entered per-user in the UI), and optionally a [Pinecone](https://www.pinecone.io/) key if you want Pinecone-backed pipelines.
+
+BM25 (hybrid search) on the built-in Postgres additionally needs the [pg_search](https://github.com/paradedb/paradedb) extension, which has no Homebrew formula — on servers without it the app scaffolds dense-only defaults and BM25 tests skip with a named reason. For the full hybrid stack locally, point `DATABASE_URL`/`TEST_DATABASE_URL` at a `paradedb/paradedb:latest-pg17` container (it bundles pgvector and pg_search — the same image the compose file ships).
 
 ```bash
 git clone https://github.com/Neeeser/Ragworks.git

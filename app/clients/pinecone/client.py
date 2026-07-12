@@ -9,10 +9,18 @@ runtime. See `app/AGENTS.md` for the resulting rule.
 from __future__ import annotations
 
 # pylint's static import resolver can't see pinecone's dynamic re-exports in
-# its package __init__; both names exist on the installed SDK (see docstring above).
-from pinecone import Pinecone, ServerlessSpec  # pylint: disable=no-name-in-module
+# its package __init__; all names exist on the installed SDK (see docstring above).
+from pinecone import IndexEmbed, Pinecone, ServerlessSpec  # pylint: disable=no-name-in-module
 
 from app.clients.pinecone.types import IndexDescription
+
+# Pinecone's hosted sparse embedding model for lexical (BM25-style) search;
+# sparse indexes created for text search integrate it so raw text can be
+# upserted (`upsert_records`) and searched (`search`) directly.
+SPARSE_TEXT_EMBED_MODEL = "pinecone-sparse-english-v0"
+
+# The record field integrated embedding reads chunk text from.
+LEXICAL_TEXT_FIELD = "chunk_text"
 
 
 def get_pinecone_client(api_key: str) -> Pinecone:
@@ -84,6 +92,35 @@ class PineconeIndexAdmin:
             vector_type=vector_type,
             dimension=dimension,
             deletion_protection=deletion_protection,
+            tags=tags,
+        )
+        return self.describe_index(name)
+
+    def create_sparse_text_index(
+        self,
+        *,
+        name: str,
+        cloud: str,
+        region: str,
+        deletion_protection: str | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> IndexDescription:
+        """Create a sparse serverless index with integrated sparse embedding.
+
+        Uses `create_index_for_model` with `pinecone-sparse-english-v0` so the
+        index accepts raw-text records and text queries (the lexical/BM25
+        path); a sparse index created without an integrated model cannot be
+        text-searched.
+        """
+        self._client.create_index_for_model(
+            name=name,
+            cloud=cloud,
+            region=region,
+            embed=IndexEmbed(
+                model=SPARSE_TEXT_EMBED_MODEL,
+                field_map={"text": LEXICAL_TEXT_FIELD},
+            ),
+            deletion_protection=deletion_protection or "disabled",
             tags=tags,
         )
         return self.describe_index(name)

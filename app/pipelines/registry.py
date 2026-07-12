@@ -15,15 +15,25 @@ from app.pipelines.nodes.chunking import (
     TokenChunkerNode,
 )
 from app.pipelines.nodes.embedding import EmbedderNode
-from app.pipelines.nodes.indexing import IndexerNode, PgvectorIndexerNode, VectorIndexerNode
-from app.pipelines.nodes.io import IngestionInputNode, IngestionOutputNode
+from app.pipelines.nodes.fusion import RRFusionNode
+from app.pipelines.nodes.indexing import (
+    Bm25IndexerNode,
+    IndexerNode,
+    PgvectorIndexerNode,
+    VectorIndexerNode,
+)
+from app.pipelines.nodes.io import (
+    IngestionInputNode,
+    IngestionOutputNode,
+    RetrievalInputNode,
+    RetrievalOutputNode,
+)
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.retrieval import (
+    Bm25RetrieverNode,
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
     RerankerNode,
-    RetrievalInputNode,
-    RetrievalOutputNode,
     VectorRetrieverNode,
 )
 
@@ -75,11 +85,14 @@ def build_default_registry() -> NodeRegistry:
             SemanticChunkerNode,
             EmbedderNode,
             VectorIndexerNode,
+            Bm25IndexerNode,
             IndexerNode,
             PgvectorIndexerNode,
             IngestionOutputNode,
             RetrievalInputNode,
             VectorRetrieverNode,
+            Bm25RetrieverNode,
+            RRFusionNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,
             RerankerNode,

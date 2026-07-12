@@ -39,8 +39,17 @@ _METRIC_OPS: dict[str, tuple[str, str, str]] = {
 
 
 def data_table_name(index_name: str) -> str:
-    """Map a validated logical index name onto its data table name."""
+    """Map a validated logical index name onto its dense data table name."""
     return "vec_" + index_name.replace("-", "_")
+
+
+def lexical_table_name(index_name: str) -> str:
+    """Map a validated logical index name onto its sparse (BM25) table name."""
+    return "lex_" + index_name.replace("-", "_")
+
+
+# Descriptive metric recorded on sparse catalog rows (pg_search scores BM25).
+BM25_METRIC = "bm25"
 
 
 def to_similarity(metric: str, distance: float) -> float:
@@ -125,15 +134,65 @@ class PgvectorRepository:
                 f"does not provide; requested dimension {dimension}."
             )
 
-    def drop_index(self, name: str) -> None:
-        """Drop the data table and catalog row; missing index is a no-op."""
+    def create_lexical_index(self, name: str) -> VectorIndexRecord:
+        """Create the sparse (BM25) data table, its indexes, and the catalog row.
+
+        The BM25 index covers `namespace` alongside `text` so pg_search can
+        apply the namespace predicate inside the index scan.
+        """
+        table = lexical_table_name(name)
         self._session.exec(  # type: ignore[call-overload]
-            text(f"DROP TABLE IF EXISTS {data_table_name(name)}")
+            text(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    chunk_id text PRIMARY KEY,
+                    namespace text NOT NULL,
+                    document_id text NOT NULL,
+                    text text NOT NULL,
+                    metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb
+                )
+                """
+            )
         )
+        self._session.exec(  # type: ignore[call-overload]
+            text(
+                f"CREATE INDEX IF NOT EXISTS {table}_bm25_idx ON {table} "
+                "USING bm25 (chunk_id, namespace, text) WITH (key_field='chunk_id')"
+            )
+        )
+        self._session.exec(  # type: ignore[call-overload]
+            text(f"CREATE INDEX IF NOT EXISTS {table}_namespace_idx ON {table} (namespace)")
+        )
+        record = VectorIndexRecord(
+            name=name, dimension=None, metric=BM25_METRIC, vector_type="sparse"
+        )
+        self._session.add(record)
+        self._session.flush()
+        return record
+
+    def drop_index(self, name: str) -> None:
+        """Drop the data table(s) and catalog row; missing index is a no-op."""
         record = self.get_record(name)
+        tables = (
+            [self._table_for(record)]
+            if record is not None
+            # No catalog row: clear any orphaned data table either way.
+            else [data_table_name(name), lexical_table_name(name)]
+        )
+        for table in tables:
+            self._session.exec(  # type: ignore[call-overload]
+                text(f"DROP TABLE IF EXISTS {table}")
+            )
         if record is not None:
             self._session.delete(record)
             self._session.flush()
+
+    @staticmethod
+    def _table_for(record: VectorIndexRecord) -> str:
+        """Return the data table backing a cataloged index."""
+        if record.vector_type == "sparse":
+            return lexical_table_name(record.name)
+        return data_table_name(record.name)
 
     # -- DML ---------------------------------------------------------------
 
@@ -179,7 +238,9 @@ class PgvectorRepository:
         """Return `(chunk_id, document_id, text, metadata, distance)` rows, nearest first."""
         _, _, operator = _METRIC_OPS[record.metric]
         table = data_table_name(record.name)
-        if record.dimension > HNSW_FP32_MAX_DIMENSION:
+        # Dense catalog rows always carry a dimension (sparse rows never reach
+        # this method — the store routes them to `query_lexical`).
+        if record.dimension is not None and record.dimension > HNSW_FP32_MAX_DIMENSION:
             # Must match the halfvec expression the HNSW index was built over,
             # or the planner falls back to a sequential scan.
             distance = (
@@ -208,18 +269,80 @@ class PgvectorRepository:
         ).all()
         return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]
 
-    def delete_namespace(self, name: str, namespace: str) -> None:
+    def upsert_lexical_chunks(
+        self, name: str, namespace: str, chunks: Sequence[DocumentChunk]
+    ) -> None:
+        """Insert-or-update chunk text rows in a sparse (BM25) index table."""
+        table = lexical_table_name(name)
+        statement = text(
+            f"""
+            INSERT INTO {table} (chunk_id, namespace, document_id, text, metadata)
+            VALUES (:chunk_id, :namespace, :document_id, :text, CAST(:metadata AS jsonb))
+            ON CONFLICT (chunk_id) DO UPDATE SET
+                namespace = EXCLUDED.namespace,
+                document_id = EXCLUDED.document_id,
+                text = EXCLUDED.text,
+                metadata = EXCLUDED.metadata
+            """
+        )
+        # One executemany round trip for the whole batch, not one per chunk.
+        self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params=[
+                {
+                    "chunk_id": chunk.chunk_id,
+                    "namespace": namespace,
+                    "document_id": chunk.document_id,
+                    "text": chunk.text,
+                    "metadata": json.dumps({**chunk.metadata.data, "order": chunk.order}),
+                }
+                for chunk in chunks
+            ],
+        )
+
+    def query_lexical(
+        self,
+        record: VectorIndexRecord,
+        namespace: str,
+        *,
+        query_text: str,
+        top_k: int,
+    ) -> list[tuple[str, str, str, dict[str, Any], float]]:
+        """Return `(chunk_id, document_id, text, metadata, score)` rows, best first.
+
+        Uses pg_search's match-disjunction operator (`|||`), which tokenizes
+        the raw query text rather than parsing it as query syntax, and BM25
+        scoring via `pdb.score` (verified against pg_search 0.24).
+        """
+        table = lexical_table_name(record.name)
+        statement = text(
+            f"""
+            SELECT chunk_id, document_id, text, metadata,
+                   pdb.score(chunk_id) AS score
+            FROM {table}
+            WHERE namespace = :namespace AND text ||| :query
+            ORDER BY score DESC
+            LIMIT :top_k
+            """
+        )
+        rows = self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params={"namespace": namespace, "query": query_text, "top_k": top_k},
+        ).all()
+        return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]
+
+    def delete_namespace(self, record: VectorIndexRecord, namespace: str) -> None:
         """Delete all rows in a namespace (idempotent)."""
         self._session.exec(  # type: ignore[call-overload]
-            text(f"DELETE FROM {data_table_name(name)} WHERE namespace = :namespace"),
+            text(f"DELETE FROM {self._table_for(record)} WHERE namespace = :namespace"),
             params={"namespace": namespace},
         )
 
-    def delete_document(self, name: str, namespace: str, document_id: str) -> None:
+    def delete_document(self, record: VectorIndexRecord, namespace: str, document_id: str) -> None:
         """Delete one document's rows in a namespace (idempotent)."""
         self._session.exec(  # type: ignore[call-overload]
             text(
-                f"DELETE FROM {data_table_name(name)} "
+                f"DELETE FROM {self._table_for(record)} "
                 "WHERE namespace = :namespace AND document_id = :document_id"
             ),
             params={"namespace": namespace, "document_id": document_id},

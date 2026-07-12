@@ -15,6 +15,7 @@ from sqlmodel import Session
 
 from app.clients.pinecone import get_pinecone_client
 from app.db import models
+from app.db.pg_search_support import pg_search_available
 from app.db.pgvector_support import pgvector_available
 from app.schemas.enums import IndexBackend
 from app.services.errors import InvalidInputError
@@ -58,14 +59,33 @@ def get_vector_store(
     return PineconeStore(get_pinecone_client(api_key))
 
 
+def lexical_available(backend: IndexBackend) -> bool:
+    """Runtime truth for sparse (BM25) indexes on a backend.
+
+    Capability says the backend *could*; this says the deployment *can*
+    (pgvector additionally needs both extensions present).
+    """
+    if not CAPABILITIES_BY_BACKEND[backend].supports_lexical:
+        return False
+    if backend is IndexBackend.PGVECTOR:
+        return pgvector_available() and pg_search_available()
+    return True
+
+
 @dataclass(frozen=True)
 class BackendStatus:
-    """One backend's availability for a given user."""
+    """One backend's availability for a given user.
+
+    `lexical_available` is the runtime truth for sparse (BM25) indexes —
+    capability says the backend *could*, this says the deployment *can*
+    (pgvector additionally needs the pg_search extension).
+    """
 
     backend: IndexBackend
     label: str
     available: bool
     configured: bool
+    lexical_available: bool
     capabilities: VectorStoreCapabilities
 
 
@@ -78,6 +98,7 @@ def backend_statuses(user: models.User) -> list[BackendStatus]:
             label=BACKEND_LABELS[IndexBackend.PGVECTOR],
             available=pgvector_available(),
             configured=True,
+            lexical_available=lexical_available(IndexBackend.PGVECTOR),
             capabilities=PGVECTOR_CAPABILITIES,
         ),
         BackendStatus(
@@ -85,6 +106,7 @@ def backend_statuses(user: models.User) -> list[BackendStatus]:
             label=BACKEND_LABELS[IndexBackend.PINECONE],
             available=True,
             configured=pinecone_configured,
+            lexical_available=lexical_available(IndexBackend.PINECONE),
             capabilities=PINECONE_CAPABILITIES,
         ),
     ]

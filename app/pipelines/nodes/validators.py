@@ -25,6 +25,23 @@ def missing_index_issue(index_name: str, node_id: str, role: str) -> PipelineVal
     )
 
 
+def lexical_support_issue(
+    capabilities: VectorStoreCapabilities,
+    backend_label: str,
+    node_id: str,
+) -> PipelineValidationIssue | None:
+    """Flag a BM25 node targeting a backend with no sparse-index support."""
+    if capabilities.supports_lexical:
+        return None
+    return PipelineValidationIssue(
+        message=(
+            f"Node '{node_id}' requires sparse (BM25) indexes, which the "
+            f"{backend_label} backend does not support."
+        ),
+        severity="error",
+    )
+
+
 def capability_issues(
     capabilities: VectorStoreCapabilities,
     *,

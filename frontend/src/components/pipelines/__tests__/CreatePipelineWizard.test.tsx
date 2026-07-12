@@ -21,8 +21,10 @@ const createPipelineLabel = "Create pipeline";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
-vi.mock("@/components/pipelines/lib/pipeline-utils", () => ({
+vi.mock("@/components/pipelines/lib/pipeline-scaffold", () => ({
   buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
+}));
+vi.mock("@/components/pipelines/lib/pipeline-utils", () => ({
   sortIndexesByName: (indexes: { name: string }[]) =>
     [...indexes].sort((a, b) => a.name.localeCompare(b.name)),
   toFlowNodes: () => [],
@@ -142,6 +144,8 @@ describe("CreatePipelineWizard", () => {
         embeddingModel: undefined,
         chunkSize: 1024,
         chunkOverlap: 200,
+        includeBm25: true,
+        indexNameMaxLength: 45,
       });
       expect(onCreated).toHaveBeenCalledWith(pipeline);
       expect(onClose).toHaveBeenCalled();
@@ -177,6 +181,8 @@ describe("CreatePipelineWizard", () => {
         embeddingModel: undefined,
         chunkSize: 512,
         chunkOverlap: 64,
+        includeBm25: true,
+        indexNameMaxLength: 45,
       });
     });
   }, 15000);

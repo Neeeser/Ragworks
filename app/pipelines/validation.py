@@ -36,6 +36,7 @@ class PipelineValidator:
         errors.extend(self._check_node_identity(definition, node_ids))
         errors.extend(self._check_edge_endpoints(definition, node_ids))
         errors.extend(self._check_edge_ports(definition, node_map))
+        errors.extend(self._check_port_fanin(definition, node_map))
         errors.extend(self._check_required_inputs(definition))
         if self._has_cycle(definition):
             errors.append("Pipeline contains at least one cycle.")
@@ -115,6 +116,36 @@ class PipelineValidator:
                 errors.append(
                     f"Edge '{edge.id}' connects incompatible port types "
                     f"'{source_port.data_type}' -> '{target_port.data_type}'."
+                )
+        return errors
+
+    def _check_port_fanin(
+        self,
+        definition: PipelineDefinition,
+        node_map: dict[str, PipelineNodeDefinition],
+    ) -> list[str]:
+        """Flag multiple edges into an input port unless it accepts many.
+
+        Without this check a second edge into a single-value port would
+        silently overwrite the first at execution time.
+        """
+        errors: list[str] = []
+        counts: dict[tuple[str, str], int] = {}
+        for edge in definition.edges:
+            key = (edge.target, edge.target_port or "default")
+            counts[key] = counts.get(key, 0) + 1
+        for (target, port_key), count in counts.items():
+            if count < 2:
+                continue
+            target_def = node_map.get(target)
+            spec = self._registry.get_spec(target_def.type) if target_def else None
+            if spec is None:
+                continue
+            port = next((p for p in spec.input_ports if p.key == port_key), None)
+            if port is not None and not port.accepts_many:
+                errors.append(
+                    f"Node '{target}' input port '{port_key}' has {count} incoming "
+                    "edges but accepts only one."
                 )
         return errors
 

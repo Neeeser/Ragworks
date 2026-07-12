@@ -95,12 +95,12 @@ def _upload_pending_document(
 
 
 def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
-    monkeypatch, pgvector_session: Session
+    monkeypatch, pg_search_session: Session
 ) -> None:
     """A successful ingest embeds, indexes into the default pgvector backend,
     and persists chunks; the document ends `READY` with a chunk count matching
     what's actually in the DB."""
-    session = pgvector_session
+    session = pg_search_session
     monkeypatch.setattr(
         ingestion_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
     )

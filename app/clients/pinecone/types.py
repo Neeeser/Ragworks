@@ -51,6 +51,31 @@ class PineconeMatch(BaseModel):
         return cls(id=match.id, score=match.score, metadata=dict(match.metadata or {}))
 
 
+class PineconeSearchHit(BaseModel):
+    """One hit from `Index.search` on an integrated-embedding index.
+
+    The SDK's OpenAPI `Hit` model exposes `_id`/`_score`/`fields` through
+    `to_dict()`; record fields (chunk text plus whatever metadata was
+    upserted) come back as a plain mapping.
+    """
+
+    id: str
+    score: float
+    fields: dict[str, object] = Field(default_factory=dict)
+
+    @classmethod
+    def from_sdk(cls, hit: Mapping[str, object] | _ToDictLike) -> PineconeSearchHit:
+        """Validate an SDK `Hit` (or a plain dict, as used in tests)."""
+        data = dict(hit) if isinstance(hit, Mapping) else dict(hit.to_dict())
+        raw_score = data.get("_score", 0.0)
+        raw_fields = data.get("fields")
+        return cls(
+            id=str(data.get("_id", "")),
+            score=float(raw_score) if isinstance(raw_score, int | float) else 0.0,
+            fields=dict(raw_fields) if isinstance(raw_fields, Mapping) else {},
+        )
+
+
 class _ToDictLike(Protocol):
     """Structural shape of SDK response models exposing `to_dict()` (e.g. `IndexModel`)."""
 

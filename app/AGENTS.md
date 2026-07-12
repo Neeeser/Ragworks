@@ -195,6 +195,27 @@ type-id-to-strategy table that duplicates what each chunker class already declar
 its own `type`/`strategy` attributes. If you add a new fixed-strategy node variant, it
 gets picked up automatically as long as it's registered — no second place to update.
 
+**Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism.**
+The executor collects every inbound edge's value into a list (always a list,
+even for one edge) and runs the node only when all wired edges delivered;
+the validator rejects multiple edges into a non-`accepts_many` port (that
+used to clobber silently). Fusion nodes (`pipelines/nodes/fusion.py`) are the
+take-many-emit-one family built on it: `BaseFusionNode` owns the variadic
+`results` port and usage summing, subclasses implement only `fuse()` —
+`fusion.rrf` (reciprocal rank, k=60) today; weighted/alpha blends later.
+The ingestion output's `indexed` port is variadic too, so dense and BM25
+indexers both terminate the graph. **Default pipelines are hybrid** (chunker
+fans out to embed→dense-index and to a BM25 index; retrieval fuses semantic
++ BM25 branches with RRF) and scaffold dense-only when the backend can't
+serve sparse indexes. **Purges iterate `settings.index_targets`** — resolved
+settings list every index a pipeline touches (dense fallback preserved for
+legacy definitions, no phantom dense target for BM25-only pipelines), and
+collection/file deletion and re-ingest purges must cover all of them. The
+retriever nodes (dense and BM25 alike) treat a not-yet-created index as
+zero matches, so querying a collection between setup and first ingest never
+404s; the BM25 branch also degrades to empty (with a warning) when its
+index name resolves to a dense index, rather than failing the fused query.
+
 **A collection's ingestion/retrieval pipeline is resolved in exactly one place:
 `app/services/pipeline_resolution.py`.** `resolve_ingestion_pipeline`/
 `resolve_retrieval_pipeline` run the ensure-defaults → attach-to-collection →
@@ -426,6 +447,22 @@ code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today
   for the full suite (`brew install pgvector` for Homebrew Postgres);
   pgvector-dependent tests use the root `pgvector_session` fixture and skip
   with a named reason when it's missing.
+- **The lexical (BM25) plane mirrors the dense one, backend-natively.**
+  `upsert_lexical`/`lexical_query` on the ABC serve sparse indexes created via
+  `IndexSpec(vector_type="sparse")`: pgvector uses ParadeDB **pg_search** BM25
+  indexes over per-index `lex_<name>` tables (v2 `|||` match-disjunction +
+  `pdb.score`, verified against pg_search 0.24); Pinecone always creates
+  sparse indexes with the integrated `pinecone-sparse-english-v0` model
+  (`create_index_for_model`) so raw text upserts/searches work — a sparse
+  index without integrated embedding cannot be text-searched. Text-record
+  upserts cap at 96/batch on Pinecone (`max_lexical_upsert_batch`).
+  pg_search availability follows the pgvector-extension pattern exactly:
+  best-effort `CREATE EXTENSION` at bootstrap, `app/db/pg_search_support.py`
+  flag, clear `InvalidInputError` at sparse-index creation, and a
+  `pg_search_session` fixture that skips tests with a named reason (run the
+  suite against `paradedb/paradedb:latest-pg17` — the shipped compose image —
+  for full coverage). A pipeline's sparse index is named `<dense>-bm25`
+  (`bm25_sibling_index_name`, truncated to the shared 45-char rule).
 - **Node type ids are permanent.** Persisted pipeline definitions reference
   `indexer.pinecone`/`retriever.pinecone`/`indexer.pgvector`/`retriever.pgvector`
   by string; a new backend adds new ids, never renames existing ones.

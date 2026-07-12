@@ -75,7 +75,7 @@ def test_collections_crud_without_pinecone_key(keyless_client: TestClient) -> No
 def test_ingest_and_search_on_pgvector_without_pinecone_key(
     monkeypatch: pytest.MonkeyPatch,
     keyless_client: TestClient,
-    pgvector_session: Session,
+    pg_search_session: Session,
 ) -> None:
     """End to end on the default (pgvector) pipeline with only an OpenRouter key:
     upload a document, then query it back."""

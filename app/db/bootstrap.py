@@ -10,7 +10,13 @@ from sqlalchemy.engine.url import make_url
 from sqlmodel import SQLModel, create_engine
 
 from app.db.engine import database_url, engine
-from app.db.migrations import apply_missing_columns, ensure_foreign_keys, ensure_indexes
+from app.db.migrations import (
+    apply_missing_columns,
+    ensure_dropped_not_null,
+    ensure_foreign_keys,
+    ensure_indexes,
+)
+from app.db.pg_search_support import set_pg_search_available
 from app.db.pgvector_support import set_pgvector_available
 from app.db.schema import SchemaValidationResult, build_expected_schema, inspect_database_schema
 
@@ -38,6 +44,31 @@ def ensure_pgvector_extension(target_engine: Engine) -> bool:
         set_pgvector_available(False)
         return False
     set_pgvector_available(True)
+    return True
+
+
+def ensure_pg_search_extension(target_engine: Engine) -> bool:
+    """Best-effort `CREATE EXTENSION pg_search`; record and return availability.
+
+    pg_search (ParadeDB BM25) ships in the bundled `paradedb/paradedb` image;
+    an external Postgres without it keeps dense pgvector search working and
+    only disables sparse (BM25) indexes on the pgvector backend, with a clear
+    error at index-creation time instead of a failed startup.
+    """
+    try:
+        with target_engine.begin() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Deliberately broad: any failure (permissions, extension not
+        # installed on the server) means the same thing — BM25 on pg is off.
+        logger.warning(
+            "pg_search extension unavailable (%s); BM25 indexes on the pgvector "
+            "backend are disabled.",
+            exc,
+        )
+        set_pg_search_available(False)
+        return False
+    set_pg_search_available(True)
     return True
 
 
@@ -89,6 +120,7 @@ def init_db() -> None:
     """Initialize database schema metadata."""
     ensure_database_exists(database_url)
     ensure_pgvector_extension(engine)
+    ensure_pg_search_extension(engine)
     expected = build_expected_schema()
     actual = inspect_database_schema(engine)
     validation = SchemaValidationResult.from_schemas(expected, actual)
@@ -102,6 +134,7 @@ def init_db() -> None:
         apply_missing_columns(engine, validation.missing_columns)
         actual = inspect_database_schema(engine)
         validation = SchemaValidationResult.from_schemas(expected, actual)
+    ensure_dropped_not_null(engine)
     ensure_indexes(engine)
     ensure_foreign_keys(engine)
     if not validation.is_valid:

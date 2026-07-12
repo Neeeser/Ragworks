@@ -654,7 +654,7 @@ def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -
 
 
 def test_retrieval_input_requires_query(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RetrievalInputConfig, RetrievalInputNode
+    from app.pipelines.nodes.io import RetrievalInputConfig, RetrievalInputNode
 
     user = _build_user()
     collection = _build_collection(user)

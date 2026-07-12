@@ -13,7 +13,8 @@ from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
-from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrievalInputNode, RetrieverConfig
+from app.pipelines.nodes.io import RetrievalInputNode
+from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
@@ -489,3 +490,71 @@ def test_pipeline_validator_detects_cycles() -> None:
 
     assert result.valid is False
     assert any("cycle" in error.lower() for error in result.errors)
+
+
+class _ManyJoinNode(PipelineNodeBase):
+    type = "test.many_join"
+    label = "Many Join"
+    category = "test"
+    description = "Collects any number of inbound results on one port."
+    example = "[A, B] -> Output."
+    input_ports = (
+        NodePort(key="items", label="Items", data_type="text", accepts_many=True),
+    )
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        return {"out": "ok"}
+
+    def summarize_io(self, inputs: dict[str, object], outputs: dict[str, object]):
+        return None
+
+
+def _fan_in_definition(target_type: str, target_port: str) -> PipelineDefinition:
+    """Two sources wired into the same input port of one target node."""
+    return PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source-a", type="test.input", name="Source A"),
+            PipelineNodeDefinition(id="source-b", type="test.input", name="Source B"),
+            PipelineNodeDefinition(id="target", type=target_type, name="Target"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge-a",
+                source="source-a",
+                target="target",
+                source_port="out",
+                target_port=target_port,
+            ),
+            PipelineEdgeDefinition(
+                id="edge-b",
+                source="source-b",
+                target="target",
+                source_port="out",
+                target_port=target_port,
+            ),
+        ],
+    )
+
+
+def test_pipeline_validator_rejects_multiple_edges_into_single_input_port() -> None:
+    """Fan-in on a port that accepts one edge is an error, not a silent clobber."""
+    registry = NodeRegistry([_InputNode, _DoubleInputNode])
+    validator = PipelineValidator(registry)
+
+    result = validator.validate(_fan_in_definition("test.double", "a"))
+
+    assert not result.valid
+    assert any(
+        "target" in error and "'a'" in error and "2" in error for error in result.errors
+    )
+
+
+def test_pipeline_validator_allows_multiple_edges_into_accepts_many_port() -> None:
+    """Fan-in on an accepts_many port is the supported fusion topology."""
+    registry = NodeRegistry([_InputNode, _ManyJoinNode])
+    validator = PipelineValidator(registry)
+
+    result = validator.validate(_fan_in_definition("test.many_join", "items"))
+
+    assert result.valid, result.errors

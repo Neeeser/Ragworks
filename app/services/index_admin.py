@@ -45,6 +45,7 @@ class IndexAdminService:
                 label=status.label,
                 available=status.available,
                 configured=status.configured,
+                lexical_available=status.lexical_available,
                 capabilities=BackendCapabilitiesRead.model_validate(
                     status.capabilities.model_dump()
                 ),

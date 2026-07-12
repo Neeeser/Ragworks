@@ -113,7 +113,9 @@ def test_query_collection_happy_path_maps_chunks_and_records_event(
     chunk = response.chunks[0]
     assert chunk.chunk_id == "chunk-1"
     assert chunk.document_id == "doc-1"
-    assert chunk.score == pytest.approx(1.0, abs=1e-6)  # identical vectors: cosine similarity 1
+    # The hybrid default fuses branches by reciprocal rank: the sole dense
+    # match at rank 1 scores 1/(60+1); raw cosine similarity is replaced.
+    assert chunk.score == pytest.approx(1 / 61, abs=1e-9)
     assert chunk.text == "Paris is the capital of France."
     assert response.usage == {"prompt_tokens": 5, "total_tokens": 5}
     assert response.query_event_id is not None

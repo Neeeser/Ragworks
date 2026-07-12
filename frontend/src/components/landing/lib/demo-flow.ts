@@ -95,6 +95,7 @@ const toPort = (port: DemoPort): NodePort => ({
   label: port.label,
   data_type: port.dataType,
   required: true,
+  accepts_many: false,
 });
 
 export type DemoFlow = {

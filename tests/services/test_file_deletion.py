@@ -9,6 +9,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db import models
+from app.pipelines.settings import IndexTarget
 from app.schemas.enums import DocumentStatus, IndexBackend
 from app.services import file_deletion as deletion_module
 from app.services.errors import ExternalServiceError
@@ -97,7 +98,12 @@ def test_folder_delete_purges_subtree_rows_bytes_and_vectors(
     assert remaining == {"keep", "keep.txt"}
     assert session.exec(select(models.Document)).all() == [kept.document]
     assert session.exec(select(models.DocumentChunkRecord)).all() == []
-    assert [entry[2] for entry in store.deleted] == [str(doomed.document.id)]
+    # The hybrid default pipeline purges the document from both of its
+    # indexes: the dense semantic index and the BM25 sibling.
+    assert [(entry[0], entry[2]) for entry in store.deleted] == [
+        ("ragworks", str(doomed.document.id)),
+        ("ragworks-bm25", str(doomed.document.id)),
+    ]
     # Bytes are gone from storage too.
     assert doomed.file.storage_path is not None
     assert not Path(doomed.file.storage_path).exists()
@@ -144,6 +150,11 @@ def test_pinecone_purge_failure_surfaces_as_external_error(
             namespace = "ns"
             index_name = "idx"
             backend = IndexBackend.PINECONE
+            index_targets = (
+                IndexTarget(
+                    backend=IndexBackend.PINECONE, index_name="idx", vector_type="dense"
+                ),
+            )
 
     monkeypatch.setattr(deletion_module, "resolve_ingestion_pipeline", lambda *_a: _Resolved())
 

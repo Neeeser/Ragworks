@@ -176,6 +176,26 @@ class _FanoutSinkNode(PipelineNodeBase):
         return None
 
 
+class _ManyJoinNode(PipelineNodeBase):
+    type = "test.many_join"
+    label = "Many Join"
+    category = "test"
+    description = "Collects any number of inbound results on one port."
+    example = "[A, B] -> Output."
+    input_ports = (
+        NodePort(key="items", label="Items", data_type="text", accepts_many=True),
+    )
+    output_ports = (NodePort(key="out", label="Out", data_type="text"),)
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        items = inputs["items"]
+        assert isinstance(items, list)
+        return {"out": sorted(str(item) for item in items)}
+
+    def summarize_io(self, inputs: dict[str, object], outputs: dict[str, object]):
+        return None
+
+
 @dataclass
 class _TraceRecorder:
     failed: list[Exception]
@@ -374,3 +394,123 @@ def test_pipeline_executor_propagates_one_output_to_multiple_targets(session: Se
     assert result.terminal_outputs["sink-a"]["out"] == "shared"
     assert result.terminal_outputs["sink-b"]["out"] == "shared"
     assert result.terminal_outputs["sink-c"]["out"] == "shared"
+
+
+def test_accepts_many_port_collects_every_inbound_edge_before_running(
+    session: Session,
+) -> None:
+    """A variadic port waits for all wired edges and receives them as a list."""
+    registry = NodeRegistry([_InputNode, _DiamondSourceNode, _ManyJoinNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source-a", type="test.input", name="Source A"),
+            PipelineNodeDefinition(id="source-b", type="test.diamond_source", name="Source B"),
+            PipelineNodeDefinition(id="join", type="test.many_join", name="Join"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge-a",
+                source="source-a",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-b",
+                source="source-b",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+        ],
+    )
+    executor = PipelineExecutor(registry)
+    context = _build_context(session)
+
+    result = executor.execute(definition, context)
+
+    assert result.terminal_outputs["join"]["out"] == ["payload", "seed"]
+
+
+def test_accepts_many_port_runs_with_delivered_branches_when_one_never_fires(
+    session: Session,
+) -> None:
+    """A variadic join fuses the branches that delivered when another can never fire.
+
+    A router-style node that emits only one of its output ports leaves the
+    other branch undelivered; the fan-in must run with what arrived instead
+    of stalling the whole pipeline.
+    """
+    registry = NodeRegistry([_PartialOutputNode, _FanoutSinkNode, _ManyJoinNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="router", type="test.partial", name="Router"),
+            PipelineNodeDefinition(id="branch-a", type="test.fanout_sink", name="Branch A"),
+            PipelineNodeDefinition(id="branch-b", type="test.fanout_sink", name="Branch B"),
+            PipelineNodeDefinition(id="join", type="test.many_join", name="Join"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge-a",
+                source="router",
+                target="branch-a",
+                source_port="a",
+                target_port="in",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-b",
+                source="router",
+                target="branch-b",
+                source_port="b",
+                target_port="in",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-a-join",
+                source="branch-a",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-b-join",
+                source="branch-b",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+        ],
+    )
+    executor = PipelineExecutor(registry)
+    context = _build_context(session)
+
+    result = executor.execute(definition, context)
+
+    assert result.terminal_outputs["join"]["out"] == ["payload"]
+
+
+def test_accepts_many_port_with_single_edge_still_receives_a_list(
+    session: Session,
+) -> None:
+    """One inbound edge into a variadic port arrives as a one-item list."""
+    registry = NodeRegistry([_InputNode, _ManyJoinNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source", type="test.input", name="Source"),
+            PipelineNodeDefinition(id="join", type="test.many_join", name="Join"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="source",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+        ],
+    )
+    executor = PipelineExecutor(registry)
+    context = _build_context(session)
+
+    result = executor.execute(definition, context)
+
+    assert result.terminal_outputs["join"]["out"] == ["payload"]

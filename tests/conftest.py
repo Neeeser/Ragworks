@@ -72,6 +72,39 @@ def _reset_pgvector_availability() -> Generator[None, None, None]:
     set_pgvector_available(True)
 
 
+@pytest.fixture(autouse=True)
+def _reset_pg_search_availability() -> Generator[None, None, None]:
+    """Keep the process-wide pg_search flag from leaking across tests.
+
+    Same rationale as `_reset_pgvector_availability`: bootstrap tests exercise
+    `ensure_pg_search_extension`'s failure path, which flips the module-level
+    flag to False for the whole process.
+    """
+    from app.db.pg_search_support import set_pg_search_available
+
+    set_pg_search_available(True)
+    yield
+    set_pg_search_available(True)
+
+
+@pytest.fixture(name="pg_search_session")
+def pg_search_session_fixture(session: Session) -> Session:
+    """The regular DB session, skipping the test when pg_search is missing.
+
+    `tests/utils/db.reset_database` installs the extension best-effort; a
+    Postgres server without pg_search (ParadeDB BM25) skips these tests with
+    a named reason instead of failing the suite (see app/AGENTS.md).
+    """
+    from sqlalchemy import text
+
+    installed = session.exec(  # type: ignore[call-overload]
+        text("SELECT 1 FROM pg_extension WHERE extname = 'pg_search'")
+    ).first()
+    if not installed:
+        pytest.skip("pg_search extension unavailable on the test Postgres server")
+    return session
+
+
 @pytest.fixture(name="pgvector_session")
 def pgvector_session_fixture(session: Session) -> Session:
     """The regular DB session, skipping the test when pgvector is missing.

@@ -85,6 +85,37 @@ def ensure_indexes(engine: Engine) -> None:
             logger.info("Created index %s on %s.", index.name, table.name)
 
 
+# Columns whose NOT NULL constraint the model has since dropped. Schema
+# validation only detects missing tables/columns, so relaxing nullability on
+# an upgraded deployment needs this explicit list.
+_DROPPED_NOT_NULL: tuple[tuple[str, str], ...] = (
+    # Sparse (BM25) indexes have no dimension; dense rows keep theirs.
+    ("vector_indexes", "dimension"),
+)
+
+
+def ensure_dropped_not_null(engine: Engine) -> None:
+    """Drop NOT NULL on columns the models now declare as nullable."""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    preparer = engine.dialect.identifier_preparer
+    with engine.begin() as connection:
+        for table_name, column_name in _DROPPED_NOT_NULL:
+            if table_name not in existing_tables:
+                continue
+            columns = {col["name"]: col for col in inspector.get_columns(table_name)}
+            column = columns.get(column_name)
+            if column is None or column["nullable"]:
+                continue
+            connection.execute(
+                text(
+                    f"ALTER TABLE {preparer.quote(table_name)} "
+                    f"ALTER COLUMN {preparer.quote(column_name)} DROP NOT NULL"
+                )
+            )
+            logger.info("Dropped NOT NULL on %s.%s.", table_name, column_name)
+
+
 def ensure_foreign_keys(engine: Engine) -> None:
     """Ensure metadata-defined foreign keys exist in the database."""
     inspector = inspect(engine)

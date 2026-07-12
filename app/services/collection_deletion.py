@@ -52,12 +52,13 @@ class CollectionDeletionService:
             for document in self.documents.list_for_collection(collection.id)
         )
         if has_indexed_documents:
-            self._purge_vectors(
-                user,
-                backend=resolved.settings.backend,
-                index_name=resolved.settings.index_name,
-                namespace=namespace,
-            )
+            for target in resolved.settings.index_targets:
+                self._purge_vectors(
+                    user,
+                    backend=target.backend,
+                    index_name=target.index_name,
+                    namespace=namespace,
+                )
         self._purge_files(collection)
         self._purge_rows(collection)
         self.session.commit()

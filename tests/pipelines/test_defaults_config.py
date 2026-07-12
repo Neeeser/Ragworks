@@ -14,8 +14,11 @@ from collections.abc import Iterator
 import pytest
 from sqlmodel import Session
 
+from app.db.pg_search_support import set_pg_search_available
+from app.db.pgvector_support import set_pgvector_available
 from app.db.repositories import AppSettingRepository
 from app.pipelines.defaults import (
+    bm25_sibling_index_name,
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
@@ -25,6 +28,8 @@ from app.pipelines.nodes.retrieval import VectorRetrieverConfig
 from app.schemas.enums import IndexBackend
 from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError
+from app.vectorstores.base import VectorStoreCapabilities
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
 
 
 @pytest.fixture(autouse=True)
@@ -165,3 +170,54 @@ def test_builders_accept_explicit_setup_choices(session: Session) -> None:
     assert indexer.config["index_name"] == "first-index"
     assert query_embedder.config["model_name"] == "wizard/model"
     assert retriever.config["index_name"] == "first-index"
+
+
+def test_default_scaffold_omits_bm25_when_pgvector_extension_unavailable(
+    session: Session,
+) -> None:
+    """Lexical availability requires pgvector itself, not just pg_search."""
+    set_pgvector_available(False)
+    set_pg_search_available(True)
+    try:
+        definition = build_default_ingestion_pipeline(
+            embedding_model="test/embed", backend=IndexBackend.PGVECTOR
+        )
+    finally:
+        set_pgvector_available(True)
+    assert "indexer.bm25" not in {node.type for node in definition.nodes}
+
+
+def test_bm25_sibling_name_truncates_to_backend_capability(monkeypatch) -> None:
+    """The sibling-name cap is read off the backend's capabilities, not hardcoded."""
+    tight = VectorStoreCapabilities(
+        max_dimension=2000,
+        supported_metrics=("cosine",),
+        supported_vector_types=("dense", "sparse"),
+        requires_api_key=False,
+        index_name_max_length=20,
+    )
+    monkeypatch.setitem(CAPABILITIES_BY_BACKEND, IndexBackend.PGVECTOR, tight)
+
+    sibling = bm25_sibling_index_name("a" * 30, IndexBackend.PGVECTOR)
+
+    assert len(sibling) <= 20
+    assert sibling.endswith("-bm25")
+
+
+def test_bm25_branch_nodes_sit_in_the_column_after_their_source(session: Session) -> None:
+    """The BM25 branch shares a column with the next main-row node.
+
+    A half-column offset makes the branch edge run horizontally at the
+    source's row — visually hidden behind the intervening card (embedder /
+    query embedder). Placing the branch directly below the next column keeps
+    the descent inside the first gap.
+    """
+    _set_override(session, "models.default_embedding_model", "test/embed")
+
+    ingestion = build_default_ingestion_pipeline()
+    positions = {node.id: node.position for node in ingestion.nodes}
+    assert positions["index-bm25"].x == positions["embed-chunks"].x
+
+    retrieval = build_default_retrieval_pipeline()
+    positions = {node.id: node.position for node in retrieval.nodes}
+    assert positions["bm25-retriever"].x == positions["embed-query"].x

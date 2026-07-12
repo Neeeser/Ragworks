@@ -52,7 +52,7 @@ def test_backends_endpoint_reports_capabilities_and_configuration(
     assert pgvector["configured"] is True
     assert pgvector["capabilities"]["max_dimension"] == 4096
     assert pgvector["capabilities"]["requires_api_key"] is False
-    assert pgvector["capabilities"]["supported_vector_types"] == ["dense"]
+    assert pgvector["capabilities"]["supported_vector_types"] == ["dense", "sparse"]
 
     pinecone = backends["pinecone"]
     assert pinecone["configured"] is False  # no key stored
@@ -123,13 +123,37 @@ def test_create_rejects_unsupported_metric(keyless_client: TestClient) -> None:
     assert "metric" in response.json()["detail"].lower()
 
 
-def test_create_rejects_sparse_on_pgvector(keyless_client: TestClient) -> None:
+def test_create_sparse_on_pgvector_round_trips(
+    keyless_client: TestClient, pg_search_session: Session
+) -> None:
+    """Sparse (BM25) indexes are first-class on pgvector via pg_search."""
+    created = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs-bm25", "vector_type": "sparse"},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["vector_type"] == "sparse"
+    assert body["dimension"] is None
+    assert body["metric"] == "bm25"
+
+    deleted = keyless_client.delete("/api/indexes/docs-bm25", params={"backend": "pgvector"})
+    assert deleted.status_code == 200
+
+
+def test_create_sparse_on_pgvector_rejected_without_pg_search(
+    keyless_client: TestClient,
+) -> None:
+    """Without the pg_search extension, sparse creation is a clear 400."""
+    from app.db.pg_search_support import set_pg_search_available
+
+    set_pg_search_available(False)
     response = keyless_client.post(
         "/api/indexes",
-        json={"backend": "pgvector", "name": "docs", "vector_type": "sparse"},
+        json={"backend": "pgvector", "name": "docs-bm25", "vector_type": "sparse"},
     )
     assert response.status_code == 400
-    assert "vector type" in response.json()["detail"].lower()
+    assert "pg_search" in response.json()["detail"]
 
 
 def test_pinecone_operations_require_key(keyless_client: TestClient) -> None:

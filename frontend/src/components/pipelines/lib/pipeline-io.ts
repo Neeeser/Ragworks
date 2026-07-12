@@ -59,10 +59,29 @@ const validateDimensionConnection = (
   return null;
 };
 
+const validatePortFanIn = (
+  connection: Connection | Edge,
+  targetNode: Node<PipelineNodeData> | undefined,
+  edges: Array<Pick<Edge, "id" | "target" | "targetHandle">> | undefined,
+) => {
+  if (!targetNode || !edges || !connection.targetHandle) return null;
+  const port = targetNode.data.inputs.find((entry) => entry.key === connection.targetHandle);
+  if (!port || port.accepts_many) return null;
+  const connectionId = "id" in connection ? connection.id : undefined;
+  const occupied = edges.some(
+    (edge) =>
+      edge.id !== connectionId &&
+      edge.target === connection.target &&
+      (edge.targetHandle ?? "default") === connection.targetHandle,
+  );
+  return occupied ? `The ${port.label} input already has a connection.` : null;
+};
+
 export const validatePipelineConnection = (
   connection: Connection | Edge,
   nodes: Node<PipelineNodeData>[],
   configOverrides?: Record<string, Record<string, unknown>>,
+  edges?: Array<Pick<Edge, "id" | "target" | "targetHandle">>,
 ) => {
   if (!connection.source || !connection.target) {
     return { valid: false, reason: "Connections must have both a source and a target." };
@@ -85,6 +104,11 @@ export const validatePipelineConnection = (
       valid: false,
       reason: `Cannot connect ${sourceType} to ${targetType}.`,
     };
+  }
+
+  const fanInError = validatePortFanIn(connection, targetNode, edges);
+  if (fanInError) {
+    return { valid: false, reason: fanInError };
   }
 
   const dimensionError = validateDimensionConnection(sourceNode, targetNode, configOverrides);

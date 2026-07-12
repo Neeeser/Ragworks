@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pinecone.exceptions import NotFoundException as PineconeNotFoundException
 
 from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.vectorstores.base import IndexSpec
@@ -19,7 +20,13 @@ class _StubIndex:
         self.query_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict[str, Any]] = []
         self.delete_error: Exception | None = None
+        self.list_error: Exception | None = None
         self._matches = list(matches)
+
+    def list(self, **_kwargs: Any) -> Any:
+        if self.list_error is not None:
+            raise self.list_error
+        return iter(())
 
     def upsert(self, *, vectors: list[dict[str, Any]], namespace: str | None = None) -> None:
         self.upsert_calls.append({"vectors": vectors, "namespace": namespace})
@@ -198,3 +205,119 @@ def test_delete_namespace_raises_other_errors() -> None:
 
     with pytest.raises(RuntimeError, match="rate limited"):
         store.delete_namespace("unit-index", "ns-1")
+
+
+def test_delete_document_vectors_tolerates_missing_index() -> None:
+    """Purging a document from a never-created index is a no-op, not a failure."""
+    index = _StubIndex()
+    index.list_error = PineconeNotFoundException("Resource unit-bm25 not found")
+    store = PineconeStore(_StubPinecone(index=index))  # type: ignore[arg-type]
+
+    store.delete_document_vectors("unit-bm25", "ns-1", "doc-1")  # does not raise
+
+
+def test_delete_namespace_tolerates_missing_index() -> None:
+    """Purging a namespace on a never-created index is a no-op, not a failure."""
+    index = _StubIndex()
+    index.delete_error = PineconeNotFoundException("Resource unit-bm25 not found")
+    store = PineconeStore(_StubPinecone(index=index))  # type: ignore[arg-type]
+
+    store.delete_namespace("unit-bm25", "ns-1")  # does not raise
+
+
+class _StubLexicalIndex(_StubIndex):
+    def __init__(self, hits: Sequence[dict[str, Any]] = ()) -> None:
+        super().__init__()
+        self.upsert_records_calls: list[dict[str, Any]] = []
+        self.search_calls: list[dict[str, Any]] = []
+        self._hits = list(hits)
+
+    def upsert_records(self, namespace: str, records: list[dict[str, Any]]) -> None:
+        self.upsert_records_calls.append({"namespace": namespace, "records": records})
+
+    def search(self, *, namespace: str, query: dict[str, Any]) -> SimpleNamespace:
+        self.search_calls.append({"namespace": namespace, "query": query})
+        return SimpleNamespace(result=SimpleNamespace(hits=list(self._hits)))
+
+
+class _StubModelPinecone(_StubPinecone):
+    """Adds the integrated-embedding control-plane surface to the stub."""
+
+    def __init__(self, *, has_index: bool = False, index: _StubIndex | None = None) -> None:
+        super().__init__(has_index=has_index, index=index)
+        self.created_for_model: dict[str, Any] | None = None
+
+    def create_index_for_model(self, **kwargs: Any) -> None:
+        self.created_for_model = dict(kwargs)
+
+    def describe_index(self, name: str) -> dict[str, Any]:
+        return {"name": name, "vector_type": "sparse", "metric": "dotproduct"}
+
+
+def test_ensure_index_sparse_creates_integrated_text_index() -> None:
+    client = _StubModelPinecone(has_index=False)
+    store = PineconeStore(client)  # type: ignore[arg-type]
+
+    store.ensure_index(IndexSpec(name="unit-bm25", vector_type="sparse"))
+
+    assert client.created is None  # not the dense path
+    assert client.created_for_model is not None
+    assert client.created_for_model["name"] == "unit-bm25"
+    embed = client.created_for_model["embed"]
+    assert embed.model == "pinecone-sparse-english-v0"
+    assert embed.field_map == {"text": "chunk_text"}
+
+
+def test_upsert_lexical_sends_text_records() -> None:
+    index = _StubLexicalIndex()
+    client = _StubModelPinecone(has_index=True, index=index)
+    store = PineconeStore(client)  # type: ignore[arg-type]
+
+    store.upsert_lexical("unit-bm25", "ns-1", [_chunk("doc-1:0", None, text="lexical text")])
+
+    assert len(index.upsert_records_calls) == 1
+    call = index.upsert_records_calls[0]
+    assert call["namespace"] == "ns-1"
+    assert call["records"] == [
+        {
+            "source": "unit",
+            "_id": "doc-1:0",
+            "chunk_text": "lexical text",
+            "document_id": "doc-1",
+            "order": 0,
+        }
+    ]
+
+
+def test_lexical_query_converts_hits_to_scored_chunks() -> None:
+    hits = [
+        {
+            "_id": "doc-1:2",
+            "_score": 3.25,
+            "fields": {
+                "chunk_text": "matched text",
+                "document_id": "doc-1",
+                "order": 2,
+                "source": "unit",
+            },
+        },
+        {"_id": "doc-2:0", "_score": 1.5, "fields": {"chunk_text": "second"}},
+    ]
+    index = _StubLexicalIndex(hits=hits)
+    client = _StubModelPinecone(has_index=True, index=index)
+    store = PineconeStore(client)  # type: ignore[arg-type]
+
+    response = store.lexical_query("unit-bm25", "ns-1", text="matched", top_k=5)
+
+    assert index.search_calls == [
+        {"namespace": "ns-1", "query": {"inputs": {"text": "matched"}, "top_k": 5}}
+    ]
+    first, second = response.matches
+    assert first.chunk.chunk_id == "doc-1:2"
+    assert first.chunk.text == "matched text"
+    assert first.chunk.document_id == "doc-1"
+    assert first.chunk.order == 2
+    assert first.chunk.metadata.data == {"source": "unit"}
+    assert first.score == 3.25
+    assert second.chunk.document_id == "doc-2:0"  # falls back to the hit id
+    assert second.score == 1.5
