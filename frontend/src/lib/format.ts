@@ -26,6 +26,11 @@ export const formatPricePerMillion = (value?: number | string | null): string | 
     const fallback = String(value).trim();
     return fallback || null;
   }
+  // OpenRouter reports routed meta-models (Auto Router, …) with a negative
+  // sentinel price — the real cost depends on where the request lands.
+  if (raw < 0) {
+    return "Variable";
+  }
   const pricePerMillion = raw * 1_000_000;
   const trimFractionDigits = (numericString: string, minFractionDigits: number) => {
     if (!numericString.includes(".")) {
