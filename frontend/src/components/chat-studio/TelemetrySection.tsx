@@ -31,11 +31,19 @@ export const TelemetrySection = ({
 }: TelemetrySectionProps) => (
   <div
     id={sectionId}
-    className={`rounded-2xl border border-hairline bg-surface ${
-      isDragging ? "border-data-pos/60 bg-data-pos/5" : ""
+    className={`overflow-hidden rounded-2xl border bg-surface transition-colors ${
+      isDragging
+        ? "border-data-pos/60 bg-data-pos/5"
+        : isOpen
+          ? "border-strong bg-surface-strong"
+          : "border-hairline"
     }`}
   >
-    <div className="flex w-full items-center justify-between gap-3 rounded-2xl border-b border-hairline px-4 py-3 transition hover:bg-surface-strong">
+    <div
+      className={`flex w-full items-center justify-between gap-3 px-4 py-3 transition hover:bg-surface-strong ${
+        isOpen ? "border-b border-hairline" : ""
+      }`}
+    >
       <button
         type="button"
         onClick={onToggle}
