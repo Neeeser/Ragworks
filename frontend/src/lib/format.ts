@@ -27,7 +27,8 @@ export const formatPricePerMillion = (value?: number | string | null): string | 
     return fallback || null;
   }
   // OpenRouter reports routed meta-models (Auto Router, …) with a negative
-  // sentinel price — the real cost depends on where the request lands.
+  // sentinel price; treat any negative value as variable — the real cost
+  // depends on where the request lands.
   if (raw < 0) {
     return "Variable";
   }
@@ -79,4 +80,20 @@ export const formatLatency = (latency?: number | null): string => {
     return "n/a";
   }
   return `${Math.round(latency)} ms`;
+};
+
+/**
+ * Compact token-count label for a model's context window, e.g. 128000 -> "128K",
+ * 2_000_000 -> "2M". Rounds to whole K below a million and one decimal at/above it;
+ * a count that rounds up to 1000K is promoted to "1M" so the K/M boundary is clean.
+ */
+export const formatContextLength = (tokens: number): string => {
+  if (tokens < 1_000) {
+    return tokens.toLocaleString();
+  }
+  const thousands = Math.round(tokens / 1_000);
+  if (thousands >= 1_000) {
+    return `${(tokens / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`;
+  }
+  return `${thousands.toLocaleString()}K`;
 };

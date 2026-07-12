@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatLatency, formatPricePerMillion } from "@/lib/format";
+import { formatContextLength, formatLatency, formatPricePerMillion } from "@/lib/format";
 
 describe("formatPricePerMillion", () => {
   it("formats a per-token price as $/M", () => {
@@ -31,5 +31,26 @@ describe("formatLatency", () => {
 
   it("falls back to n/a", () => {
     expect(formatLatency(null)).toBe("n/a");
+  });
+});
+
+describe("formatContextLength", () => {
+  it("renders counts under a thousand verbatim", () => {
+    expect(formatContextLength(512)).toBe("512");
+  });
+
+  it("compacts thousands to whole K", () => {
+    expect(formatContextLength(128_000)).toBe("128K");
+    expect(formatContextLength(131_072)).toBe("131K");
+  });
+
+  it("compacts millions to at most one decimal M", () => {
+    expect(formatContextLength(1_000_000)).toBe("1M");
+    expect(formatContextLength(2_000_000)).toBe("2M");
+    expect(formatContextLength(1_500_000)).toBe("1.5M");
+  });
+
+  it("promotes a count that rounds up to 1000K into 1M", () => {
+    expect(formatContextLength(999_999)).toBe("1M");
   });
 });

@@ -2,7 +2,7 @@
 
 import { Check, Loader, Search } from "lucide-react";
 
-import { formatPricePerMillion } from "@/lib/format";
+import { formatContextLength, formatPricePerMillion } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type { ChatModelSortOption } from "@/lib/model-sorting";
@@ -39,12 +39,6 @@ export const ModelSelectorCard = ({
 }: ModelSelectorCardProps) => {
   const visibleModels = filteredModelCatalog.slice(0, 50);
   const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
-  const formatContext = (tokens: number) =>
-    tokens >= 1_000_000
-      ? `${(tokens / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`
-      : tokens >= 1_000
-        ? `${Math.round(tokens / 1_000)}K`
-        : tokens.toLocaleString();
 
   return (
     <div className="space-y-3">
@@ -109,7 +103,9 @@ export const ModelSelectorCard = ({
             const isSelected =
               (selectedModelKey && model.id === selectedModelKey) ||
               (selectedModelKey && model.canonical_slug === selectedModelKey);
-            const contextLabel = model.context_length ? formatContext(model.context_length) : null;
+            const contextLabel = model.context_length
+              ? formatContextLength(model.context_length)
+              : null;
             const promptLabel = formatCost(model.pricing?.prompt);
             const completionLabel = formatCost(model.pricing?.completion);
             return (
