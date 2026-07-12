@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_openrouter_key
@@ -23,12 +23,15 @@ from app.schemas.collections import (
     CollectionPromptRead,
     CollectionPromptUpdate,
     CollectionRead,
+    CollectionStatsHistoryPoint,
+    CollectionStatsHistoryRead,
     CollectionStatsRead,
     CollectionUpdate,
 )
 from app.services.collection_deletion import CollectionDeletionService
 from app.services.collections import CollectionService
 from app.services.errors import ServiceError
+from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
@@ -81,6 +84,31 @@ def get_collection_stats(
     collection = get_collection_or_404(collection_id, current_user.id, session)
     stats_map = CollectionRepository(session).stats_for(current_user.id, [collection.id])
     return _stats_read(collection.id, stats_map[collection.id])
+
+
+@router.get("/{collection_id}/stats/history", response_model=CollectionStatsHistoryRead)
+def get_collection_stats_history(
+    collection_id: UUID,
+    days: int = Query(default=30, ge=7, le=365),
+    current_user: models.User = Depends(require_openrouter_key),
+    session: Session = Depends(get_session),
+) -> CollectionStatsHistoryRead:
+    """Return daily-bucketed activity history for a collection."""
+    collection = get_collection_or_404(collection_id, current_user.id, session)
+    points = CollectionRepository(session).stats_history_for(
+        current_user.id,
+        collection.id,
+        days=days,
+        today=utc_now().date(),
+    )
+    return CollectionStatsHistoryRead(
+        collection_id=collection.id,
+        days=days,
+        points=[
+            CollectionStatsHistoryPoint.model_validate(point, from_attributes=True)
+            for point in points
+        ],
+    )
 
 
 @router.get("/{collection_id}", response_model=CollectionRead)

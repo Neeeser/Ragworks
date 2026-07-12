@@ -9,6 +9,7 @@ concern: the 404 guard and the stats aggregation shaped for the wire.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -116,3 +117,125 @@ def test_collection_stats_include_query_latency(session: Session) -> None:
     stats_list = collections_routes.list_collection_stats(current_user=user, session=session)
     stats_map = {entry.collection_id: entry for entry in stats_list}
     assert stats_map[collection.id].chunk_count == 8
+
+
+def _make_document(
+    collection: models.Collection,
+    user: models.User,
+    name: str,
+    num_chunks: int,
+    created_at: datetime,
+) -> models.Document:
+    return models.Document(
+        collection_id=collection.id,
+        user_id=user.id,
+        name=name,
+        content_type="text/plain",
+        status=models.DocumentStatus.READY,
+        num_chunks=num_chunks,
+        num_tokens=num_chunks * 40,
+        chunk_size=128,
+        chunk_overlap=8,
+        chunk_strategy=models.ChunkStrategy.TOKEN,
+        embedding_model="embed-model",
+        created_at=created_at,
+    )
+
+
+def test_stats_history_buckets_growth_and_latency(session: Session) -> None:
+    """History points carry cumulative totals, per-day latency, and gap fill."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    today = datetime.now(UTC).replace(tzinfo=None, hour=12)
+
+    session.add_all(
+        [
+            # Before the window: seeds the cumulative baseline.
+            _make_document(collection, user, "old.txt", 4, today - timedelta(days=20)),
+            # Inside the window, two days ago and today.
+            _make_document(collection, user, "recent.txt", 3, today - timedelta(days=2)),
+            _make_document(collection, user, "new.txt", 5, today),
+        ]
+    )
+    session.add_all(
+        [
+            models.QueryEvent(
+                user_id=user.id,
+                collection_id=collection.id,
+                query_text="q",
+                top_k=3,
+                model="embed-model",
+                context_tokens=12,
+                latency_ms=latency,
+                response_payload={},
+                created_at=today,
+            )
+            for latency in (100.0, 200.0, 300.0)
+        ]
+    )
+    pipeline = models.Pipeline(
+        user_id=user.id, name="ingest", kind=models.PipelineKind.INGESTION
+    )
+    session.add(pipeline)
+    session.commit()
+    session.add(
+        models.PipelineRun(
+            pipeline_id=pipeline.id,
+            kind=models.PipelineKind.INGESTION,
+            user_id=user.id,
+            collection_id=collection.id,
+            status=models.PipelineRunStatus.COMPLETED,
+            started_at=today - timedelta(days=2),
+            completed_at=today - timedelta(days=2) + timedelta(milliseconds=1500),
+            created_at=today - timedelta(days=2),
+        )
+    )
+    # A still-running run must not contribute a latency sample.
+    session.add(
+        models.PipelineRun(
+            pipeline_id=pipeline.id,
+            kind=models.PipelineKind.INGESTION,
+            user_id=user.id,
+            collection_id=collection.id,
+            status=models.PipelineRunStatus.RUNNING,
+            started_at=today,
+            created_at=today,
+        )
+    )
+    session.commit()
+
+    history = collections_routes.get_collection_stats_history(
+        collection.id, days=7, current_user=user, session=session
+    )
+
+    assert history.days == 7
+    assert len(history.points) == 7
+    first, two_days_ago, last = history.points[0], history.points[4], history.points[-1]
+    # Baseline document predates the window.
+    assert (first.document_total, first.chunk_total) == (1, 4)
+    assert (two_days_ago.document_total, two_days_ago.chunk_total) == (2, 7)
+    assert (last.document_total, last.chunk_total) == (3, 12)
+    # Gap days still exist and carry totals forward.
+    assert history.points[5].document_total == 2
+
+    assert last.retrieval.count == 3
+    assert last.retrieval.avg_ms == pytest.approx(200.0)
+    assert last.retrieval.p50_ms == pytest.approx(200.0)
+    assert last.retrieval.p95_ms == pytest.approx(290.0)
+    assert last.retrieval.max_ms == pytest.approx(300.0)
+
+    assert two_days_ago.ingestion.count == 1
+    assert two_days_ago.ingestion.avg_ms == pytest.approx(1500.0, rel=1e-2)
+    # The RUNNING run today contributed nothing.
+    assert last.ingestion.count == 0
+    assert last.ingestion.avg_ms is None
+
+
+def test_stats_history_missing_collection_returns_404(session: Session) -> None:
+    user = _create_user(session)
+
+    with pytest.raises(HTTPException) as excinfo:
+        collections_routes.get_collection_stats_history(
+            uuid4(), days=30, current_user=user, session=session
+        )
+    assert excinfo.value.status_code == 404
