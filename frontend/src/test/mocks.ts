@@ -186,7 +186,7 @@ function buildAuthValue(overrides: Partial<AuthValue> = {}): AuthValue {
     loading: false,
     error: null,
     signIn: vi.fn(async () => {}),
-    signOut: vi.fn(),
+    signOut: vi.fn(async () => {}),
     refreshProfile: vi.fn(async () => {}),
     ...overrides,
   };

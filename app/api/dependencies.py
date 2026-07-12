@@ -13,8 +13,9 @@ from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.db.engine import get_session as get_session  # re-exported for routes
 from app.db.models import User
-from app.db.repositories import UserRepository
+from app.db.repositories import AuthSessionRepository, UserRepository
 from app.schemas.enums import UserRole
+from app.utils.time import ensure_utc, utc_now
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
@@ -57,6 +58,20 @@ def get_current_user(
     user = repo.get(subject_uuid)
     if user is None or not user.is_active:
         raise credentials_exception
+    session_id = payload.get("sid")
+    if session_id is not None:
+        try:
+            auth_session = AuthSessionRepository(session).get_owned(
+                UUID(str(session_id)), user.id
+            )
+        except ValueError as exc:
+            raise credentials_exception from exc
+        if (
+            auth_session is None
+            or auth_session.revoked_at is not None
+            or ensure_utc(auth_session.expires_at) <= utc_now()
+        ):
+            raise credentials_exception
     return user
 
 

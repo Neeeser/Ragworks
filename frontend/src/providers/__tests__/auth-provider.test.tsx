@@ -128,9 +128,27 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("user")).toHaveTextContent("user-1");
     });
 
-    fireEvent.click(screen.getByText("Sign out"));
-    expect(screen.getByTestId("token")).toHaveTextContent("none");
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign out"));
+    });
+    await waitFor(() => expect(screen.getByTestId("token")).toHaveTextContent("none"));
     expect(api.logoutRequest).toHaveBeenCalled();
     expect(window.localStorage.getItem("ragworks.jwt")).toBeNull();
+  });
+
+  it("keeps the session visible when server logout fails", async () => {
+    api.loginRequest.mockResolvedValueOnce({ access_token: "token", token_type: "bearer" });
+    api.logoutRequest.mockRejectedValueOnce(new Error("Logout failed"));
+    render(
+      <AuthProvider>
+        <AuthStateView />
+      </AuthProvider>,
+    );
+    await act(async () => fireEvent.click(screen.getByText("Sign in")));
+
+    await act(async () => fireEvent.click(screen.getByText("Sign out")));
+
+    expect(screen.getByTestId("token")).toHaveTextContent("token");
+    expect(screen.getByTestId("error")).toHaveTextContent("Logout failed");
   });
 });

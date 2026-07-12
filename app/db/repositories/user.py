@@ -72,6 +72,12 @@ class AuthSessionRepository(Repository):
         statement = select(models.AuthSession).where(models.AuthSession.token_digest == digest)
         return self.session.exec(statement).first()
 
+    def get_by_previous_digest(self, digest: str) -> models.AuthSession | None:
+        statement = select(models.AuthSession).where(
+            models.AuthSession.previous_token_digest == digest
+        )
+        return self.session.exec(statement).first()
+
     def get_owned(self, session_id: UUID, user_id: UUID) -> models.AuthSession | None:
         statement = select(models.AuthSession).where(
             models.AuthSession.id == session_id, models.AuthSession.user_id == user_id

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -143,3 +143,75 @@ def test_user_can_revoke_all_sessions(
     assert response.status_code == 204
     assert unauthed_client.post("/api/auth/refresh").status_code == 401
     assert all(row.revoked_at for row in session.exec(select(models.AuthSession)).all())
+
+
+def test_revocation_immediately_invalidates_issued_access_token(
+    unauthed_client: TestClient, session: Session
+) -> None:
+    user = models.User(
+        email="access-revoke@example.com", hashed_password=hash_password("password123")
+    )
+    session.add(user)
+    session.commit()
+    login = _login(unauthed_client, user.email)
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    session_id = unauthed_client.get("/api/auth/sessions", headers=headers).json()[0]["id"]
+
+    assert unauthed_client.delete(
+        f"/api/auth/sessions/{session_id}", headers=headers
+    ).status_code == 204
+    assert unauthed_client.get("/api/auth/me", headers=headers).status_code == 401
+
+
+def test_concurrent_refresh_reuses_the_same_rotation_result(
+    unauthed_client: TestClient, session: Session
+) -> None:
+    user = models.User(
+        email="concurrent@example.com", hashed_password=hash_password("password123")
+    )
+    session.add(user)
+    session.commit()
+    _login(unauthed_client, user.email)
+    old_token = unauthed_client.cookies["ragworks_refresh"]
+
+    first = unauthed_client.post("/api/auth/refresh")
+    rotated_token = unauthed_client.cookies["ragworks_refresh"]
+    row = session.exec(select(models.AuthSession)).one()
+    assert row.previous_token_digest is not None
+    assert row.revoked_at is None
+    assert datetime.now(UTC) - row.last_used_at < timedelta(seconds=30)
+    unauthed_client.cookies.clear()
+    unauthed_client.cookies.set(
+        "ragworks_refresh", old_token, domain="testserver.local", path="/api/auth"
+    )
+    second = unauthed_client.post("/api/auth/refresh")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert unauthed_client.cookies["ragworks_refresh"] == rotated_token
+
+
+def test_stale_rotated_token_reuse_revokes_session(
+    unauthed_client: TestClient, session: Session
+) -> None:
+    user = models.User(
+        email="replay@example.com", hashed_password=hash_password("password123")
+    )
+    session.add(user)
+    session.commit()
+    _login(unauthed_client, user.email)
+    old_token = unauthed_client.cookies["ragworks_refresh"]
+    unauthed_client.post("/api/auth/refresh")
+    row = session.exec(select(models.AuthSession)).one()
+    row.last_used_at -= timedelta(minutes=2)
+    session.add(row)
+    session.commit()
+    unauthed_client.cookies.clear()
+    unauthed_client.cookies.set(
+        "ragworks_refresh", old_token, domain="testserver.local", path="/api/auth"
+    )
+    replay = unauthed_client.post("/api/auth/refresh")
+
+    assert replay.status_code == 401
+    session.refresh(row)
+    assert row.revoked_at is not None

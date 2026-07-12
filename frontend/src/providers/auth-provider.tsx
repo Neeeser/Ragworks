@@ -22,7 +22,7 @@ type AuthContextValue = {
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
 
@@ -95,10 +95,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [fetchProfile],
   );
 
-  const signOut = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    void logoutRequest();
+  const signOut = useCallback(async () => {
+    setError(null);
+    try {
+      await logoutRequest();
+      setToken(null);
+      setUser(null);
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to sign out."));
+    }
   }, []);
 
   const value = useMemo(

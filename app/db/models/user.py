@@ -89,11 +89,18 @@ class AuthSession(SQLModel, table=True):
     token_digest: str = Field(
         sa_column=Column(String(64), unique=True, index=True, nullable=False)
     )
+    previous_token_digest: str | None = Field(
+        default=None, sa_column=Column(String(64), index=True, nullable=True)
+    )
     user_agent: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     ip_address: str | None = Field(default=None, sa_column=Column(String(45), nullable=True))
     persistent: bool = Field(default=False, nullable=False)
-    created_at: datetime = Field(default_factory=utc_now, nullable=False)
-    last_used_at: datetime = Field(default_factory=utc_now, nullable=False)
+    created_at: datetime = Field(
+        default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    last_used_at: datetime = Field(
+        default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
     expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     revoked_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)

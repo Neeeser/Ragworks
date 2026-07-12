@@ -38,12 +38,12 @@ export function LoginSessionsPanel() {
   const revoke = async (item: AuthSession) => {
     await revokeAuthSession(token, item.id);
     setSessions((current) => current.filter((session) => session.id !== item.id));
-    if (item.current) signOut();
+    if (item.current) await signOut();
   };
 
   const revokeAll = async () => {
     await revokeAllAuthSessions(token);
-    signOut();
+    await signOut();
   };
 
   return (

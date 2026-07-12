@@ -23,7 +23,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str, expires_minutes: int | None = None) -> str:
+def create_access_token(
+    subject: str, expires_minutes: int | None = None, session_id: str | None = None
+) -> str:
     """Create a JWT access token for the provided subject."""
     settings = get_settings()
     minutes = (
@@ -32,4 +34,6 @@ def create_access_token(subject: str, expires_minutes: int | None = None) -> str
     expire_delta = timedelta(minutes=minutes)
     expire = datetime.now(UTC) + expire_delta
     payload: dict[str, Any] = {"sub": subject, "exp": expire}
+    if session_id is not None:
+        payload["sid"] = session_id
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
