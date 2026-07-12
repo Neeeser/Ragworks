@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import {
   createFolder as apiCreateFolder,
+  copyFileNode,
   deleteFileNode,
   ingestFile,
   updateFileNode,
@@ -18,6 +19,7 @@ export interface FileActions {
   createFolder: (name: string, parentId: string | null) => Promise<FileNode | null>;
   renameNode: (node: FileNode, name: string) => Promise<boolean>;
   moveNode: (node: FileNode, parentId: string | null) => Promise<boolean>;
+  copyNode: (node: FileNode, parentId: string | null) => Promise<boolean>;
   deleteNode: (node: FileNode) => Promise<boolean>;
   retryIngestion: (node: FileNode) => Promise<boolean>;
 }
@@ -67,6 +69,12 @@ export function useFileActions(
     [run, token],
   );
 
+  const copyNode = useCallback(
+    async (node: FileNode, parentId: string | null) =>
+      (await run(() => copyFileNode(token, node.id, parentId), "Unable to copy.")) !== null,
+    [run, token],
+  );
+
   const deleteNode = useCallback(
     async (node: FileNode) =>
       (await run(() => deleteFileNode(token, node.id), "Unable to delete.")) !== null,
@@ -79,5 +87,14 @@ export function useFileActions(
     [run, token],
   );
 
-  return { error, clearError, createFolder, renameNode, moveNode, deleteNode, retryIngestion };
+  return {
+    error,
+    clearError,
+    createFolder,
+    renameNode,
+    moveNode,
+    copyNode,
+    deleteNode,
+    retryIngestion,
+  };
 }

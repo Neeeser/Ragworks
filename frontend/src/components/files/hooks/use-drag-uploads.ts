@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { isFileNodeDrag } from "@/components/files/hooks/use-file-dnd";
 import { collectDroppedUploads } from "@/components/files/lib/drop-items";
 
 import type { DroppedUpload } from "@/components/files/lib/drop-items";
@@ -15,8 +16,10 @@ export interface DragUploadHandlers {
 }
 
 /**
- * Page-level drag-and-drop for files and folder trees. Tracks enter/leave
- * depth so nested drag targets don't flicker the overlay.
+ * Page-level drag-and-drop for OS files and folder trees. Tracks enter/leave
+ * depth so nested drag targets don't flicker the overlay. Internal tree-node
+ * drags (rearranging files) are ignored entirely — those belong to
+ * `useFileDnd`.
  */
 export function useDragUploads(onUploads: (uploads: DroppedUpload[]) => void): {
   dragActive: boolean;
@@ -27,11 +30,15 @@ export function useDragUploads(onUploads: (uploads: DroppedUpload[]) => void): {
 
   const handlers: DragUploadHandlers = {
     onDragEnter: (event) => {
+      if (isFileNodeDrag(event.dataTransfer)) return;
       event.preventDefault();
       depth.current += 1;
       setDragActive(true);
     },
-    onDragOver: (event) => event.preventDefault(),
+    onDragOver: (event) => {
+      if (isFileNodeDrag(event.dataTransfer)) return;
+      event.preventDefault();
+    },
     onDragLeave: () => {
       depth.current = Math.max(0, depth.current - 1);
       if (depth.current === 0) {
@@ -39,6 +46,7 @@ export function useDragUploads(onUploads: (uploads: DroppedUpload[]) => void): {
       }
     },
     onDrop: (event) => {
+      if (isFileNodeDrag(event.dataTransfer)) return;
       event.preventDefault();
       depth.current = 0;
       setDragActive(false);

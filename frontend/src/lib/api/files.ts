@@ -70,6 +70,18 @@ export async function updateFileNode(
   });
 }
 
+export async function copyFileNode(
+  token: string,
+  fileId: string,
+  parentId?: string | null,
+): Promise<FileNode> {
+  return apiFetch<FileNode>(`/api/files/${fileId}/copy`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ parent_id: parentId ?? null }),
+  });
+}
+
 export async function deleteFileNode(token: string, fileId: string): Promise<void> {
   await apiFetch<void>(`/api/files/${fileId}`, { method: "DELETE", token });
 }

@@ -83,6 +83,29 @@ export function folderHref(collectionId: string, folder: FileNode | null): strin
   return `${base}/${segments.join("/")}`;
 }
 
+/**
+ * Whether moving/pasting `source` into `targetFolderId` (null = root) is
+ * meaningful: rejects the no-op same-parent drop, dropping a node onto
+ * itself, and moving a folder into its own subtree.
+ */
+export function canDropInto(
+  index: TreeIndex,
+  source: FileNode,
+  targetFolderId: string | null,
+): boolean {
+  if (source.parent_id === targetFolderId || source.id === targetFolderId) {
+    return false;
+  }
+  let cursor = targetFolderId ? (index.byId.get(targetFolderId) ?? null) : null;
+  while (cursor) {
+    if (cursor.id === source.id) {
+      return false;
+    }
+    cursor = cursor.parent_id ? (index.byId.get(cursor.parent_id) ?? null) : null;
+  }
+  return true;
+}
+
 export function isProcessing(node: FileNode): boolean {
   const status = node.ingestion?.status;
   return status === "pending" || status === "processing";

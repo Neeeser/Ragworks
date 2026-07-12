@@ -9,7 +9,9 @@ import { formatBytes } from "@/components/files/lib/tree";
 import { formatDate } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
+import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
+import type { MouseEvent } from "react";
 
 type FileListViewProps = {
   entries: FileNode[];
@@ -20,6 +22,8 @@ type FileListViewProps = {
   onOpenFolder: (folder: FileNode) => void;
   onSelectFile: (file: FileNode) => void;
   onRetry: (file: FileNode) => void;
+  onContextMenu: (node: FileNode, event: MouseEvent) => void;
+  dnd: FileDnd;
   animationKey: string;
 };
 
@@ -33,6 +37,8 @@ export function FileListView({
   onOpenFolder,
   onSelectFile,
   onRetry,
+  onContextMenu,
+  dnd,
   animationKey,
 }: FileListViewProps) {
   return (
@@ -64,9 +70,18 @@ export function FileListView({
               style={{ animationDelay: `${Math.min(position, 20) * 18}ms` }}
             >
               <div
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onContextMenu(node, event);
+                }}
+                {...dnd.dragProps(node)}
+                {...(node.kind === "folder" ? dnd.dropProps(node.id) : {})}
                 className={cn(
                   "flex items-center gap-3 px-4 py-2.5 transition",
                   node.id === selectedId ? "bg-accent-violet/10" : "hover:bg-surface",
+                  dnd.draggingId === node.id && "opacity-40",
+                  dnd.dropKey === node.id && "bg-accent-violet/15",
                 )}
               >
                 {expandable ? (

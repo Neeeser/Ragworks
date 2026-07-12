@@ -123,6 +123,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     createFolder: vi.fn(async () => makeFileNode({ kind: "folder" })),
     uploadFile: vi.fn(async () => makeFileUploadResponse()),
     updateFileNode: vi.fn(async () => makeFileNode()),
+    copyFileNode: vi.fn(async () => makeFileNode()),
     deleteFileNode: vi.fn(async () => undefined),
     ingestFile: vi.fn(async () => makeFileNode()),
     searchFiles: vi.fn(async () => ({ query: "", folders: [], files: [], content: [] })),

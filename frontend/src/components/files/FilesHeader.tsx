@@ -3,9 +3,11 @@
 import { ChevronRight, FolderPlus, LayoutGrid, List, UploadCloud } from "lucide-react";
 
 import { FileSearchBox } from "@/components/files/FileSearchBox";
+import { ROOT_PARENT } from "@/components/files/lib/tree";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { ViewMode } from "@/components/files/hooks/use-view-mode";
 import type { FileNode } from "@/lib/types";
 
@@ -17,6 +19,7 @@ type FilesHeaderProps = {
   breadcrumb: FileNode[];
   viewMode: ViewMode;
   uploading: boolean;
+  dnd: FileDnd;
   onViewModeChange: (mode: ViewMode) => void;
   onNavigate: (folder: FileNode | null) => void;
   onSelectFile: (file: FileNode) => void;
@@ -34,6 +37,7 @@ export function FilesHeader({
   breadcrumb,
   viewMode,
   uploading,
+  dnd,
   onViewModeChange,
   onNavigate,
   onSelectFile,
@@ -46,9 +50,11 @@ export function FilesHeader({
         <button
           type="button"
           onClick={() => onNavigate(null)}
+          {...dnd.dropProps(null)}
           className={cn(
             "max-w-48 truncate rounded-xl px-2 py-1 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
             breadcrumb.length === 0 ? "text-primary" : mutedLinkClass,
+            dnd.dropKey === ROOT_PARENT && "bg-accent-violet/15 text-primary",
           )}
         >
           {collectionName}
@@ -59,9 +65,11 @@ export function FilesHeader({
             <button
               type="button"
               onClick={() => onNavigate(crumb)}
+              {...dnd.dropProps(crumb.id)}
               className={cn(
                 "max-w-40 truncate rounded-xl px-2 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                 position === breadcrumb.length - 1 ? "font-semibold text-primary" : mutedLinkClass,
+                dnd.dropKey === crumb.id && "bg-accent-violet/15 text-primary",
               )}
             >
               {crumb.name}
