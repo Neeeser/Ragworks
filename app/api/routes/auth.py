@@ -211,11 +211,24 @@ def refresh_access_token(request: Request, response: Response, session: Session 
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Could not refresh session")
     rotated = _rotate_refresh_token(token or "")
-    auth_session.previous_token_digest = auth_session.token_digest
-    auth_session.token_digest = _digest_refresh_token(rotated)
-    auth_session.last_used_at = now
-    session.add(auth_session)
+    claimed = repo.rotate_if_current(
+        auth_session.id,
+        current_digest=token_digest,
+        rotated_digest=_digest_refresh_token(rotated),
+        used_at=now,
+    )
     session.commit()
+    if not claimed:
+        session.expire_all()
+        concurrent_winner = repo.get_by_previous_digest(token_digest)
+        if (
+            concurrent_winner is None
+            or concurrent_winner.revoked_at is not None
+            or ensure_utc(concurrent_winner.expires_at) <= now
+            or now - ensure_utc(concurrent_winner.last_used_at) > _ROTATION_GRACE
+        ):
+            _clear_refresh_cookie(response)
+            raise HTTPException(status_code=401, detail="Could not refresh session")
     remaining_days = max(1, (ensure_utc(auth_session.expires_at) - now).days + 1)
     _set_refresh_cookie(response, rotated, auth_session.persistent, remaining_days)
     return Token(

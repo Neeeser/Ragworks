@@ -9,6 +9,8 @@ from sqlmodel import Session, select
 
 from app.core.security import hash_password
 from app.db import models
+from app.db.repositories import AuthSessionRepository
+from app.utils.time import utc_now
 
 
 def _login(client: TestClient, email: str, *, remember: bool = True):
@@ -189,6 +191,44 @@ def test_concurrent_refresh_reuses_the_same_rotation_result(
     assert first.status_code == 200
     assert second.status_code == 200
     assert unauthed_client.cookies["ragworks_refresh"] == rotated_token
+
+
+def test_only_one_refresh_rotation_can_claim_the_current_digest(
+    session: Session,
+) -> None:
+    user = models.User(
+        email="atomic-rotation@example.com", hashed_password=hash_password("password123")
+    )
+    session.add(user)
+    session.commit()
+    auth_session = AuthSessionRepository(session).add(
+        models.AuthSession(
+            user_id=user.id,
+            token_digest="current-digest",
+            persistent=True,
+            expires_at=utc_now() + timedelta(days=30),
+        )
+    )
+    session.commit()
+
+    first_claimed = AuthSessionRepository(session).rotate_if_current(
+        auth_session.id,
+        current_digest="current-digest",
+        rotated_digest="first-rotation",
+        used_at=utc_now(),
+    )
+    session.commit()
+    second_claimed = AuthSessionRepository(session).rotate_if_current(
+        auth_session.id,
+        current_digest="current-digest",
+        rotated_digest="second-rotation",
+        used_at=utc_now(),
+    )
+
+    assert first_claimed is True
+    assert second_claimed is False
+    session.refresh(auth_session)
+    assert auth_session.token_digest == "first-rotation"
 
 
 def test_stale_rotated_token_reuse_revokes_session(
