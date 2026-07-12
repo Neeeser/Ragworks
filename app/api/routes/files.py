@@ -28,6 +28,7 @@ from app.db import models
 from app.db.repositories import FileNodeRepository
 from app.schemas.enums import FileNodeKind
 from app.schemas.files import (
+    FileCopyRequest,
     FileListingResponse,
     FileNodeRead,
     FileNodeUpdate,
@@ -38,6 +39,7 @@ from app.schemas.files import (
 )
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
+from app.services.file_copy import FileCopyService
 from app.services.file_deletion import FileDeletionService
 from app.services.file_search import SEARCH_MODES, FileSearchService
 from app.services.files import FileSystemService, UploadSpec
@@ -179,6 +181,32 @@ def update_file_node(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return service.read_node(node)
+
+
+@router.post(
+    "/files/{file_id}/copy",
+    response_model=FileNodeRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def copy_file_node(
+    file_id: UUID,
+    payload: FileCopyRequest,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> FileNodeRead:
+    """Copy a file or folder subtree; the copy re-ingests like a fresh upload."""
+    node = _get_file_or_404(file_id, current_user.id, session)
+    collection = _node_collection(node, session)
+    try:
+        result = FileCopyService(session).copy(
+            current_user, collection, node, target_parent_id=payload.parent_id
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    for document in result.documents:
+        background_tasks.add_task(run_document_ingestion, document.id)
+    return FileSystemService(session).read_node(result.root)
 
 
 @router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)

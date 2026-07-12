@@ -56,6 +56,7 @@ def test_file_routes_require_auth(unauthed_client: TestClient) -> None:
     assert unauthed_client.get(f"/api/collections/{collection_id}/files/tree").status_code == 401
     assert unauthed_client.get(f"/api/collections/{collection_id}/files").status_code == 401
     assert unauthed_client.patch(f"/api/files/{uuid4()}", json={}).status_code == 401
+    assert unauthed_client.post(f"/api/files/{uuid4()}/copy", json={}).status_code == 401
     assert unauthed_client.delete(f"/api/files/{uuid4()}").status_code == 401
     assert unauthed_client.get(f"/api/files/{uuid4()}/content").status_code == 401
 
@@ -205,3 +206,36 @@ def test_search_rejects_unknown_modes(
         params={"q": "x", "modes": "name,bogus"},
     )
     assert response.status_code == 400
+
+
+def test_copy_endpoint_creates_a_deduped_pending_copy(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    collection = _create_collection(session, auth_user)
+    uploaded = _upload(client, collection.id)
+
+    response = client.post(f"/api/files/{uploaded['file']['id']}/copy", json={})
+    assert response.status_code == 201, response.text
+    copy = response.json()
+    assert copy["id"] != uploaded["file"]["id"]
+    assert copy["name"] == "doc (1).txt"
+    assert copy["path"] == "/doc (1).txt"
+    assert copy["ingestion"]["status"] == "pending"
+
+
+def test_copy_endpoint_is_ownership_isolated(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    intruder = _other_user(session)
+    foreign_collection = _create_collection(session, intruder)
+    foreign_node = models.FileNode(
+        collection_id=foreign_collection.id,
+        user_id=intruder.id,
+        kind=models.FileNodeKind.FILE,
+        name="secret.txt",
+        content_type="text/plain",
+    )
+    session.add(foreign_node)
+    session.commit()
+
+    assert client.post(f"/api/files/{foreign_node.id}/copy", json={}).status_code == 404

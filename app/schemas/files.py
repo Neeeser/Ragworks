@@ -125,6 +125,12 @@ class FileNodeUpdate(BaseModel):
     parent_id: UUID | None = None
 
 
+class FileCopyRequest(BaseModel):
+    """Request body for copying a node; `parent_id` null/omitted = root."""
+
+    parent_id: UUID | None = None
+
+
 class FileUploadResponse(BaseModel):
     """Result of one upload: the file plus any auto-created folders."""
 

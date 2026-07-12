@@ -5,8 +5,9 @@ import { IngestionBadge } from "@/components/files/IngestionBadge";
 import { formatBytes } from "@/components/files/lib/tree";
 import { cn } from "@/lib/utils";
 
+import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 
 type FileGridViewProps = {
   entries: FileNode[];
@@ -14,6 +15,8 @@ type FileGridViewProps = {
   onOpenFolder: (folder: FileNode) => void;
   onSelectFile: (file: FileNode) => void;
   onRetry: (file: FileNode) => void;
+  onContextMenu: (node: FileNode, event: MouseEvent) => void;
+  dnd: FileDnd;
   animationKey: string;
 };
 
@@ -24,6 +27,8 @@ export function FileGridView({
   onOpenFolder,
   onSelectFile,
   onRetry,
+  onContextMenu,
+  dnd,
   animationKey,
 }: FileGridViewProps) {
   const activate = (node: FileNode) =>
@@ -49,6 +54,13 @@ export function FileGridView({
               activate(node);
             }
           }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onContextMenu(node, event);
+          }}
+          {...dnd.dragProps(node)}
+          {...(node.kind === "folder" ? dnd.dropProps(node.id) : {})}
           className={cn(
             "files-rise group flex cursor-pointer flex-col items-start gap-3 rounded-3xl border p-4 text-left transition",
             node.id === selectedId
@@ -56,6 +68,8 @@ export function FileGridView({
               : "border-hairline bg-surface hover:border-strong hover:bg-surface-strong",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
             "focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+            dnd.draggingId === node.id && "opacity-40",
+            dnd.dropKey === node.id && "border-accent-violet bg-accent-violet/15",
           )}
           style={{ animationDelay: `${Math.min(position, 20) * 22}ms` }}
         >

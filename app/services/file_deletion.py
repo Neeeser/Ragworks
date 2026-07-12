@@ -114,9 +114,10 @@ class FileDeletionService:
         doomed: list[models.FileNode],
         documents: list[models.Document],
     ) -> None:
-        """Delete chunk rows, document rows, and the nodes themselves."""
+        """Delete chunk rows, event/point rows, documents, and the nodes."""
         for document in documents:
             self.chunks.delete_for_document(document.id)
+            self.documents.delete_ingestion_events(document.id)
             self.session.delete(document)
         self.session.flush()
         for node in doomed:  # children precede parents, so FKs stay satisfied

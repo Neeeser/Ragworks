@@ -7,11 +7,11 @@ import { useId, useState } from "react";
 import { FileIcon } from "@/components/files/FileIcon";
 import { FilePreviewContent } from "@/components/files/FilePreviewContent";
 import { IngestionBadge } from "@/components/files/IngestionBadge";
+import { downloadFileNode } from "@/components/files/lib/download";
 import { formatBytes } from "@/components/files/lib/tree";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { fetchFileBlob } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -38,17 +38,7 @@ function PanelBody({
   const [deleting, setDeleting] = useState(false);
   const ingestion = node.ingestion;
 
-  const download = async () => {
-    // Same authenticated-bytes path the preview uses; an <a href> can't
-    // carry the Authorization header.
-    const blob = await fetchFileBlob(token, node.id);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = node.name;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
+  const download = () => downloadFileNode(token, node);
 
   const metadata: Array<{ label: string; value: string }> = [
     { label: "Type", value: node.content_type || "unknown" },

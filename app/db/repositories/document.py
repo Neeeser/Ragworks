@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
 from sqlmodel import col, select
 
@@ -49,6 +50,18 @@ class DocumentRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def delete_ingestion_events(self, document_id: UUID) -> None:
+        """Delete the ingestion audit rows referencing a document.
+
+        Part of the document purge cascade: `ingestion_events.document_id`
+        is a plain FK, so the events must go before the document row.
+        """
+        self.session.execute(
+            sa_delete(models.IngestionEvent).where(
+                col(models.IngestionEvent.document_id) == document_id,
+            )
+        )
+
     def count_by_user(self) -> dict[UUID, int]:
         """Return a mapping of user id -> number of documents they own."""
         statement = select(
@@ -78,7 +91,17 @@ class ChunkRepository(Repository):
         return list(self.session.exec(statement).all())
 
     def delete_for_document(self, document_id: UUID) -> None:
-        """Delete every stored chunk for a document (retry/delete paths)."""
+        """Delete every stored chunk for a document (retry/delete paths).
+
+        Stored UMAP points reference chunk rows (`umap_points.chunk_id`), so
+        the document's stale points are purged first — after a re-ingest or
+        delete they describe chunks that no longer exist anyway.
+        """
+        self.session.execute(
+            sa_delete(models.UmapPointRecord).where(
+                col(models.UmapPointRecord.document_id) == document_id,
+            )
+        )
         for chunk in self.list_for_document(document_id):
             self.session.delete(chunk)
         self.session.flush()

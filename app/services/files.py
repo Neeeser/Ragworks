@@ -99,7 +99,7 @@ class FileSystemService:
         """Return one folder's children plus ancestry — the `ls` view."""
         parent = None
         if parent_id is not None:
-            parent = self._require_folder(collection.id, parent_id)
+            parent = self.require_folder(collection.id, parent_id)
         entries = self.nodes.list_children(collection.id, parent_id)
         all_nodes = self.nodes.list_for_collection(collection.id)
         paths = self._paths_for(all_nodes)
@@ -162,7 +162,7 @@ class FileSystemService:
         """Create a folder, rejecting sibling-name collisions."""
         clean = validate_node_name(name)
         if parent_id is not None:
-            self._require_folder(collection.id, parent_id)
+            self.require_folder(collection.id, parent_id)
         if self.nodes.find_child_by_name(collection.id, parent_id, clean):
             raise InvalidInputError(f"'{clean}' already exists in this folder.")
         node = models.FileNode(
@@ -258,8 +258,8 @@ class FileSystemService:
         if "parent_id" in payload.model_fields_set:
             target_parent_id = payload.parent_id
             if target_parent_id is not None:
-                parent = self._require_folder(node.collection_id, target_parent_id)
-                self._reject_cycle(node, parent)
+                parent = self.require_folder(node.collection_id, target_parent_id)
+                self.reject_cycle(node, parent, action="move")
         name = node.name
         if payload.name is not None:
             name = validate_node_name(payload.name)
@@ -336,7 +336,7 @@ class FileSystemService:
                 return candidate
             counter += 1
 
-    def _require_folder(self, collection_id: UUID, node_id: UUID) -> models.FileNode:
+    def require_folder(self, collection_id: UUID, node_id: UUID) -> models.FileNode:
         """Return a folder in this collection or raise a domain error."""
         node = self.nodes.get(node_id)
         if node is None or node.collection_id != collection_id:
@@ -345,12 +345,16 @@ class FileSystemService:
             raise InvalidInputError("The target parent is a file, not a folder.")
         return node
 
-    def _reject_cycle(self, node: models.FileNode, new_parent: models.FileNode) -> None:
-        """Refuse to move a folder into itself or one of its descendants."""
+    def reject_cycle(
+        self, node: models.FileNode, new_parent: models.FileNode, *, action: str
+    ) -> None:
+        """Refuse to move/copy a folder into itself or one of its descendants."""
         cursor: models.FileNode | None = new_parent
         while cursor is not None:
             if cursor.id == node.id:
-                raise InvalidInputError("Cannot move a folder into itself or its own subfolder.")
+                raise InvalidInputError(
+                    f"Cannot {action} a folder into itself or its own subfolder."
+                )
             cursor = self.nodes.get(cursor.parent_id) if cursor.parent_id else None
 
     def _ingestion_by_file(self, collection_id: UUID) -> dict[UUID, models.Document]:

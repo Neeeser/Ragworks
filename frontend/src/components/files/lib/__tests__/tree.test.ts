@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   breadcrumbFor,
   buildTreeIndex,
+  canDropInto,
   childrenOfFolder,
   folderHref,
   formatBytes,
@@ -87,5 +88,24 @@ describe("formatBytes", () => {
     expect(formatBytes(2048)).toBe("2.0 KB");
     expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
     expect(formatBytes(15 * 1024 * 1024)).toBe("15 MB");
+  });
+});
+
+describe("canDropInto", () => {
+  const index = buildTreeIndex([rootFile, doc, q3, reports]);
+
+  it("allows moving a file into a different folder", () => {
+    expect(canDropInto(index, rootFile, "f-reports")).toBe(true);
+    expect(canDropInto(index, doc, null)).toBe(true);
+  });
+
+  it("rejects the no-op drop onto the current parent", () => {
+    expect(canDropInto(index, rootFile, null)).toBe(false);
+    expect(canDropInto(index, doc, "f-q3")).toBe(false);
+  });
+
+  it("rejects dropping a folder onto itself or into its own subtree", () => {
+    expect(canDropInto(index, reports, "f-reports")).toBe(false);
+    expect(canDropInto(index, reports, "f-q3")).toBe(false);
   });
 });
