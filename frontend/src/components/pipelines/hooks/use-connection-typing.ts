@@ -12,6 +12,7 @@ import type { Connection, Edge, Node, OnConnectStartParams } from "@xyflow/react
 
 type UseConnectionTypingParams = {
   nodes: Node<PipelineNodeData>[];
+  edges: TypedEdgeType[];
   setEdges: (updater: (edges: TypedEdgeType[]) => TypedEdgeType[]) => void;
   onInvalidConnection: (reason: string) => void;
 };
@@ -32,14 +33,16 @@ type UseConnectionTypingResult = {
  */
 export function useConnectionTyping({
   nodes,
+  edges,
   setEdges,
   onInvalidConnection,
 }: UseConnectionTypingParams): UseConnectionTypingResult {
   const [connecting, setConnecting] = useState<ConnectingContext | null>(null);
 
   const validateConnection = useCallback(
-    (connection: Connection | Edge) => validatePipelineConnection(connection, nodes),
-    [nodes],
+    (connection: Connection | Edge) =>
+      validatePipelineConnection(connection, nodes, undefined, edges),
+    [nodes, edges],
   );
 
   const handleConnect = useCallback(

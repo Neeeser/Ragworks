@@ -202,8 +202,12 @@ export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
     category: "retrieval",
     description: "Query a vector index",
     example: "",
-    input_ports: [{ key: "in", label: "In", data_type: "any", required: false }],
-    output_ports: [{ key: "out", label: "Out", data_type: "any", required: false }],
+    input_ports: [
+      { key: "in", label: "In", data_type: "any", required: false, accepts_many: false },
+    ],
+    output_ports: [
+      { key: "out", label: "Out", data_type: "any", required: false, accepts_many: false },
+    ],
     config_schema: {},
     default_config: {},
     hidden: false,

@@ -20,6 +20,7 @@ export function makeBackendInfo(overrides: Partial<BackendInfo> = {}): BackendIn
     label: "pgvector (PostgreSQL)",
     available: true,
     configured: true,
+    lexical_available: true,
     capabilities: {
       max_dimension: 2000,
       supported_metrics: ["cosine", "l2", "dotproduct"],

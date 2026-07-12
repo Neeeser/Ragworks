@@ -64,9 +64,11 @@ export function NodeConfigSections({
   const config = useMemo<Record<string, unknown>>(() => node.data.config ?? {}, [node]);
   const isEmbedder = nodeType === "embedder.openrouter";
   const isVectorNode = nodeType.startsWith("indexer.") || nodeType.startsWith("retriever.");
-  // Unified nodes select their backend in config; legacy nodes have it pinned
-  // in the type id and get no picker.
-  const backendSelectable = nodeType.endsWith(".vector");
+  // BM25 nodes target sparse (lexical) indexes; dense nodes never list them.
+  const isBm25Node = nodeType.endsWith(".bm25");
+  // Unified and BM25 nodes select their backend in config; legacy nodes have
+  // it pinned in the type id and get no picker.
+  const backendSelectable = nodeType.endsWith(".vector") || isBm25Node;
   const nodeBackend: IndexBackend = backendSelectable
     ? ((config.backend as IndexBackend) ?? appConfig.indexing.default_backend)
     : nodeType.endsWith(".pgvector")
@@ -81,8 +83,15 @@ export function NodeConfigSections({
   });
   const selectedEmbeddingModelKey = typeof config.model_name === "string" ? config.model_name : "";
   const backendIndexes = useMemo(
-    () => sortIndexesByName(vectorIndexes.filter((index) => index.backend === nodeBackend)),
-    [vectorIndexes, nodeBackend],
+    () =>
+      sortIndexesByName(
+        vectorIndexes.filter(
+          (index) =>
+            index.backend === nodeBackend &&
+            (isBm25Node ? index.vector_type === "sparse" : index.vector_type !== "sparse"),
+        ),
+      ),
+    [vectorIndexes, nodeBackend, isBm25Node],
   );
   const indexValue = typeof config.index_name === "string" ? config.index_name : "";
   const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
@@ -118,7 +127,8 @@ export function NodeConfigSections({
     } else {
       nextConfig.index_name = value;
       const index = backendIndexes.find((item) => item.name === value);
-      if (typeof index?.dimension === "number") {
+      // BM25 configs carry no dimension — sparse indexes are text-scored.
+      if (!isBm25Node && typeof index?.dimension === "number") {
         nextConfig.dimension = index.dimension;
       } else {
         delete nextConfig.dimension;

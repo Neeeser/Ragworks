@@ -6,6 +6,7 @@ export type NodeFamily =
   | "indexer"
   | "parser"
   | "retriever"
+  | "fusion"
   | "reranker"
   | "router"
   | "ingestion"
@@ -20,6 +21,7 @@ const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
   indexer: "Indexers",
   parser: "Parsers",
   retriever: "Retrievers",
+  fusion: "Fusion",
   reranker: "Rerankers",
   router: "Routers",
   ingestion: "Ingestion",
@@ -38,6 +40,7 @@ const NODE_FAMILY_ORDER: NodeFamily[] = [
   "embedder",
   "indexer",
   "retriever",
+  "fusion",
   "reranker",
   "chat",
   "utility",
@@ -69,6 +72,13 @@ const ROUTER_STYLE: FamilyStyle = {
   border: "border-stage-router/40",
   glow: GLOW,
   badge: "text-stage-router",
+};
+// Shared by the fusion and reranker families (both re-rank result streams).
+const RERANK_STYLE: FamilyStyle = {
+  accent: "bg-stage-rerank",
+  border: "border-stage-rerank/40",
+  glow: GLOW,
+  badge: "text-stage-rerank",
 };
 
 /**
@@ -109,12 +119,10 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
     glow: GLOW,
     badge: "text-stage-retrieve",
   },
-  reranker: {
-    accent: "bg-stage-rerank",
-    border: "border-stage-rerank/40",
-    glow: GLOW,
-    badge: "text-stage-rerank",
-  },
+  // Fusion nodes combine/re-rank result streams, so they share the rerank
+  // stage token rather than minting a new hue for the same semantic stage.
+  fusion: RERANK_STYLE,
+  reranker: RERANK_STYLE,
   router: ROUTER_STYLE,
   ingestion: NEUTRAL_STYLE,
   retrieval: ROUTER_STYLE,
@@ -183,6 +191,7 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   if (prefix === "indexer") return "indexer";
   if (prefix === "parser") return "parser";
   if (prefix === "retriever") return "retriever";
+  if (prefix === "fusion") return "fusion";
   if (prefix === "reranker") return "reranker";
   if (prefix === "router") return "router";
   if (prefix === "ingestion") return "ingestion";

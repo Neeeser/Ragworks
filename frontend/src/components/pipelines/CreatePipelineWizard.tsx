@@ -11,8 +11,8 @@ import {
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
+import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
-  buildDefaultDefinition,
   sortIndexesByName,
   toFlowEdges,
   toFlowNodes,
@@ -124,8 +124,12 @@ export function CreatePipelineWizard({
   }, [open, defaultBackend]);
 
   const backendInfo = backends.find((info) => info.backend === backend) ?? null;
+  // The wizard picks the dense index; the BM25 sibling is derived from it.
   const backendIndexes = useMemo(
-    () => sortIndexesByName(indexes.filter((index) => index.backend === backend)),
+    () =>
+      sortIndexesByName(
+        indexes.filter((index) => index.backend === backend && index.vector_type !== "sparse"),
+      ),
     [indexes, backend],
   );
   const selectedIndex = useMemo(
@@ -145,8 +149,11 @@ export function CreatePipelineWizard({
         embeddingModel: embeddingModel || undefined,
         chunkSize,
         chunkOverlap,
+        // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
+        // omitted when the deployment can't serve sparse indexes.
+        includeBm25: backendInfo?.lexical_available ?? false,
       }),
-    [kind, backend, indexName, selectedIndex, embeddingModel, chunkSize, chunkOverlap],
+    [kind, backend, indexName, selectedIndex, embeddingModel, chunkSize, chunkOverlap, backendInfo],
   );
 
   const preview = useMemo(

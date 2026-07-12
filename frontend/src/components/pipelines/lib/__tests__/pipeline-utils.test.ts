@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  bm25SiblingIndexName,
   buildDefaultDefinition,
+} from "@/components/pipelines/lib/pipeline-scaffold";
+import {
   buildNodeCatalog,
   createId,
   nextNodePosition,
@@ -158,10 +161,22 @@ describe("pipeline-utils", () => {
         description: "fallback",
         example: "example",
         input_ports: [
-          { key: "source", label: "Source", data_type: "document_source", required: true },
+          {
+            key: "source",
+            label: "Source",
+            data_type: "document_source",
+            required: true,
+            accepts_many: false,
+          },
         ],
         output_ports: [
-          { key: "document", label: "Document", data_type: "document", required: true },
+          {
+            key: "document",
+            label: "Document",
+            data_type: "document",
+            required: true,
+            accepts_many: false,
+          },
         ],
         config_schema: { input: { type: "string" } },
         default_config: {},
@@ -326,5 +341,62 @@ describe("pipeline-utils", () => {
       },
     ]);
     expect(placed).toEqual({ x: 736, y: 40 });
+  });
+});
+
+describe("hybrid BM25 scaffolding", () => {
+  it("scaffolds the BM25 branch with a derived sibling index when included", () => {
+    const ingestion = buildDefaultDefinition("ingestion", "pgvector", {
+      indexName: "docs",
+      includeBm25: true,
+    });
+    const bm25Indexer = ingestion.nodes.find((node) => node.type === "indexer.bm25");
+    expect(bm25Indexer?.config).toEqual({ backend: "pgvector", index_name: "docs-bm25" });
+    expect(ingestion.edges).toContainEqual(
+      expect.objectContaining({ source: "chunk-document", target: "index-bm25" }),
+    );
+    expect(ingestion.edges).toContainEqual(
+      expect.objectContaining({ source: "index-bm25", target: "ingest-output" }),
+    );
+
+    const retrieval = buildDefaultDefinition("retrieval", "pgvector", {
+      indexName: "docs",
+      includeBm25: true,
+    });
+    const bm25Retriever = retrieval.nodes.find((node) => node.type === "retriever.bm25");
+    expect(bm25Retriever?.config).toEqual({ backend: "pgvector", index_name: "docs-bm25" });
+    const fusion = retrieval.nodes.find((node) => node.type === "fusion.rrf");
+    expect(fusion).toBeDefined();
+    // Both retriever branches feed the fusion node, which feeds the output.
+    const fusionTargets = retrieval.edges.filter((edge) => edge.target === fusion?.id);
+    expect(fusionTargets.map((edge) => edge.source).sort()).toEqual([
+      "bm25-retriever",
+      "vector-retriever",
+    ]);
+    expect(retrieval.edges).toContainEqual(
+      expect.objectContaining({ source: fusion?.id, target: "retrieval-output" }),
+    );
+  });
+
+  it("omits the BM25 branch when the deployment cannot serve sparse indexes", () => {
+    const ingestion = buildDefaultDefinition("ingestion", "pgvector", { indexName: "docs" });
+    expect(ingestion.nodes.some((node) => node.type === "indexer.bm25")).toBe(false);
+    const retrieval = buildDefaultDefinition("retrieval", "pgvector", { indexName: "docs" });
+    expect(retrieval.nodes.some((node) => node.type === "fusion.rrf")).toBe(false);
+    // Without fusion, the semantic retriever feeds the output directly.
+    expect(retrieval.edges).toContainEqual(
+      expect.objectContaining({ source: "vector-retriever", target: "retrieval-output" }),
+    );
+  });
+
+  it("derives BM25 sibling names within the 45-character index name rule", () => {
+    expect(bm25SiblingIndexName("docs")).toBe("docs-bm25");
+    const long = "a".repeat(45);
+    const sibling = bm25SiblingIndexName(long);
+    expect(sibling.length).toBeLessThanOrEqual(45);
+    expect(sibling.endsWith("-bm25")).toBe(true);
+    expect(bm25SiblingIndexName("abc----------------------------------------x")).toMatch(
+      /[a-z0-9]-bm25$/,
+    );
   });
 });

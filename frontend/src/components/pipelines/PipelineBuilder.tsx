@@ -198,6 +198,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const { connecting, validateConnection, handleConnect, handleConnectStart, handleConnectEnd } =
     useConnectionTyping({
       nodes,
+      edges,
       setEdges,
       onInvalidConnection: setMessage,
     });

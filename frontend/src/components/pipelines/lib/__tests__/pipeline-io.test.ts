@@ -57,11 +57,15 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: parserNodeType,
-        outputs: [{ key: "out", label: "Out", data_type: "document", required: true }],
+        outputs: [
+          { key: "out", label: "Out", data_type: "document", required: true, accepts_many: false },
+        ],
       }),
       buildNode({
         nodeType: chunkerNodeType,
-        inputs: [{ key: "in", label: "In", data_type: "chunk_batch", required: true }],
+        inputs: [
+          { key: "in", label: "In", data_type: "chunk_batch", required: true, accepts_many: false },
+        ],
       }),
     ];
     const missingHandle: Connection = {
@@ -87,12 +91,28 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: embedderNodeType,
-        outputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        outputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: { dimension: 768 },
       }),
       buildNode({
         nodeType: indexerNodeType,
-        inputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        inputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: { dimension: 384 },
       }),
     ];
@@ -117,12 +137,28 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: embedderNodeType,
-        outputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        outputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: {},
       }),
       buildNode({
         nodeType: indexerNodeType,
-        inputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        inputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: {},
       }),
     ];
@@ -144,12 +180,28 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: embedderNodeType,
-        outputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        outputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: { dimension: Number.POSITIVE_INFINITY },
       }),
       buildNode({
         nodeType: indexerNodeType,
-        inputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        inputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
         config: { dimension: 384 },
       }),
     ];
@@ -166,11 +218,27 @@ describe("pipeline-io", () => {
     const nodes: Node<PipelineNodeData>[] = [
       buildNode({
         nodeType: embedderNodeType,
-        outputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        outputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
       }),
       buildNode({
         nodeType: retrieverNodeType,
-        inputs: [{ key: "emb", label: "Emb", data_type: "embedded_batch", required: true }],
+        inputs: [
+          {
+            key: "emb",
+            label: "Emb",
+            data_type: "embedded_batch",
+            required: true,
+            accepts_many: false,
+          },
+        ],
       }),
     ];
     const connection: Connection = {
@@ -193,11 +261,15 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: "custom.source",
-        outputs: [{ key: "out", label: "Out", data_type: "custom", required: true }],
+        outputs: [
+          { key: "out", label: "Out", data_type: "custom", required: true, accepts_many: false },
+        ],
       }),
       buildNode({
         nodeType: "custom.target",
-        inputs: [{ key: "in", label: "In", data_type: "other", required: true }],
+        inputs: [
+          { key: "in", label: "In", data_type: "other", required: true, accepts_many: false },
+        ],
       }),
     ];
     const connection: Connection = {
@@ -215,12 +287,16 @@ describe("pipeline-io", () => {
     const nodes = [
       buildNode({
         nodeType: parserNodeType,
-        outputs: [{ key: "out", label: "Out", data_type: "document", required: true }],
+        outputs: [
+          { key: "out", label: "Out", data_type: "document", required: true, accepts_many: false },
+        ],
       }),
       buildNode(
         {
           nodeType: parserNodeType,
-          inputs: [{ key: "in", label: "In", data_type: "document", required: true }],
+          inputs: [
+            { key: "in", label: "In", data_type: "document", required: true, accepts_many: false },
+          ],
         },
         `${parserNodeType}.2`,
       ),
@@ -276,5 +352,64 @@ describe("pipeline-io", () => {
 
     const overrides = { retriever: { index_name: "index-a" } };
     expect(validatePipelineConfig(nodes, overrides).nodeErrors.retriever).toBeUndefined();
+  });
+});
+
+describe("port fan-in", () => {
+  const SINGLE_TARGET = "single-target";
+  const FUSION_TARGET = "fusion-target";
+  const resultsPort = (acceptsMany: boolean) => ({
+    key: "results",
+    label: "Results",
+    data_type: "retrieval_results",
+    required: true,
+    accepts_many: acceptsMany,
+  });
+  const sourceA = buildNode(
+    { nodeType: "retriever.vector", outputs: [resultsPort(false)] },
+    "source-a",
+  );
+  const sourceB = buildNode(
+    { nodeType: "retriever.bm25", outputs: [resultsPort(false)] },
+    "source-b",
+  );
+  const singleTarget = buildNode(
+    { nodeType: "retrieval.output", inputs: [resultsPort(false)] },
+    SINGLE_TARGET,
+  );
+  const fusionTarget = buildNode(
+    { nodeType: "fusion.rrf", inputs: [resultsPort(true)] },
+    FUSION_TARGET,
+  );
+
+  it("rejects a second edge into a single-value input port", () => {
+    const nodes = [sourceA, sourceB, singleTarget];
+    const existingEdges = [{ id: "edge-1", target: SINGLE_TARGET, targetHandle: "results" }];
+    const connection: Connection = {
+      source: "source-b",
+      target: SINGLE_TARGET,
+      sourceHandle: "results",
+      targetHandle: "results",
+    };
+
+    const result = validatePipelineConnection(connection, nodes, undefined, existingEdges);
+
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain("already has a connection");
+  });
+
+  it("allows any number of edges into an accepts_many port", () => {
+    const nodes = [sourceA, sourceB, fusionTarget];
+    const existingEdges = [{ id: "edge-1", target: FUSION_TARGET, targetHandle: "results" }];
+    const connection: Connection = {
+      source: "source-b",
+      target: FUSION_TARGET,
+      sourceHandle: "results",
+      targetHandle: "results",
+    };
+
+    const result = validatePipelineConnection(connection, nodes, undefined, existingEdges);
+
+    expect(result.valid).toBe(true);
   });
 });

@@ -77,12 +77,18 @@ class BackendCapabilitiesRead(BaseModel):
 
 
 class BackendInfoRead(BaseModel):
-    """One vector-store backend's usability for the current user."""
+    """One vector-store backend's usability for the current user.
+
+    `lexical_available` reports whether sparse (BM25) indexes work on this
+    deployment right now — for pgvector that additionally requires the
+    pg_search extension the bundled Postgres image ships.
+    """
 
     backend: IndexBackend
     label: str
     available: bool
     configured: bool
+    lexical_available: bool
     capabilities: BackendCapabilitiesRead
 
 

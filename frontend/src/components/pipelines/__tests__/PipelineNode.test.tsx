@@ -40,11 +40,29 @@ describe("PipelineNode", () => {
           label: "Embedder",
           nodeType: "embedder.openrouter",
           inputs: [
-            { key: "chunks", label: "Chunks", data_type: "chunk_batch", required: false },
-            { key: "request", label: "Request", data_type: "query_request", required: false },
+            {
+              key: "chunks",
+              label: "Chunks",
+              data_type: "chunk_batch",
+              required: false,
+              accepts_many: false,
+            },
+            {
+              key: "request",
+              label: "Request",
+              data_type: "query_request",
+              required: false,
+              accepts_many: false,
+            },
           ],
           outputs: [
-            { key: "embedded", label: "Embedded", data_type: "embedded_batch", required: false },
+            {
+              key: "embedded",
+              label: "Embedded",
+              data_type: "embedded_batch",
+              required: false,
+              accepts_many: false,
+            },
           ],
           config: { model_name: "openai/text-embedding-3-small" },
           status: "running",

@@ -108,6 +108,14 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: "Indexed batch\n- upserted: 2\n- index: ragworks\n- namespace: docs",
     },
   },
+  "indexer.bm25": {
+    description:
+      "Writes chunk text into a sparse BM25 index for exact-term (lexical) search — no embeddings involved. Wire it straight from the chunker; it runs in parallel with the embed → semantic-index path.",
+    example: {
+      input: "Chunks (2 texts)\nTarget index: ragworks-bm25 / docs",
+      output: "Indexed batch\n- upserted: 2\n- index: ragworks-bm25\n- namespace: docs",
+    },
+  },
   "ingestion.output": {
     description:
       "Terminal node that passes indexed chunks through as the pipeline result. Use it to finish ingestion runs.",
@@ -146,6 +154,22 @@ const NODE_CONTENT: Record<string, NodeContent> = {
     example: {
       input: QUERY_EMBEDDING_EXAMPLE_INPUT,
       output: RETRIEVAL_RESULTS_EXAMPLE_OUTPUT,
+    },
+  },
+  "retriever.bm25": {
+    description:
+      "Queries a sparse BM25 index with the raw query text for exact-term (lexical) matches — no embeddings involved. Wire it straight from the retrieval input, in parallel with the embed → semantic-retrieve path.",
+    example: {
+      input: 'Query request\n- text: "error E1042"\n- top_k: 5',
+      output: RETRIEVAL_RESULTS_EXAMPLE_OUTPUT,
+    },
+  },
+  "fusion.rrf": {
+    description:
+      "Combines results from any number of retrievers by reciprocal rank — robust fusion when branch scores aren't comparable (semantic cosine vs BM25). Chunks found by several branches rise to the top.",
+    example: {
+      input: "Semantic: [chunk A, chunk B]\nBM25: [chunk B, chunk C]",
+      output: "Fused results: [chunk B, chunk A, chunk C]",
     },
   },
   "reranker.cross_encoder": {

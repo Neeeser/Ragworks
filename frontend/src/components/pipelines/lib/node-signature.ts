@@ -83,6 +83,18 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
   "retriever.pinecone": (read) => indexSignature(read, "pinecone", false),
   "indexer.pgvector": (read) => indexSignature(read, "pgvector", false),
   "retriever.pgvector": (read) => indexSignature(read, "pgvector", false),
+  "indexer.bm25": vectorSignature,
+  "retriever.bm25": vectorSignature,
+  "fusion.rrf": (read) => {
+    const k = asNumber(read("k"));
+    const topK = asNumber(read("top_k"));
+    return {
+      label: "RRF k",
+      value: k !== undefined ? String(k) : "60",
+      detail: topK !== undefined ? `top ${topK}` : undefined,
+      consumedKeys: ["k", "top_k"],
+    };
+  },
   "reranker.cross_encoder": (read) => {
     const enabled = read("enabled") === true;
     const model = asString(read("model_name"));

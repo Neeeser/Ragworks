@@ -46,6 +46,8 @@ export interface BackendInfo {
   label: string;
   available: boolean;
   configured: boolean;
+  /** Whether sparse (BM25) indexes work on this deployment right now. */
+  lexical_available: boolean;
   capabilities: BackendCapabilities;
 }
 
@@ -122,6 +124,8 @@ export interface NodePort {
   label: string;
   data_type: string;
   required: boolean;
+  /** Variadic input: any number of edges may target this port (fusion nodes). */
+  accepts_many: boolean;
 }
 
 export interface NodeSpec {
