@@ -30,15 +30,16 @@ ingestion through retrieval and chat.**
 
 ## Overview
 
-Ragworks is intended for people who want to run retrieval workflows on their own
-infrastructure and inspect how each answer was produced. Ingestion and retrieval
-are represented as editable node graphs rather than fixed application code. Each
-run records the inputs, outputs, duration, and status of its nodes so failures and
-poor retrieval results can be traced to a specific stage.
+Ragworks is an open-source RAG workbench for building, comparing, and inspecting
+retrieval workflows on your own infrastructure. Ingestion and retrieval are
+editable node graphs, making it easy to change parsing, chunking, embedding,
+indexing, and retrieval strategies without rewriting the application. Each run
+records node inputs, outputs, duration, and status so you can understand how a
+pipeline behaved and where its results can be improved.
 
-The included Docker Compose stack runs the application, PostgreSQL, pgvector, and
-BM25 search locally. The current release uses OpenRouter for embedding and chat
-models. Pinecone can be selected as an alternative vector store.
+The included Docker Compose stack runs Ragworks with PostgreSQL, pgvector, and
+BM25 search locally. Ragworks uses OpenRouter for embeddings and chat models,
+with Pinecone available as an alternative vector store.
 
 ## Features
 
@@ -127,28 +128,6 @@ docker compose up -d
 The Compose file follows the current release through the `latest` image tag. For
 a reproducible deployment, replace `latest` with a version from the
 [releases page](https://github.com/Neeeser/Ragworks/releases).
-
-## Configuration and data
-
-Application behavior such as registration policy, upload limits, feature flags,
-and default models can be changed under **Admin > Settings** without restarting
-the services.
-
-The default deployment uses three named volumes:
-
-- `postgres-data` stores relational data and pgvector indexes.
-- `document-storage` stores uploaded files.
-- `backend-config` stores machine-generated bootstrap state, including the JWT
-  signing secret.
-
-The signing secret is generated on first boot. Set `JWT_SECRET_KEY` on the
-backend service to supply one explicitly. The database and files remain in their
-volumes when containers are replaced or upgraded.
-
-Ragworks records optional activity data in its own database for the administrator
-dashboard. It does not send application telemetry to the project maintainers.
-Requests to embedding, chat, or external vector providers are sent to the
-services configured by the user.
 
 ## How it works
 
