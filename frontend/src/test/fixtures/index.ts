@@ -112,6 +112,8 @@ export function makeCollectionStats(overrides: Partial<CollectionStats> = {}): C
   };
 }
 
+export * from "./stats";
+
 export function makeDocument(overrides: Partial<Document> = {}): Document {
   return {
     id: "doc-1",
