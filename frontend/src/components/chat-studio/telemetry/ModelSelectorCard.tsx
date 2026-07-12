@@ -39,6 +39,12 @@ export const ModelSelectorCard = ({
 }: ModelSelectorCardProps) => {
   const visibleModels = filteredModelCatalog.slice(0, 50);
   const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
+  const formatContext = (tokens: number) =>
+    tokens >= 1_000_000
+      ? `${(tokens / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`
+      : tokens >= 1_000
+        ? `${Math.round(tokens / 1_000)}K`
+        : tokens.toLocaleString();
 
   return (
     <div className="space-y-3">
@@ -51,7 +57,7 @@ export const ModelSelectorCard = ({
             <p className="text-[11px] text-meta break-all">{selectedModelKey}</p>
           )}
         </div>
-        <div className="text-right font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
+        <div className="text-right font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
           <span>{toolReadyModels.length} ready</span>
           {modelsLoading && (
             <span className="ml-2 inline-flex items-center gap-1 text-body">
@@ -103,9 +109,7 @@ export const ModelSelectorCard = ({
             const isSelected =
               (selectedModelKey && model.id === selectedModelKey) ||
               (selectedModelKey && model.canonical_slug === selectedModelKey);
-            const contextLabel = model.context_length
-              ? `${model.context_length.toLocaleString()} ctx`
-              : null;
+            const contextLabel = model.context_length ? formatContext(model.context_length) : null;
             const promptLabel = formatCost(model.pricing?.prompt);
             const completionLabel = formatCost(model.pricing?.completion);
             return (
@@ -127,10 +131,31 @@ export const ModelSelectorCard = ({
                   </div>
                   {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-accent-violet" />}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-3 font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                  {contextLabel && <span>{contextLabel}</span>}
-                  {promptLabel && <span>Prompt {promptLabel}</span>}
-                  {completionLabel && <span>Completion {completionLabel}</span>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
+                  {contextLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        ctx
+                      </span>
+                      {contextLabel}
+                    </span>
+                  )}
+                  {promptLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        in
+                      </span>
+                      {promptLabel}
+                    </span>
+                  )}
+                  {completionLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        out
+                      </span>
+                      {completionLabel}
+                    </span>
+                  )}
                 </div>
               </button>
             );
