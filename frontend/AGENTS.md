@@ -110,6 +110,9 @@ Follow the root rule: **regression test in the same commit, verified red-green.*
   pasted three times; a reducer `RESET` action replaced it).
 - **Pages are thin shells.** Route files under `app/` delegate to components/hooks; no
   business logic, no fetch orchestration in a `page.tsx`.
+- **Shared downstream nodes sit between parallel branch rows.** In a hybrid pipeline,
+  center a merge or output node vertically between its inputs so smooth-step edges do
+  not route through either branch's node card.
 - **Feature folders separate components from logic.** Inside a feature folder
   (`chat-studio/`, `pipelines/`, …), components live at the root, pure non-React modules
   (helpers, constants, types, reducers) in `lib/`, and hooks in `hooks/` — grouped into

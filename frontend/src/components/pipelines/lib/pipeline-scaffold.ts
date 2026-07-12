@@ -254,7 +254,7 @@ export const buildDefaultDefinition = (
       type: "ingestion.output",
       name: "Ingestion Output",
       config: {},
-      position: scaffoldPosition(5),
+      position: scaffoldPosition(5, includeBm25 ? 0.5 : 0),
     },
   ];
   const edges: PipelineDefinition["edges"] = [
