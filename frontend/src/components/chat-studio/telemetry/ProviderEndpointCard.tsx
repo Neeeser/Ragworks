@@ -61,7 +61,7 @@ export const ProviderEndpointCard = ({
   const parameterCount = endpoint.supported_parameters?.length ?? 0;
   const actionClasses = (active: boolean) =>
     cn(
-      "rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.3em]",
+      "rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.08em] transition",
       active
         ? "border-accent-violet bg-accent-violet/20 text-primary"
         : "border-hairline bg-surface text-body hover:border-strong",
@@ -84,7 +84,7 @@ export const ProviderEndpointCard = ({
           <p className="font-mono text-sm text-primary">{slug}</p>
           <p className="text-xs text-muted">{endpoint.provider_name || "Unknown provider"}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-meta">
           <span>{getEndpointStatusLabel(endpoint.status)}</span>
           <span>Uptime {formatUptimePercentage(endpoint.uptime_last_30m)}</span>
           {endpoint.tag && (
@@ -106,24 +106,24 @@ export const ProviderEndpointCard = ({
       </div>
       <div className="grid gap-2 text-sm text-body sm:grid-cols-2">
         <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">Prompt</p>
-          <p className="text-lg font-semibold text-primary">{promptPrice}</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Prompt</p>
+          <p className="mt-0.5 text-sm font-semibold text-primary">{promptPrice}</p>
         </div>
         <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">Completion</p>
-          <p className="text-lg font-semibold text-primary">{completionPrice}</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Completion</p>
+          <p className="mt-0.5 text-sm font-semibold text-primary">{completionPrice}</p>
         </div>
         <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">Capacity</p>
-          <p className="text-lg font-semibold text-primary">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Capacity</p>
+          <p className="mt-0.5 text-sm font-semibold text-primary">
             {maxTokens ? `${Math.round(maxTokens).toLocaleString()} tokens` : "—"}
           </p>
         </div>
         <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
             Supported params
           </p>
-          <p className="text-lg font-semibold text-primary">{parameterCount}</p>
+          <p className="mt-0.5 text-sm font-semibold text-primary">{parameterCount}</p>
         </div>
       </div>
       <div className="grid gap-2 text-center sm:grid-cols-3">

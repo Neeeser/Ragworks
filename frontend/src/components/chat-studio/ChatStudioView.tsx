@@ -93,7 +93,7 @@ export function ChatStudioView({
               </div>
 
               {!isOverlayMode && telemetryOpen && (
-                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-hairline bg-surface p-6">
+                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-hairline bg-canvas p-6">
                   {telemetryPanel}
                 </aside>
               )}

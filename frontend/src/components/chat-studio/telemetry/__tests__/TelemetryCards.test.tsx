@@ -7,6 +7,7 @@ import { CollectionVitalsCard } from "@/components/chat-studio/telemetry/Collect
 import { StreamingSettingsCard } from "@/components/chat-studio/telemetry/StreamingSettingsCard";
 import { SystemPromptCard } from "@/components/chat-studio/telemetry/SystemPromptCard";
 import { UsageCard } from "@/components/chat-studio/telemetry/UsageCard";
+import { formatDateTime } from "@/lib/datetime";
 
 import type { Collection, UsageBreakdown } from "@/lib/types";
 
@@ -45,13 +46,13 @@ describe("Telemetry cards", () => {
         promptSections={[{ id: "base", label: "Base", scope: "base", isCustom: true }]}
         promptLoading={false}
         promptError={null}
-        generatedAt="Now"
+        generatedAt={baseTimestamp}
         onEdit={() => undefined}
         markdownComponents={markdownComponents}
       />,
     );
     expect(screen.getByText("Base prompt · Custom")).toBeInTheDocument();
-    expect(screen.getByText("Now")).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(baseTimestamp))).toBeInTheDocument();
 
     rerender(
       <SystemPromptCard

@@ -22,9 +22,9 @@ export const ProviderMaxPriceSection = ({
   setProviderForm,
   inputClasses,
 }: ProviderMaxPriceSectionProps) => (
-  <div className="space-y-3 rounded-2xl border border-hairline bg-surface p-4">
+  <div className="space-y-3 border-t border-hairline pt-4">
     <div className="space-y-1">
-      <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">
+      <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
         Max price ($/m tokens)
       </p>
       <p className="text-sm text-body">
@@ -33,8 +33,8 @@ export const ProviderMaxPriceSection = ({
     </div>
     <div className="grid grid-cols-2 gap-3">
       {PRICE_FIELDS.map((field) => (
-        <label key={field.key} className="space-y-1 text-sm text-body">
-          <span className="font-mono text-xs uppercase tracking-[0.3em] text-meta">
+        <label key={field.key} className="flex flex-col gap-1.5 text-sm text-body">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             {field.label}
           </span>
           <input

@@ -160,13 +160,13 @@ describe("ModelSelectorCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Beta/ }));
     expect(onSelectModel).toHaveBeenCalledWith("model-2");
 
-    expect(screen.getAllByText(/Prompt \$/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Completion \$/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Prompt n\/a/)).toBeInTheDocument();
-    expect(screen.getByText(/Prompt \$0.20\/M/)).toBeInTheDocument();
-    expect(screen.getByText(/Completion \$0.02\/M/)).toBeInTheDocument();
-    expect(screen.getByText(/Completion free/)).toBeInTheDocument();
-    expect(screen.getByText(/Prompt 1e309/)).toBeInTheDocument();
-    expect(screen.getByText(/Prompt \$50.0\/M/)).toBeInTheDocument();
+    expect(screen.getByText("$200/M")).toBeInTheDocument();
+    expect(screen.getByText("$20.0/M")).toBeInTheDocument();
+    expect(screen.getByText("n/a")).toBeInTheDocument();
+    expect(screen.getByText("$0.20/M")).toBeInTheDocument();
+    expect(screen.getByText("$0.02/M")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("1e309")).toBeInTheDocument();
+    expect(screen.getByText("$50.0/M")).toBeInTheDocument();
   });
 });

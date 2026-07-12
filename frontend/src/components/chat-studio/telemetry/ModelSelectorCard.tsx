@@ -2,7 +2,7 @@
 
 import { Check, Loader, Search } from "lucide-react";
 
-import { formatPricePerMillion } from "@/lib/format";
+import { formatContextLength, formatPricePerMillion } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type { ChatModelSortOption } from "@/lib/model-sorting";
@@ -51,7 +51,7 @@ export const ModelSelectorCard = ({
             <p className="text-[11px] text-meta break-all">{selectedModelKey}</p>
           )}
         </div>
-        <div className="text-right font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
+        <div className="text-right font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
           <span>{toolReadyModels.length} ready</span>
           {modelsLoading && (
             <span className="ml-2 inline-flex items-center gap-1 text-body">
@@ -104,7 +104,7 @@ export const ModelSelectorCard = ({
               (selectedModelKey && model.id === selectedModelKey) ||
               (selectedModelKey && model.canonical_slug === selectedModelKey);
             const contextLabel = model.context_length
-              ? `${model.context_length.toLocaleString()} ctx`
+              ? formatContextLength(model.context_length)
               : null;
             const promptLabel = formatCost(model.pricing?.prompt);
             const completionLabel = formatCost(model.pricing?.completion);
@@ -127,10 +127,31 @@ export const ModelSelectorCard = ({
                   </div>
                   {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-accent-violet" />}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-3 font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                  {contextLabel && <span>{contextLabel}</span>}
-                  {promptLabel && <span>Prompt {promptLabel}</span>}
-                  {completionLabel && <span>Completion {completionLabel}</span>}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
+                  {contextLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        ctx
+                      </span>
+                      {contextLabel}
+                    </span>
+                  )}
+                  {promptLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        in
+                      </span>
+                      {promptLabel}
+                    </span>
+                  )}
+                  {completionLabel && (
+                    <span className="text-body">
+                      <span className="mr-1.5 text-[10px] uppercase tracking-[0.2em] text-meta">
+                        out
+                      </span>
+                      {completionLabel}
+                    </span>
+                  )}
                 </div>
               </button>
             );
