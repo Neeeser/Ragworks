@@ -265,7 +265,9 @@ export const ProviderRoutingCard = ({
       </div>
 
       <div className="space-y-3 border-t border-hairline pt-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Data guardrails</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+          Data guardrails
+        </p>
         <div className="space-y-2">
           <div className="rounded-2xl border border-hairline bg-surface p-3">
             <label className="flex items-center justify-between gap-3 text-sm text-body">

@@ -73,7 +73,8 @@ export const SystemPromptCard = ({
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
         {generatedAt && (
           <span>
-            Generated <strong className="font-medium text-primary">{formatDateTime(generatedAt)}</strong>
+            Generated{" "}
+            <strong className="font-medium text-primary">{formatDateTime(generatedAt)}</strong>
           </span>
         )}
         <Button variant="secondary" size="sm" className="ml-auto" onClick={onEdit}>
