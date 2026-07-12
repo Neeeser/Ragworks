@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { fetchFileBlob } from "@/lib/api";
+import { formatDateTime } from "@/lib/datetime";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 import type { FileNode } from "@/lib/types";
@@ -55,7 +56,7 @@ function PanelBody({
     { label: "Path", value: node.path },
     {
       label: "Modified",
-      value: new Date(node.updated_at).toLocaleString(),
+      value: formatDateTime(node.updated_at),
     },
   ];
 

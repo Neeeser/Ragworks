@@ -24,6 +24,28 @@ export interface CollectionStats {
   last_used_at?: string | null;
 }
 
+export interface LatencyBucket {
+  count: number;
+  avg_ms?: number | null;
+  p50_ms?: number | null;
+  p95_ms?: number | null;
+  max_ms?: number | null;
+}
+
+export interface CollectionStatsHistoryPoint {
+  date: string;
+  document_total: number;
+  chunk_total: number;
+  ingestion: LatencyBucket;
+  retrieval: LatencyBucket;
+}
+
+export interface CollectionStatsHistory {
+  collection_id: UUID;
+  days: number;
+  points: CollectionStatsHistoryPoint[];
+}
+
 export interface PromptVariable {
   name: string;
   description: string;

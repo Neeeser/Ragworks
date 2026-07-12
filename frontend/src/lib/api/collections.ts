@@ -8,6 +8,7 @@ import type {
   CollectionPromptDetails,
   CollectionQueryResult,
   CollectionStats,
+  CollectionStatsHistory,
   CollectionUpdatePayload,
   Document,
   EndToEndTrace,
@@ -34,6 +35,17 @@ export async function fetchCollectionStatsById(
   collectionId: string,
 ): Promise<CollectionStats> {
   return apiFetch<CollectionStats>(`/api/collections/${collectionId}/stats`, { token });
+}
+
+export async function fetchCollectionStatsHistory(
+  token: string,
+  collectionId: string,
+  days = 30,
+): Promise<CollectionStatsHistory> {
+  return apiFetch<CollectionStatsHistory>(
+    `/api/collections/${collectionId}/stats/history?days=${days}`,
+    { token },
+  );
 }
 
 export async function getCollectionPrompt(

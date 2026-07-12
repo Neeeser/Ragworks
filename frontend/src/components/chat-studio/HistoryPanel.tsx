@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { chipClass } from "@/components/chat-studio/lib/chat-constants";
 import { Button } from "@/components/ui/button";
+import { parseApiDate } from "@/lib/datetime";
 import { cn, timeAgo } from "@/lib/utils";
 
 import type { ChatSession, Collection } from "@/lib/types";
@@ -80,7 +81,7 @@ const HistoryPanelComponent = ({
     if (!defaultTitlePattern.test(session.title)) {
       return session.title;
     }
-    const createdAt = new Date(session.created_at);
+    const createdAt = parseApiDate(session.created_at);
     if (Number.isNaN(createdAt.getTime())) {
       return session.title;
     }

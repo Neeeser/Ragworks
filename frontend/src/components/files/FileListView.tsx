@@ -6,6 +6,7 @@ import { FileIcon } from "@/components/files/FileIcon";
 import { FileRowDetails } from "@/components/files/FileRowDetails";
 import { IngestionBadge } from "@/components/files/IngestionBadge";
 import { formatBytes } from "@/components/files/lib/tree";
+import { formatDate } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 import type { FileNode } from "@/lib/types";
@@ -21,14 +22,6 @@ type FileListViewProps = {
   onRetry: (file: FileNode) => void;
   animationKey: string;
 };
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
 
 /** Finder-style rows; a chevron on ingested files expands chunk details. */
 export function FileListView({

@@ -1,5 +1,7 @@
-import { formatDistanceToNow, parseISO } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { twMerge } from "tailwind-merge";
+
+import { parseApiDate } from "@/lib/datetime";
 
 export function cn(...classes: Array<string | false | null | undefined>) {
   return twMerge(classes.filter(Boolean).join(" "));
@@ -9,8 +11,7 @@ export function timeAgo(dateLike?: string | Date | null) {
   if (!dateLike) {
     return "—";
   }
-  const date = typeof dateLike === "string" ? parseISO(dateLike) : dateLike;
-  return formatDistanceToNow(date, { addSuffix: true });
+  return formatDistanceToNow(parseApiDate(dateLike), { addSuffix: true });
 }
 
 export function truncate(text: string, limit = 200) {
