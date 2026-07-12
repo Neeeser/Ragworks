@@ -75,10 +75,10 @@ export const ProviderRoutingCard = ({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-4 rounded-2xl border border-hairline bg-surface p-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
-            <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
               Routing strategy
             </p>
             <p className="text-sm text-body">
@@ -98,7 +98,7 @@ export const ProviderRoutingCard = ({
           )}
         </div>
         <label className="space-y-2 text-sm text-body">
-          <span className="font-mono text-xs uppercase tracking-[0.3em] text-meta">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             Sort providers
           </span>
           <select
@@ -135,10 +135,10 @@ export const ProviderRoutingCard = ({
         </div>
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-hairline bg-surface p-4">
+      <div className="space-y-4 border-t border-hairline pt-4">
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
-            <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
               Provider catalog
             </p>
             <p className="text-sm text-body">
@@ -148,7 +148,7 @@ export const ProviderRoutingCard = ({
             </p>
           </div>
           {providerDirectory && (
-            <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
               {providerDirectory.endpoints.length} endpoints
             </span>
           )}
@@ -164,7 +164,7 @@ export const ProviderRoutingCard = ({
             disabled={!providerModelSlug}
           />
         </div>
-        <div className="rounded-2xl border border-hairline bg-surface p-3">
+        <div>
           {providerDirectoryLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted">
               <Loader className="h-4 w-4" />
@@ -198,8 +198,8 @@ export const ProviderRoutingCard = ({
         </div>
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-hairline bg-surface p-4">
-        <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">
+      <div className="space-y-4 border-t border-hairline pt-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
           Selections & filters
         </p>
         <ProviderSelectionFieldList
@@ -231,7 +231,7 @@ export const ProviderRoutingCard = ({
           onMove={moveProviderOrderEntry}
         />
         <div className="space-y-2">
-          <span className="font-mono text-xs uppercase tracking-[0.3em] text-meta">
+          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             Quantizations
           </span>
           <div className="flex flex-wrap gap-2">
@@ -242,7 +242,7 @@ export const ProviderRoutingCard = ({
                   key={option}
                   type="button"
                   className={cn(
-                    "rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.3em]",
+                    "rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.08em] transition",
                     active
                       ? "border-accent-cyan bg-accent-cyan/20 text-primary"
                       : "border-hairline bg-surface text-body hover:border-strong",
@@ -264,8 +264,8 @@ export const ProviderRoutingCard = ({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-hairline bg-surface p-4">
-        <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">Data guardrails</p>
+      <div className="space-y-3 border-t border-hairline pt-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Data guardrails</p>
         <div className="space-y-2">
           <div className="rounded-2xl border border-hairline bg-surface p-3">
             <label className="flex items-center justify-between gap-3 text-sm text-body">
@@ -284,7 +284,7 @@ export const ProviderRoutingCard = ({
             </p>
           </div>
           <label className="space-y-2 text-sm text-body">
-            <span className="font-mono text-xs uppercase tracking-[0.3em] text-meta">
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
               Data collection
             </span>
             <select

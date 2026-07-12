@@ -23,9 +23,9 @@ export const ProviderSelectionFieldList = ({
 }: ProviderSelectionFieldListProps) => {
   return (
     <div className="space-y-2" key={fieldKey}>
-      <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.3em] text-meta">
-        <span>{label}</span>
-        {values.length === 0 && <span className="text-[10px] text-meta">None selected</span>}
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">{label}</span>
+        {values.length === 0 && <span className="text-xs text-meta">None selected</span>}
       </div>
       {values.length > 0 && (
         <div className="flex flex-wrap gap-2">
