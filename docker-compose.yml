@@ -3,9 +3,11 @@ name: ragworks
 
 services:
   postgres:
-    # pgvector-enabled Postgres: the default vector-index backend stores
-    # embeddings right here, so a fresh install needs no vector-DB account.
-    image: pgvector/pgvector:pg17
+    # ParadeDB Postgres bundles pgvector (dense vectors) and pg_search
+    # (BM25/lexical), so the default hybrid search runs right here with no
+    # vector-DB account. Same Postgres 17 major as the previous
+    # pgvector/pgvector image — existing data volumes keep working.
+    image: paradedb/paradedb:latest-pg17
     environment:
       POSTGRES_USER: ragworks
       # Only reachable inside the compose network (no published port).
