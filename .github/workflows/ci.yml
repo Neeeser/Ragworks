@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # pgvector-enabled Postgres, matching the shipped docker-compose image.
-        image: pgvector/pgvector:pg17
+        # ParadeDB Postgres (pgvector + pg_search), matching the shipped
+        # docker-compose image — so the BM25/lexical tests run instead of
+        # skipping.
+        image: paradedb/paradedb:latest-pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
