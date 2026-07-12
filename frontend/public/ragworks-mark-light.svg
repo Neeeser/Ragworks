@@ -1,11 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="180 388 938 479" role="img" aria-labelledby="title">
   <title id="title">Ragworks split and merge pipeline mark</title>
   <defs>
+    <linearGradient id="pipeline-gradient" x1="210" y1="0" x2="1078" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="0.58" stop-color="#d946ef"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="trace-gradient" x1="493" y1="0" x2="907" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="0.5" stop-color="#d946ef"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
     <path id="pipeline" fill-rule="evenodd" d="M210 568q0-5 5-5h177q13 0 23-10l120-124q9-10 23-10l178-1q15 0 28 12l110 116q18 17 41 17l180 1q3 0 3 4v115q0 4-4 4H910q-17 0-32 15L761 829q-6 7-15 7l-188 1q-13 0-23-11L419 705q-13-13-29-13H212q-2 0-2-3V568Zm268 59 110 117q4 4 9 4h114q9 0 15-8l126-127q-12 5-19 4-13 0-23-10l-82-89q-5-7-10-7H594q-5 0-9 3L478 627Z"/>
     <path id="trace" d="m493 472 42-43q9-10 21-10h187q10 0 21 11l113 119q13 12 30 15l-50 47q-7 6-12 6h-17q-8 0-18-10l-81-88q-5-8-11-8H594q-5 0-9 3l-28 27-64-69Z"/>
   </defs>
   <use href="#pipeline" fill="#05060a" stroke="#05060a" stroke-width="14" stroke-linejoin="round"/>
-  <use href="#pipeline" fill="#4735d8"/>
+  <use href="#pipeline" fill="url(#pipeline-gradient)"/>
   <use href="#trace" fill="#05060a" stroke="#05060a" stroke-width="14" stroke-linejoin="round"/>
-  <use href="#trace" fill="#079a9a"/>
+  <use href="#trace" fill="url(#trace-gradient)"/>
 </svg>
