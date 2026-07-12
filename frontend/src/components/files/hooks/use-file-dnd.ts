@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ROOT_PARENT, canDropInto } from "@/components/files/lib/tree";
 
@@ -43,6 +43,11 @@ export function useFileDnd(
 ): FileDnd {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
+  // The browser can fire dragover on a target before React commits the
+  // dragstart state update (its handler would then close over a stale null
+  // draggingId and reject the drop) — so validity checks read this ref,
+  // which dragstart sets synchronously; the state only drives styling.
+  const draggingRef = useRef<string | null>(null);
 
   const dragProps = useCallback(
     (node: FileNode) => ({
@@ -50,9 +55,11 @@ export function useFileDnd(
       onDragStart: (event: DragEvent) => {
         event.dataTransfer.setData(FILE_NODE_DRAG_TYPE, node.id);
         event.dataTransfer.effectAllowed = "move";
+        draggingRef.current = node.id;
         setDraggingId(node.id);
       },
       onDragEnd: () => {
+        draggingRef.current = null;
         setDraggingId(null);
         setDropKey(null);
       },
@@ -64,9 +71,9 @@ export function useFileDnd(
     (folderId: string | null) => {
       const key = folderId ?? ROOT_PARENT;
       // `getData` is sealed during dragover, so validity checks use the
-      // dragging node tracked in state (drags never cross pages anyway).
+      // dragging node tracked in the ref (drags never cross pages anyway).
       const accepts = () => {
-        const source = draggingId ? index.byId.get(draggingId) : null;
+        const source = draggingRef.current ? index.byId.get(draggingRef.current) : null;
         return source ? canDropInto(index, source, folderId) : false;
       };
       return {
@@ -86,6 +93,7 @@ export function useFileDnd(
           event.stopPropagation();
           setDropKey(null);
           setDraggingId(null);
+          draggingRef.current = null;
           const source = index.byId.get(event.dataTransfer.getData(FILE_NODE_DRAG_TYPE));
           if (source && canDropInto(index, source, folderId)) {
             onMove(source, folderId);
@@ -93,7 +101,7 @@ export function useFileDnd(
         },
       };
     },
-    [draggingId, index, onMove],
+    [index, onMove],
   );
 
   return useMemo(
