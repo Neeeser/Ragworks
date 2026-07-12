@@ -12,7 +12,11 @@ interface LoginResponse {
   token_type: string;
 }
 
-export async function loginRequest(email: string, password: string): Promise<LoginResponse> {
+export async function loginRequest(
+  email: string,
+  password: string,
+  rememberMe = false,
+): Promise<LoginResponse> {
   const body = new URLSearchParams();
   body.append("username", email);
   body.append("password", password);
@@ -20,6 +24,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
   body.append("scope", "");
   body.append("client_id", "");
   body.append("client_secret", "");
+  body.append("remember_me", String(rememberMe));
 
   const response = await fetch(`${API_BASE_URL}/api/auth/token`, {
     method: "POST",
@@ -27,6 +32,7 @@ export async function loginRequest(email: string, password: string): Promise<Log
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -35,6 +41,20 @@ export async function loginRequest(email: string, password: string): Promise<Log
   }
 
   return response.json();
+}
+
+export async function refreshSession(): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>("/api/auth/refresh", {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
+export async function logoutRequest(): Promise<void> {
+  return apiFetch<void>("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+  });
 }
 
 export async function registerUser(payload: {
@@ -58,6 +78,7 @@ export async function updateUserSettings(
     openrouter_api_key?: string;
     pinecone_api_key?: string;
     run_settings_order?: RunSettingsSectionKey[];
+    remember_session_days?: 30 | 90 | 180;
   },
 ): Promise<User> {
   return apiFetch<User>("/api/auth/me", {
@@ -65,6 +86,20 @@ export async function updateUserSettings(
     token,
     body: JSON.stringify(payload),
   });
+}
+
+export async function listAuthSessions(
+  token: string,
+): Promise<import("@/lib/types").AuthSession[]> {
+  return apiFetch("/api/auth/sessions", { token, credentials: "include" });
+}
+
+export async function revokeAuthSession(token: string, sessionId: string): Promise<void> {
+  return apiFetch(`/api/auth/sessions/${sessionId}`, { method: "DELETE", token });
+}
+
+export async function revokeAllAuthSessions(token: string): Promise<void> {
+  return apiFetch("/api/auth/sessions", { method: "DELETE", token, credentials: "include" });
 }
 
 export async function updateRunSettingsOrder(

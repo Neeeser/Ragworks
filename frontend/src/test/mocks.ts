@@ -58,6 +58,8 @@ import {
 
 import type { PublicConfig, User } from "@/lib/types";
 
+const MOCK_AUTH_TOKEN = "test-token";
+
 type AuthValue = {
   user: User | null;
   token: string | null;
@@ -81,7 +83,12 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchAdminUsageTimeseries: vi.fn(async () => makeAdminUsageTimeseries()),
     updateAdminUser: vi.fn(async () => makeAdminUser()),
     // auth
-    loginRequest: vi.fn(async () => ({ access_token: "test-token", token_type: "bearer" })),
+    loginRequest: vi.fn(async () => ({ access_token: MOCK_AUTH_TOKEN, token_type: "bearer" })),
+    refreshSession: vi.fn(async () => ({ access_token: MOCK_AUTH_TOKEN, token_type: "bearer" })),
+    logoutRequest: vi.fn(async () => undefined),
+    listAuthSessions: vi.fn(() => new Promise(() => {})),
+    revokeAuthSession: vi.fn(async () => undefined),
+    revokeAllAuthSessions: vi.fn(async () => undefined),
     registerUser: vi.fn(async () => makeUser()),
     getProfile: vi.fn(async () => makeUser()),
     updateUserSettings: vi.fn(async () => makeUser()),
@@ -175,7 +182,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
 function buildAuthValue(overrides: Partial<AuthValue> = {}): AuthValue {
   return {
     user: makeUser(),
-    token: "test-token",
+    token: MOCK_AUTH_TOKEN,
     loading: false,
     error: null,
     signIn: vi.fn(async () => {}),

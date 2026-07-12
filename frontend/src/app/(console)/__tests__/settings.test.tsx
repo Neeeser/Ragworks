@@ -198,4 +198,35 @@ describe("SettingsPage", () => {
       expect(screen.getByText(VALIDATION_DOWN)).toBeInTheDocument();
     });
   });
+
+  it("updates remembered login duration and revokes a session", async () => {
+    api.listAuthSessions.mockResolvedValueOnce([
+      {
+        id: "session-1",
+        user_agent: "Test browser",
+        ip_address: "127.0.0.1",
+        created_at: "2026-07-01T00:00:00Z",
+        last_used_at: "2026-07-12T00:00:00Z",
+        expires_at: "2026-08-01T00:00:00Z",
+        current: false,
+      },
+    ]);
+    render(<SettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText("Remembered login duration"), {
+      target: { value: "90" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save login duration" }));
+
+    await waitFor(() => {
+      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
+        remember_session_days: 90,
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Revoke Test browser" }));
+    });
+    expect(api.revokeAuthSession).toHaveBeenCalledWith(TOKEN, "session-1");
+  });
 });

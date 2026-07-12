@@ -29,8 +29,19 @@ export interface User {
   last_used_stream?: boolean | null;
   last_used_tool_collection_ids?: UUID[] | null;
   run_settings_order?: RunSettingsSectionKey[] | null;
+  remember_session_days: 30 | 90 | 180;
   created_at: string;
   updated_at: string;
+}
+
+export interface AuthSession {
+  id: UUID;
+  user_agent: string | null;
+  ip_address: string | null;
+  created_at: string;
+  last_used_at: string;
+  expires_at: string;
+  current: boolean;
 }
 
 export interface ProviderKeyStatus {

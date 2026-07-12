@@ -6,23 +6,22 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
-import { getProfile, loginRequest } from "@/lib/api";
+import { getProfile, loginRequest, logoutRequest, refreshSession } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { User } from "@/lib/types";
-
-const STORAGE_KEY = "ragworks.jwt";
 
 type AuthContextValue = {
   user: User | null;
   token: string | null;
   loading: boolean;
   error: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signOut: () => void;
   refreshProfile: () => Promise<void>;
 };
@@ -34,48 +33,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tokenRef = useRef<string | null>(null);
 
-  const fetchProfile = useCallback(
-    async (authToken?: string) => {
-      const resolvedToken = authToken || token;
-      if (!resolvedToken) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const profile = await getProfile(resolvedToken);
-        setUser(profile);
-        setError(null);
-      } catch (err) {
-        setUser(null);
-        setToken(null);
-        window.localStorage.removeItem(STORAGE_KEY);
-        setError(getErrorMessage(err, "Unable to load profile."));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token],
-  );
-
-  useEffect(() => {
-    /* c8 ignore next -- window is always defined in jsdom tests */
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-    if (stored) {
-      setToken(stored);
-      fetchProfile(stored);
-    } else {
+  const fetchProfile = useCallback(async (authToken?: string | null) => {
+    const resolvedToken = authToken ?? tokenRef.current;
+    if (!resolvedToken) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const profile = await getProfile(resolvedToken);
+      setUser(profile);
+      setError(null);
+    } catch (err) {
+      setUser(null);
+      setToken(null);
+      setError(getErrorMessage(err, "Unable to load profile."));
+    } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  useEffect(() => {
+    refreshSession()
+      .then((result) => {
+        setToken(result.access_token);
+        return fetchProfile(result.access_token);
+      })
+      .catch(() => setLoading(false));
   }, [fetchProfile]);
 
+  useEffect(() => {
+    if (!token) return;
+    const timer = window.setInterval(
+      () => {
+        refreshSession()
+          .then((result) => setToken(result.access_token))
+          .catch(() => {
+            setToken(null);
+            setUser(null);
+          });
+      },
+      12 * 60 * 1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [token]);
+
   const signIn = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, rememberMe = false) => {
       setError(null);
-      const result = await loginRequest(email, password);
-      window.localStorage.setItem(STORAGE_KEY, result.access_token);
+      const result = await loginRequest(email, password, rememberMe);
       setToken(result.access_token);
       await fetchProfile(result.access_token);
     },
@@ -83,9 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
-    window.localStorage.removeItem(STORAGE_KEY);
     setToken(null);
     setUser(null);
+    void logoutRequest();
   }, []);
 
   const value = useMemo(
@@ -96,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       signIn,
       signOut,
-      refreshProfile: () => fetchProfile(),
+      refreshProfile: () => fetchProfile(token),
     }),
     [user, token, loading, error, signIn, signOut, fetchProfile],
   );

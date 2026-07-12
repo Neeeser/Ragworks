@@ -35,6 +35,7 @@ function AuthStateView() {
 describe("AuthProvider", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    api.refreshSession.mockRejectedValue(new Error("No session"));
   });
 
   it("throws when used outside the provider", () => {
@@ -63,12 +64,9 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user")).toHaveTextContent("none");
   });
 
-  it("hydrates from storage and handles refresh failures", async () => {
-    window.localStorage.setItem("ragworks.jwt", "token");
-    api.getProfile
-      .mockResolvedValueOnce(baseUser)
-      .mockResolvedValueOnce(baseUser)
-      .mockRejectedValueOnce(new Error("No profile"));
+  it("hydrates from the refresh cookie and handles profile failures", async () => {
+    api.refreshSession.mockResolvedValueOnce({ access_token: "token", token_type: "bearer" });
+    api.getProfile.mockResolvedValueOnce(baseUser).mockRejectedValueOnce(new Error("No profile"));
 
     render(
       <AuthProvider>
@@ -89,12 +87,9 @@ describe("AuthProvider", () => {
     });
   });
 
-  it("uses a fallback error message when refresh fails with non-errors", async () => {
-    window.localStorage.setItem("ragworks.jwt", "token");
-    api.getProfile
-      .mockResolvedValueOnce(baseUser)
-      .mockResolvedValueOnce(baseUser)
-      .mockRejectedValueOnce("bad");
+  it("uses a fallback error message when profile refresh fails with non-errors", async () => {
+    api.refreshSession.mockResolvedValueOnce({ access_token: "token", token_type: "bearer" });
+    api.getProfile.mockResolvedValueOnce(baseUser).mockRejectedValueOnce("bad");
 
     render(
       <AuthProvider>
@@ -135,5 +130,7 @@ describe("AuthProvider", () => {
 
     fireEvent.click(screen.getByText("Sign out"));
     expect(screen.getByTestId("token")).toHaveTextContent("none");
+    expect(api.logoutRequest).toHaveBeenCalled();
+    expect(window.localStorage.getItem("ragworks.jwt")).toBeNull();
   });
 });

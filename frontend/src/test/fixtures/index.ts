@@ -69,6 +69,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     ],
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
+    remember_session_days: 30,
     ...overrides,
   };
 }

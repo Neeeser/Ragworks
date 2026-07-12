@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 
 import { ApiKeysForm } from "@/components/settings/ApiKeysForm";
 import { ApiKeyStatusPanel } from "@/components/settings/ApiKeyStatusPanel";
+import { LoginSessionsPanel } from "@/components/settings/LoginSessionsPanel";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import { updateUserSettings, validateUserKeys } from "@/lib/api";
@@ -215,6 +216,7 @@ export default function SettingsPage() {
           />
         </GlassCard>
       </div>
+      <LoginSessionsPanel />
     </div>
   );
 }

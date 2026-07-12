@@ -32,12 +32,13 @@ describe("SignInPage", () => {
 
     fireEvent.change(screen.getByLabelText(emailLabel), { target: { value: loginEmail } });
     fireEvent.change(screen.getByLabelText(passwordLabel), { target: { value: loginPassword } });
+    fireEvent.click(screen.getByLabelText("Remember me"));
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: enterDashboardLabel }));
     });
 
-    expect(auth.signIn).toHaveBeenCalledWith(loginEmail, loginPassword);
+    expect(auth.signIn).toHaveBeenCalledWith(loginEmail, loginPassword, true);
     expect(getMockRouter().push).toHaveBeenCalledWith("/dashboard");
   });
 
@@ -54,7 +55,7 @@ describe("SignInPage", () => {
     });
 
     await waitFor(() => {
-      expect(auth.signIn).toHaveBeenCalledWith("new@example.com", loginPassword);
+      expect(auth.signIn).toHaveBeenCalledWith("new@example.com", loginPassword, false);
     });
     expect(getMockRouter().push).toHaveBeenCalledWith("/dashboard");
   });

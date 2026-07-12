@@ -28,6 +28,7 @@ export default function SignInPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [form, setForm] = useState({ email: "", password: "", full_name: "" });
   const [message, setMessage] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const isLogin = mode === "login";
@@ -38,14 +39,14 @@ export default function SignInPage() {
     setMessage(null);
     try {
       if (mode === "login") {
-        await signIn(form.email, form.password);
+        await signIn(form.email, form.password, rememberMe);
         router.push("/dashboard");
       } else {
         await registerUser(form);
         // The account was just created with these credentials — sign the
         // user straight in instead of bouncing them back to the login form.
         setMessage("Account created — signing you in…");
-        await signIn(form.email, form.password);
+        await signIn(form.email, form.password, false);
         router.push("/dashboard");
       }
     } catch (error) {
@@ -149,6 +150,18 @@ export default function SignInPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
               />
             </Field>
+
+            {isLogin && (
+              <label className="flex cursor-pointer items-center gap-3 text-sm text-body">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  className="h-4 w-4 rounded border-hairline bg-surface accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                />
+                Remember me
+              </label>
+            )}
 
             {message && (
               <p className="rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-body">

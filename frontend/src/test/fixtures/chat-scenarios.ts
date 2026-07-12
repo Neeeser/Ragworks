@@ -16,6 +16,7 @@ const baseUserId = "user-1";
 const providerA = "provider-a";
 
 export const baseUser: User = {
+  remember_session_days: 30,
   id: baseUserId,
   email: "user@example.com",
   role: "user",
