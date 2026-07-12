@@ -234,18 +234,19 @@ export const ProviderRoutingCard = ({
           <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             Quantizations
           </span>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {QUANTIZATION_OPTIONS.map((option) => {
               const active = providerForm.quantizations.includes(option);
               return (
                 <button
                   key={option}
                   type="button"
+                  aria-pressed={active}
                   className={cn(
-                    "rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.08em] transition",
+                    "rounded-xl border py-1.5 text-center font-mono text-[11px] uppercase tracking-[0.12em] transition",
                     active
-                      ? "border-accent-cyan bg-accent-cyan/20 text-primary"
-                      : "border-hairline bg-surface text-body hover:border-strong",
+                      ? "border-accent-cyan bg-accent-cyan/15 text-accent-cyan"
+                      : "border-hairline bg-surface-strong text-body hover:border-strong hover:text-primary",
                   )}
                   onClick={() => toggleQuantization(option)}
                 >
