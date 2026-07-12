@@ -144,7 +144,14 @@ class RRFusionNode(BaseFusionNode):
                 scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (self.config.k + rank)
                 first_seen.setdefault(chunk_id, match)
         ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        limit = self.config.top_k or context.top_k or len(ordered)
+        # Explicit None checks: a top_k of 0 means zero results, never
+        # "unset — return every fused chunk".
+        if self.config.top_k is not None:
+            limit = self.config.top_k
+        elif context.top_k is not None:
+            limit = max(context.top_k, 0)
+        else:
+            limit = len(ordered)
         return [
             ScoredChunk(chunk=first_seen[chunk_id].chunk, score=score)
             for chunk_id, score in ordered[:limit]

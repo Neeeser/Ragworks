@@ -41,15 +41,17 @@ export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
 export const SCAFFOLD_SPACING_X = 368;
 const SCAFFOLD_SPACING_Y = 260;
 
-// Shared index-name rule (mirrors INDEX_NAME_PATTERN in app/vectorstores/base.py).
-const INDEX_NAME_MAX_LENGTH = 45;
+// Fallback name-length cap when the backend's capabilities aren't loaded yet
+// (the real cap is BackendCapabilities.index_name_max_length).
+const DEFAULT_INDEX_NAME_MAX_LENGTH = 45;
 const BM25_INDEX_SUFFIX = "-bm25";
 
 /** Derive the BM25 sibling index name paired with a dense index name. */
-export const bm25SiblingIndexName = (indexName: string) => {
-  const base = indexName
-    .slice(0, INDEX_NAME_MAX_LENGTH - BM25_INDEX_SUFFIX.length)
-    .replace(/-+$/, "");
+export const bm25SiblingIndexName = (
+  indexName: string,
+  maxLength: number = DEFAULT_INDEX_NAME_MAX_LENGTH,
+) => {
+  const base = indexName.slice(0, maxLength - BM25_INDEX_SUFFIX.length).replace(/-+$/, "");
   return `${base}${BM25_INDEX_SUFFIX}`;
 };
 
@@ -61,6 +63,8 @@ export type DefaultDefinitionOptions = {
   chunkOverlap?: number;
   /** Scaffold the parallel BM25 branch (mirrors the backend's hybrid defaults). */
   includeBm25?: boolean;
+  /** The backend's index-name length cap (BackendCapabilities.index_name_max_length). */
+  indexNameMaxLength?: number;
 };
 
 const scaffoldPosition = (index: number, row = 0) => ({
@@ -84,7 +88,7 @@ export const buildDefaultDefinition = (
   const includeBm25 = options.includeBm25 ?? false;
   const bm25Config: Record<string, unknown> = { backend };
   if (indexName) {
-    bm25Config.index_name = bm25SiblingIndexName(indexName);
+    bm25Config.index_name = bm25SiblingIndexName(indexName, options.indexNameMaxLength);
   }
   const embedderConfig: Record<string, unknown> = {};
   if (options.embeddingModel) {

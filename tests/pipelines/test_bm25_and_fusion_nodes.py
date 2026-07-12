@@ -13,11 +13,17 @@ from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.fusion import RRFusionConfig, RRFusionNode
 from app.pipelines.nodes.indexing import Bm25IndexerConfig, Bm25IndexerNode
 from app.pipelines.nodes.io import IngestionOutputConfig, IngestionOutputNode
-from app.pipelines.nodes.retrieval import Bm25RetrieverConfig, Bm25RetrieverNode
+from app.pipelines.nodes.retrieval import (
+    Bm25RetrieverConfig,
+    Bm25RetrieverNode,
+    VectorRetrieverConfig,
+    VectorRetrieverNode,
+)
 from app.pipelines.nodes.validators import lexical_support_issue
 from app.pipelines.payloads import (
     ChunkPayload,
     IndexingPayload,
+    QueryEmbeddingPayload,
     RetrievalPayload,
     RetrievalRequestPayload,
 )
@@ -32,6 +38,7 @@ from app.retrieval.models import (
     ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
+from app.services.errors import InvalidInputError, NotFoundError
 from app.utils.file_storage import FileStorage
 from app.vectorstores.base import VectorStoreCapabilities
 from tests.pipelines.conftest import StubVectorStore, StubVectorStoreProvider
@@ -189,6 +196,42 @@ def test_bm25_retriever_queries_lexically_with_raw_text(session: Session) -> Non
     assert [match.chunk.chunk_id for match in result.response.matches] == ["doc:1"]
 
 
+def test_bm25_retriever_degrades_to_empty_when_index_is_wrong_type(session: Session) -> None:
+    """A BM25 index name resolving to a dense index degrades the branch, not the query."""
+    store = StubVectorStore()
+    store.lexical_query_error = InvalidInputError(
+        "pgvector index 'docs' is a dense index; this operation requires a sparse index."
+    )
+    context = _context(session, store)
+    node = Bm25RetrieverNode(Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs"))
+    payload = RetrievalRequestPayload(request=QueryRequest(text="q", top_k=4))
+
+    outputs = node.run({"request": payload}, context)
+
+    result = RetrievalPayload.model_validate(outputs["results"])
+    assert result.response.matches == []
+
+
+def test_vector_retriever_degrades_to_empty_when_index_not_created_yet(
+    session: Session,
+) -> None:
+    """Querying before first ingest returns no matches instead of a 404."""
+    store = StubVectorStore()
+    store.query_error = NotFoundError("pgvector index 'docs' not found.")
+    context = _context(session, store)
+    node = VectorRetrieverNode(
+        VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs")
+    )
+    payload = QueryEmbeddingPayload(
+        request=QueryRequest(text="q", top_k=4), embedding=[0.1, 0.2]
+    )
+
+    outputs = node.run({"query_embedding": payload}, context)
+
+    result = RetrievalPayload.model_validate(outputs["results"])
+    assert result.response.matches == []
+
+
 def test_rrf_fusion_accumulates_rank_scores_across_branches(session: Session) -> None:
     """A chunk found by several branches outranks single-branch chunks."""
     node = RRFusionNode(RRFusionConfig())
@@ -263,3 +306,35 @@ def test_ingestion_output_merges_branches_preferring_embedded_chunks(
     result = IndexingPayload.model_validate(outputs["result"])
     assert result.chunks[0].embedding == [0.1, 0.2]
     assert result.usage.prompt_tokens == 11
+
+
+def test_rrf_fusion_honors_zero_top_k_instead_of_returning_everything(
+    session: Session,
+) -> None:
+    """A falsy context top_k is honored, not treated as 'unset'."""
+    node = RRFusionNode(RRFusionConfig())
+    context = _context(session, StubVectorStore(), query="q", top_k=0)
+    branches = [_retrieval_payload("a", "b", "c"), _retrieval_payload("d")]
+
+    outputs = node.run({"results": branches}, context)
+
+    result = RetrievalPayload.model_validate(outputs["results"])
+    assert result.response.matches == []
+
+
+def test_ingestion_output_merge_is_not_fooled_by_unembedded_first_chunk(
+    session: Session,
+) -> None:
+    """Branch selection counts embedded chunks; it never keys off chunk[0] alone."""
+    document = Document(document_id="doc", text="x", metadata=DocumentMetadata())
+    dense_chunks = _text_chunks(2)
+    dense_chunks[1] = dense_chunks[1].model_copy(update={"embedding": [0.1, 0.2]})
+    dense = IndexingPayload(document=document, chunks=dense_chunks)
+    lexical = IndexingPayload(document=document, chunks=_text_chunks(2))
+    node = IngestionOutputNode(IngestionOutputConfig())
+    context = _context(session, StubVectorStore())
+
+    outputs = node.run({"indexed": [lexical, dense]}, context)
+
+    result = IndexingPayload.model_validate(outputs["result"])
+    assert result.chunks[1].embedding == [0.1, 0.2]

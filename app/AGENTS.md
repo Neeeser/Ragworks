@@ -211,8 +211,10 @@ serve sparse indexes. **Purges iterate `settings.index_targets`** — resolved
 settings list every index a pipeline touches (dense fallback preserved for
 legacy definitions, no phantom dense target for BM25-only pipelines), and
 collection/file deletion and re-ingest purges must cover all of them. The
-BM25 retriever treats a not-yet-created sparse index as zero matches, so
-querying a collection between setup and first ingest never 404s.
+retriever nodes (dense and BM25 alike) treat a not-yet-created index as
+zero matches, so querying a collection between setup and first ingest never
+404s; the BM25 branch also degrades to empty (with a warning) when its
+index name resolves to a dense index, rather than failing the fused query.
 
 **A collection's ingestion/retrieval pipeline is resolved in exactly one place:
 `app/services/pipeline_resolution.py`.** `resolve_ingestion_pipeline`/

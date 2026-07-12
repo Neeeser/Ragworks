@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
+from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
 from app.db.models import VectorIndexRecord
@@ -16,7 +17,7 @@ from app.retrieval.models import (
     ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
-from app.services.errors import InvalidInputError, NotFoundError
+from app.services.errors import ExternalServiceError, InvalidInputError, NotFoundError
 from app.vectorstores.base import (
     IndexSpec,
     VectorIndexDescription,
@@ -145,12 +146,21 @@ class PgvectorStore(VectorStoreBackend):
     ) -> RetrievalResponse:
         """Return the BM25 best-matching chunks for raw query text."""
         record = self._require_record(index, vector_type="sparse")
-        rows = self._repo.query_lexical(
-            record,
-            namespace,
-            query_text=text,
-            top_k=min(top_k, self.capabilities.max_top_k),
-        )
+        try:
+            rows = self._repo.query_lexical(
+                record,
+                namespace,
+                query_text=text,
+                top_k=min(top_k, self.capabilities.max_top_k),
+            )
+        except DBAPIError as exc:
+            # The BM25 operators come from the pg_search extension; if it is
+            # dropped after the index was created, the raw SQL fails at the
+            # server. Classify as an infrastructure failure (502), not a 500.
+            raise ExternalServiceError(
+                f"BM25 query on index '{index}' failed; the pg_search extension "
+                "may be unavailable on this Postgres server."
+            ) from exc
         # BM25 scores are already higher-is-better; no distance conversion.
         return RetrievalResponse(
             matches=[self._to_scored_chunk(row, record.metric, raw_score=True) for row in rows]

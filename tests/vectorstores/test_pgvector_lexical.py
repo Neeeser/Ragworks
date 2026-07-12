@@ -7,12 +7,15 @@ reason when the test server lacks it — run the suite against the bundled
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session
 
 from app.db.pg_search_support import set_pg_search_available
 from app.retrieval.models import DocumentChunk, DocumentMetadata
-from app.services.errors import InvalidInputError, NotFoundError
+from app.services.errors import ExternalServiceError, InvalidInputError, NotFoundError
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
 
@@ -132,3 +135,22 @@ def test_lexical_operations_require_matching_index_type(pg_search_session: Sessi
         store.query("docs-bm25", "ns-1", embedding=[1.0, 0.0, 0.0], top_k=5)
     with pytest.raises(NotFoundError):
         store.lexical_query("missing", "ns-1", text="anything", top_k=5)
+
+
+def test_lexical_query_wraps_database_errors_as_external(session: Session) -> None:
+    """A failing BM25 query (e.g. pg_search lost at runtime) surfaces typed, not raw."""
+
+    class _BrokenRepo:
+        @staticmethod
+        def get_record(_name: str) -> object:
+            return SimpleNamespace(name="docs-bm25", vector_type="sparse", metric="bm25")
+
+        @staticmethod
+        def query_lexical(*_args: object, **_kwargs: object) -> object:
+            raise ProgrammingError("SELECT ...", {}, Exception("operator does not exist: |||"))
+
+    store = PgvectorStore(session)
+    store._repo = _BrokenRepo()  # type: ignore[assignment]
+
+    with pytest.raises(ExternalServiceError):
+        store.lexical_query("docs-bm25", "ns", text="q", top_k=5)

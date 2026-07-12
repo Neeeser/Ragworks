@@ -74,6 +74,8 @@ class StubVectorStore(VectorStoreBackend):
     ) -> None:
         self.query_matches = query_matches or []
         self.lexical_matches = lexical_matches or []
+        self.query_error: Exception | None = None
+        self.lexical_query_error: Exception | None = None
         self.ensure_calls: list[IndexSpec] = []
         self.upsert_calls: list[dict[str, Any]] = []
         self.upsert_lexical_calls: list[dict[str, Any]] = []
@@ -121,6 +123,8 @@ class StubVectorStore(VectorStoreBackend):
                 "filter": filter,
             }
         )
+        if self.query_error is not None:
+            raise self.query_error
         return RetrievalResponse(matches=list(self.query_matches))
 
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
@@ -146,6 +150,8 @@ class StubVectorStore(VectorStoreBackend):
                 "filter": filter,
             }
         )
+        if self.lexical_query_error is not None:
+            raise self.lexical_query_error
         return RetrievalResponse(matches=list(self.lexical_matches))
 
     def delete_namespace(self, index: str, namespace: str) -> None:

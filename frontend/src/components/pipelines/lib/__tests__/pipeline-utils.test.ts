@@ -389,6 +389,12 @@ describe("hybrid BM25 scaffolding", () => {
     );
   });
 
+  it("derives BM25 sibling names within the backend's own name-length cap", () => {
+    const sibling = bm25SiblingIndexName("a".repeat(30), 20);
+    expect(sibling.length).toBeLessThanOrEqual(20);
+    expect(sibling.endsWith("-bm25")).toBe(true);
+  });
+
   it("derives BM25 sibling names within the 45-character index name rule", () => {
     expect(bm25SiblingIndexName("docs")).toBe("docs-bm25");
     const long = "a".repeat(45);

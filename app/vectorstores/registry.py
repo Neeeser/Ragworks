@@ -59,6 +59,19 @@ def get_vector_store(
     return PineconeStore(get_pinecone_client(api_key))
 
 
+def lexical_available(backend: IndexBackend) -> bool:
+    """Runtime truth for sparse (BM25) indexes on a backend.
+
+    Capability says the backend *could*; this says the deployment *can*
+    (pgvector additionally needs both extensions present).
+    """
+    if not CAPABILITIES_BY_BACKEND[backend].supports_lexical:
+        return False
+    if backend is IndexBackend.PGVECTOR:
+        return pgvector_available() and pg_search_available()
+    return True
+
+
 @dataclass(frozen=True)
 class BackendStatus:
     """One backend's availability for a given user.
@@ -85,7 +98,7 @@ def backend_statuses(user: models.User) -> list[BackendStatus]:
             label=BACKEND_LABELS[IndexBackend.PGVECTOR],
             available=pgvector_available(),
             configured=True,
-            lexical_available=pgvector_available() and pg_search_available(),
+            lexical_available=lexical_available(IndexBackend.PGVECTOR),
             capabilities=PGVECTOR_CAPABILITIES,
         ),
         BackendStatus(
@@ -93,7 +106,7 @@ def backend_statuses(user: models.User) -> list[BackendStatus]:
             label=BACKEND_LABELS[IndexBackend.PINECONE],
             available=True,
             configured=pinecone_configured,
-            lexical_available=True,
+            lexical_available=lexical_available(IndexBackend.PINECONE),
             capabilities=PINECONE_CAPABILITIES,
         ),
     ]

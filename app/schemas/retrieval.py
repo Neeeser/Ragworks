@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RetrievedChunk(BaseModel):
@@ -22,7 +22,7 @@ class CollectionQueryRequest(BaseModel):
     """Payload for querying a collection."""
 
     query: str
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1)
 
 
 class CollectionQueryResponse(BaseModel):

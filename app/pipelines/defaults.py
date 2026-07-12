@@ -9,7 +9,6 @@ is omitted so defaults always ingest and query successfully.
 
 from __future__ import annotations
 
-from app.db.pg_search_support import pg_search_available
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -28,7 +27,7 @@ from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
 from app.vectorstores.base import INDEX_NAME_PATTERN
-from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, lexical_available
 
 # Horizontal spacing between scaffolded nodes; comfortably wider than the
 # editor's rendered node cards so default pipelines never overlap. The BM25
@@ -42,26 +41,13 @@ def _default_backend() -> IndexBackend:
     return IndexBackend(get_app_config().indexing.default_backend)
 
 
-def _bm25_available(backend: IndexBackend) -> bool:
-    """Whether the backend can serve sparse (BM25) indexes right now.
-
-    Capability says whether the backend ever could; for pgvector the
-    pg_search extension must also actually be present on this deployment.
-    """
-    if not CAPABILITIES_BY_BACKEND[backend].supports_lexical:
-        return False
-    if backend is IndexBackend.PGVECTOR:
-        return pg_search_available()
-    return True
-
-
-def bm25_sibling_index_name(index_name: str) -> str:
+def bm25_sibling_index_name(index_name: str, backend: IndexBackend) -> str:
     """Derive the BM25 index name paired with a dense index name.
 
     Appends `-bm25`, truncating the base so the result stays within the
-    shared 45-character index-name rule (and never ends on a hyphen).
+    backend's index-name length rule (and never ends on a hyphen).
     """
-    max_length = 45
+    max_length = CAPABILITIES_BY_BACKEND[backend].index_name_max_length
     base = index_name[: max_length - len(BM25_INDEX_SUFFIX)].rstrip("-")
     candidate = base + BM25_INDEX_SUFFIX
     if not INDEX_NAME_PATTERN.fullmatch(candidate):
@@ -106,7 +92,7 @@ def build_default_ingestion_pipeline(
     backend = backend or _default_backend()
     embedding_model = _resolve_embedding_model(embedding_model)
     index_name = index_name or default_index_name(backend)
-    include_bm25 = _bm25_available(backend)
+    include_bm25 = lexical_available(backend)
     nodes = [
         PipelineNodeDefinition(
             id="ingest-input",
@@ -203,7 +189,7 @@ def build_default_ingestion_pipeline(
                 position={"x": NODE_SPACING_X * 3.5, "y": NODE_SPACING_Y},
                 config={
                     "backend": backend.value,
-                    "index_name": bm25_sibling_index_name(index_name),
+                    "index_name": bm25_sibling_index_name(index_name, backend),
                     "namespace": DEFAULT_NAMESPACE_TEMPLATE,
                     "ensure_index": True,
                 },
@@ -247,7 +233,7 @@ def build_default_retrieval_pipeline(
     backend = backend or _default_backend()
     embedding_model = _resolve_embedding_model(embedding_model)
     index_name = index_name or default_index_name(backend)
-    include_bm25 = _bm25_available(backend)
+    include_bm25 = lexical_available(backend)
     nodes = [
         PipelineNodeDefinition(
             id="query-input",
@@ -306,7 +292,7 @@ def build_default_retrieval_pipeline(
                     position={"x": NODE_SPACING_X * 1.5, "y": NODE_SPACING_Y},
                     config={
                         "backend": backend.value,
-                        "index_name": bm25_sibling_index_name(index_name),
+                        "index_name": bm25_sibling_index_name(index_name, backend),
                         "namespace": DEFAULT_NAMESPACE_TEMPLATE,
                     },
                 ),

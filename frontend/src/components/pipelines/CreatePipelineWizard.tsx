@@ -152,6 +152,7 @@ export function CreatePipelineWizard({
         // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
         // omitted when the deployment can't serve sparse indexes.
         includeBm25: backendInfo?.lexical_available ?? false,
+        indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
       }),
     [kind, backend, indexName, selectedIndex, embeddingModel, chunkSize, chunkOverlap, backendInfo],
   );

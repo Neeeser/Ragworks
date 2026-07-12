@@ -88,16 +88,7 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
 
     def __post_init__(self) -> None:
         """Default the targets to the dense primary so they are never empty."""
-        if not self.index_targets:
-            object.__setattr__(
-                self,
-                "index_targets",
-                (
-                    IndexTarget(
-                        backend=self.backend, index_name=self.index_name, vector_type="dense"
-                    ),
-                ),
-            )
+        _default_dense_targets(self)
 
 
 @dataclass(frozen=True)
@@ -120,16 +111,23 @@ class RetrievalPipelineSettings:
 
     def __post_init__(self) -> None:
         """Default the targets to the dense primary so they are never empty."""
-        if not self.index_targets:
-            object.__setattr__(
-                self,
-                "index_targets",
-                (
-                    IndexTarget(
-                        backend=self.backend, index_name=self.index_name, vector_type="dense"
-                    ),
+        _default_dense_targets(self)
+
+
+def _default_dense_targets(settings: IngestionPipelineSettings | RetrievalPipelineSettings) -> None:
+    """Fill empty `index_targets` with the dense primary (legacy definitions)."""
+    if not settings.index_targets:
+        object.__setattr__(
+            settings,
+            "index_targets",
+            (
+                IndexTarget(
+                    backend=settings.backend,
+                    index_name=settings.index_name,
+                    vector_type="dense",
                 ),
-            )
+            ),
+        )
 
 
 def _resolve_node_config(

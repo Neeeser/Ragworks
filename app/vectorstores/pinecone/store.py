@@ -69,6 +69,16 @@ def is_missing_namespace_error(error: Exception) -> bool:
     return response_status == 404 and "namespace" in message
 
 
+def is_benign_purge_error(error: Exception) -> bool:
+    """Return True when a Pinecone purge error means there is nothing to purge.
+
+    Covers both an absent namespace and an absent index (e.g. a hybrid
+    pipeline's sparse sibling whose creation never happened) — in either
+    case no vectors exist, so the purge already succeeded.
+    """
+    return isinstance(error, PineconeNotFoundException) or is_missing_namespace_error(error)
+
+
 class PineconeStore(VectorStoreBackend):
     """Vector storage in Pinecone serverless indexes."""
 
@@ -259,8 +269,9 @@ class PineconeStore(VectorStoreBackend):
             self._get_index(index).delete(namespace=namespace, delete_all=True)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             # Pinecone raises provider-specific error types; a missing
-            # namespace is benign (nothing to purge), anything else is real.
-            if not is_missing_namespace_error(exc):
+            # namespace or index is benign (nothing to purge), anything
+            # else is real.
+            if not is_benign_purge_error(exc):
                 raise
 
     def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
@@ -278,7 +289,7 @@ class PineconeStore(VectorStoreBackend):
                 if ids:
                     handle.delete(ids=ids, namespace=namespace)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            if not is_missing_namespace_error(exc):
+            if not is_benign_purge_error(exc):
                 raise
 
     # -- helpers -------------------------------------------------------------

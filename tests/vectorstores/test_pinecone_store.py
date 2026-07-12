@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pinecone.exceptions import NotFoundException as PineconeNotFoundException
 
 from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.vectorstores.base import IndexSpec
@@ -19,7 +20,13 @@ class _StubIndex:
         self.query_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict[str, Any]] = []
         self.delete_error: Exception | None = None
+        self.list_error: Exception | None = None
         self._matches = list(matches)
+
+    def list(self, **_kwargs: Any) -> Any:
+        if self.list_error is not None:
+            raise self.list_error
+        return iter(())
 
     def upsert(self, *, vectors: list[dict[str, Any]], namespace: str | None = None) -> None:
         self.upsert_calls.append({"vectors": vectors, "namespace": namespace})
@@ -198,6 +205,24 @@ def test_delete_namespace_raises_other_errors() -> None:
 
     with pytest.raises(RuntimeError, match="rate limited"):
         store.delete_namespace("unit-index", "ns-1")
+
+
+def test_delete_document_vectors_tolerates_missing_index() -> None:
+    """Purging a document from a never-created index is a no-op, not a failure."""
+    index = _StubIndex()
+    index.list_error = PineconeNotFoundException("Resource unit-bm25 not found")
+    store = PineconeStore(_StubPinecone(index=index))  # type: ignore[arg-type]
+
+    store.delete_document_vectors("unit-bm25", "ns-1", "doc-1")  # does not raise
+
+
+def test_delete_namespace_tolerates_missing_index() -> None:
+    """Purging a namespace on a never-created index is a no-op, not a failure."""
+    index = _StubIndex()
+    index.delete_error = PineconeNotFoundException("Resource unit-bm25 not found")
+    store = PineconeStore(_StubPinecone(index=index))  # type: ignore[arg-type]
+
+    store.delete_namespace("unit-bm25", "ns-1")  # does not raise
 
 
 class _StubLexicalIndex(_StubIndex):

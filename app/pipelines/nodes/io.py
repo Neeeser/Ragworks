@@ -140,13 +140,14 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
     def _merge(cls, inputs: dict[str, object]) -> IndexingPayload:
         """Merge branch payloads: embedded chunks win, usage sums."""
         payloads = cls._collect(inputs)
-        primary = next(
-            (
-                payload
-                for payload in payloads
-                if payload.chunks and payload.chunks[0].embedding is not None
+        # The persisted branch is the one carrying the most embedded chunks
+        # (the dense branch in a hybrid pipeline); ties keep the first, so a
+        # single-branch pipeline is a passthrough.
+        primary = max(
+            payloads,
+            key=lambda payload: sum(
+                1 for chunk in payload.chunks if chunk.embedding is not None
             ),
-            payloads[0],
         )
         return IndexingPayload(
             document=primary.document,

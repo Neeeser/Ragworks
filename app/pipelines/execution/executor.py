@@ -29,6 +29,46 @@ class PipelineExecutionResult:
     terminal_outputs: dict[str, dict[str, object]]
 
 
+@dataclass
+class _RunState:
+    """Mutable bookkeeping for one pipeline run.
+
+    `fanin` starts as the wired inbound-edge count per `(node, port)` and may
+    shrink when a branch settles as undeliverable; `dead` holds nodes that can
+    never run because no branch delivered to them.
+    """
+
+    node_map: dict[str, PipelineNodeDefinition]
+    outgoing: dict[str, list[PipelineEdgeDefinition]]
+    incoming: dict[str, list[PipelineEdgeDefinition]]
+    fanin: dict[tuple[str, str], int]
+    inputs: dict[str, dict[str, object]]
+    outputs: dict[str, dict[str, object]]
+    pending: set[str]
+    dead: set[str]
+
+    @classmethod
+    def for_definition(cls, definition: PipelineDefinition) -> _RunState:
+        """Build the initial state for a definition."""
+        node_map = definition.node_map()
+        incoming: dict[str, list[PipelineEdgeDefinition]] = {}
+        fanin: dict[tuple[str, str], int] = {}
+        for edge in definition.edges:
+            incoming.setdefault(edge.target, []).append(edge)
+            key = (edge.target, edge.target_port or "default")
+            fanin[key] = fanin.get(key, 0) + 1
+        return cls(
+            node_map=node_map,
+            outgoing=definition.outgoing_edges(),
+            incoming=incoming,
+            fanin=fanin,
+            inputs={node_id: {} for node_id in node_map},
+            outputs={},
+            pending=set(node_map.keys()),
+            dead=set(),
+        )
+
+
 class PipelineExecutor:
     """Executor for pipeline definitions."""
 
@@ -67,58 +107,78 @@ class PipelineExecutor:
         context: PipelineRunContext,
     ) -> tuple[dict[str, dict[str, object]], dict[str, dict[str, object]]]:
         """Run nodes for a pipeline definition and return outputs."""
-        node_map = definition.node_map()
-        outgoing = definition.outgoing_edges()
-        fanin = self._expected_fanin(definition)
-        inputs: dict[str, dict[str, object]] = {node_id: {} for node_id in node_map}
-        outputs: dict[str, dict[str, object]] = {}
-        pending = set(node_map.keys())
-        progressed = True
+        state = _RunState.for_definition(definition)
 
-        while pending and progressed:
+        while state.pending:
             progressed = False
-            for node_id in list(pending):
-                if not self._is_ready(node_id, node_map, inputs, fanin):
+            for node_id in list(state.pending):
+                if not self._is_ready(node_id, state):
                     continue
 
-                node_outputs = self._run_node_traced(node_map[node_id], inputs[node_id], context)
-                outputs[node_id] = node_outputs
-                pending.remove(node_id)
+                node_outputs = self._run_node_traced(
+                    state.node_map[node_id], state.inputs[node_id], context
+                )
+                state.outputs[node_id] = node_outputs
+                state.pending.remove(node_id)
                 progressed = True
-                self._propagate(node_id, node_outputs, outgoing, inputs, node_map)
+                self._propagate(node_id, node_outputs, state)
+            if progressed:
+                continue
+            if not self._settle_undeliverable(state):
+                break
 
-        self._resolve_stalled(pending, inputs)
+        self._resolve_stalled(state.pending, state.inputs)
 
         terminal_outputs = {
             node_id: node_outputs
-            for node_id, node_outputs in outputs.items()
-            if node_id not in outgoing
+            for node_id, node_outputs in state.outputs.items()
+            if node_id not in state.outgoing
         }
-        return outputs, terminal_outputs
+        return state.outputs, terminal_outputs
 
-    @staticmethod
-    def _expected_fanin(definition: PipelineDefinition) -> dict[tuple[str, str], int]:
-        """Count inbound edges per `(target node id, target port)` pair."""
-        counts: dict[tuple[str, str], int] = {}
-        for edge in definition.edges:
-            key = (edge.target, edge.target_port or "default")
-            counts[key] = counts.get(key, 0) + 1
-        return counts
+    def _settle_undeliverable(self, state: _RunState) -> bool:
+        """Settle nodes whose remaining inputs can never arrive; return True on change.
 
-    def _is_ready(
-        self,
-        node_id: str,
-        node_map: dict[str, PipelineNodeDefinition],
-        inputs: dict[str, dict[str, object]],
-        fanin: dict[tuple[str, str], int],
-    ) -> bool:
+        An upstream node may legitimately emit only a subset of its output
+        ports (a router), leaving a branch undelivered. Once every inbound
+        edge of a pending node is settled (its source ran or is itself dead):
+        a node with no inputs at all is dead — it can never run — and a
+        variadic port's expected fan-in shrinks to what actually arrived, so
+        the fan-in node runs with the branches that delivered.
+        """
+        changed = False
+        for node_id in list(state.pending):
+            edges = state.incoming.get(node_id, [])
+            if not all(
+                edge.source in state.outputs or edge.source in state.dead for edge in edges
+            ):
+                continue
+            if not state.inputs[node_id] and edges:
+                logger.info("Skipping pipeline node %s: no branch delivered to it.", node_id)
+                state.pending.remove(node_id)
+                state.dead.add(node_id)
+                changed = True
+                continue
+            for edge in edges:
+                port_key = edge.target_port or "default"
+                key = (node_id, port_key)
+                if not self._is_many_port(state.node_map.get(node_id), port_key):
+                    continue
+                collected = state.inputs[node_id].get(port_key)
+                arrived = len(collected) if isinstance(collected, list) else 0
+                if arrived > 0 and state.fanin.get(key, 0) != arrived:
+                    state.fanin[key] = arrived
+                    changed = True
+        return changed
+
+    def _is_ready(self, node_id: str, state: _RunState) -> bool:
         """Return True when a pending node has all the inputs it needs to run."""
-        node_def = node_map[node_id]
+        node_def = state.node_map[node_id]
         node_spec = self._registry.get_spec(node_def.type)
         if node_spec is None:
             raise PipelineExecutionError(f"Node type '{node_def.type}' not found.")
 
-        available_inputs = inputs[node_id]
+        available_inputs = state.inputs[node_id]
         if node_spec.input_ports and not available_inputs:
             return False
 
@@ -126,7 +186,7 @@ class PipelineExecutor:
             if port.accepts_many:
                 collected = available_inputs.get(port.key)
                 arrived = len(collected) if isinstance(collected, list) else 0
-                expected = fanin.get((node_id, port.key), 0)
+                expected = state.fanin.get((node_id, port.key), 0)
                 # A variadic port waits for every wired edge; required with
                 # nothing wired can never run (the validator flags it first).
                 if arrived < expected or (port.required and expected == 0):
@@ -165,22 +225,20 @@ class PipelineExecutor:
         self,
         node_id: str,
         node_outputs: dict[str, object],
-        outgoing: dict[str, list[PipelineEdgeDefinition]],
-        inputs: dict[str, dict[str, object]],
-        node_map: dict[str, PipelineNodeDefinition],
+        state: _RunState,
     ) -> None:
         """Copy a node's outputs onto its downstream edges' target inputs.
 
         Values bound for an `accepts_many` port collect into a list; every
         other port receives the single value directly.
         """
-        for edge in outgoing.get(node_id, []):
+        for edge in state.outgoing.get(node_id, []):
             output_key = edge.source_port or "default"
             if output_key not in node_outputs:
                 continue
-            target_inputs = inputs[edge.target]
+            target_inputs = state.inputs[edge.target]
             input_key = edge.target_port or "default"
-            if self._is_many_port(node_map.get(edge.target), input_key):
+            if self._is_many_port(state.node_map.get(edge.target), input_key):
                 collected = target_inputs.get(input_key)
                 if isinstance(collected, list):
                     collected.append(node_outputs[output_key])

@@ -31,7 +31,7 @@ from app.retrieval.models import RetrievalResponse
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
-from app.services.errors import NotFoundError
+from app.services.errors import InvalidInputError, NotFoundError
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
 
 if TYPE_CHECKING:
@@ -121,13 +121,19 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
-        response = store.query(
-            index_name,
-            namespace or "",
-            embedding=embedding,
-            top_k=request.top_k,
-            filter=request.filter,
-        )
+        try:
+            response = store.query(
+                index_name,
+                namespace or "",
+                embedding=embedding,
+                top_k=request.top_k,
+                filter=request.filter,
+            )
+        except NotFoundError:
+            # The index is created by the first ingest; querying before then
+            # is an honest empty result, not an error.
+            logger.info("Index '%s' does not exist yet; returning no matches.", index_name)
+            response = RetrievalResponse(matches=[])
         logger.info(
             "Pipeline retrieval returned %s matches for query.",
             len(response.matches),
@@ -288,6 +294,11 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
             # lexically indexed yet — an honest empty branch, not an error.
             logger.info("BM25 index '%s' does not exist yet; returning no matches.", index_name)
             response = RetrievalResponse(matches=[])
+        except InvalidInputError as exc:
+            # A misconfigured branch (e.g. the name resolves to a dense index)
+            # degrades to empty rather than failing the whole fused query.
+            logger.warning("BM25 branch on index '%s' skipped: %s", index_name, exc)
+            response = RetrievalResponse(matches=[])
         logger.info(
             "Pipeline BM25 retrieval returned %s matches for query.",
             len(response.matches),
@@ -386,5 +397,3 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
                 ),
             ],
         )
-
-

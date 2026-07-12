@@ -145,6 +145,7 @@ describe("CreatePipelineWizard", () => {
         chunkSize: 1024,
         chunkOverlap: 200,
         includeBm25: true,
+        indexNameMaxLength: 45,
       });
       expect(onCreated).toHaveBeenCalledWith(pipeline);
       expect(onClose).toHaveBeenCalled();
@@ -181,6 +182,7 @@ describe("CreatePipelineWizard", () => {
         chunkSize: 512,
         chunkOverlap: 64,
         includeBm25: true,
+        indexNameMaxLength: 45,
       });
     });
   }, 15000);

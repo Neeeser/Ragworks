@@ -285,17 +285,20 @@ class PgvectorRepository:
                 metadata = EXCLUDED.metadata
             """
         )
-        for chunk in chunks:
-            self._session.exec(  # type: ignore[call-overload]
-                statement,
-                params={
+        # One executemany round trip for the whole batch, not one per chunk.
+        self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params=[
+                {
                     "chunk_id": chunk.chunk_id,
                     "namespace": namespace,
                     "document_id": chunk.document_id,
                     "text": chunk.text,
                     "metadata": json.dumps({**chunk.metadata.data, "order": chunk.order}),
-                },
-            )
+                }
+                for chunk in chunks
+            ],
+        )
 
     def query_lexical(
         self,
