@@ -160,3 +160,53 @@ def test_pinecone_purge_failure_surfaces_as_external_error(
 
     with pytest.raises(ExternalServiceError, match="pinecone down"):
         FileDeletionService(session).delete(user, collection, upload.file)
+
+
+def test_delete_purges_ingestion_events_and_umap_points(
+    monkeypatch: pytest.MonkeyPatch, session: Session
+) -> None:
+    """Rows referencing the doomed documents must go too (regression:
+    deleting an ingested file 500'd on the ingestion_events FK, and a file
+    with stored UMAP points hit the umap_points FK the same way)."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    files = FileSystemService(session)
+    upload = _upload(files, user, collection, "doc.txt")
+    assert upload.document is not None
+    _mark_ready(session, upload.document)
+
+    session.add(
+        models.IngestionEvent(
+            document_id=upload.document.id,
+            collection_id=collection.id,
+            event_type="ingestion",
+            status="completed",
+            details={},
+        )
+    )
+    chunk = session.exec(select(models.DocumentChunkRecord)).one()
+    projection = models.UmapProjectionRecord(
+        collection_id=collection.id, user_id=user.id, embedding_model="embed", point_count=1
+    )
+    session.add(projection)
+    session.commit()
+    session.add(
+        models.UmapPointRecord(
+            projection_id=projection.id,
+            chunk_id=chunk.id,
+            document_id=upload.document.id,
+            chunk_index=0,
+            x=0.1,
+            y=0.2,
+        )
+    )
+    session.commit()
+
+    store = _RecordingStore()
+    monkeypatch.setattr(deletion_module, "get_vector_store", lambda *_a, **_k: store)
+
+    FileDeletionService(session).delete(user, collection, upload.file)
+
+    assert session.exec(select(models.Document)).all() == []
+    assert session.exec(select(models.IngestionEvent)).all() == []
+    assert session.exec(select(models.UmapPointRecord)).all() == []
