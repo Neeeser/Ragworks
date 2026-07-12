@@ -11,6 +11,8 @@ const TRAVEL_MS = 400;
 const HOLD_MS = 800;
 const PORT = 3417;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
+export const CAPTURE_SIZE = { width: 1920, height: 1080 };
+export const GIF_WIDTH = 1440;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
@@ -22,6 +24,9 @@ const posterPath = path.join(assetDir, "pipeline-flow.png");
 
 export const captureDurationMs = (stepCount) =>
   stepCount * PROCESS_MS + Math.max(0, stepCount - 1) * TRAVEL_MS + HOLD_MS;
+
+export const trimmedDurationSeconds = (totalSeconds, trimStartSeconds) =>
+  Math.max(0, totalSeconds - trimStartSeconds);
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, { encoding: "utf8", ...options });
@@ -60,12 +65,13 @@ const probeDuration = (videoPath) =>
 
 const recordScene = async (browser, kind, tempDir, capturePoster) => {
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 720 },
+    viewport: CAPTURE_SIZE,
     colorScheme: "dark",
     reducedMotion: "no-preference",
-    recordVideo: { dir: tempDir, size: { width: 1280, height: 720 } },
+    recordVideo: { dir: tempDir, size: CAPTURE_SIZE },
   });
   const page = await context.newPage();
+  const recordingStartedAt = Date.now();
   const video = page.video();
   await page.goto(`http://127.0.0.1:${PORT}/readme-pipeline-capture?kind=${kind}`);
   const capture = page.locator(`[data-readme-capture="${kind}"]`);
@@ -78,23 +84,32 @@ const recordScene = async (browser, kind, tempDir, capturePoster) => {
     throw new Error(`Invalid playback step count for ${kind}.`);
   }
   await page.waitForTimeout(700);
+  const trimStartSeconds = (Date.now() - recordingStartedAt) / 1000;
   if (capturePoster) await capture.screenshot({ path: posterPath });
   await page.waitForTimeout(captureDurationMs(stepCount));
   await context.close();
   if (!video) throw new Error(`Playwright did not record the ${kind} scene.`);
-  return video.path();
+  return { path: await video.path(), trimStartSeconds };
 };
 
 const encodeAnimation = (ingestionVideo, retrievalVideo, tempDir) => {
   const combinedPath = path.join(tempDir, "pipeline-flow.mp4");
   const fadeSeconds = 0.35;
-  const fadeOffset = Math.max(0, probeDuration(ingestionVideo) - fadeSeconds);
+  const ingestionDuration = trimmedDurationSeconds(
+    probeDuration(ingestionVideo.path),
+    ingestionVideo.trimStartSeconds,
+  );
+  const fadeOffset = Math.max(0, ingestionDuration - fadeSeconds);
   run("ffmpeg", [
     "-y",
+    "-ss",
+    String(ingestionVideo.trimStartSeconds),
     "-i",
-    ingestionVideo,
+    ingestionVideo.path,
+    "-ss",
+    String(retrievalVideo.trimStartSeconds),
     "-i",
-    retrievalVideo,
+    retrievalVideo.path,
     "-filter_complex",
     `[0:v]fps=10,drawbox=x=0:y=ih-80:w=100:h=80:color=0x05060a:t=fill,format=yuv420p[v0];[1:v]fps=10,drawbox=x=0:y=ih-80:w=100:h=80:color=0x05060a:t=fill,format=yuv420p[v1];[v0][v1]xfade=transition=fade:duration=${fadeSeconds}:offset=${fadeOffset}[v]`,
     "-map",
@@ -107,7 +122,7 @@ const encodeAnimation = (ingestionVideo, retrievalVideo, tempDir) => {
     "-i",
     combinedPath,
     "-filter_complex",
-    "fps=10,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128:stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
+    `fps=10,scale=${GIF_WIDTH}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`,
     "-loop",
     "0",
     gifPath,

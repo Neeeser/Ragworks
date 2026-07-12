@@ -131,8 +131,10 @@ drift from it:
 - Keep the README Compose block byte-for-byte identical to `docker-compose.yml`. Keep the
   YAML free of explanatory comments and put operational context in the surrounding prose.
 - Run `make readme-assets` whenever default pipeline definitions or their rendered
-  components change, then commit the generated animation and poster. Verify README links,
-  commands, release references, and factual claims with every update.
+  components change, then commit the generated animation and poster. Keep the GIF at
+  least 1440px wide and below its 8 MB guard; inspect both its first frame and node-text
+  legibility at README display size. Verify README links, commands, release references,
+  and factual claims with every update.
 
 # Make commands
 
