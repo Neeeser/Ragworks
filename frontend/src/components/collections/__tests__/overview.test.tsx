@@ -101,8 +101,8 @@ describe("CollectionOverview", () => {
       ],
     });
 
-    const selects = screen.getAllByRole("combobox");
-    fireEvent.change(selects[0], { target: { value: "pipe-3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Ingest B/ }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -124,8 +124,8 @@ describe("CollectionOverview", () => {
       ],
     });
 
-    const selects = screen.getAllByRole("combobox");
-    fireEvent.change(selects[0], { target: { value: "pipe-3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Ingest B/ }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     });

@@ -175,7 +175,8 @@ describe("UmapCanvas", () => {
     });
 
     const onViewStateChange = lastDeckProps?.onViewStateChange as
-      ((params: { viewState: { zoom: number; target?: number[] } }) => void) | undefined;
+      | ((params: { viewState: { zoom: number; target?: number[] } }) => void)
+      | undefined;
     act(() => {
       onViewStateChange?.({ viewState: { zoom: 5 } });
       onViewStateChange?.({ viewState: { zoom: 5, target: [5] } });

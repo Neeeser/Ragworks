@@ -4,8 +4,8 @@ import { Check, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { LatencyCard } from "@/components/collections/detail/overview/LatencyCard";
-import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
 import { PipelinesCard } from "@/components/collections/detail/overview/PipelinesCard";
+import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
 import { StatTrendCard } from "@/components/collections/detail/overview/StatTrendCard";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollectionStatsHistory } from "@/lib/api";

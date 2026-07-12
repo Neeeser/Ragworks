@@ -177,6 +177,34 @@ const PORT_TYPE_LABELS: Record<string, string> = {
   retrieval_results: "Results",
 };
 
+/**
+ * CSS-variable twins of NODE_FAMILY_STYLES for SVG fills (the pipeline
+ * mini-map) — same rationale as PORT_TYPE_VAR. Keep in sync with the
+ * Tailwind family styles above.
+ */
+const NEUTRAL_VAR = "var(--stage-neutral)";
+const RERANK_VAR = "var(--stage-rerank)";
+const ROUTER_VAR = "var(--stage-router)";
+
+const NODE_FAMILY_VAR: Record<NodeFamily, string> = {
+  chunker: "var(--stage-chunk)",
+  embedder: "var(--stage-embed)",
+  indexer: "var(--stage-index)",
+  parser: "var(--stage-parse)",
+  retriever: "var(--stage-retrieve)",
+  fusion: RERANK_VAR,
+  reranker: RERANK_VAR,
+  router: ROUTER_VAR,
+  ingestion: NEUTRAL_VAR,
+  retrieval: ROUTER_VAR,
+  chat: "var(--stage-chat)",
+  utility: NEUTRAL_VAR,
+  other: NEUTRAL_VAR,
+};
+
+/** A theme-aware CSS color (var() reference) for a family's SVG fill. */
+export const getNodeFamilyColorVar = (family: NodeFamily) => NODE_FAMILY_VAR[family];
+
 /** A theme-aware CSS color (var() reference) for SVG fill/stroke via `style`. */
 export const getPortTypeColorVar = (dataType?: string) =>
   (dataType && PORT_TYPE_VAR[dataType]) || "var(--port-default)";
