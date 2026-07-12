@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 
 import { chipClass } from "@/components/chat-studio/lib/chat-constants";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/datetime";
 
 import type { Components } from "react-markdown";
 
@@ -72,7 +73,7 @@ export const SystemPromptCard = ({
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
         {generatedAt && (
           <span>
-            Generated at <strong className="text-primary">{generatedAt}</strong>
+            Generated <strong className="font-medium text-primary">{formatDateTime(generatedAt)}</strong>
           </span>
         )}
         <Button variant="secondary" size="sm" className="ml-auto" onClick={onEdit}>
