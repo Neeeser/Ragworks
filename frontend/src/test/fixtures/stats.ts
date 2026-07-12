@@ -4,7 +4,7 @@ export function makeStatsHistoryPoint(
   overrides: Partial<CollectionStatsHistoryPoint> = {},
 ): CollectionStatsHistoryPoint {
   return {
-    date: "2024-01-01",
+    bucket_start: "2024-01-01T00:00:00Z",
     document_total: 3,
     chunk_total: 12,
     ingestion: { count: 1, avg_ms: 900, p50_ms: 900, p95_ms: 900, max_ms: 900 },
@@ -18,10 +18,15 @@ export function makeStatsHistory(
 ): CollectionStatsHistory {
   return {
     collection_id: "col-1",
-    days: 2,
+    range: "30d" as const,
+    bucket: "day" as const,
     points: [
       makeStatsHistoryPoint(),
-      makeStatsHistoryPoint({ date: "2024-01-02", document_total: 4, chunk_total: 16 }),
+      makeStatsHistoryPoint({
+        bucket_start: "2024-01-02T00:00:00Z",
+        document_total: 4,
+        chunk_total: 16,
+      }),
     ],
     ...overrides,
   };

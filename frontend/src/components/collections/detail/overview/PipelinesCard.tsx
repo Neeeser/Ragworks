@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
 import { Button } from "@/components/ui/button";
-import { Field, Select } from "@/components/ui/field";
 import { GlassCard } from "@/components/ui/panel";
 import { updateCollection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -82,40 +82,28 @@ export function PipelinesCard({
         </Link>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <Field
-          label="Ingestion"
-          labelClassName="font-mono text-[11px] uppercase tracking-[0.28em] text-muted"
-        >
-          <Select
+        <div>
+          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+            Ingestion
+          </p>
+          <PipelineSelect
+            label="Ingestion pipeline"
+            pipelines={ingestionPipelines}
             value={bindings.ingestion}
-            onChange={(event) =>
-              setBindings((prev) => ({ ...prev, ingestion: event.target.value }))
-            }
-          >
-            {ingestionPipelines.map((pipeline) => (
-              <option key={pipeline.id} value={pipeline.id}>
-                {pipeline.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field
-          label="Retrieval"
-          labelClassName="font-mono text-[11px] uppercase tracking-[0.28em] text-muted"
-        >
-          <Select
+            onChange={(id) => setBindings((prev) => ({ ...prev, ingestion: id }))}
+          />
+        </div>
+        <div>
+          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+            Retrieval
+          </p>
+          <PipelineSelect
+            label="Retrieval pipeline"
+            pipelines={retrievalPipelines}
             value={bindings.retrieval}
-            onChange={(event) =>
-              setBindings((prev) => ({ ...prev, retrieval: event.target.value }))
-            }
-          >
-            {retrievalPipelines.map((pipeline) => (
-              <option key={pipeline.id} value={pipeline.id}>
-                {pipeline.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+            onChange={(id) => setBindings((prev) => ({ ...prev, retrieval: id }))}
+          />
+        </div>
       </div>
       {(dirty || message) && (
         <div className="mt-4 flex flex-wrap items-center gap-3">

@@ -19,6 +19,7 @@ from sqlmodel import Session
 from app.api.routes import collections as collections_routes
 from app.db import models
 from app.db.repositories import CollectionRepository, UserRepository
+from app.schemas.enums import StatsHistoryRange
 
 
 def _create_user(session: Session) -> models.User:
@@ -205,11 +206,19 @@ def test_stats_history_buckets_growth_and_latency(session: Session) -> None:
     session.commit()
 
     history = collections_routes.get_collection_stats_history(
-        collection.id, days=7, current_user=user, session=session
+        collection.id,
+        range_=StatsHistoryRange.DAYS_7,
+        current_user=user,
+        session=session,
     )
 
-    assert history.days == 7
+    assert history.range == StatsHistoryRange.DAYS_7
+    assert history.bucket == "day"
     assert len(history.points) == 7
+    assert all(
+        point.bucket_start.hour == 0 and point.bucket_start.minute == 0
+        for point in history.points
+    )
     first, two_days_ago, last = history.points[0], history.points[4], history.points[-1]
     # Baseline document predates the window.
     assert (first.document_total, first.chunk_total) == (1, 4)
@@ -236,6 +245,59 @@ def test_stats_history_missing_collection_returns_404(session: Session) -> None:
 
     with pytest.raises(HTTPException) as excinfo:
         collections_routes.get_collection_stats_history(
-            uuid4(), days=30, current_user=user, session=session
+            uuid4(),
+            range_=StatsHistoryRange.DAYS_30,
+            current_user=user,
+            session=session,
         )
     assert excinfo.value.status_code == 404
+
+
+def test_stats_history_hourly_ranges_bucket_by_hour(session: Session) -> None:
+    """4h/24h ranges return hour buckets aligned to the clock, not days."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    session.add_all(
+        [
+            _make_document(collection, user, "older.txt", 2, now - timedelta(hours=3)),
+            _make_document(collection, user, "fresh.txt", 4, now),
+        ]
+    )
+    session.add(
+        models.QueryEvent(
+            user_id=user.id,
+            collection_id=collection.id,
+            query_text="q",
+            top_k=3,
+            model="embed-model",
+            context_tokens=12,
+            latency_ms=250.0,
+            response_payload={},
+            created_at=now - timedelta(hours=1),
+        )
+    )
+    session.commit()
+
+    history = collections_routes.get_collection_stats_history(
+        collection.id,
+        range_=StatsHistoryRange.HOURS_4,
+        current_user=user,
+        session=session,
+    )
+
+    assert history.bucket == "hour"
+    assert len(history.points) == 4
+    steps = [
+        (later.bucket_start - earlier.bucket_start).total_seconds()
+        for earlier, later in zip(history.points, history.points[1:], strict=False)
+    ]
+    assert steps == [3600.0, 3600.0, 3600.0]
+    # The 3-hours-ago document lands in the oldest bucket; the fresh one in the last.
+    assert (history.points[0].document_total, history.points[0].chunk_total) == (1, 2)
+    assert (history.points[-1].document_total, history.points[-1].chunk_total) == (2, 6)
+    # The query an hour ago sits in its own hour bucket, not the latest.
+    assert history.points[2].retrieval.count == 1
+    assert history.points[2].retrieval.avg_ms == pytest.approx(250.0)
+    assert history.points[-1].retrieval.count == 0

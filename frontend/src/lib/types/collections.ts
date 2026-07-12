@@ -32,8 +32,11 @@ export interface LatencyBucket {
   max_ms?: number | null;
 }
 
+export type StatsHistoryRange = "4h" | "24h" | "7d" | "30d";
+export type StatsBucketGranularity = "hour" | "day";
+
 export interface CollectionStatsHistoryPoint {
-  date: string;
+  bucket_start: string;
   document_total: number;
   chunk_total: number;
   ingestion: LatencyBucket;
@@ -42,7 +45,8 @@ export interface CollectionStatsHistoryPoint {
 
 export interface CollectionStatsHistory {
   collection_id: UUID;
-  days: number;
+  range: StatsHistoryRange;
+  bucket: StatsBucketGranularity;
   points: CollectionStatsHistoryPoint[];
 }
 

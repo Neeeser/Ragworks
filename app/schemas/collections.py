@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date as date_type
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.schemas.base import DateTimeConfigMixin
+from app.schemas.enums import StatsHistoryRange
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
+
+BucketGranularity = Literal["hour", "day"]
 
 
 class CollectionBase(BaseModel):
@@ -87,7 +89,7 @@ class CollectionStatsRead(DateTimeConfigMixin, BaseModel):
 
 
 class LatencyBucket(BaseModel):
-    """Latency aggregates for one flow (ingestion or retrieval) in one day bucket."""
+    """Latency aggregates for one flow (ingestion or retrieval) in one bucket."""
 
     count: int = 0
     avg_ms: float | None = None
@@ -96,14 +98,14 @@ class LatencyBucket(BaseModel):
     max_ms: float | None = None
 
 
-class CollectionStatsHistoryPoint(BaseModel):
-    """One daily bucket of collection activity.
+class CollectionStatsHistoryPoint(DateTimeConfigMixin, BaseModel):
+    """One activity bucket (an hour or a day, per the requested range).
 
-    Document/chunk totals are cumulative as of the end of the bucket's day;
-    latency aggregates cover only events that occurred within the day.
+    Document/chunk totals are cumulative as of the end of the bucket;
+    latency aggregates cover only events that occurred within it.
     """
 
-    date: date_type
+    bucket_start: datetime
     document_total: int
     chunk_total: int
     ingestion: LatencyBucket = Field(default_factory=LatencyBucket)
@@ -111,8 +113,9 @@ class CollectionStatsHistoryPoint(BaseModel):
 
 
 class CollectionStatsHistoryRead(BaseModel):
-    """Daily activity history for a collection."""
+    """Bucketed activity history for a collection's trailing window."""
 
     collection_id: UUID
-    days: int
+    range: StatsHistoryRange
+    bucket: BucketGranularity
     points: list[CollectionStatsHistoryPoint]

@@ -13,7 +13,13 @@ from __future__ import annotations
 from app.db.repositories.app_setting import AppSettingRepository
 from app.db.repositories.base import Repository
 from app.db.repositories.chat import ChatRepository
-from app.db.repositories.collection import CollectionRepository, CollectionStats
+from app.db.repositories.collection import CollectionRepository
+from app.db.repositories.collection_stats import (
+    HISTORY_WINDOWS,
+    CollectionStats,
+    CollectionStatsRepository,
+    HistoryWindow,
+)
 from app.db.repositories.document import ChunkRepository, DocumentRepository
 from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.pipeline import (
@@ -26,14 +32,17 @@ from app.db.repositories.telemetry import TelemetryRepository
 from app.db.repositories.user import AuthSessionRepository, UserRepository
 
 __all__ = [
+    "HISTORY_WINDOWS",
     "AppSettingRepository",
     "AuthSessionRepository",
     "ChatRepository",
     "ChunkRepository",
     "CollectionRepository",
     "CollectionStats",
+    "CollectionStatsRepository",
     "DocumentRepository",
     "FileNodeRepository",
+    "HistoryWindow",
     "PipelineRepository",
     "PipelineRunRepository",
     "PipelineVersionRepository",

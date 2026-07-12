@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { parseApiDate, resolvedTimeZone } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 export type TrendSeries = {
@@ -9,13 +10,15 @@ export type TrendSeries = {
   label: string;
   /** Data hue — semantic accent tokens only. */
   color: "violet" | "cyan";
-  /** One value per date; null = no samples that day (renders a gap). */
+  /** One value per bucket; null = no samples in it (renders a gap). */
   values: Array<number | null>;
 };
 
 type TrendChartProps = {
-  /** ISO dates (YYYY-MM-DD), one per bucket, oldest first. */
-  dates: string[];
+  /** ISO bucket-start datetimes (UTC), one per bucket, oldest first. */
+  buckets: string[];
+  /** Bucket width — picks the axis/tooltip label format. */
+  granularity: "hour" | "day";
   series: TrendSeries[];
   /** Fill the area under the first series (single-series growth charts). */
   area?: boolean;
@@ -35,13 +38,22 @@ const COLOR_VAR: Record<TrendSeries["color"], string> = {
   cyan: "var(--accent-cyan)",
 };
 
-function dayLabel(date: string): string {
-  // Buckets are UTC days; label them as such (never through local parsing).
+function bucketLabel(iso: string, granularity: "hour" | "day"): string {
+  // Day buckets are UTC days — label them as such (never through local
+  // parsing). Hour buckets read naturally in the viewer's clock.
+  if (granularity === "day") {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(parseApiDate(iso) ?? new Date(iso));
+  }
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
+    hour: "numeric",
+    timeZone: resolvedTimeZone(),
+  }).format(parseApiDate(iso) ?? new Date(iso));
 }
 
 function buildPath(
@@ -63,14 +75,22 @@ function buildPath(
 }
 
 type TrendTooltipProps = {
-  date: string;
+  bucket: string;
+  granularity: "hour" | "day";
   index: number;
   leftPct: number;
   series: TrendSeries[];
   formatValue: (value: number) => string;
 };
 
-function TrendTooltip({ date, index, leftPct, series, formatValue }: TrendTooltipProps) {
+function TrendTooltip({
+  bucket,
+  granularity,
+  index,
+  leftPct,
+  series,
+  formatValue,
+}: TrendTooltipProps) {
   const align = leftPct > 70 ? "-100%" : leftPct < 15 ? "0" : "-50%";
   return (
     <div
@@ -78,7 +98,7 @@ function TrendTooltip({ date, index, leftPct, series, formatValue }: TrendToolti
       style={{ left: `${leftPct}%`, transform: `translate(${align}, calc(-100% - 6px))` }}
     >
       <p className="whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
-        {dayLabel(date)}
+        {bucketLabel(bucket, granularity)}
       </p>
       {series.map((entry) => {
         const value = entry.values[index];
@@ -102,7 +122,8 @@ function TrendTooltip({ date, index, leftPct, series, formatValue }: TrendToolti
  * 2px series lines, and a crosshair tooltip on hover.
  */
 export function TrendChart({
-  dates,
+  buckets,
+  granularity,
   series,
   area = false,
   height = 160,
@@ -116,7 +137,7 @@ export function TrendChart({
     1,
     ...series.flatMap((s) => s.values.filter((v): v is number => v !== null)),
   );
-  const stepX = dates.length > 1 ? (VIEW_W - PAD_X * 2) / (dates.length - 1) : 0;
+  const stepX = buckets.length > 1 ? (VIEW_W - PAD_X * 2) / (buckets.length - 1) : 0;
   const x = useCallback((index: number) => PAD_X + index * stepX, [stepX]);
   const y = useCallback(
     (value: number) => VIEW_H - PAD_BOTTOM - (value / max) * (VIEW_H - PAD_TOP - PAD_BOTTOM),
@@ -125,13 +146,13 @@ export function TrendChart({
 
   const handleMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || dates.length === 0) return;
+    if (!rect || buckets.length === 0) return;
     const ratio = (event.clientX - rect.left) / rect.width;
-    const index = Math.round(ratio * (dates.length - 1));
-    setHoverIndex(Math.min(dates.length - 1, Math.max(0, index)));
+    const index = Math.round(ratio * (buckets.length - 1));
+    setHoverIndex(Math.min(buckets.length - 1, Math.max(0, index)));
   };
 
-  const hovered = hoverIndex === null ? null : { date: dates[hoverIndex], index: hoverIndex };
+  const hovered = hoverIndex === null ? null : { bucket: buckets[hoverIndex], index: hoverIndex };
   const hoverLeftPct = hovered ? (x(hovered.index) / VIEW_W) * 100 : 0;
 
   return (
@@ -162,9 +183,9 @@ export function TrendChart({
               vectorEffect="non-scaling-stroke"
             />
           ))}
-          {area && series[0] && dates.length > 1 && (
+          {area && series[0] && buckets.length > 1 && (
             <path
-              d={`${buildPath(series[0].values, x, y)}L${x(dates.length - 1).toFixed(2)},${VIEW_H - PAD_BOTTOM}L${x(0).toFixed(2)},${VIEW_H - PAD_BOTTOM}Z`}
+              d={`${buildPath(series[0].values, x, y)}L${x(buckets.length - 1).toFixed(2)},${VIEW_H - PAD_BOTTOM}L${x(0).toFixed(2)},${VIEW_H - PAD_BOTTOM}Z`}
               style={{ fill: COLOR_VAR[series[0].color] }}
               opacity={0.12}
             />
@@ -232,7 +253,8 @@ export function TrendChart({
 
         {hovered && (
           <TrendTooltip
-            date={hovered.date}
+            bucket={hovered.bucket}
+            granularity={granularity}
             index={hovered.index}
             leftPct={hoverLeftPct}
             series={series}
@@ -242,8 +264,8 @@ export function TrendChart({
       </div>
 
       <div className="mt-1 flex justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-        <span>{dates.length ? dayLabel(dates[0]) : ""}</span>
-        <span>{dates.length ? dayLabel(dates[dates.length - 1]) : ""}</span>
+        <span>{buckets.length ? bucketLabel(buckets[0], granularity) : ""}</span>
+        <span>{buckets.length ? bucketLabel(buckets[buckets.length - 1], granularity) : ""}</span>
       </div>
     </div>
   );

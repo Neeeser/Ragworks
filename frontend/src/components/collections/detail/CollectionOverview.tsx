@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { LatencyCard } from "@/components/collections/detail/overview/LatencyCard";
 import { PipelinesCard } from "@/components/collections/detail/overview/PipelinesCard";
+import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
 import { StatTrendCard } from "@/components/collections/detail/overview/StatTrendCard";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollectionStatsHistory } from "@/lib/api";
@@ -12,7 +13,7 @@ import { formatDate } from "@/lib/datetime";
 import { useApiQuery } from "@/lib/use-api-query";
 import { timeAgo } from "@/lib/utils";
 
-import type { Collection, CollectionStats, Pipeline } from "@/lib/types";
+import type { Collection, CollectionStats, Pipeline, StatsHistoryRange } from "@/lib/types";
 
 type CollectionOverviewProps = {
   collection: Collection;
@@ -41,14 +42,16 @@ export function CollectionOverview({
   onCollectionUpdated,
 }: CollectionOverviewProps) {
   const [copied, setCopied] = useState(false);
+  const [range, setRange] = useState<StatsHistoryRange>("7d");
 
   const history = useApiQuery(
-    () => fetchCollectionStatsHistory(token, collection.id, 30),
-    [token, collection.id],
+    () => fetchCollectionStatsHistory(token, collection.id, range),
+    [token, collection.id, range],
   );
 
   const points = useMemo(() => history.data?.points ?? [], [history.data]);
-  const dates = useMemo(() => points.map((point) => point.date), [points]);
+  const buckets = useMemo(() => points.map((point) => point.bucket_start), [points]);
+  const granularity = history.data?.bucket ?? (range === "4h" || range === "24h" ? "hour" : "day");
 
   const copyId = async () => {
     await navigator.clipboard.writeText(collection.id);
@@ -95,22 +98,28 @@ export function CollectionOverview({
         </GlassCard>
       )}
 
+      <div className="flex justify-end">
+        <RangePicker value={range} onChange={setRange} />
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
         <StatTrendCard
           label="Documents"
           total={stats?.document_count ?? points[points.length - 1]?.document_total ?? 0}
-          dates={dates}
+          buckets={buckets}
+          granularity={granularity}
           values={points.map((point) => point.document_total)}
         />
         <StatTrendCard
           label="Chunks"
           total={stats?.chunk_count ?? points[points.length - 1]?.chunk_total ?? 0}
-          dates={dates}
+          buckets={buckets}
+          granularity={granularity}
           values={points.map((point) => point.chunk_total)}
         />
       </div>
 
-      <LatencyCard points={points} />
+      <LatencyCard points={points} granularity={granularity} />
 
       <PipelinesCard
         collection={collection}

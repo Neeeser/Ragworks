@@ -38,7 +38,7 @@ describe("CollectionOverview", () => {
     renderOverview();
 
     await waitFor(() => {
-      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", 30);
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "7d");
     });
     // Hero counts come from stats.
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -46,6 +46,19 @@ describe("CollectionOverview", () => {
     // The raw UUID is no longer rendered as text; it's behind a copy action.
     expect(screen.queryByText("col-1")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /copy id/i })).toBeInTheDocument();
+  });
+
+  it("changing the time range refetches history at that range", async () => {
+    renderOverview();
+    await waitFor(() => {
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "7d");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "4h" }));
+
+    await waitFor(() => {
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "4h");
+    });
   });
 
   it("splits latency into ingestion and retrieval with a details drill-in", async () => {
@@ -61,7 +74,7 @@ describe("CollectionOverview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("button", { name: "p95" })).toBeInTheDocument();
-    expect(screen.getAllByText("Worst daily p95").length).toBe(2);
+    expect(screen.getAllByText("Worst p95").length).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: "p95" }));
     expect(screen.getByRole("button", { name: "p95" })).toHaveAttribute("aria-pressed", "true");
@@ -88,8 +101,8 @@ describe("CollectionOverview", () => {
       ],
     });
 
-    const selects = screen.getAllByRole("combobox");
-    fireEvent.change(selects[0], { target: { value: "pipe-3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Ingest B/ }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -111,8 +124,8 @@ describe("CollectionOverview", () => {
       ],
     });
 
-    const selects = screen.getAllByRole("combobox");
-    fireEvent.change(selects[0], { target: { value: "pipe-3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Ingest B/ }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     });
@@ -127,7 +140,7 @@ describe("CollectionOverview", () => {
       makeStatsHistory({
         points: [
           {
-            date: "2024-01-01",
+            bucket_start: "2024-01-01T00:00:00Z",
             document_total: 0,
             chunk_total: 0,
             ingestion: { count: 0 },

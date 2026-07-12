@@ -16,7 +16,12 @@ from sqlmodel import Session
 from app.api.dependencies import get_session, require_openrouter_key
 from app.api.routes.utils import collection_to_schema, get_collection_or_404, to_http_exception
 from app.db import models
-from app.db.repositories import CollectionRepository, CollectionStats
+from app.db.repositories import (
+    HISTORY_WINDOWS,
+    CollectionRepository,
+    CollectionStats,
+    CollectionStatsRepository,
+)
 from app.schemas.collections import (
     CollectionCreate,
     CollectionDeleteResponse,
@@ -28,6 +33,7 @@ from app.schemas.collections import (
     CollectionStatsRead,
     CollectionUpdate,
 )
+from app.schemas.enums import StatsHistoryRange
 from app.services.collection_deletion import CollectionDeletionService
 from app.services.collections import CollectionService
 from app.services.errors import ServiceError
@@ -70,7 +76,7 @@ def list_collection_stats(
     """Return aggregated stats for all collections."""
     repo = CollectionRepository(session)
     collections = list(repo.list_for_user(current_user.id))
-    stats_map = repo.stats_for(current_user.id, [collection.id for collection in collections])
+    stats_map = CollectionStatsRepository(session).stats_for(current_user.id, [collection.id for collection in collections])
     return [_stats_read(collection.id, stats_map[collection.id]) for collection in collections]
 
 
@@ -82,28 +88,30 @@ def get_collection_stats(
 ) -> CollectionStatsRead:
     """Return aggregated stats for a single collection."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
-    stats_map = CollectionRepository(session).stats_for(current_user.id, [collection.id])
+    stats_map = CollectionStatsRepository(session).stats_for(current_user.id, [collection.id])
     return _stats_read(collection.id, stats_map[collection.id])
 
 
 @router.get("/{collection_id}/stats/history", response_model=CollectionStatsHistoryRead)
 def get_collection_stats_history(
     collection_id: UUID,
-    days: int = Query(default=30, ge=7, le=365),
+    range_: StatsHistoryRange = Query(default=StatsHistoryRange.DAYS_30, alias="range"),
     current_user: models.User = Depends(require_openrouter_key),
     session: Session = Depends(get_session),
 ) -> CollectionStatsHistoryRead:
-    """Return daily-bucketed activity history for a collection."""
+    """Return bucketed activity history for a collection's trailing window."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
-    points = CollectionRepository(session).stats_history_for(
+    window = HISTORY_WINDOWS[range_]
+    points = CollectionStatsRepository(session).stats_history_for(
         current_user.id,
         collection.id,
-        days=days,
-        today=utc_now().date(),
+        window=window,
+        now=utc_now(),
     )
     return CollectionStatsHistoryRead(
         collection_id=collection.id,
-        days=days,
+        range=range_,
+        bucket=window.trunc,
         points=[
             CollectionStatsHistoryPoint.model_validate(point, from_attributes=True)
             for point in points

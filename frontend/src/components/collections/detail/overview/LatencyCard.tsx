@@ -46,17 +46,19 @@ function summarize(buckets: LatencyBucket[]): FlowSummary {
 
 type LatencyCardProps = {
   points: CollectionStatsHistoryPoint[];
+  granularity: "hour" | "day";
 };
 
 /**
- * Ingestion vs retrieval latency over time. The collapsed view charts daily
- * averages; "Details" adds percentile series and per-flow window summaries.
+ * Ingestion vs retrieval latency over time. The collapsed view charts
+ * per-bucket averages; "Details" adds percentile series and per-flow window
+ * summaries.
  */
-export function LatencyCard({ points }: LatencyCardProps) {
+export function LatencyCard({ points, granularity }: LatencyCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [metric, setMetric] = useState<LatencyMetric>("avg_ms");
 
-  const dates = useMemo(() => points.map((point) => point.date), [points]);
+  const buckets = useMemo(() => points.map((point) => point.bucket_start), [points]);
   const activeMetric = expanded ? metric : "avg_ms";
   const series = useMemo(
     () => [
@@ -118,7 +120,8 @@ export function LatencyCard({ points }: LatencyCardProps) {
       {hasSamples ? (
         <TrendChart
           className="mt-4"
-          dates={dates}
+          buckets={buckets}
+          granularity={granularity}
           height={128}
           series={series}
           formatValue={(value) => formatLatency(value)}
@@ -173,7 +176,7 @@ export function LatencyCard({ points }: LatencyCardProps) {
                     <dd className="text-primary">{formatLatency(summary.weightedAvg)}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-muted">Worst daily p95</dt>
+                    <dt className="text-muted">Worst p95</dt>
                     <dd className="text-primary">{formatLatency(summary.worstP95)}</dd>
                   </div>
                 </dl>

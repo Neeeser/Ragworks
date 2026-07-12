@@ -9,6 +9,7 @@ import type {
   CollectionQueryResult,
   CollectionStats,
   CollectionStatsHistory,
+  StatsHistoryRange,
   CollectionUpdatePayload,
   Document,
   EndToEndTrace,
@@ -40,10 +41,10 @@ export async function fetchCollectionStatsById(
 export async function fetchCollectionStatsHistory(
   token: string,
   collectionId: string,
-  days = 30,
+  range: StatsHistoryRange = "30d",
 ): Promise<CollectionStatsHistory> {
   return apiFetch<CollectionStatsHistory>(
-    `/api/collections/${collectionId}/stats/history?days=${days}`,
+    `/api/collections/${collectionId}/stats/history?range=${range}`,
     { token },
   );
 }

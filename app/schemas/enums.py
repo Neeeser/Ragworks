@@ -86,3 +86,12 @@ class UserRole(str, Enum):
 
     ADMIN = "admin"
     USER = "user"
+
+
+class StatsHistoryRange(str, Enum):
+    """Trailing window for collection activity history (bucketed hour/day)."""
+
+    HOURS_4 = "4h"
+    HOURS_24 = "24h"
+    DAYS_7 = "7d"
+    DAYS_30 = "30d"

@@ -7,6 +7,7 @@ from app.db.models import ChunkStrategy, DocumentStatus
 from app.db.repositories import (
     ChunkRepository,
     CollectionRepository,
+    CollectionStatsRepository,
     DocumentRepository,
     PipelineRepository,
     PipelineRunRepository,
@@ -159,7 +160,7 @@ def test_query_repository_add_event(session: Session) -> None:
 def test_collection_stats_for_empty_ids_returns_empty_map(session: Session) -> None:
     user = _create_user(session, "stats@example.com")
 
-    stats = CollectionRepository(session).stats_for(user.id, [])
+    stats = CollectionStatsRepository(session).stats_for(user.id, [])
 
     assert stats == {}
 

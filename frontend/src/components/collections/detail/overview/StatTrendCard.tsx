@@ -6,12 +6,13 @@ import { GlassCard } from "@/components/ui/panel";
 type StatTrendCardProps = {
   label: string;
   total: number;
-  dates: string[];
+  buckets: string[];
+  granularity: "hour" | "day";
   values: number[];
 };
 
 /** Hero count with its growth-over-time area chart. */
-export function StatTrendCard({ label, total, dates, values }: StatTrendCardProps) {
+export function StatTrendCard({ label, total, buckets, granularity, values }: StatTrendCardProps) {
   return (
     <GlassCard className="rounded-3xl p-5">
       <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">{label}</p>
@@ -20,7 +21,8 @@ export function StatTrendCard({ label, total, dates, values }: StatTrendCardProp
       </p>
       <TrendChart
         className="mt-4"
-        dates={dates}
+        buckets={buckets}
+        granularity={granularity}
         height={96}
         area
         series={[{ id: label, label, color: "violet", values }]}
