@@ -22,10 +22,13 @@ ingestion through retrieval and chat.**
 </div>
 
 <p align="center">
-  <a href="docs/assets/pipeline-flow.png">
+  <a href="docs/assets/pipeline-flow-dark.png">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/pipeline-flow.png">
-      <img src="docs/assets/pipeline-flow.gif" alt="The default Ragworks ingestion and retrieval pipelines running through semantic and BM25 branches" width="100%">
+      <source media="(prefers-color-scheme: light) and (prefers-reduced-motion: reduce)" srcset="docs/assets/pipeline-flow-light.png">
+      <source media="(prefers-color-scheme: dark) and (prefers-reduced-motion: reduce)" srcset="docs/assets/pipeline-flow-dark.png">
+      <source media="(prefers-color-scheme: light)" srcset="docs/assets/pipeline-flow-light.gif">
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pipeline-flow-dark.gif">
+      <img src="docs/assets/pipeline-flow-dark.gif" alt="The default Ragworks ingestion and retrieval pipelines running through semantic and BM25 branches" width="100%">
     </picture>
   </a>
 </p>
@@ -138,15 +141,15 @@ embedding, indexing, retrieval, fusion, and output stages. Typed edges define ho
 data moves between them, and validation catches incompatible ports, cycles, and
 invalid configuration before a run starts.
 
-The default ingestion graph parses an uploaded document, creates chunks, embeds
-them, and writes the results to an index. When lexical search is available, the
-same chunks also flow through a parallel BM25 indexing branch.
+Pipeline definitions store nodes, typed connections, and configuration as a
+versioned DAG. Pipelines can be assembled in the visual editor, then validated
+for required inputs, compatible port types, cycles, and invalid node
+configuration before they run.
 
-The default retrieval graph sends a query through semantic and BM25 branches,
-merges their rankings with reciprocal rank fusion, and returns the selected
-chunks to search or chat. Both graphs can be edited and versioned. Every run pins
-the graph version it used and records a trace for each node, connecting an answer
-back to the pipeline that produced it.
+Graph dependencies determine execution order. Each run retains the exact
+pipeline version it used and records node-level inputs, outputs, timing, and
+status. This connects an answer back to the modeled workflow that produced it
+and makes individual stages easier to inspect and compare.
 
 The backend uses FastAPI, Pydantic, SQLModel, PostgreSQL, and pgvector. The
 frontend uses Next.js, React, and TypeScript. See the

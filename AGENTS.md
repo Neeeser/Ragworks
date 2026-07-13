@@ -133,11 +133,12 @@ drift from it:
 - Keep the README Compose block byte-for-byte identical to `docker-compose.yml`. Keep the
   YAML free of explanatory comments and put operational context in the surrounding prose.
 - Run `make readme-assets` whenever default pipeline definitions or their rendered
-  components change, then commit the generated animation and poster. The capture requires
-  Playwright Chromium, `ffmpeg`, and `gifski`. Keep the GIF at least 1440px wide and below
-  its 8 MB guard, crop excess canvas, and inspect the first and last frame of each scene
-  for one complete non-looping run. Check node-text legibility at README display size.
-  Verify README links, commands, release references, and factual claims with every update.
+  components change, then commit the generated light/dark animations and posters. The
+  capture requires Playwright Chromium, `ffmpeg`, and `gifski`. Keep each GIF at least
+  1440px wide and below its 8 MB guard, crop excess canvas, and inspect the first and last
+  frame of each scene in both themes for one complete non-looping run. Check node-text
+  legibility at README display size. Verify README links, commands, release references,
+  and factual claims with every update.
 
 # Make commands
 
@@ -154,8 +155,8 @@ drift from it:
 - `make verify`: the backend gate — typecheck → lint → test
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`
-- `make readme-assets`: regenerate the README pipeline animation and poster from the
-  backend defaults and frontend renderer
+- `make readme-assets`: regenerate the light/dark README pipeline animations and posters
+  from the backend defaults and frontend renderer
 - `make bump-patch` / `make bump-minor` / `make bump-major` / `make bump-rc`: bump the
   version in `pyproject.toml` + `frontend/package.json`, commit, and tag; push manually
   to publish
