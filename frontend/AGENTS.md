@@ -250,7 +250,9 @@ config-provider.tsx`), never a one-off `fetchPublicConfig()` call — the provid
   a `fixed inset-0 z-50` div: we had five of them, each with different Escape/backdrop/
   focus behavior and half without `role="dialog"`. ModalOverlay owns Escape-to-close,
   backdrop click, focus-into-dialog, focus restore, Tab containment, scroll lock, and
-  ARIA wiring. Dialogs pass `labelledBy` pointing at their title element.
+  ARIA wiring. Dialogs pass `labelledBy` pointing at their title element. It portals to
+  `document.body`: an ancestor's transform (entrance animations) creates a stacking
+  context, and a non-portaled overlay's `z-50` loses to the sticky `z-30` navbar.
 - **Every form control goes through `Field`/`TextInput`/`Select`/`TextArea`**
   (`components/ui/field.tsx`). Field wires `htmlFor`/`id` via `useId` and `aria-describedby`
   for hint/error text. The canonical input styling lives in the exported `inputClass`
