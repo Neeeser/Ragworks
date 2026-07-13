@@ -358,8 +358,9 @@ describe("hybrid BM25 scaffolding", () => {
     expect(ingestion.edges).toContainEqual(
       expect.objectContaining({ source: "index-bm25", target: "ingest-output" }),
     );
-    const ingestionOutput = ingestion.nodes.find((node) => node.id === "ingest-output");
-    expect(ingestionOutput?.position?.y).toBe(130);
+    // Scaffolds carry no positions — placement belongs to the shared
+    // auto-layout, not the scaffold.
+    expect(ingestion.nodes.every((node) => node.position === undefined)).toBe(true);
 
     const retrieval = buildDefaultDefinition("retrieval", "pgvector", {
       indexName: "docs",

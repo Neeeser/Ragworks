@@ -1,5 +1,5 @@
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
-import { SCAFFOLD_SPACING_X } from "./pipeline-scaffold";
+import { ESTIMATED_NODE_WIDTH, LAYER_GAP_X } from "./pipeline-layout";
 import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
@@ -104,7 +104,7 @@ export const nextNodePosition = (nodes: Node<PipelineNodeData>[]) => {
   const maxX = Math.max(...nodes.map((node) => node.position.x));
   const rightmost = nodes.filter((node) => node.position.x === maxX);
   const avgY = rightmost.reduce((sum, node) => sum + node.position.y, 0) / rightmost.length;
-  return { x: maxX + SCAFFOLD_SPACING_X, y: avgY };
+  return { x: maxX + ESTIMATED_NODE_WIDTH + LAYER_GAP_X, y: avgY };
 };
 
 /** Builds the flow-node `data` payload for a node spec, shared by the sidebar's drag

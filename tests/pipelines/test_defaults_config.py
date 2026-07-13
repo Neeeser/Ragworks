@@ -204,32 +204,14 @@ def test_bm25_sibling_name_truncates_to_backend_capability(monkeypatch) -> None:
     assert sibling.endswith("-bm25")
 
 
-def test_bm25_branch_nodes_sit_in_the_column_after_their_source(session: Session) -> None:
-    """The BM25 branch shares a column with the next main-row node.
+def test_default_scaffolds_carry_no_positions(session: Session) -> None:
+    """Scaffolds defer placement to the frontend's shared auto-layout.
 
-    A half-column offset makes the branch edge run horizontally at the
-    source's row — visually hidden behind the intervening card (embedder /
-    query embedder). Placing the branch directly below the next column keeps
-    the descent inside the first gap.
+    A hand-placed coordinate here would bypass `needsAutoLayout` in the
+    editor and freeze the scaffold in a layout the algorithm never chose —
+    the drift this rule exists to prevent.
     """
     _set_override(session, "models.default_embedding_model", "test/embed")
 
-    ingestion = build_default_ingestion_pipeline()
-    positions = {node.id: node.position for node in ingestion.nodes}
-    assert positions["index-bm25"].x == positions["embed-chunks"].x
-
-    retrieval = build_default_retrieval_pipeline()
-    positions = {node.id: node.position for node in retrieval.nodes}
-    assert positions["bm25-retriever"].x == positions["embed-query"].x
-
-
-def test_hybrid_ingestion_output_is_centered_between_index_branches(session: Session) -> None:
-    """Both index edges must approach the shared output without crossing a node card."""
-    _set_override(session, "models.default_embedding_model", "test/embed")
-
-    definition = build_default_ingestion_pipeline()
-    positions = {node.id: node.position for node in definition.nodes}
-
-    assert positions["ingest-output"].y == (
-        positions["index-chunks"].y + positions["index-bm25"].y
-    ) / 2
+    for definition in (build_default_ingestion_pipeline(), build_default_retrieval_pipeline()):
+        assert all(node.position is None for node in definition.nodes)

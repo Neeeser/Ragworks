@@ -36,10 +36,11 @@ export const BM25_INDEXER_NODE_TYPE = "indexer.bm25";
 export const BM25_RETRIEVER_NODE_TYPE = "retriever.bm25";
 export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
 
-// Horizontal spacing between scaffolded nodes; matches the layout module.
-// The BM25 branch sits one row below the semantic path.
-export const SCAFFOLD_SPACING_X = 368;
-const SCAFFOLD_SPACING_Y = 260;
+// Scaffolds deliberately carry no node positions: the shared auto-layout
+// (`layoutPipelineNodes`) places any definition whose nodes lack saved
+// positions, so the wizard preview and the editor's first open both use the
+// same algorithm as Tidy. Hand-placing coordinates here would duplicate
+// layout knowledge the algorithm owns.
 
 // Fallback name-length cap when the backend's capabilities aren't loaded yet
 // (the real cap is BackendCapabilities.index_name_max_length).
@@ -66,11 +67,6 @@ export type DefaultDefinitionOptions = {
   /** The backend's index-name length cap (BackendCapabilities.index_name_max_length). */
   indexNameMaxLength?: number;
 };
-
-const scaffoldPosition = (index: number, row = 0) => ({
-  x: SCAFFOLD_SPACING_X * index,
-  y: SCAFFOLD_SPACING_Y * row,
-});
 
 export const buildDefaultDefinition = (
   kind: PipelineKind,
@@ -111,28 +107,24 @@ export const buildDefaultDefinition = (
         type: "retrieval.input",
         name: "Retrieval Input",
         config: {},
-        position: scaffoldPosition(0),
       },
       {
         id: NODE_EMBED_QUERY,
         type: "embedder.openrouter",
         name: "Embedder",
         config: embedderConfig,
-        position: scaffoldPosition(1),
       },
       {
         id: NODE_VECTOR_RETRIEVER,
         type: RETRIEVER_NODE_TYPE,
         name: "Semantic Retriever",
         config: retrieverConfig,
-        position: scaffoldPosition(2),
       },
       {
         id: NODE_RETRIEVAL_OUTPUT,
         type: "retrieval.output",
         name: "Retrieval Output",
         config: {},
-        position: scaffoldPosition(includeBm25 ? 4 : 3),
       },
     ];
     const edges: PipelineDefinition["edges"] = [
@@ -158,14 +150,12 @@ export const buildDefaultDefinition = (
           type: BM25_RETRIEVER_NODE_TYPE,
           name: "BM25 Retriever",
           config: bm25Config,
-          position: { x: SCAFFOLD_SPACING_X * 1, y: SCAFFOLD_SPACING_Y },
         },
         {
           id: NODE_FUSE_RESULTS,
           type: RRF_FUSION_NODE_TYPE,
           name: "RRF Fusion",
           config: {},
-          position: { x: SCAFFOLD_SPACING_X * 3, y: SCAFFOLD_SPACING_Y / 2 },
         },
       );
       edges.push(
@@ -216,14 +206,12 @@ export const buildDefaultDefinition = (
       type: "ingestion.input",
       name: "Ingestion Input",
       config: {},
-      position: scaffoldPosition(0),
     },
     {
       id: NODE_PARSE_DOCUMENT,
       type: "parser.document",
       name: "Document Parser",
       config: {},
-      position: scaffoldPosition(1),
     },
     {
       id: NODE_CHUNK_DOCUMENT,
@@ -233,28 +221,24 @@ export const buildDefaultDefinition = (
         chunk_size: options.chunkSize ?? 1024,
         chunk_overlap: options.chunkOverlap ?? 200,
       },
-      position: scaffoldPosition(2),
     },
     {
       id: NODE_EMBED_CHUNKS,
       type: "embedder.openrouter",
       name: "Embedder",
       config: embedderConfig,
-      position: scaffoldPosition(3),
     },
     {
       id: NODE_INDEX_CHUNKS,
       type: INDEXER_NODE_TYPE,
       name: "Semantic Indexer",
       config: indexConfig,
-      position: scaffoldPosition(4),
     },
     {
       id: NODE_INGEST_OUTPUT,
       type: "ingestion.output",
       name: "Ingestion Output",
       config: {},
-      position: scaffoldPosition(5, includeBm25 ? 0.5 : 0),
     },
   ];
   const edges: PipelineDefinition["edges"] = [
@@ -300,7 +284,6 @@ export const buildDefaultDefinition = (
       type: BM25_INDEXER_NODE_TYPE,
       name: "BM25 Indexer",
       config: bm25Config,
-      position: { x: SCAFFOLD_SPACING_X * 3, y: SCAFFOLD_SPACING_Y },
     });
     edges.push(
       {
