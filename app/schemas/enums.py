@@ -81,6 +81,26 @@ class IndexBackend(str, Enum):
     PGVECTOR = "pgvector"
 
 
+class ProviderType(str, Enum):
+    """External provider types a user can register connections for.
+
+    Values are persisted in `provider_connections.provider_type` and are
+    permanent — add new ones, never rename existing ones.
+    """
+
+    OPENROUTER = "openrouter"
+    OLLAMA = "ollama"
+    PINECONE = "pinecone"
+
+
+class ProviderKind(str, Enum):
+    """Capability kinds a provider connection can serve."""
+
+    EMBEDDING = "embedding"
+    CHAT = "chat"
+    VECTOR_STORE = "vector_store"
+
+
 class UserRole(str, Enum):
     """Privilege tiers for user accounts."""
 

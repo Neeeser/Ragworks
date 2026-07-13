@@ -2,8 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
+import { makeCatalogModel } from "@/test/fixtures";
 
-import type { EmbeddingModelInfo } from "@/lib/types";
+import type { CatalogModel } from "@/lib/types";
 
 describe("EmbeddingModelSelectorCard", () => {
   it("shows loading, empty, and error states", () => {
@@ -43,9 +44,19 @@ describe("EmbeddingModelSelectorCard", () => {
   });
 
   it("filters models by the internal search box", () => {
-    const models: EmbeddingModelInfo[] = [
-      { id: "model-1", name: "Alpha", description: "desc", pricing: { prompt: 0.0002 } },
-      { id: "model-2", name: "Beta", description: "desc", pricing: { prompt: 0.0002 } },
+    const models: CatalogModel[] = [
+      makeCatalogModel({
+        id: "model-1",
+        name: "Alpha",
+        description: "desc",
+        pricing: { prompt: 0.0002 },
+      }),
+      makeCatalogModel({
+        id: "model-2",
+        name: "Beta",
+        description: "desc",
+        pricing: { prompt: 0.0002 },
+      }),
     ];
 
     render(
@@ -71,9 +82,9 @@ describe("EmbeddingModelSelectorCard", () => {
   });
 
   it("sorts models via the internal sort control", () => {
-    const models: EmbeddingModelInfo[] = [
-      { id: "model-big", name: "Big", dimension: 1024, pricing: {} },
-      { id: "model-small", name: "Small", dimension: 128, pricing: {} },
+    const models: CatalogModel[] = [
+      makeCatalogModel({ id: "model-big", name: "Big", dimension: 1024, pricing: {} }),
+      makeCatalogModel({ id: "model-small", name: "Small", dimension: 128, pricing: {} }),
     ];
 
     render(
@@ -99,40 +110,40 @@ describe("EmbeddingModelSelectorCard", () => {
   it("renders models and pricing details, and reports selection", () => {
     const onSelectModel = vi.fn();
     const longDescription = "A".repeat(200);
-    const models: EmbeddingModelInfo[] = [
-      {
+    const models: CatalogModel[] = [
+      makeCatalogModel({
         id: "model-1",
         name: "Alpha",
         description: longDescription,
         dimension: 768,
         context_length: 1024,
         pricing: { prompt: 0.0002, completion: 0.00002 },
-      },
-      {
+      }),
+      makeCatalogModel({
         id: "model-2",
         name: "Beta",
         description: "desc",
         dimension: 256,
         pricing: { prompt: 0.0000015, completion: 0.00000015 },
-      },
-      {
+      }),
+      makeCatalogModel({
         id: "model-3",
         name: "Gamma",
         description: "desc",
         pricing: { prompt: 0.000000015, completion: 0.000000001 },
-      },
-      {
+      }),
+      makeCatalogModel({
         id: "model-4",
         name: "Delta",
         description: "desc",
         pricing: { prompt: "free" },
-      },
-      {
+      }),
+      makeCatalogModel({
         id: "model-5",
         name: "Epsilon",
         description: "desc",
         pricing: { prompt: "e" },
-      },
+      }),
     ];
 
     render(
@@ -146,7 +157,9 @@ describe("EmbeddingModelSelectorCard", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Alpha/ }));
-    expect(onSelectModel).toHaveBeenCalledWith("model-1");
+    expect(onSelectModel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "model-1", connection_id: "conn-openrouter-1" }),
+    );
 
     expect(screen.getByText(`${longDescription.slice(0, 157)}...`)).toBeInTheDocument();
     expect(screen.getAllByText(/Prompt \$/).length).toBeGreaterThan(0);
@@ -160,13 +173,13 @@ describe("EmbeddingModelSelectorCard", () => {
   });
 
   it("renders non-numeric pricing fallbacks", () => {
-    const models: EmbeddingModelInfo[] = [
-      {
+    const models: CatalogModel[] = [
+      makeCatalogModel({
         id: "model-fallback",
         name: "Fallback",
         description: "desc",
         pricing: { prompt: "free", completion: " " },
-      },
+      }),
     ];
 
     render(

@@ -58,6 +58,7 @@ export const bm25SiblingIndexName = (
 export type DefaultDefinitionOptions = {
   indexName?: string;
   indexDimension?: number;
+  embeddingConnectionId?: string;
   embeddingModel?: string;
   chunkSize?: number;
   chunkOverlap?: number;
@@ -91,6 +92,9 @@ export const buildDefaultDefinition = (
     bm25Config.index_name = bm25SiblingIndexName(indexName, options.indexNameMaxLength);
   }
   const embedderConfig: Record<string, unknown> = {};
+  if (options.embeddingConnectionId) {
+    embedderConfig.connection_id = options.embeddingConnectionId;
+  }
   if (options.embeddingModel) {
     embedderConfig.model_name = options.embeddingModel;
   }
@@ -115,7 +119,7 @@ export const buildDefaultDefinition = (
       },
       {
         id: NODE_EMBED_QUERY,
-        type: "embedder.openrouter",
+        type: "embedder.text",
         name: "Embedder",
         config: embedderConfig,
         position: scaffoldPosition(1),
@@ -237,7 +241,7 @@ export const buildDefaultDefinition = (
     },
     {
       id: NODE_EMBED_CHUNKS,
-      type: "embedder.openrouter",
+      type: "embedder.text",
       name: "Embedder",
       config: embedderConfig,
       position: scaffoldPosition(3),

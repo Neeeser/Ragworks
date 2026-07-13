@@ -144,7 +144,7 @@ export const ProviderRoutingCard = ({
             <p className="text-sm text-body">
               {providerModelSlug
                 ? `Pulled from OpenRouter for ${providerModelSlug}.`
-                : "Select a model to browse provider endpoints."}
+                : "Provider routing applies to OpenRouter models only — select one to browse endpoints."}
             </p>
           </div>
           {providerDirectory && (

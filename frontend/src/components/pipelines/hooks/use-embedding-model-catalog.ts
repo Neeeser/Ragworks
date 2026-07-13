@@ -5,19 +5,24 @@ import { useEffect, useState } from "react";
 import { fetchEmbeddingModels } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { EmbeddingModelInfo } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 
 export interface UseEmbeddingModelCatalogResult {
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
+  embeddingConnectionErrors: ConnectionCatalogError[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
 }
 
-/** Loads the OpenRouter embedding-model catalog used to auto-fill index/embedder
- * dimensions. Search/sort over the list is owned by `useEmbeddingModelFilter` in
+/** Loads the unified embedding-model catalog (all embedding-capable provider
+ * connections), used to auto-fill index/embedder dimensions. Search/sort over
+ * the list is owned by `useEmbeddingModelFilter` in
  * EmbeddingModelSelectorCard.tsx; this hook only owns the fetch. */
 export function useEmbeddingModelCatalog(token: string | null): UseEmbeddingModelCatalogResult {
-  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModelInfo[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<CatalogModel[]>([]);
+  const [embeddingConnectionErrors, setEmbeddingConnectionErrors] = useState<
+    ConnectionCatalogError[]
+  >([]);
   const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false);
   const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null);
 
@@ -30,9 +35,18 @@ export function useEmbeddingModelCatalog(token: string | null): UseEmbeddingMode
       setEmbeddingModelsLoading(true);
       setEmbeddingModelsError(null);
       try {
-        const models = await fetchEmbeddingModels(authToken);
+        const catalog = await fetchEmbeddingModels(authToken);
         if (!cancelled) {
-          setEmbeddingModels(models);
+          setEmbeddingModels(catalog.models);
+          setEmbeddingConnectionErrors(catalog.connection_errors);
+          if (catalog.connection_errors.length > 0) {
+            // A degraded connection is still an error the user must see.
+            setEmbeddingModelsError(
+              catalog.connection_errors
+                .map((entry) => `${entry.connection_label}: ${entry.message}`)
+                .join(" — "),
+            );
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -49,5 +63,10 @@ export function useEmbeddingModelCatalog(token: string | null): UseEmbeddingMode
     };
   }, [token]);
 
-  return { embeddingModels, embeddingModelsLoading, embeddingModelsError };
+  return {
+    embeddingModels,
+    embeddingConnectionErrors,
+    embeddingModelsLoading,
+    embeddingModelsError,
+  };
 }

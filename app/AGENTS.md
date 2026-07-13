@@ -465,11 +465,60 @@ code if it introduces a new `ConfigFieldKind` (bool/int/string/string_list today
   (`bm25_sibling_index_name`, truncated to the shared 45-char rule).
 - **Node type ids are permanent.** Persisted pipeline definitions reference
   `indexer.pinecone`/`retriever.pinecone`/`indexer.pgvector`/`retriever.pgvector`
-  by string; a new backend adds new ids, never renames existing ones.
+  by string; a new backend adds new ids, never renames existing ones. The one
+  recorded exception: the provider-connections overhaul retired
+  `embedder.openrouter` in favor of the generic `embedder.text` via a startup
+  data migration (`app/services/provider_migration.py`) that rewrote every
+  stored definition and pinned version — chosen deliberately so the dead id has
+  no live references. Do not repeat this pattern without the same full-rewrite
+  migration.
 - **Per-document vector deletion goes through `delete_document_vectors`** on the
   backend ABC (chunk vector ids are `{document_id}:{order}` — Pinecone lists by
   id prefix, pgvector filters its `document_id` column). Never delete a whole
   namespace to remove one file.
+
+## Model providers (`app/providers/` + `provider_connections`)
+
+- **A provider is a per-user connection row**, not a fixed slot: users may hold
+  several connections of the same type (two Ollama servers) unless the type's
+  descriptor caps it (`max_connections_per_user=1` for Pinecone). Configs are
+  validated through the per-type Pydantic models in `app/schemas/providers.py`
+  before anything is written.
+- **The layer mirrors `app/vectorstores/`**: a frozen `ProviderDescriptor`
+  declares capability kinds (`EMBEDDING`/`CHAT`/`VECTOR_STORE`), the
+  data-driven config-field catalog the UI renders from, docs link, and
+  connection limits — declared once on the adapter class, read everywhere.
+  `app/providers/registry.py` is the single construction + prerequisite gate
+  (`resolve_connection` → ownership 404, `get_provider` → kind-mismatch 400),
+  and the lazy per-run `ProviderResolver` sits on `PipelineRunContext.providers`
+  beside `vector_stores`.
+- **Chat provider implementations live in `app/providers/chat/`** (protocol +
+  OpenRouter + Ollama), not `app/chat/` — `app.chat` depends on `app.providers`,
+  never the reverse (adapters construct chat providers, and the reverse
+  direction is an import cycle). `ChatRequest` is the provider-neutral request
+  contract: the run loop passes normalized `reasoning_options` /
+  `provider_preferences`, and each provider maps them onto its own wire format
+  (OpenRouter → `extra_body`; Ollama → `think`/`options`, with `max_tokens` →
+  `num_predict` and synthesized uuid tool-call ids since Ollama has none).
+- **Model identity is a structured pair** — `connection_id` + `model_name` — on
+  the embedder node config, `ChatSession`, and `last_used_chat_*`; never a
+  munged `"provider:model"` string in persisted data.
+- **There are no eager provider-key route gates** (`require_openrouter_key` is
+  gone): prerequisites are enforced lazily at the registry, mirroring
+  `get_vector_store`. The unified catalog (`GET /api/models?kind=`) degrades
+  per-connection (`connection_errors`) instead of failing when one provider is
+  unreachable.
+- **Ollama catalog classification never embeds.** `describe_models` reads
+  `/api/show` `capabilities` + architecture metadata (`{arch}.embedding_length`,
+  `{arch}.context_length`) — probing via `/api/embed` would load every model
+  into the server's memory just to list them; the probe is a per-model fallback
+  in `embedding_dimension` only.
+- **Adding a provider type is a checklist**: config model in
+  `app/schemas/providers.py`, `ProviderType` enum value, adapter module under
+  `app/providers/` with its descriptor, `ADAPTERS` registry entry, and a typed
+  client under `app/clients/<provider>/`. The frontend needs zero new form
+  code — the add-connection dialog renders from the descriptor's
+  `config_fields`.
 
 ## The collection file tree (`file_nodes` + `documents`)
 
@@ -854,9 +903,10 @@ construction site.
   deactivation only; deleting an account means cascading Pinecone namespaces,
   file storage, and relational rows (a `CollectionDeletionService`-scale job).
   Add the cascade service and its tests together when prioritized.
-- **Provider API keys are stored plaintext at rest.** `User.openrouter_api_key` and
-  `User.pinecone_api_key` (`app/db/models/user.py`) are plain `Text` columns with no
-  encryption-at-rest. Pre-existing and tracked, not introduced by this pass; the wire
-  contract is guarded by `test_me_response_excludes_secrets`
-  (`tests/api/test_route_contract.py`), which fails if either key ever leaks into a
-  response body. Encrypting the column is future work, not a blocker for this PR.
+- **Provider credentials are stored plaintext at rest.** `provider_connections.config`
+  (`app/db/models/provider.py`) holds API keys/URLs as plain JSON with no
+  encryption-at-rest. Pre-existing and tracked (it replaced the old plaintext
+  `User.*_api_key` columns); the wire contract is guarded by
+  `test_connections_response_never_serializes_secret_values` and
+  `test_me_response_excludes_secrets` (`tests/api/test_route_contract.py`).
+  Encrypting the column is future work, not a blocker for this PR.

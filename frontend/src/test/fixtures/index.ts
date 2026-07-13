@@ -46,9 +46,8 @@ export function makeUser(overrides: Partial<User> = {}): User {
     email: USER_EMAIL,
     role: USER_ROLE,
     is_active: true,
-    openrouter_configured: true,
-    pinecone_configured: true,
     last_used_chat_model: "model-1",
+    last_used_chat_connection_id: "conn-openrouter-1",
     last_used_parameters: { temperature: 0.7 },
     last_used_provider: {
       order: [PROVIDER_A],
@@ -413,3 +412,10 @@ export * from "@/test/fixtures/config";
 export * from "@/test/fixtures/chat-scenarios";
 
 export { makeBackendInfo, makePineconeBackendInfo, makeVectorIndex } from "./indexes";
+
+export {
+  makeCatalogModel,
+  makeConnection,
+  makeModelCatalog,
+  makeProviderType,
+} from "@/test/fixtures/providers";

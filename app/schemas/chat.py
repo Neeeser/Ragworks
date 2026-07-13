@@ -75,6 +75,7 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
     title: str
     mode: ChatMode
     chat_model: str
+    provider_connection_id: UUID | None = None
     context_tokens: int
     tool_collection_ids: list[UUID] = Field(default_factory=list)
     parameter_overrides: dict[str, Any] | None = None
@@ -99,6 +100,7 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
             title=session.title,
             mode=session.mode,
             chat_model=session.chat_model,
+            provider_connection_id=session.provider_connection_id,
             context_tokens=session.context_tokens,
             tool_collection_ids=tool_collection_ids or [],
             parameter_overrides=session.parameter_overrides,
@@ -120,6 +122,7 @@ class ChatMessageCreate(BaseModel):
     title: str | None = None
     edit_message_id: UUID | None = None
     chat_model: str | None = None
+    provider_connection_id: UUID | None = None
     tool_collection_ids: list[UUID] | None = None
     parameters: ChatParameters | None = None
     provider: ProviderPreferences | None = None

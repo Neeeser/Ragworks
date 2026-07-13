@@ -21,15 +21,18 @@ import httpx
 from openai import OpenAIError
 from pinecone.exceptions import PineconeException
 
+from app.clients.ollama import OllamaApiError
+
 _EXTERNAL_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
     httpx.HTTPError,
     OpenAIError,
     PineconeException,
+    OllamaApiError,
 )
 
 
 def is_external_provider_error(exc: Exception) -> bool:
-    """Return True when `exc` originates from a Pinecone/OpenRouter client call.
+    """Return True when `exc` originates from a Pinecone/OpenRouter/Ollama client call.
 
     Used at service boundaries that run pipeline nodes talking to those
     providers (`RetrievalService`, `IngestionService`): a genuine upstream

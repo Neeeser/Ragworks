@@ -27,6 +27,7 @@ import {
   CHAT_INPUT_MIN_HEIGHT,
   TELEMETRY_SECTION_IDS,
 } from "@/components/chat-studio/lib/chat-constants";
+import { useConnections } from "@/components/connections/hooks/use-connections";
 import { useAuth } from "@/providers/auth-provider";
 
 export function ChatStudio() {
@@ -62,6 +63,8 @@ export function ChatStudio() {
     setStreamingEnabled,
     activeModelId,
     setActiveModelId,
+    activeConnectionId,
+    setActiveConnectionId,
     deletingSessionId,
     branchedSessionOriginRef,
   } = state;
@@ -70,7 +73,12 @@ export function ChatStudio() {
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const authToken = token ?? "";
-  const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
+  const { connections, connectionsLoading } = useConnections(authToken, authLoading);
+  const chatProviderConfigured = Boolean(
+    !authLoading &&
+    !connectionsLoading &&
+    connections.some((connection) => connection.kinds.includes("chat")),
+  );
 
   const {
     chatEntryMap,
@@ -145,8 +153,9 @@ export function ChatStudio() {
   const modelCatalog = useModelCatalog({
     authToken,
     authLoading,
-    openrouterConfigured,
+    chatProviderConfigured,
     activeModelId,
+    activeConnectionId,
     toolsEnabled,
   });
 
@@ -159,7 +168,10 @@ export function ChatStudio() {
   const providerPreferences = useProviderPreferences({
     authToken,
     authLoading,
-    openrouterConfigured,
+    openrouterConnectionId:
+      modelCatalog.currentModelInfo?.provider_type === "openrouter"
+        ? modelCatalog.currentModelInfo.connection_id
+        : null,
     providerModelSlug: modelCatalog.providerModelSlug,
   });
 
@@ -187,8 +199,9 @@ export function ChatStudio() {
   const { activeSession, branchedFromSession } = useSessionLifecycle({
     ...state,
     authLoading,
+    connectionsLoading,
     authToken,
-    openrouterConfigured,
+    chatProviderConfigured,
     user,
     selectedSessionId,
     sessionIdParam,
@@ -240,6 +253,7 @@ export function ChatStudio() {
     user,
     toolsEnabled,
     activeModelId,
+    activeConnectionId,
     buildParameterPayload: modelParameters.buildParameterPayload,
     providerRuleCount: providerPreferences.providerRuleCount,
     providerPayload: providerPreferences.providerPayload,
@@ -295,6 +309,7 @@ export function ChatStudio() {
     panel,
     toolsEnabled,
     setActiveModelId,
+    setActiveConnectionId,
   });
 
   const currentModelLabel = modelCatalog.currentModelInfo?.name || activeModelId || "Select model";

@@ -17,7 +17,6 @@ from dataclasses import dataclass
 
 from sqlmodel import Session
 
-from app.clients.openrouter import OpenRouterClient
 from app.core.config import Settings
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
@@ -25,6 +24,7 @@ from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
 from app.pipelines.registry import NodeRegistry, default_registry
 from app.pipelines.tracing import PipelineTraceRecorder
+from app.providers.registry import ProviderResolver
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
 from app.vectorstores.registry import VectorStoreProvider
@@ -57,7 +57,7 @@ class PipelineRunner:
         user: models.User,
         collection: models.Collection,
         settings: Settings,
-        openrouter: OpenRouterClient,
+        providers: ProviderResolver,
         vector_stores: VectorStoreProvider,
         storage: FileStorage,
         document: models.Document | None = None,
@@ -85,7 +85,7 @@ class PipelineRunner:
             document=document,
             query=query,
             top_k=top_k,
-            openrouter=openrouter,
+            providers=providers,
             vector_stores=vector_stores,
             storage=storage,
             settings=settings,

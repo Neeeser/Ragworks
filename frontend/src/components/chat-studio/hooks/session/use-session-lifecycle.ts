@@ -17,8 +17,9 @@ import type { ChatSession, User } from "@/lib/types";
 
 export interface UseSessionLifecycleParams extends ChatStudioCoreState {
   authLoading: boolean;
+  connectionsLoading: boolean;
   authToken: string;
-  openrouterConfigured: boolean;
+  chatProviderConfigured: boolean;
   user: User | null;
   selectedSessionId: string | null;
   sessionIdParam: string | null;
@@ -50,8 +51,9 @@ export interface UseSessionLifecycleResult {
 export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessionLifecycleResult {
   const {
     authLoading,
+    connectionsLoading,
     authToken,
-    openrouterConfigured,
+    chatProviderConfigured,
     user,
     selectedSessionId,
     sessionIdParam,
@@ -74,6 +76,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     setLoading,
     activeModelId,
     setActiveModelId,
+    setActiveConnectionId,
     setStreamingEnabled,
     previousModelIdRef,
     applyNewChatDefaultsRef,
@@ -100,7 +103,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
   ]);
 
   useEffect(() => {
-    if (authLoading) {
+    if (authLoading || connectionsLoading) {
       return;
     }
     if (!authToken) {
@@ -108,16 +111,20 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
       setStatus("Sign in to access the chat studio.");
       return;
     }
-    if (!openrouterConfigured) {
-      setLoading(false);
-      setStatus("OpenRouter API key is not configured. Update it in Settings to continue.");
+    if (!chatProviderConfigured) {
+      setStatus("No chat provider is configured. Add one in Settings to continue.");
       return;
     }
     setStatus(null);
-  }, [authLoading, authToken, openrouterConfigured, setLoading, setStatus]);
+  }, [authLoading, authToken, chatProviderConfigured, connectionsLoading, setLoading, setStatus]);
 
   useEffect(() => {
-    if (authLoading || !authToken || !openrouterConfigured) {
+    if (authLoading) {
+      // Still resolving auth — keep the loader up rather than flashing an
+      // empty state.
+      return;
+    }
+    if (!authToken) {
       setSessions([]);
       setLoading(false);
       return;
@@ -158,7 +165,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     historyFilterActive,
     historyFilterCollectionIds,
     historyFilterIncludeUnassigned,
-    openrouterConfigured,
+    chatProviderConfigured,
     sessionIdParam,
     sortSessions,
   ]);
@@ -172,6 +179,12 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
       setActiveModelId((current) =>
         current === session.chat_model ? current : session.chat_model,
       );
+    }
+    if (session) {
+      // Always sync — a legacy session without a connection must clear the
+      // previous session's id, or its sends route through the wrong provider.
+      const nextConnection = session.provider_connection_id ?? null;
+      setActiveConnectionId((current) => (current === nextConnection ? current : nextConnection));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, sessions]);
@@ -222,6 +235,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     if (newChatDefaultsRef.current) {
       const snapshot = newChatDefaultsRef.current;
       setActiveModelId(snapshot.activeModelId);
+      setActiveConnectionId(snapshot.activeConnectionId);
       setParameterOverrides(snapshot.parameterOverrides);
       setProviderForm(snapshot.providerForm);
       setStreamingEnabled(snapshot.streamingEnabled);
@@ -234,12 +248,14 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     const latestSession = sessions.find((session) => !pendingIds.has(session.id)) ?? null;
     if (latestSession) {
       setActiveModelId(latestSession.chat_model);
+      setActiveConnectionId(latestSession.provider_connection_id ?? null);
       setParameterOverrides(latestSession.parameter_overrides ?? {});
       setProviderForm(createProviderFormFromPreferences(latestSession.provider_preferences));
       setStreamingEnabled(latestSession.stream ?? DEFAULT_STREAMING_ENABLED);
       setSelectedToolCollectionIds(latestSession.tool_collection_ids ?? []);
     } else if (user) {
       setActiveModelId(user.last_used_chat_model ?? null);
+      setActiveConnectionId(user.last_used_chat_connection_id ?? null);
       setParameterOverrides(user.last_used_parameters ?? {});
       setProviderForm(createProviderFormFromPreferences(user.last_used_provider));
       setStreamingEnabled(user.last_used_stream ?? DEFAULT_STREAMING_ENABLED);

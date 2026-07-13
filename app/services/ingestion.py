@@ -14,7 +14,6 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.clients.openrouter import get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.engine import session_scope
@@ -23,6 +22,7 @@ from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import IngestionPipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
+from app.providers.registry import ProviderResolver
 from app.retrieval.models import DocumentChunk
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedIngestionPipeline, resolve_ingestion_pipeline
@@ -95,7 +95,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         runner = PipelineRunner(self.session)
         handle: PipelineRunHandle | None = None
         try:
-            openrouter = get_openrouter_client(user.openrouter_api_key or "")
+            providers = ProviderResolver(user, self.session)
             vector_stores = VectorStoreProvider(user, self.session)
             if is_retry:
                 self._purge_previous_vectors(vector_stores, resolved, document)
@@ -108,7 +108,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 user=user,
                 collection=collection,
                 settings=self.settings,
-                openrouter=openrouter,
+                providers=providers,
                 vector_stores=vector_stores,
                 storage=self.storage,
                 document=document,

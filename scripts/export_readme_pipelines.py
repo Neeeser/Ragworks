@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from uuid import UUID
 
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
@@ -15,11 +16,14 @@ from app.schemas.enums import IndexBackend
 
 SAMPLE_EMBEDDING_MODEL = "openai/text-embedding-3-small"
 SAMPLE_INDEX_NAME = "ragworks"
+# Stable placeholder: the rendered node card shows the model, not this id.
+SAMPLE_CONNECTION_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 def build_capture_payload() -> dict[str, object]:
     """Return render data sourced from the backend's default pipeline builders."""
     options = {
+        "embedding_connection_id": SAMPLE_CONNECTION_ID,
         "embedding_model": SAMPLE_EMBEDDING_MODEL,
         "backend": IndexBackend.PGVECTOR,
         "index_name": SAMPLE_INDEX_NAME,

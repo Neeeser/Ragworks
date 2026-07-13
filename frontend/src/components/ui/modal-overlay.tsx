@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -92,7 +93,10 @@ export function ModalOverlay({
     return null;
   }
 
-  return (
+  // Portaled to <body>: an ancestor with a transform (e.g. an entrance
+  // animation) creates a stacking context, and without the portal the
+  // overlay's z-index competes inside it and loses to the sticky navbar.
+  return createPortal(
     <div
       className={cn(
         "fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-4 py-10 backdrop-blur-sm",
@@ -112,6 +116,7 @@ export function ModalOverlay({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

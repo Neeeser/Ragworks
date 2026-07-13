@@ -15,6 +15,7 @@ from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository, UserRepository
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.services.pipelines import PipelineService
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 def _other_user(session: Session) -> models.User:
@@ -22,8 +23,6 @@ def _other_user(session: Session) -> models.User:
         email="other@example.com",
         full_name="Other",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     UserRepository(session).add(user)
     session.commit()
@@ -37,7 +36,9 @@ def _other_user(session: Session) -> models.User:
     "path",
     [
         "/api/auth/me",
-        "/api/auth/me/keys/validate",
+        "/api/connections",
+        "/api/providers",
+        "/api/models",
         "/api/collections",
         "/api/collections/stats",
         "/api/pipelines",
@@ -88,7 +89,9 @@ def test_cross_user_pipeline_is_404(client, session: Session) -> None:
         user=other,
         name="Theirs",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     session.refresh(pipeline)
@@ -118,7 +121,17 @@ def test_create_pipeline_missing_fields_is_422(client) -> None:
 def test_me_response_excludes_secrets(client) -> None:
     body = client.get("/api/auth/me").json()
 
-    assert body["openrouter_configured"] is True
-    assert body["pinecone_configured"] is True
     for secret in ("hashed_password", "openrouter_api_key", "pinecone_api_key"):
         assert secret not in body
+
+
+def test_connections_response_never_serializes_secret_values(client) -> None:
+    """Connection reads echo `secrets_configured` booleans, never key values."""
+    body = client.get("/api/connections").json()
+
+    assert body, "expected the fixture user's connections"
+    serialized = str(body)
+    assert "openrouter-key" not in serialized
+    assert "pinecone-key" not in serialized
+    for connection in body:
+        assert connection["secrets_configured"].get("api_key") is True

@@ -81,7 +81,7 @@ const chunk = (col: number): DemoNode => ({
 
 const embed = (col: number): DemoNode => ({
   id: "embed",
-  nodeType: "embedder.openrouter",
+  nodeType: "embedder.text",
   label: "Embed",
   description: "Turn each chunk into a vector.",
   input: PORT.chunks,
@@ -112,7 +112,7 @@ const query = (col: number): DemoNode => ({
 
 const embedQuery = (col: number): DemoNode => ({
   id: NODE_EMBED_QUERY,
-  nodeType: "embedder.openrouter",
+  nodeType: "embedder.text",
   label: "Embed Query",
   description: "Turn the question into a vector.",
   input: PORT.query,

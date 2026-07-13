@@ -5,9 +5,10 @@ The wire-level sanitization this module used to do by hand (`PARAMETER_TYPE_HINT
 `ChatParameters` / `ProviderPreferences` (`app/schemas/chat_parameters.py`).
 What remains here is genuinely request-shaping, not wire coercion:
 `sanitize_parameter_overrides` filters an already-typed `ChatParameters` down
-to the specific model's supported parameters; `prepare_reasoning_override`,
-`build_reasoning_options`, and `build_openrouter_body` construct the OpenRouter
-request payload.
+to the specific model's supported parameters; `prepare_reasoning_override` and
+`build_reasoning_options` construct the normalized reasoning options
+(`build_openrouter_body` — the OpenRouter wire shaping — lives with the
+provider in `app/providers/chat/openrouter.py`).
 """
 
 from __future__ import annotations
@@ -110,21 +111,3 @@ def build_reasoning_options(
         options["reasoning"] = {"effort": selected_effort}
 
     return options
-
-
-def build_openrouter_body(
-    reasoning_options: dict[str, Any] | None,
-    provider_options: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build the OpenRouter extra_body payload for chat requests."""
-    body: dict[str, Any] = dict(reasoning_options) if reasoning_options else {}
-    usage_config = body.get("usage")
-    if isinstance(usage_config, dict):
-        merged_usage = dict(usage_config)
-        merged_usage["include"] = True
-        body["usage"] = merged_usage
-    else:
-        body["usage"] = {"include": True}
-    if provider_options:
-        body["provider"] = provider_options
-    return body

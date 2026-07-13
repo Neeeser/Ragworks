@@ -37,8 +37,6 @@ def _create_user(session: Session) -> models.User:
         email="user@example.com",
         full_name="User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     repo.add(user)
     session.commit()
@@ -301,7 +299,6 @@ def test_delete_chat_session_paths(session: Session) -> None:
 def test_stream_chat_yields_events(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
-        openrouter_api_key="openrouter-key",
     )
 
     class _StubChatService:
@@ -335,7 +332,6 @@ def test_stream_chat_yields_events(monkeypatch) -> None:
 def test_stream_chat_handles_errors(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
-        openrouter_api_key="openrouter-key",
     )
 
     class _StubChatService:
@@ -372,7 +368,6 @@ def test_stream_chat_surfaces_openrouter_auth_failure_as_error_event(monkeypatch
     `openai.AuthenticationError` OpenRouter's SDK actually raises."""
     user = SimpleNamespace(
         id=uuid4(),
-        openrouter_api_key="openrouter-key",
     )
 
     class _StubChatService:
@@ -409,7 +404,6 @@ def test_stream_chat_surfaces_openrouter_auth_failure_as_error_event(monkeypatch
 def test_stream_chat_closes_on_disconnect(monkeypatch) -> None:
     user = SimpleNamespace(
         id=uuid4(),
-        openrouter_api_key="openrouter-key",
     )
 
     class _DisconnectingRequest:

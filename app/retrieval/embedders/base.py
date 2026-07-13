@@ -13,6 +13,11 @@ class Embedder(Protocol):
 
     model_name: str
 
+    @property
+    def usage(self) -> dict[str, int] | None:
+        """Most recent embedding call's token usage, when the provider reports it."""
+        ...
+
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:
         """Embed a sequence of document chunks."""
         ...

@@ -75,18 +75,6 @@ def get_current_user(
     return user
 
 
-def require_openrouter_key(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    """Ensure the user has configured an OpenRouter API key."""
-    if not (current_user.openrouter_api_key or "").strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OpenRouter API key is not configured. Update it in Settings to continue.",
-        )
-    return current_user
-
-
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Return the authenticated user, rejecting non-admins with a 403."""
     if current_user.role != UserRole.ADMIN.value:

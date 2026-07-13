@@ -33,8 +33,8 @@ import {
   getCollectionPrompt,
   getProfile,
   listChatSessions,
+  listChatModels,
   listModelEndpoints,
-  listModels,
   listPipelineVersions,
   listIndexes,
   fetchIndexBackends,
@@ -50,7 +50,6 @@ import {
   updateUserSettings,
   uploadFile,
   validatePipeline,
-  validateUserKeys,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 
@@ -200,7 +199,7 @@ describe("api", () => {
     globalThis.fetch = fetchMock as typeof fetch;
     fetchMock.mockResolvedValueOnce(createJsonResponse({ id: "user-1" }));
 
-    await updateUserSettings("token", { pinecone_api_key: "abc" });
+    await updateUserSettings("token", { remember_session_days: 90 });
     const [, options] = fetchMock.mock.calls[0];
     const headers = options?.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer token");
@@ -288,7 +287,6 @@ describe("api", () => {
 
     await Promise.all([
       registerUser({ email: testEmail, password: testPassword }),
-      validateUserKeys("token"),
       fetchCollections("token"),
       fetchCollectionStats("token"),
       fetchCollectionStatsById("token", "col-1"),
@@ -301,7 +299,6 @@ describe("api", () => {
       fetchPipeline("token", "pipe-1"),
       fetchPipelineNodes("token"),
       fetchEmbeddingModels("token"),
-      fetchEmbeddingModels("token", true),
       listIndexes("token"),
       fetchIndexBackends("token"),
       describeIndex("token", "pgvector", "index"),
@@ -390,10 +387,10 @@ describe("api", () => {
       .mockResolvedValueOnce(createJsonResponse({}))
       .mockResolvedValueOnce(createJsonResponse({}));
 
-    await listModels("token", true);
-    await listModelEndpoints("token", "openai", "gpt-4o");
-    await listModels();
-    await listModelEndpoints(undefined, "openai", "gpt-4o");
+    await listChatModels("token");
+    await listModelEndpoints("token", "conn-1", "openai", "gpt-4o");
+    await listChatModels("token");
+    await listModelEndpoints("token", "conn-1", "openai", "gpt-4o");
   });
 
   it("streams chat events and returns final payload", async () => {

@@ -1,232 +1,97 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "@/app/(console)/settings/page";
 import * as apiModule from "@/lib/api";
-import { makeUser } from "@/test/fixtures";
-import { setMockAuth } from "@/test/mocks";
 
-import type { UserKeyValidation } from "@/lib/types";
+const OLLAMA_URL = "http://192.168.1.225:11434";
 
-vi.mock("@/providers/auth-provider", async () =>
-  (await import("@/test/mocks")).mockAuth({ token: "token" }),
-);
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);
 
-const KEY_PLACEHOLDER = "Key saved (hidden)";
-const SAVE_BUTTON = "Save settings";
-const TOKEN = "token";
-const UPDATE_FAILED = "Update failed";
-const VALIDATION_DOWN = "Validation down";
+const TOKEN = "test-token";
 
-const submitForm = () => fireEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
-
-describe("SettingsPage", () => {
-  beforeEach(() => {
-    setMockAuth({ user: makeUser({ full_name: "Test User" }) });
+describe("SettingsPage (provider connections)", () => {
+  beforeEach(async () => {
+    const { resetMockAuth } = await import("@/test/mocks");
+    resetMockAuth();
   });
 
-  it("shows validation state while checking", () => {
-    api.validateUserKeys.mockImplementation(() => new Promise<UserKeyValidation>(() => {}));
+  it("lists configured connections with capability badges and built-ins", async () => {
     render(<SettingsPage />);
 
-    expect(screen.getAllByText("Checking").length).toBeGreaterThan(0);
+    expect(await screen.findByText("OpenRouter")).toBeInTheDocument();
+    expect(screen.getAllByText("Embeddings").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Chat").length).toBeGreaterThan(0);
+    // Built-in pgvector renders as a non-removable entry.
+    expect(await screen.findByText("pgvector (PostgreSQL)")).toBeInTheDocument();
   });
 
-  it("requires a token to save settings", () => {
-    setMockAuth({ token: null });
+  it("adds an Ollama connection through the data-driven form", async () => {
+    const user = userEvent.setup();
     render(<SettingsPage />);
 
-    submitForm();
-    expect(screen.getByText("Sign in to update your settings.")).toBeInTheDocument();
-  });
+    await user.click(await screen.findByRole("button", { name: /add provider/i }));
+    await user.click(await screen.findByRole("button", { name: /ollama/i }));
 
-  it("handles no-op saves", async () => {
-    api.validateUserKeys.mockResolvedValue({
-      openrouter: { configured: false, valid: false },
-      pinecone: { configured: false, valid: false },
-    });
-    render(<SettingsPage />);
+    // The form renders from the provider type's config_fields catalog.
+    const urlInput = await screen.findByLabelText("Server URL");
+    await user.type(urlInput, OLLAMA_URL);
+    expect(screen.getByLabelText(/API key \(optional/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /add connection/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
-    });
-
-    submitForm();
-    expect(screen.getByText("No changes to save.")).toBeInTheDocument();
-  });
-
-  it("saves updated settings and refreshes validation", async () => {
-    render(<SettingsPage />);
-
-    const connectedBadges = await screen.findAllByText("Connected");
-    expect(connectedBadges.length).toBeGreaterThan(0);
-
-    const inputs = screen.getAllByPlaceholderText(KEY_PLACEHOLDER);
-    fireEvent.change(inputs[0], { target: { value: "or-abc" } });
-
-    await act(async () => {
-      submitForm();
-    });
-
-    await waitFor(() => {
-      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
-        openrouter_api_key: "or-abc",
-      });
-    });
-    expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
-  });
-
-  it("submits pending removals", async () => {
-    render(<SettingsPage />);
-
-    fireEvent.click(screen.getAllByText("Remove")[0]);
-    expect(screen.getByText("Will remove on save.")).toBeInTheDocument();
-
-    await act(async () => {
-      submitForm();
-    });
-
-    await waitFor(() => {
-      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
-        openrouter_api_key: "",
-      });
+      expect(api.createConnection).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({
+          provider_type: "ollama",
+          config: { base_url: OLLAMA_URL },
+        }),
+      );
     });
   });
 
-  it("saves pinecone keys and supports pending clears", async () => {
+  it("surfaces a failed pre-save probe without creating the connection", async () => {
+    api.validateConnectionConfig.mockResolvedValueOnce({
+      valid: false,
+      message: "The Ollama server is unreachable.",
+    });
+    const user = userEvent.setup();
     render(<SettingsPage />);
 
-    const inputs = screen.getAllByPlaceholderText(KEY_PLACEHOLDER);
-    fireEvent.change(inputs[1], { target: { value: "pc-123" } });
+    await user.click(await screen.findByRole("button", { name: /add provider/i }));
+    await user.click(await screen.findByRole("button", { name: /ollama/i }));
+    await user.type(await screen.findByLabelText("Server URL"), "http://10.0.0.9:11434");
+    await user.click(screen.getByRole("button", { name: /^test$/i }));
 
-    await act(async () => {
-      submitForm();
-    });
+    expect(await screen.findByText("The Ollama server is unreachable.")).toBeInTheDocument();
+    expect(api.createConnection).not.toHaveBeenCalled();
+  });
 
-    await waitFor(() => {
-      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
-        pinecone_api_key: "pc-123",
-      });
-    });
+  it("removes a connection after confirmation", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage />);
 
-    fireEvent.click(screen.getAllByText("Remove")[1]);
-    expect(screen.getByText("Will remove on save.")).toBeInTheDocument();
-
-    await act(async () => {
-      submitForm();
-    });
+    await user.click(await screen.findByRole("button", { name: /remove openrouter/i }));
+    await user.click(await screen.findByRole("button", { name: /^remove$/i }));
 
     await waitFor(() => {
-      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
-        pinecone_api_key: "",
-      });
+      expect(api.deleteConnection).toHaveBeenCalledWith(TOKEN, "conn-openrouter-1");
     });
   });
 
-  it("handles save errors and invalid status", async () => {
-    api.validateUserKeys.mockResolvedValue({
-      openrouter: { configured: true, valid: false, message: "Bad key" },
-      pinecone: { configured: true, valid: false },
-    });
-    api.updateUserSettings.mockRejectedValue(new Error(UPDATE_FAILED));
-
+  it("validates a saved connection and shows the outcome", async () => {
+    api.validateConnection.mockResolvedValueOnce({ valid: true, message: "Connected." });
+    const user = userEvent.setup();
     render(<SettingsPage />);
 
-    const invalidBadges = await screen.findAllByText("Invalid");
-    expect(invalidBadges.length).toBeGreaterThan(0);
+    await user.click(await screen.findByRole("button", { name: /validate openrouter/i }));
 
-    const inputs = screen.getAllByPlaceholderText(KEY_PLACEHOLDER);
-    fireEvent.change(inputs[0], { target: { value: "or-invalid" } });
-    await act(async () => {
-      submitForm();
-    });
-
-    expect(await screen.findByText(UPDATE_FAILED)).toBeInTheDocument();
-  });
-
-  it("falls back to default status when validation is missing", async () => {
-    setMockAuth({ user: null });
-    api.validateUserKeys.mockRejectedValue(VALIDATION_DOWN);
-
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Unable to validate API keys.")).toBeInTheDocument();
-    });
-    expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
-  });
-
-  it("shows invalid status without a validation message", async () => {
-    api.validateUserKeys.mockResolvedValue({
-      openrouter: { configured: true, valid: false },
-      pinecone: { configured: true, valid: true },
-    });
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Invalid OpenRouter API key.")).toBeInTheDocument();
-    });
-  });
-
-  it("handles save errors without Error objects and dismisses notifications", async () => {
-    api.updateUserSettings.mockRejectedValue(UPDATE_FAILED);
-
-    render(<SettingsPage />);
-
-    const inputs = await screen.findAllByPlaceholderText(KEY_PLACEHOLDER);
-    fireEvent.change(inputs[0], { target: { value: "or-abc" } });
-
-    await act(async () => {
-      submitForm();
-    });
-
-    expect(await screen.findByText("Unable to update settings.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
-    await waitFor(() => {
-      expect(screen.queryByText("Unable to update settings.")).not.toBeInTheDocument();
-    });
-  });
-
-  it("shows validation error message when key checks fail", async () => {
-    api.validateUserKeys.mockRejectedValue(new Error(VALIDATION_DOWN));
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText(VALIDATION_DOWN)).toBeInTheDocument();
-    });
-  });
-
-  it("updates remembered login duration and revokes a session", async () => {
-    api.listAuthSessions.mockResolvedValueOnce([
-      {
-        id: "session-1",
-        user_agent: "Test browser",
-        ip_address: "127.0.0.1",
-        created_at: "2026-07-01T00:00:00Z",
-        last_used_at: "2026-07-12T00:00:00Z",
-        expires_at: "2026-08-01T00:00:00Z",
-        current: false,
-      },
-    ]);
-    render(<SettingsPage />);
-
-    fireEvent.change(await screen.findByLabelText("Remembered login duration"), {
-      target: { value: "90" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save login duration" }));
-
-    await waitFor(() => {
-      expect(api.updateUserSettings).toHaveBeenCalledWith(TOKEN, {
-        remember_session_days: 90,
-      });
-    });
-
-    await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Revoke Test browser" }));
-    });
-    expect(api.revokeAuthSession).toHaveBeenCalledWith(TOKEN, "session-1");
+    expect(await screen.findByText("Connected.")).toBeInTheDocument();
+    expect(api.validateConnection).toHaveBeenCalledWith(TOKEN, "conn-openrouter-1");
   });
 });

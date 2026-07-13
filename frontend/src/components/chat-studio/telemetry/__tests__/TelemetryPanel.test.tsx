@@ -3,6 +3,7 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
+import { makeCatalogModel } from "@/test/fixtures";
 
 import type {
   ProviderFormState,
@@ -283,6 +284,9 @@ const buildProps = (overrides: FlatOverrides = {}): React.ComponentProps<typeof 
       onModelSearchChange: f.onModelSearchChange,
       modelSortOption: f.modelSortOption,
       onModelSortChange: f.onModelSortChange,
+      connectionFilter: "",
+      onConnectionFilterChange: vi.fn(),
+      connectionOptions: [],
       toolReadyModels: f.toolReadyModels,
       filteredModelCatalog: f.filteredModelCatalog,
       modelsLoading: f.modelsLoading,
@@ -391,7 +395,11 @@ describe("TelemetryPanel", () => {
       promptSections: [{ id: "base", label: "Base", scope: "base", isCustom: false }],
       selectedToolCollectionIds: ["col-1", "col-2"],
       providerRuleCount: 2,
-      currentModelInfo: { id: "model-1", name: "Model A", supported_parameters: [] },
+      currentModelInfo: makeCatalogModel({
+        id: "model-1",
+        name: "Model A",
+        supported_parameters: [],
+      }),
       activeParameterCount: 1,
       contextWindow: 120,
       contextConsumed: 30,

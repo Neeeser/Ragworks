@@ -3,14 +3,16 @@
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { useOpenRouterKeyValidation } from "@/components/setup/hooks/use-key-validation";
+import { ConnectionsManager } from "@/components/connections/ConnectionsManager";
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
+import type { ProviderKind } from "@/lib/types";
 
 const KICKER = "First-run setup";
 
@@ -35,75 +37,74 @@ export function StepWelcome({ wizard }: { wizard: SetupWizardApi }) {
       }
     >
       <p className="text-body leading-relaxed">
-        Four choices: an OpenRouter key, an embedding model, a vector index, and your first
-        collection.
+        Four choices: your providers, an embedding model, a vector index, and your first collection.
       </p>
     </SetupStepShell>
   );
 }
 
-export function StepKey({ wizard }: { wizard: SetupWizardApi }) {
-  const [key, setKey] = useState("");
-  const validation = useOpenRouterKeyValidation(key);
+const COVERAGE_ROWS: Array<{ kind: ProviderKind; label: string; hint: string }> = [
+  { kind: "embedding", label: "Embeddings", hint: "turns documents and queries into vectors" },
+  { kind: "chat", label: "Chat", hint: "answers questions over your collections" },
+  { kind: "vector_store", label: "Vector database", hint: "stores and searches the vectors" },
+];
+
+export function StepProviders({ wizard }: { wizard: SetupWizardApi }) {
+  const { token } = useAuth();
   return (
     <SetupStepShell
-      stepKey="key"
+      stepKey="providers"
       direction={wizard.state.direction}
       kicker={KICKER}
-      title="Connect OpenRouter"
+      title="Connect your providers"
       footer={
         <>
           <Button variant="ghost" onClick={wizard.back}>
             Back
           </Button>
-          {wizard.keyConfigured && !key ? (
-            <Button size="lg" onClick={wizard.next}>
-              Continue
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              loading={wizard.busy}
-              disabled={validation.state !== "valid"}
-              onClick={() => void wizard.saveKey(key)}
-            >
-              Save & continue
-            </Button>
-          )}
+          <Button size="lg" disabled={!wizard.providersReady} onClick={wizard.next}>
+            Continue
+          </Button>
         </>
       }
     >
       <p className="text-body leading-relaxed">
-        Embeddings and chat both run through OpenRouter. Your key is stored on your account and
-        never shared.
+        Connect at least one provider for each capability below. OpenRouter covers embeddings and
+        chat with one API key; an Ollama server adds local models; pgvector ships built in as the
+        vector database.
       </p>
-      {wizard.keyConfigured ? (
-        <p className="flex items-center gap-2 text-sm text-body">
-          <Check aria-hidden className="h-4 w-4 text-accent-cyan" />A key is already connected —
-          continue, or paste a new one to replace it.
-        </p>
-      ) : null}
-      <Field label="OpenRouter API key">
-        <TextInput
-          type="password"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          placeholder="sk-or-…"
-          autoComplete="off"
-        />
-      </Field>
-      <div aria-live="polite">
-        {validation.state === "checking" ? (
-          <p className="text-sm text-muted">Checking the key with OpenRouter…</p>
-        ) : null}
-        {validation.state === "valid" ? (
-          <p className="flex items-center gap-2 text-sm text-body">
-            <Check aria-hidden className="h-4 w-4 text-accent-cyan" />
-            Key verified.
-          </p>
-        ) : null}
-        <SetupNotice message={validation.state === "invalid" ? validation.message : null} />
-      </div>
+      <ul className="space-y-1.5" aria-label="Required capabilities">
+        {COVERAGE_ROWS.map((row) => {
+          const covered = wizard.coverage[row.kind];
+          return (
+            <li key={row.kind} className="flex items-center gap-2 text-sm">
+              <span
+                aria-hidden
+                className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-full border",
+                  covered
+                    ? "border-accent-cyan/60 bg-accent-cyan/15 text-accent-cyan"
+                    : "border-hairline text-transparent",
+                )}
+              >
+                <Check className="h-3 w-3" />
+              </span>
+              <span className={covered ? "text-body" : "text-muted"}>
+                {row.label}
+                <span className="ml-1.5 text-xs text-meta">— {row.hint}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <ConnectionsManager
+        authToken={token ?? ""}
+        connections={wizard.connections}
+        providerTypes={wizard.providerTypes}
+        loading={wizard.connectionsLoading}
+        error={wizard.connectionsError}
+        onChanged={wizard.reloadConnections}
+      />
       <SetupNotice message={wizard.error} />
     </SetupStepShell>
   );
@@ -112,7 +113,7 @@ export function StepKey({ wizard }: { wizard: SetupWizardApi }) {
 export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
   const [search, setSearch] = useState("");
   const { models, suggestedModelId } = wizard;
-  const { embeddingModel } = wizard.state.choices;
+  const { embeddingModel, embeddingConnectionId } = wizard.state.choices;
 
   // Backend caps are data declared on each backend — never hardcoded here.
   // NOTE(dimension-reduction): once pgvector gains dimension reduction for
@@ -126,7 +127,9 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
     const matches = term
       ? list.filter(
           (model) =>
-            model.id.toLowerCase().includes(term) || model.name.toLowerCase().includes(term),
+            model.id.toLowerCase().includes(term) ||
+            model.name.toLowerCase().includes(term) ||
+            model.connection_label.toLowerCase().includes(term),
         )
       : list;
     // Suggested model floats to the top so the default is one click away.
@@ -167,16 +170,19 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
       <SetupNotice message={wizard.modelsError} />
       <ul className="max-h-72 space-y-2 overflow-y-auto pr-1" aria-label="Embedding models">
         {filtered.map((model) => {
-          const selected = model.id === embeddingModel;
+          const selected =
+            model.id === embeddingModel &&
+            (!embeddingConnectionId || model.connection_id === embeddingConnectionId);
           const oversized =
             pgvectorCap != null && model.dimension != null && model.dimension > pgvectorCap;
           return (
-            <li key={model.id}>
+            <li key={`${model.connection_id}::${model.id}`}>
               <button
                 type="button"
                 aria-pressed={selected}
                 onClick={() =>
                   wizard.setChoices({
+                    embeddingConnectionId: model.connection_id,
                     embeddingModel: model.id,
                     embeddingDimension: model.dimension ?? null,
                   })
@@ -203,7 +209,9 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
                     ) : null}
                   </span>
                 </span>
-                <span className="mt-1 block truncate text-xs text-meta">{model.id}</span>
+                <span className="mt-1 block truncate text-xs text-meta">
+                  {model.connection_label} · {model.id}
+                </span>
                 {oversized ? (
                   <span className="mt-1 block text-xs text-data-neg">
                     Over pgvector&apos;s {pgvectorCap.toLocaleString()}-dimension index limit —

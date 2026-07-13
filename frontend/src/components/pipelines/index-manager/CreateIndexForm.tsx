@@ -8,12 +8,12 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
-import type { BackendInfo, EmbeddingModelInfo } from "@/lib/types";
+import type { BackendInfo, CatalogModel } from "@/lib/types";
 
 type CreateIndexFormProps = {
   token: string;
   backendInfo: BackendInfo;
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
   onCreateStart: () => void;

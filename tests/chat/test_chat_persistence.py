@@ -269,7 +269,6 @@ def test_ensure_session_returns_existing_session() -> None:
         session=_StubSession(),
         user=SimpleNamespace(id=uuid4()),
         payload=payload,
-        default_chat_model="model",
         primary_collection_id=collection_id,
     )
 
@@ -288,9 +287,10 @@ def test_ensure_session_creates_session_with_requested_id() -> None:
     request = SessionRequest(
         chat_repo=chat_repo,
         session=session,
-        user=SimpleNamespace(id=uuid4()),
+        user=SimpleNamespace(
+            id=uuid4(), last_used_chat_model=None, last_used_chat_connection_id=None
+        ),
         payload=payload,
-        default_chat_model="model",
         primary_collection_id=uuid4(),
     )
 
@@ -304,7 +304,11 @@ def test_ensure_session_creates_session_with_requested_id() -> None:
 def test_ensure_session_prefers_user_last_used_model() -> None:
     chat_repo = _StubChatRepo(existing=None)
     session = _StubSession()
-    user = SimpleNamespace(id=uuid4(), last_used_chat_model="last-used-model")
+    user = SimpleNamespace(
+        id=uuid4(),
+        last_used_chat_model="last-used-model",
+        last_used_chat_connection_id=None,
+    )
     payload = ChatMessageCreate(content="Hello")
 
     request = SessionRequest(
@@ -312,7 +316,6 @@ def test_ensure_session_prefers_user_last_used_model() -> None:
         session=session,
         user=user,
         payload=payload,
-        default_chat_model="default-model",
         primary_collection_id=None,
     )
 

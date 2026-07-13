@@ -3,13 +3,14 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
+import { makeCatalogModel } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 import type { ComponentProps } from "react";
 
-const NODE_TYPE_EMBEDDER = "embedder.openrouter";
+const NODE_TYPE_EMBEDDER = "embedder.text";
 const NODE_TYPE_INDEXER = "indexer.vector";
 const NODE_TYPE_PARSER = "parser.document";
 const INDEX_SELECT_LABEL = "Vector index";
@@ -267,21 +268,23 @@ describe("NodeEditorDrawer", () => {
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_EMBEDDER, { model_name: "emb-1", dimension: 768 }),
-      embeddingModels: [{ id: "emb-1", name: "Embedding One", dimension: 768 }],
+      embeddingModels: [makeCatalogModel({ id: "emb-1", name: "Embedding One", dimension: 768 })],
       onApply,
     });
 
     expect(screen.getByTestId("embedding-selector")).toBeInTheDocument();
     expect(lastEmbeddingProps).toMatchObject({ selectedModelKey: "emb-1" });
     act(() => {
-      (lastEmbeddingProps?.onSelectModel as (id: string) => void)("emb-2");
+      (lastEmbeddingProps?.onSelectModel as (model: unknown) => void)(
+        makeCatalogModel({ id: "emb-2", name: "Embedding Two" }),
+      );
     });
     fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
-    // No explicit dimension: OpenRouter rejects a `dimensions` override for
-    // most embedding models.
+    // No explicit dimension: most embedding models reject a `dimensions`
+    // override, so the draft carries only the connection + model.
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
-      config: { model_name: "emb-2" },
+      config: { connection_id: "conn-openrouter-1", model_name: "emb-2" },
     });
   });
 

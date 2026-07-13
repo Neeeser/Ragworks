@@ -9,6 +9,8 @@ is omitted so defaults always ingest and query successfully.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -55,27 +57,10 @@ def bm25_sibling_index_name(index_name: str, backend: IndexBackend) -> str:
     return candidate
 
 
-def _resolve_embedding_model(explicit: str | None) -> str:
-    """Return the model a scaffold embeds with, or fail pointing at setup.
-
-    The code default is deliberately empty (no OpenRouter embedding model id
-    is evergreen), so an install that has never run the first-run setup
-    wizard has no model to scaffold with -- failing here, with a message
-    that names the fix, beats a 502 on the first upload.
-    """
-    model = explicit or get_app_config().models.default_embedding_model
-    if not model.strip():
-        raise InvalidInputError(
-            "No default embedding model is configured. Complete the "
-            "first-time setup wizard (or set models.default_embedding_model) "
-            "before creating default pipelines."
-        )
-    return model
-
-
 def build_default_ingestion_pipeline(
     *,
-    embedding_model: str | None = None,
+    embedding_connection_id: UUID,
+    embedding_model: str,
     backend: IndexBackend | None = None,
     index_name: str | None = None,
     chunk_size: int = 1024,
@@ -83,14 +68,14 @@ def build_default_ingestion_pipeline(
 ) -> PipelineDefinition:
     """Return the default (hybrid) ingestion pipeline definition.
 
-    Explicit arguments (the setup wizard's confirmed choices) win over the
-    runtime config; with no arguments this scaffolds from config and raises
-    `InvalidInputError` when no embedding model has been configured yet.
-    Chunks flow down two parallel paths: embed → semantic index, and straight
-    into a BM25 index (omitted when the backend can't serve sparse indexes).
+    There are no global default models: the embedding choice — a provider
+    connection plus model — is always explicit (the setup wizard's confirmed
+    pick, or an existing default's embedder when re-scaffolding for a backend
+    change). Chunks flow down two parallel paths: embed → semantic index, and
+    straight into a BM25 index (omitted when the backend can't serve sparse
+    indexes).
     """
     backend = backend or _default_backend()
-    embedding_model = _resolve_embedding_model(embedding_model)
     index_name = index_name or default_index_name(backend)
     include_bm25 = lexical_available(backend)
     nodes = [
@@ -118,10 +103,13 @@ def build_default_ingestion_pipeline(
         ),
         PipelineNodeDefinition(
             id="embed-chunks",
-            type="embedder.openrouter",
+            type="embedder.text",
             name="Embedder",
             position={"x": NODE_SPACING_X * 3, "y": 0},
-            config={"model_name": embedding_model},
+            config={
+                "connection_id": str(embedding_connection_id),
+                "model_name": embedding_model,
+            },
         ),
         PipelineNodeDefinition(
             id="index-chunks",
@@ -221,20 +209,20 @@ def build_default_ingestion_pipeline(
 
 def build_default_retrieval_pipeline(
     *,
-    embedding_model: str | None = None,
+    embedding_connection_id: UUID,
+    embedding_model: str,
     backend: IndexBackend | None = None,
     index_name: str | None = None,
 ) -> PipelineDefinition:
     """Return the default (hybrid) retrieval pipeline definition.
 
-    Same contract as `build_default_ingestion_pipeline`: explicit setup
-    choices win over config; no configured model raises. The query runs down
-    two parallel branches — embed → semantic retrieve, and BM25 retrieve on
-    the raw text — fused by reciprocal rank (the BM25 branch and fusion node
-    are omitted when the backend can't serve sparse indexes).
+    Same contract as `build_default_ingestion_pipeline`: the embedding choice
+    is always explicit. The query runs down two parallel branches — embed →
+    semantic retrieve, and BM25 retrieve on the raw text — fused by
+    reciprocal rank (the BM25 branch and fusion node are omitted when the
+    backend can't serve sparse indexes).
     """
     backend = backend or _default_backend()
-    embedding_model = _resolve_embedding_model(embedding_model)
     index_name = index_name or default_index_name(backend)
     include_bm25 = lexical_available(backend)
     nodes = [
@@ -246,10 +234,13 @@ def build_default_retrieval_pipeline(
         ),
         PipelineNodeDefinition(
             id="embed-query",
-            type="embedder.openrouter",
+            type="embedder.text",
             name="Embedder",
             position={"x": NODE_SPACING_X, "y": 0},
-            config={"model_name": embedding_model},
+            config={
+                "connection_id": str(embedding_connection_id),
+                "model_name": embedding_model,
+            },
         ),
         PipelineNodeDefinition(
             id="vector-retriever",

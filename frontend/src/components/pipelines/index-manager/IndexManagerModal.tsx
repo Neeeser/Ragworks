@@ -17,14 +17,14 @@ import { CreateIndexForm } from "./CreateIndexForm";
 import { IndexDetailsPanel } from "./IndexDetailsPanel";
 import { IndexListPanel } from "./IndexListPanel";
 
-import type { BackendInfo, EmbeddingModelInfo, IndexBackend, VectorIndex } from "@/lib/types";
+import type { BackendInfo, CatalogModel, IndexBackend, VectorIndex } from "@/lib/types";
 
 type IndexManagerModalProps = {
   open: boolean;
   token: string;
   indexes: VectorIndex[];
   backends: BackendInfo[];
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
   embeddingModelsLoading?: boolean;
   embeddingModelsError?: string | null;
   loading?: boolean;

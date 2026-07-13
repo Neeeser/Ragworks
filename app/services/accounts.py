@@ -1,9 +1,9 @@
 """Account service: registration, settings updates, and the base system prompt.
 
 Owns the user-mutation behavior the auth and chat routes used to inline.
-Provider-key updates are validated through `app.services.provider_keys`; a
-validation failure raises `InvalidInputError` carrying a per-field error map, so
-the route returns the same 400-with-`{field: message}` body it always has.
+Provider credentials live on `provider_connections` (see
+`app.services.connections`), not user columns, so settings updates here cover
+only run-settings order and session persistence.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from app.schemas.auth import UserCreate, UserSettingsUpdate
 from app.schemas.enums import UserRole
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
-from app.services.provider_keys import Provider, validate_key
 from app.telemetry import record
 from app.telemetry.events import UserRegistered
 
@@ -59,28 +58,7 @@ class AccountService:
         user: models.User,
         payload: UserSettingsUpdate,
     ) -> models.User:
-        """Validate and apply provider keys and run-settings order for a user."""
-        normalized: dict[str, str] = {}
-        errors: dict[str, str] = {}
-        for field, provider, raw in (
-            ("openrouter_api_key", Provider.OPENROUTER, payload.openrouter_api_key),
-            ("pinecone_api_key", Provider.PINECONE, payload.pinecone_api_key),
-        ):
-            if raw is None:
-                continue
-            value = raw.strip()
-            normalized[field] = value
-            if value:
-                status = validate_key(provider, value)
-                if not status.valid:
-                    errors[field] = status.message or "Invalid API key."
-        if errors:
-            raise InvalidInputError(errors)
-
-        if "openrouter_api_key" in normalized:
-            user.openrouter_api_key = normalized["openrouter_api_key"] or None
-        if "pinecone_api_key" in normalized:
-            user.pinecone_api_key = normalized["pinecone_api_key"] or None
+        """Apply run-settings order and session persistence for a user."""
         if payload.run_settings_order is not None:
             user.run_settings_order = [entry.value for entry in payload.run_settings_order]
         if payload.remember_session_days is not None:

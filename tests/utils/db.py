@@ -47,31 +47,15 @@ def reset_database(engine: Engine) -> None:
     SQLModel.metadata.create_all(engine)
 
 
-TEST_DEFAULT_EMBEDDING_MODEL = "test/embedding-model"
-"""Suite-wide seeded default embedding model.
-
-The shipped code default is deliberately empty (the first-run setup wizard
-seeds it), so every test session seeds a DB override to behave like a
-configured deployment. Tests that exercise the unset behavior delete the
-`models.default_embedding_model` override and invalidate the config cache.
-"""
-
-
 def open_session() -> Iterator[Session]:
-    """Yield a SQLModel session backed by a reset, config-seeded test database."""
+    """Yield a SQLModel session backed by a reset test database."""
     # pylint: disable=import-outside-toplevel
     from app.db.bootstrap import ensure_database_exists
-    from app.db.repositories import AppSettingRepository
     from app.services.app_config import invalidate_app_config_cache
 
     ensure_database_exists(get_database_url())
     engine = create_test_engine()
     reset_database(engine)
-    with Session(engine) as seed:
-        AppSettingRepository(seed).upsert(
-            "models.default_embedding_model", TEST_DEFAULT_EMBEDDING_MODEL, updated_by=None
-        )
-        seed.commit()
     invalidate_app_config_cache()
     with Session(engine) as session:
         yield session

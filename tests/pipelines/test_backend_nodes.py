@@ -23,7 +23,13 @@ from app.pipelines.settings import resolve_ingestion_settings, resolve_retrieval
 from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 from app.schemas.enums import IndexBackend
 from app.utils.file_storage import FileStorage
-from tests.pipelines.conftest import StubVectorStore, StubVectorStoreProvider
+from tests.pipelines.conftest import (
+    StubProviderResolver,
+    StubVectorStore,
+    StubVectorStoreProvider,
+)
+
+EMBED_CONNECTION_ID = uuid4()
 
 
 def _collection() -> models.Collection:
@@ -83,7 +89,7 @@ def test_indexer_splits_upserts_at_backend_batch_limit(session: Session) -> None
         document=None,
         query=None,
         top_k=None,
-        openrouter=object(),
+        providers=StubProviderResolver(),
         vector_stores=StubVectorStoreProvider(store),
         storage=FileStorage(),
         settings=get_settings(),
@@ -112,7 +118,9 @@ def test_indexer_splits_upserts_at_backend_batch_limit(session: Session) -> None
 
 
 def test_resolved_settings_report_backend() -> None:
-    ingestion = build_default_ingestion_pipeline()
+    ingestion = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+    )
     collection = _collection()
     registry = default_registry()
 

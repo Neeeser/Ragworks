@@ -21,7 +21,6 @@ from sqlmodel import Session
 
 from app.chat.events import FinalEvent
 from app.chat.messages import AssistantMessage, ToolCall, normalize_assistant_content
-from app.chat.parameters import build_openrouter_body
 from app.chat.persistence import (
     MessageRecord,
     RecordContext,
@@ -33,7 +32,6 @@ from app.chat.persistence import (
     record_tool_call_assistant_message,
     serialize_messages,
 )
-from app.chat.providers.base import ChatProvider, ChatRequest
 from app.chat.reasoning import normalize_reasoning_segments
 from app.chat.state import (
     ChatSetup,
@@ -47,6 +45,7 @@ from app.chat.tools import ToolExecutor
 from app.chat.usage import UsageSummary, coerce_usage_value
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.providers.chat.base import ChatProvider, ChatRequest
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
 from app.telemetry import record
 from app.telemetry.events import ChatTurnCompleted
@@ -225,11 +224,9 @@ def _build_request(run: ChatRun) -> ChatRequest:
         messages=serialize_messages(run.setup.messages),
         tools=run.setup.tools or None,
         model=run.setup.model.active_model_name,
-        extra_body=build_openrouter_body(
-            run.setup.model.reasoning_options,
-            run.setup.model.provider_preferences,
-        ),
         parameters=run.setup.model.parameter_overrides or None,
+        reasoning_options=run.setup.model.reasoning_options or None,
+        provider_preferences=run.setup.model.provider_preferences,
     )
 
 

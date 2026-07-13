@@ -7,12 +7,13 @@ import { formatPricePerMillion } from "@/lib/format";
 import { sortEmbeddingModels, type EmbeddingModelSortOption } from "@/lib/model-sorting";
 import { cn } from "@/lib/utils";
 
-import type { EmbeddingModelInfo } from "@/lib/types";
+import type { CatalogModel } from "@/lib/types";
 
 type EmbeddingModelSelectorCardProps = {
-  models: EmbeddingModelInfo[];
+  models: CatalogModel[];
   selectedModelKey: string;
-  onSelectModel: (id: string) => void;
+  selectedConnectionId?: string | null;
+  onSelectModel: (model: CatalogModel) => void;
   modelsLoading: boolean;
   modelsError: string | null;
 };
@@ -23,7 +24,7 @@ type EmbeddingModelSelectorCardProps = {
  * (via prop drilling) the node editor; centralizing it here lets every caller just
  * pass the raw model list.
  */
-export function useEmbeddingModelFilter(models: EmbeddingModelInfo[]) {
+export function useEmbeddingModelFilter(models: CatalogModel[]) {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState<EmbeddingModelSortOption>("price");
 
@@ -31,7 +32,8 @@ export function useEmbeddingModelFilter(models: EmbeddingModelInfo[]) {
     const term = searchTerm.trim().toLowerCase();
     const matching = term
       ? models.filter((model) => {
-          const haystack = `${model.name} ${model.id} ${model.description ?? ""}`.toLowerCase();
+          const haystack =
+            `${model.name} ${model.id} ${model.connection_label} ${model.description ?? ""}`.toLowerCase();
           return haystack.includes(term);
         })
       : models;
@@ -44,13 +46,21 @@ export function useEmbeddingModelFilter(models: EmbeddingModelInfo[]) {
 export function EmbeddingModelSelectorCard({
   models,
   selectedModelKey,
+  selectedConnectionId,
   onSelectModel,
   modelsLoading,
   modelsError,
 }: EmbeddingModelSelectorCardProps) {
   const { searchTerm, setSearchTerm, sortOption, setSortOption, filteredModels } =
     useEmbeddingModelFilter(models);
-  const currentModelInfo = models.find((model) => model.id === selectedModelKey) ?? null;
+  const currentModelInfo =
+    models.find(
+      (model) =>
+        model.id === selectedModelKey &&
+        (!selectedConnectionId || model.connection_id === selectedConnectionId),
+    ) ??
+    models.find((model) => model.id === selectedModelKey) ??
+    null;
   const visibleModels = filteredModels.slice(0, 50);
   const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
 
@@ -75,14 +85,14 @@ export function EmbeddingModelSelectorCard({
         </div>
       </div>
       <p className="text-xs text-muted">
-        Pick an OpenRouter embedding model to auto-fill its vector dimension.
+        Pick an embedding model from any connected provider to auto-fill its vector dimension.
       </p>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-meta" />
         <input
           type="search"
           className="w-full rounded-2xl border border-hairline bg-surface py-2 pl-9 pr-3 text-sm text-primary outline-none placeholder:text-meta focus:border-accent-violet"
-          placeholder="Search OpenRouter embeddings…"
+          placeholder="Search embedding models…"
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
         />
@@ -119,7 +129,10 @@ export function EmbeddingModelSelectorCard({
           </p>
         ) : (
           visibleModels.map((model) => {
-            const isSelected = selectedModelKey && model.id === selectedModelKey;
+            const isSelected =
+              selectedModelKey &&
+              model.id === selectedModelKey &&
+              (!selectedConnectionId || model.connection_id === selectedConnectionId);
             const contextLabel = model.context_length
               ? `${Math.round(model.context_length).toLocaleString()} ctx`
               : null;
@@ -134,9 +147,9 @@ export function EmbeddingModelSelectorCard({
                 : model.description;
             return (
               <button
-                key={model.id}
+                key={`${model.connection_id}::${model.id}`}
                 type="button"
-                onClick={() => onSelectModel(model.id)}
+                onClick={() => onSelectModel(model)}
                 className={cn(
                   "w-full rounded-2xl border px-3 py-2 text-left transition",
                   isSelected
@@ -147,7 +160,9 @@ export function EmbeddingModelSelectorCard({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-primary">{model.name}</p>
-                    <p className="text-[11px] text-meta break-all">{model.id}</p>
+                    <p className="text-[11px] text-meta break-all">
+                      {model.connection_label} · {model.id}
+                    </p>
                   </div>
                   {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-accent-violet" />}
                 </div>

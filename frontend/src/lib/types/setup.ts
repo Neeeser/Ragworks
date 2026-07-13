@@ -1,9 +1,11 @@
 import type { Collection } from "@/lib/types/collections";
-import type { IndexBackend } from "@/lib/types/common";
+import type { IndexBackend, UUID } from "@/lib/types/common";
 
 /** Mirrors `app/schemas/setup.py::SetupStatusRead`. */
 export interface SetupStatus {
-  openrouter_configured: boolean;
+  has_embedding_provider: boolean;
+  has_chat_provider: boolean;
+  has_vector_store: boolean;
   has_index: boolean;
   has_collection: boolean;
   setup_complete: boolean;
@@ -11,6 +13,7 @@ export interface SetupStatus {
 
 /** Mirrors `app/schemas/setup.py::SetupBootstrapRequest`. */
 export interface SetupBootstrapRequest {
+  embedding_connection_id: UUID;
   embedding_model: string;
   embedding_dimension?: number | null;
   backend: IndexBackend;

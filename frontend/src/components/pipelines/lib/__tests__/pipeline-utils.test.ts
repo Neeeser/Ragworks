@@ -89,7 +89,7 @@ describe("pipeline-utils", () => {
       index_name: "index-a",
       dimension: 384,
     });
-    const embedder = retrieval.nodes.find((node) => node.type === "embedder.openrouter");
+    const embedder = retrieval.nodes.find((node) => node.type === "embedder.text");
     // The dimension never lands on the embedder: an explicit `dimensions`
     // param is rejected by most OpenRouter embedding models.
     expect(embedder?.config).toEqual({});
@@ -114,7 +114,7 @@ describe("pipeline-utils", () => {
     expect(indexer?.config).toEqual({ backend: "pinecone", index_name: "index-b" });
     const chunker = ingestion.nodes.find((node) => node.type === "chunker.token");
     expect(chunker?.config).toEqual({ chunk_size: 512, chunk_overlap: 32 });
-    const ingestEmbedder = ingestion.nodes.find((node) => node.type === "embedder.openrouter");
+    const ingestEmbedder = ingestion.nodes.find((node) => node.type === "embedder.text");
     expect(ingestEmbedder?.config).toEqual({ model_name: "openai/text-embedding-3-small" });
   });
 

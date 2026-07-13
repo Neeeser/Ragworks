@@ -3,7 +3,8 @@
 Ragworks is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`).
 The goal is an easy-to-use RAG interface for power users. Its backbones are pluggable
 vector stores — pgvector in the shipped Postgres by default, Pinecone optionally —
-and OpenRouter for embeddings and LLMs.
+and pluggable model providers behind per-user connections: OpenRouter and Ollama
+today (embeddings + chat), mixable per pipeline and per chat session.
 
 This file holds only repo-wide rules. Area-specific engineering practices live next to
 the code they govern — load the one for the code you're touching:
@@ -94,21 +95,25 @@ drift from it:
 - **Layer 2 — runtime application config: Postgres (`app_settings` table).**
   The central, UI-editable config is `AppConfig` (`app/schemas/app_config.py`), the
   single source of truth for both code defaults and the field catalog the admin UI
-  renders from — one section model per concern today (`auth`, `uploads`, `models`,
-  `features`). The sparse `app_settings` table stores overrides only, keyed by dotted
-  field name; `AppConfigService.effective_config()` merges precedence env-pinned →
-  DB override → code default. `GET /api/config` serves the public subset
-  (`PublicConfig`) unauthenticated; `GET /api/admin/config` and `PATCH
-  /api/admin/config` (admin-gated) serve/edit the full field catalog. Do **not**
-  introduce file-based runtime config (config.yaml in a volume) — the DB is the
-  config store. `models.default_embedding_model` is deliberately **empty by
-  default** — no OpenRouter embedding model id is evergreen, so a hardcoded one
-  rots (a shipped default once 502'd every first upload). The first-run setup
-  wizard (`/setup`, `POST /api/setup/bootstrap`) seeds it with the user's
-  confirmed choice; default-pipeline scaffolding raises a clear
-  `InvalidInputError` when it's unset rather than building broken pipelines.
-- **Layer 3 — per-user settings** (provider API keys, session preferences) — already
-  exists; stays per-user, never migrates into global config.
+  renders from — one section model per concern today (`auth`, `uploads`,
+  `indexing`, `features`, `telemetry`). The sparse `app_settings` table stores
+  overrides only, keyed by dotted field name; `AppConfigService.effective_config()`
+  merges precedence env-pinned → DB override → code default. `GET /api/config`
+  serves the public subset (`PublicConfig`) unauthenticated; `GET /api/admin/config`
+  and `PATCH /api/admin/config` (admin-gated) serve/edit the full field catalog. Do
+  **not** introduce file-based runtime config (config.yaml in a volume) — the DB is
+  the config store. **There are no global default models** — a `models` section
+  once existed and was removed because shipped model ids rot as providers
+  deprecate them (a hardcoded default once 502'd every first upload). Model
+  choices are always explicit `(provider connection, model)` pairs: the setup
+  wizard's confirmed pick lands inside the scaffolded pipeline definitions, chat
+  seeds from the user's sticky last-used model, and default-pipeline scaffolding
+  raises a clear `InvalidInputError` when no defaults exist yet.
+- **Layer 3 — per-user settings** (provider connections, session preferences) —
+  already exists; stays per-user, never migrates into global config. Provider
+  credentials live on the `provider_connections` table (one row per configured
+  provider instance: an OpenRouter account, an Ollama server URL, a Pinecone
+  project), never as columns on `User`.
 - **The frontend is an API client, never a config owner.** Frontend-related settings
   are fields in the central config fetched over the API. The frontend container mounts
   no volumes and reads no config files; sharing a volume between frontend and backend

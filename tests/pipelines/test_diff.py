@@ -23,7 +23,7 @@ def _definition() -> PipelineDefinition:
             ),
             PipelineNodeDefinition(
                 id="b",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
                 config={},
                 position={"x": 300, "y": 0},

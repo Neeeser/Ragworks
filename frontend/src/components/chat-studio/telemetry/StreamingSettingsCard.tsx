@@ -21,7 +21,7 @@ export const StreamingSettingsCard = ({
         />
       </label>
       <p className="text-xs text-muted">
-        Stream OpenRouter completions to this console via Server-Sent Events for real-time feedback.
+        Stream completions to this console via Server-Sent Events for real-time feedback.
       </p>
     </div>
   );

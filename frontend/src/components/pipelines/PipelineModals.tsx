@@ -9,7 +9,7 @@ import { IndexManagerModal } from "./index-manager/IndexManagerModal";
 
 import type {
   BackendInfo,
-  EmbeddingModelInfo,
+  CatalogModel,
   NodeSpec,
   Pipeline,
   PipelineKind,
@@ -27,7 +27,7 @@ type PipelineModalsProps = {
   indexes: VectorIndex[];
   backends: BackendInfo[];
   nodeSpecs: NodeSpec[];
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
   indexesLoading: boolean;

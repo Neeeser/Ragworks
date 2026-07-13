@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TypeVar
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -84,6 +85,7 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
     namespace: str | None
     dimension: int | None
     metric: str
+    embedding_connection_id: UUID | None = None
     index_targets: tuple[IndexTarget, ...] = ()
 
     def __post_init__(self) -> None:
@@ -107,6 +109,7 @@ class RetrievalPipelineSettings:
     index_name: str
     namespace: str | None
     dimension: int | None
+    embedding_connection_id: UUID | None = None
     index_targets: tuple[IndexTarget, ...] = ()
 
     def __post_init__(self) -> None:
@@ -294,6 +297,7 @@ def resolve_ingestion_settings(
         chunk_size=chunker.chunk_size,
         chunk_overlap=chunker.chunk_overlap,
         embedding_model=embedder.model_name,
+        embedding_connection_id=embedder.connection_id,
         backend=backend,
         index_name=index_name,
         namespace=namespace,
@@ -325,6 +329,7 @@ def resolve_retrieval_settings(
     bm25 = _resolve_bm25_config(definition, Bm25RetrieverNode.type, Bm25RetrieverConfig)
     return RetrievalPipelineSettings(
         embedding_model=embedder.model_name,
+        embedding_connection_id=embedder.connection_id,
         backend=backend,
         index_name=index_name,
         namespace=namespace,

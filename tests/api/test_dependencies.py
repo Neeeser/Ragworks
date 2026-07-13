@@ -86,16 +86,4 @@ def test_get_current_user_rejects_inactive_user(session: Session) -> None:
         dependencies.get_current_user(token=token, session=session)
 
 
-def test_require_openrouter_key_rejects_missing_value(session: Session) -> None:
-    user = _create_user(session)
 
-    with pytest.raises(HTTPException) as excinfo:
-        dependencies.require_openrouter_key(current_user=user)
-
-    assert excinfo.value.status_code == 400
-
-
-def test_require_openrouter_key_accepts_valid_value(session: Session) -> None:
-    user = _create_user(session, openrouter_api_key="openrouter-key")
-
-    assert dependencies.require_openrouter_key(current_user=user) == user
