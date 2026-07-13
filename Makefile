@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -37,6 +37,7 @@ help:
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
+	@echo "  make readme-assets - regenerate the README pipeline animation"
 	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - bump version, commit, tag (push manually)"
 
 env: env-backend env-frontend
@@ -103,6 +104,9 @@ format-frontend: env-frontend
 
 format-check-frontend: env-frontend
 	$(NPM) --prefix frontend run format:check
+
+readme-assets: env-backend env-frontend
+	$(NPM) --prefix frontend run docs:capture-pipeline
 
 bump-patch:
 	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py patch

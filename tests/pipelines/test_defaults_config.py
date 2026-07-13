@@ -221,3 +221,15 @@ def test_bm25_branch_nodes_sit_in_the_column_after_their_source(session: Session
     retrieval = build_default_retrieval_pipeline()
     positions = {node.id: node.position for node in retrieval.nodes}
     assert positions["bm25-retriever"].x == positions["embed-query"].x
+
+
+def test_hybrid_ingestion_output_is_centered_between_index_branches(session: Session) -> None:
+    """Both index edges must approach the shared output without crossing a node card."""
+    _set_override(session, "models.default_embedding_model", "test/embed")
+
+    definition = build_default_ingestion_pipeline()
+    positions = {node.id: node.position for node in definition.nodes}
+
+    assert positions["ingest-output"].y == (
+        positions["index-chunks"].y + positions["index-bm25"].y
+    ) / 2

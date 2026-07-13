@@ -1,0 +1,905 @@
+{
+  "scenes": [
+    {
+      "kind": "ingestion",
+      "definition": {
+        "nodes": [
+          {
+            "id": "ingest-input",
+            "type": "ingestion.input",
+            "name": "Ingestion Input",
+            "config": {},
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "parse-document",
+            "type": "parser.document",
+            "name": "Document Parser",
+            "config": {},
+            "position": {
+              "x": 340.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "chunk-document",
+            "type": "chunker.token",
+            "name": "Token Chunker",
+            "config": {
+              "chunk_size": 1024,
+              "chunk_overlap": 200
+            },
+            "position": {
+              "x": 680.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "embed-chunks",
+            "type": "embedder.openrouter",
+            "name": "Embedder",
+            "config": {
+              "model_name": "openai/text-embedding-3-small"
+            },
+            "position": {
+              "x": 1020.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "index-chunks",
+            "type": "indexer.vector",
+            "name": "Semantic Indexer",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks",
+              "namespace": "col-{collection_id}",
+              "metric": "cosine",
+              "ensure_index": true
+            },
+            "position": {
+              "x": 1360.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "ingest-output",
+            "type": "ingestion.output",
+            "name": "Ingestion Output",
+            "config": {},
+            "position": {
+              "x": 1700.0,
+              "y": 130.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "index-bm25",
+            "type": "indexer.bm25",
+            "name": "BM25 Indexer",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks-bm25",
+              "namespace": "col-{collection_id}",
+              "ensure_index": true
+            },
+            "position": {
+              "x": 1020.0,
+              "y": 260.0
+            },
+            "ui": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-ingest-input-parser",
+            "source": "ingest-input",
+            "target": "parse-document",
+            "source_port": "source",
+            "target_port": "source",
+            "ui": {}
+          },
+          {
+            "id": "edge-parser-chunker",
+            "source": "parse-document",
+            "target": "chunk-document",
+            "source_port": "document",
+            "target_port": "document",
+            "ui": {}
+          },
+          {
+            "id": "edge-chunker-embedder",
+            "source": "chunk-document",
+            "target": "embed-chunks",
+            "source_port": "chunks",
+            "target_port": "chunks",
+            "ui": {}
+          },
+          {
+            "id": "edge-embedder-indexer",
+            "source": "embed-chunks",
+            "target": "index-chunks",
+            "source_port": "embedded",
+            "target_port": "embedded",
+            "ui": {}
+          },
+          {
+            "id": "edge-indexer-output",
+            "source": "index-chunks",
+            "target": "ingest-output",
+            "source_port": "indexed",
+            "target_port": "indexed",
+            "ui": {}
+          },
+          {
+            "id": "edge-chunker-bm25-indexer",
+            "source": "chunk-document",
+            "target": "index-bm25",
+            "source_port": "chunks",
+            "target_port": "chunks",
+            "ui": {}
+          },
+          {
+            "id": "edge-bm25-indexer-output",
+            "source": "index-bm25",
+            "target": "ingest-output",
+            "source_port": "indexed",
+            "target_port": "indexed",
+            "ui": {}
+          }
+        ],
+        "viewport": {}
+      }
+    },
+    {
+      "kind": "retrieval",
+      "definition": {
+        "nodes": [
+          {
+            "id": "query-input",
+            "type": "retrieval.input",
+            "name": "Retrieval Input",
+            "config": {},
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "embed-query",
+            "type": "embedder.openrouter",
+            "name": "Embedder",
+            "config": {
+              "model_name": "openai/text-embedding-3-small"
+            },
+            "position": {
+              "x": 340.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "vector-retriever",
+            "type": "retriever.vector",
+            "name": "Semantic Retriever",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks",
+              "namespace": "col-{collection_id}"
+            },
+            "position": {
+              "x": 680.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "retrieval-output",
+            "type": "retrieval.output",
+            "name": "Retrieval Output",
+            "config": {},
+            "position": {
+              "x": 1360.0,
+              "y": 0.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "bm25-retriever",
+            "type": "retriever.bm25",
+            "name": "BM25 Retriever",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks-bm25",
+              "namespace": "col-{collection_id}"
+            },
+            "position": {
+              "x": 340.0,
+              "y": 260.0
+            },
+            "ui": {}
+          },
+          {
+            "id": "fuse-results",
+            "type": "fusion.rrf",
+            "name": "RRF Fusion",
+            "config": {},
+            "position": {
+              "x": 1020.0,
+              "y": 130.0
+            },
+            "ui": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-retrieval-input",
+            "source": "query-input",
+            "target": "embed-query",
+            "source_port": "request",
+            "target_port": "request",
+            "ui": {}
+          },
+          {
+            "id": "edge-retrieval-embedder",
+            "source": "embed-query",
+            "target": "vector-retriever",
+            "source_port": "query_embedding",
+            "target_port": "query_embedding",
+            "ui": {}
+          },
+          {
+            "id": "edge-input-bm25-retriever",
+            "source": "query-input",
+            "target": "bm25-retriever",
+            "source_port": "request",
+            "target_port": "request",
+            "ui": {}
+          },
+          {
+            "id": "edge-semantic-fusion",
+            "source": "vector-retriever",
+            "target": "fuse-results",
+            "source_port": "results",
+            "target_port": "results",
+            "ui": {}
+          },
+          {
+            "id": "edge-bm25-fusion",
+            "source": "bm25-retriever",
+            "target": "fuse-results",
+            "source_port": "results",
+            "target_port": "results",
+            "ui": {}
+          },
+          {
+            "id": "edge-fusion-output",
+            "source": "fuse-results",
+            "target": "retrieval-output",
+            "source_port": "results",
+            "target_port": "results",
+            "ui": {}
+          }
+        ],
+        "viewport": {}
+      }
+    }
+  ],
+  "node_specs": [
+    {
+      "type": "ingestion.input",
+      "label": "Ingestion Input",
+      "category": "ingestion",
+      "description": "Build a document source from the uploaded file.",
+      "example": "Context(document='file.pdf') -> SourcePayload(document_id='123', path='/tmp/file.pdf', content_type='application/pdf').",
+      "input_ports": [],
+      "output_ports": [
+        {
+          "key": "source",
+          "label": "Source",
+          "data_type": "document_source",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for ingestion input nodes.",
+        "properties": {},
+        "title": "IngestionInputConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false
+    },
+    {
+      "type": "parser.document",
+      "label": "Document Parser",
+      "category": "ingestion",
+      "description": "Extract text from a document source.",
+      "example": "SourcePayload(content_type='application/pdf') -> ParsedDocumentPayload(text='Invoice #42 ...').",
+      "input_ports": [
+        {
+          "key": "source",
+          "label": "Source",
+          "data_type": "document_source",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "document",
+          "label": "Document",
+          "data_type": "document",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for document parsing.",
+        "properties": {
+          "mode": {
+            "default": "auto",
+            "enum": ["auto", "pdf", "text"],
+            "title": "Mode",
+            "type": "string"
+          },
+          "encoding": {
+            "default": "utf-8",
+            "title": "Encoding",
+            "type": "string"
+          }
+        },
+        "title": "ParserConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "mode": "auto",
+        "encoding": "utf-8"
+      },
+      "hidden": false
+    },
+    {
+      "type": "chunker.token",
+      "label": "Token Chunker",
+      "category": "ingestion",
+      "description": "Chunk documents based on token counts.",
+      "example": "ParsedDocumentPayload(text='Hello world') -> ChunkPayload(chunks=['Hello', 'world']).",
+      "input_ports": [
+        {
+          "key": "document",
+          "label": "Document",
+          "data_type": "document",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "chunks",
+          "label": "Chunks",
+          "data_type": "chunk_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for fixed-strategy chunking nodes.",
+        "properties": {
+          "chunk_size": {
+            "default": 1024,
+            "exclusiveMinimum": 0,
+            "title": "Chunk Size",
+            "type": "integer"
+          },
+          "chunk_overlap": {
+            "default": 200,
+            "minimum": 0,
+            "title": "Chunk Overlap",
+            "type": "integer"
+          }
+        },
+        "title": "FixedChunkerConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "chunk_size": 1024,
+        "chunk_overlap": 200
+      },
+      "hidden": false
+    },
+    {
+      "type": "embedder.openrouter",
+      "label": "Embedder",
+      "category": "ingestion",
+      "description": "Embed chunks using OpenRouter.",
+      "example": "ChunkPayload(chunks=['hello']) -> EmbeddingPayload(embeddings=[[0.12, 0.03, ...]]).",
+      "input_ports": [
+        {
+          "key": "chunks",
+          "label": "Chunks",
+          "data_type": "chunk_batch",
+          "required": false,
+          "accepts_many": false
+        },
+        {
+          "key": "request",
+          "label": "Request",
+          "data_type": "query_request",
+          "required": false,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "embedded",
+          "label": "Embedded",
+          "data_type": "embedded_batch",
+          "required": false,
+          "accepts_many": false
+        },
+        {
+          "key": "query_embedding",
+          "label": "Query Embedding",
+          "data_type": "query_embedding",
+          "required": false,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for embedding nodes.",
+        "properties": {
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional override for the embedding vector dimension.",
+            "title": "Dimension"
+          }
+        },
+        "title": "EmbedderConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "model_name": "sentence-transformers/all-minilm-l6-v2",
+        "dimension": null
+      },
+      "hidden": false
+    },
+    {
+      "type": "indexer.vector",
+      "label": "Indexer",
+      "category": "ingestion",
+      "description": "Write embeddings into a vector index (pgvector or Pinecone).",
+      "example": "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs').",
+      "input_ports": [
+        {
+          "key": "embedded",
+          "label": "Embedded",
+          "data_type": "embedded_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "indexed",
+          "label": "Indexed",
+          "data_type": "indexed_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Unified indexer config: the target backend is data, not a node subtype.\n\n`index_name` deliberately defaults to empty -- an index must be chosen\nexplicitly, and validation flags a blank one (`missing_index_issue`).\nLegacy definitions that relied on the old per-backend defaults get theirs\nfilled by the startup migration (`app.pipelines.upgrades`).",
+        "properties": {
+          "index_name": {
+            "default": "",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "title": "Namespace",
+            "type": "string"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dimension"
+          },
+          "metric": {
+            "default": "cosine",
+            "title": "Metric",
+            "type": "string"
+          },
+          "ensure_index": {
+            "default": true,
+            "title": "Ensure Index",
+            "type": "boolean"
+          },
+          "backend": {
+            "$ref": "#/$defs/IndexBackend"
+          }
+        },
+        "title": "VectorIndexerConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "index_name": "",
+        "namespace": "col-{collection_id}",
+        "dimension": null,
+        "metric": "cosine",
+        "ensure_index": true,
+        "backend": "pgvector"
+      },
+      "hidden": false
+    },
+    {
+      "type": "indexer.bm25",
+      "label": "BM25 Indexer",
+      "category": "ingestion",
+      "description": "Write chunk text into a sparse BM25 index for exact-term (lexical) search \u2014 no embeddings involved.",
+      "example": "ChunkPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs-bm25').",
+      "input_ports": [
+        {
+          "key": "chunks",
+          "label": "Chunks",
+          "data_type": "chunk_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "indexed",
+          "label": "Indexed",
+          "data_type": "indexed_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Configuration for BM25 (sparse/lexical) indexing nodes.\n\nNo dimension or metric: sparse indexes are text-scored (pg_search BM25 /\nPinecone's integrated sparse model). `index_name` defaults to empty like\nthe unified dense indexer \u2014 an index must be chosen explicitly.",
+        "properties": {
+          "backend": {
+            "$ref": "#/$defs/IndexBackend"
+          },
+          "index_name": {
+            "default": "",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "title": "Namespace",
+            "type": "string"
+          },
+          "ensure_index": {
+            "default": true,
+            "title": "Ensure Index",
+            "type": "boolean"
+          }
+        },
+        "title": "Bm25IndexerConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "backend": "pgvector",
+        "index_name": "",
+        "namespace": "col-{collection_id}",
+        "ensure_index": true
+      },
+      "hidden": false
+    },
+    {
+      "type": "ingestion.output",
+      "label": "Ingestion Output",
+      "category": "ingestion",
+      "description": "Emit the indexed chunks for persistence.",
+      "example": "IndexingPayload(chunks=2) -> Result(IndexingPayload(chunks=2)).",
+      "input_ports": [
+        {
+          "key": "indexed",
+          "label": "Indexed",
+          "data_type": "indexed_batch",
+          "required": true,
+          "accepts_many": true
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "result",
+          "label": "Result",
+          "data_type": "indexed_batch",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for ingestion output nodes.",
+        "properties": {},
+        "title": "IngestionOutputConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false
+    },
+    {
+      "type": "retrieval.input",
+      "label": "Retrieval Input",
+      "category": "retrieval",
+      "description": "Provide the query payload for retrieval.",
+      "example": "Query='coffee', top_k=3 -> QueryRequest(text='coffee', top_k=3).",
+      "input_ports": [],
+      "output_ports": [
+        {
+          "key": "request",
+          "label": "Request",
+          "data_type": "query_request",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for retrieval input nodes.",
+        "properties": {},
+        "title": "RetrievalInputConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false
+    },
+    {
+      "type": "retriever.vector",
+      "label": "Retriever",
+      "category": "retrieval",
+      "description": "Query a vector index (pgvector or Pinecone) for matching chunks.",
+      "example": "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> RetrievalPayload(matches=[chunk_a, chunk_b]).",
+      "input_ports": [
+        {
+          "key": "query_embedding",
+          "label": "Query Embedding",
+          "data_type": "query_embedding",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Unified retriever config: the target backend is data, not a node subtype.\n\n`index_name` deliberately defaults to empty -- an index must be chosen\nexplicitly, and validation flags a blank one (`missing_index_issue`).\nLegacy definitions that relied on the old per-backend defaults get theirs\nfilled by the startup migration (`app.pipelines.upgrades`).",
+        "properties": {
+          "index_name": {
+            "default": "",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "title": "Namespace",
+            "type": "string"
+          },
+          "backend": {
+            "$ref": "#/$defs/IndexBackend"
+          }
+        },
+        "title": "VectorRetrieverConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "index_name": "",
+        "namespace": "col-{collection_id}",
+        "backend": "pgvector"
+      },
+      "hidden": false
+    },
+    {
+      "type": "retriever.bm25",
+      "label": "BM25 Retriever",
+      "category": "retrieval",
+      "description": "Query a sparse BM25 index with the raw query text for exact-term (lexical) matches \u2014 no embeddings involved.",
+      "example": "QueryRequest(text='error E1042') -> RetrievalPayload(matches=[chunk_a]).",
+      "input_ports": [
+        {
+          "key": "request",
+          "label": "Request",
+          "data_type": "query_request",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Configuration for BM25 (sparse/lexical) retriever nodes.",
+        "properties": {
+          "backend": {
+            "$ref": "#/$defs/IndexBackend"
+          },
+          "index_name": {
+            "default": "",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "title": "Bm25RetrieverConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "backend": "pgvector",
+        "index_name": "",
+        "namespace": "col-{collection_id}"
+      },
+      "hidden": false
+    },
+    {
+      "type": "fusion.rrf",
+      "label": "RRF Fusion",
+      "category": "retrieval",
+      "description": "Combine results from multiple retrievers by reciprocal rank \u2014 robust fusion without comparable scores (e.g. semantic + BM25).",
+      "example": "[semantic: (a, b), bm25: (b, c)] -> RetrievalPayload(b, a, c).",
+      "input_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": true
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for reciprocal rank fusion.\n\n`k` is the standard RRF dampening constant (Cormack et al.: 60): higher\nvalues flatten the difference between ranks. `top_k` caps the fused list;\nunset, it falls back to the run's requested top_k.",
+        "properties": {
+          "k": {
+            "default": 60,
+            "minimum": 1,
+            "title": "K",
+            "type": "integer"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top K"
+          }
+        },
+        "title": "RRFusionConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "k": 60,
+        "top_k": null
+      },
+      "hidden": false
+    },
+    {
+      "type": "retrieval.output",
+      "label": "Retrieval Output",
+      "category": "retrieval",
+      "description": "Emit retrieval results for the API.",
+      "example": "RetrievalPayload(matches=2) -> Result(RetrievalPayload(matches=2)).",
+      "input_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "result",
+          "label": "Result",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for retrieval output nodes.",
+        "properties": {},
+        "title": "RetrievalOutputConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false
+    }
+  ]
+}

@@ -1,16 +1,10 @@
-# Ragworks — the same file is pasted into README.md's quick start; keep them in sync.
 name: ragworks
 
 services:
   postgres:
-    # ParadeDB Postgres bundles pgvector (dense vectors) and pg_search
-    # (BM25/lexical), so the default hybrid search runs right here with no
-    # vector-DB account. Same Postgres 17 major as the previous
-    # pgvector/pgvector image — existing data volumes keep working.
     image: paradedb/paradedb:latest-pg17
     environment:
       POSTGRES_USER: ragworks
-      # Only reachable inside the compose network (no published port).
       POSTGRES_PASSWORD: ragworks
       POSTGRES_DB: ragworks
     volumes:
@@ -26,8 +20,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://ragworks:ragworks@postgres:5432/ragworks
     volumes:
-      # Bulk uploads (reclaimable) and small app state (e.g. the
-      # auto-generated auth secret) kept apart on purpose.
       - document-storage:/data/storage
       - backend-config:/data/config
     depends_on:

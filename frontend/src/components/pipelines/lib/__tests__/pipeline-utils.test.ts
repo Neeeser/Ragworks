@@ -358,6 +358,8 @@ describe("hybrid BM25 scaffolding", () => {
     expect(ingestion.edges).toContainEqual(
       expect.objectContaining({ source: "index-bm25", target: "ingest-output" }),
     );
+    const ingestionOutput = ingestion.nodes.find((node) => node.id === "ingest-output");
+    expect(ingestionOutput?.position?.y).toBe(130);
 
     const retrieval = buildDefaultDefinition("retrieval", "pgvector", {
       indexName: "docs",

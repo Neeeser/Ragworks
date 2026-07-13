@@ -54,6 +54,7 @@ export function HeroFlowBackdrop() {
         autoPlay={animate}
         loop={false}
         onRunComplete={animate ? onRunComplete : undefined}
+        fitViewPadding={0.18}
       />
     </div>
   );

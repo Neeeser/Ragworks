@@ -140,7 +140,10 @@ def build_default_ingestion_pipeline(
             id="ingest-output",
             type="ingestion.output",
             name="Ingestion Output",
-            position={"x": NODE_SPACING_X * 5, "y": 0},
+            position={
+                "x": NODE_SPACING_X * 5,
+                "y": NODE_SPACING_Y / 2 if include_bm25 else 0,
+            },
         ),
     ]
     edges = [

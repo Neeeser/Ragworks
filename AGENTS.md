@@ -120,6 +120,26 @@ drift from it:
 - **Docs are updated incrementally.** When a fix or incident teaches a rule, add it to
   the relevant AGENTS.md in that same PR — never batched later.
 
+# README style and maintenance
+
+- Write for self-hosters first in concise, factual language. Keep the project identity
+  provider-neutral; name currently supported providers only where the setup requires it.
+- A centered header may use one short tagline, a curated row of stable project/technology
+  badges, and section navigation. Use emoji sparingly in section headings, or inline only
+  when one materially improves understanding; do not decorate every heading or list item.
+  Avoid oversized badge walls, inflated claims, volatile metrics, and roadmap checklists.
+  Link to canonical development or release documentation instead of duplicating details
+  that change frequently.
+- Keep the README Compose block byte-for-byte identical to `docker-compose.yml`. Keep the
+  YAML free of explanatory comments and put operational context in the surrounding prose.
+- Run `make readme-assets` whenever default pipeline definitions or their rendered
+  components change, then commit the generated light/dark animations and posters. The
+  capture requires Playwright Chromium, `ffmpeg`, and `gifski`. Keep each GIF at least
+  1440px wide and below its 8 MB guard, crop excess canvas, and inspect the first and last
+  frame of each scene in both themes for one complete non-looping run. Check node-text
+  legibility at README display size. Verify README links, commands, release references,
+  and factual claims with every update.
+
 # Make commands
 
 - `make env`: install backend deps via `uv` and frontend deps via `npm`
@@ -135,6 +155,8 @@ drift from it:
 - `make verify`: the backend gate — typecheck → lint → test
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`
+- `make readme-assets`: regenerate the light/dark README pipeline animations and posters
+  from the backend defaults and frontend renderer
 - `make bump-patch` / `make bump-minor` / `make bump-major` / `make bump-rc`: bump the
   version in `pyproject.toml` + `frontend/package.json`, commit, and tag; push manually
   to publish
