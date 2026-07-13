@@ -1,15 +1,17 @@
-"""Embedding node: OpenRouter-backed embedder for chunk batches or single queries.
+"""Embedding node: provider-connection-backed embedder for chunks or queries.
 
-`embedder.openrouter` stays one dual-mode node type -- saved pipelines
-reference this type id, so splitting it into two node types would break them.
-The *code* still splits: `run()` resolves which mode applies, then dispatches
-to `_embed_chunks`/`_embed_query`, each a self-contained unit with its own
-local `payload` variable (the pre-split version reused one `payload` name
-across both branches with different types, which is exactly the dual-branch
-narrowing mypy flagged -- see Phase 5.1's note on this module).
+`embedder.text` is one dual-mode node type (chunk batches on the ingestion
+side, single queries on the retrieval side); `run()` resolves which mode
+applies, then dispatches to `_embed_chunks`/`_embed_query`. The embedder
+itself comes from the run context's `ProviderResolver`, so any connection
+with the EMBEDDING kind (OpenRouter, Ollama, ...) can serve the node.
+(The legacy `embedder.openrouter` id was retired by a data migration that
+rewrote stored definitions — see `app/db/migrations.py`.)
 """
 
 from __future__ import annotations
+
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -30,16 +32,24 @@ from app.pipelines.tracing.summaries import (
     summarize_query_embedding,
     summarize_text,
 )
-from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
-from app.services.app_config import get_app_config
+from app.retrieval.embedders.base import Embedder
+from app.services.errors import InvalidInputError
 
 
 class EmbedderConfig(BaseModel):
-    """Configuration for embedding nodes."""
+    """Configuration for embedding nodes.
 
-    model_name: str = Field(
-        default_factory=lambda: get_app_config().models.default_embedding_model
+    `connection_id` names the provider connection that serves the model; both
+    it and `model_name` are required for a runnable node, but stay optional on
+    the model so an incomplete draft validates in the editor and surfaces
+    through node validation instead of a parse crash.
+    """
+
+    connection_id: UUID | None = Field(
+        default=None,
+        description="Provider connection that serves the embedding model.",
     )
+    model_name: str = ""
     dimension: int | None = Field(
         default=None,
         gt=0,
@@ -54,10 +64,10 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
     given pipeline; `run()` resolves which mode applies before dispatching.
     """
 
-    type = "embedder.openrouter"
+    type = "embedder.text"
     label = "Embedder"
     category = "ingestion"
-    description = "Embed chunks using OpenRouter."
+    description = "Embed text using a configured provider connection."
     example = "ChunkPayload(chunks=['hello']) -> EmbeddingPayload(embeddings=[[0.12, 0.03, ...]])."
     input_ports = (
         NodePort(key="chunks", label="Chunks", data_type="chunk_batch", required=False),
@@ -81,8 +91,13 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         if chunks_input is not None and request_input is not None:
             raise ValueError("Embedder node cannot process both chunks and request payloads.")
 
-        embedder = OpenRouterEmbedder(
-            context.openrouter,
+        if self.config.connection_id is None or not self.config.model_name:
+            raise InvalidInputError(
+                "Embedder node needs a provider connection and model. "
+                "Pick them in the pipeline editor."
+            )
+        embedder = context.providers.embedder(
+            self.config.connection_id,
             self.config.model_name,
             dimensions=self.config.dimension,
         )
@@ -93,7 +108,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         raise ValueError("Embedder node requires a chunk batch or query request payload.")
 
     @staticmethod
-    def _embed_chunks(embedder: OpenRouterEmbedder, chunks_input: object) -> dict[str, object]:
+    def _embed_chunks(embedder: Embedder, chunks_input: object) -> dict[str, object]:
         """Embed a chunk batch and return it as an EmbeddingPayload."""
         payload = ChunkPayload.model_validate(chunks_input)
         document = payload.document
@@ -115,7 +130,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         }
 
     @staticmethod
-    def _embed_query(embedder: OpenRouterEmbedder, request_input: object) -> dict[str, object]:
+    def _embed_query(embedder: Embedder, request_input: object) -> dict[str, object]:
         """Embed a single query and return it as a QueryEmbeddingPayload."""
         payload = RetrievalRequestPayload.model_validate(request_input)
         request = payload.request
