@@ -13,17 +13,12 @@ double resolution (full pipeline lookup twice per explicit request) is gone.
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from sqlmodel import Session
 
 from app.chat.messages import ProviderMessage, SystemMessage
-from app.chat.parameters import (
-    build_reasoning_options,
-    prepare_reasoning_override,
-    sanitize_parameter_overrides,
-)
+from app.chat.model_settings import prepare_model_settings, resolve_chat_provider
 from app.chat.persistence import (
     MessageRecord,
     RecordContext,
@@ -37,7 +32,6 @@ from app.chat.persistence import (
 )
 from app.chat.state import (
     ChatSetup,
-    ModelSettings,
     PipelineContext,
     ToolCollectionContext,
 )
@@ -48,10 +42,8 @@ from app.db.repositories import (
     CollectionRepository,
     ProviderConnectionRepository,
 )
-from app.providers.chat.base import ChatProvider
-from app.providers.registry import ProviderResolver
 from app.schemas.chat import ChatMessageCreate
-from app.schemas.enums import IndexBackend, ProviderKind, ProviderType
+from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import (
     resolve_ingestion_pipeline,
@@ -64,10 +56,6 @@ from app.services.prompts import (
     render_system_prompt,
     system_prompt_context,
 )
-
-# Context-window fallback when the provider's model catalog does not report
-# one; matches the old `chat.settings` node's default.
-DEFAULT_CONTEXT_WINDOW = 8192
 
 
 class ChatSetupBuilder:
@@ -271,81 +259,6 @@ class ChatSetupBuilder:
         messages.extend(provider_message_from_model(msg) for msg in history)
         return messages
 
-    def _build_reasoning_request_options(
-        self, supported_parameters: list[str], reasoning_override: dict[str, Any] | None
-    ) -> dict[str, Any]:
-        """Build reasoning options for the current model."""
-        override_effort = reasoning_override.get("effort") if reasoning_override else None
-        options = build_reasoning_options(supported_parameters, override_effort or self.reasoning_effort)
-        if reasoning_override and "reasoning" in options:
-            options["reasoning"].update(reasoning_override)
-        return options
-
-    def _resolve_chat_provider(
-        self,
-        *,
-        user: models.User,
-        session_model: models.ChatSession,
-    ) -> tuple[ChatProvider, str]:
-        """Resolve the session's chat provider through the connection registry.
-
-        Raises a clear `InvalidInputError` when the session has no provider
-        connection at all (fresh install, or the referenced connection was
-        deleted and the payload supplied no replacement).
-        """
-        connection_id = session_model.provider_connection_id
-        if connection_id is None:
-            raise InvalidInputError(
-                "Pick a chat provider and model to start chatting."
-            )
-        resolver = ProviderResolver(user, self.session)
-        adapter = resolver.adapter(connection_id, ProviderKind.CHAT)
-        return adapter.chat_provider(), adapter.connection.label
-
-    # Resolves model info, tool support, parameter overrides, reasoning options,
-    # provider preferences, and context window in one pass; splitting further
-    # would just relocate these locals into an intermediate object.
-    # pylint: disable=too-many-arguments,too-many-locals
-    def _prepare_model_settings(
-        self,
-        *,
-        provider: ChatProvider,
-        connection_label: str,
-        payload: ChatMessageCreate,
-        session_model: models.ChatSession,
-        fallback_context_window: int,
-        tools_enabled: bool,
-    ) -> ModelSettings:
-        """Resolve model settings, parameters, and preferences."""
-        active_model_name = session_model.chat_model
-        if not active_model_name:
-            raise InvalidInputError("Pick a chat model to start chatting.")
-        model_info = provider.get_model(active_model_name)
-        if not model_info:
-            raise InvalidInputError(
-                f"Selected model is not available on {connection_label}."
-            )
-        supported_parameters = model_info.supported_parameters or []
-        tool_supported = any(param.lower() == "tools" for param in supported_parameters)
-        if tools_enabled and not tool_supported:
-            raise InvalidInputError("Selected model does not support tool calls required for retrieval.")
-        parameter_overrides = sanitize_parameter_overrides(payload.parameters, supported_parameters)
-        reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
-        reasoning_options = self._build_reasoning_request_options(
-            supported_parameters, reasoning_override
-        )
-        provider_preferences = payload.provider.to_request_payload() if payload.provider else None
-        context_window = model_info.context_length or fallback_context_window
-        return ModelSettings(
-            active_model_name=active_model_name,
-            model_info=model_info,
-            supported_parameters=supported_parameters,
-            parameter_overrides=parameter_overrides,
-            reasoning_options=reasoning_options,
-            provider_preferences=provider_preferences,
-            context_window=context_window,
-        )
-
     # Orchestrates tool-collection resolution, model-settings resolution, and
     # prompt assembly for a turn; see the module docstring for the full sequence.
     # pylint: disable=too-many-locals
@@ -360,7 +273,6 @@ class ChatSetupBuilder:
         primary_context: ToolCollectionContext | None = None
         tool_collections: list[ToolCollectionContext]
         tool_collection_ids: list[UUID]
-        fallback_context_window = DEFAULT_CONTEXT_WINDOW
         if explicit_ids:
             tool_collections, tool_collection_ids = self._resolve_tool_collections(
                 user=user, payload=payload, session_model=None
@@ -389,19 +301,19 @@ class ChatSetupBuilder:
             session_model=session_model, edit_target=edit_target, payload=payload
         )
         self._maybe_update_session_model(session_model=session_model, payload=payload)
-        provider, connection_label = self._resolve_chat_provider(
-            user=user, session_model=session_model
+        provider, connection_label = resolve_chat_provider(
+            self.session, user=user, session_model=session_model
         )
         messages = self._build_message_history(
             user=user, session_model=session_model, tool_collections=tool_collections
         )
         tools, tool_collection_map = ToolExecutor.specs(tool_collections)
-        model_settings = self._prepare_model_settings(
+        model_settings = prepare_model_settings(
             provider=provider,
             connection_label=connection_label,
             payload=payload,
             session_model=session_model,
-            fallback_context_window=fallback_context_window,
+            reasoning_effort=self.reasoning_effort,
             tools_enabled=bool(tool_collections),
         )
         persist_session_preferences(

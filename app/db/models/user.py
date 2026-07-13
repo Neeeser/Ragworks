@@ -50,7 +50,12 @@ class User(SQLModel, TimestampMixin, table=True):
         default=None,
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("provider_connections.id", ondelete="SET NULL", use_alter=True),
+            ForeignKey(
+                "provider_connections.id",
+                name="fk_users_last_used_chat_connection_id",
+                ondelete="SET NULL",
+                use_alter=True,
+            ),
             nullable=True,
         ),
     )

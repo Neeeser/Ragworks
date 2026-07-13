@@ -80,12 +80,12 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
     chunk_size: int
     chunk_overlap: int
     embedding_model: str
-    embedding_connection_id: UUID | None
     backend: IndexBackend
     index_name: str
     namespace: str | None
     dimension: int | None
     metric: str
+    embedding_connection_id: UUID | None = None
     index_targets: tuple[IndexTarget, ...] = ()
 
     def __post_init__(self) -> None:
@@ -105,11 +105,11 @@ class RetrievalPipelineSettings:
     """
 
     embedding_model: str
-    embedding_connection_id: UUID | None
     backend: IndexBackend
     index_name: str
     namespace: str | None
     dimension: int | None
+    embedding_connection_id: UUID | None = None
     index_targets: tuple[IndexTarget, ...] = ()
 
     def __post_init__(self) -> None:

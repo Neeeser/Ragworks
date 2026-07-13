@@ -90,6 +90,7 @@ class OpenRouterAdapter(ProviderAdapter):
                     context_length=model.context_length,
                     pricing=model.pricing,
                     supported_parameters=model.supported_parameters,
+                    default_parameters=model.default_parameters,
                 )
                 for model in client.list_models()
             ]

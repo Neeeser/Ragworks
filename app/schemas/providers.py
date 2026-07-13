@@ -146,6 +146,7 @@ class CatalogModel(BaseModel):
     pricing: ModelPricing | None = None
     dimension: int | None = None
     supported_parameters: list[str] = Field(default_factory=list)
+    default_parameters: dict[str, Any] | None = None
 
 
 class ConnectionCatalogError(BaseModel):
