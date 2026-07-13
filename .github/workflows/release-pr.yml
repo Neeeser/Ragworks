@@ -1,0 +1,50 @@
+name: Open release PR
+
+# The "button" half of cutting a release: pick a bump level and this opens the
+# release PR for you (same result as running `make bump-<level>` locally). The
+# canonical logic lives in scripts/bump_version.py — this workflow only runs it
+# in CI. Merging the PR it opens is what tags + publishes (see release.yml).
+#
+# Token note: with the default GITHUB_TOKEN, the PR this opens will NOT trigger
+# the verify CI (GitHub suppresses workflow events from GITHUB_TOKEN actions).
+# Set a RELEASE_PR_TOKEN secret (a fine-grained PAT with contents + PR write) to
+# have the release PR run CI like any other PR — required once main enforces
+# passing checks. Running `make bump-<level>` locally sidesteps this entirely
+# (the PR is authored by your own credentials).
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "Version bump level"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - rc
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Open release PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          UV_BIN: uv
+        run: uv run python scripts/bump_version.py ${{ inputs.level }}

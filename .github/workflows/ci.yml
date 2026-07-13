@@ -2,7 +2,14 @@ name: CI
 
 on:
   pull_request:
-  workflow_call:
+  push:
+    branches: [main]
+
+concurrency:
+  # Cancel superseded PR runs (fast feedback); never cancel a main run, whose
+  # result is the branch's recorded health.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:

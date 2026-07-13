@@ -42,7 +42,7 @@ help:
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
 	@echo "  make readme-assets - regenerate the README pipeline animation"
-	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - bump version, commit, tag (push manually)"
+	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - open a release PR (merge it to publish)"
 
 env: env-backend env-frontend
 
