@@ -1,0 +1,27 @@
+name: Edge images
+
+# Rolling dev images published from main on every push (public repo — Actions
+# minutes are free). Kept separate from release.yml so a release never re-runs
+# the verify gate or double-builds; this owns only the moving `edge` tag. The
+# release merge commit is skipped here — it gets versioned images from
+# release.yml instead (release PRs squash-merge to a "chore: release vX.Y.Z"
+# subject).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A newer main push supersedes an in-flight edge build; edge is disposable.
+  group: edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge:
+    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release v') }}"
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-images.yml
+    with:
+      channel: edge

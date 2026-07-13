@@ -43,13 +43,28 @@ failing-then-passing test is incomplete.
 
 # Releases
 
-Docker is the release vehicle: pushing a `v*` tag runs the CI gates, publishes
-`ghcr.io/neeeser/ragworks-backend` / `-frontend` images (multi-arch), and cuts a
-GitHub Release with `docker-compose.yml` attached. Cut a release with
-`make bump-patch|bump-minor|bump-major` (pre-releases: `make bump-rc`, SemVer `-rc.N`)
-followed by the printed `git push`. Pushes to `main` publish `edge` images only. The
-version lives in `pyproject.toml` and `frontend/package.json`; only
-`scripts/bump_version.py` writes it.
+Docker is the release vehicle, and releases go through a **release PR** — never a
+push straight to `main`. `make bump-patch|bump-minor|bump-major` (pre-releases:
+`make bump-rc`, SemVer `-rc.N`), or the **Open release PR** workflow-dispatch
+button, runs `scripts/bump_version.py`: it bumps the version on a
+`release/v<version>` branch and opens a PR (it does not push to `main` or create
+the tag). Merging that PR fires the Release workflow (`release.yml`, triggered by
+the release PR merging), which tags the merge commit, publishes multi-arch
+`ghcr.io/neeeser/ragworks-backend` / `-frontend` images (`X.Y.Z` + `X.Y` +
+`latest` for stable, `X.Y.Z-rc.N` alone for pre-releases), and cuts the GitHub
+Release with label-organized notes (`.github/release.yml`) and
+`docker-compose.yml` attached. The version lives in `pyproject.toml` and
+`frontend/package.json` (plus the lockfiles); only `scripts/bump_version.py`
+writes it. Because the tag is created by the workflow, a failed build leaves no
+dangling tag, and because the release commit already passed CI on the PR, the
+release path never re-runs the verify gate. The multi-arch build itself is one
+reusable workflow (`build-images.yml`) shared by `release.yml` and `edge.yml`, so
+the build definition has a single home. Every push to `main` publishes rolling
+`edge` images (`edge.yml`) for testing main — never a release; the release commit
+is skipped there since `release.yml` gives it versioned images instead. `ci.yml`
+(verify: typecheck → lint → test) runs on every pull request and every push to
+`main`, so the verify gate follows the normal commit pattern and gates the
+release PR like any other.
 
 The shipped `docker-compose.yml` is deliberately minimal and self-contained: no
 `.env` file, no required edits, `latest` image tags, hardcoded network-internal

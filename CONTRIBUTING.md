@@ -40,34 +40,36 @@ Other rules that will come up in review:
 
 ## Cutting a release
 
-Releases are fully automated by CI — pushing a `v*` tag is the only trigger.
-There is no manual step on GitHub: the workflow runs the CI gates, publishes
-multi-arch Docker images (`ghcr.io/neeeser/ragworks-backend` / `-frontend`),
-and creates the GitHub Release with auto-generated notes (organized by PR
-labels via `.github/release.yml`) and `docker-compose.yml` attached.
-
-From an up-to-date `main`:
+Releases go through a **release PR** — nothing is pushed straight to `main`, and
+merging the PR is what publishes. From an up-to-date `main`:
 
 ```bash
-make bump-patch   # 0.1.0 -> 0.1.1   (bug fixes)
-make bump-minor   # 0.1.1 -> 0.2.0   (new features)
+make bump-patch   # 0.1.2 -> 0.1.3   (bug fixes)
+make bump-minor   # 0.1.2 -> 0.2.0   (new features)
 make bump-major   # 0.2.0 -> 1.0.0   (breaking changes)
-make bump-rc      # 0.1.1 -> 0.1.2-rc.1, or 0.1.2-rc.1 -> -rc.2  (pre-release)
+make bump-rc      # 0.1.2 -> 0.1.3-rc.1, or 0.1.3-rc.1 -> -rc.2  (pre-release)
 ```
 
-Each bump target updates the version in `pyproject.toml` and
-`frontend/package.json` (only `scripts/bump_version.py` writes it), commits,
-and creates the `v<version>` tag locally. Nothing is published yet — then push
-exactly what the command prints:
+Each command bumps the version in `pyproject.toml`, `frontend/package.json`, and
+the lockfiles (only `scripts/bump_version.py` writes it), commits to a
+`release/v<version>` branch, and opens a PR labelled `skip-changelog`. You can
+also open the same PR from the Actions tab via the **Open release PR** workflow
+(pick the bump level). Bumping from an `-rc.N` version with `bump-patch`
+finalizes it (e.g. `0.1.3-rc.3 -> 0.1.3`).
 
-```bash
-git push origin main v0.1.1
-```
+Review the release PR — CI runs on it like any other — then **merge it**.
+Merging triggers the Release workflow, which:
 
-That push kicks off the Release workflow; when it finishes, the release is
-live on the Releases page. Bumping from an `-rc.N` version with `bump-patch`
-finalizes it (e.g. `0.1.1-rc.3 -> 0.1.1`). Pushes to `main` without a tag
-publish `edge` images only, never a release.
+- tags the merge commit `v<version>`;
+- builds and pushes the multi-arch images (`ghcr.io/neeeser/ragworks-backend` /
+  `-frontend`) — `X.Y.Z` + `X.Y` + `latest` for a stable release, `X.Y.Z-rc.N`
+  alone for a pre-release;
+- creates the GitHub Release with notes organized by PR labels
+  (`.github/release.yml`) and `docker-compose.yml` attached.
+
+Because the tag is created by the workflow (not pushed by hand), a failed build
+never leaves a dangling tag. Separately, every push to `main` publishes rolling
+`edge` images (the Edge images workflow) for testing main — never a release.
 
 ## Reporting issues
 

@@ -24,8 +24,11 @@ Semantics:
   rc     0.1.0 -> 0.1.1-rc.1   0.1.1-rc.1 -> 0.1.1-rc.2
 
 Usage: uv run python scripts/bump_version.py {patch,minor,major,rc}
-Refuses to run on a dirty tree, off `main`, or if the target tag exists.
-Pushing is deliberately manual: the script prints the exact command.
+Opens a release PR (branch `release/v<version>`) that bumps every file recording
+the version; merging that PR tags the commit and publishes the release (see
+.github/workflows/release.yml). Refuses to run on a dirty tree, off `main`, or if
+the target tag or release branch already exists. Requires the `gh` CLI
+authenticated with permission to push a branch and open a PR.
 """
 
 from __future__ import annotations
@@ -118,8 +121,28 @@ def _refresh_lockfile() -> None:
     subprocess.run([uv_bin, "lock"], check=True, capture_output=True, cwd=ROOT)
 
 
+def _local_branch_exists(branch: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+        capture_output=True,
+        cwd=ROOT,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _remote_branch_exists(branch: str) -> bool:
+    result = subprocess.run(
+        ["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
+        capture_output=True,
+        cwd=ROOT,
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def main() -> None:
-    """Validate repo state, bump versions, commit, and tag."""
+    """Validate repo state, bump versions on a release branch, and open a PR."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("part", choices=["patch", "minor", "major", "rc"])
     args = parser.parse_args()
@@ -132,6 +155,8 @@ def main() -> None:
     current = _read_current_version()
     new_version = bump(current, args.part)
     tag = f"v{new_version}"
+    release_branch = f"release/{tag}"
+
     existing = subprocess.run(
         ["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"],
         capture_output=True,
@@ -140,16 +165,44 @@ def main() -> None:
     )
     if existing.returncode == 0:
         _fail(f"tag {tag} already exists")
+    if _local_branch_exists(release_branch) or _remote_branch_exists(release_branch):
+        _fail(f"release branch {release_branch} already exists; delete it or bump again")
 
+    _run("git", "checkout", "-b", release_branch)
     _write_versions(new_version)
     _refresh_lockfile()
     _run("git", "add", str(PYPROJECT), str(PACKAGE_JSON), str(PACKAGE_LOCK), str(UV_LOCK))
     _run("git", "commit", "-m", f"chore: release {tag}")
-    _run("git", "tag", "-a", tag, "-m", tag)
+    _run("git", "push", "-u", "origin", release_branch)
+
+    body = (
+        f"Automated release PR: **{current} → {new_version}**.\n\n"
+        f"Merging this PR publishes the release — it tags the merge commit `{tag}`, "
+        "builds and pushes the multi-arch backend/frontend images to GHCR, and "
+        "creates the GitHub Release (notes generated from merged PRs, with "
+        "`docker-compose.yml` attached).\n\n"
+        "Only the version files change here. If the version is wrong, close this "
+        "PR and run the bump again — do not edit it by hand."
+    )
+    pr_url = _run(
+        "gh",
+        "pr",
+        "create",
+        "--base",
+        "main",
+        "--head",
+        release_branch,
+        "--title",
+        f"chore: release {tag}",
+        "--body",
+        body,
+        "--label",
+        "skip-changelog",
+    )
 
     print(f"{current} -> {new_version}")
-    print(f"Created commit and tag {tag}. To publish the release, run:")
-    print(f"  git push origin main {tag}")
+    print(f"Opened release PR: {pr_url}")
+    print("Review and merge it to publish the release.")
 
 
 if __name__ == "__main__":
