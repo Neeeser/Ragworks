@@ -25,7 +25,9 @@ const SetupStatusContext = createContext<SetupStatusContextValue | null>(null);
 const EXEMPT_PREFIXES = ["/setup", "/settings"];
 
 const COMPLETE: SetupStatus = {
-  openrouter_configured: true,
+  has_embedding_provider: true,
+  has_chat_provider: true,
+  has_vector_store: true,
   has_index: true,
   has_collection: true,
   setup_complete: true,

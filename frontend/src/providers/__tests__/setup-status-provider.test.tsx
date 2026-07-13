@@ -12,7 +12,9 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 const statusMock = vi.mocked(fetchSetupStatus);
 
 const incomplete = {
-  openrouter_configured: false,
+  has_embedding_provider: false,
+  has_chat_provider: false,
+  has_vector_store: true,
   has_index: false,
   has_collection: false,
   setup_complete: false,

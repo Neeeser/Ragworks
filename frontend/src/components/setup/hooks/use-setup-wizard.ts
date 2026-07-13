@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useReducer, useState } from "react";
 
+import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
+import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
 import {
   initialSetupWizardState,
   setupWizardReducer,
@@ -14,7 +16,6 @@ import {
   describeIndex,
   fetchEmbeddingModels,
   fetchIndexBackends,
-  updateUserSettings,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -22,22 +23,35 @@ import { useAuth } from "@/providers/auth-provider";
 import { useSetupStatus } from "@/providers/setup-status-provider";
 
 import type { SetupChoices, SetupWizardState } from "@/components/setup/lib/setup-wizard-reducer";
-import type { BackendInfo, EmbeddingModelInfo } from "@/lib/types";
+import type {
+  BackendInfo,
+  CatalogModel,
+  ProviderConnection,
+  ProviderKind,
+  ProviderTypeInfo,
+} from "@/lib/types";
 
 export interface SetupWizardApi {
   state: SetupWizardState;
   next: () => void;
   back: () => void;
   setChoices: (choices: Partial<SetupChoices>) => void;
-  keyConfigured: boolean;
-  saveKey: (key: string) => Promise<void>;
-  models: EmbeddingModelInfo[] | null;
+  // Providers step
+  connections: ProviderConnection[];
+  providerTypes: ProviderTypeInfo[];
+  connectionsLoading: boolean;
+  connectionsError: string | null;
+  reloadConnections: () => void;
+  coverage: Record<ProviderKind, boolean>;
+  providersReady: boolean;
+  // Model step
+  models: CatalogModel[] | null;
   modelsLoading: boolean;
   modelsError: string | null;
   backends: BackendInfo[] | null;
   suggestedModelId: string | null;
-  /** Saves an optional Pinecone key, creates (or adopts) the index, advances. */
-  ensureIndex: (pineconeKey?: string) => Promise<void>;
+  /** Creates (or adopts) the index, then advances. */
+  ensureIndex: () => Promise<void>;
   /** Installs pipelines + first collection, then lands on the collection. */
   finish: () => Promise<void>;
   busy: boolean;
@@ -47,29 +61,44 @@ export interface SetupWizardApi {
 
 /** One state domain: wizard progression, remote catalogs, and mutations. */
 export function useSetupWizard(): SetupWizardApi {
-  const { token, user, refreshProfile } = useAuth();
+  const { token, loading: authLoading } = useAuth();
   const { markComplete } = useSetupStatus();
   const router = useRouter();
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [keySaved, setKeySaved] = useState(false);
 
-  const keyConfigured = keySaved || Boolean(user?.openrouter_configured);
+  const authToken = token ?? "";
+  const { connections, connectionsLoading, connectionsError, reloadConnections } = useConnections(
+    authToken,
+    authLoading,
+  );
+  const { providerTypes } = useProviderTypes(authToken, authLoading);
 
-  const modelsQuery = useApiQuery(() => fetchEmbeddingModels(token ?? ""), [token, keyConfigured], {
-    enabled: Boolean(token) && keyConfigured,
+  const coverage = useMemo(
+    () => computeKindCoverage(connections, providerTypes),
+    [connections, providerTypes],
+  );
+  const providersReady = coverage.embedding && coverage.chat && coverage.vector_store;
+  const hasEmbeddingProvider = coverage.embedding;
+
+  const modelsQuery = useApiQuery(
+    () => fetchEmbeddingModels(authToken),
+    [authToken, hasEmbeddingProvider],
+    { enabled: Boolean(authToken) && hasEmbeddingProvider },
+  );
+  const backendsQuery = useApiQuery(() => fetchIndexBackends(authToken), [authToken], {
+    enabled: Boolean(authToken),
   });
-  const backendsQuery = useApiQuery(() => fetchIndexBackends(token ?? ""), [token], {
-    enabled: Boolean(token),
-  });
+
+  const models = modelsQuery.data?.models ?? null;
 
   const suggestedModelId = useMemo(() => {
-    const match = modelsQuery.data?.find((model) =>
+    const match = models?.find((model) =>
       model.id.toLowerCase().includes(SUGGESTED_MODEL_FRAGMENT),
     );
     return match?.id ?? null;
-  }, [modelsQuery.data]);
+  }, [models]);
 
   const setChoices = useCallback(
     (choices: Partial<SetupChoices>) => dispatch({ type: "SET_CHOICES", choices }),
@@ -84,75 +113,54 @@ export function useSetupWizard(): SetupWizardApi {
     dispatch({ type: "BACK" });
   }, []);
 
-  const saveKey = useCallback(
-    async (key: string) => {
-      if (!token) return;
-      setBusy(true);
-      setError(null);
+  const ensureIndex = useCallback(async () => {
+    if (!token) return;
+    const { backend, indexName, embeddingDimension } = state.choices;
+    setBusy(true);
+    setError(null);
+    try {
       try {
-        await updateUserSettings(token, { openrouter_api_key: key });
-        await refreshProfile();
-        setKeySaved(true);
-        dispatch({ type: "NEXT" });
+        await createIndex(token, {
+          backend,
+          name: indexName,
+          dimension: embeddingDimension ?? undefined,
+          metric: "cosine",
+        });
       } catch (err) {
-        setError(getErrorMessage(err, "Could not save the API key."));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [token, refreshProfile],
-  );
-
-  const ensureIndex = useCallback(
-    async (pineconeKey?: string) => {
-      if (!token) return;
-      const { backend, indexName, embeddingDimension } = state.choices;
-      setBusy(true);
-      setError(null);
-      try {
-        if (pineconeKey?.trim()) {
-          await updateUserSettings(token, { pinecone_api_key: pineconeKey.trim() });
-          await refreshProfile();
+        // Adopt an existing index only when its dimension matches the model.
+        const existing = await describeIndex(token, backend, indexName).catch(() => null);
+        if (!existing) throw err;
+        if (
+          embeddingDimension != null &&
+          existing.dimension != null &&
+          existing.dimension !== embeddingDimension
+        ) {
+          throw new Error(
+            `Index "${indexName}" already exists with dimension ${existing.dimension}; ` +
+              `pick a different name or a ${existing.dimension}-dimension model.`,
+          );
         }
-        try {
-          await createIndex(token, {
-            backend,
-            name: indexName,
-            dimension: embeddingDimension ?? undefined,
-            metric: "cosine",
-          });
-        } catch (err) {
-          // Adopt an existing index only when its dimension matches the model.
-          const existing = await describeIndex(token, backend, indexName).catch(() => null);
-          if (!existing) throw err;
-          if (
-            embeddingDimension != null &&
-            existing.dimension != null &&
-            existing.dimension !== embeddingDimension
-          ) {
-            throw new Error(
-              `Index "${indexName}" already exists with dimension ${existing.dimension}; ` +
-                `pick a different name or a ${existing.dimension}-dimension model.`,
-            );
-          }
-        }
-        dispatch({ type: "NEXT" });
-      } catch (err) {
-        setError(getErrorMessage(err, "Could not create the index."));
-      } finally {
-        setBusy(false);
       }
-    },
-    [token, state.choices, refreshProfile],
-  );
+      dispatch({ type: "NEXT" });
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not create the index."));
+    } finally {
+      setBusy(false);
+    }
+  }, [token, state.choices]);
 
   const finish = useCallback(async () => {
     if (!token) return;
     const { choices } = state;
+    if (!choices.embeddingConnectionId) {
+      setError("Pick an embedding model before finishing setup.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const result = await bootstrapSetup(token, {
+        embedding_connection_id: choices.embeddingConnectionId,
         embedding_model: choices.embeddingModel,
         embedding_dimension: choices.embeddingDimension,
         backend: choices.backend,
@@ -174,9 +182,14 @@ export function useSetupWizard(): SetupWizardApi {
     next,
     back,
     setChoices,
-    keyConfigured,
-    saveKey,
-    models: modelsQuery.data,
+    connections,
+    providerTypes,
+    connectionsLoading,
+    connectionsError,
+    reloadConnections,
+    coverage,
+    providersReady,
+    models,
     modelsLoading: modelsQuery.loading,
     modelsError: modelsQuery.error,
     backends: backendsQuery.data,
