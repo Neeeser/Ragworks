@@ -33,6 +33,11 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.URL,
             required=True,
             placeholder="http://localhost:11434",
+            description=(
+                "When Ragworks runs in Docker, use your machine's LAN IP or "
+                "http://host.docker.internal:11434 — localhost points at the "
+                "container itself."
+            ),
         ),
         ProviderConfigField(
             name="api_key",

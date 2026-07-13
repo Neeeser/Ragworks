@@ -37,6 +37,7 @@ class ProviderConfigField(BaseModel):
     kind: ConfigFieldKind
     required: bool = True
     placeholder: str | None = None
+    description: str | None = None
 
 
 class ProviderTypeRead(BaseModel):
