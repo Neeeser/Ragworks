@@ -2,7 +2,7 @@
 
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useImperativeHandle, useRef } from "react";
 
 import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export type CustomSelectOption = {
   value: string;
   label: string;
   disabled?: boolean;
+  preventFocusRestore?: boolean;
 };
 
 type CustomSelectProps = Pick<
@@ -39,14 +40,25 @@ export const CustomSelect = forwardRef<HTMLButtonElement, CustomSelectProps>(fun
   { id, value, options, placeholder, disabled, className, onValueChange, ...ariaProps },
   ref,
 ) {
+  const preventFocusRestoreRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useImperativeHandle(ref, () => triggerRef.current as HTMLButtonElement);
+
+  const handleValueChange = (nextValue: string) => {
+    const decodedValue = decodeValue(nextValue);
+    preventFocusRestoreRef.current =
+      options.find((option) => option.value === decodedValue)?.preventFocusRestore ?? false;
+    onValueChange(decodedValue);
+  };
+
   return (
     <SelectPrimitive.Root
       value={value ? encodeValue(value) : ""}
       disabled={disabled}
-      onValueChange={(nextValue) => onValueChange(decodeValue(nextValue))}
+      onValueChange={handleValueChange}
     >
       <SelectPrimitive.Trigger
-        ref={ref}
+        ref={triggerRef}
         id={id}
         className={cn(
           inputClass,
@@ -68,6 +80,14 @@ export const CustomSelect = forwardRef<HTMLButtonElement, CustomSelectProps>(fun
           position="popper"
           sideOffset={6}
           collisionPadding={8}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (preventFocusRestoreRef.current) {
+              preventFocusRestoreRef.current = false;
+              return;
+            }
+            triggerRef.current?.focus();
+          }}
           className={cn(
             "relative z-[70] max-h-[min(20rem,var(--radix-select-content-available-height))]",
             "min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl",

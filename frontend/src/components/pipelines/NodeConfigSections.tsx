@@ -222,7 +222,11 @@ export function NodeConfigSections({
                   typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
                 }`,
               })),
-              { value: CREATE_SENTINEL, label: "+ Add new index..." },
+              {
+                value: CREATE_SENTINEL,
+                label: "+ Add new index...",
+                preventFocusRestore: true,
+              },
             ]}
           />
         </ParameterFieldCard>

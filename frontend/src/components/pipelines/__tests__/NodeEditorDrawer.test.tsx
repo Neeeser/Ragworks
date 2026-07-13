@@ -4,6 +4,7 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
+import { ModalOverlay } from "@/components/ui/modal-overlay";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { VectorIndex } from "@/lib/types";
@@ -103,6 +104,36 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
   };
   return render(<NodeEditorDrawer {...props} />);
 };
+
+function DrawerWithIndexManager() {
+  const [managerOpen, setManagerOpen] = React.useState(false);
+  return (
+    <>
+      <NodeEditorDrawer
+        node={makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" })}
+        onClose={() => undefined}
+        onApply={() => undefined}
+        isPreview={false}
+        validationErrors={[]}
+        vectorIndexes={indexes}
+        onOpenIndexManager={() => setManagerOpen(true)}
+        embeddingModels={[]}
+        embeddingModelsLoading={false}
+        embeddingModelsError={null}
+      />
+      <ModalOverlay
+        open={managerOpen}
+        onClose={() => setManagerOpen(false)}
+        labelledBy="index-manager-title"
+      >
+        <div>
+          <h2 id="index-manager-title">Index manager</h2>
+          <button type="button">Manager action</button>
+        </div>
+      </ModalOverlay>
+    </>
+  );
+}
 
 describe("NodeEditorDrawer", () => {
   beforeEach(() => {
@@ -236,18 +267,36 @@ describe("NodeEditorDrawer", () => {
     expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
   });
 
-  it("opens the index manager from the create sentinel", async () => {
+  it("displays and selects an index that has not been created yet", async () => {
     const user = userEvent.setup();
-    const onOpenIndexManager = vi.fn();
     renderDrawer({
-      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "missing",
+        dimension: 768,
+      }),
       vectorIndexes: indexes,
-      onOpenIndexManager,
     });
+
+    const select = screen.getByRole("combobox", { name: INDEX_SELECT_LABEL });
+    expect(select).toHaveTextContent("missing (not created yet)");
+
+    await user.click(select);
+    expect(screen.getByRole("option", { name: "missing (not created yet)" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("keeps focus in the index manager opened from the create sentinel", async () => {
+    const user = userEvent.setup();
+    render(<DrawerWithIndexManager />);
 
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     await user.click(screen.getByRole("option", { name: /Add new index/ }));
-    expect(onOpenIndexManager).toHaveBeenCalled();
+
+    expect(screen.getByRole("dialog", { name: "Index manager" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manager action" })).toHaveFocus();
   });
 
   it("clearing the index removes index_name and dimension from the draft", async () => {

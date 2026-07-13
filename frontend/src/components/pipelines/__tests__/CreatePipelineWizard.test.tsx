@@ -96,7 +96,7 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.getByText(/No pgvector \(PostgreSQL\) indexes/)).toBeInTheDocument();
 
-    const indexSelector = screen.getByRole("combobox");
+    const indexSelector = screen.getByRole("combobox", { name: /pgvector.*index/i });
     await user.click(indexSelector);
     expect(indexSelector).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("listbox")).toBeInTheDocument();
