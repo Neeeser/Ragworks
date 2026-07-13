@@ -89,6 +89,23 @@ proxies same-origin `/api/*` calls via the runtime `API_PROXY_TARGET` middleware
 (`frontend/src/middleware.ts`) — a build-time `rewrites()` in `next.config.ts` can't
 see an env var set when the container starts.
 
+# Two runtime modes — every change works in both
+
+The app runs two ways, and a change isn't done until it works in both:
+
+- **Dev mode**: `make run` (or `make server` + `make frontend` separately) —
+  uvicorn with reload, the Next.js dev server, `NEXT_PUBLIC_API_BASE_URL` pointing
+  the frontend straight at the backend, `DEBUG=true`.
+- **Docker**: `docker-compose.yml` — the primary target, because Docker is the
+  release format. Same-origin `/api/*` through the runtime middleware proxy, no
+  build-time API URL, `DEBUG=false`, secrets/volumes as described under Releases.
+
+The modes differ in exactly the ways that hide bugs: how the frontend reaches the
+API (direct URL vs runtime proxy), env-var timing (dev reads them live; a Docker
+image bakes build-time values), debug defaults, and storage paths. When a change
+touches startup, config, routing, storage, or anything env-dependent, verify it in
+(or reason it through for) both modes — "works with `make run`" alone is not done.
+
 # Configuration architecture
 
 The project is heading toward being fully config-driven (runtime-editable settings,
@@ -171,11 +188,31 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 # Maintaining these AGENTS.md files
 
 These files are lessons learned about writing good, consistent code in this repo.
-When a fix, incident, or review teaches a durable rule, add it to the relevant
-AGENTS.md **in the same PR** — never batched later. A rule earns its place by
-capturing a non-obvious repo invariant or a proven failure mode; write it as a
-concise imperative plus one line of why (the failure it prevents). Put it in the
-narrowest file where it always applies. Don't add generic language advice, transient
-feature status, or facts easily discovered from the code — known gaps and tech debt
-become GitHub issues, not AGENTS.md sections. Prune rules when the architecture or
-enforcement that motivated them changes.
+The structure is fixed at three files — this root file for repo-wide design, infra,
+CI, and release rules; `app/AGENTS.md` and `frontend/AGENTS.md` for their areas. No
+nested AGENTS.md files deeper in the tree.
+
+**Adding a rule.** When a fix, incident, or review teaches a durable rule, add it to
+the relevant AGENTS.md **in the same PR** — never batched later. A rule earns its
+place by capturing a non-obvious repo invariant or a proven failure mode; write it
+as a concise imperative plus one line of *why* (the failure it prevents). That
+one-line why is load-bearing, not decoration — a bare imperative is easy to
+rationalize around; "nothing was written and the test still passed" is not. Put the
+rule in the narrowest file where it always applies, and state it once — a child file
+extends the root, it never restates or contradicts it.
+
+**What doesn't belong.** Generic language/framework advice, transient feature
+status, tutorials, and facts easily discovered from the code. Known gaps and tech
+debt become GitHub issues, not AGENTS.md sections — a "tracked" claim with no issue
+behind it is how stale text accumulates.
+
+**Editing or condensing these files is high-risk** — deleting the wrong sentence
+silently weakens every future change. Treat it as a behavior-preserving refactor:
+classify each block (keep / condense / correct / remove) before touching it, keep
+every rule plus its one-line why, and never move a rule somewhere with a weaker
+loading trigger than the file it's in. While editing, verify that every referenced
+path still exists and that the files don't contradict each other or the
+Makefile/workflows — stale prose loses to mechanical sources, and this file has
+shipped contradictions before (a bump-command summary that disagreed with the
+release process it sat next to). Prune rules when the architecture or enforcement
+that motivated them changes.
