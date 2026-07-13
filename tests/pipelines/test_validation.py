@@ -247,7 +247,7 @@ def test_pipeline_validator_reports_dimension_mismatch() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
                 config={"dimension": 512},
             ),
@@ -288,7 +288,7 @@ def test_pipeline_validator_warns_when_dimension_missing() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
                 config={"dimension": 512},
             ),
@@ -376,7 +376,7 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
                 config={},
             ),
@@ -415,7 +415,7 @@ def test_pipeline_validator_requires_retriever_index() -> None:
     definition = PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="retrieval.input", name="Input"),
-            PipelineNodeDefinition(id="embedder", type="embedder.openrouter", name="Embedder"),
+            PipelineNodeDefinition(id="embedder", type="embedder.text", name="Embedder"),
             PipelineNodeDefinition(
                 id="retriever",
                 type="retriever.pinecone",

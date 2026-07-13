@@ -107,6 +107,9 @@ class OllamaClient:
         _raise_for_status(response)
         return OllamaEmbedResponse.model_validate(response.json())
 
+    # Mirrors Ollama's /api/chat body surface one-for-one (messages, model,
+    # tools, options, think, stream); grouping them would just relocate the list.
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _build_chat_body(
         self,
         messages: list[dict[str, Any]],

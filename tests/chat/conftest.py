@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 from sqlmodel import Session
 
+from app.chat import model_settings as model_settings_module
 from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.db import models
@@ -227,7 +228,7 @@ def install_chat_flow_fixture(monkeypatch, stub_pipeline_settings):
     ) -> None:
         monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
         monkeypatch.setattr(
-            setup_module, "ProviderResolver", stub_resolver_class(openrouter)
+            model_settings_module, "ProviderResolver", stub_resolver_class(openrouter)
         )
         monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
         stub_pipeline_settings(chat_model=chat_model, backend=backend)
@@ -242,7 +243,7 @@ def stub_resolver_class(openrouter: object) -> type:
     exercise the genuine provider translation layer with only the HTTP client
     faked -- the same boundary the old `get_openrouter_client` patch faked.
     """
-    from app.chat.providers.openrouter import OpenRouterProvider
+    from app.providers.chat.openrouter import OpenRouterProvider
 
     class _StubResolver:
         def __init__(self, _user: models.User, _session: Session) -> None:

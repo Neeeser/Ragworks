@@ -382,7 +382,7 @@ def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> Non
 
 
 def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
-    result = client.embed(["hello"], extra_headers={"X-Extra": "value"})
+    result = client.embed(["hello"], model="test-embed", extra_headers={"X-Extra": "value"})
 
     call = client._client.embeddings.calls[0]
     assert call["extra_headers"]["X-Extra"] == "value"
@@ -391,7 +391,7 @@ def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
 
 
 def test_embed_includes_dimensions(client: OpenRouterClient) -> None:
-    client.embed(["hello"], dimensions=1536)
+    client.embed(["hello"], model="test-embed", dimensions=1536)
 
     call = client._client.embeddings.calls[0]
     assert call["dimensions"] == 1536
@@ -425,6 +425,7 @@ def test_get_embedding_dimension_raises_on_missing_embedding(client: OpenRouterC
 def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> None:
     payload = client.chat(
         messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
         extra_body={"usage": {"include": True}},
         parameters={"temperature": 0.2, "top_p": None},
     )
@@ -439,6 +440,7 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
     client.chat(
         messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
         tools=[{"type": "function", "function": {"name": "tool"}}],
         tool_choice={"type": "function", "function": {"name": "tool"}},
         parallel_tool_calls=True,
@@ -452,7 +454,8 @@ def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
 
 def test_chat_stream_yields_chunks(client: OpenRouterClient) -> None:
     chunks = list(
-        client.chat_stream(messages=[{"role": "user", "content": "hi"}], parameters={"top_p": 0.9})
+        client.chat_stream(messages=[{"role": "user", "content": "hi"}],
+        model="test-chat", parameters={"top_p": 0.9})
     )
 
     call = client._client.chat.completions.calls[0]
@@ -465,6 +468,7 @@ def test_chat_stream_skips_none_parameters(client: OpenRouterClient) -> None:
     list(
         client.chat_stream(
             messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
             parameters={"top_p": None, "temperature": 0.1},
         )
     )
@@ -498,6 +502,7 @@ def test_chat_stream_includes_tool_settings(client: OpenRouterClient) -> None:
     chunks = list(
         client.chat_stream(
             messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
             tools=[{"type": "function", "function": {"name": "tool"}}],
             tool_choice={"type": "function", "function": {"name": "tool"}},
             parallel_tool_calls=True,

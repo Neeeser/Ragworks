@@ -6,8 +6,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.chat.providers.base import ChatRequest
-from app.chat.providers.ollama import (
+from app.providers.chat.base import ChatRequest
+from app.providers.chat.ollama import (
     OllamaChatProvider,
     convert_messages_to_ollama,
     model_info_from_description,

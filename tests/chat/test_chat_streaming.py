@@ -6,9 +6,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.chat.providers.base import ChatRequest, ParsedStreamChunk
-from app.chat.providers.openrouter import OpenRouterProvider
 from app.chat.streaming import StreamOutcome, stream_model_completion
+from app.providers.chat.base import ChatRequest, ParsedStreamChunk
+from app.providers.chat.openrouter import OpenRouterProvider
 from app.schemas.openrouter import OpenRouterStreamChunk
 
 

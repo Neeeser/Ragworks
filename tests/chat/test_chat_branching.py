@@ -19,7 +19,6 @@ def _create_user(session: Session) -> models.User:
         email="brancher@example.com",
         full_name="Branch User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
     )
     repo.add(user)
     session.commit()

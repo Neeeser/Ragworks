@@ -5,9 +5,9 @@ from typing import Any
 import pytest
 from sqlmodel import Session
 
+from app.chat import model_settings as chat_model_settings_module
 from app.chat import run_loop as chat_run_loop
 from app.chat import service as service_module
-from app.chat import setup as chat_setup_module
 from app.chat.service import ChatService
 from app.chat.state import RunState, ToolExecutionContext
 from app.chat.streaming import StreamOutcome
@@ -147,7 +147,7 @@ def test_send_message_handles_tool_calls(
 
     retrieval = _TrackingRetrievalService()
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
-    monkeypatch.setattr(chat_setup_module, "ProviderResolver", stub_resolver_class(openrouter))
+    monkeypatch.setattr(chat_model_settings_module, "ProviderResolver", stub_resolver_class(openrouter))
     monkeypatch.setattr(service_module, "RetrievalService", lambda *_a, **_k: retrieval)
     stub_pipeline_settings(chat_model="tool-model")
 
@@ -303,7 +303,9 @@ def test_stream_message_handles_tool_calls_and_final(
 
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
-        chat_setup_module, "ProviderResolver", stub_resolver_class(ModelOnlyOpenRouter(model_info))
+        chat_model_settings_module,
+        "ProviderResolver",
+        stub_resolver_class(ModelOnlyOpenRouter(model_info)),
     )
     monkeypatch.setattr(service_module, "RetrievalService", _TrackingRetrievalService)
     # stream_model_completion lives in the shared run loop, not the service.
@@ -459,7 +461,7 @@ def _install_streaming_flow(monkeypatch, stub_pipeline_settings, *, stream_facto
     """Wire a streaming service flow with a fake `stream_model_completion` factory."""
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
-        chat_setup_module,
+        chat_model_settings_module,
         "ProviderResolver",
         stub_resolver_class(ModelOnlyOpenRouter(tool_model_info())),
     )

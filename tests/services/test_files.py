@@ -20,7 +20,6 @@ def _create_user(session: Session) -> models.User:
         email="files@example.com",
         full_name="Files Tester",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
     )
     session.add(user)
     session.commit()

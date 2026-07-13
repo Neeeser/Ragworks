@@ -20,8 +20,6 @@ def keyless_user_fixture(session: Session) -> models.User:
         email="keyless@example.com",
         full_name="Keyless",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key=None,
     )
     UserRepository(session).add(user)
     session.commit()
@@ -159,7 +157,7 @@ def test_create_sparse_on_pgvector_rejected_without_pg_search(
 def test_pinecone_operations_require_key(keyless_client: TestClient) -> None:
     listed = keyless_client.get("/api/indexes", params={"backend": "pinecone"})
     assert listed.status_code == 400
-    assert "Pinecone API key" in listed.json()["detail"]
+    assert "Pinecone connection" in listed.json()["detail"]
 
     created = keyless_client.post(
         "/api/indexes",

@@ -1,9 +1,9 @@
 """Shared stub factories for pipeline node/execution tests.
 
-`OpenRouterEmbedder` gets monkeypatched out in several node tests with
-slightly different canned results; vector-store access goes through the run
-context, so `StubVectorStore`/`StubVectorStoreProvider` stand in for a real
-backend without any monkeypatching.
+Embedders are served through the run context's provider resolver, so
+`StubProviderResolver` (with `make_stub_embedder` classes) stands in for the
+provider layer, and `StubVectorStore`/`StubVectorStoreProvider` stand in for a
+real vector backend — no monkeypatching required.
 """
 
 from __future__ import annotations
@@ -159,6 +159,20 @@ class StubVectorStore(VectorStoreBackend):
 
     def delete_document_vectors(self, index: str, namespace: str, document_id: str) -> None:
         self.deleted_documents.append((index, namespace, document_id))
+
+
+class StubProviderResolver:
+    """Stands in for `ProviderResolver`: serves `embedder_cls` for any connection.
+
+    Tests swap `embedder_cls` (built via `make_stub_embedder`) after building
+    the run context — the resolver is the run's real embedder boundary.
+    """
+
+    def __init__(self, embedder_cls: type | None = None) -> None:
+        self.embedder_cls = embedder_cls or make_stub_embedder()
+
+    def embedder(self, _connection_id: Any, model_name: str, dimensions: int | None = None) -> Any:
+        return self.embedder_cls(None, model_name, dimensions=dimensions)
 
 
 class StubVectorStoreProvider:

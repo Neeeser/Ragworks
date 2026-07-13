@@ -12,6 +12,7 @@ from app.db import models
 from app.db.repositories import UserRepository
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.services.pipelines import PipelineService
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 def _create_user(session: Session) -> models.User:
@@ -29,7 +30,9 @@ def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     session.refresh(pipeline)
@@ -116,7 +119,9 @@ def test_list_pipeline_nodes_returns_specs() -> None:
 
 
 def test_validate_pipeline_returns_success() -> None:
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
 
     response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
@@ -126,7 +131,9 @@ def test_validate_pipeline_returns_success() -> None:
 
 
 def test_validate_pipeline_requires_index_name() -> None:
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     for node in definition.nodes:
         if node.type.startswith("indexer."):
             node.config = {**(node.config or {}), "index_name": ""}
@@ -137,9 +144,11 @@ def test_validate_pipeline_requires_index_name() -> None:
 
 
 def test_validate_pipeline_returns_warnings() -> None:
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     for node in definition.nodes:
-        if node.type == "embedder.openrouter":
+        if node.type == "embedder.text":
             node.config = {**(node.config or {}), "dimension": 512}
     response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
@@ -158,7 +167,9 @@ def test_validate_definition_rejects_invalid(monkeypatch) -> None:
     monkeypatch.setattr(pipelines_routes, "PipelineValidator", _StubValidator)
 
     with pytest.raises(HTTPException) as excinfo:
-        pipelines_routes._validate_definition_or_400(build_default_ingestion_pipeline())
+        pipelines_routes._validate_definition_or_400(build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ))
 
     assert excinfo.value.status_code == 400
 
@@ -179,13 +190,17 @@ def test_list_pipelines_filters_by_kind(session: Session) -> None:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     service.create_pipeline(
         user=user,
         name="Retrieval",
         kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
 
@@ -227,7 +242,9 @@ def test_update_pipeline_updates_definition(session: Session) -> None:
     pipeline = _create_pipeline(session, user)
     previous_version = pipeline.current_version
 
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
     chunker.config = {**chunker.config, "chunk_size": 512}
     updated = pipelines_routes.update_pipeline(
@@ -252,7 +269,9 @@ def test_update_pipeline_rejects_no_change_save(session: Session) -> None:
 
     with pytest.raises(HTTPException) as excinfo:
         pipelines_routes.update_pipeline(
-            pipelines_routes.PipelineUpdate(definition=build_default_ingestion_pipeline()),
+            pipelines_routes.PipelineUpdate(definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )),
             pipeline=pipeline,
             current_user=user,
             session=session,
@@ -304,7 +323,9 @@ def test_create_pipeline_creates_record(session: Session) -> None:
         pipelines_routes.PipelineCreate(
             name="New Pipeline",
             kind=models.PipelineKind.INGESTION,
-            definition=build_default_ingestion_pipeline(),
+            definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
         ),
         current_user=user,
         session=session,
