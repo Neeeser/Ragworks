@@ -8,10 +8,12 @@ every model into the server's memory just to list them.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
 
+from app.clients.ollama.errors import OllamaApiError
 from app.schemas.ollama import (
     OllamaModelDescription,
     OllamaShowResponse,
@@ -19,6 +21,8 @@ from app.schemas.ollama import (
 )
 
 _CACHE_TTL_SECONDS = 300.0
+
+logger = logging.getLogger(__name__)
 
 
 def _architecture_int(model_info: dict[str, Any], suffix: str) -> int | None:
@@ -67,7 +71,19 @@ class OllamaCatalog:
         for summary in self._fetch_tags().models:
             show = self._shows.get(summary.name)
             if show is None:
-                show = self._fetch_show(summary.name)
+                try:
+                    show = self._fetch_show(summary.name)
+                except OllamaApiError as exc:
+                    # A single corrupt/incompatible model (e.g. a gpt-oss pull
+                    # on an outdated server: 'tensor ... size overflow') must
+                    # not hide the rest of the server's models — the listing
+                    # itself already succeeded, so the server is reachable.
+                    logger.warning(
+                        "Skipping Ollama model %s: /api/show failed: %s",
+                        summary.name,
+                        exc,
+                    )
+                    continue
                 self._shows[summary.name] = show
             details = show.details or summary.details
             described.append(

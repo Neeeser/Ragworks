@@ -89,6 +89,33 @@ def test_describe_models_classifies_capabilities_and_dimensions() -> None:
     assert embed.embedding_dimension == 768
 
 
+def test_describe_models_skips_a_model_whose_show_fails() -> None:
+    """One broken model must not hide the rest of the server's catalog.
+
+    Real case: a gpt-oss pull on an outdated Ollama build fails /api/show with
+    'tensor "blk.0.ffn_down_exps.weight" size overflow' — the other models are
+    still perfectly usable.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json=TAGS_PAYLOAD)
+        if request.url.path == "/api/show":
+            model = json.loads(request.content)["model"]
+            if model == "llama3.2:latest":
+                return httpx.Response(
+                    500, json={"error": 'tensor "blk.0.ffn_down_exps.weight" size overflow'}
+                )
+            return httpx.Response(200, json=SHOW_PAYLOADS[model])
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    client = _build_client(httpx.MockTransport(handler))
+    described = client.describe_models()
+
+    assert [model.name for model in described] == ["nomic-embed-text:latest"]
+    assert described[0].capabilities == ["embedding"]
+
+
 def test_version_sends_bearer_header() -> None:
     seen: dict[str, str] = {}
 

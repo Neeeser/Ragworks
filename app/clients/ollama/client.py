@@ -17,6 +17,7 @@ import httpx
 
 from app.clients.cache import ClientCache
 from app.clients.ollama.catalog import OllamaCatalog
+from app.clients.ollama.errors import OllamaApiError
 from app.schemas.ollama import (
     OllamaChatResponse,
     OllamaEmbedResponse,
@@ -25,15 +26,6 @@ from app.schemas.ollama import (
     OllamaTagsResponse,
     OllamaVersionResponse,
 )
-
-
-class OllamaApiError(RuntimeError):
-    """An error reported by the Ollama server (HTTP or in-band `error` field)."""
-
-    def __init__(self, message: str, status_code: int | None = None) -> None:
-        """Store the provider message and optional HTTP status."""
-        super().__init__(message)
-        self.status_code = status_code
 
 
 def _raise_for_status(response: httpx.Response) -> None:
