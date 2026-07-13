@@ -39,6 +39,14 @@ export function useEmbeddingModelCatalog(token: string | null): UseEmbeddingMode
         if (!cancelled) {
           setEmbeddingModels(catalog.models);
           setEmbeddingConnectionErrors(catalog.connection_errors);
+          if (catalog.connection_errors.length > 0) {
+            // A degraded connection is still an error the user must see.
+            setEmbeddingModelsError(
+              catalog.connection_errors
+                .map((entry) => `${entry.connection_label}: ${entry.message}`)
+                .join(" — "),
+            );
+          }
         }
       } catch (error) {
         if (!cancelled) {

@@ -42,6 +42,7 @@ from app.db.repositories import (
     CollectionRepository,
     ProviderConnectionRepository,
 )
+from app.providers.registry import resolve_connection
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
@@ -269,6 +270,11 @@ class ChatSetupBuilder:
         payload: ChatMessageCreate,
     ) -> ChatSetup:
         """Resolve the full chat setup for a turn (see the module docstring)."""
+        # Resolve a payload-supplied connection id BEFORE any session write:
+        # a stale id would otherwise crash on the FK mid-flush (500), and a
+        # foreign user's id would be persisted before the ownership check.
+        if payload.provider_connection_id is not None:
+            resolve_connection(self.session, user, payload.provider_connection_id)
         explicit_ids = payload.tool_collection_ids is not None
         primary_context: ToolCollectionContext | None = None
         tool_collections: list[ToolCollectionContext]

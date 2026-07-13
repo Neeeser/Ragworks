@@ -260,3 +260,23 @@ def test_pgvector_backed_tools_need_no_pinecone_key(
     result = service.send_message(user=user, payload=payload)
 
     assert result.messages[-1].content == "Answer"
+
+
+def test_payload_with_foreign_or_unknown_connection_is_rejected_before_any_write(
+    session: Session, chat_user, install_chat_flow, stream
+) -> None:
+    """A stale/foreign `provider_connection_id` must 404 via the ownership
+    check BEFORE any session row is written — not crash on the FK mid-flush
+    (regression: the id used to be persisted first)."""
+    from app.services.errors import NotFoundError
+
+    install_chat_flow(openrouter=StubOpenRouter(tool_model_info(), {}), chat_model="test-model")
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", provider_connection_id=uuid4())
+
+    with pytest.raises(NotFoundError):
+        _drive(service, chat_user, payload, stream=stream)
+
+    from app.db.repositories import ChatRepository
+
+    assert ChatRepository(session).list_sessions(user_id=chat_user.id) == []

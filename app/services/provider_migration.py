@@ -7,7 +7,8 @@ steps:
 1. Move legacy `users.openrouter_api_key` / `users.pinecone_api_key` values
    into `provider_connections` rows and drop the columns. Detected via the
    live table's columns, so upgraded installs migrate once and fresh installs
-   skip entirely.
+   skip entirely — and the detection gates every other step, so none of this
+   ever reruns after the columns are gone.
 2. Rewrite every stored pipeline definition (all versions, pinned ones
    included — a deliberate exception to "node ids are permanent", chosen so
    the retired `embedder.openrouter` id has no live references): the node
@@ -38,8 +39,15 @@ NEW_EMBEDDER_TYPE = "embedder.text"
 
 
 def migrate_provider_connections(session: Session) -> None:
-    """Run the full provider-connections migration (idempotent)."""
-    _migrate_user_key_columns(session)
+    """Run the provider-connections migration once (idempotent).
+
+    Every data step is gated on the legacy key columns still existing: on an
+    already-migrated (or fresh) install this is a no-op, so a user who later
+    deletes a connection is never silently re-pointed at another one on the
+    next restart.
+    """
+    if not _migrate_user_key_columns(session):
+        return
     openrouter_by_user = _openrouter_connection_ids(session)
     _rewrite_embedder_nodes(session, openrouter_by_user)
     _backfill_chat_sessions(session, openrouter_by_user)
@@ -47,8 +55,12 @@ def migrate_provider_connections(session: Session) -> None:
     session.commit()
 
 
-def _migrate_user_key_columns(session: Session) -> None:
-    """Move legacy user key columns into connection rows, then drop them."""
+def _migrate_user_key_columns(session: Session) -> bool:
+    """Move legacy user key columns into connection rows, then drop them.
+
+    Returns True when legacy columns were found (i.e. this boot is the
+    migration boot) — the caller gates every other data step on it.
+    """
     bind = session.get_bind()
     user_columns = {column["name"] for column in sa_inspect(bind).get_columns("users")}
     legacy_columns = [
@@ -57,7 +69,7 @@ def _migrate_user_key_columns(session: Session) -> None:
     ]
     present = [entry for entry in legacy_columns if entry[0] in user_columns]
     if not present:
-        return
+        return False
     logger.info("Migrating legacy user API key columns to provider connections.")
     for column_name, provider_type, label in present:
         rows = session.execute(
@@ -81,6 +93,7 @@ def _migrate_user_key_columns(session: Session) -> None:
     for column_name, _, _ in present:
         session.execute(text(f"ALTER TABLE users DROP COLUMN {column_name}"))
     session.flush()
+    return True
 
 
 def _has_connection_of_type(session: Session, user_id: UUID, provider_type: str) -> bool:

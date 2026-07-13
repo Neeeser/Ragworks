@@ -39,10 +39,10 @@ OLLAMA_SAMPLER_PARAMETERS = [
     "max_tokens",
     "frequency_penalty",
     "presence_penalty",
-    "repeat_penalty",
+    "repetition_penalty",
 ]
 
-_OPTION_KEY_MAP = {"max_tokens": "num_predict"}
+_OPTION_KEY_MAP = {"max_tokens": "num_predict", "repetition_penalty": "repeat_penalty"}
 
 
 def model_info_from_description(description: OllamaModelDescription) -> ModelInfo:

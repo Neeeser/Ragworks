@@ -123,6 +123,7 @@ export function ConnectionsManager({
             : ""
         }
         confirmLabel="Remove"
+        loading={removingId !== null}
         onConfirm={handleRemove}
         onCancel={() => setPendingRemoval(null)}
       />

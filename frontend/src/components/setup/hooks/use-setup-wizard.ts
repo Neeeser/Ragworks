@@ -82,14 +82,24 @@ export function useSetupWizard(): SetupWizardApi {
   const providersReady = coverage.embedding && coverage.chat && coverage.vector_store;
   const hasEmbeddingProvider = coverage.embedding;
 
+  // `connections` identity changes on every reload, so adding a second
+  // embedding provider mid-wizard refetches the catalog too.
   const modelsQuery = useApiQuery(
     () => fetchEmbeddingModels(authToken),
-    [authToken, hasEmbeddingProvider],
+    [authToken, hasEmbeddingProvider, connections],
     { enabled: Boolean(authToken) && hasEmbeddingProvider },
   );
   const backendsQuery = useApiQuery(() => fetchIndexBackends(authToken), [authToken], {
     enabled: Boolean(authToken),
   });
+  const reloadBackends = backendsQuery.reload;
+
+  const handleConnectionsChanged = useCallback(() => {
+    reloadConnections();
+    // Backend `configured` flags (e.g. Pinecone) derive from connections, so
+    // the index step must see a freshly added connection without a reload.
+    reloadBackends();
+  }, [reloadBackends, reloadConnections]);
 
   const models = modelsQuery.data?.models ?? null;
 
@@ -186,7 +196,7 @@ export function useSetupWizard(): SetupWizardApi {
     providerTypes,
     connectionsLoading,
     connectionsError,
-    reloadConnections,
+    reloadConnections: handleConnectionsChanged,
     coverage,
     providersReady,
     models,

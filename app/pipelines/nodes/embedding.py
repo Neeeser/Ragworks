@@ -5,18 +5,20 @@ side, single queries on the retrieval side); `run()` resolves which mode
 applies, then dispatches to `_embed_chunks`/`_embed_query`. The embedder
 itself comes from the run context's `ProviderResolver`, so any connection
 with the EMBEDDING kind (OpenRouter, Ollama, ...) can serve the node.
-(The legacy `embedder.openrouter` id was retired by a data migration that
-rewrote stored definitions — see `app/db/migrations.py`.)
+(The legacy `embedder.openrouter` id was retired by a startup data migration
+that rewrote stored definitions — see `app/services/provider_migration.py`.)
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.node import PipelineNodeBase
+from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import (
     ChunkPayload,
     EmbeddingPayload,
@@ -34,6 +36,9 @@ from app.pipelines.tracing.summaries import (
 )
 from app.retrieval.embedders.base import Embedder
 from app.services.errors import InvalidInputError
+
+if TYPE_CHECKING:
+    from app.pipelines.registry import NodeRegistry
 
 
 class EmbedderConfig(BaseModel):
@@ -83,6 +88,38 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         ),
     )
     config_model = EmbedderConfig
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        node: PipelineNodeDefinition,
+        _definition: PipelineDefinition,
+        _registry: NodeRegistry,
+    ) -> list[PipelineValidationIssue]:
+        """Flag an embedder that has no provider connection or model configured."""
+        config = EmbedderConfig.model_validate(node.config or {})
+        issues: list[PipelineValidationIssue] = []
+        if config.connection_id is None:
+            issues.append(
+                PipelineValidationIssue(
+                    message=(
+                        f"Embedder node '{node.id}' has no provider connection "
+                        "configured. Pick one in the pipeline editor."
+                    ),
+                    severity="error",
+                )
+            )
+        if not config.model_name:
+            issues.append(
+                PipelineValidationIssue(
+                    message=(
+                        f"Embedder node '{node.id}' has no embedding model "
+                        "configured. Pick one in the pipeline editor."
+                    ),
+                    severity="error",
+                )
+            )
+        return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Resolve the embedding mode and dispatch to the matching unit."""

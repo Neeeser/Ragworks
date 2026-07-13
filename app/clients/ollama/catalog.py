@@ -59,8 +59,10 @@ class OllamaCatalog:
             and self._described
         ):
             return self._described
-        if force_refresh:
-            self._shows = {}
+        # The listing is being refreshed (TTL expiry or force) — drop the
+        # per-model show cache with it so re-pulled models pick up new
+        # capabilities/metadata within the same window.
+        self._shows = {}
         described: list[OllamaModelDescription] = []
         for summary in self._fetch_tags().models:
             show = self._shows.get(summary.name)

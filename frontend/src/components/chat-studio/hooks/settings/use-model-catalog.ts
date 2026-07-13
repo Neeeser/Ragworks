@@ -92,11 +92,18 @@ export function useModelCatalog({
         if (!cancelled) {
           setModelCatalog(catalog.models);
           setConnectionErrors(catalog.connection_errors);
-          setModelsError(
-            catalog.models.length === 0 && !chatProviderConfigured
-              ? "Add a chat provider in Settings to load models."
-              : null,
-          );
+          if (catalog.connection_errors.length > 0) {
+            // A degraded connection is still an error the user must see.
+            setModelsError(
+              catalog.connection_errors
+                .map((entry) => `${entry.connection_label}: ${entry.message}`)
+                .join(" — "),
+            );
+          } else if (catalog.models.length === 0 && !chatProviderConfigured) {
+            setModelsError("Add a chat provider in Settings to load models.");
+          } else {
+            setModelsError(null);
+          }
         }
       } catch (error) {
         if (!cancelled) {

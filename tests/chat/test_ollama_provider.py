@@ -99,12 +99,12 @@ def test_chat_maps_parameters_think_and_options() -> None:
 
     provider.chat(
         _request(
-            parameters={"temperature": 0.2, "max_tokens": 128},
+            parameters={"temperature": 0.2, "max_tokens": 128, "repetition_penalty": 1.1},
             reasoning_options={"reasoning": {"effort": "high"}},
         )
     )
     call = client.chat_calls[0]
-    assert call["options"] == {"temperature": 0.2, "num_predict": 128}
+    assert call["options"] == {"temperature": 0.2, "num_predict": 128, "repeat_penalty": 1.1}
     assert call["think"] is True
 
 

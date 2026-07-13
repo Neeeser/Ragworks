@@ -163,7 +163,13 @@ class OllamaClient:
             for line in response.iter_lines():
                 if not line.strip():
                     continue
-                chunk = OllamaChatResponse.model_validate(json.loads(line))
+                try:
+                    payload = json.loads(line)
+                except ValueError as exc:
+                    raise OllamaApiError(
+                        "The Ollama server sent a malformed stream line."
+                    ) from exc
+                chunk = OllamaChatResponse.model_validate(payload)
                 if chunk.error:
                     raise OllamaApiError(chunk.error)
                 yield chunk

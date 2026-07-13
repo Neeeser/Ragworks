@@ -18,6 +18,7 @@ from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 class _InputNode(PipelineNodeBase):
@@ -249,7 +250,11 @@ def test_pipeline_validator_reports_dimension_mismatch() -> None:
                 id="embedder",
                 type="embedder.text",
                 name="Embedder",
-                config={"dimension": 512},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                    "dimension": 512,
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -290,7 +295,11 @@ def test_pipeline_validator_warns_when_dimension_missing() -> None:
                 id="embedder",
                 type="embedder.text",
                 name="Embedder",
-                config={"dimension": 512},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                    "dimension": 512,
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -378,7 +387,10 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
                 id="embedder",
                 type="embedder.text",
                 name="Embedder",
-                config={},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -415,7 +427,15 @@ def test_pipeline_validator_requires_retriever_index() -> None:
     definition = PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="retrieval.input", name="Input"),
-            PipelineNodeDefinition(id="embedder", type="embedder.text", name="Embedder"),
+            PipelineNodeDefinition(
+                id="embedder",
+                type="embedder.text",
+                name="Embedder",
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                },
+            ),
             PipelineNodeDefinition(
                 id="retriever",
                 type="retriever.pinecone",
@@ -558,3 +578,20 @@ def test_pipeline_validator_allows_multiple_edges_into_accepts_many_port() -> No
     result = validator.validate(_fan_in_definition("test.many_join", "items"))
 
     assert result.valid, result.errors
+
+
+def test_pipeline_validator_flags_unconfigured_embedder() -> None:
+    """An embedder with no connection/model is a definite runtime failure —
+    validation must say so instead of validating clean."""
+    registry = NodeRegistry([_ChunkSourceNode, EmbedderNode, IndexerNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="embedder", type="embedder.text", name="Embedder"),
+        ],
+        edges=[],
+    )
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    assert any("no provider connection" in error for error in result.errors)
+    assert any("no embedding model" in error for error in result.errors)

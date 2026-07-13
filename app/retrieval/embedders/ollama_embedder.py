@@ -66,4 +66,6 @@ class OllamaEmbedder(Embedder):
             [query], model=self.model_name, dimensions=self.dimensions
         )
         vectors = self._extract_vectors(response)
-        return vectors[0] if vectors else []
+        if not vectors:
+            raise ValueError("Ollama returned no embedding for the query.")
+        return vectors[0]

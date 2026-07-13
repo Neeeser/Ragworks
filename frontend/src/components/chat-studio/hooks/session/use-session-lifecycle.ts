@@ -180,12 +180,11 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
         current === session.chat_model ? current : session.chat_model,
       );
     }
-    if (session?.provider_connection_id) {
-      setActiveConnectionId((current) =>
-        current === session.provider_connection_id
-          ? current
-          : (session.provider_connection_id ?? null),
-      );
+    if (session) {
+      // Always sync — a legacy session without a connection must clear the
+      // previous session's id, or its sends route through the wrong provider.
+      const nextConnection = session.provider_connection_id ?? null;
+      setActiveConnectionId((current) => (current === nextConnection ? current : nextConnection));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, sessions]);

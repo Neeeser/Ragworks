@@ -96,8 +96,18 @@ class ConnectionService:
         self.repo = ProviderConnectionRepository(session)
 
     def list_connections(self, user: models.User) -> list[ConnectionRead]:
-        """Return the user's connections, redacted for the wire."""
-        return [connection_to_read(row) for row in self.repo.list_for_user(user.id)]
+        """Return the user's connections, redacted for the wire.
+
+        A row with an unknown provider type (e.g. after a version downgrade)
+        is skipped rather than failing the whole listing.
+        """
+        rows = []
+        for row in self.repo.list_for_user(user.id):
+            try:
+                rows.append(connection_to_read(row))
+            except ValueError:
+                continue
+        return rows
 
     def coverage(self, user: models.User) -> ProviderCoverage:
         """Which provider kinds the user's connections (plus builtins) cover."""

@@ -146,3 +146,33 @@ def test_migration_leaves_definitions_without_owner_connection_flagged(
         assert node["type"] == "embedder.text"
         assert "connection_id" not in node["config"]
         assert fresh.exec(select(models.ProviderConnection)).all() == []
+
+
+def test_migration_never_rebinds_sessions_after_the_migration_boot(session: Session) -> None:
+    """A session whose connection was deleted (FK SET NULL) must stay
+    connection-less across restarts — the backfill only runs on the boot that
+    finds the legacy columns (regression: it used to rerun every startup)."""
+    user = models.User(email="rebind@example.com", hashed_password="hashed")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    connection = models.ProviderConnection(
+        user_id=user.id,
+        provider_type="openrouter",
+        label="OpenRouter",
+        config={"api_key": "sk-or-x"},
+    )
+    session.add(connection)
+    session.commit()
+    cleared = models.ChatSession(
+        user_id=user.id, title="Cleared", chat_model="m", provider_connection_id=None
+    )
+    session.add(cleared)
+    session.commit()
+
+    migrate_provider_connections(session)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.ChatSession, cleared.id)
+        assert stored is not None
+        assert stored.provider_connection_id is None
