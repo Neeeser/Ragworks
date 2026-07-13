@@ -16,6 +16,7 @@
     "lint": "eslint --cache --cache-location .eslintcache --cache-strategy content",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "assets:favicon": "node scripts/generate-brand-icons.mjs",
     "docs:capture-pipeline": "node scripts/capture-readme-pipeline.mjs",
     "verify": "npm run typecheck && npm run lint && vitest run"
   },
@@ -56,6 +57,7 @@
     "jsdom": "^25.0.1",
     "playwright": "^1.61.1",
     "prettier": "^3.3.3",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^6.0.12",

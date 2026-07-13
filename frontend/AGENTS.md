@@ -246,6 +246,10 @@ config-provider.tsx`), never a one-off `fetchPublicConfig()` call — the provid
 
 ## UI primitives — use them, don't re-roll them
 
+- **Favicon variants are generated brand assets.** The navbar SVGs in `public/` own the
+  Ragworks mark geometry and theme palettes; run `npm run assets:favicon` after changing
+  them, and never edit `src/app/icon.svg`, `apple-icon.png`, or `favicon.ico` by hand.
+
 - **Every overlay is `ModalOverlay`** (`components/ui/modal-overlay.tsx`). Never hand-roll
   a `fixed inset-0 z-50` div: we had five of them, each with different Escape/backdrop/
   focus behavior and half without `role="dialog"`. ModalOverlay owns Escape-to-close,
