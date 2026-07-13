@@ -18,7 +18,8 @@ import {
   toFlowNodes,
 } from "@/components/pipelines/lib/pipeline-utils";
 import { Button } from "@/components/ui/button";
-import { Field, Select, TextInput } from "@/components/ui/field";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -278,16 +279,21 @@ export function CreatePipelineWizard({
             label={`${BACKEND_TITLES[backend]} index`}
             labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
           >
-            <Select value={indexName} onChange={(event) => handleIndexSelect(event.target.value)}>
-              <option value="">Select an index</option>
-              {backendIndexes.map((index) => (
-                <option key={index.name} value={index.name}>
-                  {index.name}
-                  {typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""}
-                </option>
-              ))}
-              <option value={CREATE_SENTINEL}>+ Add new index...</option>
-            </Select>
+            <CustomSelect
+              value={indexName}
+              onValueChange={handleIndexSelect}
+              placeholder="Select an index"
+              options={[
+                { value: "", label: "Select an index" },
+                ...backendIndexes.map((index) => ({
+                  value: index.name,
+                  label: `${index.name}${
+                    typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
+                  }`,
+                })),
+                { value: CREATE_SENTINEL, label: "+ Add new index..." },
+              ]}
+            />
           </Field>
           {backendInfo ? (
             <p className="text-xs text-muted">

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -179,7 +180,8 @@ describe("NodeEditorDrawer", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it("filters the index picker to the node's configured backend and saves the pick", () => {
+  it("filters the index picker to the node's configured backend and saves the pick", async () => {
+    const user = userEvent.setup();
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
@@ -187,12 +189,15 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    const select = screen.getByLabelText(INDEX_SELECT_LABEL);
+    const select = screen.getByRole("combobox", { name: INDEX_SELECT_LABEL });
+    await user.click(select);
+    expect(select).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /alpha/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /local/ })).not.toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "alpha" } });
-    fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
       config: { backend: "pinecone", index_name: "alpha", dimension: 768 },
@@ -219,17 +224,20 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
-  it("legacy backend-pinned nodes get the index picker but no backend picker", () => {
+  it("legacy backend-pinned nodes get the index picker but no backend picker", async () => {
+    const user = userEvent.setup();
     renderDrawer({
       node: makeNode("retriever.pgvector", {}),
       vectorIndexes: indexes,
     });
 
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
   });
 
-  it("opens the index manager from the create sentinel", () => {
+  it("opens the index manager from the create sentinel", async () => {
+    const user = userEvent.setup();
     const onOpenIndexManager = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
@@ -237,13 +245,13 @@ describe("NodeEditorDrawer", () => {
       onOpenIndexManager,
     });
 
-    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), {
-      target: { value: "__create__" },
-    });
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /Add new index/ }));
     expect(onOpenIndexManager).toHaveBeenCalled();
   });
 
-  it("clearing the index removes index_name and dimension from the draft", () => {
+  it("clearing the index removes index_name and dimension from the draft", async () => {
+    const user = userEvent.setup();
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
@@ -255,8 +263,9 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
       config: { backend: "pinecone" },
@@ -315,5 +324,15 @@ describe("NodeEditorDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Add to canvas/ }));
     expect(onAddToCanvas).toHaveBeenCalled();
+  });
+
+  it("disables the index selector in preview mode", () => {
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
+      vectorIndexes: indexes,
+      isPreview: true,
+    });
+
+    expect(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL })).toBeDisabled();
   });
 });

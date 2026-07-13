@@ -64,6 +64,11 @@ function renderWizard(overrides: Partial<WizardProps> = {}) {
   return render(<CreatePipelineWizard {...props} />);
 }
 
+async function chooseIndex(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("combobox"));
+  await user.click(screen.getByRole("option", { name: new RegExp(name, "i") }));
+}
+
 describe("CreatePipelineWizard", () => {
   const pipeline = makePipeline({ kind: "ingestion", definition: { nodes: [], edges: [] } });
 
@@ -91,7 +96,11 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.getByText(/No pgvector \(PostgreSQL\) indexes/)).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox"), "__create__");
+    const indexSelector = screen.getByRole("combobox");
+    await user.click(indexSelector);
+    expect(indexSelector).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Add new index/ }));
     expect(onOpenIndexManager).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /Create index/ }));
@@ -107,8 +116,26 @@ describe("CreatePipelineWizard", () => {
 
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    await chooseIndex(user, "alpha");
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  });
+
+  it("closes only the index popup on Escape and restores trigger focus", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha" })], onClose });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    const trigger = screen.getByRole("combobox");
+    await user.click(trigger);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
   });
 
   it("creates a pipeline with the selected options and handles errors", async () => {
@@ -124,7 +151,7 @@ describe("CreatePipelineWizard", () => {
     await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
-    await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    await chooseIndex(user, "alpha");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     // Embedding step for retrieval pipelines.
@@ -167,7 +194,7 @@ describe("CreatePipelineWizard", () => {
 
     await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.selectOptions(screen.getByRole("combobox"), "alpha");
+    await chooseIndex(user, "alpha");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     await user.click(screen.getByRole("radio", { name: /Fine/ }));
@@ -225,10 +252,14 @@ describe("CreatePipelineWizard backend selection", () => {
 
     const pgvectorCard = screen.getByRole("button", { name: /pgvector/ });
     expect(pgvectorCard).toHaveAttribute("aria-pressed", "true");
+    const indexSelector = screen.getByRole("combobox");
+    await user.click(indexSelector);
     expect(screen.getByRole("option", { name: /local-docs/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /cloud-docs/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: /Pinecone/ }));
+    await user.click(indexSelector);
     expect(screen.getByRole("option", { name: /cloud-docs/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /local-docs/ })).not.toBeInTheDocument();
   });

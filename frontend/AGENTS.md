@@ -256,6 +256,11 @@ config-provider.tsx`), never a one-off `fetchPublicConfig()` call — the provid
   for hint/error text. The canonical input styling lives in the exported `inputClass`
   constant — the raw class string was once copy-pasted 29 times; if you type
   `rounded-2xl border border-white/10` by hand into a form control, stop.
+- **Product-facing dropdown selection uses `CustomSelect`**, never a browser-native
+  `<select>` whose popup cannot follow the product theme. The shared primitive owns popup
+  styling, keyboard/typeahead behavior, focus management, and portal positioning. Use a
+  native control only when platform-native behavior is deliberately required, and document
+  that reason next to the control.
 - **Confirmations use `ConfirmDialog`**, including destructive type-to-confirm flows via
   its `confirmText` prop — don't build bespoke nested delete modals.
 - **Wizards use `WizardShell` + `WizardFooter`** — the Back/Next/Cancel cluster is one

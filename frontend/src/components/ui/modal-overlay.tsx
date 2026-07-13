@@ -59,6 +59,7 @@ export function ModalOverlay({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
         if (openOverlayStack[openOverlayStack.length - 1] !== stackId) return;
         onCloseRef.current();
         return;
