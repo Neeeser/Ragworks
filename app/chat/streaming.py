@@ -9,9 +9,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from app.chat.providers.base import ChatProvider, ChatRequest, ParsedStreamChunk
 from app.chat.reasoning import extend_reasoning_segments, normalize_reasoning_segments
 from app.chat.tool_calls import accumulate_stream_tool_calls, coerce_stream_text
+from app.providers.chat.base import ChatProvider, ChatRequest, ParsedStreamChunk
 
 
 @dataclass

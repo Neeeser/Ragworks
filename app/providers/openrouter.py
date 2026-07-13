@@ -6,14 +6,15 @@ from typing import ClassVar
 
 import httpx
 
-from app.chat.providers.base import ChatProvider
-from app.chat.providers.openrouter import OpenRouterProvider
 from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.db.models import ProviderConnection
 from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.chat.base import ChatProvider
+from app.providers.chat.openrouter import OpenRouterProvider
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import EndpointsListResponse
 from app.schemas.providers import (
     CatalogModel,
     ConfigFieldKind,
@@ -121,3 +122,7 @@ class OpenRouterAdapter(ProviderAdapter):
         """Probe the embedding dimension for a model."""
         self.require_kind(ProviderKind.EMBEDDING)
         return self._client().get_embedding_dimension(model_name)
+
+    def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
+        """Return OpenRouter's per-provider endpoint directory for a model."""
+        return self._client().list_model_endpoints(author, slug)

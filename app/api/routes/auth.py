@@ -20,11 +20,8 @@ from app.db import models
 from app.db.repositories import AuthSessionRepository, UserRepository
 from app.schemas.auth import (
     AuthSessionRead,
-    ProviderKeyStatus,
-    ProviderKeyValidateRequest,
     Token,
     UserCreate,
-    UserKeyValidation,
     UserRead,
     UserSettingsUpdate,
 )
@@ -32,7 +29,6 @@ from app.schemas.enums import UserRole
 from app.services.accounts import AccountService
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
-from app.services.provider_keys import Provider, validate_key, validate_user_keys
 from app.telemetry import record
 from app.telemetry.events import UserSignedIn
 from app.utils.time import ensure_utc, utc_now
@@ -120,9 +116,8 @@ def _build_user_read(user: models.User) -> UserRead:
         full_name=user.full_name,
         is_active=user.is_active,
         role=UserRole(user.role),
-        openrouter_configured=bool((user.openrouter_api_key or "").strip()),
-        pinecone_configured=bool((user.pinecone_api_key or "").strip()),
         last_used_chat_model=user.last_used_chat_model,
+        last_used_chat_connection_id=user.last_used_chat_connection_id,
         last_used_parameters=user.last_used_parameters,
         last_used_provider=user.last_used_provider,
         last_used_stream=user.last_used_stream,
@@ -317,23 +312,6 @@ def revoke_all_auth_sessions(
 def read_current_user(current_user: models.User = Depends(get_current_user)) -> UserRead:
     """Return the authenticated user's profile."""
     return _build_user_read(current_user)
-
-
-@router.get("/me/keys/validate", response_model=UserKeyValidation)
-def validate_current_user_keys(
-    current_user: models.User = Depends(get_current_user),
-) -> UserKeyValidation:
-    """Validate stored API keys for the authenticated user."""
-    return validate_user_keys(current_user)
-
-
-@router.post("/keys/validate", response_model=ProviderKeyStatus)
-def validate_provider_key(
-    payload: ProviderKeyValidateRequest,
-    _current_user: models.User = Depends(get_current_user),
-) -> ProviderKeyStatus:
-    """Probe a pasted provider key against its provider without saving it."""
-    return validate_key(Provider(payload.provider), payload.api_key)
 
 
 @router.patch("/me", response_model=UserRead)

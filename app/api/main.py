@@ -15,6 +15,7 @@ from app.api.routes import (
     chat,
     collections,
     config,
+    connections,
     documents,
     files,
     health,
@@ -35,6 +36,7 @@ from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
 )
+from app.services.provider_migration import migrate_provider_connections
 from app.telemetry import purge_expired as purge_expired_telemetry
 
 settings = get_settings()
@@ -67,6 +69,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level or "")
     init_db()
     with session_scope() as session:
+        migrate_provider_connections(session)
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
         backfill_file_nodes(session)
@@ -93,6 +96,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(config.router)
 app.include_router(auth.router)
+app.include_router(connections.router)
 app.include_router(admin.router)
 app.include_router(models.router)
 app.include_router(pipelines.router)

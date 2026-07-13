@@ -6,11 +6,11 @@ from typing import ClassVar
 
 import httpx
 
-from app.chat.providers.base import ChatProvider
-from app.chat.providers.ollama import OllamaChatProvider, model_info_from_description
 from app.clients.ollama import OllamaApiError, OllamaClient, get_ollama_client
 from app.db.models import ProviderConnection
 from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.chat.base import ChatProvider
+from app.providers.chat.ollama import OllamaChatProvider, model_info_from_description
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
 from app.schemas.enums import ProviderKind, ProviderType

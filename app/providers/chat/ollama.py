@@ -22,8 +22,8 @@ from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
-from app.chat.providers.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.clients.ollama import OllamaClient
+from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.schemas.models import ModelInfo
 from app.schemas.ollama import OllamaChatResponse, OllamaModelDescription
 

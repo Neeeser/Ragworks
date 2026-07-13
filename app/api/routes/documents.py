@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
-from app.api.dependencies import get_session, require_openrouter_key
+from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import get_collection_or_404
 from app.db import models
 from app.db.repositories import ChunkRepository, DocumentRepository
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api", tags=["documents"])
 @router.get("/collections/{collection_id}/documents", response_model=list[DocumentRead])
 def list_documents(
     collection_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[DocumentRead]:
     """List documents for a collection."""
@@ -40,7 +40,7 @@ def list_documents(
 @router.get("/documents/{document_id}/chunks", response_model=ChunkVisualization)
 def get_document_chunks(
     document_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ChunkVisualization:
     """Return chunk visualization data for a document."""
@@ -57,7 +57,7 @@ def get_document_chunks(
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetailRead)
 def get_chunk_detail(
     chunk_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ChunkDetailRead:
     """Return details for a single chunk."""

@@ -35,7 +35,6 @@ from app.chat.persistence import (
     provider_message_from_model,
     record_message,
 )
-from app.chat.providers.base import ChatProvider
 from app.chat.state import (
     ChatSetup,
     ModelSettings,
@@ -49,6 +48,7 @@ from app.db.repositories import (
     CollectionRepository,
     ProviderConnectionRepository,
 )
+from app.providers.chat.base import ChatProvider
 from app.providers.registry import ProviderResolver
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend, ProviderKind, ProviderType

@@ -32,7 +32,6 @@ from app.chat.persistence import (
     record_tool_call_assistant_message,
     serialize_messages,
 )
-from app.chat.providers.base import ChatProvider, ChatRequest
 from app.chat.reasoning import normalize_reasoning_segments
 from app.chat.state import (
     ChatSetup,
@@ -46,6 +45,7 @@ from app.chat.tools import ToolExecutor
 from app.chat.usage import UsageSummary, coerce_usage_value
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.providers.chat.base import ChatProvider, ChatRequest
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
 from app.telemetry import record
 from app.telemetry.events import ChatTurnCompleted

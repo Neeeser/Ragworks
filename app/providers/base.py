@@ -14,8 +14,8 @@ from typing import ClassVar, TypeVar
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.chat.providers.base import ChatProvider
 from app.db.models import ProviderConnection
+from app.providers.chat.base import ChatProvider
 from app.retrieval.embedders.base import Embedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (

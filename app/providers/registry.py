@@ -14,10 +14,10 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.chat.providers.base import ChatProvider
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository
 from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.chat.base import ChatProvider
 from app.providers.ollama import OllamaAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter

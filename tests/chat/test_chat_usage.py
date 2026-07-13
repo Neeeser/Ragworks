@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.chat.parameters import build_openrouter_body
+from app.providers.chat.openrouter import build_openrouter_body
 from app.chat.usage import (
     UsageSummary,
     coerce_float_value,
