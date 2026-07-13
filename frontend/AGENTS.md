@@ -268,6 +268,10 @@ the same PR.
 - **Hydration mismatches come from render-time nondeterminism:** `Date.now()`,
   `Math.random()`, locale-dependent formatting, and browser-only globals during
   first render. Render the deterministic default, then update after mount.
+- **Async readiness redirects gate the entire protected shell.** Keep nav and page
+  content unmounted behind an accessible loading state until the check resolves and
+  while redirecting — rendering first and redirecting from an effect flashes content
+  the user can't use yet.
 - **This app's data flow is deliberately client-side** (token in localStorage →
   `apiFetch`); the auth guard is a client-side redirect in `(console)/layout.tsx`
   with no `middleware.ts`. Don't introduce one-off server-side data fetching or
