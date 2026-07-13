@@ -44,10 +44,14 @@ from app.chat.state import (
 )
 from app.chat.tools import ToolExecutor
 from app.db import models
-from app.db.repositories import ChatRepository, CollectionRepository
+from app.db.repositories import (
+    ChatRepository,
+    CollectionRepository,
+    ProviderConnectionRepository,
+)
+from app.providers.registry import ProviderResolver
 from app.schemas.chat import ChatMessageCreate
-from app.schemas.enums import IndexBackend
-from app.services.app_config import get_app_config
+from app.schemas.enums import IndexBackend, ProviderKind, ProviderType
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import (
     resolve_ingestion_pipeline,
@@ -155,9 +159,11 @@ class ChatSetupBuilder:
             for context in contexts
             for target in context.retrieval_settings.index_targets
         )
-        if needs_pinecone and not (user.pinecone_api_key or "").strip():
+        if needs_pinecone and not ProviderConnectionRepository(
+            self.session
+        ).list_for_user_of_type(user.id, ProviderType.PINECONE.value):
             raise InvalidInputError(
-                "Pinecone API key is not configured. Update it in Settings to enable tools."
+                "No Pinecone connection is configured. Add one in Settings to enable tools."
             )
         return contexts, collection_ids
 
@@ -166,7 +172,6 @@ class ChatSetupBuilder:
         *,
         user: models.User,
         payload: ChatMessageCreate,
-        default_chat_model: str,
         primary_collection_id: UUID | None,
     ) -> tuple[models.ChatSession, models.ChatMessage | None]:
         """Resolve the chat session for the request payload."""
@@ -184,7 +189,6 @@ class ChatSetupBuilder:
             session=self.session,
             user=user,
             payload=payload,
-            default_chat_model=default_chat_model,
             primary_collection_id=primary_collection_id,
         )
         return ensure_session(session_request), None
@@ -227,8 +231,18 @@ class ChatSetupBuilder:
     ) -> None:
         """Update the session model if a new model was requested."""
         requested_model = (payload.chat_model or "").strip() or None
+        requested_connection = payload.provider_connection_id
+        changed = False
         if requested_model and requested_model != session_model.chat_model:
             session_model.chat_model = requested_model
+            changed = True
+        if (
+            requested_connection
+            and requested_connection != session_model.provider_connection_id
+        ):
+            session_model.provider_connection_id = requested_connection
+            changed = True
+        if changed:
             self.session.add(session_model)
             self.session.flush()
 
@@ -267,6 +281,27 @@ class ChatSetupBuilder:
             options["reasoning"].update(reasoning_override)
         return options
 
+    def _resolve_chat_provider(
+        self,
+        *,
+        user: models.User,
+        session_model: models.ChatSession,
+    ) -> tuple[ChatProvider, str]:
+        """Resolve the session's chat provider through the connection registry.
+
+        Raises a clear `InvalidInputError` when the session has no provider
+        connection at all (fresh install, or the referenced connection was
+        deleted and the payload supplied no replacement).
+        """
+        connection_id = session_model.provider_connection_id
+        if connection_id is None:
+            raise InvalidInputError(
+                "Pick a chat provider and model to start chatting."
+            )
+        resolver = ProviderResolver(user, self.session)
+        adapter = resolver.adapter(connection_id, ProviderKind.CHAT)
+        return adapter.chat_provider(), adapter.connection.label
+
     # Resolves model info, tool support, parameter overrides, reasoning options,
     # provider preferences, and context window in one pass; splitting further
     # would just relocate these locals into an intermediate object.
@@ -275,19 +310,21 @@ class ChatSetupBuilder:
         self,
         *,
         provider: ChatProvider,
+        connection_label: str,
         payload: ChatMessageCreate,
         session_model: models.ChatSession,
-        default_chat_model: str,
         fallback_context_window: int,
         tools_enabled: bool,
     ) -> ModelSettings:
         """Resolve model settings, parameters, and preferences."""
-        active_model_name = session_model.chat_model or default_chat_model
+        active_model_name = session_model.chat_model
         if not active_model_name:
-            raise InvalidInputError("No chat model is configured for this session.")
+            raise InvalidInputError("Pick a chat model to start chatting.")
         model_info = provider.get_model(active_model_name)
         if not model_info:
-            raise InvalidInputError("Selected model is not available on OpenRouter.")
+            raise InvalidInputError(
+                f"Selected model is not available on {connection_label}."
+            )
         supported_parameters = model_info.supported_parameters or []
         tool_supported = any(param.lower() == "tools" for param in supported_parameters)
         if tools_enabled and not tool_supported:
@@ -317,16 +354,12 @@ class ChatSetupBuilder:
         *,
         user: models.User,
         payload: ChatMessageCreate,
-        provider: ChatProvider,
     ) -> ChatSetup:
         """Resolve the full chat setup for a turn (see the module docstring)."""
         explicit_ids = payload.tool_collection_ids is not None
         primary_context: ToolCollectionContext | None = None
         tool_collections: list[ToolCollectionContext]
         tool_collection_ids: list[UUID]
-        # The chat model is a session-level choice (chat UI), never pipeline
-        # config -- the old per-pipeline `chat.settings` node is gone.
-        default_chat_model = get_app_config().models.default_chat_model
         fallback_context_window = DEFAULT_CONTEXT_WINDOW
         if explicit_ids:
             tool_collections, tool_collection_ids = self._resolve_tool_collections(
@@ -337,7 +370,6 @@ class ChatSetupBuilder:
         session_model, edit_target = self._resolve_session_model(
             user=user,
             payload=payload,
-            default_chat_model=default_chat_model,
             primary_collection_id=primary_context.collection.id if primary_context else None,
         )
 
@@ -357,15 +389,18 @@ class ChatSetupBuilder:
             session_model=session_model, edit_target=edit_target, payload=payload
         )
         self._maybe_update_session_model(session_model=session_model, payload=payload)
+        provider, connection_label = self._resolve_chat_provider(
+            user=user, session_model=session_model
+        )
         messages = self._build_message_history(
             user=user, session_model=session_model, tool_collections=tool_collections
         )
         tools, tool_collection_map = ToolExecutor.specs(tool_collections)
         model_settings = self._prepare_model_settings(
             provider=provider,
+            connection_label=connection_label,
             payload=payload,
             session_model=session_model,
-            default_chat_model=default_chat_model,
             fallback_context_window=fallback_context_window,
             tools_enabled=bool(tool_collections),
         )
@@ -395,4 +430,5 @@ class ChatSetupBuilder:
                 else None
             ),
             model=model_settings,
+            provider=provider,
         )

@@ -74,7 +74,6 @@ class SessionRequest:
     session: Session
     user: models.User
     payload: ChatMessageCreate
-    default_chat_model: str
     primary_collection_id: UUID | None = None
 
 
@@ -280,9 +279,13 @@ def create_session(
     payload = request.payload
     base_title = payload.title or (payload.content[:60] if payload.content else None)
     fallback_title = f"Chat {utc_now().strftime('%H:%M:%S')}"
-    last_used_model = (getattr(request.user, "last_used_chat_model", None) or "").strip()
-    preferred_model = (
-        (payload.chat_model or "").strip() or last_used_model or request.default_chat_model
+    last_used_model = (request.user.last_used_chat_model or "").strip()
+    # No global default models exist: a new session seeds from the payload,
+    # falling back to the user's sticky last-used choice; setup raises a clear
+    # error later when neither yields a model.
+    preferred_model = (payload.chat_model or "").strip() or last_used_model
+    preferred_connection = (
+        payload.provider_connection_id or request.user.last_used_chat_connection_id
     )
     session_model = models.ChatSession(
         id=session_id or uuid4(),
@@ -291,6 +294,7 @@ def create_session(
         title=base_title or fallback_title,
         mode=payload.mode,
         chat_model=preferred_model,
+        provider_connection_id=preferred_connection,
     )
     request.chat_repo.add_session(session_model)
     request.session.commit()
@@ -369,6 +373,7 @@ def persist_session_preferences(
     session_model.provider_preferences = provider_preferences
     session_model.stream = preferences.stream_enabled
     user.last_used_chat_model = session_model.chat_model
+    user.last_used_chat_connection_id = session_model.provider_connection_id
     user.last_used_parameters = parameter_overrides
     user.last_used_provider = provider_preferences
     user.last_used_stream = preferences.stream_enabled

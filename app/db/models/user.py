@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
 from app.schemas.enums import UserRole
@@ -46,6 +47,14 @@ class User(SQLModel, TimestampMixin, table=True):
     last_used_chat_model: str | None = Field(
         default=None,
         sa_column=Column(String, nullable=True),
+    )
+    last_used_chat_connection_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("provider_connections.id", ondelete="SET NULL", use_alter=True),
+            nullable=True,
+        ),
     )
     last_used_parameters: dict[str, Any] | None = Field(
         default=None,

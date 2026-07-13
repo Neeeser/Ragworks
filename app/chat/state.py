@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.chat.messages import ProviderMessage, ToolCall
+from app.chat.providers.base import ChatProvider
 from app.chat.usage import UsageSummary
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
@@ -55,6 +56,7 @@ class ChatSetup:
     tool_collection_map: dict[str, models.Collection]
     pipeline: PipelineContext | None
     model: ModelSettings
+    provider: ChatProvider
 
 
 @dataclass

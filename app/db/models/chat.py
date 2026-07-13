@@ -29,6 +29,15 @@ class ChatSession(SQLModel, TimestampMixin, table=True):
     title: str = Field(sa_column=Column(String, nullable=False))
     mode: ChatMode = Field(default=ChatMode.CHAT, sa_column=Column(String, nullable=False))
     chat_model: str = Field(sa_column=Column(String, nullable=False))
+    provider_connection_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("provider_connections.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     context_tokens: int = Field(default=0, nullable=False)
     parameter_overrides: dict[str, Any] | None = Field(
         default=None,

@@ -94,6 +94,7 @@ def branch_session(
         title=branch_title,
         mode=session_model.mode,
         chat_model=session_model.chat_model,
+        provider_connection_id=session_model.provider_connection_id,
         context_tokens=0,
         parameter_overrides=session_model.parameter_overrides,
         provider_preferences=session_model.provider_preferences,
