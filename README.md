@@ -22,7 +22,7 @@ ingestion through retrieval and chat.**
 </div>
 
 <p align="center">
-  <a href="docs/assets/pipeline-flow.png" title="Open the full-resolution pipeline view">
+  <a href="docs/assets/pipeline-flow.png">
     <picture>
       <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/pipeline-flow.png">
       <img src="docs/assets/pipeline-flow.gif" alt="The default Ragworks ingestion and retrieval pipelines running through semantic and BM25 branches" width="100%">

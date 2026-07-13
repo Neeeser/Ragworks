@@ -108,6 +108,7 @@ function LoadedTraceDebugger({
             steps={graph.steps}
             playback={playback}
             nodeTypes={graph.combined ? traceNodeTypes : undefined}
+            fitViewPadding={0.18}
           />
         </div>
       </div>

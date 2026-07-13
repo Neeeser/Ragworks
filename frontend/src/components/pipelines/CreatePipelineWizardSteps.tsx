@@ -218,6 +218,7 @@ export function WizardReviewStep({
             steps={preview.steps}
             autoPlay
             compact
+            fitViewPadding={0.18}
           />
         </div>
       </div>

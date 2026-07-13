@@ -11,7 +11,7 @@ const TRAVEL_MS = 400;
 const HOLD_MS = 800;
 const PORT = 3417;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
-export const CAPTURE_SIZE = { width: 1920, height: 1080 };
+export const CAPTURE_SIZE = { width: 1920, height: 720 };
 export const GIF_ENCODER = "gifski";
 export const GIF_WIDTH = 1920;
 
@@ -25,9 +25,6 @@ const posterPath = path.join(assetDir, "pipeline-flow.png");
 
 export const captureDurationMs = (stepCount) =>
   stepCount * PROCESS_MS + Math.max(0, stepCount - 1) * TRAVEL_MS + HOLD_MS;
-
-export const trimmedDurationSeconds = (totalSeconds, trimStartSeconds) =>
-  Math.max(0, totalSeconds - trimStartSeconds);
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, { encoding: "utf8", ...options });
@@ -51,19 +48,6 @@ const waitForServer = async (url, server) => {
   throw new Error("Timed out waiting for the README capture page.");
 };
 
-const probeDuration = (videoPath) =>
-  Number(
-    run("ffprobe", [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      videoPath,
-    ]),
-  );
-
 const recordScene = async (browser, kind, tempDir, capturePoster) => {
   const context = await browser.newContext({
     viewport: CAPTURE_SIZE,
@@ -85,30 +69,34 @@ const recordScene = async (browser, kind, tempDir, capturePoster) => {
     throw new Error(`Invalid playback step count for ${kind}.`);
   }
   await page.waitForTimeout(700);
-  const trimStartSeconds = (Date.now() - recordingStartedAt) / 1000;
   if (capturePoster) await capture.screenshot({ path: posterPath });
-  await page.waitForTimeout(captureDurationMs(stepCount));
+  await page.locator("[data-capture-start]").evaluate((button) => button.click());
+  await page.locator('[data-playback-state="playing"]').waitFor();
+  const trimStartSeconds = (Date.now() - recordingStartedAt) / 1000;
+  const durationSeconds = captureDurationMs(stepCount) / 1000;
+  await page.waitForTimeout(durationSeconds * 1000);
   await context.close();
   if (!video) throw new Error(`Playwright did not record the ${kind} scene.`);
-  return { path: await video.path(), trimStartSeconds };
+  return { path: await video.path(), trimStartSeconds, durationSeconds };
 };
 
 const encodeAnimation = (ingestionVideo, retrievalVideo, tempDir) => {
   const combinedPath = path.join(tempDir, "pipeline-flow.mp4");
   const fadeSeconds = 0.35;
-  const ingestionDuration = trimmedDurationSeconds(
-    probeDuration(ingestionVideo.path),
-    ingestionVideo.trimStartSeconds,
-  );
+  const ingestionDuration = ingestionVideo.durationSeconds;
   const fadeOffset = Math.max(0, ingestionDuration - fadeSeconds);
   run("ffmpeg", [
     "-y",
     "-ss",
     String(ingestionVideo.trimStartSeconds),
+    "-t",
+    String(ingestionVideo.durationSeconds),
     "-i",
     ingestionVideo.path,
     "-ss",
     String(retrievalVideo.trimStartSeconds),
+    "-t",
+    String(retrievalVideo.durationSeconds),
     "-i",
     retrievalVideo.path,
     "-filter_complex",

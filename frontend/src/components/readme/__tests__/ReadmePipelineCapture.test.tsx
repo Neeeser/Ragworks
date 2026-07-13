@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReadmePipelineCapture } from "@/components/readme/ReadmePipelineCapture";
@@ -13,15 +14,17 @@ vi.mock("@/components/pipelines/flow/FlowPlayer", () => ({
 }));
 
 describe("ReadmePipelineCapture", () => {
-  it("renders the exported default retrieval pipeline through FlowPlayer", () => {
+  it("starts one non-looping retrieval run only when capture requests it", async () => {
+    const user = userEvent.setup();
     render(<ReadmePipelineCapture kind="retrieval" />);
 
     expect(screen.getByRole("heading", { name: "Default retrieval pipeline" })).toBeVisible();
     expect(screen.getByTestId("flow-player")).toBeVisible();
     expect(flowPlayerSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        autoPlay: true,
-        loop: true,
+        autoPlay: false,
+        fitViewPadding: 0.05,
+        loop: false,
         processMs: 550,
         travelMs: 400,
         nodes: expect.arrayContaining([
@@ -29,6 +32,12 @@ describe("ReadmePipelineCapture", () => {
           expect.objectContaining({ id: "fuse-results" }),
         ]),
       }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Start pipeline capture" }));
+
+    expect(flowPlayerSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoPlay: true, loop: false }),
     );
   });
 });

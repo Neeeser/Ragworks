@@ -27,6 +27,7 @@ type FlowPlayerProps = {
   autoPlay?: boolean;
   processMs?: number;
   travelMs?: number;
+  fitViewPadding: number;
   onActiveStepChange?: (index: number) => void;
   className?: string;
   /** Compact hides the step scrubber (landing-page style ambient playback). */
@@ -74,6 +75,7 @@ export function FlowPlayer({
   autoPlay = false,
   processMs,
   travelMs,
+  fitViewPadding,
   onActiveStepChange,
   className,
   compact = false,
@@ -176,7 +178,7 @@ export function FlowPlayer({
               }
         }
         fitView
-        fitViewOptions={{ padding: 0.18, maxZoom: 1 }}
+        fitViewOptions={{ padding: fitViewPadding, maxZoom: 1 }}
         minZoom={0.2}
         nodesDraggable={false}
         nodesConnectable={false}

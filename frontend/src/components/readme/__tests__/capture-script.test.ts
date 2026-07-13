@@ -5,7 +5,6 @@ import {
   GIF_ENCODER,
   GIF_WIDTH,
   captureDurationMs,
-  trimmedDurationSeconds,
 } from "../../../../scripts/capture-readme-pipeline.mjs";
 
 describe("captureDurationMs", () => {
@@ -15,12 +14,8 @@ describe("captureDurationMs", () => {
   });
 
   it("captures above GitHub display resolution before encoding", () => {
-    expect(CAPTURE_SIZE).toEqual({ width: 1920, height: 1080 });
+    expect(CAPTURE_SIZE).toEqual({ width: 1920, height: 720 });
     expect(GIF_WIDTH).toBe(1920);
     expect(GIF_ENCODER).toBe("gifski");
-  });
-
-  it("subtracts the pre-render recording lead from encoded scene duration", () => {
-    expect(trimmedDurationSeconds(8.4, 1.25)).toBeCloseTo(7.15);
   });
 });

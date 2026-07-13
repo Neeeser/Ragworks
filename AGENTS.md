@@ -133,9 +133,9 @@ drift from it:
 - Run `make readme-assets` whenever default pipeline definitions or their rendered
   components change, then commit the generated animation and poster. The capture requires
   Playwright Chromium, `ffmpeg`, and `gifski`. Keep the GIF at least 1440px wide and below
-  its 8 MB guard; inspect both its first frame and node-text legibility at README display
-  size. Verify README links, commands, release references, and factual claims with every
-  update.
+  its 8 MB guard, crop excess canvas, and inspect the first and last frame of each scene
+  for one complete non-looping run. Check node-text legibility at README display size.
+  Verify README links, commands, release references, and factual claims with every update.
 
 # Make commands
 
