@@ -5,8 +5,8 @@ name: Open release PR
 # canonical logic lives in scripts/bump_version.py — this workflow only runs it.
 # Merging the PR it opens is what tags + publishes (see release.yml).
 #
-# It authenticates as the "ragworks-release-bot" GitHub App (RELEASE_APP_ID +
-# RELEASE_APP_PRIVATE_KEY secrets), not GITHUB_TOKEN, so the PR it opens triggers
+# It authenticates as the "ragworks-release-bot" GitHub App (RELEASE_APP_CLIENT_ID
+# + RELEASE_APP_PRIVATE_KEY secrets), not GITHUB_TOKEN, so the PR it opens triggers
 # the verify CI like any other PR — GitHub suppresses workflow events raised by
 # GITHUB_TOKEN, but not by an App. The App token is minted fresh per run and
 # expires within the hour, so there is nothing to rotate.
@@ -37,7 +37,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v4
         with:
