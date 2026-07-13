@@ -38,8 +38,6 @@ class User(SQLModel, TimestampMixin, table=True):
     email: str = Field(sa_column=Column(String, unique=True, index=True, nullable=False))
     full_name: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     hashed_password: str = Field(sa_column=Column(String, nullable=False))
-    openrouter_api_key: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    pinecone_api_key: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     system_prompt_template: str | None = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
