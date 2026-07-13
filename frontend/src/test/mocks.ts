@@ -53,6 +53,9 @@ import {
   makeQueryResult,
   makeTraceResponse,
   makeUmapVisualization,
+  makeConnection,
+  makeModelCatalog,
+  makeProviderType,
   makeUser,
   makeValidation,
 } from "@/test/fixtures";
@@ -94,15 +97,6 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     getProfile: vi.fn(async () => makeUser()),
     updateUserSettings: vi.fn(async () => makeUser()),
     updateRunSettingsOrder: vi.fn(async () => makeUser()),
-    validateProviderKey: vi.fn(async () => ({
-      configured: true,
-      valid: true,
-      message: null,
-    })),
-    validateUserKeys: vi.fn(async () => ({
-      openrouter: { configured: true, valid: true },
-      pinecone: { configured: true, valid: true },
-    })),
     // collections
     fetchCollections: vi.fn(async () => []),
     fetchCollection: vi.fn(async () => makeCollection()),
@@ -163,16 +157,51 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     chat: vi.fn(async () => makeChatCompletion()),
     streamChat: vi.fn(async () => makeChatCompletion()),
     // models
-    fetchEmbeddingModels: vi.fn(async () => []),
-    listModels: vi.fn(async () => []),
+    fetchEmbeddingModels: vi.fn(async () => makeModelCatalog()),
+    listChatModels: vi.fn(async () => makeModelCatalog()),
     listModelEndpoints: vi.fn(async () => ({ data: makeProviderDirectory() })),
+    // connections
+    listProviderTypes: vi.fn(async () => [
+      makeProviderType(),
+      makeProviderType({
+        provider_type: "ollama",
+        label: "Ollama",
+        recommended: false,
+        docs_url: "https://ollama.com/download",
+        config_fields: [
+          { name: "base_url", label: "Server URL", kind: "url", required: true },
+          {
+            name: "api_key",
+            label: "API key (optional, for proxied servers)",
+            kind: "secret",
+            required: false,
+          },
+        ],
+      }),
+      makeProviderType({
+        provider_type: "pgvector",
+        label: "pgvector (PostgreSQL)",
+        kinds: ["vector_store"],
+        config_fields: [],
+        recommended: false,
+        builtin: true,
+      }),
+    ]),
+    listConnections: vi.fn(async () => [makeConnection()]),
+    createConnection: vi.fn(async () => makeConnection()),
+    updateConnection: vi.fn(async () => makeConnection()),
+    deleteConnection: vi.fn(async () => undefined),
+    validateConnectionConfig: vi.fn(async () => ({ valid: true, message: "Connected." })),
+    validateConnection: vi.fn(async () => ({ valid: true, message: "Connected." })),
     // config
     fetchPublicConfig: vi.fn(async () => makePublicConfig()),
     fetchAdminConfig: vi.fn(async () => []),
     updateAdminConfig: vi.fn(async () => []),
     // setup
     fetchSetupStatus: vi.fn(async () => ({
-      openrouter_configured: true,
+      has_embedding_provider: true,
+      has_chat_provider: true,
+      has_vector_store: true,
       has_index: true,
       has_collection: true,
       setup_complete: true,

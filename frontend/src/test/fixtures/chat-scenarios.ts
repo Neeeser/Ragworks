@@ -4,7 +4,7 @@ import type {
   ChatSession,
   Collection,
   ModelEndpointDirectory,
-  ModelInfo,
+  CatalogModel,
   Pipeline,
   PromptDetails,
   ToolCallTrace,
@@ -21,8 +21,6 @@ export const baseUser: User = {
   email: "user@example.com",
   role: "user",
   is_active: true,
-  openrouter_configured: true,
-  pinecone_configured: true,
   last_used_chat_model: "model-1",
   last_used_parameters: {
     temperature: 0.7,
@@ -163,10 +161,12 @@ export const collectionPromptDetails: PromptDetails = {
   is_custom: true,
 };
 
-export const modelCatalog: ModelInfo[] = [
+export const modelCatalog: CatalogModel[] = [
   {
+    connection_id: "conn-openrouter-1",
+    connection_label: "OpenRouter",
+    provider_type: "openrouter",
     id: "model-1",
-    canonical_slug: "openrouter/model-1",
     name: "Model One",
     description: "Primary model",
     supported_parameters: [
@@ -185,8 +185,10 @@ export const modelCatalog: ModelInfo[] = [
     },
   },
   {
+    connection_id: "conn-openrouter-1",
+    connection_label: "OpenRouter",
+    provider_type: "openrouter",
     id: "model-2",
-    canonical_slug: "openrouter/model-2",
     name: "Model Two",
     description: "Backup model",
     supported_parameters: ["temperature"],
