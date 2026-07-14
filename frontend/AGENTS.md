@@ -110,9 +110,6 @@ the same PR.
 - **Shared downstream nodes sit between parallel branch rows.** In a hybrid
   pipeline graph, center a merge/output node vertically between its inputs so
   smooth-step edges don't route through either branch's node card.
-- **Static pipeline playback follows topology, never serialization order.** Build
-  `FlowStep[]` with `buildTopologyPlaybackSteps`; trace playback is the exception
-  and keeps its authoritative recorded execution order.
 - **Feature folders separate components from logic.** Components at the folder
   root, pure non-React modules in `lib/`, hooks in `hooks/` — grouped into domain
   subdirectories once they outgrow ~10 files. Chat Studio is the reference
@@ -135,10 +132,6 @@ the same PR.
   server render uses different values and hydration mismatches. Initialize with the
   default, hydrate in a mount effect, and gate any effect that reacts to the
   hydrated value behind a `hydrated` flag.
-- **Autoplay policy stays reactive.** An `autoPlay` initializer is not enough when
-  reduced-motion can change after hydration; stop and reset pending playback
-  immediately when autoplay turns off, and distinguish a final step in progress
-  from a completed run.
 - **Effects must not write state they derive.** Computing a value in `useMemo` and
   copying it into `useState` via an effect adds a render per change and a stale
   window. Derive it where you use it.
