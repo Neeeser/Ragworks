@@ -19,9 +19,9 @@ const outputPaths = {
   apple: resolve(appDir, "apple-icon.png"),
 };
 
-// The crop keeps the canonical split/merge loop and equal portions of its input/output
-// arms. Changing only the viewBox preserves the navbar mark's exact path geometry.
-const FAVICON_VIEW_BOX = "395 345 568 568";
+// A square viewport with the canonical mark's original viewBox relies on SVG's default
+// xMidYMid meet behavior, keeping the complete split/merge mark centered without cropping.
+const FAVICON_CANVAS_SIZE = 1024;
 const ICO_SIZES = [16, 32, 48, 256];
 
 function extractPath(svg, id) {
@@ -76,8 +76,15 @@ function lightThemeCss(lightSvg) {
 }
 
 function squareSvg(darkSvg, lightSvg, { adaptive }) {
-  let svg = darkSvg
-    .replace('viewBox="180 388 938 479"', `viewBox="${FAVICON_VIEW_BOX}"`)
+  const squareCanvasSvg = darkSvg.replace(
+    /(<svg\b[^>]*?)\sviewBox=/,
+    `$1 width="${FAVICON_CANVAS_SIZE}" height="${FAVICON_CANVAS_SIZE}" viewBox=`,
+  );
+  if (squareCanvasSvg === darkSvg) {
+    throw new Error("Canonical mark is missing its viewBox");
+  }
+
+  let svg = squareCanvasSvg
     .replace(' role="img" aria-labelledby="title"', "")
     .replace(/\n  <title[^>]*>.*?<\/title>/, "");
 

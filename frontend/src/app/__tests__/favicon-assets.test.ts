@@ -19,6 +19,12 @@ function extractPath(svg: string, id: string): string {
   return match?.[1] ?? "";
 }
 
+function extractViewBox(svg: string): string {
+  const match = svg.match(/viewBox="([^"]+)"/);
+  expect(match, "SVG viewBox is missing").not.toBeNull();
+  return match?.[1] ?? "";
+}
+
 function pngDimensions(png: Buffer): [number, number] {
   expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
   return [png.readUInt32BE(16), png.readUInt32BE(20)];
@@ -36,11 +42,12 @@ function icoDimensions(ico: Buffer): number[] {
 }
 
 describe("favicon assets", () => {
-  it("uses the canonical navbar geometry in a square, theme-aware SVG", () => {
+  it("centers the complete canonical mark in a square, theme-aware SVG", () => {
     const canonicalMark = readRequiredFile(canonicalMarkPath).toString("utf8");
     const favicon = readRequiredFile(resolve(appDir, "icon.svg")).toString("utf8");
 
-    expect(favicon).toContain('viewBox="395 345 568 568"');
+    expect(favicon).toContain('width="1024" height="1024"');
+    expect(extractViewBox(favicon)).toBe(extractViewBox(canonicalMark));
     expect(favicon).toContain("prefers-color-scheme: light");
     expect(favicon).not.toContain("<text");
     expect(extractPath(favicon, "pipeline")).toBe(extractPath(canonicalMark, "pipeline"));
