@@ -14,6 +14,7 @@ import { PipelineEdgeRoutingProvider } from "./PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./TypedEdge";
 import { useFlowDotColor } from "./use-flow-dot-color";
 import { useFlowPlayback } from "./use-flow-playback";
+import { ViewportVerticalAnchor } from "./ViewportVerticalAnchor";
 
 import type { PipelineNodeData } from "../PipelineNode";
 import type { TypedEdgeType } from "./TypedEdge";
@@ -47,6 +48,19 @@ type FlowPlayerProps = {
   loop?: boolean;
   /** Fired once when a non-looping run finishes (see useFlowPlayback). */
   onRunComplete?: () => void;
+  /**
+   * Pin this node's row to the container's vertical center instead of
+   * fitView's bounding-box center — keeps a designated node at the same
+   * screen height when graphs of different row counts rotate through one
+   * surface (the landing hero).
+   */
+  anchorNodeId?: string;
+  /**
+   * Lower bound for fitView's zoom (default 0.2). Ambient full-bleed surfaces
+   * (the landing hero) pass a smaller floor so wide graphs still fit entirely
+   * inside narrow (mobile) viewports instead of rendering clipped.
+   */
+  minZoom?: number;
   /** Extra node types merged over the pipeline defaults (e.g. the trace index store). */
   nodeTypes?: NodeTypes;
   /**
@@ -83,6 +97,8 @@ export function FlowPlayer({
   ambient = false,
   loop,
   onRunComplete,
+  anchorNodeId,
+  minZoom = 0.2,
   nodeTypes,
   playback: externalPlayback,
 }: FlowPlayerProps) {
@@ -181,7 +197,7 @@ export function FlowPlayer({
           }
           fitView
           fitViewOptions={{ padding: fitViewPadding, maxZoom: 1 }}
-          minZoom={0.2}
+          minZoom={minZoom}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
@@ -191,6 +207,7 @@ export function FlowPlayer({
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={18} size={1} color={dotColor} />
+          {anchorNodeId ? <ViewportVerticalAnchor nodeId={anchorNodeId} /> : null}
         </ReactFlow>
       </PipelineEdgeRoutingProvider>
 
