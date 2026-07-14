@@ -108,11 +108,11 @@ export function buildSceneFlow(scene: SceneDefinition): DemoFlow {
     };
   });
 
-  const steps = buildTopologyPlaybackSteps({ nodes, edges });
-
   // Default path: the same auto-layout the editor's Tidy button uses, so
   // scenes track the real algorithm instead of hand-maintained grids.
   const nodes = manual ? placedNodes : layoutPipelineNodes(placedNodes, edges);
+
+  const steps = buildTopologyPlaybackSteps({ nodes, edges });
 
   return { nodes, edges, steps };
 }
