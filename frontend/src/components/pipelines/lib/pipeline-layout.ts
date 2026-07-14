@@ -195,6 +195,11 @@ const averageCenter = (ids: string[], centers: Map<string, number>): number | un
   return values.reduce((sum, center) => sum + center, 0) / values.length;
 };
 
+// Nodes are aligned by their TOP edge, not their vertical center: cards have
+// fixed-height headers with port rows directly under them, so equal tops make
+// matching ports share a y coordinate and straight runs render as straight
+// wires. Centering by card middle staggers mixed-height rows for no benefit
+// (the constant offset cancels out of every neighbor average anyway).
 const packColumn = (
   column: string[],
   desired: Map<string, number>,
@@ -205,7 +210,7 @@ const packColumn = (
     let center = desired.get(id) ?? 0;
     if (index > 0) {
       const previous = column[index - 1];
-      const clearance = (heights.get(previous)! + heights.get(id)!) / 2 + NODE_GAP_Y;
+      const clearance = heights.get(previous)! + NODE_GAP_Y;
       center = Math.max(center, centers.get(previous)! + clearance);
     }
     centers.set(id, center);
@@ -256,8 +261,8 @@ const layoutComponent = (
   );
   const heights = new Map(component.map((id) => [id, dimensions.get(id)!.height]));
   const centers = positionColumns(columns, relations, heights);
-  const top = Math.min(...component.map((id) => centers.get(id)! - heights.get(id)! / 2));
-  const bottom = Math.max(...component.map((id) => centers.get(id)! + heights.get(id)! / 2));
+  const top = Math.min(...component.map((id) => centers.get(id)!));
+  const bottom = Math.max(...component.map((id) => centers.get(id)! + heights.get(id)!));
   const columnWidths = columns.map((column) =>
     Math.max(...column.map((id) => dimensions.get(id)!.width)),
   );
@@ -272,7 +277,7 @@ const layoutComponent = (
         id,
         {
           x: columnLefts[layers.get(id) ?? 0],
-          y: centers.get(id)! - heights.get(id)! / 2 - top,
+          y: centers.get(id)! - top,
         },
       ]),
     ),

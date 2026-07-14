@@ -383,6 +383,22 @@ describe("layoutPipelineNodes", () => {
     expect(new Set(laid.map((node) => node.position.y)).size).toBe(1);
   });
 
+  it("keeps a mixed-height straight run top-aligned so port rows line up", () => {
+    // Cards have fixed-height headers with ports directly beneath, so a
+    // straight run must share its top edge — center-aligning mixed heights
+    // staggers the wires (and made the landing hero read as multi-row).
+    const nodes = [
+      makeNode("small", { x: 0, y: 0 }),
+      makeNode("tall", { x: 0, y: 0 }, { measured: { width: 264, height: 155 } }),
+      makeNode("small-again", { x: 0, y: 0 }),
+    ];
+    const edges = [edge("small", "tall"), edge("tall", "small-again")];
+
+    const laid = layoutPipelineNodes(nodes, edges);
+
+    expect(new Set(laid.map((node) => node.position.y)).size).toBe(1);
+  });
+
   it("centers a fan-out source between its parallel branches", () => {
     const fanOut = fixtures[1];
     const byId = new Map(
