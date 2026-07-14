@@ -1,15 +1,41 @@
+/** One entry of FastAPI's 422 validation-error `detail` list. */
+interface ValidationErrorItem {
+  loc?: unknown[];
+  msg?: string;
+}
+
+const isValidationErrorItem = (value: unknown): value is ValidationErrorItem =>
+  typeof value === "object" && value !== null && "msg" in value;
+
+/** Renders a single 422 item as "field.path: message" (dropping the leading "body"). */
+function formatValidationErrorItem(item: ValidationErrorItem): string {
+  const msg = item.msg ?? "Invalid value";
+  const path = (item.loc ?? []).filter((part) => part !== "body").map((part) => String(part));
+  return path.length > 0 ? `${path.join(".")}: ${msg}` : msg;
+}
+
 /**
- * Formats a per-field error detail (`{field: message}`, as raised by backend
- * `InvalidInputError`) into readable "field: message" lines. A plain string
- * detail passes through unchanged.
+ * Formats an API error `detail` into readable lines. Handles the three shapes
+ * the backend actually returns: a plain string (`ServiceError`), a per-field
+ * map (`{field: message}`), and FastAPI's 422 validation list
+ * (`[{loc, msg, type}]`). The list case previously rendered as
+ * "0: [object Object]" because it was treated as a `{field: message}` map.
  */
-export function formatApiErrorDetail(detail: string | Record<string, string>): string {
+export function formatApiErrorDetail(detail: unknown): string {
   if (typeof detail === "string") {
     return detail;
   }
-  return Object.entries(detail)
-    .map(([field, message]) => `${field}: ${message}`)
-    .join("\n");
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => (isValidationErrorItem(item) ? formatValidationErrorItem(item) : String(item)))
+      .join("\n");
+  }
+  if (typeof detail === "object" && detail !== null) {
+    return Object.entries(detail as Record<string, unknown>)
+      .map(([field, message]) => `${field}: ${String(message)}`)
+      .join("\n");
+  }
+  return String(detail);
 }
 
 export function getErrorMessage(err: unknown, fallback: string): string {
