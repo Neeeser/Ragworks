@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import logging
+
+import pytest
+from sqlmodel import Session
+
+from app.db import models
+from app.providers.openrouter import OpenRouterAdapter
+from app.schemas.providers import (
+    ConnectionUpdate,
+    ConnectionValidationResult,
+)
+from app.services import connections as connections_module
+from app.services.connections import ConnectionService
+from tests.utils.providers import add_connection
+
+
+def _user(session: Session) -> models.User:
+    user = models.User(email="connections@example.com", hashed_password="hashed")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@pytest.fixture(autouse=True)
+def _valid_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: ConnectionValidationResult(valid=True),
+    )
+
+
+def test_update_invalidates_resources_derived_from_old_config(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-old"}, label="OpenRouter"
+    )
+    invalidated_configs: list[dict[str, object]] = []
+    invalidated_dimensions: list[object] = []
+    monkeypatch.setattr(
+        connections_module,
+        "invalidate_connection_caches",
+        lambda old: invalidated_configs.append(dict(old.config)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        connections_module,
+        "invalidate_embedding_dimensions",
+        lambda connection_id: invalidated_dimensions.append(connection_id),
+        raising=False,
+    )
+
+    ConnectionService(session).update(
+        user, connection.id, ConnectionUpdate(config={"api_key": "sk-new"})
+    )
+
+    assert invalidated_configs == [{"api_key": "sk-old"}]
+    assert invalidated_dimensions == [connection.id]
+
+
+def test_delete_invalidates_resources_after_commit(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-delete"}, label="OpenRouter"
+    )
+    invalidated: list[object] = []
+    monkeypatch.setattr(
+        connections_module,
+        "invalidate_connection_caches",
+        lambda old: invalidated.append(old.id),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        connections_module,
+        "invalidate_embedding_dimensions",
+        lambda connection_id: invalidated.append(connection_id),
+        raising=False,
+    )
+
+    ConnectionService(session).delete(user, connection.id)
+
+    assert invalidated == [connection.id, connection.id]
+
+
+def test_committed_update_survives_cache_cleanup_failure(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-old"}, label="Before"
+    )
+
+    def _fail(_connection: models.ProviderConnection) -> None:
+        raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        connections_module, "invalidate_connection_caches", _fail, raising=False
+    )
+    monkeypatch.setattr(
+        connections_module,
+        "invalidate_embedding_dimensions",
+        lambda _connection_id: None,
+        raising=False,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result = ConnectionService(session).update(
+            user, connection.id, ConnectionUpdate(label="After")
+        )
+
+    assert result.label == "After"
+    assert "Cache cleanup failed" in caplog.text

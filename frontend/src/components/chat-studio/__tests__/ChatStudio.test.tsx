@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatStudio } from "@/components/chat-studio/ChatStudio";
 import * as apiModule from "@/lib/api";
+import { clearModelCatalogsForUser } from "@/lib/model-catalog-cache";
 import {
   altChatCompletionPayload,
   baseUser,
@@ -37,6 +38,8 @@ import type { ReactNode } from "react";
 
 const CHAT_STUDIO_LOADED_KEY = "chatStudio.loaded";
 const SEND_TURN_LABEL = "Send turn";
+const OPEN_HISTORY_LABEL = "Open history";
+const OPEN_RUN_SETTINGS_LABEL = "Open run settings";
 const TOOL_NAME = "collection.search";
 const AUTH_TOKEN = "token";
 
@@ -170,7 +173,11 @@ const setupDefaultApiMocks = () => {
   api.getCollectionPrompt.mockResolvedValue(collectionPromptDetails);
   api.listChatSessions.mockResolvedValue(sessions);
   api.listModelEndpoints.mockResolvedValue({ data: providerDirectory });
-  api.listModels.mockResolvedValue(modelCatalog);
+  api.listChatModels.mockResolvedValue({
+    models: modelCatalog,
+    connection_errors: [],
+    meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
+  });
   api.updateRunSettingsOrder.mockResolvedValue(baseUser);
   api.updateBasePrompt.mockResolvedValue({
     ...basePromptDetails,
@@ -201,11 +208,26 @@ const typeAndSend = (value: string) => {
   fireEvent.click(screen.getByRole("button", { name: SEND_TURN_LABEL }));
 };
 
+const openRunSettings = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: OPEN_RUN_SETTINGS_LABEL }));
+  await waitFor(() => {
+    expect(mockTelemetryPanelProps).not.toBeNull();
+  });
+};
+
+const openHistory = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: OPEN_HISTORY_LABEL }));
+  await waitFor(() => {
+    expect(mockHistoryPanelProps).not.toBeNull();
+  });
+};
+
 const firstStreamPayload = () =>
   api.streamChat.mock.calls[0][1] as unknown as Record<string, unknown>;
 
 describe("ChatStudio", () => {
   beforeEach(() => {
+    clearModelCatalogsForUser(baseUser.id);
     const router = getMockRouter();
     router.push.mockReset();
     router.replace.mockReset();
@@ -248,12 +270,13 @@ describe("ChatStudio", () => {
         "Sign in to access the chat studio.",
       );
 
-      setAuthState({ user: { ...baseUser, openrouter_configured: false } });
+      api.listConnections.mockResolvedValue([]);
+      setAuthState({ user: baseUser });
       rerender(<ChatStudio />);
       await flushPromises();
 
       expect(screen.getByTestId("notification")).toHaveTextContent(
-        "OpenRouter API key is not configured.",
+        "No chat provider is configured.",
       );
     });
 
@@ -265,7 +288,7 @@ describe("ChatStudio", () => {
 
       expect(api.listChatSessions).not.toHaveBeenCalled();
       expect(api.fetchCollections).not.toHaveBeenCalled();
-      expect(api.listModels).not.toHaveBeenCalled();
+      expect(api.listChatModels).not.toHaveBeenCalled();
     });
 
     it("loads collections and sends with tools even without a Pinecone key", async () => {
@@ -273,7 +296,7 @@ describe("ChatStudio", () => {
       // client never gates tools on the Pinecone key — the backend enforces
       // it only when a selected collection actually retrieves from Pinecone.
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+      setAuthState({ user: baseUser });
 
       render(<ChatStudio />);
       await flushPromises();
@@ -322,9 +345,7 @@ describe("ChatStudio", () => {
       setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: [] } });
 
       const { rerender } = render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockTelemetryPanelProps).not.toBeNull();
-      });
+      await openRunSettings();
 
       setQuery("collections=col-2,missing");
       rerender(<ChatStudio />);
@@ -342,6 +363,7 @@ describe("ChatStudio", () => {
       setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: ["col-1", "missing"] } });
 
       render(<ChatStudio />);
+      await openRunSettings();
 
       await waitFor(() => {
         expect(
@@ -357,6 +379,7 @@ describe("ChatStudio", () => {
       api.fetchCollections.mockRejectedValueOnce(new Error("Collections down"));
 
       render(<ChatStudio />);
+      await openRunSettings();
 
       await waitFor(() => {
         expect(
@@ -375,6 +398,7 @@ describe("ChatStudio", () => {
       await waitFor(() => {
         expect(api.fetchDocuments).toHaveBeenCalled();
       });
+      await openRunSettings();
 
       const telemetryProps = mockTelemetryPanelProps as {
         documentCount?: number;
@@ -639,13 +663,11 @@ describe("ChatStudio", () => {
     it("sends a non-streaming turn and deletes a session", async () => {
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
       setMockParams({ sessionId: "session-2" });
-      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+      setAuthState({ user: baseUser });
       api.chat.mockResolvedValue({ ...chatCompletionPayload, session: sessions[1] });
 
       render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockTelemetryPanelProps).toBeTruthy();
-      });
+      await openRunSettings();
 
       act(() => {
         (mockTelemetryPanelProps as { onStreamingToggle: (v: boolean) => void }).onStreamingToggle(
@@ -657,6 +679,8 @@ describe("ChatStudio", () => {
       await waitFor(() => {
         expect(api.chat).toHaveBeenCalled();
       });
+
+      await openHistory();
 
       await act(async () => {
         await (mockHistoryPanelProps as { onDelete: (id: string) => Promise<void> }).onDelete(
@@ -674,9 +698,7 @@ describe("ChatStudio", () => {
       setMockParams({ sessionId: "session-1" });
 
       render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockHistoryPanelProps).not.toBeNull();
-      });
+      await openHistory();
 
       const historyProps = mockHistoryPanelProps as {
         onFilterChange: (ids: string[], include: boolean) => void;
@@ -704,9 +726,7 @@ describe("ChatStudio", () => {
 
     it("toggles the provider preferences section", async () => {
       render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockTelemetryPanelProps).not.toBeNull();
-      });
+      await openRunSettings();
 
       const initialOpen = (mockTelemetryPanelProps as { providerPreferencesOpen?: boolean })
         .providerPreferencesOpen;
@@ -726,12 +746,12 @@ describe("ChatStudio", () => {
     });
 
     it("persists a debounced run settings order change and refreshes the profile", async () => {
-      vi.useFakeTimers();
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
       setMockParams({ sessionId: "session-1" });
 
       render(<ChatStudio />);
-      await flushPromises();
+      await openRunSettings();
+      vi.useFakeTimers();
 
       const telemetryProps = mockTelemetryPanelProps as {
         sectionOrder: string[];
@@ -753,9 +773,7 @@ describe("ChatStudio", () => {
       api.updateRunSettingsOrder.mockRejectedValueOnce(new Error("Save failed"));
 
       render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockTelemetryPanelProps).not.toBeNull();
-      });
+      await openRunSettings();
 
       const reversed = [
         ...(baseUser.run_settings_order ?? []),
@@ -782,9 +800,7 @@ describe("ChatStudio", () => {
       setMockParams({ sessionId: "session-1" });
 
       render(<ChatStudio />);
-      await waitFor(() => {
-        expect(mockTelemetryPanelProps).not.toBeNull();
-      });
+      await openRunSettings();
 
       act(() => {
         (mockTelemetryPanelProps as { onPromptEdit: () => void }).onPromptEdit();
@@ -811,6 +827,17 @@ describe("ChatStudio", () => {
   });
 
   describe("responsive panels", () => {
+    it("shows clear controls while both drawers default to closed", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+
+      render(<ChatStudio />);
+
+      expect(await screen.findByRole("button", { name: OPEN_HISTORY_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: OPEN_RUN_SETTINGS_LABEL })).toBeInTheDocument();
+      expect(mockHistoryPanelProps).toBeNull();
+      expect(mockTelemetryPanelProps).toBeNull();
+    });
+
     it("opens the run settings and history panels in overlay mode", async () => {
       window.innerWidth = 800;
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
@@ -823,14 +850,16 @@ describe("ChatStudio", () => {
         expect(mockChatTimelineProps).toBeTruthy();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "Open run settings" }));
+      fireEvent.click(screen.getByRole("button", { name: OPEN_RUN_SETTINGS_LABEL }));
       await waitFor(() => {
         expect(screen.getByTestId("telemetry-panel")).toBeInTheDocument();
       });
+      expect(screen.queryByTestId("history-panel")).not.toBeInTheDocument();
 
-      const openHistoryButton = await screen.findByRole("button", { name: "Open history" });
+      const openHistoryButton = await screen.findByRole("button", { name: OPEN_HISTORY_LABEL });
       fireEvent.click(openHistoryButton);
       expect(screen.getByTestId("history-panel")).toBeInTheDocument();
+      expect(screen.queryByTestId("telemetry-panel")).not.toBeInTheDocument();
     });
   });
 });

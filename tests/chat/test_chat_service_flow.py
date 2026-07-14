@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from sqlmodel import Session
 
+from app.chat import model_settings as chat_model_settings_module
 from app.chat import run_loop as chat_run_loop
 from app.chat import service as service_module
 from app.chat.service import ChatService
@@ -25,6 +26,7 @@ from tests.chat.conftest import (
     StubOpenRouter,
     StubRetrievalService,
     StubSettings,
+    stub_resolver_class,
     tool_model_info,
 )
 
@@ -145,7 +147,7 @@ def test_send_message_handles_tool_calls(
 
     retrieval = _TrackingRetrievalService()
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
-    monkeypatch.setattr(service_module, "get_openrouter_client", lambda *_a, **_k: openrouter)
+    monkeypatch.setattr(chat_model_settings_module, "ProviderResolver", stub_resolver_class(openrouter))
     monkeypatch.setattr(service_module, "RetrievalService", lambda *_a, **_k: retrieval)
     stub_pipeline_settings(chat_model="tool-model")
 
@@ -301,7 +303,9 @@ def test_stream_message_handles_tool_calls_and_final(
 
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
-        service_module, "get_openrouter_client", lambda *_a, **_k: ModelOnlyOpenRouter(model_info)
+        chat_model_settings_module,
+        "ProviderResolver",
+        stub_resolver_class(ModelOnlyOpenRouter(model_info)),
     )
     monkeypatch.setattr(service_module, "RetrievalService", _TrackingRetrievalService)
     # stream_model_completion lives in the shared run loop, not the service.
@@ -409,12 +413,24 @@ def test_send_message_rejects_other_users_session(
         email="other@example.com",
         full_name="Other",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
+        last_used_chat_model="test-model",
     )
     session.add(other)
     session.commit()
     session.refresh(other)
+    for provider_type, config in (
+        ("openrouter", {"api_key": "openrouter-key"}),
+        ("pinecone", {"api_key": "pinecone-key"}),
+    ):
+        session.add(
+            models.ProviderConnection(
+                user_id=other.id,
+                provider_type=provider_type,
+                label=provider_type,
+                config=config,
+            )
+        )
+    session.commit()
     collection = make_collection(other)
     owned_session = models.ChatSession(user_id=owner.id, title="Owned", chat_model="test-model")
     session.add(owned_session)
@@ -445,9 +461,9 @@ def _install_streaming_flow(monkeypatch, stub_pipeline_settings, *, stream_facto
     """Wire a streaming service flow with a fake `stream_model_completion` factory."""
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
-        service_module,
-        "get_openrouter_client",
-        lambda *_a, **_k: ModelOnlyOpenRouter(tool_model_info()),
+        chat_model_settings_module,
+        "ProviderResolver",
+        stub_resolver_class(ModelOnlyOpenRouter(tool_model_info())),
     )
     monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
     monkeypatch.setattr(chat_run_loop, "stream_model_completion", stream_factory)

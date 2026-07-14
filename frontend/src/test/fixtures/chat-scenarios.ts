@@ -4,7 +4,7 @@ import type {
   ChatSession,
   Collection,
   ModelEndpointDirectory,
-  ModelInfo,
+  CatalogModel,
   Pipeline,
   PromptDetails,
   ToolCallTrace,
@@ -14,6 +14,7 @@ import type {
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
 const baseUserId = "user-1";
 const providerA = "provider-a";
+const openRouterConnectionId = "conn-openrouter-1";
 
 export const baseUser: User = {
   remember_session_days: 30,
@@ -21,9 +22,8 @@ export const baseUser: User = {
   email: "user@example.com",
   role: "user",
   is_active: true,
-  openrouter_configured: true,
-  pinecone_configured: true,
   last_used_chat_model: "model-1",
+  last_used_chat_connection_id: openRouterConnectionId,
   last_used_parameters: {
     temperature: 0.7,
   },
@@ -104,6 +104,7 @@ export const sessions: ChatSession[] = [
     title: "Chat 9:00 AM",
     mode: "chat",
     chat_model: "model-1",
+    provider_connection_id: openRouterConnectionId,
     context_tokens: 128,
     tool_collection_ids: ["col-1"],
     parameter_overrides: {
@@ -132,6 +133,7 @@ export const sessions: ChatSession[] = [
     title: "Chat 10:00 AM",
     mode: "chat",
     chat_model: "model-2",
+    provider_connection_id: openRouterConnectionId,
     context_tokens: 64,
     tool_collection_ids: [],
     parameter_overrides: {},
@@ -163,10 +165,12 @@ export const collectionPromptDetails: PromptDetails = {
   is_custom: true,
 };
 
-export const modelCatalog: ModelInfo[] = [
+export const modelCatalog: CatalogModel[] = [
   {
+    connection_id: openRouterConnectionId,
+    connection_label: "OpenRouter",
+    provider_type: "openrouter",
     id: "model-1",
-    canonical_slug: "openrouter/model-1",
     name: "Model One",
     description: "Primary model",
     supported_parameters: [
@@ -185,8 +189,10 @@ export const modelCatalog: ModelInfo[] = [
     },
   },
   {
+    connection_id: openRouterConnectionId,
+    connection_label: "OpenRouter",
+    provider_type: "openrouter",
     id: "model-2",
-    canonical_slug: "openrouter/model-2",
     name: "Model Two",
     description: "Backup model",
     supported_parameters: ["temperature"],

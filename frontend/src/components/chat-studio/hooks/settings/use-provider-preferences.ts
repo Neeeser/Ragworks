@@ -15,7 +15,8 @@ import type { ModelEndpointDirectory, ProviderPreferences } from "@/lib/types";
 interface UseProviderPreferencesParams {
   authToken: string;
   authLoading: boolean;
-  openrouterConfigured: boolean;
+  /** The active model's OpenRouter connection id, or null for non-OpenRouter models. */
+  openrouterConnectionId: string | null;
   providerModelSlug: string | null;
 }
 
@@ -39,7 +40,7 @@ interface UseProviderPreferencesResult {
 export function useProviderPreferences({
   authToken,
   authLoading,
-  openrouterConfigured,
+  openrouterConnectionId,
   providerModelSlug,
 }: UseProviderPreferencesParams): UseProviderPreferencesResult {
   const [providerForm, setProviderForm] = useState<ProviderFormState>(() =>
@@ -73,9 +74,11 @@ export function useProviderPreferences({
       setProviderDirectoryLoading(false);
       return;
     }
-    if (!openrouterConfigured) {
+    if (!openrouterConnectionId) {
+      // Provider routing is OpenRouter's surface; other providers have no
+      // endpoint directory to browse.
       setProviderDirectory(null);
-      setProviderDirectoryError("Add your OpenRouter API key in Settings to load providers.");
+      setProviderDirectoryError(null);
       setProviderDirectoryLoading(false);
       return;
     }
@@ -88,7 +91,7 @@ export function useProviderPreferences({
     let cancelled = false;
     setProviderDirectoryLoading(true);
     setProviderDirectoryError(null);
-    listModelEndpoints(authToken || undefined, author, slugPart)
+    listModelEndpoints(authToken, openrouterConnectionId, author, slugPart)
       .then((response) => {
         if (cancelled) return;
         setProviderDirectory(response.data);
@@ -106,7 +109,7 @@ export function useProviderPreferences({
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, openrouterConfigured, providerModelSlug]);
+  }, [authLoading, authToken, openrouterConnectionId, providerModelSlug]);
 
   useEffect(() => {
     setProviderSearchTerm("");

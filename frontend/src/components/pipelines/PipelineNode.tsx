@@ -180,9 +180,8 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         dimWholeNode && "opacity-40",
       )}
     >
-      {/* Fixed-height header so every card's port rows start at the same
-          offset from the top -- with top-aligned layout columns this makes
-          matching ports line up into straight, factory-style runs. */}
+      {/* Fixed-height header keeps port rows at a predictable offset so the
+          obstacle router can connect cards consistently across the graph. */}
       <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-primary">{data.label}</p>

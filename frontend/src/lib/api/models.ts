@@ -1,37 +1,52 @@
-import { apiFetch, type FetchOptions } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 
-import type { EmbeddingModelInfo, ListModelEndpointsResponse, ModelInfo } from "@/lib/types";
+import type {
+  EmbeddingDimensionResponse,
+  ListModelEndpointsResponse,
+  ModelCatalogResponse,
+  UUID,
+} from "@/lib/types";
+
+export async function listChatModels(
+  token: string,
+  refresh = false,
+): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>(`/api/models?kind=chat${refresh ? "&refresh=true" : ""}`, {
+    token,
+  });
+}
 
 export async function fetchEmbeddingModels(
   token: string,
-  refresh?: boolean,
-): Promise<EmbeddingModelInfo[]> {
-  const params = refresh ? "?refresh=true" : "";
-  return apiFetch<EmbeddingModelInfo[]>(`/api/models/embeddings${params}`, { token });
+  refresh = false,
+): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>(
+    `/api/models?kind=embedding${refresh ? "&refresh=true" : ""}`,
+    { token },
+  );
 }
 
-export async function listModels(token?: string, refresh?: boolean): Promise<ModelInfo[]> {
-  const query = refresh ? "?refresh=true" : "";
-  const options: FetchOptions = {};
-  if (token) {
-    options.token = token;
-  }
-  return apiFetch<ModelInfo[]>(`/api/models${query}`, options);
+export async function fetchEmbeddingDimension(
+  token: string,
+  connectionId: UUID,
+  modelId: string,
+): Promise<EmbeddingDimensionResponse> {
+  return apiFetch<EmbeddingDimensionResponse>(
+    `/api/connections/${connectionId}/models/embedding-dimension?model_id=${encodeURIComponent(modelId)}`,
+    { token },
+  );
 }
 
 export async function listModelEndpoints(
-  token: string | undefined,
+  token: string,
+  connectionId: UUID,
   author: string,
   slug: string,
 ): Promise<ListModelEndpointsResponse> {
   const encodedAuthor = encodeURIComponent(author);
   const encodedSlug = encodeURIComponent(slug);
-  const options: FetchOptions = {};
-  if (token) {
-    options.token = token;
-  }
   return apiFetch<ListModelEndpointsResponse>(
-    `/api/models/${encodedAuthor}/${encodedSlug}/endpoints`,
-    options,
+    `/api/connections/${connectionId}/models/${encodedAuthor}/${encodedSlug}/endpoints`,
+    { token },
   );
 }

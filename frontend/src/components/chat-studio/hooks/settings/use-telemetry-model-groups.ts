@@ -13,6 +13,7 @@ import type {
   TelemetryParametersProps,
   TelemetryProviderProps,
 } from "@/components/chat-studio/lib/types";
+import type { CatalogModel } from "@/lib/types";
 
 type ModelCatalog = ReturnType<typeof useModelCatalog>;
 type ModelParameters = ReturnType<typeof useModelParameters>;
@@ -25,6 +26,7 @@ export interface UseTelemetryModelGroupsParams {
   panel: UsePanelControlsResult;
   toolsEnabled: boolean;
   setActiveModelId: (id: string) => void;
+  setActiveConnectionId: (id: string | null) => void;
 }
 
 export interface UseTelemetryModelGroupsResult {
@@ -47,6 +49,7 @@ export function useTelemetryModelGroups(
     panel,
     toolsEnabled,
     setActiveModelId,
+    setActiveConnectionId,
   } = params;
 
   const {
@@ -54,6 +57,9 @@ export function useTelemetryModelGroups(
     setModelSearchTerm,
     modelSortOption,
     setModelSortOption,
+    connectionFilter,
+    setConnectionFilter,
+    connectionOptions,
     toolReadyModels,
     sortedModelCatalog,
     modelsLoading,
@@ -100,6 +106,14 @@ export function useTelemetryModelGroups(
     setProviderForm(createDefaultProviderForm());
   }, [setProviderForm]);
 
+  const handleSelectModel = useCallback(
+    (model: CatalogModel) => {
+      setActiveModelId(model.id);
+      setActiveConnectionId(model.connection_id);
+    },
+    [setActiveConnectionId, setActiveModelId],
+  );
+
   const telemetryModel = useMemo<TelemetryModelProps>(
     () => ({
       modelSelectorOpen,
@@ -108,24 +122,30 @@ export function useTelemetryModelGroups(
       onModelSearchChange: setModelSearchTerm,
       modelSortOption,
       onModelSortChange: setModelSortOption,
+      connectionFilter,
+      onConnectionFilterChange: setConnectionFilter,
+      connectionOptions,
       toolReadyModels,
       filteredModelCatalog: sortedModelCatalog,
       modelsLoading,
       modelsError,
       selectedModelKey,
-      onSelectModel: setActiveModelId,
+      onSelectModel: handleSelectModel,
       currentModelInfo,
       toolsEnabled,
     }),
     [
+      connectionFilter,
+      connectionOptions,
       currentModelInfo,
       modelSearchTerm,
       modelSelectorOpen,
       modelSortOption,
       modelsError,
       modelsLoading,
+      handleSelectModel,
       selectedModelKey,
-      setActiveModelId,
+      setConnectionFilter,
       setModelSearchTerm,
       setModelSortOption,
       sortedModelCatalog,

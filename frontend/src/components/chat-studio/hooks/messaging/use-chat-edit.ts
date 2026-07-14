@@ -51,6 +51,7 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
     setContextConsumed,
     setOptimisticMessages,
     setActiveModelId,
+    setActiveConnectionId,
     setParameterOverrides,
     setProviderForm,
     setStreamingEnabled,
@@ -162,6 +163,7 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
           return sortSessions(next);
         });
         setActiveModelId(branchedSession.chat_model);
+        setActiveConnectionId(branchedSession.provider_connection_id ?? null);
         setSelectedToolCollectionIds(branchedSession.tool_collection_ids ?? []);
         setParameterOverrides(branchedSession.parameter_overrides ?? {});
         setProviderForm(createProviderFormFromPreferences(branchedSession.provider_preferences));
@@ -194,6 +196,7 @@ export function useChatEdit(params: UseChatEditParams): UseChatEditResult {
       resetChatStream,
       selectedSessionId,
       setActiveModelId,
+      setActiveConnectionId,
       setContextConsumed,
       setEditingDraft,
       setEditingMessageId,

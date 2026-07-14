@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChatStudioPanels } from "@/components/chat-studio/ChatStudioPanels";
 import { useChatMutation } from "@/components/chat-studio/hooks/messaging/use-chat-mutation";
@@ -27,6 +27,7 @@ import {
   CHAT_INPUT_MIN_HEIGHT,
   TELEMETRY_SECTION_IDS,
 } from "@/components/chat-studio/lib/chat-constants";
+import { useConnections } from "@/components/connections/hooks/use-connections";
 import { useAuth } from "@/providers/auth-provider";
 
 export function ChatStudio() {
@@ -62,6 +63,8 @@ export function ChatStudio() {
     setStreamingEnabled,
     activeModelId,
     setActiveModelId,
+    activeConnectionId,
+    setActiveConnectionId,
     deletingSessionId,
     branchedSessionOriginRef,
   } = state;
@@ -70,7 +73,12 @@ export function ChatStudio() {
   const chatPromptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const authToken = token ?? "";
-  const openrouterConfigured = Boolean(!authLoading && user?.openrouter_configured);
+  const { connections, connectionsLoading } = useConnections(authToken, authLoading);
+  const chatProviderConfigured = Boolean(
+    !authLoading &&
+    !connectionsLoading &&
+    connections.some((connection) => connection.kinds.includes("chat")),
+  );
 
   const {
     chatEntryMap,
@@ -145,10 +153,14 @@ export function ChatStudio() {
   const modelCatalog = useModelCatalog({
     authToken,
     authLoading,
-    openrouterConfigured,
+    chatProviderConfigured,
     activeModelId,
+    activeConnectionId,
     toolsEnabled,
+    userId: user?.id ?? null,
+    connections,
   });
+  const { refreshModels } = modelCatalog;
 
   const modelParameters = useModelParameters({
     currentModelInfo: modelCatalog.currentModelInfo,
@@ -159,7 +171,10 @@ export function ChatStudio() {
   const providerPreferences = useProviderPreferences({
     authToken,
     authLoading,
-    openrouterConfigured,
+    openrouterConnectionId:
+      modelCatalog.currentModelInfo?.provider_type === "openrouter"
+        ? modelCatalog.currentModelInfo.connection_id
+        : null,
     providerModelSlug: modelCatalog.providerModelSlug,
   });
 
@@ -171,6 +186,10 @@ export function ChatStudio() {
   });
 
   const panel = usePanelControls({ setLoading: state.setLoading });
+
+  useEffect(() => {
+    if (panel.telemetryOpen && panel.modelSelectorOpen) void refreshModels();
+  }, [panel.modelSelectorOpen, panel.telemetryOpen, refreshModels]);
 
   const sortSessions = useCallback((items: typeof sessions) => {
     const pendingIds = state.pendingSessionIdsRef.current;
@@ -187,8 +206,9 @@ export function ChatStudio() {
   const { activeSession, branchedFromSession } = useSessionLifecycle({
     ...state,
     authLoading,
+    connectionsLoading,
     authToken,
-    openrouterConfigured,
+    chatProviderConfigured,
     user,
     selectedSessionId,
     sessionIdParam,
@@ -240,6 +260,7 @@ export function ChatStudio() {
     user,
     toolsEnabled,
     activeModelId,
+    activeConnectionId,
     buildParameterPayload: modelParameters.buildParameterPayload,
     providerRuleCount: providerPreferences.providerRuleCount,
     providerPayload: providerPreferences.providerPayload,
@@ -295,6 +316,7 @@ export function ChatStudio() {
     panel,
     toolsEnabled,
     setActiveModelId,
+    setActiveConnectionId,
   });
 
   const currentModelLabel = modelCatalog.currentModelInfo?.name || activeModelId || "Select model";
@@ -330,7 +352,7 @@ export function ChatStudio() {
 
   const chatInputPlaceholder = toolsEnabled
     ? "Ask about the selected collections…"
-    : "Ask anything…";
+    : "Send a message…";
 
   return (
     <ChatStudioPanels

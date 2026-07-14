@@ -21,9 +21,8 @@ export interface User {
   full_name?: string | null;
   role: UserRole;
   is_active: boolean;
-  openrouter_configured: boolean;
-  pinecone_configured: boolean;
   last_used_chat_model?: string | null;
+  last_used_chat_connection_id?: UUID | null;
   last_used_parameters?: Record<string, unknown> | null;
   last_used_provider?: ProviderPreferences | null;
   last_used_stream?: boolean | null;
@@ -42,17 +41,6 @@ export interface AuthSession {
   last_used_at: string;
   expires_at: string;
   current: boolean;
-}
-
-export interface ProviderKeyStatus {
-  configured: boolean;
-  valid: boolean;
-  message?: string | null;
-}
-
-export interface UserKeyValidation {
-  openrouter: ProviderKeyStatus;
-  pinecone: ProviderKeyStatus;
 }
 
 export type ProviderSortOption = "price" | "throughput" | "latency";

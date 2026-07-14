@@ -23,25 +23,24 @@ export function HeroFlowBackdrop() {
   const animate = !usePrefersReducedMotion();
   const { scene, fading, onRunComplete } = useSceneRotation(LANDING_SCENES);
   const { nodes, edges, steps } = useMemo(() => scene.build(), [scene]);
-  // fitView centers the graph's bounding box, so a two-row hybrid scene would
-  // push its main row up into the headline; nudge tall scenes further down so
-  // the main row stays in the clear band the copy leaves for it.
-  const tall = useMemo(() => new Set(nodes.map((node) => node.position.y)).size > 1, [nodes]);
+  // Anchor the viewport on each scene's entry node (the first playback step)
+  // so it sits at the same screen height in every scene — fitView alone
+  // centers the bounding box, which shifts the main row when a hybrid scene
+  // adds a second branch row.
+  const anchorNodeId = steps[0]?.nodeIds[0];
 
   return (
     // Each scene is a short horizontal band (one row, or two for hybrid
     // branches), so the mask is a wide ellipse: the flow reads as a band
-    // running across the hero's middle, fading out above/below (clearing the
-    // headline and subhead) and at the left/right edges. The hero copy leaves
-    // a clear gap here for it to run through — see LandingPage. The layer is
-    // nudged down slightly so the band runs through the clear gap below the
-    // headline instead of across it.
+    // running across the hero's middle, fading out above/below and at the
+    // left/right edges. The flow is ambient scenery, not an exhibit — it
+    // renders large and faint, nudged below center so it runs behind the
+    // actions rather than sitting framed between headline and buttons.
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 transition-opacity duration-[400ms] [mask-image:radial-gradient(105%_46%_at_50%_50%,black_45%,transparent_85%)]",
-        tall ? "translate-y-[12%]" : "translate-y-[3%]",
-        fading ? "opacity-0" : "opacity-30",
+        "pointer-events-none absolute inset-0 translate-y-[6%] transition-opacity duration-[400ms] [mask-image:radial-gradient(105%_46%_at_50%_50%,black_45%,transparent_85%)]",
+        fading ? "opacity-0" : "opacity-[0.22]",
       )}
     >
       {/* Keyed by scene so each rotation remounts the player and autoplays fresh. */}
@@ -54,7 +53,11 @@ export function HeroFlowBackdrop() {
         autoPlay={animate}
         loop={false}
         onRunComplete={animate ? onRunComplete : undefined}
-        fitViewPadding={0.18}
+        anchorNodeId={anchorNodeId}
+        // Full-bleed decorative surface: let wide scenes shrink far enough to
+        // fit narrow (mobile) viewports instead of rendering clipped.
+        minZoom={0.05}
+        fitViewPadding={0.06}
       />
     </div>
   );

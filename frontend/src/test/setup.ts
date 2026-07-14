@@ -163,6 +163,12 @@ Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
   value: vi.fn(),
 });
 
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: { writable: true, value: vi.fn(() => false) },
+  setPointerCapture: { writable: true, value: vi.fn() },
+  releasePointerCapture: { writable: true, value: vi.fn() },
+});
+
 Object.defineProperty(HTMLAnchorElement.prototype, "click", {
   writable: true,
   value: vi.fn(),

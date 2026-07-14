@@ -20,9 +20,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ragworks Control Room",
-  description:
-    "Observe every chunk, embedding, and token in your Retrieval-Augmented Generation stack.",
+  title: "Ragworks",
+  description: "An open-source workbench for building, running, and inspecting RAG pipelines.",
 };
 
 export default function RootLayout({

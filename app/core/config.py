@@ -33,16 +33,6 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="OPENROUTER_SITE_NAME",
     )
-    # Empty by default on purpose: there is no evergreen OpenRouter embedding
-    # model id; the first-run setup wizard seeds the runtime config instead.
-    default_embedding_model: str = Field(
-        default="",
-        validation_alias="OPENROUTER_DEFAULT_EMBEDDING_MODEL",
-    )
-    default_chat_model: str = Field(
-        default="openai/gpt-oss-120b",
-        validation_alias="OPENROUTER_DEFAULT_CHAT_MODEL",
-    )
     openrouter_reasoning_effort: str | None = Field(
         default="medium",
         validation_alias="OPENROUTER_REASONING_EFFORT",

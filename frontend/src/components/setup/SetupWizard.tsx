@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { useSetupWizard } from "@/components/setup/hooks/use-setup-wizard";
 import { SETUP_STEPS } from "@/components/setup/lib/setup-wizard-reducer";
 import { SetupFlowBackdrop } from "@/components/setup/SetupFlowBackdrop";
-import { StepKey, StepModel, StepWelcome } from "@/components/setup/SetupSteps";
+import { StepModel, StepProviders, StepWelcome } from "@/components/setup/SetupSteps";
 import { StepIndex, StepLaunch } from "@/components/setup/SetupStepsLaunch";
 import { cn } from "@/lib/utils";
 import { useSetupStatus } from "@/providers/setup-status-provider";
@@ -51,7 +51,7 @@ export function SetupWizard() {
           </span>
         </nav>
         {wizard.state.step === "welcome" ? <StepWelcome wizard={wizard} /> : null}
-        {wizard.state.step === "key" ? <StepKey wizard={wizard} /> : null}
+        {wizard.state.step === "providers" ? <StepProviders wizard={wizard} /> : null}
         {wizard.state.step === "model" ? <StepModel wizard={wizard} /> : null}
         {wizard.state.step === "index" ? <StepIndex wizard={wizard} /> : null}
         {wizard.state.step === "launch" ? <StepLaunch wizard={wizard} /> : null}

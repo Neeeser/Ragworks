@@ -1,4 +1,4 @@
-import type { EmbeddingModelInfo, ModelInfo, ModelPricing } from "@/lib/types";
+import type { CatalogModel, ModelPricing } from "@/lib/types";
 
 export type ChatModelSortOption = "default" | "price";
 export type EmbeddingModelSortOption = "price" | "dimension";
@@ -39,7 +39,7 @@ const compareNullableNumbers = (a: number | null, b: number | null) => {
 const compareNames = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-export const sortChatModels = (models: ModelInfo[], option: ChatModelSortOption) => {
+export const sortChatModels = (models: CatalogModel[], option: ChatModelSortOption) => {
   if (option === "default") {
     return [...models];
   }
@@ -54,10 +54,7 @@ export const sortChatModels = (models: ModelInfo[], option: ChatModelSortOption)
   return sorted;
 };
 
-export const sortEmbeddingModels = (
-  models: EmbeddingModelInfo[],
-  option: EmbeddingModelSortOption,
-) => {
+export const sortEmbeddingModels = (models: CatalogModel[], option: EmbeddingModelSortOption) => {
   const sorted = [...models];
   if (option === "price") {
     sorted.sort((a, b) => {

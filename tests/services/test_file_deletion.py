@@ -15,6 +15,7 @@ from app.services import file_deletion as deletion_module
 from app.services.errors import ExternalServiceError
 from app.services.file_deletion import FileDeletionService
 from app.services.files import FileSystemService, UploadSpec
+from tests.utils.providers import install_default_pipelines
 
 
 class _RecordingStore:
@@ -32,11 +33,11 @@ def _create_user(session: Session) -> models.User:
         email="delete@example.com",
         full_name="Delete Tester",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
     )
     session.add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 

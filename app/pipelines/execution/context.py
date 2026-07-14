@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from sqlmodel import Session
 
-from app.clients.openrouter import OpenRouterClient
 from app.core.config import Settings
 from app.db import models
 from app.pipelines.tracing import PipelineTraceRecorder
+from app.providers.registry import ProviderResolver
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import VectorStoreProvider
 
@@ -24,7 +24,7 @@ class PipelineRunContext:
     document: models.Document | None
     query: str | None
     top_k: int | None
-    openrouter: OpenRouterClient
+    providers: ProviderResolver
     vector_stores: VectorStoreProvider
     storage: FileStorage
     settings: Settings

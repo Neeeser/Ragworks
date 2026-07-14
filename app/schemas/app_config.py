@@ -18,11 +18,9 @@ from app.schemas.enums import IndexBackend
 
 # Code defaults for the model fields mirror app/core/config.py's Settings
 # defaults so an un-overridden install behaves identically either way.
-_DEFAULT_CHAT_MODEL = "openai/gpt-oss-120b"
 # Deliberately empty: OpenRouter's embedding catalog shifts over time, so a
 # hardcoded model id rots (we shipped one that 502'd every first upload).
 # The first-run setup wizard seeds this with the user's confirmed choice.
-_DEFAULT_EMBEDDING_MODEL = ""
 
 
 def _meta(
@@ -86,31 +84,6 @@ class UploadSettings(BaseModel):
             "through the collection's ingestion pipeline; other types are "
             "stored without indexing (and can be ingested manually).",
             public=True,
-        ),
-    )
-
-
-class ModelDefaults(BaseModel):
-    """Default models used when a pipeline or chat session does not pin one."""
-
-    default_chat_model: str = Field(
-        default=_DEFAULT_CHAT_MODEL,
-        min_length=1,
-        json_schema_extra=_meta(
-            "Default chat model",
-            "OpenRouter model id used for chat when no session/pipeline "
-            "override applies.",
-            env_var="OPENROUTER_DEFAULT_CHAT_MODEL",
-        ),
-    )
-    default_embedding_model: str = Field(
-        default=_DEFAULT_EMBEDDING_MODEL,
-        json_schema_extra=_meta(
-            "Default embedding model",
-            "OpenRouter model id used to embed documents and queries in "
-            "newly created default pipelines. Empty until the first-run "
-            "setup wizard seeds it with a confirmed choice.",
-            env_var="OPENROUTER_DEFAULT_EMBEDDING_MODEL",
         ),
     )
 
@@ -188,7 +161,6 @@ class AppConfig(BaseModel):
 
     auth: AuthSettings = Field(default_factory=AuthSettings)
     uploads: UploadSettings = Field(default_factory=UploadSettings)
-    models: ModelDefaults = Field(default_factory=ModelDefaults)
     indexing: IndexingSettings = Field(default_factory=IndexingSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)

@@ -9,7 +9,8 @@ import { IndexManagerModal } from "./index-manager/IndexManagerModal";
 
 import type {
   BackendInfo,
-  EmbeddingModelInfo,
+  CatalogModel,
+  ModelCatalogResponse,
   NodeSpec,
   Pipeline,
   PipelineKind,
@@ -27,9 +28,11 @@ type PipelineModalsProps = {
   indexes: VectorIndex[];
   backends: BackendInfo[];
   nodeSpecs: NodeSpec[];
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
+  embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
+  onCatalogVisible: () => void;
   indexesLoading: boolean;
   indexesError: string | null;
   onRefreshIndexes: () => void;
@@ -58,8 +61,10 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
       backends,
       nodeSpecs,
       embeddingModels,
+      embeddingCatalog,
       embeddingModelsLoading,
       embeddingModelsError,
+      onCatalogVisible,
       indexesLoading,
       indexesError,
       onRefreshIndexes,
@@ -113,8 +118,10 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           backends={backends}
           nodeSpecs={nodeSpecs}
           embeddingModels={embeddingModels}
+          embeddingCatalog={embeddingCatalog}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
+          onCatalogVisible={onCatalogVisible}
           onClose={() => setShowCreatePipeline(false)}
           onCreated={onPipelineCreated}
           onOpenIndexManager={() => {
@@ -129,8 +136,10 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           indexes={indexes}
           backends={backends}
           embeddingModels={embeddingModels}
+          embeddingCatalog={embeddingCatalog}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
+          onCatalogVisible={onCatalogVisible}
           loading={indexesLoading}
           error={indexesError}
           onClose={() => {

@@ -2,7 +2,9 @@
 
 These migrated out of ``tests/api/test_auth_routes.py`` when Task 6.2 moved the
 behavior off the route and into ``AccountService`` -- the route now only
-translates the domain errors these tests raise.
+translates the domain errors these tests raise. Provider credentials live on
+``provider_connections`` (see ``tests/services/test_connections.py``), so the
+settings surface here covers run-settings order and the base prompt only.
 """
 
 from __future__ import annotations
@@ -12,41 +14,19 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import UserRepository
-from app.schemas.auth import (
-    ProviderKeyStatus,
-    RunSettingsSection,
-    UserCreate,
-    UserSettingsUpdate,
-)
+from app.schemas.auth import RunSettingsSection, UserCreate, UserSettingsUpdate
 from app.schemas.enums import UserRole
-from app.services import accounts as accounts_module
 from app.services.accounts import AccountService, ensure_admin_exists
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
-from app.services.provider_keys import Provider
 
 
-def _persist_user(
-    session: Session,
-    *,
-    openrouter: str | None = None,
-    pinecone: str | None = None,
-) -> models.User:
-    user = models.User(
-        email="user@example.com",
-        full_name="User",
-        hashed_password="hashed",
-        openrouter_api_key=openrouter,
-        pinecone_api_key=pinecone,
-    )
+def _persist_user(session: Session) -> models.User:
+    user = models.User(email="user@example.com", full_name="User", hashed_password="hashed")
     session.add(user)
     session.commit()
     session.refresh(user)
     return user
-
-
-def _valid_key(_provider: Provider, _api_key: str) -> ProviderKeyStatus:
-    return ProviderKeyStatus(configured=True, valid=True, message="Connected.")
 
 
 def test_register_rejects_duplicate_email(session: Session) -> None:
@@ -70,87 +50,19 @@ def test_new_user_defaults_to_user_role(session: Session) -> None:
         assert fresh.role == UserRole.USER.value
 
 
-def test_register_provisions_default_pipelines(session: Session) -> None:
+def test_register_succeeds_without_default_pipelines(session: Session) -> None:
+    """Sign-up must never depend on setup state — the wizard runs after login.
+
+    With global default models removed, default pipelines cannot scaffold
+    until the user makes an explicit embedding choice; registration still
+    succeeds and `ensure_default_pipelines` raises the clear setup error.
+    """
     user = AccountService(session).register(
         UserCreate(email="new@example.com", full_name="New", password="Str0ngPass!")
     )
-
-    defaults = PipelineService(session).ensure_default_pipelines(user)
-    assert defaults.ingestion.id is not None
-    assert defaults.retrieval.id is not None
-
-
-def test_update_settings_rejects_invalid_openrouter_key(monkeypatch, session: Session) -> None:
-    user = _persist_user(session)
-
-    def _invalid(provider: Provider, _api_key: str) -> ProviderKeyStatus:
-        if provider is Provider.OPENROUTER:
-            return ProviderKeyStatus(configured=True, valid=False, message="Invalid OpenRouter API key.")
-        return _valid_key(provider, _api_key)
-
-    monkeypatch.setattr(accounts_module, "validate_key", _invalid)
-
-    with pytest.raises(InvalidInputError) as excinfo:
-        AccountService(session).update_settings(
-            user, UserSettingsUpdate(openrouter_api_key="bad-key")
-        )
-
-    assert excinfo.value.detail == {"openrouter_api_key": "Invalid OpenRouter API key."}
-    session.refresh(user)
-    assert user.openrouter_api_key is None
-
-
-def test_update_settings_rejects_invalid_pinecone_key(monkeypatch, session: Session) -> None:
-    user = _persist_user(session)
-
-    def _invalid(provider: Provider, _api_key: str) -> ProviderKeyStatus:
-        if provider is Provider.PINECONE:
-            return ProviderKeyStatus(configured=True, valid=False, message="Invalid Pinecone API key.")
-        return _valid_key(provider, _api_key)
-
-    monkeypatch.setattr(accounts_module, "validate_key", _invalid)
-
-    with pytest.raises(InvalidInputError) as excinfo:
-        AccountService(session).update_settings(
-            user, UserSettingsUpdate(pinecone_api_key="bad-key")
-        )
-
-    assert "pinecone_api_key" in excinfo.value.detail
-
-
-def test_update_settings_clears_keys(session: Session) -> None:
-    user = _persist_user(session, openrouter="openrouter-key", pinecone="pinecone-key")
-
-    updated = AccountService(session).update_settings(
-        user, UserSettingsUpdate(openrouter_api_key=" ", pinecone_api_key=" ")
-    )
-
-    assert updated.openrouter_api_key is None
-    assert updated.pinecone_api_key is None
-
-
-def test_update_settings_accepts_valid_keys(monkeypatch, session: Session) -> None:
-    monkeypatch.setattr(accounts_module, "validate_key", _valid_key)
-    user = _persist_user(session)
-
-    updated = AccountService(session).update_settings(
-        user, UserSettingsUpdate(openrouter_api_key="openrouter-key", pinecone_api_key="pinecone-key")
-    )
-
-    assert updated.openrouter_api_key == "openrouter-key"
-    assert updated.pinecone_api_key == "pinecone-key"
-
-
-def test_update_settings_sets_only_one_key(monkeypatch, session: Session) -> None:
-    monkeypatch.setattr(accounts_module, "validate_key", _valid_key)
-    user = _persist_user(session)
-
-    updated = AccountService(session).update_settings(
-        user, UserSettingsUpdate(openrouter_api_key="openrouter-key")
-    )
-
-    assert updated.openrouter_api_key == "openrouter-key"
-    assert updated.pinecone_api_key is None
+    assert user.id is not None
+    with pytest.raises(InvalidInputError, match="setup"):
+        PipelineService(session).ensure_default_pipelines(user)
 
 
 def test_update_settings_sets_run_settings_order(session: Session) -> None:
@@ -216,27 +128,3 @@ def test_ensure_admin_exists_is_a_noop_with_admin_or_no_users(session: Session) 
     with Session(session.get_bind()) as fresh:
         assert fresh.get(models.User, admin.id).role == UserRole.ADMIN.value
         assert fresh.get(models.User, other.id).role == UserRole.USER.value
-
-
-def test_register_succeeds_without_a_configured_embedding_model(session: Session) -> None:
-    """Sign-up must never depend on setup state — the wizard runs after login.
-
-    Regression: registration eagerly scaffolded default pipelines, which
-    rightly refuse to build without an embedding model — bricking sign-up on
-    a fresh install.
-    """
-    from app.db.repositories import AppSettingRepository
-    from app.services.app_config import invalidate_app_config_cache
-
-    AppSettingRepository(session).delete("models.default_embedding_model")
-    session.commit()
-    invalidate_app_config_cache()
-    try:
-        user = AccountService(session).register(
-            UserCreate(email="fresh@example.com", full_name="Fresh", password="Str0ngPass!")
-        )
-    finally:
-        invalidate_app_config_cache()
-
-    assert user.id is not None
-    assert not list(PipelineService(session).list_pipelines(user.id))

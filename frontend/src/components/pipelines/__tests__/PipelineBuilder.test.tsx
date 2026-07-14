@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
 import * as apiModule from "@/lib/api";
-import { makeCollection, makeNodeSpec, makePipeline, makePipelineVersion } from "@/test/fixtures";
+import {
+  makeCollection,
+  makeNodeSpec,
+  makePipeline,
+  makePipelineVersion,
+  makeCatalogModel,
+} from "@/test/fixtures";
 
 import type { NodeSpec, Pipeline, PipelineVersion } from "@/lib/types";
 import type { Connection, Edge, Node } from "@xyflow/react";
@@ -349,7 +355,11 @@ describe("PipelineBuilder", () => {
     api.fetchPipelines.mockResolvedValue([pipeline]);
     api.fetchPipelineNodes.mockResolvedValue(nodeSpecs);
     api.fetchCollections.mockResolvedValue([]);
-    api.fetchEmbeddingModels.mockResolvedValue([]);
+    api.fetchEmbeddingModels.mockResolvedValue({
+      models: [],
+      connection_errors: [],
+      meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
+    });
     api.listIndexes.mockResolvedValue([]);
     api.listPipelineVersions.mockResolvedValue([makePipelineVersion({ id: "v1" })]);
     api.validatePipeline.mockResolvedValue({ valid: true, errors: [], warnings: [] });
@@ -549,10 +559,14 @@ describe("PipelineBuilder", () => {
     };
 
     api.fetchPipelines.mockResolvedValueOnce([pipelineWithEdge]);
-    api.fetchEmbeddingModels.mockResolvedValueOnce([
-      { id: "emb-1", name: "Alpha", dimension: 512 },
-      { id: "emb-2", name: "Beta" },
-    ]);
+    api.fetchEmbeddingModels.mockResolvedValueOnce({
+      models: [
+        makeCatalogModel({ id: "emb-1", name: "Alpha", dimension: 512 }),
+        makeCatalogModel({ id: "emb-2", name: "Beta", dimension: null }),
+      ],
+      connection_errors: [],
+      meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
+    });
     io.validatePipelineEdges.mockReturnValue({
       edgeErrors: { "edge-1": "bad edge" },
       nodeErrors: {},

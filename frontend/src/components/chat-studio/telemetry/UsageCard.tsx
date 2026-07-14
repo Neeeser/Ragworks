@@ -52,7 +52,7 @@ export const UsageCard = ({ usage, contextWindow, contextConsumed, onExport }: U
       <div className="space-y-3">
         <div className="rounded-2xl border border-hairline bg-surface p-3 text-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted">
-            OpenRouter total cost
+            Provider total cost
           </p>
           <p className="mt-2 text-2xl font-semibold text-primary">{usageCostLabel}</p>
           <p className="text-[11px] text-meta">API cost for this session</p>

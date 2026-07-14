@@ -465,19 +465,20 @@ def cmd_sessions_history(args, client: BackendClient, _state: Dict[str, Any], _s
     return messages
 
 
-def cmd_models_list(args, client: BackendClient, _state: Dict[str, Any], _state_path: Path) -> List[Dict[str, Any]]:
-    route = "/api/models"
+def cmd_models_list(args, client: BackendClient, _state: Dict[str, Any], _state_path: Path) -> Dict[str, Any]:
+    route = "/api/models?kind=chat"
     if args.refresh:
-        route += "?refresh=true"
-    models = client.get(route, require_auth=False)
+        route += "&refresh=true"
+    payload = client.get(route)
+    models = payload.get("models", [])
     if not args.json:
         for model in models[: args.limit or len(models)]:
             print(
-                f"- {model['id']} provider={model.get('provider')} ctx={model.get('context_length')} price={model.get('pricing', {}).get('prompt')}"
+                f"- {model['id']} provider={model.get('provider_type')} ctx={model.get('context_length')} price={(model.get('pricing') or {}).get('prompt')}"
             )
         if args.limit and len(models) > args.limit:
             print(f"... truncated to {args.limit} models. Use --limit 0 for full list.")
-    return models
+    return payload
 
 
 def cmd_health(args, client: BackendClient, _state: Dict[str, Any], _state_path: Path) -> Dict[str, Any]:
@@ -588,7 +589,7 @@ def build_parser() -> argparse.ArgumentParser:
     session_history.set_defaults(func=cmd_sessions_history)
 
     # Models
-    models_parser = subparsers.add_parser("models", help="OpenRouter model catalog.")
+    models_parser = subparsers.add_parser("models", help="Unified chat model catalog.")
     models_parser.add_argument("--refresh", action="store_true", help="Force refresh the cached catalog.")
     models_parser.add_argument("--limit", type=int, default=20, help="Limit printed rows (0 for all).")
     models_parser.set_defaults(func=cmd_models_list)
@@ -632,4 +633,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         sys.exit("Aborted by user.")
-

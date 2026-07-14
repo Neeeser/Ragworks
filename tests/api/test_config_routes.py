@@ -78,7 +78,7 @@ def test_admin_config_lists_full_catalog(
     assert len(body) > 0
     keys = {entry["key"] for entry in body}
     assert "auth.allow_registration" in keys
-    assert "models.default_chat_model" in keys
+    assert "uploads.max_upload_size_mb" in keys
     for entry in body:
         for field in ("key", "label", "kind", "value", "default", "source"):
             assert field in entry

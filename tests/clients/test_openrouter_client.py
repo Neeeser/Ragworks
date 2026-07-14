@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 
 import pytest
 
+from app.cache import ResourceCache
 from app.clients.openrouter import OpenRouterClient
 from app.clients.openrouter import client as openrouter_module
 from app.schemas.models import EndpointsListResponse, ListEndpointsResponse, ModelInfo
@@ -119,9 +120,10 @@ def test_list_models_caches_and_refreshes(client: OpenRouterClient) -> None:
     second = client.list_models()
     refreshed = client.list_models(force_refresh=True)
 
-    assert [model.id for model in first] == ["model-a"]
-    assert [model.id for model in second] == ["model-a"]
-    assert [model.id for model in refreshed] == ["model-b"]
+    assert [model.id for model in first.value] == ["model-a"]
+    assert first.freshness == "fresh"
+    assert [model.id for model in second.value] == ["model-a"]
+    assert [model.id for model in refreshed.value] == ["model-b"]
     assert client._http.get_calls.count("/models") == 2
 
 
@@ -316,9 +318,9 @@ def test_list_embedding_models_caches_and_refreshes(client: OpenRouterClient) ->
     second = client.list_embedding_models()
     refreshed = client.list_embedding_models(force_refresh=True)
 
-    assert first[0].id == "embed-a"
-    assert second[0].id == "embed-a"
-    assert refreshed[0].id == "embed-b"
+    assert first.value[0].id == "embed-a"
+    assert second.value[0].id == "embed-a"
+    assert refreshed.value[0].id == "embed-b"
     assert client._http.get_calls.count("/embeddings/models") == 2
 
 
@@ -329,7 +331,7 @@ def test_list_embedding_models_handles_invalid_payload(client: OpenRouterClient)
 
     models = client.list_embedding_models()
 
-    assert models == []
+    assert models.value == []
 
 
 def test_list_embedding_models_skips_invalid_entries(client: OpenRouterClient) -> None:
@@ -346,32 +348,24 @@ def test_list_embedding_models_skips_invalid_entries(client: OpenRouterClient) -
         ],
     }
 
-    def _raise_dimension(_model_id: str) -> int:
-        raise ValueError("no dimension")
-
-    client._catalog.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
-
     models = client.list_embedding_models()
 
-    assert len(models) == 1
-    assert models[0].id == "embed-a"
-    assert models[0].dimension is None
+    assert len(models.value) == 1
+    assert models.value[0].id == "embed-a"
+    assert models.value[0].dimension is None
+    assert client._client.embeddings.calls == []
 
 
-def test_list_embedding_models_uses_dimension_cache(client: OpenRouterClient) -> None:
+def test_list_embedding_models_never_eagerly_probes_dimensions(
+    client: OpenRouterClient,
+) -> None:
     _StubHttpClient.responses = {
         "/embeddings/models": [{"data": [{"id": "embed-a", "name": "Embed A"}]}],
     }
-    client._catalog._dimensions = {"embed-a": 256}
-
-    def _raise_dimension(_model_id: str) -> int:
-        raise AssertionError("dimension lookup should be skipped")
-
-    client._catalog.get_embedding_dimension = _raise_dimension  # type: ignore[assignment]
-
     models = client.list_embedding_models(force_refresh=True)
 
-    assert models[0].dimension == 256
+    assert models.value[0].dimension is None
+    assert client._client.embeddings.calls == []
 
 
 def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> None:
@@ -381,7 +375,7 @@ def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> Non
 
 
 def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
-    result = client.embed(["hello"], extra_headers={"X-Extra": "value"})
+    result = client.embed(["hello"], model="test-embed", extra_headers={"X-Extra": "value"})
 
     call = client._client.embeddings.calls[0]
     assert call["extra_headers"]["X-Extra"] == "value"
@@ -390,7 +384,7 @@ def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
 
 
 def test_embed_includes_dimensions(client: OpenRouterClient) -> None:
-    client.embed(["hello"], dimensions=1536)
+    client.embed(["hello"], model="test-embed", dimensions=1536)
 
     call = client._client.embeddings.calls[0]
     assert call["dimensions"] == 1536
@@ -424,6 +418,7 @@ def test_get_embedding_dimension_raises_on_missing_embedding(client: OpenRouterC
 def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> None:
     payload = client.chat(
         messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
         extra_body={"usage": {"include": True}},
         parameters={"temperature": 0.2, "top_p": None},
     )
@@ -438,6 +433,7 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
     client.chat(
         messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
         tools=[{"type": "function", "function": {"name": "tool"}}],
         tool_choice={"type": "function", "function": {"name": "tool"}},
         parallel_tool_calls=True,
@@ -451,7 +447,8 @@ def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
 
 def test_chat_stream_yields_chunks(client: OpenRouterClient) -> None:
     chunks = list(
-        client.chat_stream(messages=[{"role": "user", "content": "hi"}], parameters={"top_p": 0.9})
+        client.chat_stream(messages=[{"role": "user", "content": "hi"}],
+        model="test-chat", parameters={"top_p": 0.9})
     )
 
     call = client._client.chat.completions.calls[0]
@@ -464,6 +461,7 @@ def test_chat_stream_skips_none_parameters(client: OpenRouterClient) -> None:
     list(
         client.chat_stream(
             messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
             parameters={"top_p": None, "temperature": 0.1},
         )
     )
@@ -497,6 +495,7 @@ def test_chat_stream_includes_tool_settings(client: OpenRouterClient) -> None:
     chunks = list(
         client.chat_stream(
             messages=[{"role": "user", "content": "hi"}],
+        model="test-chat",
             tools=[{"type": "function", "function": {"name": "tool"}}],
             tool_choice={"type": "function", "function": {"name": "tool"}},
             parallel_tool_calls=True,
@@ -541,7 +540,9 @@ def test_get_openrouter_client_closes_evicted_clients(monkeypatch) -> None:
     # stub entries in the production cache for the rest of the pytest session and
     # could evict (and close) a real cached client held by other fixtures.
     monkeypatch.setattr(
-        openrouter_module, "_client_cache", openrouter_module._ClientCache(max_size=64)
+        openrouter_module,
+        "_client_cache",
+        ResourceCache(max_entries=64, key_material=lambda key: key),
     )
 
     keys = [f"cache-eviction-test-key-{i}" for i in range(65)]

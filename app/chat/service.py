@@ -17,13 +17,10 @@ from uuid import UUID
 from sqlmodel import Session
 
 from app.chat.branching import branch_session
-from app.chat.providers.base import ChatProvider
-from app.chat.providers.openrouter import OpenRouterProvider
 from app.chat.run_loop import ChatRun, run_chat
 from app.chat.setup import ChatSetupBuilder
 from app.chat.state import RunState
 from app.chat.tools import ToolExecutor
-from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import ChatRepository, CollectionRepository
@@ -45,36 +42,28 @@ class ChatService:
         self.settings = get_settings()
         self.chat_repo = ChatRepository(session)
         self.collection_repo = CollectionRepository(session)
-        self.openrouter: OpenRouterClient | None = None
-        self.provider: ChatProvider | None = None
         self.retrieval = RetrievalService(session)
         effort_value = (self.settings.openrouter_reasoning_effort or "").strip()
         self.reasoning_effort: str | None = effort_value or None
 
-    def _ensure_provider(self, user: models.User) -> ChatProvider:
-        """Return the provider client for the current user."""
-        if self.provider is not None:
-            return self.provider
-        if self.openrouter is None:
-            self.openrouter = get_openrouter_client(user.openrouter_api_key or "")
-        provider = OpenRouterProvider(self.openrouter)
-        self.provider = provider
-        return provider
-
     def _build_run(self, *, user: models.User, payload: ChatMessageCreate) -> ChatRun:
-        """Resolve providers and setup, then assemble the run context for a turn."""
-        provider = self._ensure_provider(user)
+        """Resolve setup (including the session's provider) and assemble the run.
+
+        The provider comes off the setup: `ChatSetupBuilder` resolves the
+        session's provider connection through the registry, so this facade no
+        longer assumes any particular provider type.
+        """
         builder = ChatSetupBuilder(
             session=self.session,
             chat_repo=self.chat_repo,
             collection_repo=self.collection_repo,
             reasoning_effort=self.reasoning_effort,
         )
-        setup = builder.build(user=user, payload=payload, provider=provider)
+        setup = builder.build(user=user, payload=payload)
         return ChatRun(
-            provider=provider,
+            provider=setup.provider,
             setup=setup,
-            run_state=RunState(provider=provider.name),
+            run_state=RunState(provider=setup.provider.name),
             user=user,
             payload=payload,
             session=self.session,

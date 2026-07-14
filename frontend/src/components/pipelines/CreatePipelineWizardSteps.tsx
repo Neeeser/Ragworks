@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { EmbeddingModelInfo, IndexBackend, PipelineKind, VectorIndex } from "@/lib/types";
+import type { CatalogModel, IndexBackend, PipelineKind, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type ChunkPreset = {
@@ -47,8 +47,11 @@ type ProcessingStepProps = {
   showAdvancedChunking: boolean;
   onToggleAdvancedChunking: () => void;
   embeddingModel: string;
-  onSelectEmbeddingModel: (modelId: string) => void;
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingConnectionId: string | null;
+  embeddingConnectionLabel?: string | null;
+  selectedAvailability: "available" | "unknown" | "missing";
+  onSelectEmbeddingModel: (model: CatalogModel) => void;
+  embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
   selectedIndex: VectorIndex | null;
@@ -64,6 +67,9 @@ export function WizardProcessingStep({
   showAdvancedChunking,
   onToggleAdvancedChunking,
   embeddingModel,
+  embeddingConnectionId,
+  embeddingConnectionLabel,
+  selectedAvailability,
   onSelectEmbeddingModel,
   embeddingModels,
   embeddingModelsLoading,
@@ -74,7 +80,10 @@ export function WizardProcessingStep({
   const activePreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
-  const selectedModel = embeddingModels.find((model) => model.id === embeddingModel) ?? null;
+  const selectedModel =
+    embeddingModels.find(
+      (model) => model.id === embeddingModel && model.connection_id === embeddingConnectionId,
+    ) ?? null;
   const dimensionMismatch =
     typeof selectedModel?.dimension === "number" &&
     typeof selectedIndex?.dimension === "number" &&
@@ -162,6 +171,9 @@ export function WizardProcessingStep({
           <EmbeddingModelSelectorCard
             models={embeddingModels}
             selectedModelKey={embeddingModel}
+            selectedConnectionId={embeddingConnectionId}
+            selectedConnectionLabel={embeddingConnectionLabel}
+            selectedAvailability={selectedAvailability}
             modelsLoading={embeddingModelsLoading}
             modelsError={embeddingModelsError}
             onSelectModel={onSelectEmbeddingModel}

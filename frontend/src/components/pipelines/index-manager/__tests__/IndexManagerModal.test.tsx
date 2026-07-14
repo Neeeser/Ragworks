@@ -4,9 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IndexManagerModal } from "@/components/pipelines/index-manager/IndexManagerModal";
 import * as apiModule from "@/lib/api";
-import { makeBackendInfo, makePineconeBackendInfo, makeVectorIndex } from "@/test/fixtures";
+import {
+  makeBackendInfo,
+  makePineconeBackendInfo,
+  makeVectorIndex,
+  makeCatalogModel,
+} from "@/test/fixtures";
 
-import type { EmbeddingModelInfo, VectorIndex } from "@/lib/types";
+import type { CatalogModel, VectorIndex } from "@/lib/types";
 
 let lastEmbeddingProps: Record<string, unknown> | null = null;
 const deleteIndexLabel = "Delete index";
@@ -35,9 +40,9 @@ describe("IndexManagerModal", () => {
     makeVectorIndex({ name: "alpha", dimension: 768, host: "host", status: { state: "READY" } }),
   ];
 
-  const embeddingModels: EmbeddingModelInfo[] = [
-    { id: "emb-1", name: "Embed", dimension: 1536 },
-    { id: "emb-2", name: "Other", dimension: 1024 },
+  const embeddingModels: CatalogModel[] = [
+    makeCatalogModel({ id: "emb-1", name: "Embed", dimension: 1536 }),
+    makeCatalogModel({ id: "emb-2", name: "Other", dimension: 1024 }),
   ];
 
   const lastButton = (name: string | RegExp) => {
@@ -200,7 +205,7 @@ describe("IndexManagerModal", () => {
 
     // Search/sort are now owned internally by EmbeddingModelSelectorCard; the modal
     // just forwards the raw catalog.
-    const models = lastEmbeddingProps?.models as EmbeddingModelInfo[] | undefined;
+    const models = lastEmbeddingProps?.models as CatalogModel[] | undefined;
     expect(models).toEqual(embeddingModels);
 
     act(() => {

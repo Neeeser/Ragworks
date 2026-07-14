@@ -49,26 +49,24 @@ const PORT = {
   results: { key: "results", label: "Results", dataType: "retrieval_results" },
 } as const;
 
-const source = (col: number): DemoNode => ({
+const source = (): DemoNode => ({
   id: "source",
   nodeType: "ingestion.source",
   label: "Document",
   description: "A source file enters the pipeline.",
   output: PORT.file,
-  col,
 });
 
-const parse = (col: number): DemoNode => ({
+const parse = (): DemoNode => ({
   id: "parse",
   nodeType: "parser.pdf",
   label: "Parse",
   description: "Extract clean text from the raw file.",
   input: PORT.file,
   output: PORT.document,
-  col,
 });
 
-const chunk = (col: number): DemoNode => ({
+const chunk = (): DemoNode => ({
   id: "chunk",
   nodeType: "chunker.recursive",
   label: "Chunk",
@@ -76,21 +74,19 @@ const chunk = (col: number): DemoNode => ({
   input: PORT.document,
   output: PORT.chunks,
   config: { chunk_size: 400, chunk_overlap: 40 },
-  col,
 });
 
-const embed = (col: number): DemoNode => ({
+const embed = (): DemoNode => ({
   id: "embed",
-  nodeType: "embedder.openrouter",
+  nodeType: "embedder.text",
   label: "Embed",
   description: "Turn each chunk into a vector.",
   input: PORT.chunks,
   output: PORT.embedded,
   config: EMBED_CONFIG,
-  col,
 });
 
-const index = (col: number): DemoNode => ({
+const index = (): DemoNode => ({
   id: "index",
   nodeType: "indexer.vector",
   label: "Vector Index",
@@ -98,30 +94,27 @@ const index = (col: number): DemoNode => ({
   input: PORT.embedded,
   output: PORT.indexed,
   config: DENSE_INDEX_CONFIG,
-  col,
 });
 
-const query = (col: number): DemoNode => ({
+const query = (): DemoNode => ({
   id: "query",
   nodeType: "retrieval.input",
   label: "Query",
   description: "A user question enters the pipeline.",
   output: PORT.query,
-  col,
 });
 
-const embedQuery = (col: number): DemoNode => ({
+const embedQuery = (): DemoNode => ({
   id: NODE_EMBED_QUERY,
-  nodeType: "embedder.openrouter",
+  nodeType: "embedder.text",
   label: "Embed Query",
   description: "Turn the question into a vector.",
   input: PORT.query,
   output: PORT.queryEmbedding,
   config: EMBED_CONFIG,
-  col,
 });
 
-const retrieve = (col: number): DemoNode => ({
+const retrieve = (): DemoNode => ({
   id: "retrieve",
   nodeType: "retriever.vector",
   label: "Vector Retrieve",
@@ -129,22 +122,20 @@ const retrieve = (col: number): DemoNode => ({
   input: PORT.queryEmbedding,
   output: PORT.results,
   config: DENSE_INDEX_CONFIG,
-  col,
 });
 
-const results = (col: number): DemoNode => ({
+const results = (): DemoNode => ({
   id: "results",
   nodeType: "retrieval.output",
   label: "Results",
   description: "Grounded evidence, ranked.",
   input: PORT.results,
-  col,
 });
 
 // -- scene definitions --------------------------------------------------------
 
 const SEMANTIC_INGESTION: SceneDefinition = {
-  nodes: [source(0), parse(1), chunk(2), embed(3), index(4)],
+  nodes: [source(), parse(), chunk(), embed(), index()],
   edges: [
     ["source", "parse"],
     ["parse", "chunk"],
@@ -154,7 +145,7 @@ const SEMANTIC_INGESTION: SceneDefinition = {
 };
 
 const SEMANTIC_RETRIEVAL: SceneDefinition = {
-  nodes: [query(0), embedQuery(1), retrieve(2), results(3)],
+  nodes: [query(), embedQuery(), retrieve(), results()],
   edges: [
     ["query", NODE_EMBED_QUERY],
     [NODE_EMBED_QUERY, "retrieve"],
@@ -162,16 +153,14 @@ const SEMANTIC_RETRIEVAL: SceneDefinition = {
   ],
 };
 
-// The BM25 branch sits one row below the semantic path, in the column after
-// its source — mirroring the editor's default hybrid scaffold so wires
-// descend in the gap instead of hiding behind cards.
+// Placed by the shared auto-layout (see demo-flow.ts) — no manual grid.
 const HYBRID_INGESTION: SceneDefinition = {
   nodes: [
-    source(0),
-    parse(1),
-    chunk(2),
-    embed(3),
-    index(4),
+    source(),
+    parse(),
+    chunk(),
+    embed(),
+    index(),
     {
       id: NODE_INDEX_BM25,
       nodeType: "indexer.bm25",
@@ -180,8 +169,6 @@ const HYBRID_INGESTION: SceneDefinition = {
       input: PORT.chunks,
       output: PORT.indexed,
       config: BM25_INDEX_CONFIG,
-      col: 3,
-      row: 1,
     },
     {
       id: "collection",
@@ -189,8 +176,6 @@ const HYBRID_INGESTION: SceneDefinition = {
       label: "Collection",
       description: "Both indexes back one collection.",
       input: PORT.indexed,
-      col: 5,
-      row: 0.5,
     },
   ],
   edges: [
@@ -206,9 +191,9 @@ const HYBRID_INGESTION: SceneDefinition = {
 
 const HYBRID_RETRIEVAL: SceneDefinition = {
   nodes: [
-    query(0),
-    embedQuery(1),
-    retrieve(2),
+    query(),
+    embedQuery(),
+    retrieve(),
     {
       id: NODE_BM25_RETRIEVE,
       nodeType: "retriever.bm25",
@@ -217,8 +202,6 @@ const HYBRID_RETRIEVAL: SceneDefinition = {
       input: PORT.query,
       output: PORT.results,
       config: BM25_INDEX_CONFIG,
-      col: 1,
-      row: 1,
     },
     {
       id: "fusion",
@@ -228,10 +211,8 @@ const HYBRID_RETRIEVAL: SceneDefinition = {
       input: PORT.results,
       output: PORT.results,
       config: { k: 60 },
-      col: 3,
-      row: 0.5,
     },
-    results(4),
+    results(),
   ],
   edges: [
     ["query", NODE_EMBED_QUERY],

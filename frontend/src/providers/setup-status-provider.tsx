@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { WorkspaceLoading } from "@/components/ui/workspace-loading";
 import { fetchSetupStatus } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -25,7 +26,9 @@ const SetupStatusContext = createContext<SetupStatusContextValue | null>(null);
 const EXEMPT_PREFIXES = ["/setup", "/settings"];
 
 const COMPLETE: SetupStatus = {
-  openrouter_configured: true,
+  has_embedding_provider: true,
+  has_chat_provider: true,
+  has_vector_store: true,
   has_index: true,
   has_collection: true,
   setup_complete: true,
@@ -46,14 +49,16 @@ export function SetupStatusProvider({ children }: { children: ReactNode }) {
     enabled: Boolean(token) && Boolean(user),
   });
   const status = completedLocally ? COMPLETE : query.data;
+  const exempt = Boolean(pathname && EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix)));
+  const checkingStatus = Boolean(token) && Boolean(user) && !status && !query.error;
+  const redirectingToSetup = status?.setup_complete === false && !exempt;
 
   useEffect(() => {
     if (!status || !pathname) return;
-    const exempt = EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix));
     if (!status.setup_complete && !exempt) {
       router.replace("/setup");
     }
-  }, [status, pathname, router]);
+  }, [status, exempt, pathname, router]);
 
   const markComplete = useCallback(() => setCompletedLocally(true), []);
 
@@ -62,7 +67,11 @@ export function SetupStatusProvider({ children }: { children: ReactNode }) {
     [status, query.reload, markComplete],
   );
 
-  return <SetupStatusContext.Provider value={value}>{children}</SetupStatusContext.Provider>;
+  return (
+    <SetupStatusContext.Provider value={value}>
+      {!exempt && (checkingStatus || redirectingToSetup) ? <WorkspaceLoading /> : children}
+    </SetupStatusContext.Provider>
+  );
 }
 
 export function useSetupStatus(): SetupStatusContextValue {

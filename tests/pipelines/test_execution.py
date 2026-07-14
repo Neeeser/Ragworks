@@ -20,7 +20,7 @@ from app.pipelines.node import PipelineNodeBase
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.utils.file_storage import FileStorage
-from tests.pipelines.conftest import StubVectorStoreProvider
+from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
 
 
 class _InputNode(PipelineNodeBase):
@@ -231,7 +231,7 @@ def _build_context(session: Session, trace=None) -> PipelineRunContext:
         document=None,
         query=None,
         top_k=None,
-        openrouter=object(),
+        providers=StubProviderResolver(),
         vector_stores=StubVectorStoreProvider(),
         storage=FileStorage(),
         settings=get_settings(),

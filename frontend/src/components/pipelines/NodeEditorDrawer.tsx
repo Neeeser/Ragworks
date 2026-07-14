@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
@@ -13,6 +14,7 @@ import { NodeConfigSections, NodeDescription, NodeExampleSection } from "./NodeC
 
 import type { NodeConfigSectionsProps } from "./NodeConfigSections";
 import type { PipelineNodeData } from "./PipelineNode";
+import type { CatalogModel } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type NodeEdits = {
@@ -62,25 +64,41 @@ function DrawerContent({
   const dirty =
     !isPreview &&
     (draftLabel !== node.data.label || !sameConfig(draftConfig, node.data.config ?? {}));
+  const selectedEmbeddingConnectionId =
+    typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
+  const selectedEmbeddingModelId =
+    typeof draftConfig.model_name === "string" ? draftConfig.model_name : null;
+  const embeddingSelectionMissing =
+    node.data.nodeType === "embedder.text" &&
+    modelAvailability(
+      catalogProps.embeddingCatalog,
+      selectedEmbeddingConnectionId,
+      selectedEmbeddingModelId,
+    ) === "missing";
 
   const draftNode: Node<PipelineNodeData> = {
     ...node,
     data: { ...node.data, label: draftLabel, config: draftConfig },
   };
 
-  const handleSelectEmbeddingModel = (modelId: string) => {
-    // Deliberately set only the model — and clear any stored dimension: an
-    // explicit `dimension` is sent to OpenRouter as a `dimensions` override,
-    // which most embedding models reject (no matryoshka support). Models emit
-    // their native size without it.
+  const handleSelectEmbeddingModel = (model: CatalogModel) => {
+    // Deliberately set only the connection + model — and clear any stored
+    // dimension: an explicit `dimension` is sent to the provider as a
+    // `dimensions` override, which most embedding models reject (no
+    // matryoshka support). Models emit their native size without it.
     setDraftConfig((prev) => {
-      const next: Record<string, unknown> = { ...prev, model_name: modelId };
+      const next: Record<string, unknown> = {
+        ...prev,
+        connection_id: model.connection_id,
+        model_name: model.id,
+      };
       delete next.dimension;
       return next;
     });
   };
 
   const handleSave = () => {
+    if (embeddingSelectionMissing) return;
     onApply(node.id, { label: draftLabel, config: draftConfig });
     onClose();
   };
@@ -135,7 +153,7 @@ function DrawerContent({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!isPreview ? (
-              <Button size="sm" onClick={handleSave} disabled={!dirty}>
+              <Button size="sm" onClick={handleSave} disabled={!dirty || embeddingSelectionMissing}>
                 Save node
               </Button>
             ) : null}

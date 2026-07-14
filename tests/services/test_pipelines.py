@@ -1,30 +1,69 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel import Session, select
 
 from app.db import models
-from app.pipelines.defaults import build_default_ingestion_pipeline
+from app.pipelines.defaults import (
+    build_default_ingestion_pipeline,
+    build_default_retrieval_pipeline,
+)
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
+from tests.utils.providers import add_openrouter_connection
+
+EMBED_CONNECTION_ID = uuid4()
 
 
 def _revised_ingestion_definition() -> PipelineDefinition:
     """Default ingestion definition with a material config change."""
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+    )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
     chunker.config = {**chunker.config, "chunk_size": 512}
     return definition
 
 
 def _create_user(session: Session) -> models.User:
+    """A user with defaults already installed.
+
+    Global default models are gone, so `ensure_default_pipelines` can only
+    re-scaffold from existing defaults — these tests install the pair the way
+    the setup wizard would (explicit connection + model).
+    """
     user = models.User(email="pipeline@example.com", full_name="Pipeline User", hashed_password="hashed")
     session.add(user)
     session.commit()
     session.refresh(user)
+    connection = add_openrouter_connection(session, user)
+    service = PipelineService(session)
+    service.create_pipeline(
+        user=user,
+        name="Default Ingestion Pipeline",
+        description="Baseline ingestion pipeline for uploads.",
+        kind=models.PipelineKind.INGESTION,
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=connection.id, embedding_model="test-embed"
+        ),
+        change_summary="Test scaffold.",
+        is_default=True,
+    )
+    service.create_pipeline(
+        user=user,
+        name="Default Retrieval Pipeline",
+        description="Baseline retrieval pipeline for queries.",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=connection.id, embedding_model="test-embed"
+        ),
+        change_summary="Test scaffold.",
+        is_default=True,
+    )
+    session.commit()
     return user
 
 
@@ -152,7 +191,9 @@ def test_pipeline_in_use_detects_collection_reference(session: Session) -> None:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+                embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+            ),
     )
     session.commit()
     _create_collection(session, user, ingestion_pipeline_id=pipeline.id)
@@ -184,7 +225,9 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+                embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+            ),
     )
     service.update_pipeline(
         pipeline=pipeline,

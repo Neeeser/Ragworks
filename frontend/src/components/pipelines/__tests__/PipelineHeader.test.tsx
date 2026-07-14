@@ -28,7 +28,7 @@ describe("PipelineHeader", () => {
 
     renderHeader({ onCreatePipeline: onCreate, onManageIndexes: onManage });
 
-    expect(screen.getByText("Build ingestion flows.")).toBeInTheDocument();
+    expect(screen.getByText("Ingestion pipelines")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "ingestion" })).toHaveAttribute(
       "href",
       "/pipelines/ingestion",
@@ -44,7 +44,7 @@ describe("PipelineHeader", () => {
   it("renders retrieval header text", () => {
     renderHeader({ kind: "retrieval" });
 
-    expect(screen.getByText("Design retrieval flows.")).toBeInTheDocument();
+    expect(screen.getByText("Retrieval pipelines")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "retrieval" })).toHaveAttribute(
       "href",
       "/pipelines/retrieval",

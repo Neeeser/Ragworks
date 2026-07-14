@@ -2,7 +2,7 @@
 
 import { useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
@@ -45,7 +45,7 @@ type PipelineBuilderProps = {
 };
 
 export function PipelineBuilder({ kind }: PipelineBuilderProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const {
     pipelines,
@@ -71,8 +71,14 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     handleActivateVersion,
   } = usePipelines({ token, kind });
 
-  const { embeddingModels, embeddingModelsLoading, embeddingModelsError } =
-    useEmbeddingModelCatalog(token);
+  const {
+    embeddingModels,
+    embeddingModelsLoading,
+    embeddingModelsError,
+    embeddingCatalog,
+    refreshModels,
+  } = useEmbeddingModelCatalog(token, user?.id);
+  const handleCatalogVisible = useCallback(() => void refreshModels(), [refreshModels]);
 
   const { indexes, indexesLoading, indexesError, refreshIndexes } = useIndexes(token);
   const { backends } = useIndexBackends(token);
@@ -281,8 +287,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         backends={backends}
         nodeSpecs={nodeSpecs}
         embeddingModels={embeddingModels}
+        embeddingCatalog={embeddingCatalog}
         embeddingModelsLoading={embeddingModelsLoading}
         embeddingModelsError={embeddingModelsError}
+        onCatalogVisible={handleCatalogVisible}
         indexesLoading={indexesLoading}
         indexesError={indexesError}
         onRefreshIndexes={refreshIndexes}
@@ -356,8 +364,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         vectorIndexes={indexes}
         onOpenIndexManager={handleOpenIndexManager}
         embeddingModels={embeddingModels}
+        embeddingCatalog={embeddingCatalog}
         embeddingModelsLoading={embeddingModelsLoading}
         embeddingModelsError={embeddingModelsError}
+        onCatalogVisible={handleCatalogVisible}
       />
 
       <PipelineEditorDialogs

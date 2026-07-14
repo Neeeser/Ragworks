@@ -28,6 +28,7 @@ from app.db.models.pipeline import (
     PipelineRun,
     PipelineVersion,
 )
+from app.db.models.provider import ProviderConnection
 from app.db.models.telemetry import TelemetryEventRow
 from app.db.models.user import AuthSession, TimestampMixin, User
 from app.db.models.vectors import VectorIndexRecord
@@ -67,6 +68,7 @@ __all__ = [
     "PipelineRun",
     "PipelineRunStatus",
     "PipelineVersion",
+    "ProviderConnection",
     "QueryEvent",
     "TelemetryEventRow",
     "TimestampMixin",

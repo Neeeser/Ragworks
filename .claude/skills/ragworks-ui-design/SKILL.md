@@ -58,6 +58,26 @@ Reference implementation: `frontend/src/components/landing/`. Shared primitives:
 6. **Motion is orchestrated, not sprinkled.** One entrance or one ambient loop, always
    honoring `prefers-reduced-motion`. Extra motion is the fastest way to look generated.
 
+## Copy voice (the words, not just the amount)
+
+Principle 1 governs how *much* text; this governs the *register* of what remains.
+Ragworks is a serious open-source workbench for RAG developers — copy is written
+like engineering documentation, never like a product pitch. Generated-feeling
+marketing copy is the fastest way for a screen to read as fake:
+
+- **State facts, don't sell.** "Provider connections for embeddings, chat, and
+  vector stores." — not "models from every connection are available side by side."
+- **Never narrate the UI.** "Pick a collection to dive into documents, search, and
+  pipeline settings" restates what the list in front of the user already is. If the
+  design makes it obvious, the fix is deleting the sentence (or making the design
+  more obvious), not rewording it.
+- **Banned register:** aphoristic taglines ("Every RAG signal, surfaced."),
+  marketing adjectives and verbs (seamless, powerful, effortless, unlock, elevate,
+  supercharge, "dive into", "explore", "at a glance", "side by side").
+- **Helpful text stays.** A tooltip or one factual line that tells the user
+  something the UI doesn't show (a constraint, a consequence, where a value comes
+  from) is good design language — keep it, plainly worded.
+
 ## Token quick-reference
 
 Color is a **semantic token**, never a hardcoded class — this is how light/dark (and any

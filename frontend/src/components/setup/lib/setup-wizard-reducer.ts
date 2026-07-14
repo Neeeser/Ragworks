@@ -1,13 +1,14 @@
 import type { IndexBackend } from "@/lib/types";
 
 /** Ordered wizard steps; `welcome` is always first, `launch` always last. */
-export const SETUP_STEPS = ["welcome", "key", "model", "index", "launch"] as const;
+export const SETUP_STEPS = ["welcome", "providers", "model", "index", "launch"] as const;
 export type SetupStepId = (typeof SETUP_STEPS)[number];
 
 /** Preferred first-run model: small, stable, fits every backend's caps. */
 export const SUGGESTED_MODEL_FRAGMENT = "all-minilm-l6";
 
 export interface SetupChoices {
+  embeddingConnectionId: string | null;
   embeddingModel: string;
   embeddingDimension: number | null;
   backend: IndexBackend;
@@ -33,6 +34,7 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
   step: "welcome",
   direction: 1,
   choices: {
+    embeddingConnectionId: null,
     embeddingModel: "",
     embeddingDimension: null,
     backend,

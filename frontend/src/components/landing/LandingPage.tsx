@@ -63,14 +63,17 @@ export function LandingPage() {
               className="landing-rise max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-primary sm:text-6xl md:text-7xl"
               style={{ animationDelay: "80ms" }}
             >
-              Every RAG signal,{" "}
+              Build, run, and{" "}
               <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
-                surfaced.
-              </span>
+                inspect
+              </span>{" "}
+              RAG pipelines.
             </h1>
           </div>
 
-          {/* The clear band the running pipeline flows through. */}
+          {/* A modest gap for the flow band — the pipeline is ambient scenery,
+              not an exhibit, so the actions below are allowed to float over
+              its lower edge. */}
           <div className="h-32 w-full sm:h-44" aria-hidden />
 
           {/* Below the flow band — actions only. The running pipeline says what
