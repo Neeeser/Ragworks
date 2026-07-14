@@ -24,7 +24,7 @@ export function StepWelcome({ wizard }: { wizard: SetupWizardApi }) {
       kicker={KICKER}
       title={
         <>
-          Let&apos;s wire up your{" "}
+          Set up your{" "}
           <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
             workspace
           </span>

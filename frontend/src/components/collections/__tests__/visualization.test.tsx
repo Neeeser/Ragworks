@@ -56,7 +56,7 @@ describe("CollectionVisualization", () => {
       expect(screen.getByText(unableToLoadUmapMessage)).toBeInTheDocument();
     });
     expect(
-      screen.getByText("Upload documents and compute a projection to explore the collection."),
+      screen.getByText("Upload documents, then compute a projection to plot their embeddings."),
     ).toBeInTheDocument();
   });
 

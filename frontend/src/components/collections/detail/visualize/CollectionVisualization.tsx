@@ -182,7 +182,7 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
       ) : (
         <GlassCard className="flex flex-1 items-center justify-center rounded-3xl border border-hairline p-10">
           <p className="max-w-sm text-center text-sm text-muted text-balance">
-            Upload documents and compute a projection to explore the collection.
+            Upload documents, then compute a projection to plot their embeddings.
           </p>
         </GlassCard>
       )}

@@ -153,10 +153,7 @@ export default function CollectionsPage() {
           <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-muted">
             Collections
           </p>
-          <h1 className="text-3xl font-semibold text-primary">Your knowledge bases.</h1>
-          <p className="mt-2 text-sm text-muted">
-            Pick a collection to dive into documents, search, and pipeline settings.
-          </p>
+          <h1 className="text-3xl font-semibold text-primary">Document collections</h1>
         </div>
         <Button
           variant="secondary"

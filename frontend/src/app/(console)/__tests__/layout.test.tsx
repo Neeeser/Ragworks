@@ -26,7 +26,7 @@ function deferred<T>() {
 }
 
 const signOutName = "Sign out";
-const controlRoomLabel = "Control Room";
+const consoleBrandLabel = "Console";
 
 describe("ConsoleLayout", () => {
   let auth: ReturnType<typeof setMockAuth>;
@@ -44,7 +44,7 @@ describe("ConsoleLayout", () => {
     document.head.append(style);
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    const brandLink = (await screen.findByText(controlRoomLabel)).closest("a");
+    const brandLink = (await screen.findByText(consoleBrandLabel)).closest("a");
     const marks = brandLink?.querySelectorAll("img") ?? [];
 
     expect(marks).toHaveLength(2);
@@ -77,7 +77,7 @@ describe("ConsoleLayout", () => {
     render(<ConsoleLayout>Overview content</ConsoleLayout>);
 
     expect(screen.getByRole("status")).toHaveTextContent("Preparing your workspace");
-    expect(screen.queryByText(controlRoomLabel)).not.toBeInTheDocument();
+    expect(screen.queryByText(consoleBrandLabel)).not.toBeInTheDocument();
     expect(screen.queryByText("Overview content")).not.toBeInTheDocument();
 
     await act(async () => {
@@ -92,14 +92,14 @@ describe("ConsoleLayout", () => {
     });
 
     await waitFor(() => expect(getMockRouter().replace).toHaveBeenCalledWith("/setup"));
-    expect(screen.queryByText(controlRoomLabel)).not.toBeInTheDocument();
+    expect(screen.queryByText(consoleBrandLabel)).not.toBeInTheDocument();
     expect(screen.queryByText("Overview content")).not.toBeInTheDocument();
   });
 
   it("renders navigation and toggles the account menu", async () => {
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    expect(await screen.findByText(controlRoomLabel)).toBeInTheDocument();
+    expect(await screen.findByText(consoleBrandLabel)).toBeInTheDocument();
     const avatarButton = screen.getByRole("button", { expanded: false });
     fireEvent.click(avatarButton);
     expect(screen.getByText(signOutName)).toBeInTheDocument();

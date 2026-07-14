@@ -48,24 +48,13 @@ export function LandingPage() {
         <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
           {/* Above the flow band. */}
           <div className="flex flex-col items-center gap-6">
-            <p
-              className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted sm:text-xs"
-              style={{ animationDelay: "0ms" }}
-            >
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
-              </span>
-              Open-source RAG workbench
-            </p>
-
             <h1
               className="landing-rise max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-primary sm:text-6xl md:text-7xl"
-              style={{ animationDelay: "80ms" }}
+              style={{ animationDelay: "0ms" }}
             >
-              Every RAG signal,{" "}
+              Open-source RAG{" "}
               <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
-                surfaced.
+                workbench
               </span>
             </h1>
           </div>

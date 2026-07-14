@@ -124,9 +124,9 @@ function ConsoleLayoutContent({ children }: { children: React.ReactNode }) {
               <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
                 Ragworks
               </p>
-              <p className="text-lg font-semibold">Control Room</p>
+              <p className="text-lg font-semibold">Console</p>
             </div>
-            <span className="sr-only">Ragworks Control Room</span>
+            <span className="sr-only">Ragworks console</span>
           </Link>
           <nav className="flex flex-1 justify-center gap-2 text-sm">
             {links.map((link) => {

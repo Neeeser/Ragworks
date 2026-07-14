@@ -345,7 +345,7 @@ export function ChatStudio() {
 
   const chatInputPlaceholder = toolsEnabled
     ? "Ask about the selected collections…"
-    : "Ask anything…";
+    : "Send a message…";
 
   return (
     <ChatStudioPanels

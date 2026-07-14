@@ -23,11 +23,10 @@ export default function SettingsPage() {
           Settings
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary">
-          Configure your providers.
+          Provider connections
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Connections are stored per user. Each provider lists what it serves — embeddings, chat, or
-          a vector database — and models from every connection are available side by side.
+          Stored per user. Each connection serves embeddings, chat, or a vector database.
         </p>
       </div>
 

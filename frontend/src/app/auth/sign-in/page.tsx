@@ -91,7 +91,7 @@ export default function SignInPage() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
           </span>
-          Ragworks console
+          Ragworks
         </p>
 
         {/* Heading — no subhead; the form itself is self-evident. */}
