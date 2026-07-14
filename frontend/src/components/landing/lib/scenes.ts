@@ -142,7 +142,6 @@ const SEMANTIC_INGESTION: SceneDefinition = {
     ["chunk", "embed"],
     ["embed", "index"],
   ],
-  stages: [["source"], ["parse"], ["chunk"], ["embed"], ["index"]],
 };
 
 const SEMANTIC_RETRIEVAL: SceneDefinition = {
@@ -152,7 +151,6 @@ const SEMANTIC_RETRIEVAL: SceneDefinition = {
     [NODE_EMBED_QUERY, "retrieve"],
     ["retrieve", "results"],
   ],
-  stages: [["query"], [NODE_EMBED_QUERY], ["retrieve"], ["results"]],
 };
 
 // Placed by the shared auto-layout (see demo-flow.ts) — no manual grid.
@@ -189,17 +187,6 @@ const HYBRID_INGESTION: SceneDefinition = {
     ["index", "collection"],
     [NODE_INDEX_BM25, "collection"],
   ],
-  stages: [
-    ["source"],
-    ["parse"],
-    ["chunk"],
-    // The payload splits: embeddings on the main row, keywords below. When
-    // this stage ends, both branches depart at once — embed's dot to the
-    // vector index and BM25's dot straight to the collection.
-    ["embed", NODE_INDEX_BM25],
-    ["index"],
-    ["collection"],
-  ],
 };
 
 const HYBRID_RETRIEVAL: SceneDefinition = {
@@ -234,16 +221,6 @@ const HYBRID_RETRIEVAL: SceneDefinition = {
     ["retrieve", "fusion"],
     [NODE_BM25_RETRIEVE, "fusion"],
     ["fusion", "results"],
-  ],
-  stages: [
-    ["query"],
-    // The query splits: semantic branch above, keyword branch below. When
-    // this stage ends, both branches depart at once — the embedding to the
-    // vector retriever and BM25's results straight to the fusion node.
-    [NODE_EMBED_QUERY, NODE_BM25_RETRIEVE],
-    ["retrieve"],
-    ["fusion"],
-    ["results"],
   ],
 };
 

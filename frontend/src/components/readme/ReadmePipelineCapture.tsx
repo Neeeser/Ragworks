@@ -3,10 +3,10 @@
 import { useState } from "react";
 
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
+import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
 import fixtureJson from "@/components/readme/readme-pipelines.generated.json";
-
-import { buildPlaybackSteps } from "./capture-flow";
 
 import type { NodeSpec, PipelineDefinition, PipelineKind } from "@/lib/types";
 
@@ -29,9 +29,11 @@ export function ReadmePipelineCapture({ kind }: ReadmePipelineCaptureProps) {
   if (!scene) {
     throw new Error(`Missing README capture fixture for ${kind}.`);
   }
-  const nodes = toFlowNodes(scene.definition, fixture.node_specs);
+  // The exported fixture carries no positions; the capture is placed by the
+  // same auto-layout the editor and Tidy use.
   const edges = toFlowEdges(scene.definition, fixture.node_specs);
-  const steps = buildPlaybackSteps(scene.definition);
+  const nodes = layoutPipelineNodes(toFlowNodes(scene.definition, fixture.node_specs), edges);
+  const steps = buildTopologyPlaybackSteps(scene.definition);
 
   return (
     <main

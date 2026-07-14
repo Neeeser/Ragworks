@@ -1,7 +1,8 @@
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
+import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
-import type { FlowStep } from "@/components/pipelines/flow/use-flow-playback";
+import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { NodePort } from "@/lib/types";
 import type { Node } from "@xyflow/react";
@@ -49,13 +50,6 @@ export type SceneDefinition = {
   nodes: DemoNode[];
   /** Wires as `[sourceId, targetId]`; handles/color derive from the node ports. */
   edges: [string, string][];
-  /**
-   * Playback stages, in order. Each stage's nodes glow together, and every
-   * edge from stage N into stage N+1 travels simultaneously — list a branch
-   * node in consecutive stages to hold its glow while the other branch
-   * catches up before a merge.
-   */
-  stages: string[][];
 };
 
 // Grid spacing for the manual `col`/`row` escape hatch only — auto-laid
@@ -114,11 +108,11 @@ export function buildSceneFlow(scene: SceneDefinition): DemoFlow {
     };
   });
 
-  const steps: FlowStep[] = scene.stages.map((nodeIds) => ({ nodeIds }));
-
   // Default path: the same auto-layout the editor's Tidy button uses, so
   // scenes track the real algorithm instead of hand-maintained grids.
   const nodes = manual ? placedNodes : layoutPipelineNodes(placedNodes, edges);
+
+  const steps = buildTopologyPlaybackSteps({ nodes, edges });
 
   return { nodes, edges, steps };
 }

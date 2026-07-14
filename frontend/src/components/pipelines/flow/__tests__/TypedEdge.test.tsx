@@ -89,9 +89,28 @@ describe("TypedEdge", () => {
     );
     expect(container.querySelectorAll("animateMotion")).toHaveLength(2);
     container.querySelectorAll("animateMotion").forEach((motion) => {
-      expect(motion).toHaveAttribute("path", BATCH_PATH);
+      expect(motion).toHaveAttribute(
+        "path",
+        `M 258,74 L 264 74 L 680 74 L 680 222 L 736 222 L 742,222`,
+      );
       expect(motion).toHaveAttribute("dur", "500ms");
     });
+  });
+
+  it("extends the payload dot's travel to rest on the port handle centers", () => {
+    const { container } = render(
+      <svg>
+        <TypedEdge {...edgeProps} />
+      </svg>,
+    );
+
+    // React Flow anchors edges at the handle's outer edge; the visible port
+    // dot is centered one handle-radius inward. A dot frozen at the raw path
+    // end sits visibly offset beside the gray handle dot.
+    const motion = container.querySelector("animateMotion");
+    const path = motion?.getAttribute("path") ?? "";
+    expect(path.startsWith("M 258,74 ")).toBe(true); // source: Right → center 6px left of anchor
+    expect(path.endsWith(" L 742,222")).toBe(true); // target: Left → center 6px right of anchor
   });
 
   it("uses the smooth-step fallback while a batch route is pending", () => {

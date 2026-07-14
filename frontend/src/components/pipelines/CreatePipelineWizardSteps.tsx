@@ -5,10 +5,11 @@ import { Sparkles } from "lucide-react";
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
 import { Field, TextInput } from "@/components/ui/field";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
-import type { FlowStep } from "@/components/pipelines/flow/use-flow-playback";
+import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { CatalogModel, IndexBackend, PipelineKind, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
@@ -214,6 +215,8 @@ export function WizardReviewStep({
   chunkOverlap,
   preview,
 }: ReviewStepProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
+
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-2xl border border-hairline bg-canvas-raised/70">
@@ -228,7 +231,7 @@ export function WizardReviewStep({
             nodes={preview.nodes}
             edges={preview.edges}
             steps={preview.steps}
-            autoPlay
+            autoPlay={!prefersReducedMotion}
             compact
             fitViewPadding={0.18}
           />

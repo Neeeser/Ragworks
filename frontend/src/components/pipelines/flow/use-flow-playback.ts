@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/**
- * One playback stage: every node in `nodeIds` is active ("processing") at
- * once. Linear pipelines use single-element stages; a fan-out (e.g. hybrid
- * ingestion's chunker feeding both the embedder and a BM25 indexer) lists the
- * parallel branch nodes together so their payload dots travel simultaneously.
- */
-export type FlowStep = {
-  nodeIds: string[];
-};
+import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 
 export type PlaybackPhase = "process" | "travel";
 
@@ -57,6 +49,9 @@ export type UseFlowPlaybackResult = {
 
 const EMPTY_EDGE_SET: Set<string> = new Set();
 
+const clampStepIndex = (index: number, stepCount: number): number =>
+  Math.max(0, Math.min(index, stepCount - 1));
+
 /**
  * Timing engine for pipeline playback. Each stage runs two phases -- its
  * nodes "process" (highlighted), then the payload "travels" every edge into
@@ -73,11 +68,24 @@ export function useFlowPlayback({
   initialIndex = 0,
   onRunComplete,
 }: UseFlowPlaybackParams): UseFlowPlaybackResult {
-  const [activeIndex, setActiveIndex] = useState(() =>
-    Math.max(0, Math.min(initialIndex, steps.length - 1)),
-  );
+  const startIndex = clampStepIndex(initialIndex, steps.length);
+  const [activeIndex, setActiveIndex] = useState(startIndex);
   const [phase, setPhase] = useState<PlaybackPhase>("process");
   const [playing, setPlaying] = useState(autoPlay);
+  const [completed, setCompleted] = useState(false);
+  const [previousAutoPlay, setPreviousAutoPlay] = useState(autoPlay);
+
+  // autoPlay is presentation policy, so a runtime preference change must
+  // take effect before commit. A render-time adjustment prevents the stale
+  // autoplay timer from starting during reduced-motion hydration, and lets a
+  // later opt-in begin a fresh run.
+  if (previousAutoPlay !== autoPlay) {
+    setPreviousAutoPlay(autoPlay);
+    setActiveIndex(startIndex);
+    setPhase("process");
+    setCompleted(false);
+    setPlaying(autoPlay);
+  }
   // Ref so a rerender with a new callback identity can't retrigger the timer.
   const onRunCompleteRef = useRef(onRunComplete);
   useEffect(() => {
@@ -111,7 +119,7 @@ export function useFlowPlayback({
     [steps, edges],
   );
 
-  const atEnd = activeIndex >= steps.length - 1 && phase === "process";
+  const atEnd = completed;
 
   useEffect(() => {
     if (!playing || steps.length === 0) return;
@@ -121,7 +129,9 @@ export function useFlowPlayback({
           if (loop) {
             setActiveIndex(0);
             setPhase("process");
+            setCompleted(false);
           } else {
+            setCompleted(true);
             setPlaying(false);
             onRunCompleteRef.current?.();
           }
@@ -143,21 +153,23 @@ export function useFlowPlayback({
 
   const seek = useCallback(
     (index: number) => {
-      setActiveIndex(Math.max(0, Math.min(index, steps.length - 1)));
+      setActiveIndex(clampStepIndex(index, steps.length));
       setPhase("process");
+      setCompleted(false);
     },
     [steps.length],
   );
 
   const toggle = useCallback(() => {
-    setPlaying((prev) => {
-      if (!prev && atEnd) {
-        setActiveIndex(0);
-        setPhase("process");
-      }
-      return !prev;
-    });
-  }, [atEnd]);
+    if (!playing && atEnd) {
+      setActiveIndex(0);
+      setPhase("process");
+      setCompleted(false);
+      setPlaying(true);
+      return;
+    }
+    setPlaying((prev) => !prev);
+  }, [atEnd, playing]);
 
   const stepForward = useCallback(() => {
     setPlaying(false);
@@ -172,6 +184,7 @@ export function useFlowPlayback({
   const restart = useCallback(() => {
     setActiveIndex(0);
     setPhase("process");
+    setCompleted(false);
     setPlaying(true);
   }, []);
 

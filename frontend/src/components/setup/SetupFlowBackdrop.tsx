@@ -4,6 +4,7 @@ import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo } from "react";
 
+import { ActiveFlowNodesContext } from "@/components/pipelines/flow/active-nodes-context";
 import { PipelineEdgeRoutingProvider } from "@/components/pipelines/flow/PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "@/components/pipelines/flow/TypedEdge";
 import { useFlowDotColor } from "@/components/pipelines/flow/use-flow-dot-color";
@@ -52,41 +53,45 @@ export function SetupFlowBackdrop({ step }: { step: SetupStepId }) {
   const { nodes, edges } = useMemo(() => buildSetupFlow(), []);
   const dotColor = useFlowDotColor();
 
+  // Stable node identity: the active glow travels through the context, not
+  // per-step node data — see ActiveFlowNodesContext.
   const decoratedNodes = useMemo(
     () =>
       nodes.map((node) => ({
         ...node,
         draggable: false,
         connectable: false,
-        data: { ...node.data, active: node.id === step },
       })),
-    [nodes, step],
+    [nodes],
   );
+  const activeNodeIds = useMemo(() => new Set([step]), [step]);
 
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 opacity-35 [mask-image:radial-gradient(120%_75%_at_50%_45%,black_55%,transparent_92%)]"
     >
-      <PipelineEdgeRoutingProvider nodes={decoratedNodes}>
-        <ReactFlow
-          nodes={decoratedNodes}
-          edges={edges}
-          nodeTypes={pipelineNodeTypes}
-          edgeTypes={pipelineEdgeTypes}
-          minZoom={0.2}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          zoomOnScroll={false}
-          panOnDrag={false}
-          preventScrolling={false}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background gap={18} size={1} color={dotColor} />
-          <ViewportDirector step={step} />
-        </ReactFlow>
-      </PipelineEdgeRoutingProvider>
+      <ActiveFlowNodesContext.Provider value={activeNodeIds}>
+        <PipelineEdgeRoutingProvider nodes={decoratedNodes}>
+          <ReactFlow
+            nodes={decoratedNodes}
+            edges={edges}
+            nodeTypes={pipelineNodeTypes}
+            edgeTypes={pipelineEdgeTypes}
+            minZoom={0.2}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            zoomOnScroll={false}
+            panOnDrag={false}
+            preventScrolling={false}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={18} size={1} color={dotColor} />
+            <ViewportDirector step={step} />
+          </ReactFlow>
+        </PipelineEdgeRoutingProvider>
+      </ActiveFlowNodesContext.Provider>
     </div>
   );
 }

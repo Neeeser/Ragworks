@@ -54,7 +54,15 @@ describe("LatestOnlyRoutingScheduler", () => {
     dispatch.mockClear();
 
     const snapshotA = scheduler.submit(input(274));
-    expect(scheduler.getResult("edge-1", seed.version)).toBeNull();
+    // The seed result is retained but signature-guarded: the moved geometry
+    // never sees it.
+    expect(
+      scheduler.getMatchingResult(
+        "edge-1",
+        snapshotA.nodeSignature,
+        snapshotA.edgeSignatures.get("edge-1") as string,
+      ),
+    ).toBeNull();
     const snapshotB = scheduler.submit(input(284));
     const snapshotC = scheduler.submit(input(294));
 
@@ -75,6 +83,48 @@ describe("LatestOnlyRoutingScheduler", () => {
     expect(scheduler.getResult("edge-1", snapshotC.version)).toMatchObject({
       svgPathString: "current-c",
     });
+  });
+
+  it("keeps serving still-valid routes while an identical resubmission is in flight", () => {
+    const dispatch = vi.fn();
+    const scheduler = new LatestOnlyRoutingScheduler(dispatch);
+    const seedInput = input(264);
+    const seed = scheduler.submit(seedInput);
+    scheduler.complete(seed.version, results("seed"));
+    const nodeSignature = seed.nodeSignature;
+    const edgeSignature = seed.edgeSignatures.get("edge-1") as string;
+    expect(scheduler.getMatchingResult("edge-1", nodeSignature, edgeSignature)).toMatchObject({
+      svgPathString: "seed",
+    });
+
+    // An edge remount re-registers and resubmits the same geometry. The seed
+    // route must keep rendering while the identical snapshot is in flight —
+    // dropping it flashes every edge back to its smooth-step fallback.
+    const resubmit = scheduler.submit(input(264));
+    expect(scheduler.getMatchingResult("edge-1", nodeSignature, edgeSignature)).toMatchObject({
+      svgPathString: "seed",
+    });
+
+    scheduler.complete(resubmit.version, results("fresh"));
+    expect(scheduler.getMatchingResult("edge-1", nodeSignature, edgeSignature)).toMatchObject({
+      svgPathString: "fresh",
+    });
+  });
+
+  it("never serves a retained route to changed geometry", () => {
+    const dispatch = vi.fn();
+    const scheduler = new LatestOnlyRoutingScheduler(dispatch);
+    const seed = scheduler.submit(input(264));
+    scheduler.complete(seed.version, results("seed"));
+
+    const moved = scheduler.submit(input(300));
+    expect(
+      scheduler.getMatchingResult(
+        "edge-1",
+        moved.nodeSignature,
+        moved.edgeSignatures.get("edge-1") as string,
+      ),
+    ).toBeNull();
   });
 
   it("keeps the fallback clear when the latest dispatch fails", () => {

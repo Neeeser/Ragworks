@@ -13,6 +13,7 @@ import {
 import { IndexBackendIcon } from "@/components/pipelines/icons/IndexBackendIcon";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
+import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   sortIndexesByName,
@@ -200,7 +201,7 @@ export function CreatePipelineWizard({
     return {
       nodes: layoutPipelineNodes(toFlowNodes(definition, nodeSpecs), edges),
       edges,
-      steps: definition.nodes.map((node) => ({ nodeIds: [node.id] })),
+      steps: buildTopologyPlaybackSteps(definition),
     };
   }, [definition, nodeSpecs]);
 

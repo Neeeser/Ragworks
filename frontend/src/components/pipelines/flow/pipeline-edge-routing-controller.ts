@@ -43,8 +43,11 @@ export class LatestOnlyRoutingScheduler {
       nodeSignature: nodeSignature(input),
       edgeSignatures: new Map(input.edges.map((edge) => [edge.id, edgeSignature(edge)])),
     };
+    // Deliberately keep `applied`: getMatchingResult signature-checks every
+    // read, so still-valid routes keep rendering while this snapshot is in
+    // flight. Dropping them here flashed every edge back to its smooth-step
+    // fallback on each edge remount (e.g. per playback step transition).
     this.latest = snapshot;
-    this.applied = null;
     if (this.inFlight) {
       this.pending = snapshot;
     } else {

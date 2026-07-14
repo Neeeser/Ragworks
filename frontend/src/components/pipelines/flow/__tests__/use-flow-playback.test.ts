@@ -166,3 +166,105 @@ describe("useFlowPlayback initialIndex", () => {
     expect(result.current.activeIndex).toBe(1);
   });
 });
+
+describe("useFlowPlayback lifecycle", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("cancels a pending phase when playback is paused", () => {
+    const { result } = renderHook(() => useFlowPlayback({ steps, edges, autoPlay: true }));
+
+    act(() => result.current.toggle());
+    act(() => vi.advanceTimersByTime(PROCESS_MS + TRAVEL_MS));
+
+    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.phase).toBe("process");
+  });
+
+  it("stops and resets a progressed run when autoplay is disabled at runtime", () => {
+    const { result, rerender } = renderHook(
+      ({ autoPlay }) => useFlowPlayback({ steps, edges, autoPlay }),
+      { initialProps: { autoPlay: true } },
+    );
+    advanceOneHop();
+    expect(result.current.activeIndex).toBe(1);
+
+    rerender({ autoPlay: false });
+
+    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.phase).toBe("process");
+    expect(result.current.playing).toBe(false);
+    act(() => vi.advanceTimersByTime(PROCESS_MS + TRAVEL_MS));
+    expect(result.current.activeIndex).toBe(0);
+  });
+
+  it("does not advance when autoplay is disabled during mount reconciliation", () => {
+    const { result, rerender } = renderHook(
+      ({ autoPlay }) => useFlowPlayback({ steps, edges, autoPlay }),
+      { initialProps: { autoPlay: true } },
+    );
+
+    rerender({ autoPlay: false });
+    act(() => vi.advanceTimersByTime(PROCESS_MS + TRAVEL_MS));
+
+    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.phase).toBe("process");
+    expect(result.current.playing).toBe(false);
+  });
+
+  it("starts a fresh run when autoplay is enabled at runtime", () => {
+    const { result, rerender } = renderHook(
+      ({ autoPlay }) => useFlowPlayback({ steps, edges, autoPlay }),
+      { initialProps: { autoPlay: false } },
+    );
+
+    rerender({ autoPlay: true });
+
+    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.playing).toBe(true);
+    advanceOneHop();
+    expect(result.current.activeIndex).toBe(1);
+  });
+
+  it("resumes the final processing step without treating it as completed", () => {
+    const { result } = renderHook(() => useFlowPlayback({ steps, edges, autoPlay: true }));
+    advanceOneHop();
+    act(() => vi.advanceTimersByTime(PROCESS_MS / 2));
+    expect(result.current.activeIndex).toBe(1);
+    expect(result.current.atEnd).toBe(false);
+
+    act(() => result.current.toggle());
+    expect(result.current.playing).toBe(false);
+    act(() => result.current.toggle());
+
+    expect(result.current.activeIndex).toBe(1);
+    expect(result.current.phase).toBe("process");
+    expect(result.current.playing).toBe(true);
+  });
+
+  it("replays from the first step after a completed run", () => {
+    const { result } = renderHook(() => useFlowPlayback({ steps, edges, autoPlay: true }));
+    advanceOneHop();
+    act(() => vi.advanceTimersByTime(PROCESS_MS));
+    expect(result.current.playing).toBe(false);
+    expect(result.current.atEnd).toBe(true);
+
+    act(() => result.current.toggle());
+
+    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.phase).toBe("process");
+    expect(result.current.playing).toBe(true);
+  });
+
+  it("cleans up timers when its consumer unmounts", () => {
+    const onRunComplete = vi.fn();
+    const { unmount } = renderHook(() =>
+      useFlowPlayback({ steps, edges, autoPlay: true, onRunComplete }),
+    );
+
+    unmount();
+    act(() => vi.runAllTimers());
+
+    expect(onRunComplete).not.toHaveBeenCalled();
+  });
+});
