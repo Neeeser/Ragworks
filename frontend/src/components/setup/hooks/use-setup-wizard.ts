@@ -10,7 +10,13 @@ import {
   setupWizardReducer,
   SUGGESTED_MODEL_FRAGMENT,
 } from "@/components/setup/lib/setup-wizard-reducer";
-import { bootstrapSetup, createIndex, describeIndex, fetchIndexBackends } from "@/lib/api";
+import {
+  bootstrapSetup,
+  createIndex,
+  describeIndex,
+  fetchEmbeddingDimension,
+  fetchIndexBackends,
+} from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -122,15 +128,37 @@ export function useSetupWizard(): SetupWizardApi {
 
   const ensureIndex = useCallback(async () => {
     if (!token) return;
-    const { backend, indexName, embeddingDimension } = state.choices;
+    const { backend, indexName, embeddingConnectionId, embeddingModel } = state.choices;
     setBusy(true);
     setError(null);
     try {
+      // The unified model catalog leaves `dimension` null for providers that
+      // don't report it (OpenRouter embedding models), so resolve it against
+      // the connection before creating a dense index — otherwise the create
+      // request omits the dimension and the backend rejects it with a 422.
+      let embeddingDimension = state.choices.embeddingDimension;
+      if (embeddingDimension == null && embeddingConnectionId && embeddingModel) {
+        const resolved = await fetchEmbeddingDimension(
+          token,
+          embeddingConnectionId,
+          embeddingModel,
+        ).catch(() => null);
+        embeddingDimension = resolved?.dimension ?? null;
+        if (embeddingDimension != null) {
+          setChoices({ embeddingDimension });
+        }
+      }
+      if (embeddingDimension == null) {
+        throw new Error(
+          "Could not resolve the embedding model's dimension. Pick a different model, " +
+            "or check that the provider connection is reachable.",
+        );
+      }
       try {
         await createIndex(token, {
           backend,
           name: indexName,
-          dimension: embeddingDimension ?? undefined,
+          dimension: embeddingDimension,
           metric: "cosine",
         });
       } catch (err) {
@@ -154,7 +182,7 @@ export function useSetupWizard(): SetupWizardApi {
     } finally {
       setBusy(false);
     }
-  }, [token, state.choices]);
+  }, [token, state.choices, setChoices]);
 
   const finish = useCallback(async () => {
     if (!token) return;
