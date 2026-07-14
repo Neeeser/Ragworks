@@ -13,6 +13,20 @@ replace them:
 - Backend (`app/`): @app/AGENTS.md
 - Frontend (`frontend/`): @frontend/AGENTS.md
 
+# Writing voice — plain, factual, never pitchy
+
+Ragworks is a serious open-source workbench for RAG developers, and every string a
+user reads — UI copy, README, docs, empty states, taglines — is written like
+engineering documentation, not a product pitch. State what a thing is or does in
+plain sentences ("Provider connections for embeddings, chat, and vector stores"),
+never sell it or narrate the UI ("Pick a collection to dive into…", "Every RAG
+signal, surfaced.") — pitchy copy reads as generated filler and erodes trust in the
+tool. Banned register: marketing adjectives and aphoristic taglines (seamless,
+powerful, effortless, unlock, elevate, supercharge, "dive into", "at a glance",
+"X, surfaced."). Explanatory text is welcome only where it tells a user something
+the UI doesn't already show; if the design makes it obvious, delete the text
+instead of decorating it.
+
 # Verify gates
 
 Nothing ships without its gate passing. Run the gate for every area you changed:
