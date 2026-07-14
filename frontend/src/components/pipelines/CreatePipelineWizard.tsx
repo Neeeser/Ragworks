@@ -10,6 +10,7 @@ import {
   WizardProcessingStep,
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
+import { IndexBackendIcon } from "@/components/pipelines/icons/IndexBackendIcon";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
@@ -330,6 +331,7 @@ export function CreatePipelineWizard({
                   label: `${index.name}${
                     typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
                   }`,
+                  icon: <IndexBackendIcon backend={index.backend} />,
                 })),
                 {
                   value: CREATE_SENTINEL,

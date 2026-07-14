@@ -7,11 +7,14 @@ import { forwardRef, useImperativeHandle, useRef } from "react";
 import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
-import type { AriaAttributes } from "react";
+import type { AriaAttributes, ReactNode } from "react";
 
 export type CustomSelectOption = {
   value: string;
   label: string;
+  /** Small leading visual (e.g. a backend logo); shown in the option row and
+   * on the trigger when selected. Typeahead still matches on `label`. */
+  icon?: ReactNode;
   disabled?: boolean;
   preventFocusRestore?: boolean;
 };
@@ -114,7 +117,16 @@ export const CustomSelect = forwardRef<HTMLButtonElement, CustomSelectProps>(fun
                 <SelectPrimitive.ItemIndicator className="absolute left-3 inline-flex items-center text-accent-violet">
                   <Check className="h-4 w-4" aria-hidden />
                 </SelectPrimitive.ItemIndicator>
-                <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText>
+                  <span className="inline-flex items-center gap-2 align-middle">
+                    {option.icon ? (
+                      <span aria-hidden className="inline-flex shrink-0 items-center">
+                        {option.icon}
+                      </span>
+                    ) : null}
+                    {option.label}
+                  </span>
+                </SelectPrimitive.ItemText>
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

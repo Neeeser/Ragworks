@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -156,6 +156,35 @@ describe("CustomSelect", () => {
     fireEvent.pointerDown(screen.getByText("Outside"));
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("renders option icons in the popup and on the trigger, without changing accessible names", async () => {
+    const user = userEvent.setup();
+    function IconSelect() {
+      const [value, setValue] = useState("");
+      return (
+        <CustomSelect
+          aria-label={SELECT_LABEL}
+          value={value}
+          placeholder={PLACEHOLDER}
+          options={[
+            { value: "", label: PLACEHOLDER },
+            { value: "alpha", label: ALPHA_INDEX, icon: <svg data-testid="alpha-icon" /> },
+          ]}
+          onValueChange={setValue}
+        />
+      );
+    }
+    render(<IconSelect />);
+
+    const trigger = screen.getByRole("combobox", { name: SELECT_LABEL });
+    await user.click(trigger);
+    const option = screen.getByRole("option", { name: ALPHA_INDEX });
+    expect(within(option).getByTestId("alpha-icon")).toBeInTheDocument();
+
+    await user.click(option);
+    expect(trigger).toHaveTextContent(ALPHA_INDEX);
+    expect(within(trigger).getByTestId("alpha-icon")).toBeInTheDocument();
   });
 
   it("announces and enforces a disabled trigger", async () => {

@@ -9,8 +9,7 @@ import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
-import { PineconeIcon } from "./icons/PineconeIcon";
-import { PostgresIcon } from "./icons/PostgresIcon";
+import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import {
   buildPipelineConfigFields,
   coerceFieldValue,
@@ -193,11 +192,7 @@ export function NodeConfigSections({
                       : "border-hairline bg-surface text-body hover:border-strong"
                   }`}
                 >
-                  {option.value === "pgvector" ? (
-                    <PostgresIcon className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <PineconeIcon className="h-4 w-4 shrink-0 text-primary" />
-                  )}
+                  <IndexBackendIcon backend={option.value} />
                   <span>
                     <span className="block font-semibold">{option.label}</span>
                     <span className="block text-[10px] text-meta">{option.hint}</span>
@@ -232,13 +227,20 @@ export function NodeConfigSections({
             options={[
               { value: "", label: "Select an index" },
               ...(indexValue && !selectedIndex
-                ? [{ value: indexValue, label: `${indexValue} (not created yet)` }]
+                ? [
+                    {
+                      value: indexValue,
+                      label: `${indexValue} (not created yet)`,
+                      icon: <IndexBackendIcon backend={nodeBackend} />,
+                    },
+                  ]
                 : []),
               ...backendIndexes.map((index) => ({
                 value: index.name,
                 label: `${index.name}${
                   typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
                 }`,
+                icon: <IndexBackendIcon backend={index.backend} />,
               })),
               {
                 value: CREATE_SENTINEL,
