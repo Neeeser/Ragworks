@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatStudio } from "@/components/chat-studio/ChatStudio";
 import * as apiModule from "@/lib/api";
+import { clearModelCatalogsForUser } from "@/lib/model-catalog-cache";
 import {
   altChatCompletionPayload,
   baseUser,
@@ -172,7 +173,11 @@ const setupDefaultApiMocks = () => {
   api.getCollectionPrompt.mockResolvedValue(collectionPromptDetails);
   api.listChatSessions.mockResolvedValue(sessions);
   api.listModelEndpoints.mockResolvedValue({ data: providerDirectory });
-  api.listChatModels.mockResolvedValue({ models: modelCatalog, connection_errors: [] });
+  api.listChatModels.mockResolvedValue({
+    models: modelCatalog,
+    connection_errors: [],
+    meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
+  });
   api.updateRunSettingsOrder.mockResolvedValue(baseUser);
   api.updateBasePrompt.mockResolvedValue({
     ...basePromptDetails,
@@ -222,6 +227,7 @@ const firstStreamPayload = () =>
 
 describe("ChatStudio", () => {
   beforeEach(() => {
+    clearModelCatalogsForUser(baseUser.id);
     const router = getMockRouter();
     router.push.mockReset();
     router.replace.mockReset();

@@ -33,6 +33,8 @@ function renderCatalog() {
       activeModelId: null,
       activeConnectionId: null,
       toolsEnabled: false,
+      userId: "user-1",
+      connections: [],
     }),
   );
 }

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -158,6 +158,15 @@ class ConnectionCatalogError(BaseModel):
     message: str
 
 
+class CatalogMetadata(BaseModel):
+    """Freshness of the unified catalog returned to model selectors."""
+
+    freshness: Literal["fresh", "stale"] = "fresh"
+    age_seconds: float = Field(default=0, ge=0)
+    refreshing: bool = False
+    warning: str | None = None
+
+
 class ModelCatalogResponse(BaseModel):
     """Unified model listing across every connection of the requested kind.
 
@@ -167,6 +176,15 @@ class ModelCatalogResponse(BaseModel):
 
     models: list[CatalogModel] = Field(default_factory=list)
     connection_errors: list[ConnectionCatalogError] = Field(default_factory=list)
+    meta: CatalogMetadata = Field(default_factory=CatalogMetadata)
+
+
+class EmbeddingDimensionResponse(BaseModel):
+    """Dimension lookup qualified by the exact provider connection and model."""
+
+    connection_id: UUID
+    model_id: str
+    dimension: int | None
 
 
 class ProviderCoverage(BaseModel):

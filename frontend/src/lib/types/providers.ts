@@ -86,8 +86,24 @@ export interface ConnectionCatalogError {
   message: string;
 }
 
+/** Mirrors `app/schemas/providers.py::CatalogMetadata`. */
+export interface CatalogMetadata {
+  freshness: "fresh" | "stale";
+  age_seconds: number;
+  refreshing: boolean;
+  warning?: string | null;
+}
+
 /** Mirrors `app/schemas/providers.py::ModelCatalogResponse` (`GET /api/models`). */
 export interface ModelCatalogResponse {
   models: CatalogModel[];
   connection_errors: ConnectionCatalogError[];
+  meta: CatalogMetadata;
+}
+
+/** Mirrors `app/schemas/providers.py::EmbeddingDimensionResponse`. */
+export interface EmbeddingDimensionResponse {
+  connection_id: UUID;
+  model_id: string;
+  dimension?: number | null;
 }

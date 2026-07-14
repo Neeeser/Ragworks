@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteConnection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { invalidateModelCatalogs } from "@/lib/model-catalog-cache";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { ProviderConnection, ProviderKind, ProviderTypeInfo } from "@/lib/types";
 
@@ -39,6 +41,7 @@ export function ConnectionsManager({
   error,
   onChanged,
 }: ConnectionsManagerProps) {
+  const { user } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderConnection | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<ProviderConnection | null>(null);
@@ -46,6 +49,10 @@ export function ConnectionsManager({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const builtins = providerTypes.filter((type) => type.builtin);
+  const handleChanged = () => {
+    if (user?.id) invalidateModelCatalogs(user.id, authToken);
+    onChanged();
+  };
 
   const handleRemove = async () => {
     if (!pendingRemoval) return;
@@ -53,7 +60,7 @@ export function ConnectionsManager({
     setActionError(null);
     try {
       await deleteConnection(authToken, pendingRemoval.id);
-      onChanged();
+      handleChanged();
     } catch (removeError) {
       setActionError(getErrorMessage(removeError, "Unable to remove the connection."));
     } finally {
@@ -123,7 +130,7 @@ export function ConnectionsManager({
           providerType={providerTypes.find((type) => type.provider_type === editing.provider_type)}
           authToken={authToken}
           onClose={() => setEditing(null)}
-          onUpdated={() => onChanged()}
+          onUpdated={handleChanged}
         />
       )}
       <AddConnectionDialog
@@ -132,7 +139,7 @@ export function ConnectionsManager({
         authToken={authToken}
         providerTypes={providerTypes}
         existingConnections={connections}
-        onCreated={() => onChanged()}
+        onCreated={handleChanged}
       />
       <ConfirmDialog
         open={pendingRemoval !== null}

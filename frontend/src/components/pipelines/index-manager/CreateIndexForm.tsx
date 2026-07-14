@@ -8,12 +8,13 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
-import type { BackendInfo, CatalogModel } from "@/lib/types";
+import type { BackendInfo, CatalogModel, ModelCatalogResponse } from "@/lib/types";
 
 type CreateIndexFormProps = {
   token: string;
   backendInfo: BackendInfo;
   embeddingModels: CatalogModel[];
+  embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
   onCreateStart: () => void;
@@ -31,6 +32,7 @@ export function CreateIndexForm({
   token,
   backendInfo,
   embeddingModels,
+  embeddingCatalog,
   embeddingModelsLoading,
   embeddingModelsError,
   onCreateStart,
@@ -41,6 +43,7 @@ export function CreateIndexForm({
     token,
     backendInfo,
     embeddingModels,
+    embeddingCatalog,
     onCreateStart,
     onCreated,
     onError,
@@ -143,6 +146,9 @@ export function CreateIndexForm({
                 <EmbeddingModelSelectorCard
                   models={embeddingModels}
                   selectedModelKey={form.selectedEmbeddingModelId}
+                  selectedConnectionId={form.selectedEmbeddingConnectionId}
+                  selectedConnectionLabel={form.selectedEmbeddingConnectionLabel}
+                  selectedAvailability={form.selectedEmbeddingAvailability}
                   modelsLoading={embeddingModelsLoading}
                   modelsError={embeddingModelsError}
                   onSelectModel={form.handleSelectEmbeddingModel}

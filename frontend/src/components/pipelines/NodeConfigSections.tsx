@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { VariablesTree } from "@/components/traces/debugger/VariablesTree";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
@@ -20,7 +21,7 @@ import { sortIndexesByName } from "./lib/pipeline-utils";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { CatalogModel, IndexBackend, VectorIndex } from "@/lib/types";
+import type { CatalogModel, IndexBackend, ModelCatalogResponse, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type NodeConfigSectionsProps = {
@@ -31,8 +32,10 @@ export type NodeConfigSectionsProps = {
   vectorIndexes: VectorIndex[];
   onOpenIndexManager?: () => void;
   embeddingModels: CatalogModel[];
+  embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
+  onCatalogVisible?: () => void;
   onSelectEmbeddingModel: (model: CatalogModel) => void;
 };
 
@@ -55,14 +58,20 @@ export function NodeConfigSections({
   vectorIndexes,
   onOpenIndexManager,
   embeddingModels,
+  embeddingCatalog,
   embeddingModelsLoading,
   embeddingModelsError,
+  onCatalogVisible,
   onSelectEmbeddingModel,
 }: NodeConfigSectionsProps) {
   const { config: appConfig } = useAppConfig();
   const nodeType = node.data.nodeType;
   const config = useMemo<Record<string, unknown>>(() => node.data.config ?? {}, [node]);
   const isEmbedder = nodeType === "embedder.text";
+
+  useEffect(() => {
+    if (isEmbedder) onCatalogVisible?.();
+  }, [isEmbedder, onCatalogVisible]);
   const isVectorNode = nodeType.startsWith("indexer.") || nodeType.startsWith("retriever.");
   // BM25 nodes target sparse (lexical) indexes; dense nodes never list them.
   const isBm25Node = nodeType.endsWith(".bm25");
@@ -147,6 +156,11 @@ export function NodeConfigSections({
           models={embeddingModels}
           selectedModelKey={selectedEmbeddingModelKey}
           selectedConnectionId={selectedEmbeddingConnectionId}
+          selectedAvailability={modelAvailability(
+            embeddingCatalog,
+            selectedEmbeddingConnectionId,
+            selectedEmbeddingModelKey || null,
+          )}
           modelsLoading={embeddingModelsLoading}
           modelsError={embeddingModelsError}
           onSelectModel={onSelectEmbeddingModel}

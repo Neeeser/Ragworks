@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
@@ -63,6 +64,17 @@ function DrawerContent({
   const dirty =
     !isPreview &&
     (draftLabel !== node.data.label || !sameConfig(draftConfig, node.data.config ?? {}));
+  const selectedEmbeddingConnectionId =
+    typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
+  const selectedEmbeddingModelId =
+    typeof draftConfig.model_name === "string" ? draftConfig.model_name : null;
+  const embeddingSelectionMissing =
+    node.data.nodeType === "embedder.text" &&
+    modelAvailability(
+      catalogProps.embeddingCatalog,
+      selectedEmbeddingConnectionId,
+      selectedEmbeddingModelId,
+    ) === "missing";
 
   const draftNode: Node<PipelineNodeData> = {
     ...node,
@@ -86,6 +98,7 @@ function DrawerContent({
   };
 
   const handleSave = () => {
+    if (embeddingSelectionMissing) return;
     onApply(node.id, { label: draftLabel, config: draftConfig });
     onClose();
   };
@@ -140,7 +153,7 @@ function DrawerContent({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!isPreview ? (
-              <Button size="sm" onClick={handleSave} disabled={!dirty}>
+              <Button size="sm" onClick={handleSave} disabled={!dirty || embeddingSelectionMissing}>
                 Save node
               </Button>
             ) : null}

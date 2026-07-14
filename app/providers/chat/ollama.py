@@ -144,7 +144,7 @@ class OllamaChatProvider:
 
     def _description(self, model_id: str) -> OllamaModelDescription | None:
         """Find the (cached) description for a model id."""
-        for description in self._client.describe_models():
+        for description in self._client.describe_models().value:
             if description.name == model_id:
                 return description
         return None

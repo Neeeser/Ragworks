@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { listChatModels } from "@/lib/api";
 import { PARAMETER_DEFINITIONS } from "@/lib/chat-parameters";
-import { getErrorMessage } from "@/lib/errors";
+import { modelAvailability, useSharedModelCatalog } from "@/lib/model-catalog-cache";
 import { sortChatModels } from "@/lib/model-sorting";
 
 import { sanitizeModelSlug } from "../../lib/chat-utils";
 
 import type { ModelParameterKey, ParameterDefinition } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
-import type { CatalogModel, ConnectionCatalogError, UUID } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError, ProviderConnection, UUID } from "@/lib/types";
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -21,6 +20,8 @@ const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
     },
     {} as Record<ModelParameterKey, ParameterDefinition>,
   );
+const EMPTY_MODELS: CatalogModel[] = [];
+const EMPTY_CONNECTION_ERRORS: ConnectionCatalogError[] = [];
 
 /** Stable UI key for a (connection, model) pair. */
 export const modelSelectionKey = (connectionId: UUID, modelId: string) =>
@@ -39,6 +40,8 @@ interface UseModelCatalogParams {
   activeModelId: string | null;
   activeConnectionId: UUID | null;
   toolsEnabled: boolean;
+  userId: UUID | null;
+  connections: ProviderConnection[];
 }
 
 interface UseModelCatalogResult {
@@ -62,6 +65,8 @@ interface UseModelCatalogResult {
   toolReadyModels: CatalogModel[];
   sortedModelCatalog: CatalogModel[];
   selectedModelKey: string;
+  selectedAvailability: "available" | "unknown" | "missing";
+  refreshModels: () => Promise<void>;
 }
 
 /**
@@ -77,71 +82,59 @@ export function useModelCatalog({
   activeModelId,
   activeConnectionId,
   toolsEnabled,
+  userId,
+  connections,
 }: UseModelCatalogParams): UseModelCatalogResult {
-  const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
-  const [connectionErrors, setConnectionErrors] = useState<ConnectionCatalogError[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const query = useSharedModelCatalog(
+    userId,
+    authToken,
+    "chat",
+    !authLoading && Boolean(authToken) && Boolean(userId),
+  );
+  const modelCatalog = query.data?.models ?? EMPTY_MODELS;
+  const connectionErrors = query.data?.connection_errors ?? EMPTY_CONNECTION_ERRORS;
   const [modelSearchTerm, setModelSearchTerm] = useState("");
   const [modelSortOption, setModelSortOption] = useState<ChatModelSortOption>("price");
   const [connectionFilter, setConnectionFilter] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadModels = async () => {
-      if (authLoading) {
-        return;
-      }
-      if (!authToken) {
-        setModelCatalog([]);
-        setModelsLoading(false);
-        setModelsError("Sign in to load models.");
-        return;
-      }
-      setModelsLoading(true);
-      try {
-        const catalog = await listChatModels(authToken);
-        if (!cancelled) {
-          setModelCatalog(catalog.models);
-          setConnectionErrors(catalog.connection_errors);
-          if (catalog.connection_errors.length > 0) {
-            // A degraded connection is still an error the user must see.
-            setModelsError(
-              catalog.connection_errors
-                .map((entry) => `${entry.connection_label}: ${entry.message}`)
-                .join(" — "),
-            );
-          } else if (catalog.models.length === 0 && !chatProviderConfigured) {
-            setModelsError("Add a chat provider in Settings to load models.");
-          } else {
-            setModelsError(null);
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setModelsError(getErrorMessage(error, "Unable to load model metadata."));
-        }
-      } finally {
-        if (!cancelled) {
-          setModelsLoading(false);
-        }
-      }
-    };
-    loadModels();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, authToken, chatProviderConfigured]);
-
   const currentModelInfo = useMemo(() => {
-    if (!activeModelId) return null;
-    const withinConnection = activeConnectionId
-      ? modelCatalog.find(
-          (model) => model.id === activeModelId && model.connection_id === activeConnectionId,
-        )
-      : null;
-    return withinConnection ?? modelCatalog.find((model) => model.id === activeModelId) ?? null;
+    if (!activeModelId || !activeConnectionId) return null;
+    return (
+      modelCatalog.find(
+        (model) => model.id === activeModelId && model.connection_id === activeConnectionId,
+      ) ?? null
+    );
   }, [activeConnectionId, activeModelId, modelCatalog]);
+
+  const selectedAvailability = modelAvailability(query.data, activeConnectionId, activeModelId);
+  const modelsError = useMemo(() => {
+    if (!authToken) return "Sign in to load models.";
+    if (query.error) return query.error;
+    if (selectedAvailability === "missing") {
+      const label =
+        connections.find((connection) => connection.id === activeConnectionId)?.label ??
+        "this connection";
+      return `Selected model is no longer available from ${label}. Select another model.`;
+    }
+    if (connectionErrors.length > 0) {
+      return connectionErrors
+        .map((entry) => `${entry.connection_label}: ${entry.message}`)
+        .join(" — ");
+    }
+    if (modelCatalog.length === 0 && !chatProviderConfigured) {
+      return "Add a chat provider in Settings to load models.";
+    }
+    return null;
+  }, [
+    activeConnectionId,
+    authToken,
+    chatProviderConfigured,
+    connectionErrors,
+    connections,
+    modelCatalog.length,
+    query.error,
+    selectedAvailability,
+  ]);
 
   const providerModelSlug = useMemo(() => {
     if (currentModelInfo?.provider_type !== "openrouter") {
@@ -224,7 +217,7 @@ export function useModelCatalog({
   return {
     modelCatalog,
     connectionErrors,
-    modelsLoading,
+    modelsLoading: query.loading,
     modelsError,
     modelSearchTerm,
     setModelSearchTerm,
@@ -240,5 +233,7 @@ export function useModelCatalog({
     toolReadyModels,
     sortedModelCatalog,
     selectedModelKey,
+    selectedAvailability,
+    refreshModels: query.refresh,
   };
 }

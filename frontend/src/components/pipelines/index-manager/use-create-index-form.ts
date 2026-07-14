@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { createIndex } from "@/lib/api";
+import { createIndex, fetchEmbeddingDimension } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 
-import type { BackendInfo, CatalogModel, IndexCreatePayload } from "@/lib/types";
+import type {
+  BackendInfo,
+  CatalogModel,
+  IndexCreatePayload,
+  ModelCatalogResponse,
+} from "@/lib/types";
 
 export const CLOUD_OPTIONS = ["aws", "gcp", "azure"];
 export const REGION_OPTIONS: Record<string, string[]> = {
@@ -32,6 +38,7 @@ interface UseCreateIndexFormParams {
    * the dimension ceiling, and which Pinecone-only fields render at all. */
   backendInfo: BackendInfo;
   embeddingModels: CatalogModel[];
+  embeddingCatalog?: ModelCatalogResponse | null;
   /** Called at the start of every create attempt, before any validation or the API
    * call - the parent uses it to clear stale success/error banners so a retry never
    * shows a leftover error next to a fresh result. */
@@ -45,6 +52,9 @@ export interface UseCreateIndexFormResult {
   creating: boolean;
   useModelDimension: boolean;
   selectedEmbeddingModelId: string;
+  selectedEmbeddingConnectionId: string;
+  selectedEmbeddingConnectionLabel: string;
+  selectedEmbeddingAvailability: "available" | "unknown" | "missing";
   selectedEmbeddingModel: CatalogModel | null;
   createDisabled: boolean;
   createDisabledReason: string | null;
@@ -77,6 +87,7 @@ export function useCreateIndexForm({
   token,
   backendInfo,
   embeddingModels,
+  embeddingCatalog = null,
   onCreateStart,
   onCreated,
   onError,
@@ -85,6 +96,10 @@ export function useCreateIndexForm({
   const [creating, setCreating] = useState(false);
   const [useModelDimension, setUseModelDimension] = useState(false);
   const [selectedEmbeddingModelId, setSelectedEmbeddingModelId] = useState("");
+  const [selectedEmbeddingConnectionId, setSelectedEmbeddingConnectionId] = useState("");
+  const [selectedEmbeddingConnectionLabel, setSelectedEmbeddingConnectionLabel] = useState("");
+  const [dimensionLookupError, setDimensionLookupError] = useState<string | null>(null);
+  const selectionGeneration = useRef(0);
 
   const { capabilities, backend } = backendInfo;
   const metricOptions = capabilities.supported_metrics;
@@ -96,7 +111,16 @@ export function useCreateIndexForm({
 
   const effectiveVectorType = supportsSparse ? (createForm.vector_type ?? "dense") : "dense";
   const selectedEmbeddingModel =
-    embeddingModels.find((model) => model.id === selectedEmbeddingModelId) ?? null;
+    embeddingModels.find(
+      (model) =>
+        model.id === selectedEmbeddingModelId &&
+        model.connection_id === selectedEmbeddingConnectionId,
+    ) ?? null;
+  const selectedEmbeddingAvailability = modelAvailability(
+    embeddingCatalog,
+    selectedEmbeddingConnectionId || null,
+    selectedEmbeddingModelId || null,
+  );
   const dimensionValid =
     effectiveVectorType === "sparse" ||
     (typeof createForm.dimension === "number" &&
@@ -105,16 +129,25 @@ export function useCreateIndexForm({
   const dimensionOverMax =
     typeof createForm.dimension === "number" && createForm.dimension > maxDimension;
   const createDisabled =
-    !createForm.name.trim() || !dimensionValid || (useModelDimension && !selectedEmbeddingModelId);
+    !createForm.name.trim() ||
+    !dimensionValid ||
+    (useModelDimension &&
+      (!selectedEmbeddingModelId || selectedEmbeddingAvailability === "missing"));
   const createDisabledReason = !createForm.name.trim()
     ? "Enter an index name to continue."
-    : effectiveVectorType === "dense" && useModelDimension && !selectedEmbeddingModelId
-      ? "Select an embedding model to set the dimension."
-      : effectiveVectorType === "dense" && dimensionOverMax
-        ? `${backendInfo.label} supports up to ${maxDimension.toLocaleString()} dimensions.`
-        : effectiveVectorType === "dense" && !dimensionValid
-          ? "Enter a dimension to create a dense index."
-          : null;
+    : effectiveVectorType === "dense" &&
+        useModelDimension &&
+        (!selectedEmbeddingModelId || selectedEmbeddingAvailability === "missing")
+      ? selectedEmbeddingModelId
+        ? `Selected model is no longer available from ${selectedEmbeddingConnectionLabel || "this connection"}. Select another model.`
+        : "Select an embedding model to set the dimension."
+      : effectiveVectorType === "dense" && useModelDimension && dimensionLookupError
+        ? dimensionLookupError
+        : effectiveVectorType === "dense" && dimensionOverMax
+          ? `${backendInfo.label} supports up to ${maxDimension.toLocaleString()} dimensions.`
+          : effectiveVectorType === "dense" && !dimensionValid
+            ? "Enter a dimension to create a dense index."
+            : null;
 
   const setName = (value: string) => setCreateForm((prev) => ({ ...prev, name: value }));
   const setMetric = (value: string) => setCreateForm((prev) => ({ ...prev, metric: value }));
@@ -137,6 +170,10 @@ export function useCreateIndexForm({
     if (value === "sparse") {
       setUseModelDimension(false);
       setSelectedEmbeddingModelId("");
+      setSelectedEmbeddingConnectionId("");
+      setSelectedEmbeddingConnectionLabel("");
+      setDimensionLookupError(null);
+      selectionGeneration.current += 1;
     }
   };
 
@@ -152,14 +189,20 @@ export function useCreateIndexForm({
   const handleDimensionModeChange = (mode: "manual" | "model") => {
     const useModel = mode === "model";
     setUseModelDimension(useModel);
+    setDimensionLookupError(null);
     if (useModel) {
-      const model = embeddingModels.find((entry) => entry.id === selectedEmbeddingModelId);
+      const model = embeddingModels.find(
+        (entry) =>
+          entry.id === selectedEmbeddingModelId &&
+          entry.connection_id === selectedEmbeddingConnectionId,
+      );
       setCreateForm((prev) => ({
         ...prev,
         dimension: typeof model?.dimension === "number" ? model.dimension : undefined,
       }));
       return;
     }
+    selectionGeneration.current += 1;
     setCreateForm((prev) => ({
       ...prev,
       dimension: typeof prev.dimension === "number" ? prev.dimension : 1536,
@@ -168,10 +211,29 @@ export function useCreateIndexForm({
 
   const handleSelectEmbeddingModel = (model: CatalogModel) => {
     setSelectedEmbeddingModelId(model.id);
+    setSelectedEmbeddingConnectionId(model.connection_id);
+    setSelectedEmbeddingConnectionLabel(model.connection_label);
+    setDimensionLookupError(null);
+    selectionGeneration.current += 1;
+    const generation = selectionGeneration.current;
     if (typeof model.dimension === "number") {
       const dimension = model.dimension;
       setCreateForm((prev) => ({ ...prev, dimension }));
+      return;
     }
+    setCreateForm((prev) => ({ ...prev, dimension: undefined }));
+    void fetchEmbeddingDimension(token, model.connection_id, model.id)
+      .then((result) => {
+        if (selectionGeneration.current !== generation || typeof result.dimension !== "number") {
+          return;
+        }
+        setCreateForm((prev) => ({ ...prev, dimension: result.dimension ?? undefined }));
+      })
+      .catch(() => {
+        if (selectionGeneration.current === generation) {
+          setDimensionLookupError("Unable to resolve the selected model dimension.");
+        }
+      });
   };
 
   const handleCreate = async () => {
@@ -198,7 +260,10 @@ export function useCreateIndexForm({
         return;
         /* c8 ignore stop */
       }
-      if (useModelDimension && !selectedEmbeddingModelId) {
+      if (
+        useModelDimension &&
+        (!selectedEmbeddingModelId || selectedEmbeddingAvailability === "missing")
+      ) {
         /* c8 ignore start -- guarded by disabled Create button */
         onError("Select an embedding model to set the dimension.");
         setCreating(false);
@@ -216,10 +281,16 @@ export function useCreateIndexForm({
   };
 
   return {
-    createForm,
+    createForm:
+      useModelDimension && selectedEmbeddingAvailability === "missing"
+        ? { ...createForm, dimension: undefined }
+        : createForm,
     creating,
     useModelDimension,
     selectedEmbeddingModelId,
+    selectedEmbeddingConnectionId,
+    selectedEmbeddingConnectionLabel,
+    selectedEmbeddingAvailability,
     selectedEmbeddingModel,
     createDisabled,
     createDisabledReason,

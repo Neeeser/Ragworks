@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, TypeVar
 
 import httpx
 
+from app.cache import CacheSnapshot
 from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.db.models import ProviderConnection
-from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.openrouter import OpenRouterProvider
 from app.retrieval.embedders.base import Embedder
@@ -16,6 +17,7 @@ from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.models import EndpointsListResponse
 from app.schemas.providers import (
+    CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
     ConnectionValidationResult,
@@ -39,6 +41,8 @@ OPENROUTER_DESCRIPTOR = ProviderDescriptor(
     docs_url="https://openrouter.ai/settings/keys",
     recommended=True,
 )
+
+SnapshotValueT = TypeVar("SnapshotValueT")
 
 
 class OpenRouterAdapter(ProviderAdapter):
@@ -74,12 +78,15 @@ class OpenRouterAdapter(ProviderAdapter):
             )
         return ConnectionValidationResult(valid=True, message="Connected.")
 
-    def list_models(self, kind: ProviderKind) -> list[CatalogModel]:
+    def list_models(
+        self, kind: ProviderKind, *, force_refresh: bool = False
+    ) -> CatalogResult:
         """List OpenRouter chat or embedding models for this connection."""
         self.require_kind(kind)
         client = self._client()
         if kind is ProviderKind.CHAT:
-            return [
+            snapshot = client.list_models(force_refresh=force_refresh)
+            models = [
                 CatalogModel(
                     connection_id=self.connection.id,
                     connection_label=self.connection.label,
@@ -92,9 +99,13 @@ class OpenRouterAdapter(ProviderAdapter):
                     supported_parameters=model.supported_parameters,
                     default_parameters=model.default_parameters,
                 )
-                for model in client.list_models()
+                for model in snapshot.value
             ]
-        return [
+            return CatalogResult(models=models, meta=_catalog_metadata(snapshot))
+        embedding_snapshot = client.list_embedding_models(
+            force_refresh=force_refresh
+        )
+        models = [
             CatalogModel(
                 connection_id=self.connection.id,
                 connection_label=self.connection.label,
@@ -102,12 +113,17 @@ class OpenRouterAdapter(ProviderAdapter):
                 id=model.id,
                 name=model.name,
                 description=model.description,
-                context_length=int(model.context_length) if model.context_length else None,
+                context_length=(
+                    int(model.context_length) if model.context_length else None
+                ),
                 pricing=model.pricing,
                 dimension=model.dimension,
             )
-            for model in client.list_embedding_models()
+            for model in embedding_snapshot.value
         ]
+        return CatalogResult(
+            models=models, meta=_catalog_metadata(embedding_snapshot)
+        )
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an OpenRouter embedder for this connection."""
@@ -127,3 +143,14 @@ class OpenRouterAdapter(ProviderAdapter):
     def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
         """Return OpenRouter's per-provider endpoint directory for a model."""
         return self._client().list_model_endpoints(author, slug)
+
+
+def _catalog_metadata(
+    snapshot: CacheSnapshot[SnapshotValueT],
+) -> CatalogMetadata:
+    return CatalogMetadata(
+        freshness=snapshot.freshness,
+        age_seconds=snapshot.age_seconds,
+        refreshing=snapshot.refreshing,
+        warning=snapshot.warning,
+    )

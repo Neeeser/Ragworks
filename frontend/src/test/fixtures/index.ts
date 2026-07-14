@@ -230,6 +230,7 @@ export function makeChatSession(overrides: Partial<ChatSession> = {}): ChatSessi
     title: "Chat 9:00 AM",
     mode: "chat",
     chat_model: "model-1",
+    provider_connection_id: "conn-openrouter-1",
     context_tokens: 128,
     tool_collection_ids: ["col-1"],
     parameter_overrides: {},

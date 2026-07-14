@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.cache import CacheSnapshot
 from app.providers.chat.base import ChatRequest
 from app.providers.chat.ollama import (
     OllamaChatProvider,
@@ -31,8 +32,16 @@ class _StubOllamaClient:
     descriptions: list[OllamaModelDescription] = field(default_factory=list)
     chat_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def describe_models(self, force_refresh: bool = False) -> list[OllamaModelDescription]:
-        return self.descriptions
+    def describe_models(
+        self, force_refresh: bool = False
+    ) -> CacheSnapshot[list[OllamaModelDescription]]:
+        return CacheSnapshot(
+            value=self.descriptions,
+            freshness="fresh",
+            age_seconds=0,
+            refreshing=False,
+            warning=None,
+        )
 
     def chat(self, **kwargs: Any) -> Any:
         self.chat_calls.append(kwargs)

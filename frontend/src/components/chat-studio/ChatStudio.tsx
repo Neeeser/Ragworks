@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChatStudioPanels } from "@/components/chat-studio/ChatStudioPanels";
 import { useChatMutation } from "@/components/chat-studio/hooks/messaging/use-chat-mutation";
@@ -157,7 +157,10 @@ export function ChatStudio() {
     activeModelId,
     activeConnectionId,
     toolsEnabled,
+    userId: user?.id ?? null,
+    connections,
   });
+  const { refreshModels } = modelCatalog;
 
   const modelParameters = useModelParameters({
     currentModelInfo: modelCatalog.currentModelInfo,
@@ -183,6 +186,10 @@ export function ChatStudio() {
   });
 
   const panel = usePanelControls({ setLoading: state.setLoading });
+
+  useEffect(() => {
+    if (panel.telemetryOpen && panel.modelSelectorOpen) void refreshModels();
+  }, [panel.modelSelectorOpen, panel.telemetryOpen, refreshModels]);
 
   const sortSessions = useCallback((items: typeof sessions) => {
     const pendingIds = state.pendingSessionIdsRef.current;

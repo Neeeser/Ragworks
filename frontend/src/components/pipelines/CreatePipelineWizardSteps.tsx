@@ -47,6 +47,8 @@ type ProcessingStepProps = {
   onToggleAdvancedChunking: () => void;
   embeddingModel: string;
   embeddingConnectionId: string | null;
+  embeddingConnectionLabel?: string | null;
+  selectedAvailability: "available" | "unknown" | "missing";
   onSelectEmbeddingModel: (model: CatalogModel) => void;
   embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
@@ -65,6 +67,8 @@ export function WizardProcessingStep({
   onToggleAdvancedChunking,
   embeddingModel,
   embeddingConnectionId,
+  embeddingConnectionLabel,
+  selectedAvailability,
   onSelectEmbeddingModel,
   embeddingModels,
   embeddingModelsLoading,
@@ -77,9 +81,7 @@ export function WizardProcessingStep({
     null;
   const selectedModel =
     embeddingModels.find(
-      (model) =>
-        model.id === embeddingModel &&
-        (!embeddingConnectionId || model.connection_id === embeddingConnectionId),
+      (model) => model.id === embeddingModel && model.connection_id === embeddingConnectionId,
     ) ?? null;
   const dimensionMismatch =
     typeof selectedModel?.dimension === "number" &&
@@ -169,6 +171,8 @@ export function WizardProcessingStep({
             models={embeddingModels}
             selectedModelKey={embeddingModel}
             selectedConnectionId={embeddingConnectionId}
+            selectedConnectionLabel={embeddingConnectionLabel}
+            selectedAvailability={selectedAvailability}
             modelsLoading={embeddingModelsLoading}
             modelsError={embeddingModelsError}
             onSelectModel={onSelectEmbeddingModel}

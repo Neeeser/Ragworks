@@ -149,6 +149,7 @@ describe("EmbeddingModelSelectorCard", () => {
     render(
       <EmbeddingModelSelectorCard
         selectedModelKey="model-1"
+        selectedConnectionId="conn-openrouter-1"
         models={models}
         modelsLoading={false}
         modelsError={null}
@@ -185,6 +186,7 @@ describe("EmbeddingModelSelectorCard", () => {
     render(
       <EmbeddingModelSelectorCard
         selectedModelKey="model-fallback"
+        selectedConnectionId="conn-openrouter-1"
         models={models}
         modelsLoading={false}
         modelsError={null}
@@ -193,5 +195,51 @@ describe("EmbeddingModelSelectorCard", () => {
     );
 
     expect(screen.getByText(/Prompt\s+free/)).toBeInTheDocument();
+  });
+
+  it("keeps a disappeared exact selection visible and requires a replacement", () => {
+    const selected = makeCatalogModel({
+      connection_id: "conn-a",
+      connection_label: "Provider A",
+      id: "shared-id",
+      name: "Selected model",
+    });
+    const otherConnection = makeCatalogModel({
+      connection_id: "conn-b",
+      connection_label: "Provider B",
+      id: "shared-id",
+      name: "Same ID elsewhere",
+    });
+    const { rerender } = render(
+      <EmbeddingModelSelectorCard
+        selectedModelKey="shared-id"
+        selectedConnectionId="conn-a"
+        selectedConnectionLabel="Provider A"
+        models={[selected]}
+        modelsLoading={false}
+        modelsError={null}
+        onSelectModel={() => undefined}
+      />,
+    );
+
+    rerender(
+      <EmbeddingModelSelectorCard
+        selectedModelKey="shared-id"
+        selectedConnectionId="conn-a"
+        selectedConnectionLabel="Provider A"
+        models={[otherConnection]}
+        modelsLoading={false}
+        modelsError={null}
+        onSelectModel={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Selected model is no longer available from Provider A. Select another model.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Same ID elsewhere/ })).toBeInTheDocument();
   });
 });

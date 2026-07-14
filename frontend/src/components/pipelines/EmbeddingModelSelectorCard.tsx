@@ -13,6 +13,8 @@ type EmbeddingModelSelectorCardProps = {
   models: CatalogModel[];
   selectedModelKey: string;
   selectedConnectionId?: string | null;
+  selectedConnectionLabel?: string | null;
+  selectedAvailability?: "available" | "unknown" | "missing";
   onSelectModel: (model: CatalogModel) => void;
   modelsLoading: boolean;
   modelsError: string | null;
@@ -47,6 +49,8 @@ export function EmbeddingModelSelectorCard({
   models,
   selectedModelKey,
   selectedConnectionId,
+  selectedConnectionLabel,
+  selectedAvailability,
   onSelectModel,
   modelsLoading,
   modelsError,
@@ -55,12 +59,25 @@ export function EmbeddingModelSelectorCard({
     useEmbeddingModelFilter(models);
   const currentModelInfo =
     models.find(
-      (model) =>
-        model.id === selectedModelKey &&
-        (!selectedConnectionId || model.connection_id === selectedConnectionId),
-    ) ??
-    models.find((model) => model.id === selectedModelKey) ??
-    null;
+      (model) => model.id === selectedModelKey && model.connection_id === selectedConnectionId,
+    ) ?? null;
+  const selectionUnavailable = Boolean(
+    selectedAvailability === "missing" ||
+    (selectedAvailability === undefined &&
+      selectedModelKey &&
+      selectedConnectionId &&
+      !currentModelInfo &&
+      !modelsLoading &&
+      !modelsError),
+  );
+  const connectionLabel =
+    currentModelInfo?.connection_label ??
+    selectedConnectionLabel ??
+    models.find((model) => model.connection_id === selectedConnectionId)?.connection_label ??
+    "this connection";
+  const unavailableMessage = selectionUnavailable
+    ? `Selected model is no longer available from ${connectionLabel}. Select another model.`
+    : null;
   const visibleModels = filteredModels.slice(0, 50);
   const formatCost = (value?: number | string | null) => formatPricePerMillion(value);
 
@@ -97,7 +114,17 @@ export function EmbeddingModelSelectorCard({
           onChange={(event) => setSearchTerm(event.target.value)}
         />
       </div>
-      {modelsError && <p className="text-sm text-data-neg">{modelsError}</p>}
+      {(modelsError || unavailableMessage) && (
+        <p className="text-sm text-data-neg">{modelsError ?? unavailableMessage}</p>
+      )}
+      {selectionUnavailable && (
+        <div className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-3 py-2">
+          <p className="text-sm font-semibold text-primary">Unavailable</p>
+          <p className="text-[11px] text-meta break-all">
+            {connectionLabel} · {selectedModelKey}
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body">
           <div className="flex items-center justify-between gap-2">
@@ -132,7 +159,7 @@ export function EmbeddingModelSelectorCard({
             const isSelected =
               selectedModelKey &&
               model.id === selectedModelKey &&
-              (!selectedConnectionId || model.connection_id === selectedConnectionId);
+              model.connection_id === selectedConnectionId;
             const contextLabel = model.context_length
               ? `${Math.round(model.context_length).toLocaleString()} ctx`
               : null;

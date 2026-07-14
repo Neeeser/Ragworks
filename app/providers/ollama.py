@@ -8,13 +8,14 @@ import httpx
 
 from app.clients.ollama import OllamaApiError, OllamaClient, get_ollama_client
 from app.db.models import ProviderConnection
-from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.ollama import OllamaChatProvider, model_info_from_description
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
+    CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
     ConnectionValidationResult,
@@ -82,12 +83,15 @@ class OllamaAdapter(ProviderAdapter):
             )
         return ConnectionValidationResult(valid=True, message=f"Connected (Ollama {version}).")
 
-    def list_models(self, kind: ProviderKind) -> list[CatalogModel]:
+    def list_models(
+        self, kind: ProviderKind, *, force_refresh: bool = False
+    ) -> CatalogResult:
         """List the server's local models that serve the requested kind."""
         self.require_kind(kind)
         capability = "embedding" if kind is ProviderKind.EMBEDDING else "completion"
         entries: list[CatalogModel] = []
-        for description in self._client().describe_models():
+        snapshot = self._client().describe_models(force_refresh=force_refresh)
+        for description in snapshot.value:
             if capability not in description.capabilities:
                 continue
             info = model_info_from_description(description)
@@ -110,7 +114,15 @@ class OllamaAdapter(ProviderAdapter):
                     ),
                 )
             )
-        return entries
+        return CatalogResult(
+            models=entries,
+            meta=CatalogMetadata(
+                freshness=snapshot.freshness,
+                age_seconds=snapshot.age_seconds,
+                refreshing=snapshot.refreshing,
+                warning=snapshot.warning,
+            ),
+        )
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an Ollama embedder for this connection."""
@@ -125,7 +137,7 @@ class OllamaAdapter(ProviderAdapter):
     def embedding_dimension(self, model_name: str) -> int | None:
         """Read the embedding dimension from architecture metadata, probing as fallback."""
         self.require_kind(ProviderKind.EMBEDDING)
-        for description in self._client().describe_models():
+        for description in self._client().describe_models().value:
             if description.name == model_name and description.embedding_dimension:
                 return description.embedding_dimension
         response = self._client().embed(["dimension_probe"], model=model_name)

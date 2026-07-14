@@ -355,7 +355,11 @@ describe("PipelineBuilder", () => {
     api.fetchPipelines.mockResolvedValue([pipeline]);
     api.fetchPipelineNodes.mockResolvedValue(nodeSpecs);
     api.fetchCollections.mockResolvedValue([]);
-    api.fetchEmbeddingModels.mockResolvedValue({ models: [], connection_errors: [] });
+    api.fetchEmbeddingModels.mockResolvedValue({
+      models: [],
+      connection_errors: [],
+      meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
+    });
     api.listIndexes.mockResolvedValue([]);
     api.listPipelineVersions.mockResolvedValue([makePipelineVersion({ id: "v1" })]);
     api.validatePipeline.mockResolvedValue({ valid: true, errors: [], warnings: [] });
@@ -561,6 +565,7 @@ describe("PipelineBuilder", () => {
         makeCatalogModel({ id: "emb-2", name: "Beta", dimension: null }),
       ],
       connection_errors: [],
+      meta: { freshness: "fresh", age_seconds: 0, refreshing: false, warning: null },
     });
     io.validatePipelineEdges.mockReturnValue({
       edgeErrors: { "edge-1": "bad edge" },

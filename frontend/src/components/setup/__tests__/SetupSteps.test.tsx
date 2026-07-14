@@ -7,7 +7,12 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 
 import { initialSetupWizardState } from "@/components/setup/lib/setup-wizard-reducer";
 import { StepModel, StepProviders } from "@/components/setup/SetupSteps";
-import { makeCatalogModel, makeConnection, makeProviderType } from "@/test/fixtures";
+import {
+  makeCatalogModel,
+  makeConnection,
+  makeModelCatalog,
+  makeProviderType,
+} from "@/test/fixtures";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
 import type { BackendInfo, CatalogModel } from "@/lib/types";
@@ -57,10 +62,19 @@ function makeWizard(overrides: Partial<SetupWizardApi> = {}): SetupWizardApi {
     error: null,
     clearError: vi.fn(),
     ...overrides,
+    modelCatalog: overrides.modelCatalog ?? makeModelCatalog(models),
+    refreshModels: overrides.refreshModels ?? vi.fn().mockResolvedValue(undefined),
   };
 }
 
 describe("StepModel", () => {
+  it("revalidates the catalog while the model step is visible", () => {
+    const refreshModels = vi.fn().mockResolvedValue(undefined);
+    render(<StepModel wizard={makeWizard({ refreshModels })} />);
+
+    expect(refreshModels).toHaveBeenCalledTimes(1);
+  });
+
   it("selects a model with its connection and dimension and enables Continue", async () => {
     const wizard = makeWizard();
     render(<StepModel wizard={wizard} />);

@@ -17,7 +17,13 @@ import { CreateIndexForm } from "./CreateIndexForm";
 import { IndexDetailsPanel } from "./IndexDetailsPanel";
 import { IndexListPanel } from "./IndexListPanel";
 
-import type { BackendInfo, CatalogModel, IndexBackend, VectorIndex } from "@/lib/types";
+import type {
+  BackendInfo,
+  CatalogModel,
+  IndexBackend,
+  ModelCatalogResponse,
+  VectorIndex,
+} from "@/lib/types";
 
 type IndexManagerModalProps = {
   open: boolean;
@@ -25,10 +31,12 @@ type IndexManagerModalProps = {
   indexes: VectorIndex[];
   backends: BackendInfo[];
   embeddingModels: CatalogModel[];
+  embeddingCatalog?: ModelCatalogResponse | null;
   embeddingModelsLoading?: boolean;
   embeddingModelsError?: string | null;
   loading?: boolean;
   error?: string | null;
+  onCatalogVisible?: () => void;
   onClose: () => void;
   onRefresh: () => void;
 };
@@ -45,10 +53,12 @@ export function IndexManagerModal({
   indexes,
   backends,
   embeddingModels,
+  embeddingCatalog = null,
   embeddingModelsLoading = false,
   embeddingModelsError = null,
   loading = false,
   error = null,
+  onCatalogVisible,
   onClose,
   onRefresh,
 }: IndexManagerModalProps) {
@@ -62,6 +72,10 @@ export function IndexManagerModal({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"details" | "create">("details");
   const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (open) onCatalogVisible?.();
+  }, [onCatalogVisible, open]);
 
   const sortedIndexes = sortIndexesByName(
     indexes.filter((index) => index.backend === activeBackend),
@@ -225,6 +239,7 @@ export function IndexManagerModal({
                     token={token}
                     backendInfo={activeBackendInfo}
                     embeddingModels={embeddingModels}
+                    embeddingCatalog={embeddingCatalog}
                     embeddingModelsLoading={embeddingModelsLoading}
                     embeddingModelsError={embeddingModelsError}
                     onCreateStart={() => {

@@ -3,7 +3,7 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
-import { makeCatalogModel } from "@/test/fixtures";
+import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { VectorIndex } from "@/lib/types";
@@ -16,6 +16,8 @@ const NODE_TYPE_PARSER = "parser.document";
 const INDEX_SELECT_LABEL = "Vector index";
 const SAVE_NODE = "Save node";
 const CLOSE_EDITOR = "Close node editor";
+const RENAMED_LABEL = "Renamed";
+const NODE_LABEL = "Node label";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -97,6 +99,7 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
     validationErrors: [],
     vectorIndexes: [],
     embeddingModels: [],
+    embeddingCatalog: null,
     embeddingModelsLoading: false,
     embeddingModelsError: null,
     ...overrides,
@@ -267,8 +270,15 @@ describe("NodeEditorDrawer", () => {
   it("picking an embedding model updates the draft and never keeps a stale dimension", () => {
     const onApply = vi.fn();
     renderDrawer({
-      node: makeNode(NODE_TYPE_EMBEDDER, { model_name: "emb-1", dimension: 768 }),
-      embeddingModels: [makeCatalogModel({ id: "emb-1", name: "Embedding One", dimension: 768 })],
+      node: makeNode(NODE_TYPE_EMBEDDER, {
+        connection_id: "conn-openrouter-1",
+        model_name: "emb-1",
+        dimension: 768,
+      }),
+      embeddingModels: [
+        makeCatalogModel({ id: "emb-1", name: "Embedding One", dimension: 768 }),
+        makeCatalogModel({ id: "emb-2", name: "Embedding Two" }),
+      ],
       onApply,
     });
 
@@ -288,13 +298,33 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
+  it("blocks node edits when a refreshed catalog no longer contains the selected model", () => {
+    const onApply = vi.fn();
+    const otherConnection = makeCatalogModel({ connection_id: "conn-b", id: "removed-model" });
+    renderDrawer({
+      node: makeNode(NODE_TYPE_EMBEDDER, {
+        connection_id: "conn-a",
+        model_name: "removed-model",
+      }),
+      embeddingModels: [otherConnection],
+      embeddingCatalog: makeModelCatalog([otherConnection]),
+      onApply,
+    });
+
+    fireEvent.change(screen.getByLabelText(NODE_LABEL), { target: { value: RENAMED_LABEL } });
+    const saveButton = screen.getByRole("button", { name: SAVE_NODE });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(saveButton);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it("saves a label edit through the draft", () => {
     const onApply = vi.fn();
     renderDrawer({ onApply });
 
-    fireEvent.change(screen.getByLabelText("Node label"), { target: { value: "Renamed" } });
+    fireEvent.change(screen.getByLabelText(NODE_LABEL), { target: { value: RENAMED_LABEL } });
     fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
-    expect(onApply).toHaveBeenCalledWith("node-1", { label: "Renamed", config: {} });
+    expect(onApply).toHaveBeenCalledWith("node-1", { label: RENAMED_LABEL, config: {} });
   });
 
   it("surfaces validation errors", () => {
@@ -312,7 +342,7 @@ describe("NodeEditorDrawer", () => {
 
     // The label renders as a heading, not an editable input, and there is no
     // local save in preview mode.
-    expect(screen.queryByLabelText("Node label")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(NODE_LABEL)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: SAVE_NODE })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Node" })).toBeInTheDocument();
 

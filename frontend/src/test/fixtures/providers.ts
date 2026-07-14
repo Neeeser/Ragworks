@@ -1,5 +1,6 @@
 import type {
   CatalogModel,
+  CatalogMetadata,
   ConnectionCatalogError,
   ModelCatalogResponse,
   ProviderConnection,
@@ -64,6 +65,12 @@ export function makeCatalogModel(overrides: Partial<CatalogModel> = {}): Catalog
 export function makeModelCatalog(
   models: CatalogModel[] = [makeCatalogModel()],
   connectionErrors: ConnectionCatalogError[] = [],
+  meta: CatalogMetadata = {
+    freshness: "fresh",
+    age_seconds: 0,
+    refreshing: false,
+    warning: null,
+  },
 ): ModelCatalogResponse {
-  return { models, connection_errors: connectionErrors };
+  return { models, connection_errors: connectionErrors, meta };
 }

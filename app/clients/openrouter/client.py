@@ -9,7 +9,7 @@ from urllib.parse import quote
 import httpx
 from openai import OpenAI
 
-from app.clients.cache import ClientCache
+from app.cache import CacheSnapshot, ResourceCache
 from app.clients.openrouter.catalog import ModelCatalog
 from app.core.config import get_settings
 from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
@@ -110,11 +110,13 @@ class OpenRouterClient:
         """Issue a single-input embeddings call used to measure vector length."""
         return self.embed(["dimension_probe"], model=model_id)
 
-    def list_models(self, force_refresh: bool = False) -> list[ModelInfo]:
+    def list_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return available models, caching for a short period."""
         return self._catalog.list_models(force_refresh=force_refresh)
 
-    def list_embedding_models(self, force_refresh: bool = False) -> list[EmbeddingModelInfo]:
+    def list_embedding_models(
+        self, force_refresh: bool = False
+    ) -> CacheSnapshot[list[EmbeddingModelInfo]]:
         """Return available embedding models, caching for a short period."""
         return self._catalog.list_embedding_models(force_refresh=force_refresh)
 
@@ -147,11 +149,11 @@ class OpenRouterClient:
                     return model
             return None
 
-        cached = self.list_models()
+        cached = self.list_models().value
         match = _match(cached)
         if match:
             return match
-        refreshed = self.list_models(force_refresh=True)
+        refreshed = self.list_models(force_refresh=True).value
         return _match(refreshed)
 
     def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
@@ -285,11 +287,14 @@ class OpenRouterClient:
         The SDK shares `self._http` (see `__init__`), so closing either would
         suffice; both are closed defensively in case they ever diverge again.
         """
+        self._catalog.close()
         self._client.close()
         self._http.close()
 
 
-_client_cache: ClientCache[OpenRouterClient] = ClientCache(max_size=64)
+_client_cache: ResourceCache[str, OpenRouterClient] = ResourceCache(
+    max_entries=64, key_material=lambda key: key
+)
 
 
 def get_openrouter_client(api_key: str) -> OpenRouterClient:
@@ -301,3 +306,13 @@ def get_openrouter_client(api_key: str) -> OpenRouterClient:
     cache's max size.
     """
     return _client_cache.get_or_create(api_key, lambda: OpenRouterClient(api_key))
+
+
+def invalidate_openrouter_client(api_key: str) -> bool:
+    """Close the cached client derived from an old API key."""
+    return _client_cache.invalidate(api_key)
+
+
+def close_openrouter_clients() -> None:
+    """Close every cached OpenRouter client during application shutdown."""
+    _client_cache.close_all()

@@ -10,14 +10,9 @@ import {
   setupWizardReducer,
   SUGGESTED_MODEL_FRAGMENT,
 } from "@/components/setup/lib/setup-wizard-reducer";
-import {
-  bootstrapSetup,
-  createIndex,
-  describeIndex,
-  fetchEmbeddingModels,
-  fetchIndexBackends,
-} from "@/lib/api";
+import { bootstrapSetup, createIndex, describeIndex, fetchIndexBackends } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 import { useApiQuery } from "@/lib/use-api-query";
 import { useAuth } from "@/providers/auth-provider";
 import { useSetupStatus } from "@/providers/setup-status-provider";
@@ -26,6 +21,7 @@ import type { SetupChoices, SetupWizardState } from "@/components/setup/lib/setu
 import type {
   BackendInfo,
   CatalogModel,
+  ModelCatalogResponse,
   ProviderConnection,
   ProviderKind,
   ProviderTypeInfo,
@@ -46,6 +42,8 @@ export interface SetupWizardApi {
   providersReady: boolean;
   // Model step
   models: CatalogModel[] | null;
+  modelCatalog: ModelCatalogResponse | null;
+  refreshModels: () => Promise<void>;
   modelsLoading: boolean;
   modelsError: string | null;
   backends: BackendInfo[] | null;
@@ -61,7 +59,7 @@ export interface SetupWizardApi {
 
 /** One state domain: wizard progression, remote catalogs, and mutations. */
 export function useSetupWizard(): SetupWizardApi {
-  const { token, loading: authLoading } = useAuth();
+  const { token, user, loading: authLoading } = useAuth();
   const { markComplete } = useSetupStatus();
   const router = useRouter();
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
@@ -82,12 +80,11 @@ export function useSetupWizard(): SetupWizardApi {
   const providersReady = coverage.embedding && coverage.chat && coverage.vector_store;
   const hasEmbeddingProvider = coverage.embedding;
 
-  // `connections` identity changes on every reload, so adding a second
-  // embedding provider mid-wizard refetches the catalog too.
-  const modelsQuery = useApiQuery(
-    () => fetchEmbeddingModels(authToken),
-    [authToken, hasEmbeddingProvider, connections],
-    { enabled: Boolean(authToken) && hasEmbeddingProvider },
+  const modelsQuery = useSharedModelCatalog(
+    user?.id,
+    authToken,
+    "embedding",
+    Boolean(authToken) && hasEmbeddingProvider,
   );
   const backendsQuery = useApiQuery(() => fetchIndexBackends(authToken), [authToken], {
     enabled: Boolean(authToken),
@@ -187,6 +184,11 @@ export function useSetupWizard(): SetupWizardApi {
     }
   }, [token, state, markComplete, router]);
 
+  const modelConnectionError =
+    (modelsQuery.data?.connection_errors ?? [])
+      .map((entry) => `${entry.connection_label}: ${entry.message}`)
+      .join(" — ") || null;
+
   return {
     state,
     next,
@@ -200,8 +202,10 @@ export function useSetupWizard(): SetupWizardApi {
     coverage,
     providersReady,
     models,
+    modelCatalog: modelsQuery.data,
+    refreshModels: modelsQuery.refresh,
     modelsLoading: modelsQuery.loading,
-    modelsError: modelsQuery.error,
+    modelsError: modelsQuery.error ?? modelConnectionError,
     backends: backendsQuery.data,
     suggestedModelId,
     ensureIndex,

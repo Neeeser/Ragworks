@@ -158,6 +158,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     streamChat: vi.fn(async () => makeChatCompletion()),
     // models
     fetchEmbeddingModels: vi.fn(async () => makeModelCatalog()),
+    fetchEmbeddingDimension: vi.fn(async () => ({ dimension: 1536 })),
     listChatModels: vi.fn(async () => makeModelCatalog()),
     listModelEndpoints: vi.fn(async () => ({ data: makeProviderDirectory() })),
     // connections

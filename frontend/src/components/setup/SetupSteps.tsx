@@ -1,13 +1,14 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ConnectionsManager } from "@/components/connections/ConnectionsManager";
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -113,7 +114,24 @@ export function StepProviders({ wizard }: { wizard: SetupWizardApi }) {
 export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
   const [search, setSearch] = useState("");
   const { models, suggestedModelId } = wizard;
+  const { refreshModels } = wizard;
   const { embeddingModel, embeddingConnectionId } = wizard.state.choices;
+  const selectionAvailability = modelAvailability(
+    wizard.modelCatalog,
+    embeddingConnectionId,
+    embeddingModel || null,
+  );
+  const selectedConnectionLabel =
+    wizard.connections.find((connection) => connection.id === embeddingConnectionId)?.label ??
+    "this connection";
+  const unavailableMessage =
+    selectionAvailability === "missing"
+      ? `Selected model is no longer available from ${selectedConnectionLabel}. Select another model.`
+      : null;
+
+  useEffect(() => {
+    void refreshModels();
+  }, [refreshModels]);
 
   // Backend caps are data declared on each backend — never hardcoded here.
   // NOTE(dimension-reduction): once pgvector gains dimension reduction for
@@ -149,7 +167,11 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
           <Button variant="ghost" onClick={wizard.back}>
             Back
           </Button>
-          <Button size="lg" disabled={!embeddingModel} onClick={wizard.next}>
+          <Button
+            size="lg"
+            disabled={!embeddingModel || selectionAvailability === "missing"}
+            onClick={wizard.next}
+          >
             Continue
           </Button>
         </>
@@ -168,6 +190,15 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
       </Field>
       {wizard.modelsLoading ? <p className="text-sm text-muted">Loading the catalog…</p> : null}
       <SetupNotice message={wizard.modelsError} />
+      <SetupNotice message={unavailableMessage} />
+      {unavailableMessage ? (
+        <div className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-4 py-3">
+          <p className="text-sm font-medium text-primary">Unavailable</p>
+          <p className="text-[11px] text-meta break-all">
+            {selectedConnectionLabel} · {embeddingModel}
+          </p>
+        </div>
+      ) : null}
       <ul className="max-h-72 space-y-2 overflow-y-auto pr-1" aria-label="Embedding models">
         {filtered.map((model) => {
           const selected =

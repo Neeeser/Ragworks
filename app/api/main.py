@@ -30,6 +30,7 @@ from app.api.routes import (
 from app.core.config import get_settings
 from app.db.bootstrap import init_db
 from app.db.engine import session_scope
+from app.providers.registry import close_provider_clients
 from app.services.accounts import ensure_admin_exists
 from app.services.file_backfill import backfill_file_nodes
 from app.services.pipelines import (
@@ -75,7 +76,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         backfill_file_nodes(session)
         ensure_admin_exists(session)
     purge_expired_telemetry()
-    yield
+    try:
+        yield
+    finally:
+        close_provider_clients()
 
 
 app = FastAPI(

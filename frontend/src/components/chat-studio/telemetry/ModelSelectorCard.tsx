@@ -141,6 +141,12 @@ export const ModelSelectorCard = ({
         </div>
       </div>
       {modelsError && <p className="text-sm text-data-neg">{modelsError}</p>}
+      {selectedModelKey && !currentModelInfo && modelsError?.includes("no longer available") ? (
+        <div className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-3 py-2">
+          <p className="text-sm font-semibold text-primary">Unavailable</p>
+          <p className="text-[11px] text-meta break-all">{selectedModelKey}</p>
+        </div>
+      ) : null}
       <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
         {modelsLoading && toolReadyModels.length === 0 ? (
           <p className="text-sm text-muted">Loading tool-compatible models…</p>
@@ -161,7 +167,7 @@ export const ModelSelectorCard = ({
               </div>
               {group.models.map((model) => {
                 const modelKey = modelSelectionKey(model.connection_id, model.id);
-                const isSelected = selectedModelKey === modelKey || selectedModelKey === model.id;
+                const isSelected = selectedModelKey === modelKey;
                 const contextLabel = model.context_length
                   ? formatContextLength(model.context_length)
                   : null;

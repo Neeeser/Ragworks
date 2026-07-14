@@ -1,13 +1,40 @@
 import { apiFetch } from "@/lib/api/client";
 
-import type { ListModelEndpointsResponse, ModelCatalogResponse, UUID } from "@/lib/types";
+import type {
+  EmbeddingDimensionResponse,
+  ListModelEndpointsResponse,
+  ModelCatalogResponse,
+  UUID,
+} from "@/lib/types";
 
-export async function listChatModels(token: string): Promise<ModelCatalogResponse> {
-  return apiFetch<ModelCatalogResponse>("/api/models?kind=chat", { token });
+export async function listChatModels(
+  token: string,
+  refresh = false,
+): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>(`/api/models?kind=chat${refresh ? "&refresh=true" : ""}`, {
+    token,
+  });
 }
 
-export async function fetchEmbeddingModels(token: string): Promise<ModelCatalogResponse> {
-  return apiFetch<ModelCatalogResponse>("/api/models?kind=embedding", { token });
+export async function fetchEmbeddingModels(
+  token: string,
+  refresh = false,
+): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>(
+    `/api/models?kind=embedding${refresh ? "&refresh=true" : ""}`,
+    { token },
+  );
+}
+
+export async function fetchEmbeddingDimension(
+  token: string,
+  connectionId: UUID,
+  modelId: string,
+): Promise<EmbeddingDimensionResponse> {
+  return apiFetch<EmbeddingDimensionResponse>(
+    `/api/connections/${connectionId}/models/embedding-dimension?model_id=${encodeURIComponent(modelId)}`,
+    { token },
+  );
 }
 
 export async function listModelEndpoints(

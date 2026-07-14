@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from app.clients.cache import ClientCache
+from app.cache import CacheSnapshot, ResourceCache
 from app.clients.ollama.catalog import OllamaCatalog
 from app.clients.ollama.errors import OllamaApiError
 from app.schemas.ollama import (
@@ -81,7 +81,9 @@ class OllamaClient:
         _raise_for_status(response)
         return OllamaShowResponse.model_validate(response.json())
 
-    def describe_models(self, force_refresh: bool = False) -> list[OllamaModelDescription]:
+    def describe_models(
+        self, force_refresh: bool = False
+    ) -> CacheSnapshot[list[OllamaModelDescription]]:
         """Return capability-classified model descriptions, TTL-cached."""
         return self._catalog.describe_models(force_refresh=force_refresh)
 
@@ -168,10 +170,20 @@ class OllamaClient:
 
     def close(self) -> None:
         """Close the HTTP transport, releasing its connection pool."""
+        self._catalog.close()
         self._http.close()
 
 
-_client_cache: ClientCache[OllamaClient] = ClientCache(max_size=64)
+OllamaClientKey = tuple[str, str]
+
+
+def _client_key(base_url: str, api_key: str | None) -> OllamaClientKey:
+    return (base_url.strip().rstrip("/"), (api_key or "").strip())
+
+
+_client_cache: ResourceCache[OllamaClientKey, OllamaClient] = ResourceCache(
+    max_entries=64, key_material=lambda key: "\n".join(key)
+)
 
 
 def get_ollama_client(base_url: str, api_key: str | None = None) -> OllamaClient:
@@ -180,5 +192,15 @@ def get_ollama_client(base_url: str, api_key: str | None = None) -> OllamaClient
     Keyed by URL + key so rotating either yields a fresh client while the
     bounded cache closes whatever it evicts.
     """
-    cache_key = f"{base_url.rstrip('/')}\n{api_key or ''}"
+    cache_key = _client_key(base_url, api_key)
     return _client_cache.get_or_create(cache_key, lambda: OllamaClient(base_url, api_key))
+
+
+def invalidate_ollama_client(base_url: str, api_key: str | None = None) -> bool:
+    """Close the cached client derived from an old server configuration."""
+    return _client_cache.invalidate(_client_key(base_url, api_key))
+
+
+def close_ollama_clients() -> None:
+    """Close every cached Ollama client during application shutdown."""
+    _client_cache.close_all()

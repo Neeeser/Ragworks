@@ -168,6 +168,10 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   `ChatParameters` ignores unknown keys and `ProviderPreferences` normalizes only a
   small alias set — a deliberate narrowing from an old case-insensitive sanitizer.
   Send canonical snake_case keys.
+- **Planning artifacts stay ignored.** Never force-add or commit `docs/superpowers/`;
+  they are disposable working notes, not maintained project documentation.
+- **Use the shared cache layer for user-visible repeated work.** Do not add feature-local
+  cache engines; shared lifecycle and invalidation rules prevent stale-state bugs.
 
 # README style and maintenance
 

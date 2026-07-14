@@ -78,9 +78,10 @@ def _catalog_handler(request: httpx.Request) -> httpx.Response:
 
 def test_describe_models_classifies_capabilities_and_dimensions() -> None:
     client = _build_client(httpx.MockTransport(_catalog_handler))
-    described = client.describe_models()
+    snapshot = client.describe_models()
 
-    by_name = {model.name: model for model in described}
+    assert snapshot.freshness == "fresh"
+    by_name = {model.name: model for model in snapshot.value}
     chat = by_name["llama3.2:latest"]
     assert chat.capabilities == ["completion", "tools"]
     assert chat.context_length == 131072
@@ -110,7 +111,7 @@ def test_describe_models_skips_a_model_whose_show_fails() -> None:
         raise AssertionError(f"Unexpected path {request.url.path}")
 
     client = _build_client(httpx.MockTransport(handler))
-    described = client.describe_models()
+    described = client.describe_models().value
 
     assert [model.name for model in described] == ["nomic-embed-text:latest"]
     assert described[0].capabilities == ["embedding"]

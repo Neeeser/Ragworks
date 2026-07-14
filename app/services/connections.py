@@ -8,6 +8,7 @@ non-secret values, with secret fields echoed as `secrets_configured` booleans.
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from sqlmodel import Session
@@ -20,6 +21,8 @@ from app.providers.registry import (
     ADAPTERS,
     all_descriptors,
     build_adapter,
+    invalidate_connection_caches,
+    invalidate_embedding_dimensions,
     resolve_connection,
 )
 from app.schemas.enums import ProviderKind, ProviderType
@@ -35,6 +38,7 @@ from app.schemas.providers import (
 from app.services.errors import InvalidInputError
 
 PGVECTOR_BUILTIN_TYPE = "pgvector"
+logger = logging.getLogger(__name__)
 
 
 def provider_type_catalog() -> list[ProviderTypeRead]:
@@ -179,6 +183,7 @@ class ConnectionService:
     ) -> ConnectionRead:
         """Relabel a connection and/or overlay config fields (secret rotation)."""
         connection = resolve_connection(self.session, user, connection_id)
+        old_connection = connection.model_copy(deep=True)
         if payload.label is not None:
             connection.label = payload.label
         if payload.config:
@@ -191,13 +196,29 @@ class ConnectionService:
         self.session.add(connection)
         self.session.commit()
         self.session.refresh(connection)
+        self._cleanup_connection_cache(old_connection)
         return connection_to_read(connection)
 
     def delete(self, user: models.User, connection_id: UUID) -> None:
         """Delete a connection; downstream references fail lazily with a clear error."""
         connection = resolve_connection(self.session, user, connection_id)
+        old_connection = connection.model_copy(deep=True)
         self.repo.delete(connection)
         self.session.commit()
+        self._cleanup_connection_cache(old_connection)
+
+    @staticmethod
+    def _cleanup_connection_cache(connection: models.ProviderConnection) -> None:
+        """Best-effort cleanup after the database mutation is committed."""
+        try:
+            invalidate_connection_caches(connection)
+            invalidate_embedding_dimensions(connection.id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.warning(
+                "Cache cleanup failed for provider connection %s.",
+                connection.id,
+                exc_info=True,
+            )
 
     def validate_unsaved(
         self, provider_type: ProviderType, config: dict[str, object]

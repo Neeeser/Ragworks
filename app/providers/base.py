@@ -10,6 +10,7 @@ re-hardcoding provider facts elsewhere.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import ClassVar, TypeVar
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -19,6 +20,7 @@ from app.providers.chat.base import ChatProvider
 from app.retrieval.embedders.base import Embedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
+    CatalogMetadata,
     CatalogModel,
     ConnectionValidationResult,
     ProviderConfigField,
@@ -26,6 +28,14 @@ from app.schemas.providers import (
 from app.services.errors import InvalidInputError
 
 ConfigT = TypeVar("ConfigT", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class CatalogResult:
+    """One provider connection's shaped models and cache metadata."""
+
+    models: list[CatalogModel]
+    meta: CatalogMetadata
 
 
 class ProviderDescriptor(BaseModel):
@@ -80,10 +90,13 @@ class ProviderAdapter(ABC):
     def validate_connection(self) -> ConnectionValidationResult:
         """Probe the connection's credentials/reachability."""
 
-    def list_models(self, kind: ProviderKind) -> list[CatalogModel]:
+    def list_models(
+        self, kind: ProviderKind, *, force_refresh: bool = False
+    ) -> CatalogResult:
         """Return the connection's models of one kind (empty by default)."""
+        del force_refresh
         self.require_kind(kind)
-        return []
+        return CatalogResult(models=[], meta=CatalogMetadata())
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an embedder for a model served by this connection."""

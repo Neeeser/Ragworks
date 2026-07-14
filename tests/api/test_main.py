@@ -7,8 +7,10 @@ called from `lifespan`, so it is testable directly.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
+from app.api import main as main_module
 from app.api.main import configure_logging
 
 
@@ -34,3 +36,29 @@ def test_configure_logging_is_noop_when_name_blank(monkeypatch) -> None:
     monkeypatch.setattr(logging, "basicConfig", _basic_config)
 
     configure_logging("")
+
+
+def test_lifespan_closes_provider_clients(monkeypatch) -> None:
+    for name in (
+        "configure_logging",
+        "init_db",
+        "migrate_provider_connections",
+        "upgrade_stored_pipeline_definitions",
+        "backfill_default_pipelines",
+        "backfill_file_nodes",
+        "ensure_admin_exists",
+        "purge_expired_telemetry",
+    ):
+        monkeypatch.setattr(main_module, name, lambda *_args, **_kwargs: None)
+    closed: list[bool] = []
+    monkeypatch.setattr(
+        main_module, "close_provider_clients", lambda: closed.append(True)
+    )
+
+    async def _exercise() -> None:
+        async with main_module.lifespan(main_module.app):
+            assert closed == []
+
+    asyncio.run(_exercise())
+
+    assert closed == [True]

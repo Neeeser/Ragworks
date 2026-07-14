@@ -10,10 +10,20 @@ only constructs the adapters it actually touches.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlmodel import Session
 
+from app.cache import CachePolicy, ValueCache
+from app.clients.ollama.client import (
+    close_ollama_clients,
+    invalidate_ollama_client,
+)
+from app.clients.openrouter.client import (
+    close_openrouter_clients,
+    invalidate_openrouter_client,
+)
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository
 from app.providers.base import ProviderAdapter, ProviderDescriptor
@@ -23,6 +33,7 @@ from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.retrieval.embedders.base import Embedder
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.providers import OllamaConnectionConfig, OpenRouterConnectionConfig
 from app.services.errors import InvalidInputError, NotFoundError
 
 ADAPTERS: dict[ProviderType, type[ProviderAdapter]] = {
@@ -34,6 +45,31 @@ ADAPTERS: dict[ProviderType, type[ProviderAdapter]] = {
 CONNECTION_REMOVED_DETAIL = (
     "The provider connection this uses was removed. Pick another provider in Settings."
 )
+
+_dimension_cache = ValueCache[tuple[UUID, str], int | None](
+    CachePolicy(
+        fresh_seconds=None,
+        max_stale_seconds=0,
+        failure_retry_seconds=30,
+        max_entries=1024,
+    )
+)
+
+
+def _invalidate_openrouter(config: dict[str, object]) -> None:
+    parsed = OpenRouterConnectionConfig.model_validate(config)
+    invalidate_openrouter_client(parsed.api_key)
+
+
+def _invalidate_ollama(config: dict[str, object]) -> None:
+    parsed = OllamaConnectionConfig.model_validate(config)
+    invalidate_ollama_client(parsed.base_url, parsed.api_key)
+
+
+_CACHE_INVALIDATORS: dict[ProviderType, Callable[[dict[str, object]], None]] = {
+    ProviderType.OPENROUTER: _invalidate_openrouter,
+    ProviderType.OLLAMA: _invalidate_ollama,
+}
 
 
 def all_descriptors() -> list[ProviderDescriptor]:
@@ -83,6 +119,44 @@ def get_provider(
     adapter = build_adapter(connection)
     adapter.require_kind(kind)
     return adapter
+
+
+def cached_embedding_dimension(
+    connection_id: UUID,
+    model_id: str,
+    loader: Callable[[], int | None],
+) -> int | None:
+    """Return a dimension keyed by exact connection and model identity.
+
+    An unknown (`None`) dimension is returned but never retained: the policy
+    is indefinite-fresh, so caching it would pin "unknown" until the next
+    connection mutation instead of re-probing on the next lookup.
+    """
+    key = (connection_id, model_id)
+    dimension = _dimension_cache.get(key, loader).value
+    if dimension is None:
+        _dimension_cache.invalidate(key)
+    return dimension
+
+
+def invalidate_embedding_dimensions(connection_id: UUID) -> int:
+    """Drop dimension values owned by one changed or deleted connection."""
+    return _dimension_cache.invalidate_matching(lambda key: key[0] == connection_id)
+
+
+def invalidate_connection_caches(connection: models.ProviderConnection) -> None:
+    """Close resources derived from a connection's stored configuration."""
+    provider_type = ProviderType(connection.provider_type)
+    invalidator = _CACHE_INVALIDATORS.get(provider_type)
+    if invalidator is not None:
+        invalidator(connection.config)
+
+
+def close_provider_clients() -> None:
+    """Close all provider-owned caches and resources during application shutdown."""
+    _dimension_cache.close()
+    close_openrouter_clients()
+    close_ollama_clients()
 
 
 class ProviderResolver:
