@@ -262,3 +262,32 @@ def test_close_waits_for_refresh_and_cache_can_be_reused(clock: FakeClock) -> No
 
     assert cache.get("other", lambda: "recreated").value == "recreated"
     cache.close()
+
+
+def test_invalidate_during_background_refresh_discards_the_refresh_result(
+    cache: ValueCache[str, str], clock: FakeClock
+) -> None:
+    refresh_started = threading.Event()
+    release_refresh = threading.Event()
+    loads = 0
+
+    def loader() -> str:
+        nonlocal loads
+        loads += 1
+        if loads == 2:
+            refresh_started.set()
+            assert release_refresh.wait(timeout=1)
+        return f"value-{loads}"
+
+    cache.get("key", loader)
+    clock.advance(11)
+    cache.get("key", loader)
+    assert refresh_started.wait(timeout=1)
+
+    assert cache.invalidate("key") is True
+
+    release_refresh.set()
+    reloaded = cache.get("key", loader)
+
+    assert reloaded.value == "value-3"
+    assert loads == 3

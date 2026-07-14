@@ -80,22 +80,20 @@ class ValueCache(Generic[KeyT, ValueT]):
         return self._load_blocking(key, entry, loader)
 
     def invalidate(self, key: KeyT) -> bool:
-        """Remove a completed entry by key."""
+        """Remove an entry by key.
+
+        An in-flight load is detached rather than skipped: its waiters still
+        receive the result, but it lands outside the cache — otherwise a
+        refresh started before the invalidation would repopulate the entry
+        with data loaded from the pre-invalidation state.
+        """
         with self._lock:
-            entry = self._entries.get(key)
-            if entry is None or entry.refreshing:
-                return False
-            del self._entries[key]
-            return True
+            return self._entries.pop(key, None) is not None
 
     def invalidate_matching(self, predicate: Callable[[KeyT], bool]) -> int:
-        """Remove every completed entry whose key matches `predicate`."""
+        """Remove every entry whose key matches `predicate` (see `invalidate`)."""
         with self._lock:
-            keys = [
-                key
-                for key, entry in self._entries.items()
-                if not entry.refreshing and predicate(key)
-            ]
+            keys = [key for key in self._entries if predicate(key)]
             for key in keys:
                 del self._entries[key]
             return len(keys)
