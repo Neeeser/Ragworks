@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { listModels } from "@/lib/api";
+import { listChatModels } from "@/lib/api";
 import { PARAMETER_DEFINITIONS } from "@/lib/chat-parameters";
 import { getErrorMessage } from "@/lib/errors";
 import { sortChatModels } from "@/lib/model-sorting";
@@ -11,7 +11,7 @@ import { sanitizeModelSlug } from "../../lib/chat-utils";
 
 import type { ModelParameterKey, ParameterDefinition } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
-import type { ModelInfo } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError, UUID } from "@/lib/types";
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
   PARAMETER_DEFINITIONS.reduce(
@@ -22,48 +22,69 @@ const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
     {} as Record<ModelParameterKey, ParameterDefinition>,
   );
 
+/** Stable UI key for a (connection, model) pair. */
+export const modelSelectionKey = (connectionId: UUID, modelId: string) =>
+  `${connectionId}::${modelId}`;
+
+export interface ConnectionOption {
+  connectionId: UUID;
+  label: string;
+  providerType: string;
+}
+
 interface UseModelCatalogParams {
   authToken: string;
   authLoading: boolean;
-  openrouterConfigured: boolean;
+  chatProviderConfigured: boolean;
   activeModelId: string | null;
+  activeConnectionId: UUID | null;
   toolsEnabled: boolean;
 }
 
 interface UseModelCatalogResult {
-  modelCatalog: ModelInfo[];
+  modelCatalog: CatalogModel[];
+  connectionErrors: ConnectionCatalogError[];
   modelsLoading: boolean;
   modelsError: string | null;
   modelSearchTerm: string;
   setModelSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   modelSortOption: ChatModelSortOption;
   setModelSortOption: React.Dispatch<React.SetStateAction<ChatModelSortOption>>;
-  currentModelInfo: ModelInfo | null;
+  /** Connection id to restrict the picker to, or "" for every provider. */
+  connectionFilter: string;
+  setConnectionFilter: React.Dispatch<React.SetStateAction<string>>;
+  /** One entry per connection present in the catalog, for the filter dropdown. */
+  connectionOptions: ConnectionOption[];
+  currentModelInfo: CatalogModel | null;
   providerModelSlug: string | null;
   supportedParameterKeys: Set<ModelParameterKey>;
   visibleParameterDefinitions: ParameterDefinition[];
-  toolReadyModels: ModelInfo[];
-  sortedModelCatalog: ModelInfo[];
+  toolReadyModels: CatalogModel[];
+  sortedModelCatalog: CatalogModel[];
   selectedModelKey: string;
 }
 
 /**
- * Loads the OpenRouter model catalog and derives the searchable/sortable views plus
- * the currently-selected model's metadata (slug, supported parameters). Preserves the
- * auth-gated error messages of the original inline fetch.
+ * Loads the unified model catalog (every chat-capable provider connection) and
+ * derives the searchable/sortable views plus the currently-selected model's
+ * metadata (slug, supported parameters). One unreachable connection degrades
+ * to a `connectionErrors` entry instead of failing the whole catalog.
  */
 export function useModelCatalog({
   authToken,
   authLoading,
-  openrouterConfigured,
+  chatProviderConfigured,
   activeModelId,
+  activeConnectionId,
   toolsEnabled,
 }: UseModelCatalogParams): UseModelCatalogResult {
-  const [modelCatalog, setModelCatalog] = useState<ModelInfo[]>([]);
+  const [modelCatalog, setModelCatalog] = useState<CatalogModel[]>([]);
+  const [connectionErrors, setConnectionErrors] = useState<ConnectionCatalogError[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [modelSearchTerm, setModelSearchTerm] = useState("");
   const [modelSortOption, setModelSortOption] = useState<ChatModelSortOption>("price");
+  const [connectionFilter, setConnectionFilter] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -77,18 +98,24 @@ export function useModelCatalog({
         setModelsError("Sign in to load models.");
         return;
       }
-      if (!openrouterConfigured) {
-        setModelCatalog([]);
-        setModelsLoading(false);
-        setModelsError("Add your OpenRouter API key in Settings to load models.");
-        return;
-      }
       setModelsLoading(true);
       try {
-        const items = await listModels(authToken || undefined);
+        const catalog = await listChatModels(authToken);
         if (!cancelled) {
-          setModelCatalog(items);
-          setModelsError(null);
+          setModelCatalog(catalog.models);
+          setConnectionErrors(catalog.connection_errors);
+          if (catalog.connection_errors.length > 0) {
+            // A degraded connection is still an error the user must see.
+            setModelsError(
+              catalog.connection_errors
+                .map((entry) => `${entry.connection_label}: ${entry.message}`)
+                .join(" — "),
+            );
+          } else if (catalog.models.length === 0 && !chatProviderConfigured) {
+            setModelsError("Add a chat provider in Settings to load models.");
+          } else {
+            setModelsError(null);
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -104,21 +131,24 @@ export function useModelCatalog({
     return () => {
       cancelled = true;
     };
-  }, [authLoading, authToken, openrouterConfigured]);
+  }, [authLoading, authToken, chatProviderConfigured]);
 
   const currentModelInfo = useMemo(() => {
-    const lookupId = activeModelId;
-    if (!lookupId) return null;
-    return (
-      modelCatalog.find((model) => model.id === lookupId || model.canonical_slug === lookupId) ??
-      null
-    );
-  }, [activeModelId, modelCatalog]);
+    if (!activeModelId) return null;
+    const withinConnection = activeConnectionId
+      ? modelCatalog.find(
+          (model) => model.id === activeModelId && model.connection_id === activeConnectionId,
+        )
+      : null;
+    return withinConnection ?? modelCatalog.find((model) => model.id === activeModelId) ?? null;
+  }, [activeConnectionId, activeModelId, modelCatalog]);
 
   const providerModelSlug = useMemo(() => {
-    const slugSource = currentModelInfo?.canonical_slug ?? currentModelInfo?.id ?? null;
-    return sanitizeModelSlug(slugSource);
-  }, [currentModelInfo?.canonical_slug, currentModelInfo?.id]);
+    if (currentModelInfo?.provider_type !== "openrouter") {
+      return null;
+    }
+    return sanitizeModelSlug(currentModelInfo?.id ?? null);
+  }, [currentModelInfo?.id, currentModelInfo?.provider_type]);
 
   const supportedParameterKeys = useMemo(() => {
     const supported = new Set<ModelParameterKey>();
@@ -148,33 +178,61 @@ export function useModelCatalog({
     );
   }, [modelCatalog, toolsEnabled]);
 
+  const connectionOptions = useMemo(() => {
+    const options = new Map<UUID, ConnectionOption>();
+    for (const model of modelCatalog) {
+      if (!options.has(model.connection_id)) {
+        options.set(model.connection_id, {
+          connectionId: model.connection_id,
+          label: model.connection_label,
+          providerType: model.provider_type,
+        });
+      }
+    }
+    return [...options.values()];
+  }, [modelCatalog]);
+
+  const connectionScopedModels = useMemo(() => {
+    if (!connectionFilter) return toolReadyModels;
+    return toolReadyModels.filter((model) => model.connection_id === connectionFilter);
+  }, [connectionFilter, toolReadyModels]);
+
   const filteredModelCatalog = useMemo(() => {
     const query = modelSearchTerm.trim().toLowerCase();
-    if (!query) return toolReadyModels;
-    return toolReadyModels.filter((model) => {
-      const haystack = [model.name, model.id, model.canonical_slug, model.description]
+    if (!query) return connectionScopedModels;
+    return connectionScopedModels.filter((model) => {
+      const haystack = [model.name, model.id, model.connection_label, model.description]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [modelSearchTerm, toolReadyModels]);
+  }, [connectionScopedModels, modelSearchTerm]);
 
   const sortedModelCatalog = useMemo(
     () => sortChatModels(filteredModelCatalog, modelSortOption),
     [filteredModelCatalog, modelSortOption],
   );
 
-  const selectedModelKey = useMemo(() => activeModelId || "", [activeModelId]);
+  const selectedModelKey = useMemo(() => {
+    if (!activeModelId) return "";
+    return activeConnectionId
+      ? modelSelectionKey(activeConnectionId, activeModelId)
+      : activeModelId;
+  }, [activeConnectionId, activeModelId]);
 
   return {
     modelCatalog,
+    connectionErrors,
     modelsLoading,
     modelsError,
     modelSearchTerm,
     setModelSearchTerm,
     modelSortOption,
     setModelSortOption,
+    connectionFilter,
+    setConnectionFilter,
+    connectionOptions,
     currentModelInfo,
     providerModelSlug,
     supportedParameterKeys,

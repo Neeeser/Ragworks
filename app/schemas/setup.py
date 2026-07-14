@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.schemas.collections import CollectionRead
@@ -11,7 +13,9 @@ from app.schemas.enums import IndexBackend
 class SetupStatusRead(BaseModel):
     """Derived first-run readiness: real state, never a stored flag."""
 
-    openrouter_configured: bool
+    has_embedding_provider: bool
+    has_chat_provider: bool
+    has_vector_store: bool
     has_index: bool
     has_collection: bool
     setup_complete: bool
@@ -20,6 +24,7 @@ class SetupStatusRead(BaseModel):
 class SetupBootstrapRequest(BaseModel):
     """The wizard's confirmed choices, applied in one transaction."""
 
+    embedding_connection_id: UUID
     embedding_model: str = Field(min_length=1)
     embedding_dimension: int | None = Field(default=None, gt=0)
     backend: IndexBackend

@@ -30,6 +30,7 @@ from app.vectorstores import registry as registry_module
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
 from app.vectorstores.pinecone.store import is_missing_namespace_error
+from tests.utils.providers import add_pinecone_connection, install_default_pipelines
 
 
 @pytest.fixture(autouse=True)
@@ -109,12 +110,12 @@ def _create_user(session: Session) -> models.User:
         email="user@example.com",
         full_name="User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
+    add_pinecone_connection(session, user)
     return user
 
 
@@ -345,16 +346,16 @@ def _add_document(session: Session, user, collection, status) -> models.Document
 
 
 def _keyless_user(session: Session) -> models.User:
+    """A user with defaults installed but no Pinecone connection."""
     user = models.User(
         email="keyless@example.com",
         full_name="Keyless",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key=None,
     )
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 
@@ -389,7 +390,7 @@ def test_delete_with_indexed_documents_still_requires_the_backend(
     _add_document(session, user, collection, models.DocumentStatus.READY)
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
 
-    with pytest.raises(InvalidInputError, match="Pinecone API key"):
+    with pytest.raises(InvalidInputError, match="Pinecone connection"):
         CollectionDeletionService(session).delete(user, collection)
 
     assert session.get(models.Collection, collection.id) is not None

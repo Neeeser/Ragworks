@@ -76,9 +76,9 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: "Chunk batch\n- Topic A\n- Topic B",
     },
   },
-  "embedder.openrouter": {
+  "embedder.text": {
     description:
-      "Calls the configured OpenRouter embedding model to embed chunks or a query request. It attaches vectors plus usage metadata for downstream indexing or retrieval.",
+      "Calls the embedding model on the configured provider connection to embed chunks or a query request. It attaches vectors plus usage metadata for downstream indexing or retrieval.",
     example: {
       input: 'Query request: "Hello world!"',
       output: "Query embedding:\n- [0.12, -0.03, 0.44, ...]",

@@ -4,7 +4,11 @@ import { BaseEdge, getSmoothStepPath } from "@xyflow/react";
 
 import { getPortTypeColorVar } from "../lib/pipeline-theme";
 
+import { usePipelineEdgeRoute } from "./PipelineEdgeRoutingProvider";
+
 import type { Edge, EdgeProps } from "@xyflow/react";
+
+export { PIPELINE_EDGE_ROUTING_OPTIONS } from "./PipelineEdgeRoutingProvider";
 
 export type TypedEdgeData = {
   /** Port data type leaving the source handle; colors the wire. */
@@ -23,6 +27,30 @@ export type TypedEdgeData = {
 
 export type TypedEdgeType = Edge<TypedEdgeData, "typed">;
 
+type EdgeCoordinates = Pick<
+  EdgeProps<TypedEdgeType>,
+  "sourceX" | "sourceY" | "targetX" | "targetY" | "sourcePosition" | "targetPosition"
+>;
+
+const resolveEdgePath = (
+  route: ReturnType<typeof usePipelineEdgeRoute>,
+  coordinates: EdgeCoordinates,
+) => {
+  if (route) return route.svgPathString;
+  return getSmoothStepPath({ ...coordinates, borderRadius: 6 })[0];
+};
+
+const resolveEdgeAppearance = (data: TypedEdgeData | undefined, selected: boolean | undefined) => {
+  const color = data?.error ? "var(--data-neg)" : getPortTypeColorVar(data?.dataType);
+  const emphasized = Boolean(data?.active || data?.error || selected);
+  return {
+    color,
+    emphasized,
+    lit: emphasized || Boolean(data?.visited),
+    travelMs: data?.travelMs ?? 700,
+  };
+};
+
 /**
  * Orthogonal step edge colored by the data type it carries -- the same color
  * language as the port dots -- with an optional animated payload dot for
@@ -30,6 +58,8 @@ export type TypedEdgeType = Edge<TypedEdgeData, "typed">;
  */
 export function TypedEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -39,23 +69,19 @@ export function TypedEdge({
   data,
   selected,
 }: EdgeProps<TypedEdgeType>) {
-  // Rigid orthogonal routing (small corner radius): pipelines read as an
-  // assembly line, so the wires run like conveyor tracks, not loose curves.
-  const [path] = getSmoothStepPath({
+  const coordinates = {
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 6,
-  });
+  };
+  const route = usePipelineEdgeRoute({ id, source, target, data, ...coordinates });
+  const path = resolveEdgePath(route, coordinates);
   // Theme-aware color via CSS var; applied through `style` (var() is invalid in
   // SVG presentation attributes like fill=/stroke=, valid only in inline style).
-  const color = data?.error ? "var(--data-neg)" : getPortTypeColorVar(data?.dataType);
-  const emphasized = Boolean(data?.active || data?.error || selected);
-  const lit = emphasized || Boolean(data?.visited);
-  const travelMs = data?.travelMs ?? 700;
+  const { color, emphasized, lit, travelMs } = resolveEdgeAppearance(data, selected);
 
   return (
     <>

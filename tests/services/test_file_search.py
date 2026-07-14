@@ -19,7 +19,6 @@ def _create_user(session: Session) -> models.User:
         email="search@example.com",
         full_name="Search Tester",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
     )
     session.add(user)
     session.commit()

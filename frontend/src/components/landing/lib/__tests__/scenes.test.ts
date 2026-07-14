@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LANDING_SCENES } from "@/components/landing/lib/scenes";
 
 const HYBRID_RETRIEVAL_ID = "hybrid-retrieval";
+const HYBRID_INGESTION_ID = "hybrid-ingestion";
 
 describe("LANDING_SCENES registry", () => {
   it("ships both semantic and hybrid variants of ingestion and retrieval", () => {
@@ -10,7 +11,7 @@ describe("LANDING_SCENES registry", () => {
     expect(new Set(ids).size).toBe(ids.length); // ids unique
     expect(ids).toContain("semantic-ingestion");
     expect(ids).toContain("semantic-retrieval");
-    expect(ids).toContain("hybrid-ingestion");
+    expect(ids).toContain(HYBRID_INGESTION_ID);
     expect(ids).toContain(HYBRID_RETRIEVAL_ID);
     expect(LANDING_SCENES.some((scene) => scene.kind === "ingestion")).toBe(true);
     expect(LANDING_SCENES.some((scene) => scene.kind === "retrieval")).toBe(true);
@@ -90,7 +91,7 @@ describe("LANDING_SCENES registry", () => {
   });
 
   it("hybrid ingestion splits at the chunker and merges both indexes downstream", () => {
-    const scene = LANDING_SCENES.find((entry) => entry.id === "hybrid-ingestion");
+    const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_INGESTION_ID);
     expect(scene).toBeDefined();
     const { edges } = scene!.build();
     const fanOut = edges.filter((edge) => edge.source === "chunk");
@@ -116,5 +117,24 @@ describe("LANDING_SCENES registry", () => {
     const { nodes } = scene!.build();
     const rows = new Set(nodes.map((node) => node.position.y));
     expect(rows.size).toBeGreaterThan(1);
+  });
+
+  // Scenes are placed by the shared auto-layout (the editor's Tidy
+  // algorithm), so merge nodes must sit between their branches — the
+  // regression the manual grid used to hand-maintain.
+  it("auto-layout centers hybrid merge nodes between their branch rows", () => {
+    const cases = [
+      { sceneId: HYBRID_INGESTION_ID, branches: ["index", "index-bm25"], merge: "collection" },
+      { sceneId: HYBRID_RETRIEVAL_ID, branches: ["retrieve", "bm25-retrieve"], merge: "fusion" },
+    ];
+    cases.forEach(({ sceneId, branches, merge }) => {
+      const scene = LANDING_SCENES.find((entry) => entry.id === sceneId);
+      const { nodes } = scene!.build();
+      const byId = new Map(nodes.map((node) => [node.id, node]));
+      const branchYs = branches.map((id) => byId.get(id)!.position.y);
+      const mergeY = byId.get(merge)!.position.y;
+      expect(mergeY, `${sceneId} merge above branches`).toBeGreaterThan(Math.min(...branchYs));
+      expect(mergeY, `${sceneId} merge below branches`).toBeLessThan(Math.max(...branchYs));
+    });
   });
 });

@@ -170,7 +170,7 @@ const setupDefaultApiMocks = () => {
   api.getCollectionPrompt.mockResolvedValue(collectionPromptDetails);
   api.listChatSessions.mockResolvedValue(sessions);
   api.listModelEndpoints.mockResolvedValue({ data: providerDirectory });
-  api.listModels.mockResolvedValue(modelCatalog);
+  api.listChatModels.mockResolvedValue({ models: modelCatalog, connection_errors: [] });
   api.updateRunSettingsOrder.mockResolvedValue(baseUser);
   api.updateBasePrompt.mockResolvedValue({
     ...basePromptDetails,
@@ -248,12 +248,13 @@ describe("ChatStudio", () => {
         "Sign in to access the chat studio.",
       );
 
-      setAuthState({ user: { ...baseUser, openrouter_configured: false } });
+      api.listConnections.mockResolvedValue([]);
+      setAuthState({ user: baseUser });
       rerender(<ChatStudio />);
       await flushPromises();
 
       expect(screen.getByTestId("notification")).toHaveTextContent(
-        "OpenRouter API key is not configured.",
+        "No chat provider is configured.",
       );
     });
 
@@ -265,7 +266,7 @@ describe("ChatStudio", () => {
 
       expect(api.listChatSessions).not.toHaveBeenCalled();
       expect(api.fetchCollections).not.toHaveBeenCalled();
-      expect(api.listModels).not.toHaveBeenCalled();
+      expect(api.listChatModels).not.toHaveBeenCalled();
     });
 
     it("loads collections and sends with tools even without a Pinecone key", async () => {
@@ -273,7 +274,7 @@ describe("ChatStudio", () => {
       // client never gates tools on the Pinecone key — the backend enforces
       // it only when a selected collection actually retrieves from Pinecone.
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
-      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+      setAuthState({ user: baseUser });
 
       render(<ChatStudio />);
       await flushPromises();
@@ -639,7 +640,7 @@ describe("ChatStudio", () => {
     it("sends a non-streaming turn and deletes a session", async () => {
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
       setMockParams({ sessionId: "session-2" });
-      setAuthState({ user: { ...baseUser, pinecone_configured: false } });
+      setAuthState({ user: baseUser });
       api.chat.mockResolvedValue({ ...chatCompletionPayload, session: sessions[1] });
 
       render(<ChatStudio />);

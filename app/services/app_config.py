@@ -55,10 +55,9 @@ _CACHE_TTL_SECONDS = 30.0
 # that supplies its pinned value when the field's `env_var` is set. Kept as
 # a literal dict (not reflection) so adding an env-pinned field is a
 # one-line, greppable change in both `app_config.py` and here.
-_ENV_PINNED_SETTINGS_ATTR: dict[str, str] = {
-    "models.default_chat_model": "default_chat_model",
-    "models.default_embedding_model": "default_embedding_model",
-}
+# No env-pinned fields remain since global default models were removed; the
+# mapping stays so a future pinned field is a one-line entry.
+_ENV_PINNED_SETTINGS_ATTR: dict[str, str] = {}
 
 _cache_lock = threading.Lock()
 _cache: tuple[float, AppConfig] | None = None

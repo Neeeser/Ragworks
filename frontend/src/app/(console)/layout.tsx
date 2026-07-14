@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { WorkspaceLoading } from "@/components/ui/workspace-loading";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { SetupStatusProvider } from "@/providers/setup-status-provider";
@@ -18,7 +19,7 @@ const navLinks = [
   { href: "/pipelines", label: "Pipelines", icon: GitBranch },
 ];
 
-export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+function ConsoleLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -84,11 +85,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   }, [user?.full_name, user?.email]);
 
   if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-muted">
-        Preparing your workspace…
-      </div>
-    );
+    return <WorkspaceLoading />;
   }
 
   const links =
@@ -208,16 +205,22 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           isPipelinesRoute && "xl:overflow-hidden",
         )}
       >
-        <SetupStatusProvider>
-          {isFullHeightRoute || isPipelinesRoute ? (
-            <div className={cn(isFullHeightRoute && "h-full", isPipelinesRoute && "xl:h-full")}>
-              {children}
-            </div>
-          ) : (
-            children
-          )}
-        </SetupStatusProvider>
+        {isFullHeightRoute || isPipelinesRoute ? (
+          <div className={cn(isFullHeightRoute && "h-full", isPipelinesRoute && "xl:h-full")}>
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </main>
     </div>
+  );
+}
+
+export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SetupStatusProvider>
+      <ConsoleLayoutContent>{children}</ConsoleLayoutContent>
+    </SetupStatusProvider>
   );
 }

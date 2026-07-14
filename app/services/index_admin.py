@@ -11,7 +11,6 @@ from __future__ import annotations
 from sqlmodel import Session
 
 from app.db import models
-from app.db.pgvector_support import pgvector_available
 from app.schemas.enums import IndexBackend
 from app.schemas.indexes import (
     BackendCapabilitiesRead,
@@ -50,7 +49,7 @@ class IndexAdminService:
                     status.capabilities.model_dump()
                 ),
             )
-            for status in backend_statuses(user)
+            for status in backend_statuses(user, self._session)
         ]
 
     def list_indexes(self, user: models.User, backend: IndexBackend | None) -> list[IndexRead]:
@@ -102,10 +101,9 @@ class IndexAdminService:
         record(IndexDeleted(user_id=user.id, backend=backend.value, index_name=name))
 
     def _usable_backends(self, user: models.User) -> list[IndexBackend]:
-        """Backends this user can list right now (pgvector present, key set)."""
-        usable: list[IndexBackend] = []
-        if pgvector_available():
-            usable.append(IndexBackend.PGVECTOR)
-        if (user.pinecone_api_key or "").strip():
-            usable.append(IndexBackend.PINECONE)
-        return usable
+        """Backends this user can list right now (pgvector present, connection set)."""
+        return [
+            status.backend
+            for status in backend_statuses(user, self._session)
+            if status.available and status.configured
+        ]

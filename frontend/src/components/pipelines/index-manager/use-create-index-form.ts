@@ -5,7 +5,7 @@ import { useState } from "react";
 import { createIndex } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { BackendInfo, EmbeddingModelInfo, IndexCreatePayload } from "@/lib/types";
+import type { BackendInfo, CatalogModel, IndexCreatePayload } from "@/lib/types";
 
 export const CLOUD_OPTIONS = ["aws", "gcp", "azure"];
 export const REGION_OPTIONS: Record<string, string[]> = {
@@ -31,7 +31,7 @@ interface UseCreateIndexFormParams {
   /** The backend the form creates on; its capabilities drive metric options,
    * the dimension ceiling, and which Pinecone-only fields render at all. */
   backendInfo: BackendInfo;
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
   /** Called at the start of every create attempt, before any validation or the API
    * call - the parent uses it to clear stale success/error banners so a retry never
    * shows a leftover error next to a fresh result. */
@@ -45,7 +45,7 @@ export interface UseCreateIndexFormResult {
   creating: boolean;
   useModelDimension: boolean;
   selectedEmbeddingModelId: string;
-  selectedEmbeddingModel: EmbeddingModelInfo | null;
+  selectedEmbeddingModel: CatalogModel | null;
   createDisabled: boolean;
   createDisabledReason: string | null;
   metricOptions: string[];
@@ -59,7 +59,7 @@ export interface UseCreateIndexFormResult {
   handleVectorTypeChange: (value: string) => void;
   handleCloudChange: (value: string) => void;
   handleDimensionModeChange: (mode: "manual" | "model") => void;
-  handleSelectEmbeddingModel: (modelId: string) => void;
+  handleSelectEmbeddingModel: (model: CatalogModel) => void;
   handleCreate: () => Promise<void>;
 }
 
@@ -166,11 +166,11 @@ export function useCreateIndexForm({
     }));
   };
 
-  const handleSelectEmbeddingModel = (modelId: string) => {
-    setSelectedEmbeddingModelId(modelId);
-    const model = embeddingModels.find((entry) => entry.id === modelId);
-    if (typeof model?.dimension === "number") {
-      setCreateForm((prev) => ({ ...prev, dimension: model.dimension }));
+  const handleSelectEmbeddingModel = (model: CatalogModel) => {
+    setSelectedEmbeddingModelId(model.id);
+    if (typeof model.dimension === "number") {
+      const dimension = model.dimension;
+      setCreateForm((prev) => ({ ...prev, dimension }));
     }
   };
 

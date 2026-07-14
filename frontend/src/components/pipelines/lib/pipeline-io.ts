@@ -47,7 +47,7 @@ const validateDimensionConnection = (
   configOverrides?: Record<string, Record<string, unknown>>,
 ) => {
   if (!sourceNode || !targetNode) return null;
-  if (sourceNode.data.nodeType !== "embedder.openrouter") return null;
+  if (sourceNode.data.nodeType !== "embedder.text") return null;
   if (!targetNode.data.nodeType.startsWith("indexer.")) return null;
   const sourceConfig = resolveNodeConfig(sourceNode, configOverrides);
   const targetConfig = resolveNodeConfig(targetNode, configOverrides);

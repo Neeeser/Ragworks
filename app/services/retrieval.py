@@ -8,13 +8,13 @@ from time import perf_counter
 
 from sqlmodel import Session
 
-from app.clients.openrouter import get_openrouter_client
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
 from app.pipelines.tracing.summaries import TokenUsage
+from app.providers.registry import ProviderResolver
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedRetrievalPipeline, resolve_retrieval_pipeline
@@ -101,7 +101,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         top_k: int,
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the retrieval pipeline run."""
-        openrouter = get_openrouter_client(user.openrouter_api_key or "")
+        providers = ProviderResolver(user, self.session)
         vector_stores = VectorStoreProvider(user, self.session)
         version = resolved.service.get_current_version(resolved.pipeline)
         return runner.start(
@@ -112,7 +112,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             user=user,
             collection=collection,
             settings=self.settings,
-            openrouter=openrouter,
+            providers=providers,
             vector_stores=vector_stores,
             storage=FileStorage(),
             query=query,

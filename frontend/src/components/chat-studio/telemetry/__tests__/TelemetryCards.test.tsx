@@ -245,7 +245,7 @@ describe("Telemetry cards", () => {
     );
 
     expect(screen.getByText(/50/)).toBeInTheDocument();
-    expect(screen.getByText(/OpenRouter total cost/)).toBeInTheDocument();
+    expect(screen.getByText(/Provider total cost/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Export chat history" }));
     expect(onExport).toHaveBeenCalled();
   });

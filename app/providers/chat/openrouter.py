@@ -7,10 +7,28 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.chat.providers.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.clients.openrouter import OpenRouterClient
+from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse, OpenRouterStreamChunk
+
+
+def build_openrouter_body(
+    reasoning_options: dict[str, Any] | None,
+    provider_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the OpenRouter extra_body payload for chat requests."""
+    body: dict[str, Any] = dict(reasoning_options) if reasoning_options else {}
+    usage_config = body.get("usage")
+    if isinstance(usage_config, dict):
+        merged_usage = dict(usage_config)
+        merged_usage["include"] = True
+        body["usage"] = merged_usage
+    else:
+        body["usage"] = {"include": True}
+    if provider_options:
+        body["provider"] = provider_options
+    return body
 
 
 class OpenRouterProvider:
@@ -46,10 +64,15 @@ class OpenRouterProvider:
             tools=request.tools,
             model=request.model,
             parallel_tool_calls=True,
-            extra_body=request.extra_body,
+            extra_body=self._build_extra_body(request),
             parameters=request.parameters or None,
         )
         return response.model_dump(exclude_none=True)
+
+    @staticmethod
+    def _build_extra_body(request: ChatRequest) -> dict[str, Any]:
+        """Map the normalized request onto OpenRouter's `extra_body` shape."""
+        return build_openrouter_body(request.reasoning_options, request.provider_preferences)
 
     def chat_stream(self, request: ChatRequest) -> Iterable[dict[str, Any]]:
         """Stream a chat completion request, dumping each typed chunk to a dict."""
@@ -58,7 +81,7 @@ class OpenRouterProvider:
             tools=request.tools,
             model=request.model,
             parallel_tool_calls=True,
-            extra_body=request.extra_body,
+            extra_body=self._build_extra_body(request),
             parameters=request.parameters or None,
         ):
             yield chunk.model_dump(exclude_none=True)

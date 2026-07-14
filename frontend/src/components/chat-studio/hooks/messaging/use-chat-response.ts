@@ -43,6 +43,7 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
     setUsage,
     setContextConsumed,
     setActiveModelId,
+    setActiveConnectionId,
     setParameterOverrides,
     setProviderForm,
     setStreamingEnabled,
@@ -102,6 +103,7 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
       setContextConsumed(response.context_consumed);
       setContextWindow(response.context_window || contextWindow || 0);
       setActiveModelId(response.session.chat_model);
+      setActiveConnectionId(response.session.provider_connection_id ?? null);
       const resolvedSession =
         toolCollectionsDirtyRef.current && response.session.tool_collection_ids
           ? { ...response.session, tool_collection_ids: selectedToolCollectionIds }
@@ -138,6 +140,7 @@ export function useChatResponse(params: UseChatMutationParams): UseChatResponseR
       pendingSessionIdsRef,
       selectedToolCollectionIds,
       setActiveModelId,
+      setActiveConnectionId,
       setContextConsumed,
       setContextWindow,
       setParameterOverrides,

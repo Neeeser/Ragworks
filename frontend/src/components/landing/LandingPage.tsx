@@ -70,8 +70,10 @@ export function LandingPage() {
             </h1>
           </div>
 
-          {/* The clear band the running pipeline flows through. */}
-          <div className="h-32 w-full sm:h-44" aria-hidden />
+          {/* The clear band the running pipeline flows through. The pipeline is
+              the hero's focal point, anchored to the viewport center — this gap
+              keeps the headline above and the actions below fully clear of it. */}
+          <div className="h-52 w-full sm:h-80 md:h-96" aria-hidden />
 
           {/* Below the flow band — actions only. The running pipeline says what
               the product does; words don't need to repeat it. */}

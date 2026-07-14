@@ -13,6 +13,7 @@ import { NodeConfigSections, NodeDescription, NodeExampleSection } from "./NodeC
 
 import type { NodeConfigSectionsProps } from "./NodeConfigSections";
 import type { PipelineNodeData } from "./PipelineNode";
+import type { CatalogModel } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type NodeEdits = {
@@ -68,13 +69,17 @@ function DrawerContent({
     data: { ...node.data, label: draftLabel, config: draftConfig },
   };
 
-  const handleSelectEmbeddingModel = (modelId: string) => {
-    // Deliberately set only the model — and clear any stored dimension: an
-    // explicit `dimension` is sent to OpenRouter as a `dimensions` override,
-    // which most embedding models reject (no matryoshka support). Models emit
-    // their native size without it.
+  const handleSelectEmbeddingModel = (model: CatalogModel) => {
+    // Deliberately set only the connection + model — and clear any stored
+    // dimension: an explicit `dimension` is sent to the provider as a
+    // `dimensions` override, which most embedding models reject (no
+    // matryoshka support). Models emit their native size without it.
     setDraftConfig((prev) => {
-      const next: Record<string, unknown> = { ...prev, model_name: modelId };
+      const next: Record<string, unknown> = {
+        ...prev,
+        connection_id: model.connection_id,
+        model_name: model.id,
+      };
       delete next.dimension;
       return next;
     });

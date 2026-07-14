@@ -46,13 +46,16 @@ def test_setup_status_shape(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {
-        "openrouter_configured",
+        "has_embedding_provider",
+        "has_chat_provider",
+        "has_vector_store",
         "has_index",
         "has_collection",
         "setup_complete",
     }
-    # The auth_user fixture has keys but no index/collection yet.
-    assert body["openrouter_configured"] is True
+    # The auth_user fixture has connections but no index/collection yet.
+    assert body["has_embedding_provider"] is True
+    assert body["has_chat_provider"] is True
     assert body["setup_complete"] is False
 
 
@@ -60,10 +63,12 @@ def test_setup_bootstrap_validates_body(client: TestClient) -> None:
     assert client.post("/api/setup/bootstrap", json={}).status_code == 422
 
 
-def test_setup_bootstrap_translates_domain_errors(client: TestClient) -> None:
+def test_setup_bootstrap_translates_domain_errors(client: TestClient, auth_user, session) -> None:
+    connection = _openrouter_connection_id(session, auth_user)
     response = client.post(
         "/api/setup/bootstrap",
         json={
+            "embedding_connection_id": connection,
             "embedding_model": "some/model",
             "backend": "pgvector",
             "index_name": "does-not-exist",
@@ -74,8 +79,15 @@ def test_setup_bootstrap_translates_domain_errors(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def _openrouter_connection_id(session, user) -> str:
+    from app.db.repositories import ProviderConnectionRepository
+
+    rows = ProviderConnectionRepository(session).list_for_user_of_type(user.id, "openrouter")
+    return str(rows[0].id)
+
+
 def test_setup_bootstrap_returns_the_created_collection(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, auth_user, session
 ) -> None:
     """Regression: the response shaping used `model_validate(collection)`,
     which 500s because the db column `extra_metadata` is the schema field
@@ -92,6 +104,7 @@ def test_setup_bootstrap_returns_the_created_collection(
     response = client.post(
         "/api/setup/bootstrap",
         json={
+            "embedding_connection_id": _openrouter_connection_id(session, auth_user),
             "embedding_model": "some/model",
             "embedding_dimension": 384,
             "backend": "pgvector",

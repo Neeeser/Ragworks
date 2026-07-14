@@ -55,7 +55,7 @@ export const ModelParametersCard = ({
   if (!currentModelInfo) {
     return (
       <p className="text-sm text-muted">
-        Unable to find OpenRouter metadata for{" "}
+        Unable to find provider metadata for{" "}
         <span className="text-primary">{selectedModelLabel}</span>.
       </p>
     );
@@ -63,7 +63,7 @@ export const ModelParametersCard = ({
   if (visibleParameterDefinitions.length === 0) {
     return (
       <p className="text-sm text-muted">
-        This model does not expose the common sampling parameters listed in the OpenRouter docs.
+        This model does not expose any of the common sampling parameters.
       </p>
     );
   }

@@ -1,11 +1,12 @@
 """First-run setup: derived readiness status and the one-shot bootstrap.
 
-`status` derives readiness from real state (OpenRouter key, an index the
-user can reach, a collection) so it can never drift from reality. `bootstrap`
-applies the wizard's confirmed choices in one transaction: default ingestion
-and retrieval pipelines built around the chosen model/index, the first
-collection attached to them, and the global default embedding model seeded
-if it is still unset.
+`status` derives readiness from real state (provider connections covering
+embedding/chat/vector-store, an index the user can reach, a collection) so it
+can never drift from reality. `bootstrap` applies the wizard's confirmed
+choices in one transaction: default ingestion and retrieval pipelines built
+around the chosen connection/model/index and the first collection attached to
+them. There are no global default models to seed — the embedding choice lives
+inside the scaffolded pipeline definitions.
 """
 
 from __future__ import annotations
@@ -17,15 +18,16 @@ from uuid import uuid4
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import AppSettingRepository, CollectionRepository
+from app.db.pgvector_support import pgvector_available
+from app.db.repositories import CollectionRepository, ProviderConnectionRepository
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition
-from app.schemas.enums import IndexBackend
+from app.providers.registry import build_adapter, get_provider, resolve_connection
+from app.schemas.enums import IndexBackend, ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
-from app.services.app_config import get_app_config, invalidate_app_config_cache
 from app.services.errors import (
     InvalidInputError,
     NotFoundError,
@@ -52,18 +54,37 @@ class SetupService:
 
     def status(self, user: models.User) -> SetupStatusRead:
         """Return derived readiness for this user."""
-        openrouter_configured = bool((user.openrouter_api_key or "").strip())
+        coverage = self._provider_coverage(user)
         has_index = self._has_index(user)
         has_collection = bool(self._collections.list_for_user(user.id))
+        providers_ready = all(coverage[kind] for kind in ProviderKind)
         return SetupStatusRead(
-            openrouter_configured=openrouter_configured,
+            has_embedding_provider=coverage[ProviderKind.EMBEDDING],
+            has_chat_provider=coverage[ProviderKind.CHAT],
+            has_vector_store=coverage[ProviderKind.VECTOR_STORE],
             has_index=has_index,
             has_collection=has_collection,
-            setup_complete=openrouter_configured and has_index and has_collection,
+            setup_complete=providers_ready and has_index and has_collection,
         )
+
+    def _provider_coverage(self, user: models.User) -> dict[ProviderKind, bool]:
+        """Which kinds the user's connections (plus built-in pgvector) cover."""
+        coverage = {kind: False for kind in ProviderKind}
+        if pgvector_available():
+            coverage[ProviderKind.VECTOR_STORE] = True
+        for connection in ProviderConnectionRepository(self.session).list_for_user(user.id):
+            try:
+                descriptor = build_adapter(connection).descriptor
+            except InvalidInputError:
+                continue
+            for kind in descriptor.kinds:
+                coverage[kind] = True
+        return coverage
 
     def bootstrap(self, user: models.User, payload: SetupBootstrapRequest) -> models.Collection:
         """Install default pipelines and the first collection in one commit."""
+        connection = resolve_connection(self.session, user, payload.embedding_connection_id)
+        get_provider(connection, ProviderKind.EMBEDDING)
         self._validate_index(user, payload)
         defaults = self._install_default_pipelines(user, payload)
         collection = models.Collection(
@@ -76,7 +97,6 @@ class SetupService:
             extra_metadata={},
         )
         self._collections.add(collection)
-        self._seed_default_embedding_model(payload.embedding_model, user)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -129,6 +149,7 @@ class SetupService:
         """Create (or refresh) the default pipelines from the wizard's choices."""
         definitions: dict[models.PipelineKind, PipelineDefinition] = {
             models.PipelineKind.INGESTION: build_default_ingestion_pipeline(
+                embedding_connection_id=payload.embedding_connection_id,
                 embedding_model=payload.embedding_model,
                 backend=payload.backend,
                 index_name=payload.index_name,
@@ -136,6 +157,7 @@ class SetupService:
                 chunk_overlap=payload.chunk_overlap,
             ),
             models.PipelineKind.RETRIEVAL: build_default_retrieval_pipeline(
+                embedding_connection_id=payload.embedding_connection_id,
                 embedding_model=payload.embedding_model,
                 backend=payload.backend,
                 index_name=payload.index_name,
@@ -174,16 +196,3 @@ class SetupService:
                     )
                 installed[kind] = existing
         return installed
-
-    def _seed_default_embedding_model(self, model: str, user: models.User) -> None:
-        """Seed the global default model with the wizard's choice, once.
-
-        Only when the effective value is still unset -- a later user's wizard
-        never overwrites a default the deployment already settled on.
-        """
-        if get_app_config().models.default_embedding_model.strip():
-            return
-        AppSettingRepository(self.session).upsert(
-            "models.default_embedding_model", model, updated_by=user.id
-        )
-        invalidate_app_config_cache()

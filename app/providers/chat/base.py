@@ -34,13 +34,22 @@ class ParsedStreamChunk:
 
 @dataclass(frozen=True)
 class ChatRequest:
-    """Chat completion request payload for providers."""
+    """Normalized chat completion request handed to providers.
+
+    This is the provider-neutral contract: `reasoning_options` is the
+    normalized reasoning payload (`{"reasoning": {...}}` /
+    `{"include_reasoning": True}`) and `provider_preferences` is OpenRouter's
+    routing config. Each provider maps these onto its own wire format —
+    OpenRouter into `extra_body`, Ollama into `think`/`options` — so request
+    shaping lives behind the provider, not in the run loop.
+    """
 
     messages: list[dict[str, Any]]
     tools: list[dict[str, Any]] | None
     model: str
-    extra_body: dict[str, Any] | None
     parameters: dict[str, Any] | None
+    reasoning_options: dict[str, Any] | None = None
+    provider_preferences: dict[str, Any] | None = None
 
 
 class ChatProvider(Protocol):

@@ -16,31 +16,40 @@ from sqlmodel import Session, select
 from app.db import models
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.retrieval.models import DocumentChunk, DocumentMetadata
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
-class _StubOpenRouterClient:
-    """Stand-in for `OpenRouterClient` at the client boundary."""
+class _StubEmbedder:
+    """Embedder stand-in: every text embeds to the same fixed vector."""
 
-    def embed(
-        self,
-        texts: object,
-        model: str | None = None,
-        extra_headers: dict[str, str] | None = None,
-        dimensions: int | None = None,
-    ) -> OpenRouterEmbeddingsResponse:
-        texts = list(texts)  # type: ignore[arg-type]
-        return OpenRouterEmbeddingsResponse.model_validate(
-            {
-                "data": [{"embedding": [0.1, 0.2, 0.3]} for _ in texts],
-                "usage": {"prompt_tokens": 5, "total_tokens": 5},
-            }
-        )
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+
+    @property
+    def usage(self) -> dict[str, int] | None:
+        return {"prompt_tokens": 5, "total_tokens": 5}
+
+    def embed_documents(self, chunks):
+        return [[0.1, 0.2, 0.3] for _ in chunks]
+
+    def embed_query(self, _query: str):
+        return [0.1, 0.2, 0.3]
+
+
+class _StubProviderResolver:
+    """ProviderResolver stand-in serving `_StubEmbedder` for any connection."""
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def embedder(self, _connection_id, model_name: str, dimensions=None):
+        del dimensions
+        return _StubEmbedder(model_name)
 
 
 
@@ -49,12 +58,11 @@ def _create_user(session: Session) -> models.User:
         email="retrieval@example.com",
         full_name="Retrieval User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     session.add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 
@@ -80,9 +88,7 @@ def test_query_collection_happy_path_maps_chunks_and_records_event(
     records a `QueryEvent` carrying the same latency/usage/pipeline-run data
     the response reports."""
     session = pgvector_session
-    monkeypatch.setattr(
-        "app.services.retrieval.get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
-    )
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -137,7 +143,9 @@ def test_query_collection_rejects_missing_pipeline(session: Session) -> None:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     collection = _create_collection(session, user, retrieval_pipeline_id=pipeline.id)
@@ -166,7 +174,7 @@ def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Se
             raise RuntimeError("boom")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
 
     with pytest.raises(RuntimeError, match="boom"):
         service.query_collection(user, collection, query="hello")
@@ -201,7 +209,7 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
             raise PineconeException("Pinecone is unavailable")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
 
     with pytest.raises(ExternalServiceError, match="Pinecone is unavailable"):
         service.query_collection(user, collection, query="hello")
@@ -231,7 +239,7 @@ def test_query_collection_skips_failed_run_update(monkeypatch, session: Session)
             raise RuntimeError("boom")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.get_openrouter_client", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
 
     with pytest.raises(RuntimeError, match="boom"):
         service.query_collection(user, collection, query="hello")

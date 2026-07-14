@@ -11,6 +11,7 @@ import {
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
+import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   sortIndexesByName,
@@ -26,7 +27,7 @@ import { useAppConfig } from "@/providers/config-provider";
 
 import type {
   BackendInfo,
-  EmbeddingModelInfo,
+  CatalogModel,
   IndexBackend,
   NodeSpec,
   Pipeline,
@@ -41,7 +42,7 @@ type CreatePipelineWizardProps = {
   indexes: VectorIndex[];
   backends: BackendInfo[];
   nodeSpecs: NodeSpec[];
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
   onClose: () => void;
@@ -103,6 +104,7 @@ export function CreatePipelineWizard({
   const [name, setName] = useState("");
   const [indexName, setIndexName] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
+  const [embeddingConnectionId, setEmbeddingConnectionId] = useState<string | null>(null);
   const [chunkSize, setChunkSize] = useState(1024);
   const [chunkOverlap, setChunkOverlap] = useState(200);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
@@ -136,7 +138,12 @@ export function CreatePipelineWizard({
     () => backendIndexes.find((index) => index.name === indexName) ?? null,
     [backendIndexes, indexName],
   );
-  const selectedModel = embeddingModels.find((model) => model.id === embeddingModel) ?? null;
+  const selectedModel =
+    embeddingModels.find(
+      (model) =>
+        model.id === embeddingModel &&
+        (!embeddingConnectionId || model.connection_id === embeddingConnectionId),
+    ) ?? null;
   const activeChunkPreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
@@ -146,6 +153,7 @@ export function CreatePipelineWizard({
       buildDefaultDefinition(kind, backend, {
         indexName: indexName.trim() || undefined,
         indexDimension: selectedIndex?.dimension ?? undefined,
+        embeddingConnectionId: embeddingConnectionId || undefined,
         embeddingModel: embeddingModel || undefined,
         chunkSize,
         chunkOverlap,
@@ -154,17 +162,29 @@ export function CreatePipelineWizard({
         includeBm25: backendInfo?.lexical_available ?? false,
         indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
       }),
-    [kind, backend, indexName, selectedIndex, embeddingModel, chunkSize, chunkOverlap, backendInfo],
+    [
+      kind,
+      backend,
+      indexName,
+      selectedIndex,
+      embeddingModel,
+      embeddingConnectionId,
+      chunkSize,
+      chunkOverlap,
+      backendInfo,
+    ],
   );
 
-  const preview = useMemo(
-    () => ({
-      nodes: toFlowNodes(definition, nodeSpecs),
-      edges: toFlowEdges(definition, nodeSpecs),
+  const preview = useMemo(() => {
+    // Scaffolds carry no positions; the preview is placed by the same
+    // algorithm the editor and Tidy use.
+    const edges = toFlowEdges(definition, nodeSpecs);
+    return {
+      nodes: layoutPipelineNodes(toFlowNodes(definition, nodeSpecs), edges),
+      edges,
       steps: definition.nodes.map((node) => ({ nodeIds: [node.id] })),
-    }),
-    [definition, nodeSpecs],
-  );
+    };
+  }, [definition, nodeSpecs]);
 
   const canProceed = () => {
     if (stepIndex === 0) return name.trim().length > 0;
@@ -323,7 +343,11 @@ export function CreatePipelineWizard({
           showAdvancedChunking={showAdvancedChunking}
           onToggleAdvancedChunking={() => setShowAdvancedChunking((prev) => !prev)}
           embeddingModel={embeddingModel}
-          onSelectEmbeddingModel={setEmbeddingModel}
+          embeddingConnectionId={embeddingConnectionId}
+          onSelectEmbeddingModel={(model) => {
+            setEmbeddingModel(model.id);
+            setEmbeddingConnectionId(model.connection_id);
+          }}
           embeddingModels={embeddingModels}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}

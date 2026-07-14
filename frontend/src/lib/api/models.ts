@@ -1,37 +1,25 @@
-import { apiFetch, type FetchOptions } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 
-import type { EmbeddingModelInfo, ListModelEndpointsResponse, ModelInfo } from "@/lib/types";
+import type { ListModelEndpointsResponse, ModelCatalogResponse, UUID } from "@/lib/types";
 
-export async function fetchEmbeddingModels(
-  token: string,
-  refresh?: boolean,
-): Promise<EmbeddingModelInfo[]> {
-  const params = refresh ? "?refresh=true" : "";
-  return apiFetch<EmbeddingModelInfo[]>(`/api/models/embeddings${params}`, { token });
+export async function listChatModels(token: string): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>("/api/models?kind=chat", { token });
 }
 
-export async function listModels(token?: string, refresh?: boolean): Promise<ModelInfo[]> {
-  const query = refresh ? "?refresh=true" : "";
-  const options: FetchOptions = {};
-  if (token) {
-    options.token = token;
-  }
-  return apiFetch<ModelInfo[]>(`/api/models${query}`, options);
+export async function fetchEmbeddingModels(token: string): Promise<ModelCatalogResponse> {
+  return apiFetch<ModelCatalogResponse>("/api/models?kind=embedding", { token });
 }
 
 export async function listModelEndpoints(
-  token: string | undefined,
+  token: string,
+  connectionId: UUID,
   author: string,
   slug: string,
 ): Promise<ListModelEndpointsResponse> {
   const encodedAuthor = encodeURIComponent(author);
   const encodedSlug = encodeURIComponent(slug);
-  const options: FetchOptions = {};
-  if (token) {
-    options.token = token;
-  }
   return apiFetch<ListModelEndpointsResponse>(
-    `/api/models/${encodedAuthor}/${encodedSlug}/endpoints`,
-    options,
+    `/api/connections/${connectionId}/models/${encodedAuthor}/${encodedSlug}/endpoints`,
+    { token },
   );
 }

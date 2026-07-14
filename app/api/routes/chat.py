@@ -16,7 +16,6 @@ from app.api.dependencies import (
     get_current_user,
     get_session,
     oauth2_scheme,
-    require_openrouter_key,
 )
 from app.api.routes.utils import to_http_exception
 from app.chat import ChatService
@@ -97,7 +96,7 @@ def update_base_prompt(
 @router.post("/chat", response_model=ChatCompletionResponse)
 def chat(
     payload: ChatMessageCreate,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ChatCompletionResponse:
     """Send a chat message with optional tool collections."""
@@ -122,7 +121,6 @@ def stream_chat(
     with ExitStack() as stack:
         session = stack.enter_context(stream_scoped_session())
         current_user = get_current_user(token=token, session=session)
-        current_user = require_openrouter_key(current_user)
         chat_service = ChatService(session)
         session_cleanup = stack.pop_all()
 

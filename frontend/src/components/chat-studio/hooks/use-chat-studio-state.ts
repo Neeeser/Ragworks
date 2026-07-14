@@ -46,7 +46,9 @@ export interface ChatStudioCoreState {
   streamingEnabled: boolean;
   setStreamingEnabled: Dispatch<boolean>;
   activeModelId: string | null;
+  activeConnectionId: string | null;
   setActiveModelId: Dispatch<string | null>;
+  setActiveConnectionId: Dispatch<string | null>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
   branchedSessionOriginRef: React.MutableRefObject<Map<string, "edit" | "manual">>;
   skipHistoryFetchSessionRef: React.MutableRefObject<string | null>;
@@ -74,6 +76,7 @@ export function useChatStudioState(): ChatStudioCoreState {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [streamingEnabled, setStreamingEnabled] = useState(DEFAULT_STREAMING_ENABLED);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const branchedSessionOriginRef = useRef(new Map<string, "edit" | "manual">());
@@ -115,7 +118,9 @@ export function useChatStudioState(): ChatStudioCoreState {
     streamingEnabled,
     setStreamingEnabled,
     activeModelId,
+    activeConnectionId,
     setActiveModelId,
+    setActiveConnectionId,
     abortControllerRef,
     branchedSessionOriginRef,
     skipHistoryFetchSessionRef,

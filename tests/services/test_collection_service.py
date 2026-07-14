@@ -29,6 +29,7 @@ from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
 from app.services.prompts import SYSTEM_PROMPT_METADATA_KEY
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
 def _create_user(session: Session) -> models.User:
@@ -36,12 +37,11 @@ def _create_user(session: Session) -> models.User:
         email="user@example.com",
         full_name="User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 
@@ -171,7 +171,9 @@ def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
         user=user,
         name="Retrieval",
         kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_retrieval_pipeline(),
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
 
@@ -201,11 +203,15 @@ def test_update_assigns_pipeline_ids(session: Session) -> None:
     pipeline_service = PipelineService(session)
     ingestion_pipeline = pipeline_service.create_pipeline(
         user=user, name="Ingestion", kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     retrieval_pipeline = pipeline_service.create_pipeline(
         user=user, name="Retrieval", kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_retrieval_pipeline(),
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
 
@@ -227,7 +233,9 @@ def test_update_rejects_invalid_pipeline_kind(session: Session) -> None:
     collection = _create_collection(session, user)
     retrieval_pipeline = PipelineService(session).create_pipeline(
         user=user, name="Retrieval", kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_retrieval_pipeline(),
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
 
