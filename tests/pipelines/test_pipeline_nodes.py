@@ -28,6 +28,7 @@ from app.pipelines.payloads import (
     ParsedDocumentPayload,
     RetrievalPayload,
     SourcePayload,
+    TokenizerSpec,
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, build_default_registry
@@ -41,6 +42,7 @@ from app.retrieval.models import (
     ScoredChunk,
 )
 from app.retrieval.parsers.base import DocumentSource
+from app.services.errors import ExternalServiceError, InvalidInputError
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import (
     StubProviderResolver,
@@ -97,7 +99,9 @@ def _build_collection(user: models.User) -> models.Collection:
     )
 
 
-def _build_document(user: models.User, collection: models.Collection, source_path: Path) -> models.Document:
+def _build_document(
+    user: models.User, collection: models.Collection, source_path: Path
+) -> models.Document:
     return models.Document(
         id=uuid4(),
         collection_id=collection.id,
@@ -266,11 +270,11 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
         metadata=DocumentMetadata(),
     )
     store = StubVectorStore(query_matches=[ScoredChunk(chunk=chunk, score=0.9)])
-    context = _build_context(
-        session, user, collection, query="hello", top_k=3, vector_store=store
-    )
+    context = _build_context(session, user, collection, query="hello", top_k=3, vector_store=store)
 
-    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 2}, query_result=[0.1, 0.2])
+    context.providers.embedder_cls = make_stub_embedder(
+        usage={"prompt_tokens": 2}, query_result=[0.1, 0.2]
+    )
 
     definition = build_default_retrieval_pipeline(
         embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
@@ -453,11 +457,14 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
     from app.pipelines.payloads import ChunkPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
-        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
-        DocumentChunk(document_id="doc", chunk_id="doc:1", text="b", order=1, metadata=DocumentMetadata()),
+        DocumentChunk(
+            document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()
+        ),
+        DocumentChunk(
+            document_id="doc", chunk_id="doc:1", text="b", order=1, metadata=DocumentMetadata()
+        ),
     ]
     payload = ChunkPayload(document=document, chunks=chunks)
     node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
@@ -470,9 +477,213 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
         node.run({"chunks": payload}, context)
 
 
-def test_embedder_node_requires_a_mode(monkeypatch, session: Session) -> None:
+def test_embedder_node_rejects_ambiguous_or_incomplete_inputs(session: Session) -> None:
     from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 
+    user = _build_user()
+    context = _build_context(session, user, _build_collection(user))
+    payload = ChunkPayload(
+        document=Document(document_id="doc", text="", metadata=DocumentMetadata()),
+        chunks=[],
+    )
+
+    configured = EmbedderNode(
+        EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed")
+    )
+    with pytest.raises(ValueError, match="both chunks and request"):
+        configured.run({"chunks": payload, "request": object()}, context)
+
+    with pytest.raises(InvalidInputError, match="needs a provider connection"):
+        EmbedderNode(EmbedderConfig()).run({}, context)
+
+
+def test_embedder_guard_handles_missing_connection_and_zero_effective_limit(
+    session: Session,
+) -> None:
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import EmbeddingPayload
+
+    payload = ChunkPayload(
+        document=Document(document_id="doc", text="", metadata=DocumentMetadata()),
+        chunks=[
+            DocumentChunk(
+                document_id="doc",
+                chunk_id="doc:0",
+                text="one two",
+                order=0,
+                metadata=DocumentMetadata(),
+            )
+        ],
+        tokenizer=TokenizerSpec(kind="whitespace"),
+    )
+    user = _build_user()
+    context = _build_context(session, user, _build_collection(user))
+    no_connection = EmbedderNode(EmbedderConfig())
+    assert no_connection._guard_embedding_inputs(payload, context) == payload.chunks
+    assert no_connection._embedding_input_limit(context) is None
+
+    node = EmbedderNode(
+        EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed")
+    )
+    context.providers = StubProviderResolver(embedding_input_limit=16)
+    result = node.run({"chunks": payload}, context)
+    assert isinstance(result["embedded"], EmbeddingPayload)
+    assert len(result["embedded"].chunks) == 1
+
+
+def test_embedder_node_splits_oversized_chunks_before_provider_call() -> None:
+    """Provider inputs stay within the effective limit and ids remain contiguous."""
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import EmbeddingPayload
+    from app.retrieval.tokenizers.resources import build_token_counter
+
+    embedded_texts: list[str] = []
+
+    class _RecordingEmbedder:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            self.usage: dict[str, int] = {}
+
+        def embed_documents(self, provider_chunks: list[DocumentChunk]) -> list[list[float]]:
+            embedded_texts.extend(chunk.text for chunk in provider_chunks)
+            return [[0.1, 0.2] for _ in provider_chunks]
+
+        def embed_query(self, _query: str) -> list[float]:
+            return [0.1, 0.2]
+
+    class _WarningTrace:
+        def __init__(self) -> None:
+            self.warnings: list[str] = []
+
+        def record_warning(self, warning: str) -> None:
+            self.warnings = [*self.warnings, warning]
+
+    document = Document(document_id="doc", text="", metadata=DocumentMetadata())
+    oversized = " ".join(f"token-{index}" for index in range(50))
+    chunks = [
+        DocumentChunk(
+            document_id="doc",
+            chunk_id="doc:7",
+            text=oversized,
+            order=7,
+            metadata=DocumentMetadata(data={"page": 3}),
+        ),
+        DocumentChunk(
+            document_id="doc",
+            chunk_id="doc:8",
+            text="tail",
+            order=8,
+            metadata=DocumentMetadata(data={"page": 4}),
+        ),
+    ]
+    payload = ChunkPayload(
+        document=document,
+        chunks=chunks,
+        tokenizer=TokenizerSpec(kind="whitespace"),
+    )
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
+    user = _build_user()
+    collection = _build_collection(user)
+    session = Session()
+    context = _build_context(session, user, collection)
+    context.providers = StubProviderResolver(
+        _RecordingEmbedder,
+        embedding_input_limit=56,
+    )
+    warning_trace = _WarningTrace()
+    context.trace = warning_trace  # type: ignore[assignment]
+
+    result = node.run({"chunks": payload}, context)
+    embedded = result["embedded"]
+    assert isinstance(embedded, EmbeddingPayload)
+
+    assert embedded_texts == [chunk.text for chunk in embedded.chunks]
+    wordpiece = build_token_counter(TokenizerSpec(kind="wordpiece"), context.storage.base_path)
+    assert all(wordpiece.count(text) <= 40 for text in embedded_texts)
+    assert set(oversized.split()).issubset(
+        {token for text in embedded_texts for token in text.split()}
+    )
+    assert [chunk.order for chunk in embedded.chunks] == list(range(len(embedded.chunks)))
+    assert [chunk.chunk_id for chunk in embedded.chunks] == [
+        f"doc:{order}" for order in range(len(embedded.chunks))
+    ]
+    assert [chunk.metadata.data for chunk in embedded.chunks] == [
+        {"page": 3}
+    ] * (len(embedded.chunks) - 1) + [{"page": 4}]
+    assert warning_trace.warnings == [
+        f"Document doc chunk 0 contained {wordpiece.count(oversized)} tokens, exceeding the "
+        f"40-token embedding limit, and was split into {len(embedded.chunks) - 1} parts using "
+        "the wordpiece counter."
+    ]
+
+
+def test_embedder_node_skips_guard_when_provider_limit_is_unknown() -> None:
+    """Unknown provider metadata leaves chunks unchanged and emits no warning."""
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+    from app.pipelines.payloads import EmbeddingPayload
+
+    document = Document(document_id="doc", text="", metadata=DocumentMetadata())
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:9",
+        text="one two three four five",
+        order=9,
+        metadata=DocumentMetadata(data={"page": 1}),
+    )
+    payload = ChunkPayload(
+        document=document,
+        chunks=[chunk],
+        tokenizer=TokenizerSpec(kind="whitespace"),
+    )
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
+    user = _build_user()
+    collection = _build_collection(user)
+    session = Session()
+    context = _build_context(session, user, collection)
+    context.providers = StubProviderResolver(embedding_input_limit=None)
+
+    result = node.run({"chunks": payload}, context)
+    embedded = result["embedded"]
+    assert isinstance(embedded, EmbeddingPayload)
+    assert [(item.chunk_id, item.order, item.text) for item in embedded.chunks] == [
+        ("doc:9", 9, chunk.text)
+    ]
+
+
+def test_embedder_node_skips_guard_when_limit_lookup_is_unavailable() -> None:
+    """Provider metadata outages do not prevent the embedding call."""
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+
+    class _UnavailableLimitResolver(StubProviderResolver):
+        def embedding_input_limit(self, _connection_id: object, _model_name: str) -> int | None:
+            raise ExternalServiceError("model metadata unavailable")
+
+    payload = ChunkPayload(
+        document=Document(document_id="doc", text="", metadata=DocumentMetadata()),
+        chunks=[
+            DocumentChunk(
+                document_id="doc",
+                chunk_id="doc:0",
+                text="one two three",
+                order=0,
+                metadata=DocumentMetadata(),
+            )
+        ],
+        tokenizer=TokenizerSpec(kind="whitespace"),
+    )
+    node = EmbedderNode(
+        EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed")
+    )
+    user = _build_user()
+    context = _build_context(Session(), user, _build_collection(user))
+    context.providers = _UnavailableLimitResolver()
+
+    result = node.run({"chunks": payload}, context)
+
+    assert result["embedded"]
+
+
+def test_embedder_node_requires_a_mode(monkeypatch, session: Session) -> None:
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 
     node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
@@ -489,10 +700,11 @@ def test_embedder_node_summarizes_chunk_mode(monkeypatch, session: Session) -> N
     from app.pipelines.payloads import ChunkPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
-        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
+        DocumentChunk(
+            document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()
+        ),
     ]
     payload = ChunkPayload(document=document, chunks=chunks)
     node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
@@ -513,7 +725,6 @@ def test_embedder_node_summarizes_query_mode(monkeypatch, session: Session) -> N
     from app.pipelines.payloads import RetrievalRequestPayload
     from app.retrieval.models import QueryRequest
 
-
     payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
     node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
@@ -533,13 +744,14 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
     from app.pipelines.payloads import QueryEmbeddingPayload, RetrievalRequestPayload
     from app.retrieval.models import QueryRequest
 
-
     payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
     node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
-    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 4}, query_result=[0.1, 0.2, 0.3])
+    context.providers.embedder_cls = make_stub_embedder(
+        usage={"prompt_tokens": 4}, query_result=[0.1, 0.2, 0.3]
+    )
 
     outputs = node.run({"request": payload}, context)
     result = QueryEmbeddingPayload.model_validate(outputs["query_embedding"])
@@ -556,7 +768,9 @@ def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
-        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
+        DocumentChunk(
+            document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()
+        ),
     ]
     payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
     node = IndexerNode(IndexerConfig(dimension=None))
@@ -575,7 +789,14 @@ def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
-        DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata(), embedding=[0.1, 0.2]),
+        DocumentChunk(
+            document_id="doc",
+            chunk_id="doc:0",
+            text="a",
+            order=0,
+            metadata=DocumentMetadata(),
+            embedding=[0.1, 0.2],
+        ),
     ]
     payload = EmbeddingPayload(document=document, chunks=chunks, usage={})
     node = IndexerNode(IndexerConfig(dimension=None, ensure_index=False))
@@ -670,7 +891,9 @@ def test_reranker_node_returns_when_disabled(session: Session) -> None:
         order=0,
         metadata=DocumentMetadata(),
     )
-    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    payload = RetrievalPayload(
+        response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
+    )
     node = RerankerNode(RerankerConfig(enabled=False))
     user = _build_user()
     collection = _build_collection(user)
@@ -693,7 +916,9 @@ def test_reranker_node_requires_query(session: Session) -> None:
         order=0,
         metadata=DocumentMetadata(),
     )
-    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    payload = RetrievalPayload(
+        response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
+    )
     node = RerankerNode(RerankerConfig(enabled=True))
     user = _build_user()
     collection = _build_collection(user)
@@ -715,7 +940,9 @@ def test_reranker_node_summarize_io(session: Session) -> None:
         order=0,
         metadata=DocumentMetadata(),
     )
-    payload = RetrievalPayload(response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={})
+    payload = RetrievalPayload(
+        response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
+    )
     node = RerankerNode(RerankerConfig(enabled=True))
 
     summary = node.summarize_io({"results": payload}, {"results": payload})

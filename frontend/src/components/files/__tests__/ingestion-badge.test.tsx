@@ -11,6 +11,23 @@ describe("IngestionBadge", () => {
     expect(screen.getByLabelText("Ingested, 4 chunks")).toBeInTheDocument();
   });
 
+  it("shows a keyboard-focusable warning state for a ready file with warnings", async () => {
+    const node = makeFileNode({
+      ingestion: {
+        ...makeFileNode().ingestion!,
+        warnings: ["Chunk 0 was split into 2 parts."],
+      },
+    });
+
+    render(<IngestionBadge node={node} onRetry={vi.fn()} />);
+
+    const warning = screen.getByLabelText("Ingested with 1 warning, 4 chunks");
+    expect(warning).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    await userEvent.tab();
+    expect(warning).toHaveFocus();
+  });
+
   it("shows a spinner while queued or running", () => {
     const node = makeFileNode({
       ingestion: { ...makeFileNode().ingestion!, status: "processing" },

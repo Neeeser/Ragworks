@@ -9,7 +9,12 @@ import tiktoken
 from tiktoken.load import load_tiktoken_bpe
 from tokenizers import Tokenizer
 
-from .base import TokenOffset, split_at_offsets, validate_token_window
+from .base import (
+    TokenOffset,
+    split_at_offsets,
+    validate_token_window,
+    whitespace_aligned_end,
+)
 
 _NON_WHITESPACE = re.compile(r"\S+")
 _CL100K_HASH = "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"
@@ -134,6 +139,12 @@ class Cl100kTokenCounter:
                 end_index += 1
                 if token_count >= max_tokens:
                     break
+            end_index = whitespace_aligned_end(
+                text,
+                [(start, end) for start, end, _weight in spans],
+                start_index,
+                end_index,
+            )
             chunks.append(text[spans[start_index][0] : spans[end_index - 1][1]].strip())
             if end_index == len(spans):
                 break

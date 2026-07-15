@@ -148,6 +148,65 @@ def test_init_db_backfills_string_server_default_as_literal() -> None:
         assert fresh.role == UserRole.USER.value
 
 
+def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
+    """Existing document and trace rows receive empty warning lists."""
+    SQLModel.metadata.drop_all(app_engine)
+    SQLModel.metadata.create_all(app_engine)
+
+    with Session(app_engine) as session:
+        user = models.User(email="warnings@example.com", hashed_password="hashed")
+        session.add(user)
+        session.flush()
+        collection = models.Collection(
+            user_id=user.id,
+            name="Warnings",
+            description="",
+            extra_metadata={},
+        )
+        pipeline = models.Pipeline(
+            user_id=user.id,
+            name="Warnings",
+            kind=models.PipelineKind.INGESTION,
+            current_version=1,
+        )
+        session.add(collection)
+        session.add(pipeline)
+        session.flush()
+        document = models.Document(
+            collection_id=collection.id,
+            user_id=user.id,
+            name="document.txt",
+            content_type="text/plain",
+            embedding_model="embed",
+        )
+        run = models.PipelineRun(
+            pipeline_id=pipeline.id,
+            kind=models.PipelineKind.INGESTION,
+            user_id=user.id,
+            collection_id=collection.id,
+            status=models.PipelineRunStatus.RUNNING,
+        )
+        session.add(document)
+        session.add(run)
+        session.commit()
+        document_id = document.id
+        run_id = run.id
+
+    with app_engine.begin() as connection:
+        connection.execute(text("ALTER TABLE documents DROP COLUMN warnings"))
+        connection.execute(text("ALTER TABLE pipeline_runs DROP COLUMN warnings"))
+
+    init_db()
+
+    with Session(app_engine) as fresh_session:
+        fresh_document = fresh_session.get(models.Document, document_id)
+        fresh_run = fresh_session.get(models.PipelineRun, run_id)
+        assert fresh_document is not None
+        assert fresh_run is not None
+        assert fresh_document.warnings == []
+        assert fresh_run.warnings == []
+
+
 def test_collections_schema_excludes_pipeline_models() -> None:
     init_db()
     actual = inspect_database_schema(app_engine)

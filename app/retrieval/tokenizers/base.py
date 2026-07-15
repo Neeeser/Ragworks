@@ -8,6 +8,22 @@ from typing import Protocol
 TokenOffset = tuple[int, int]
 
 
+def whitespace_aligned_end(
+    text: str,
+    offsets: Sequence[TokenOffset],
+    start_index: int,
+    candidate_end: int,
+    search_window: int = 16,
+) -> int:
+    """Back up a token cut to a nearby source-word boundary when possible."""
+    lower_bound = max(start_index + 1, candidate_end - search_window + 1)
+    for end_index in range(candidate_end, lower_bound - 1, -1):
+        end = offsets[end_index - 1][1]
+        if end >= len(text) or text[end].isspace():
+            return end_index
+    return candidate_end
+
+
 def validate_token_window(max_tokens: int, overlap: int) -> None:
     """Validate the shared token-window constraints."""
     if max_tokens <= 0:
@@ -42,9 +58,10 @@ def split_at_offsets(
         return []
 
     chunks: list[str] = []
-    step = max_tokens - overlap
-    for start_index in range(0, len(offsets), step):
-        end_index = min(start_index + max_tokens, len(offsets))
+    start_index = 0
+    while start_index < len(offsets):
+        candidate_end = min(start_index + max_tokens, len(offsets))
+        end_index = whitespace_aligned_end(text, offsets, start_index, candidate_end)
         start = offsets[start_index][0]
         end = offsets[end_index - 1][1]
         chunk = text[start:end].strip()
@@ -52,4 +69,8 @@ def split_at_offsets(
             chunks.append(chunk)
         if end_index == len(offsets):
             break
+        next_start = max(start_index, end_index - overlap)
+        if next_start == start_index:
+            next_start = end_index
+        start_index = next_start
     return chunks

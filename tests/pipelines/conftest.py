@@ -168,11 +168,21 @@ class StubProviderResolver:
     the run context — the resolver is the run's real embedder boundary.
     """
 
-    def __init__(self, embedder_cls: type | None = None) -> None:
+    def __init__(
+        self,
+        embedder_cls: type | None = None,
+        *,
+        embedding_input_limit: int | None = None,
+    ) -> None:
         self.embedder_cls = embedder_cls or make_stub_embedder()
+        self.published_embedding_input_limit = embedding_input_limit
 
     def embedder(self, _connection_id: Any, model_name: str, dimensions: int | None = None) -> Any:
         return self.embedder_cls(None, model_name, dimensions=dimensions)
+
+    def embedding_input_limit(self, _connection_id: Any, _model_name: str) -> int | None:
+        """Return the configured provider-published embedding limit."""
+        return self.published_embedding_input_limit
 
 
 class StubVectorStoreProvider:

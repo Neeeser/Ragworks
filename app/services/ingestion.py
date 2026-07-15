@@ -88,6 +88,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         self._apply_settings(document, resolved.settings)
         document.status = models.DocumentStatus.PROCESSING
         document.error_message = None
+        document.warnings = []
         self.chunks.delete_for_document(document.id)
         self.session.add(document)
         self.session.commit()  # make `processing` visible to pollers mid-run
@@ -117,6 +118,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             self.session.add(document)
             result = runner.execute(resolved.definition, handle)
             payload = self._extract_indexing_payload(result.terminal_outputs)
+            document.warnings = [*handle.run.warnings]
             chunk_records = self._persist_chunks(
                 document, collection, payload.chunks, resolved.settings
             )

@@ -11,6 +11,7 @@ that rewrote stored definitions — see `app/services/provider_migration.py`.)
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from app.pipelines.payloads import (
     EmbeddingPayload,
     QueryEmbeddingPayload,
     RetrievalRequestPayload,
+    TokenizerSpec,
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -34,11 +36,20 @@ from app.pipelines.tracing.summaries import (
     summarize_query_embedding,
     summarize_text,
 )
+from app.providers.base import effective_embedding_input_limit
 from app.retrieval.embedders.base import Embedder
-from app.services.errors import InvalidInputError
+from app.retrieval.models import DocumentChunk
+from app.retrieval.tokenizers.resources import build_token_counter
+from app.services.errors import (
+    InvalidInputError,
+    ServiceError,
+    is_external_provider_error,
+)
 
 if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class EmbedderConfig(BaseModel):
@@ -139,17 +150,21 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
             dimensions=self.config.dimension,
         )
         if chunks_input is not None:
-            return self._embed_chunks(embedder, chunks_input)
+            return self._embed_chunks(embedder, chunks_input, context)
         if request_input is not None:
             return self._embed_query(embedder, request_input)
         raise ValueError("Embedder node requires a chunk batch or query request payload.")
 
-    @staticmethod
-    def _embed_chunks(embedder: Embedder, chunks_input: object) -> dict[str, object]:
+    def _embed_chunks(
+        self,
+        embedder: Embedder,
+        chunks_input: object,
+        context: PipelineRunContext,
+    ) -> dict[str, object]:
         """Embed a chunk batch and return it as an EmbeddingPayload."""
         payload = ChunkPayload.model_validate(chunks_input)
         document = payload.document
-        chunks = payload.chunks
+        chunks = self._guard_embedding_inputs(payload, context)
         embeddings = embedder.embed_documents(chunks)
         if len(embeddings) != len(chunks):
             raise ValueError("Embedder returned mismatched embeddings.")
@@ -165,6 +180,91 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
                 usage=usage,
             )
         }
+
+    def _guard_embedding_inputs(
+        self,
+        payload: ChunkPayload,
+        context: PipelineRunContext,
+    ) -> list[DocumentChunk]:
+        """Split provider-bound chunks that exceed the model's effective limit."""
+        if self.config.connection_id is None:  # guarded by run(), kept for type narrowing
+            return payload.chunks
+        published_limit = self._embedding_input_limit(context)
+        return self.guard_chunks_for_embedding(payload, published_limit, context)
+
+    @staticmethod
+    def guard_chunks_for_embedding(
+        payload: ChunkPayload,
+        published_limit: int | None,
+        context: PipelineRunContext,
+    ) -> list[DocumentChunk]:
+        """Split a chunk payload once before it fans out to index planes."""
+        if published_limit is None:
+            return payload.chunks
+        limit = effective_embedding_input_limit(published_limit)
+        if limit <= 0:
+            return payload.chunks
+
+        # A whitespace tokenizer is useful for legacy chunking, but it is not
+        # an estimate of model tokens. The runtime guard must use a real model
+        # tokenizer whenever the wired tokenizer cannot enforce the provider's
+        # limit, otherwise providers may still silently truncate the parts.
+        tokenizer = payload.tokenizer
+        if tokenizer.kind == "whitespace":
+            tokenizer = TokenizerSpec(kind="wordpiece")
+        counter = build_token_counter(tokenizer, context.storage.base_path)
+        guarded: list[DocumentChunk] = []
+        for original_index, chunk in enumerate(payload.chunks):
+            token_count = counter.count(chunk.text)
+            parts = (
+                counter.split(
+                    chunk.text,
+                    max_tokens=limit,
+                    overlap=min(32, limit - 1),
+                )
+                if token_count > limit
+                else [chunk.text]
+            )
+            if token_count > limit:
+                warning = (
+                    f"Document {payload.document.document_id} chunk {original_index} contained "
+                    f"{token_count} tokens, exceeding the {limit}-token embedding limit, and "
+                    f"was split into {len(parts)} parts using the {tokenizer.kind} counter."
+                )
+                if context.trace is not None:
+                    context.trace.record_warning(warning)
+            for text in parts:
+                order = len(guarded)
+                guarded.append(
+                    DocumentChunk(
+                        document_id=chunk.document_id,
+                        chunk_id=f"{chunk.document_id}:{order}",
+                        text=text,
+                        order=order,
+                        metadata=chunk.metadata.model_copy(deep=True),
+                    )
+                )
+        return guarded
+
+    def _embedding_input_limit(self, context: PipelineRunContext) -> int | None:
+        """Resolve provider metadata, treating recognized lookup failures as unknown."""
+        if self.config.connection_id is None:
+            return None
+        try:
+            return context.providers.embedding_input_limit(
+                self.config.connection_id,
+                self.config.model_name,
+            )
+        except Exception as exc:
+            if not isinstance(exc, ServiceError) and not is_external_provider_error(exc):
+                raise
+            logger.warning(
+                "Embedding input limit unavailable for connection=%s model=%s: %s",
+                self.config.connection_id,
+                self.config.model_name,
+                exc,
+            )
+            return None
 
     @staticmethod
     def _embed_query(embedder: Embedder, request_input: object) -> dict[str, object]:

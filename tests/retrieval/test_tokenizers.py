@@ -33,6 +33,26 @@ def _wordpiece_tokenizer(path: Path) -> Path:
     return path
 
 
+def _giant_wordpiece_tokenizer(path: Path) -> Path:
+    tokenizer = Tokenizer(
+        WordPiece(
+            vocab={
+                "[UNK]": 0,
+                "before": 1,
+                "after": 2,
+                "long": 3,
+                "##word": 4,
+                "##piece": 5,
+            },
+            unk_token="[UNK]",
+        )
+    )
+    tokenizer.normalizer = BertNormalizer(lowercase=True)
+    tokenizer.pre_tokenizer = BertPreTokenizer()
+    tokenizer.save(str(path))
+    return path
+
+
 def test_wordpiece_counter_catches_a_512_word_chunk_that_whitespace_misses(
     tmp_path: Path,
 ) -> None:
@@ -57,6 +77,34 @@ def test_tokenizer_json_counter_splits_at_token_boundaries_with_overlap(
 
     assert chunks == ["playing other", "other playing"]
     assert all(counter.count(chunk) <= 3 for chunk in chunks)
+
+
+def test_wordpiece_split_prefers_whitespace_boundaries(tmp_path: Path) -> None:
+    counter = TokenizerJsonCounter.from_file(
+        _wordpiece_tokenizer(tmp_path / "tokenizer.json")
+    )
+    # The second WordPiece of ``playing`` straddles the naive two-token cut.
+    # A nearby boundary is available after ``other`` and must be preferred.
+    text = "other playing"
+
+    chunks = counter.split(text, max_tokens=2)
+
+    assert chunks == ["other", "playing"]
+    assert all(counter.count(chunk) <= 2 for chunk in chunks)
+
+
+def test_wordpiece_split_cuts_giant_word_when_no_boundary_exists(tmp_path: Path) -> None:
+    counter = TokenizerJsonCounter.from_file(
+        _giant_wordpiece_tokenizer(tmp_path / "tokenizer.json")
+    )
+    text = "before longwordpiece after"
+
+    chunks = counter.split(text, max_tokens=2)
+
+    assert chunks == ["before", "longword", "piece after"]
+    assert "before" in chunks
+    assert "after" in chunks[-1]
+    assert all(counter.count(chunk) <= 2 for chunk in chunks)
 
 
 def test_whitespace_counter_preserves_legacy_split_semantics() -> None:
@@ -147,3 +195,13 @@ def test_vendored_cl100k_tokenizer_loads_without_network(tmp_path: Path) -> None
     counter = build_token_counter(TokenizerSpec(kind="cl100k"), tmp_path)
 
     assert counter.count("hello world") == 2
+
+
+def test_cl100k_split_prefers_whitespace_boundaries(tmp_path: Path) -> None:
+    counter = build_token_counter(TokenizerSpec(kind="cl100k"), tmp_path)
+    text = "token-105 token-106 token-107 token-108"
+
+    chunks = counter.split(text, max_tokens=4)
+
+    assert all("token-" in chunk for chunk in chunks)
+    assert all(counter.count(chunk) <= 4 for chunk in chunks)

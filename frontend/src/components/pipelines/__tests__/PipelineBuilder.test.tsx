@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
@@ -122,6 +122,14 @@ vi.mock("@/components/pipelines/NodeEditorDrawer", () => ({
     ) => void;
     return (
       <div>
+        {(props.validationIssues as Array<{ message: string; field?: string }> | undefined)?.map(
+          (issue) => (
+            <div role="alert" key={`${issue.field ?? "issue"}-${issue.message}`}>
+              {issue.field ? `${issue.field}: ` : ""}
+              {issue.message}
+            </div>
+          ),
+        )}
         <button
           type="button"
           onClick={() => (props.onOpenIndexManager as (flag?: boolean) => void)?.(true)}
@@ -146,11 +154,33 @@ vi.mock("@/components/pipelines/NodeEditorDrawer", () => ({
 }));
 
 vi.mock("@/components/pipelines/SaveVersionDialog", () => ({
-  SaveVersionDialog: ({ open, onSave }: { open: boolean; onSave: () => void }) =>
+  SaveVersionDialog: ({
+    open,
+    onSave,
+    validationMessage,
+    validationIssues,
+  }: {
+    open: boolean;
+    onSave: () => void;
+    validationMessage?: string | null;
+    validationIssues?: Array<{ message: string; field?: string }>;
+  }) =>
     open ? (
-      <button type="button" onClick={onSave}>
-        Save pipeline
-      </button>
+      <div role="dialog">
+        {validationMessage ? (
+          <div role="alert">
+            {validationMessage}
+            {validationIssues?.map((issue) => (
+              <span key={issue.message}>
+                {issue.field}: {issue.message}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <button type="button" onClick={onSave}>
+          Save pipeline
+        </button>
+      </div>
     ) : null,
 }));
 
@@ -554,6 +584,44 @@ describe("PipelineBuilder", () => {
     await waitFor(() => expect(api.activatePipelineVersion).toHaveBeenCalled());
   });
 
+  it("keeps the save-version dialog open and surfaces field validation issues", async () => {
+    const issue = {
+      code: "embedding_input_limit_exceeded",
+      message: "Chunk size exceeds the embedding model input limit.",
+      severity: "error" as const,
+      node_id: "node-1",
+      field: "chunk_size",
+    };
+    api.validatePipeline.mockResolvedValueOnce({
+      valid: false,
+      errors: [issue.message],
+      warnings: [],
+      issues: [issue],
+    });
+
+    render(<PipelineBuilder kind="ingestion" />);
+    await waitFor(() => expect(lastCanvasProps).not.toBeNull());
+    await waitFor(() =>
+      expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
+    fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "Validation failed: Chunk size exceeds the embedding model input limit.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "chunk_size: Chunk size exceeds the embedding model input limit.",
+    );
+    expect(within(dialog).getByRole("button", { name: savePipelineLabel })).toBeInTheDocument();
+    expect(api.updatePipeline).not.toHaveBeenCalled();
+  });
+
   it("surfaces validation warnings and save failures", async () => {
     api.validatePipeline.mockResolvedValueOnce({
       valid: true,
@@ -612,6 +680,8 @@ describe("PipelineBuilder", () => {
         (lastCanvasProps?.nodes as Array<{ data: { errors?: string[] } }>)[0]?.data.errors,
       ).toContain(staleIssue.message);
     });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(staleIssue.message);
   });
 
   it("handles activation errors", async () => {

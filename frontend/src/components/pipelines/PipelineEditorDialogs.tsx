@@ -6,7 +6,7 @@ import { RevisionHistoryDialog } from "./RevisionHistoryDialog";
 import { SaveVersionDialog } from "./SaveVersionDialog";
 
 import type { PendingChange } from "./lib/pipeline-diff";
-import type { PipelineVersion } from "@/lib/types";
+import type { PipelineValidationIssue, PipelineVersion } from "@/lib/types";
 
 type PipelineEditorDialogsProps = {
   saveOpen: boolean;
@@ -16,6 +16,8 @@ type PipelineEditorDialogsProps = {
   onChangeSummary: (value: string) => void;
   onSave: () => void;
   saving: boolean;
+  validationMessage: string | null;
+  validationIssues: PipelineValidationIssue[];
   historyOpen: boolean;
   onCloseHistory: () => void;
   versions: PipelineVersion[];
@@ -38,6 +40,8 @@ export function PipelineEditorDialogs({
   onChangeSummary,
   onSave,
   saving,
+  validationMessage,
+  validationIssues,
   historyOpen,
   onCloseHistory,
   versions,
@@ -58,6 +62,8 @@ export function PipelineEditorDialogs({
         onChangeSummary={onChangeSummary}
         onSave={onSave}
         saving={saving}
+        validationMessage={validationMessage}
+        validationIssues={validationIssues}
       />
       <RevisionHistoryDialog
         open={historyOpen}

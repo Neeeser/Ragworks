@@ -52,6 +52,7 @@ class ChunkPayload(BaseModel):
 
     document: Document
     chunks: list[DocumentChunk]
+    tokenizer: TokenizerSpec = Field(default_factory=lambda: TokenizerSpec(kind="wordpiece"))
 
 
 class EmbeddingPayload(BaseModel):

@@ -75,6 +75,7 @@ class EchoNode(PipelineNodeBase):
     example = "Payload(text='hello') -> Payload(text='hello')."
     input_ports = (NodePort(key="value", label="Value", data_type="payload"),)
     output_ports = (NodePort(key="result", label="Result", data_type="payload"),)
+
     class EchoConfig(BaseModel):
         """Empty config for echo node."""
 
@@ -288,6 +289,36 @@ def test_trace_recorder_mark_run_completed_is_idempotent(session: Session) -> No
     recorder.mark_run_completed()
 
     assert run.status == models.PipelineRunStatus.COMPLETED
+
+
+def test_trace_recorder_reassigns_warnings_for_json_persistence(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = models.Pipeline(
+        user_id=user.id,
+        name="Trace Pipeline",
+        kind=models.PipelineKind.INGESTION,
+        current_version=1,
+    )
+    session.add(pipeline)
+    session.flush()
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version_id=None,
+        pipeline_version=1,
+        kind=models.PipelineKind.INGESTION,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.RUNNING,
+    )
+    session.add(run)
+    session.flush()
+
+    recorder = PipelineTraceRecorder(session, run, PipelineDefinition())
+    recorder.record_warning("split chunk 0")
+    recorder.record_warning("split chunk 2")
+
+    assert run.warnings == ["split chunk 0", "split chunk 2"]
 
 
 def test_trace_recorder_normalizes_non_dict_payloads() -> None:

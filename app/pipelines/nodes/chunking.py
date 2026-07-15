@@ -86,7 +86,13 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
             len(chunks),
             document.document_id,
         )
-        return {"chunks": ChunkPayload(document=document, chunks=chunks)}
+        return {
+            "chunks": ChunkPayload(
+                document=document,
+                chunks=chunks,
+                tokenizer=tokenizer,
+            )
+        }
 
     def summarize_io(
         self,

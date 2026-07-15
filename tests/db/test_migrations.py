@@ -65,6 +65,12 @@ def test_resolve_default_sql_handles_enum_default() -> None:
     assert drop_default is True
 
 
+def test_missing_warning_columns_backfill_empty_json_lists() -> None:
+    assert migrations._missing_column_default("documents", "warnings") == ("'[]'", True)
+    assert migrations._missing_column_default("pipeline_runs", "warnings") == ("'[]'", True)
+    assert migrations._missing_column_default("documents", "unrelated") == (None, False)
+
+
 def test_foreign_key_name_truncates_long_identifiers() -> None:
     name = migrations._foreign_key_name("t" * 40, ("col" * 10,), "r" * 40)
 

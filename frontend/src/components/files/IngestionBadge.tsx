@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, TriangleAlert, X } from "lucide-react";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,10 @@ type IngestionBadgeProps = {
   onRetry: (node: FileNode) => void;
 };
 
+function warningCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "warning" : "warnings"}`;
+}
+
 /**
  * The discreet per-file ingestion state: green check (indexed), spinner
  * (queued/running), or a red X (failed / never eligible) that retries on
@@ -22,6 +26,21 @@ export function IngestionBadge({ node, onRetry }: IngestionBadgeProps) {
     return null;
   }
   const ingestion = node.ingestion;
+
+  if (ingestion?.status === "ready" && ingestion.warnings.length > 0) {
+    const warningLabel = warningCountLabel(ingestion.warnings.length);
+    return (
+      <Tooltip content={`Ingested with ${warningLabel} — ${ingestion.num_chunks} chunks`}>
+        <span
+          tabIndex={0}
+          aria-label={`Ingested with ${warningLabel}, ${ingestion.num_chunks} chunks`}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-data-warn/15 text-data-warn"
+        >
+          <TriangleAlert className="h-3 w-3" aria-hidden />
+        </span>
+      </Tooltip>
+    );
+  }
 
   if (ingestion?.status === "ready") {
     return (

@@ -144,6 +144,11 @@ class PipelineTraceRecorder:  # pylint: disable=too-few-public-methods
         self._run.completed_at = utc_now()
         self._session.add(self._run)
 
+    def record_warning(self, warning: str) -> None:
+        """Append one non-failing run warning using JSON-safe reassignment."""
+        self._run.warnings = [*self._run.warnings, warning]
+        self._session.add(self._run)
+
     def _record_io(
         self,
         node_run: models.PipelineNodeRun,

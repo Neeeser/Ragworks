@@ -52,7 +52,7 @@ export interface UsePipelinesResult {
   handleDeletePipeline: (pipeline: Pipeline) => void;
   cancelDeletePipeline: () => void;
   handleConfirmDelete: () => Promise<void>;
-  handleSavePipeline: (definition: PipelineDefinition, fallbackSummary: string) => Promise<void>;
+  handleSavePipeline: (definition: PipelineDefinition, fallbackSummary: string) => Promise<boolean>;
   /** Silently persist a layout-only definition (node drags, auto-layout). */
   persistLayout: (definition: PipelineDefinition) => Promise<void>;
   handleActivateVersion: (version: PipelineVersion) => Promise<void>;
@@ -218,7 +218,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
 
   const handleSavePipeline = async (definition: PipelineDefinition, fallbackSummary: string) => {
     const authToken = token ?? "";
-    if (!authToken || !selectedPipeline) return;
+    if (!authToken || !selectedPipeline) return false;
     setValidating(true);
     setMessage(null);
     setValidationIssues([]);
@@ -227,7 +227,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
       if (!validation.valid) {
         setValidationIssues(validation.issues);
         setMessage(`Validation failed: ${validation.errors.join(" ")}`);
-        return;
+        return false;
       }
       const warningText = validation.warnings?.length
         ? `Warnings: ${validation.warnings.join(" ")}`
@@ -246,6 +246,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
           ? `Saved as v${updated.current_version}. ${warningText}`
           : `Saved as v${updated.current_version}.`,
       );
+      return true;
     } catch (error) {
       if (
         error instanceof ApiError &&
@@ -257,6 +258,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
         setValidationIssues(error.rawDetail.issues as PipelineValidationIssue[]);
       }
       setMessage(getErrorMessage(error, "Unable to save pipeline."));
+      return false;
     } finally {
       setSaving(false);
       setValidating(false);

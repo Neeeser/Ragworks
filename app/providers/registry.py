@@ -192,6 +192,12 @@ class ProviderResolver:
             model_name, dimensions=dimensions
         )
 
+    def embedding_input_limit(self, connection_id: UUID, model_name: str) -> int | None:
+        """Return the provider-published embedding input limit when known."""
+        return self.adapter(
+            connection_id, ProviderKind.EMBEDDING
+        ).embedding_input_limit(model_name)
+
     def chat(self, connection_id: UUID) -> ChatProvider:
         """Construct a chat provider from a connection id."""
         return self.adapter(connection_id, ProviderKind.CHAT).chat_provider()

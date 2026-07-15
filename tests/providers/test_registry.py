@@ -103,3 +103,15 @@ def test_provider_resolver_builds_and_caches_adapters(session: Session) -> None:
     second = resolver.adapter(connection.id, ProviderKind.EMBEDDING)
     assert first is second
     assert isinstance(first, OllamaAdapter)
+
+
+def test_provider_resolver_reads_embedding_input_limit_from_cached_adapter(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _create_user(session, "limit-resolver@example.com")
+    connection = _ollama_connection(session, user)
+    resolver = ProviderResolver(user, session)
+    adapter = resolver.adapter(connection.id, ProviderKind.EMBEDDING)
+    monkeypatch.setattr(adapter, "embedding_input_limit", lambda _model: 2048)
+
+    assert resolver.embedding_input_limit(connection.id, "nomic-embed-text") == 2048

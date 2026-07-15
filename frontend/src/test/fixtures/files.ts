@@ -17,6 +17,7 @@ export function makeFileNode(overrides: Partial<FileNode> = {}): FileNode {
       document_id: "doc-1",
       status: "ready",
       error_message: null,
+      warnings: [],
       num_chunks: 4,
       num_tokens: 100,
       chunk_size: 512,

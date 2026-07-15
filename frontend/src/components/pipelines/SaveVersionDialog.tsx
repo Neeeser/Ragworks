@@ -9,6 +9,7 @@ import { GlassCard } from "@/components/ui/panel";
 import { changeKindDot } from "./lib/change-kind";
 
 import type { PendingChange } from "./lib/pipeline-diff";
+import type { PipelineValidationIssue } from "@/lib/types";
 
 type SaveVersionDialogProps = {
   open: boolean;
@@ -19,6 +20,8 @@ type SaveVersionDialogProps = {
   onChangeSummary: (value: string) => void;
   onSave: () => void;
   saving: boolean;
+  validationMessage?: string | null;
+  validationIssues?: PipelineValidationIssue[];
 };
 
 /**
@@ -34,6 +37,8 @@ export function SaveVersionDialog({
   onChangeSummary,
   onSave,
   saving,
+  validationMessage,
+  validationIssues = [],
 }: SaveVersionDialogProps) {
   const titleId = useId();
   return (
@@ -42,6 +47,26 @@ export function SaveVersionDialog({
         <p id={titleId} className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
           Save version
         </p>
+        {validationMessage ? (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="mt-4 rounded-2xl border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-sm text-data-neg"
+          >
+            <p>{validationMessage}</p>
+            {validationIssues.some((issue) => issue.field) ? (
+              <ul aria-label="Validation issues" className="mt-2 space-y-1 text-xs">
+                {validationIssues
+                  .filter((issue) => issue.field)
+                  .map((issue) => (
+                    <li key={`${issue.node_id ?? "pipeline"}-${issue.field}-${issue.message}`}>
+                      {issue.field}: {issue.message}
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto rounded-2xl border border-hairline bg-surface px-3 py-2">
           {pendingChanges.map((change) => (
             <li

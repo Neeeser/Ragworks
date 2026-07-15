@@ -101,6 +101,7 @@ export interface Document {
   content_type: string;
   status: DocumentStatus;
   error_message?: string | null;
+  warnings: string[];
   num_chunks: number;
   num_tokens: number;
   chunk_size: number;

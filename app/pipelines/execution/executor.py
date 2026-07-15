@@ -11,8 +11,11 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+from app.pipelines.payloads import ChunkPayload
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
+from app.services.errors import ServiceError, is_external_provider_error
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +124,7 @@ class PipelineExecutor:
                 state.outputs[node_id] = node_outputs
                 state.pending.remove(node_id)
                 progressed = True
-                self._propagate(node_id, node_outputs, state)
+                self._propagate(node_id, node_outputs, state, context)
             if progressed:
                 continue
             if not self._settle_undeliverable(state):
@@ -226,12 +229,14 @@ class PipelineExecutor:
         node_id: str,
         node_outputs: dict[str, object],
         state: _RunState,
+        context: PipelineRunContext,
     ) -> None:
         """Copy a node's outputs onto its downstream edges' target inputs.
 
         Values bound for an `accepts_many` port collect into a list; every
         other port receives the single value directly.
         """
+        node_outputs = self._guard_fanout_chunks(node_id, node_outputs, state, context)
         for edge in state.outgoing.get(node_id, []):
             output_key = edge.source_port or "default"
             if output_key not in node_outputs:
@@ -246,6 +251,42 @@ class PipelineExecutor:
                     target_inputs[input_key] = [node_outputs[output_key]]
             else:
                 target_inputs[input_key] = node_outputs[output_key]
+
+    @staticmethod
+    def _guard_fanout_chunks(
+        node_id: str,
+        node_outputs: dict[str, object],
+        state: _RunState,
+        context: PipelineRunContext,
+    ) -> dict[str, object]:
+        """Apply one downstream embedding guard before hybrid fan-out."""
+        payload = node_outputs.get("chunks")
+        outgoing = state.outgoing.get(node_id, [])
+        if not isinstance(payload, ChunkPayload) or len(outgoing) < 2:
+            return node_outputs
+
+        limits: list[int] = []
+        for edge in outgoing:
+            target = state.node_map.get(edge.target)
+            if target is None or target.type != EmbedderNode.type:
+                continue
+            config = EmbedderConfig.model_validate(target.config or {})
+            if config.connection_id is None or not config.model_name:
+                continue
+            try:
+                published = context.providers.embedding_input_limit(
+                    config.connection_id, config.model_name
+                )
+            except Exception as exc:
+                if not isinstance(exc, ServiceError) and not is_external_provider_error(exc):
+                    raise
+                continue
+            if published is not None:
+                limits.append(published)
+        if not limits:
+            return node_outputs
+        guarded = EmbedderNode.guard_chunks_for_embedding(payload, min(limits), context)
+        return {**node_outputs, "chunks": payload.model_copy(update={"chunks": guarded})}
 
     def _is_many_port(self, node_def: PipelineNodeDefinition | None, port_key: str) -> bool:
         """Return True when the target node declares `port_key` as accepts_many."""
