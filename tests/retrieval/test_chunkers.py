@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import pytest
+from tokenizers import Tokenizer
+from tokenizers.models import WordPiece
+from tokenizers.normalizers import BertNormalizer
+from tokenizers.pre_tokenizers import BertPreTokenizer
 
 from app.db.models import ChunkStrategy
 from app.retrieval.chunkers.strategies import _BaseChunker, build_chunker
 from app.retrieval.models import Document, DocumentMetadata
+from app.retrieval.tokenizers import TokenizerJsonCounter
 
 
 def _document(text: str) -> Document:
@@ -83,6 +88,25 @@ def test_token_chunker_emits_overlap_chunks() -> None:
     assert len(chunks) >= 3
     assert chunks[0].text.split() == ["token0", "token1", "token2", "token3"]
     assert chunks[1].text.split()[0] == "token3"
+
+
+def test_token_chunker_enforces_wordpiece_token_budgets(tmp_path) -> None:
+    tokenizer = Tokenizer(
+        WordPiece(vocab={"[UNK]": 0, "play": 1, "##ing": 2}, unk_token="[UNK]")
+    )
+    tokenizer.normalizer = BertNormalizer(lowercase=True)
+    tokenizer.pre_tokenizer = BertPreTokenizer()
+    tokenizer_path = tmp_path / "tokenizer.json"
+    tokenizer.save(str(tokenizer_path))
+    counter = TokenizerJsonCounter.from_file(tokenizer_path)
+    text = " ".join(["playing"] * 512)
+
+    chunks = build_chunker(ChunkStrategy.TOKEN, 512, 32, counter=counter).chunk(
+        _document(text)
+    )
+
+    assert len(chunks) > 1
+    assert all(counter.count(chunk.text) <= 512 for chunk in chunks)
 
 
 def test_token_chunker_produces_one_giant_chunk_for_whitespace_free_cjk_text() -> None:

@@ -28,6 +28,7 @@ dependencies = [
     "pydantic-settings>=2.2.1",
     "email-validator>=2.1.0",
     "pgvector>=0.5.0",
+    "tokenizers>=0.22.1",
 ]
 
 [dependency-groups]
@@ -84,6 +85,11 @@ strict = true
 module = "umap"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# HuggingFace tokenizers ships no inline types or third-party stub package.
+module = "tokenizers"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-q", "--strict-markers"]
@@ -137,4 +143,8 @@ enable = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["app"]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.retrieval.tokenizers.data" = ["*.json", "*.tiktoken"]

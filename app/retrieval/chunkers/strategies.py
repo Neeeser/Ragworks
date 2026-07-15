@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from app.db.models import ChunkStrategy
 from app.retrieval.models import Document, DocumentChunk
+from app.retrieval.tokenizers import TokenCounter, WhitespaceTokenCounter
 
 from .base import DocumentChunker
 
@@ -14,7 +15,12 @@ from .base import DocumentChunker
 class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
     """Shared helper for chunkers with size and overlap."""
 
-    def __init__(self, chunk_size: int, overlap: int) -> None:
+    def __init__(
+        self,
+        chunk_size: int,
+        overlap: int,
+        counter: TokenCounter | None = None,
+    ) -> None:
         """Initialize shared chunking parameters."""
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
@@ -24,6 +30,7 @@ class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
             raise ValueError("chunk overlap must be smaller than chunk size")
         self.chunk_size = chunk_size
         self.overlap = overlap
+        self.counter = counter or WhitespaceTokenCounter()
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
         """Chunk a document using the concrete implementation."""
@@ -52,41 +59,13 @@ class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
         if not normalized:
             return []
 
-        chunks: list[DocumentChunk] = []
-        buffer: list[str] = []
-        buffer_tokens = 0
-        has_new_tokens = False
-
-        def emit_chunk() -> None:
-            """Flush the current buffer into a chunk."""
-            nonlocal buffer, buffer_tokens, has_new_tokens
-            chunk_text = " ".join(buffer)
-            chunks.append(self._build_chunk(document, chunk_text, len(chunks)))
-            if self.overlap > 0:
-                buffer = buffer[-self.overlap :]
-                buffer_tokens = len(buffer)
-            else:
-                buffer = []
-                buffer_tokens = 0
-            has_new_tokens = False
-
-        for segment in normalized:
-            tokens = segment.split()
-            idx = 0
-            while idx < len(tokens):
-                remaining = self.chunk_size - buffer_tokens
-                take = min(remaining, len(tokens) - idx)
-                buffer.extend(tokens[idx : idx + take])
-                buffer_tokens += take
-                has_new_tokens = True
-                idx += take
-                if buffer_tokens == self.chunk_size:
-                    emit_chunk()
-
-        if buffer and has_new_tokens:
-            emit_chunk()
-
-        return chunks
+        text = " ".join(normalized)
+        return [
+            self._build_chunk(document, chunk_text, index)
+            for index, chunk_text in enumerate(
+                self.counter.split(text, self.chunk_size, self.overlap)
+            )
+        ]
 
 
 class TokenChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
@@ -149,19 +128,25 @@ class SemanticChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
             if stripped.startswith(("#", "-", "*", "##")) or stripped.isupper():
                 flush()
             current.append(stripped)
-            if len(" ".join(current).split()) >= self.chunk_size:
+            if self.counter.count(" ".join(current)) >= self.chunk_size:
                 flush()
         flush()
 
         return self._chunk_segments(document, buffers)
 
 
-def build_chunker(strategy: ChunkStrategy, chunk_size: int, overlap: int) -> DocumentChunker:
+def build_chunker(
+    strategy: ChunkStrategy,
+    chunk_size: int,
+    overlap: int,
+    *,
+    counter: TokenCounter | None = None,
+) -> DocumentChunker:
     """Factory for chunker implementations."""
     if strategy == ChunkStrategy.SENTENCE:
-        return SentenceChunker(chunk_size=chunk_size, overlap=overlap)
+        return SentenceChunker(chunk_size=chunk_size, overlap=overlap, counter=counter)
     if strategy == ChunkStrategy.PARAGRAPH:
-        return ParagraphChunker(chunk_size=chunk_size, overlap=overlap)
+        return ParagraphChunker(chunk_size=chunk_size, overlap=overlap, counter=counter)
     if strategy == ChunkStrategy.SEMANTIC:
-        return SemanticChunker(chunk_size=chunk_size, overlap=overlap)
-    return TokenChunker(chunk_size=chunk_size, overlap=overlap)
+        return SemanticChunker(chunk_size=chunk_size, overlap=overlap, counter=counter)
+    return TokenChunker(chunk_size=chunk_size, overlap=overlap, counter=counter)
