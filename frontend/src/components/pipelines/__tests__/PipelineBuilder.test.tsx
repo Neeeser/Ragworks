@@ -680,6 +680,8 @@ describe("PipelineBuilder", () => {
         (lastCanvasProps?.nodes as Array<{ data: { errors?: string[] } }>)[0]?.data.errors,
       ).toContain(staleIssue.message);
     });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(staleIssue.message);
   });
 
   it("handles activation errors", async () => {

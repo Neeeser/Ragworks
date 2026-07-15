@@ -232,6 +232,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       setMessage(validationErrors[0]);
       return;
     }
+    setMessage(null);
     setSaveDialogOpen(true);
   };
 
@@ -409,7 +410,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onChangeSummary={setChangeSummary}
         onSave={() => void handleSave()}
         saving={saving || validating}
-        validationMessage={message?.startsWith("Validation failed:") ? message : null}
+        validationMessage={saveDialogOpen ? message : null}
         validationIssues={validationIssues}
         historyOpen={historyOpen}
         onCloseHistory={() => setHistoryOpen(false)}

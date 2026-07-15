@@ -33,6 +33,26 @@ def _wordpiece_tokenizer(path: Path) -> Path:
     return path
 
 
+def _giant_wordpiece_tokenizer(path: Path) -> Path:
+    tokenizer = Tokenizer(
+        WordPiece(
+            vocab={
+                "[UNK]": 0,
+                "before": 1,
+                "after": 2,
+                "long": 3,
+                "##word": 4,
+                "##piece": 5,
+            },
+            unk_token="[UNK]",
+        )
+    )
+    tokenizer.normalizer = BertNormalizer(lowercase=True)
+    tokenizer.pre_tokenizer = BertPreTokenizer()
+    tokenizer.save(str(path))
+    return path
+
+
 def test_wordpiece_counter_catches_a_512_word_chunk_that_whitespace_misses(
     tmp_path: Path,
 ) -> None:
@@ -63,24 +83,28 @@ def test_wordpiece_split_prefers_whitespace_boundaries(tmp_path: Path) -> None:
     counter = TokenizerJsonCounter.from_file(
         _wordpiece_tokenizer(tmp_path / "tokenizer.json")
     )
-    text = "playing playing playing playing"
+    # The second WordPiece of ``playing`` straddles the naive two-token cut.
+    # A nearby boundary is available after ``other`` and must be preferred.
+    text = "other playing"
 
-    chunks = counter.split(text, max_tokens=4)
+    chunks = counter.split(text, max_tokens=2)
 
-    assert chunks == ["playing playing", "playing playing"]
-    assert all(counter.count(chunk) <= 4 for chunk in chunks)
+    assert chunks == ["other", "playing"]
+    assert all(counter.count(chunk) <= 2 for chunk in chunks)
 
 
 def test_wordpiece_split_cuts_giant_word_when_no_boundary_exists(tmp_path: Path) -> None:
     counter = TokenizerJsonCounter.from_file(
-        _wordpiece_tokenizer(tmp_path / "tokenizer.json")
+        _giant_wordpiece_tokenizer(tmp_path / "tokenizer.json")
     )
-    text = "playing"
+    text = "before longwordpiece after"
 
-    chunks = counter.split(text, max_tokens=1)
+    chunks = counter.split(text, max_tokens=2)
 
-    assert len(chunks) > 1
-    assert all(counter.count(chunk) <= 1 for chunk in chunks)
+    assert chunks == ["before", "longword", "piece after"]
+    assert "before" in chunks
+    assert "after" in chunks[-1]
+    assert all(counter.count(chunk) <= 2 for chunk in chunks)
 
 
 def test_whitespace_counter_preserves_legacy_split_semantics() -> None:
