@@ -221,6 +221,11 @@ export const buildTraceGraph = (
       },
       draggable: false,
       selectable: false,
+      // Explicit dimensions: layout/edge-routing geometry estimates any
+      // unmeasured node via estimateNodeHeight, which reads PipelineNodeData
+      // ports this datastore node doesn't have.
+      width: 220,
+      height: 88,
       data: { indexName: target.indexName, backend: target.backend },
       // The store carries IndexStoreNodeData, not PipelineNodeData; ReactFlow
       // dispatches rendering by `type`, so the heterogeneous array is safe at

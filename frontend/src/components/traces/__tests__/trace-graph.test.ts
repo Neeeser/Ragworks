@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveNodeDimensions } from "@/components/pipelines/lib/pipeline-layout";
 import { buildTraceGraph } from "@/components/traces/trace-graph";
 import { makeNodeRunTrace, makeNodeSpec, makeTraceResponse } from "@/test/fixtures";
 
@@ -103,6 +104,18 @@ describe("buildTraceGraph", () => {
     expect(read?.target).toBe("retrieval::retrieve");
     // The store is a datastore, not an executed node — never a playback step.
     expect(graph.steps.some((step) => step.nodeId === STORE_ID)).toBe(false);
+  });
+
+  it("gives the index store explicit dimensions so geometry never estimates it", () => {
+    const graph = buildTraceGraph(retrievalTrace(), ingestionTrace(), nodeSpecs);
+    const store = graph.nodes.find((node) => node.id === STORE_ID);
+
+    // estimateNodeHeight reads PipelineNodeData ports the store doesn't have;
+    // resolveNodeDimensions must short-circuit on these instead of crashing.
+    expect(store?.width).toBeGreaterThan(0);
+    expect(store?.height).toBeGreaterThan(0);
+    expect(() => resolveNodeDimensions(store!)).not.toThrow();
+    expect(resolveNodeDimensions(store!)).toEqual({ width: store?.width, height: store?.height });
   });
 
   it("stacks the retrieval band below the ingestion band", () => {
