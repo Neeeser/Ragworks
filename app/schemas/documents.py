@@ -25,6 +25,7 @@ class DocumentRead(DateTimeConfigMixin, BaseModel):
     content_type: str
     status: DocumentStatus
     error_message: str | None = None
+    warnings: list[str]
     num_chunks: int
     num_tokens: int
     chunk_size: int
@@ -45,6 +46,7 @@ class DocumentRead(DateTimeConfigMixin, BaseModel):
             content_type=document.content_type,
             status=document.status,
             error_message=document.error_message,
+            warnings=document.warnings,
             num_chunks=document.num_chunks,
             num_tokens=document.num_tokens,
             chunk_size=document.chunk_size,
@@ -95,5 +97,4 @@ class ChunkDetailRead(BaseModel):
 
     document: DocumentRead
     chunk: ChunkRead
-
 

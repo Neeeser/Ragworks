@@ -74,6 +74,10 @@ class PipelineRun(SQLModel, TimestampMixin, table=True):
         sa_column=Column(String, nullable=False),
     )
     error_message: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    warnings: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
     started_at: datetime = Field(default_factory=utc_now, nullable=False)
     completed_at: datetime | None = Field(default=None, nullable=True)
 

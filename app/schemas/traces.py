@@ -31,6 +31,7 @@ class PipelineRunRead(DateTimeConfigMixin, BaseModel):
     collection_id: UUID
     status: PipelineRunStatus
     error_message: str | None
+    warnings: list[str] = Field(default_factory=list)
     started_at: datetime
     completed_at: datetime | None
 

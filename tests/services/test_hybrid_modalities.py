@@ -68,6 +68,9 @@ class _StubProviderResolver:
         del dimensions
         return _StubEmbedder(model_name)
 
+    def embedding_input_limit(self, _connection_id, _model_name: str) -> int | None:
+        return None
+
 
 def _create_user(session: Session) -> models.User:
     user = models.User(

@@ -79,6 +79,9 @@ class _StubProviderResolver:
         del dimensions
         return _StubEmbedder(model_name)
 
+    def embedding_input_limit(self, _connection_id: Any, _model_name: str) -> int | None:
+        return None
+
 
 def test_collections_crud_without_pinecone_connection(keyless_client: TestClient) -> None:
     created = keyless_client.post("/api/collections", json={"name": "Docs", "description": ""})

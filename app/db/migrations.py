@@ -25,6 +25,12 @@ logger = logging.getLogger(__name__)
 _MAX_IDENTIFIER_LENGTH = 63
 _IndexSignature = tuple[tuple[str, ...], bool]
 _ForeignKeySignature = tuple[tuple[str, ...], str, tuple[str, ...]]
+_JSON_LIST_DEFAULT_COLUMNS = frozenset(
+    {
+        ("documents", "warnings"),
+        ("pipeline_runs", "warnings"),
+    }
+)
 
 
 def apply_missing_columns(engine: Engine, missing_columns: Mapping[str, set[str]]) -> None:
@@ -167,6 +173,8 @@ def _add_column(
     default_sql, drop_default = _resolve_default_sql(
         column, dialect, allow_application_default=requires_default
     )
+    if requires_default and default_sql is None:
+        default_sql, drop_default = _missing_column_default(table.name, column.name)
     column_type = column.type.compile(dialect=dialect)
 
     column_parts = [preparer.quote(column.name), column_type]
@@ -195,6 +203,13 @@ def _add_column(
             f"ALTER COLUMN {preparer.quote(column.name)} DROP DEFAULT"
         )
         connection.execute(text(drop_ddl))
+
+
+def _missing_column_default(table_name: str, column_name: str) -> tuple[str | None, bool]:
+    """Return a temporary backfill default for known non-scalar migrations."""
+    if (table_name, column_name) in _JSON_LIST_DEFAULT_COLUMNS:
+        return "'[]'", True
+    return None, False
 
 
 def _table_is_empty(
