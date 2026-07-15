@@ -40,7 +40,7 @@ export function ConnectionConfigFields({
               field.kind === "secret" ? (
                 <button
                   type="button"
-                  aria-label={`${revealed[field.name] ? "Hide" : "Show"} ${field.label}`}
+                  aria-label={`${revealed[field.name] ? "Hide" : "Show"} secret: ${field.name}`}
                   aria-pressed={revealed[field.name] ?? false}
                   onClick={() =>
                     setRevealed((current) => ({

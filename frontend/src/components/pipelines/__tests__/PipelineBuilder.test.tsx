@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
-import { ApiError } from "@/lib/api-error";
 import * as apiModule from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import {
   makeCollection,
   makeNodeSpec,

@@ -12,8 +12,8 @@ import {
   updatePipeline,
   validatePipeline,
 } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
 import { ApiError } from "@/lib/api-error";
+import { getErrorMessage } from "@/lib/errors";
 
 import type {
   Collection,
@@ -249,12 +249,12 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     } catch (error) {
       if (
         error instanceof ApiError &&
-        typeof error.detail === "object" &&
-        error.detail !== null &&
-        "issues" in error.detail &&
-        Array.isArray(error.detail.issues)
+        typeof error.rawDetail === "object" &&
+        error.rawDetail !== null &&
+        "issues" in error.rawDetail &&
+        Array.isArray(error.rawDetail.issues)
       ) {
-        setValidationIssues(error.detail.issues as PipelineValidationIssue[]);
+        setValidationIssues(error.rawDetail.issues as PipelineValidationIssue[]);
       }
       setMessage(getErrorMessage(error, "Unable to save pipeline."));
     } finally {

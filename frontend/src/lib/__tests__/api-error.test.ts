@@ -22,7 +22,7 @@ describe("ApiError", () => {
     const detail = { issues: [{ message: "Pick another model." }] };
     const error = new ApiError(400, "Pick another model.", detail);
 
-    expect(error.detail).toBe(detail);
+    expect(error.rawDetail).toBe(detail);
   });
 });
 

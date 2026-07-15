@@ -62,7 +62,6 @@ vi.mock("@/components/ui/parameter-controls", () => ({
         <button
           id={props.id}
           type="button"
-          aria-invalid={props.ariaInvalid || undefined}
           aria-describedby={props.ariaDescribedBy}
           onClick={() => props.onChange(props.input === "boolean" ? true : "text")}
         >

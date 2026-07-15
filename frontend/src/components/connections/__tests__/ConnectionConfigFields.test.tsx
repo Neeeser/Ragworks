@@ -24,10 +24,10 @@ describe("ConnectionConfigFields", () => {
     const input = screen.getByLabelText("API key");
 
     expect(input).toHaveAttribute("type", "password");
-    await user.click(screen.getByRole("button", { name: "Show API key" }));
+    await user.click(screen.getByRole("button", { name: "Show secret: api_key" }));
     expect(input).toHaveAttribute("type", "text");
     expect(input).toHaveValue("secret-value");
-    await user.click(screen.getByRole("button", { name: "Hide API key" }));
+    await user.click(screen.getByRole("button", { name: "Hide secret: api_key" }));
     expect(input).toHaveAttribute("type", "password");
   });
 });
