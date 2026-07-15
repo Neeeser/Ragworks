@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capturing GitHub Issues"
+  short_description: "Turn user feedback into grounded GitHub issues"
+  default_prompt: "Use $capturing-github-issues to turn this user feedback into a grounded issue draft."
