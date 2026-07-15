@@ -79,18 +79,33 @@ function PanelBody({
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         <FilePreviewContent key={`${node.id}:${node.updated_at}`} token={token} node={node} />
 
-        <dl className="grid grid-cols-2 gap-3">
-          {metadata.map((item) => (
-            <div key={item.label} className="min-w-0">
-              <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                {item.label}
-              </dt>
-              <dd className="mt-1 truncate text-sm text-primary" title={item.value}>
-                {item.value}
-              </dd>
+        <div className="rounded-3xl border border-hairline bg-surface p-4">
+          <dl className="grid grid-cols-2 gap-3">
+            {metadata.map((item) => (
+              <div key={item.label} className="min-w-0">
+                <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                  {item.label}
+                </dt>
+                <dd className="mt-1 truncate text-sm text-primary" title={item.value}>
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {ingestion?.warnings.length ? (
+            <div className="mt-4 border-t border-hairline pt-4">
+              <h4 className="font-mono text-[11px] uppercase tracking-[0.28em] text-data-warn">
+                Ingestion warnings
+              </h4>
+              <ul className="mt-2 list-disc space-y-2 pl-4 text-sm text-body marker:text-data-warn">
+                {ingestion.warnings.map((warning, index) => (
+                  <li key={`${index}:${warning}`}>{warning}</li>
+                ))}
+              </ul>
             </div>
-          ))}
-        </dl>
+          ) : null}
+        </div>
 
         {ingestion?.status === "failed" && (
           <p className="rounded-2xl border border-data-neg/40 bg-data-neg/10 p-3 text-sm text-body">

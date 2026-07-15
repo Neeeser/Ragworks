@@ -10,6 +10,7 @@ export interface FileIngestion {
   document_id: UUID;
   status: DocumentStatus;
   error_message?: string | null;
+  warnings: string[];
   num_chunks: number;
   num_tokens: number;
   chunk_size: number;
