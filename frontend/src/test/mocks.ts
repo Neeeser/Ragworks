@@ -207,7 +207,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
       has_collection: true,
       setup_complete: true,
     })),
-    bootstrapSetup: vi.fn(async () => ({ collection: makeCollection() })),
+    bootstrapSetup: vi.fn(async () => ({ collection: makeCollection(), warnings: [] })),
     ...overrides,
   };
 }

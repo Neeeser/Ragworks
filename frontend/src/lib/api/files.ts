@@ -122,6 +122,7 @@ export async function fetchFileBlob(token: string, fileId: string): Promise<Blob
     throw new ApiError(
       response.status,
       typeof detail === "string" ? detail : formatApiErrorDetail(detail),
+      detail,
     );
   }
   return response.blob();

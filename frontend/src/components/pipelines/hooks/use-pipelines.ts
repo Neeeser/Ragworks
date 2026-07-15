@@ -13,6 +13,7 @@ import {
   validatePipeline,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { ApiError } from "@/lib/api-error";
 
 import type {
   Collection,
@@ -166,7 +167,15 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     setPipelines((prev) => [created, ...prev]);
     setSelectedPipeline(created);
     setChangeSummary("");
-    setValidationIssues([]);
+    setValidationIssues(created.validation_issues ?? []);
+    const warnings = (created.validation_issues ?? []).filter(
+      (issue) => issue.severity === "warning",
+    );
+    setMessage(
+      warnings.length > 0
+        ? `Pipeline created with warnings: ${warnings.map((issue) => issue.message).join(" ")}`
+        : "Pipeline created.",
+    );
   };
 
   const handleDeletePipeline = (pipeline: Pipeline) => {
@@ -238,6 +247,15 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
           : `Saved as v${updated.current_version}.`,
       );
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        typeof error.detail === "object" &&
+        error.detail !== null &&
+        "issues" in error.detail &&
+        Array.isArray(error.detail.issues)
+      ) {
+        setValidationIssues(error.detail.issues as PipelineValidationIssue[]);
+      }
       setMessage(getErrorMessage(error, "Unable to save pipeline."));
     } finally {
       setSaving(false);
@@ -287,7 +305,15 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
         version.version,
       );
       applyUpdatedPipeline(updated);
-      setMessage(`Activated version ${version.version}.`);
+      setValidationIssues(updated.validation_issues ?? []);
+      const warnings = (updated.validation_issues ?? []).filter(
+        (issue) => issue.severity === "warning",
+      );
+      setMessage(
+        warnings.length > 0
+          ? `Activated version ${version.version} with warnings: ${warnings.map((issue) => issue.message).join(" ")}`
+          : `Activated version ${version.version}.`,
+      );
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to activate version."));
     } finally {

@@ -168,6 +168,7 @@ export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
     is_default: false,
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
+    validation_issues: [],
     definition: {
       nodes: [
         {

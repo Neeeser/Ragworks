@@ -9,6 +9,7 @@ import {
   makeBackendInfo,
   makeCatalogModel,
   makeModelCatalog,
+  makeNodeSpec,
   makePineconeBackendInfo,
   makePipeline,
   makeVectorIndex,
@@ -212,7 +213,7 @@ describe("CreatePipelineWizard", () => {
         indexDimension: 768,
         embeddingConnectionId: "conn-openrouter-1",
         embeddingModel: "emb-1",
-        chunkSize: 1024,
+        chunkSize: 512,
         chunkOverlap: 200,
         includeBm25: true,
         indexNameMaxLength: 45,
@@ -229,6 +230,36 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
     expect(await screen.findByText("Unable to create pipeline.")).toBeInTheDocument();
   }, 15000);
+
+  it("derives initial chunking values from the backend node catalog", async () => {
+    const user = userEvent.setup();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({
+      indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })],
+      nodeSpecs: [
+        makeNodeSpec({
+          type: "chunker.token",
+          default_config: { chunk_size: 384, chunk_overlap: 48 },
+        }),
+      ],
+    });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    await waitFor(() =>
+      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
+        "ingestion",
+        "pgvector",
+        expect.objectContaining({ chunkSize: 384, chunkOverlap: 48 }),
+      ),
+    );
+  });
 
   it("applies chunking presets on the processing step", async () => {
     const user = userEvent.setup();

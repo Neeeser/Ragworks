@@ -75,6 +75,14 @@ const KIND_COPY: Record<
   },
 };
 
+const chunkerDefaults = (nodeSpecs: NodeSpec[]) => {
+  const defaults = nodeSpecs.find((spec) => spec.type === "chunker.token")?.default_config;
+  return {
+    size: typeof defaults?.chunk_size === "number" ? defaults.chunk_size : 512,
+    overlap: typeof defaults?.chunk_overlap === "number" ? defaults.chunk_overlap : 200,
+  };
+};
+
 export function CreatePipelineWizard({
   open,
   token,
@@ -109,6 +117,7 @@ export function CreatePipelineWizard({
   const [stepIndex, setStepIndex] = useState(0);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const defaultChunking = useMemo(() => chunkerDefaults(nodeSpecs), [nodeSpecs]);
 
   useEffect(() => {
     if (open) onCatalogVisible?.();
@@ -119,8 +128,8 @@ export function CreatePipelineWizard({
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingConnectionId, setEmbeddingConnectionId] = useState<string | null>(null);
   const [embeddingConnectionLabel, setEmbeddingConnectionLabel] = useState<string | null>(null);
-  const [chunkSize, setChunkSize] = useState(1024);
-  const [chunkOverlap, setChunkOverlap] = useState(200);
+  const [chunkSize, setChunkSize] = useState(defaultChunking.size);
+  const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
   const wasOpen = useRef(false);
 
@@ -134,12 +143,12 @@ export function CreatePipelineWizard({
       setEmbeddingModel("");
       setEmbeddingConnectionId(null);
       setEmbeddingConnectionLabel(null);
-      setChunkSize(1024);
-      setChunkOverlap(200);
+      setChunkSize(defaultChunking.size);
+      setChunkOverlap(defaultChunking.overlap);
       setShowAdvancedChunking(false);
     }
     wasOpen.current = open;
-  }, [open, defaultBackend]);
+  }, [open, defaultBackend, defaultChunking]);
 
   const backendInfo = backends.find((info) => info.backend === backend) ?? null;
   // The wizard picks the dense index; the BM25 sibling is derived from it.

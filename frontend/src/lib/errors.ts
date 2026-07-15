@@ -7,6 +7,12 @@ interface ValidationErrorItem {
 const isValidationErrorItem = (value: unknown): value is ValidationErrorItem =>
   typeof value === "object" && value !== null && "msg" in value;
 
+const hasMessage = (value: unknown): value is { message: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "message" in value &&
+  typeof value.message === "string";
+
 /** Renders a single 422 item as "field.path: message" (dropping the leading "body"). */
 function formatValidationErrorItem(item: ValidationErrorItem): string {
   const msg = item.msg ?? "Invalid value";
@@ -27,12 +33,16 @@ export function formatApiErrorDetail(detail: unknown): string {
   }
   if (Array.isArray(detail)) {
     return detail
-      .map((item) => (isValidationErrorItem(item) ? formatValidationErrorItem(item) : String(item)))
+      .map((item) => {
+        if (isValidationErrorItem(item)) return formatValidationErrorItem(item);
+        if (hasMessage(item)) return item.message;
+        return formatApiErrorDetail(item);
+      })
       .join("\n");
   }
   if (typeof detail === "object" && detail !== null) {
     return Object.entries(detail as Record<string, unknown>)
-      .map(([field, message]) => `${field}: ${String(message)}`)
+      .map(([field, message]) => `${field}: ${formatApiErrorDetail(message)}`)
       .join("\n");
   }
   return String(detail);

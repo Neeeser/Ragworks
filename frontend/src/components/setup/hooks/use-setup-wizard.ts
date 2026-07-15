@@ -60,6 +60,7 @@ export interface SetupWizardApi {
   finish: () => Promise<void>;
   busy: boolean;
   error: string | null;
+  warning: string | null;
   clearError: () => void;
 }
 
@@ -71,6 +72,8 @@ export function useSetupWizard(): SetupWizardApi {
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [completedCollectionId, setCompletedCollectionId] = useState<string | null>(null);
 
   const authToken = token ?? "";
   const { connections, connectionsLoading, connectionsError, reloadConnections } = useConnections(
@@ -186,6 +189,10 @@ export function useSetupWizard(): SetupWizardApi {
 
   const finish = useCallback(async () => {
     if (!token) return;
+    if (completedCollectionId) {
+      router.replace(`/collections/${completedCollectionId}`);
+      return;
+    }
     const { choices } = state;
     if (!choices.embeddingConnectionId) {
       setError("Pick an embedding model before finishing setup.");
@@ -193,6 +200,7 @@ export function useSetupWizard(): SetupWizardApi {
     }
     setBusy(true);
     setError(null);
+    setWarning(null);
     try {
       const result = await bootstrapSetup(token, {
         embedding_connection_id: choices.embeddingConnectionId,
@@ -205,12 +213,20 @@ export function useSetupWizard(): SetupWizardApi {
         chunk_overlap: choices.chunkOverlap,
       });
       markComplete();
+      if ((result.warnings ?? []).length > 0) {
+        setCompletedCollectionId(result.collection.id);
+        setWarning(
+          `Setup finished with warnings: ${result.warnings.map((issue) => issue.message).join(" ")} Select Finish setup again to continue.`,
+        );
+        setBusy(false);
+        return;
+      }
       router.replace(`/collections/${result.collection.id}`);
     } catch (err) {
       setError(getErrorMessage(err, "Could not finish setup."));
       setBusy(false);
     }
-  }, [token, state, markComplete, router]);
+  }, [token, state, markComplete, router, completedCollectionId]);
 
   const modelConnectionError =
     (modelsQuery.data?.connection_errors ?? [])
@@ -240,6 +256,7 @@ export function useSetupWizard(): SetupWizardApi {
     finish,
     busy,
     error,
+    warning,
     clearError: () => setError(null),
   };
 }

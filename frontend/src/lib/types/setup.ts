@@ -1,5 +1,6 @@
 import type { Collection } from "@/lib/types/collections";
 import type { IndexBackend, UUID } from "@/lib/types/common";
+import type { PipelineValidationIssue } from "@/lib/types/pipelines";
 
 /** Mirrors `app/schemas/setup.py::SetupStatusRead`. */
 export interface SetupStatus {
@@ -26,4 +27,5 @@ export interface SetupBootstrapRequest {
 /** Mirrors `app/schemas/setup.py::SetupBootstrapResponse`. */
 export interface SetupBootstrapResponse {
   collection: Collection;
+  warnings: PipelineValidationIssue[];
 }

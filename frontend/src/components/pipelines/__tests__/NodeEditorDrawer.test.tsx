@@ -31,34 +31,56 @@ vi.mock("@/components/ui/parameter-controls", () => ({
     label,
     helper,
     error,
+    errorId,
+    controlId,
     children,
   }: {
     label: string;
     helper?: string | null;
     error?: string | null;
+    errorId?: string;
+    controlId?: string;
     children: React.ReactNode;
   }) => (
     <div>
-      <span>{label}</span>
+      <label htmlFor={controlId}>{label}</label>
       {helper && <span>{helper}</span>}
       {children}
-      {error && <span>{error}</span>}
+      {error && <span id={errorId}>{error}</span>}
     </div>
   ),
-  ParameterInput: (props: { input: string; onChange: (value: string | boolean) => void }) => {
+  ParameterInput: (props: {
+    input: string;
+    id?: string;
+    ariaInvalid?: boolean;
+    ariaDescribedBy?: string;
+    onChange: (value: string | boolean) => void;
+  }) => {
     parameterInputMock(props);
+    if (props.input !== "integer" && props.input !== "number") {
+      return (
+        <button
+          id={props.id}
+          type="button"
+          aria-invalid={props.ariaInvalid || undefined}
+          aria-describedby={props.ariaDescribedBy}
+          onClick={() => props.onChange(props.input === "boolean" ? true : "text")}
+        >
+          {`trigger-${props.input}`}
+        </button>
+      );
+    }
     return (
-      <button
-        type="button"
+      <input
+        id={props.id}
+        type="number"
+        aria-invalid={props.ariaInvalid || undefined}
+        aria-describedby={props.ariaDescribedBy}
         onClick={() => {
           if (props.input === "number") props.onChange("1.2");
-          else if (props.input === "integer") props.onChange("3");
-          else if (props.input === "boolean") props.onChange(true);
-          else props.onChange("text");
+          else props.onChange("3");
         }}
-      >
-        {`trigger-${props.input}`}
-      </button>
+      />
     );
   },
 }));
@@ -425,7 +447,10 @@ describe("NodeEditorDrawer", () => {
       ],
     });
 
-    expect(screen.getByText(/Chunk size 1,024 exceeds/)).toBeInTheDocument();
+    const message = screen.getByText(/Chunk size 1,024 exceeds/);
+    const input = screen.getByRole("spinbutton", { name: "Chunk Size" });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", message.id);
   });
 
   it("preview mode is read-only with an Add to canvas action", () => {

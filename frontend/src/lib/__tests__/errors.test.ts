@@ -63,6 +63,17 @@ describe("formatApiErrorDetail", () => {
       ]),
     ).toBe("name: field required\nroot problem");
   });
+
+  it("renders structured pipeline issues without object coercion", () => {
+    const result = formatApiErrorDetail({
+      errors: ["Pipeline is invalid."],
+      issues: [{ field: "chunk_size", message: "Chunk span is too large." }],
+    });
+
+    expect(result).toContain("Pipeline is invalid.");
+    expect(result).toContain("Chunk span is too large.");
+    expect(result).not.toContain("[object Object]");
+  });
 });
 
 describe("isAbortError", () => {

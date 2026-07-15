@@ -17,6 +17,13 @@ describe("ApiError", () => {
 
     expect(error.message).toBe("Internal server error");
   });
+
+  it("keeps structured detail for inline recovery", () => {
+    const detail = { issues: [{ message: "Pick another model." }] };
+    const error = new ApiError(400, "Pick another model.", detail);
+
+    expect(error.detail).toBe(detail);
+  });
 });
 
 describe("isUnauthorized", () => {

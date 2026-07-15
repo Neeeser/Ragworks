@@ -81,6 +81,7 @@ export const pipeline: Pipeline = {
   is_default: false,
   created_at: baseTimestamp,
   updated_at: baseTimestamp,
+  validation_issues: [],
   definition: {
     nodes: [
       {

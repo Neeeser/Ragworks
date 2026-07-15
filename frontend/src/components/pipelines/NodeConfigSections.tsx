@@ -21,7 +21,13 @@ import { sortIndexesByName } from "./lib/pipeline-utils";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { CatalogModel, IndexBackend, ModelCatalogResponse, VectorIndex } from "@/lib/types";
+import type {
+  CatalogModel,
+  IndexBackend,
+  ModelCatalogResponse,
+  PipelineValidationIssue,
+  VectorIndex,
+} from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type NodeConfigSectionsProps = {
@@ -29,6 +35,7 @@ export type NodeConfigSectionsProps = {
   onConfigChange: (config: Record<string, unknown>) => void;
   isPreview: boolean;
   validationErrors: string[];
+  validationIssues?: PipelineValidationIssue[];
   vectorIndexes: VectorIndex[];
   onOpenIndexManager?: () => void;
   embeddingModels: CatalogModel[];
@@ -55,6 +62,7 @@ export function NodeConfigSections({
   onConfigChange,
   isPreview,
   validationErrors,
+  validationIssues = [],
   vectorIndexes,
   onOpenIndexManager,
   embeddingModels,
@@ -255,6 +263,9 @@ export function NodeConfigSections({
         <div className="space-y-3">
           {filteredFields.map((field) => {
             const value = getInputValue(field, config);
+            const issue = validationIssues.find((item) => item.field === field.key);
+            const inputId = `node-${node.id}-${field.key}`;
+            const issueId = issue ? `${inputId}-validation` : undefined;
             const helper =
               field.defaultValue !== undefined
                 ? `Default: ${formatConfigValue(field.defaultValue)}`
@@ -268,8 +279,14 @@ export function NodeConfigSections({
                 label={field.label}
                 description={field.description}
                 helper={helper}
+                error={issue?.message}
+                errorId={issueId}
+                controlId={inputId}
               >
                 <ParameterInput
+                  id={inputId}
+                  ariaInvalid={issue?.severity === "error"}
+                  ariaDescribedBy={issueId}
                   input={field.input}
                   value={value}
                   min={field.min}

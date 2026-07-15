@@ -101,6 +101,7 @@ export interface Pipeline {
   created_at: string;
   updated_at: string;
   definition: PipelineDefinition;
+  validation_issues?: PipelineValidationIssue[];
 }
 
 /** One structural change a version introduced (`PipelineChangeRead`). */

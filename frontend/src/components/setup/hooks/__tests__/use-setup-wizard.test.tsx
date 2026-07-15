@@ -1,13 +1,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
+
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 vi.mock("@/providers/setup-status-provider", () => ({
   useSetupStatus: () => ({ status: null, refresh: vi.fn(), markComplete: vi.fn() }),
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace }),
 }));
 vi.mock("@/lib/model-catalog-cache", () => ({
   useSharedModelCatalog: () => ({
@@ -26,6 +28,7 @@ const CONNECTION_ID = "conn-1";
 const MODEL_ID = "openai/text-embedding-3-small";
 const createIndex = vi.mocked(api.createIndex);
 const fetchEmbeddingDimension = vi.mocked(api.fetchEmbeddingDimension);
+const bootstrapSetup = vi.mocked(api.bootstrapSetup);
 
 async function mountWizard() {
   const hook = renderHook(() => useSetupWizard());
@@ -115,5 +118,40 @@ describe("useSetupWizard.ensureIndex — embedding dimension resolution", () => 
 
     expect(createIndex).not.toHaveBeenCalled();
     expect(result.current.error).toMatch(/dimension/i);
+  });
+});
+
+describe("useSetupWizard.finish — validation warnings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders returned warnings before continuing to the collection", async () => {
+    bootstrapSetup.mockResolvedValue({
+      collection: { id: "collection-1" } as never,
+      warnings: [
+        {
+          code: "embedding_input_limit_exceeded",
+          message: "Chunking may exceed the model limit.",
+          severity: "warning",
+        },
+      ],
+    });
+    const { result } = await mountWizard();
+    act(() => {
+      result.current.setChoices({
+        embeddingConnectionId: CONNECTION_ID,
+        embeddingModel: MODEL_ID,
+        collectionName: "First",
+      });
+    });
+
+    await act(async () => result.current.finish());
+
+    expect(result.current.warning).toMatch(/chunking may exceed/i);
+    expect(routerReplace).not.toHaveBeenCalled();
+
+    await act(async () => result.current.finish());
+    expect(routerReplace).toHaveBeenCalledWith("/collections/collection-1");
   });
 });
