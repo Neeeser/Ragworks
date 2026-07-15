@@ -4,13 +4,6 @@ import type { IndexBackend, UUID } from "@/lib/types/common";
 export type PipelineKind = "ingestion" | "retrieval";
 export type PipelineRunStatus = "running" | "completed" | "failed";
 export type PipelineIOType = "input" | "output";
-export type TokenizerKind = "wordpiece" | "cl100k" | "whitespace" | "huggingface";
-
-export interface TokenizerSpec {
-  kind: TokenizerKind;
-  hf_model_id?: string | null;
-}
-
 export interface HuggingFaceTokenizerDownload {
   model_id: string;
   consent?: boolean;
@@ -153,7 +146,6 @@ export interface NodeSpec {
   config_schema: Record<string, unknown>;
   default_config: Record<string, unknown>;
   hidden: boolean;
-  requires_model_id?: boolean;
 }
 
 export interface PipelineValidationResult {

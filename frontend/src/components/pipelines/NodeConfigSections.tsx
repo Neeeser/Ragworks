@@ -8,6 +8,7 @@ import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-co
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
+import { ChunkerTokenizerFields } from "./ChunkerTokenizerFields";
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import {
@@ -76,6 +77,7 @@ export function NodeConfigSections({
   const nodeType = node.data.nodeType;
   const config = useMemo<Record<string, unknown>>(() => node.data.config ?? {}, [node]);
   const isEmbedder = nodeType === "embedder.text";
+  const isChunker = nodeType.startsWith("chunker.");
 
   useEffect(() => {
     if (isEmbedder) onCatalogVisible?.();
@@ -97,7 +99,8 @@ export function NodeConfigSections({
     const embedderHidden =
       isEmbedder && ["connection_id", "model_name", "dimension"].includes(field.key);
     const vectorHidden = isVectorNode && ["backend", "index_name", "dimension"].includes(field.key);
-    return !(embedderHidden || vectorHidden);
+    const chunkerTokenizerField = isChunker && ["tokenizer", "hf_model_id"].includes(field.key);
+    return !(embedderHidden || vectorHidden || chunkerTokenizerField);
   });
   const selectedEmbeddingModelKey = typeof config.model_name === "string" ? config.model_name : "";
   const selectedEmbeddingConnectionId =
@@ -172,6 +175,14 @@ export function NodeConfigSections({
           modelsLoading={embeddingModelsLoading}
           modelsError={embeddingModelsError}
           onSelectModel={onSelectEmbeddingModel}
+        />
+      ) : null}
+      {isChunker ? (
+        <ChunkerTokenizerFields
+          config={config}
+          disabled={isPreview}
+          validationIssues={validationIssues}
+          onConfigChange={onConfigChange}
         />
       ) : null}
       {isVectorNode && backendSelectable ? (

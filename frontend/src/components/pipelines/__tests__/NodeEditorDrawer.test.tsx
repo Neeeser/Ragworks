@@ -63,7 +63,11 @@ vi.mock("@/components/ui/parameter-controls", () => ({
           id={props.id}
           type="button"
           aria-describedby={props.ariaDescribedBy}
-          onClick={() => props.onChange(props.input === "boolean" ? true : "text")}
+          onClick={() =>
+            props.onChange(
+              props.input === "boolean" ? true : props.input === "select" ? "huggingface" : "text",
+            )
+          }
         >
           {`trigger-${props.input}`}
         </button>
@@ -199,6 +203,37 @@ describe("NodeEditorDrawer", () => {
     fireEvent.click(saveButton);
     expect(onApply).toHaveBeenCalledWith("node-1", { label: "Node", config: { mode: "text" } });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("shows the HuggingFace model field only for the HuggingFace chunker tokenizer", async () => {
+    const user = userEvent.setup();
+    renderDrawer({
+      node: makeNode(
+        "chunker.token",
+        { tokenizer: "wordpiece" },
+        {
+          properties: {
+            tokenizer: {
+              type: "string",
+              enum: ["wordpiece", "cl100k", "whitespace", "huggingface"],
+              default: "wordpiece",
+            },
+            hf_model_id: {
+              anyOf: [{ type: "string" }, { type: "null" }],
+              default: null,
+            },
+          },
+        },
+      ),
+    });
+
+    expect(screen.getByRole("combobox", { name: "Tokenizer" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("HuggingFace model id")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Tokenizer" }));
+    await user.click(screen.getByRole("option", { name: "HuggingFace" }));
+
+    expect(screen.getByLabelText("HuggingFace model id")).toBeInTheDocument();
   });
 
   it("closes directly while clean, via the close button and Escape", () => {

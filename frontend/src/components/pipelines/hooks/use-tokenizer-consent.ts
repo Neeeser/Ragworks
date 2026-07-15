@@ -7,7 +7,7 @@ import { ensureHuggingFaceTokenizer } from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { NodeSpec, PipelineDefinition } from "@/lib/types";
+import type { PipelineDefinition } from "@/lib/types";
 
 type ReadyAction = () => Promise<void>;
 type PendingConsent = {
@@ -23,7 +23,6 @@ const isConsentRequired = (error: unknown): error is ApiError =>
 export function useTokenizerConsent(
   token: string | null,
   setMessage: (message: string | null) => void,
-  nodeSpecs: Pick<NodeSpec, "type" | "requires_model_id">[],
 ) {
   const [pending, setPending] = useState<PendingConsent | null>(null);
   const [modelId, setModelId] = useState<string | null>(null);
@@ -56,9 +55,9 @@ export function useTokenizerConsent(
   const ensureThen = useCallback(
     async (definition: PipelineDefinition, ready: ReadyAction) => {
       setMessage(null);
-      await continueAt(huggingFaceTokenizerModelIds(definition, nodeSpecs), 0, ready);
+      await continueAt(huggingFaceTokenizerModelIds(definition), 0, ready);
     },
-    [continueAt, nodeSpecs, setMessage],
+    [continueAt, setMessage],
   );
 
   const confirm = useCallback(async () => {

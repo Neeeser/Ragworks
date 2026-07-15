@@ -472,17 +472,24 @@ describe("PipelineBuilder", () => {
   });
 
   it("requires consent before saving an uncached HuggingFace tokenizer", async () => {
-    const tokenizerSpec = makeNodeSpec({
-      type: "tokenizer.huggingface",
-      label: "HuggingFace tokenizer",
+    const chunkerSpec = makeNodeSpec({
+      type: "chunker.token",
+      label: "Token Chunker",
       category: "ingestion",
-      requires_model_id: true,
-      input_ports: [],
+      input_ports: [
+        {
+          key: "document",
+          label: "Document",
+          data_type: "document",
+          required: true,
+          accepts_many: false,
+        },
+      ],
       output_ports: [
         {
-          key: "tokenizer",
-          label: "Tokenizer",
-          data_type: "tokenizer",
+          key: "chunks",
+          label: "Chunks",
+          data_type: "chunk_batch",
           required: true,
           accepts_many: false,
         },
@@ -495,10 +502,10 @@ describe("PipelineBuilder", () => {
           nodes: [
             ...pipeline.definition.nodes,
             {
-              id: "tokenizer",
-              type: "tokenizer.huggingface",
-              name: "Tokenizer",
-              config: { hf_model_id: hfModelId },
+              id: "chunker",
+              type: "chunker.token",
+              name: "Token Chunker",
+              config: { tokenizer: "huggingface", hf_model_id: hfModelId },
               position: { x: -200, y: 0 },
             },
           ],
@@ -506,7 +513,7 @@ describe("PipelineBuilder", () => {
         },
       },
     ]);
-    api.fetchPipelineNodes.mockResolvedValueOnce([...nodeSpecs, tokenizerSpec]);
+    api.fetchPipelineNodes.mockResolvedValueOnce([...nodeSpecs, chunkerSpec]);
     api.ensureHuggingFaceTokenizer
       .mockRejectedValueOnce(new ApiError(400, "Download consent is required."))
       .mockResolvedValue({ model_id: hfModelId, cached: true });

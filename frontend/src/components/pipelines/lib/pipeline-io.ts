@@ -1,5 +1,4 @@
 import type { PipelineNodeData } from "../PipelineNode";
-import type { NodeSpec } from "@/lib/types";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
 type PortCompatibilityMap = Record<string, Set<string>>;
@@ -8,7 +7,6 @@ const PORT_COMPATIBILITY: PortCompatibilityMap = {
   document_source: new Set(["document_source"]),
   document: new Set(["document"]),
   chunk_batch: new Set(["chunk_batch"]),
-  tokenizer: new Set(["tokenizer"]),
   embedded_batch: new Set(["embedded_batch"]),
   indexed_batch: new Set(["indexed_batch"]),
   query_request: new Set(["query_request"]),
@@ -155,21 +153,16 @@ const resolveIndexName = (config: Record<string, unknown>) => {
 export const validatePipelineConfig = (
   nodes: Node<PipelineNodeData>[],
   configOverrides?: Record<string, Record<string, unknown>>,
-  nodeSpecs: Pick<NodeSpec, "type" | "requires_model_id">[] = [],
 ) => {
   const nodeErrors: Record<string, string[]> = {};
-  const modelIdNodeTypes = new Set(
-    nodeSpecs.filter((spec) => spec.requires_model_id).map((spec) => spec.type),
-  );
   nodes.forEach((node) => {
     const { nodeType } = node.data;
     const config = resolveNodeConfig(node, configOverrides);
-    if (modelIdNodeTypes.has(nodeType)) {
+    if (nodeType.startsWith("chunker.") && config.tokenizer === "huggingface") {
       const modelId = config.hf_model_id;
       if (typeof modelId !== "string" || !modelId.trim()) {
         nodeErrors[node.id] = ["A HuggingFace model id is required."];
       }
-      return;
     }
     if (!nodeType.startsWith("indexer.") && !nodeType.startsWith("retriever.")) {
       return;

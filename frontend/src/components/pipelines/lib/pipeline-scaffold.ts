@@ -10,7 +10,6 @@ import type { IndexBackend, PipelineDefinition, PipelineKind } from "@/lib/types
 const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
 const PORT_CHUNKS = "chunks";
-const PORT_TOKENIZER = "tokenizer";
 const PORT_EMBEDDED = "embedded";
 const PORT_QUERY_EMBEDDING = "query_embedding";
 const PORT_INDEXED = "indexed";
@@ -25,7 +24,6 @@ const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
 const NODE_PARSE_DOCUMENT = "parse-document";
 const NODE_CHUNK_DOCUMENT = "chunk-document";
-const NODE_TOKENIZE_DOCUMENT = "tokenize-document";
 const NODE_EMBED_CHUNKS = "embed-chunks";
 const NODE_INDEX_CHUNKS = "index-chunks";
 const NODE_INDEX_BM25 = "index-bm25";
@@ -220,12 +218,6 @@ export const buildDefaultDefinition = (
       config: {},
     },
     {
-      id: NODE_TOKENIZE_DOCUMENT,
-      type: "tokenizer.wordpiece",
-      name: "BERT WordPiece",
-      config: {},
-    },
-    {
       id: NODE_CHUNK_DOCUMENT,
       type: "chunker.token",
       name: "Token Chunker",
@@ -267,13 +259,6 @@ export const buildDefaultDefinition = (
       target: NODE_CHUNK_DOCUMENT,
       source_port: PORT_DOCUMENT,
       target_port: PORT_DOCUMENT,
-    },
-    {
-      id: "edge-tokenizer-chunker",
-      source: NODE_TOKENIZE_DOCUMENT,
-      target: NODE_CHUNK_DOCUMENT,
-      source_port: PORT_TOKENIZER,
-      target_port: PORT_TOKENIZER,
     },
     {
       id: "edge-chunker-embedder",

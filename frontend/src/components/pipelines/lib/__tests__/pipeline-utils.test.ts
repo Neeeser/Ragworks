@@ -108,22 +108,14 @@ describe("pipeline-utils", () => {
       chunkOverlap: 32,
       embeddingModel: "openai/text-embedding-3-small",
     });
-    expect(ingestion.nodes).toHaveLength(7);
-    expect(ingestion.edges).toHaveLength(6);
+    expect(ingestion.nodes).toHaveLength(6);
+    expect(ingestion.edges).toHaveLength(5);
     const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
     expect(indexer?.config).toEqual({ backend: "pinecone", index_name: "index-b" });
     const chunker = ingestion.nodes.find((node) => node.type === "chunker.token");
-    const tokenizer = ingestion.nodes.find((node) => node.type === "tokenizer.wordpiece");
     expect(chunker?.config).toEqual({ chunk_size: 512, chunk_overlap: 32 });
-    expect(tokenizer).toBeDefined();
-    expect(ingestion.edges).toContainEqual(
-      expect.objectContaining({
-        source: tokenizer?.id,
-        target: chunker?.id,
-        source_port: "tokenizer",
-        target_port: "tokenizer",
-      }),
-    );
+    expect(ingestion.nodes.every((node) => !node.type.startsWith("tokenizer."))).toBe(true);
+    expect(ingestion.edges.every((edge) => edge.target_port !== "tokenizer")).toBe(true);
     const ingestEmbedder = ingestion.nodes.find((node) => node.type === "embedder.text");
     expect(ingestEmbedder?.config).toEqual({ model_name: "openai/text-embedding-3-small" });
   });

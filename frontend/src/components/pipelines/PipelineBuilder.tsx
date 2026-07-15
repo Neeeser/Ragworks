@@ -74,7 +74,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     persistLayout,
     handleActivateVersion,
   } = usePipelines({ token, kind });
-  const tokenizerConsent = useTokenizerConsent(token, setMessage, nodeSpecs);
+  const tokenizerConsent = useTokenizerConsent(token, setMessage);
 
   const {
     embeddingModels,
@@ -184,13 +184,13 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const { edgeErrors, nodeErrors } = useMemo(() => {
     const edgeValidation = validatePipelineEdges(nodes, edges);
-    const configValidation = validatePipelineConfig(nodes, undefined, nodeSpecs);
+    const configValidation = validatePipelineConfig(nodes);
     const mergedNodeErrors: Record<string, string[]> = { ...edgeValidation.nodeErrors };
     Object.entries(configValidation.nodeErrors).forEach(([nodeId, errors]) => {
       mergedNodeErrors[nodeId] = [...(mergedNodeErrors[nodeId] ?? []), ...errors];
     });
     return { edgeErrors: edgeValidation.edgeErrors, nodeErrors: mergedNodeErrors };
-  }, [nodes, edges, nodeSpecs]);
+  }, [nodes, edges]);
 
   const pendingChanges = useMemo(() => {
     if (!selectedPipeline) return [];

@@ -21,7 +21,6 @@ describe("pipeline-theme", () => {
     expect(resolveNodeFamily("retrieval.output")).toBe("retrieval");
     expect(resolveNodeFamily("chat.settings")).toBe("chat");
     expect(resolveNodeFamily("utility.misc")).toBe("utility");
-    expect(resolveNodeFamily("tokenizer.wordpiece")).toBe("tokenizer");
     expect(resolveNodeFamily("custom.node")).toBe("other");
   });
 
@@ -47,6 +46,5 @@ describe("pipeline-theme", () => {
     expect(withType.handle).toContain("bg-stage-retrieve");
     const withoutType = getPortTypeClasses();
     expect(withoutType.handle).toContain("bg-stage-neutral");
-    expect(getPortTypeClasses("tokenizer").handle).toContain("bg-stage-chunk");
   });
 });

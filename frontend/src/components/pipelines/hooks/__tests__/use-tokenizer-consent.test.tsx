@@ -14,17 +14,16 @@ const modelId = "owner/model";
 const definition: PipelineDefinition = {
   nodes: [
     {
-      id: "tokenizer",
-      type: "tokenizer.huggingface",
-      name: "Tokenizer",
-      config: { hf_model_id: modelId },
+      id: "chunker",
+      type: "chunker.token",
+      name: "Token Chunker",
+      config: { tokenizer: "huggingface", hf_model_id: modelId },
     },
   ],
   edges: [],
 };
 
 describe("useTokenizerConsent", () => {
-  const nodeSpecs = [{ type: "tokenizer.huggingface", requires_model_id: true }];
   beforeEach(() => {
     api.ensureHuggingFaceTokenizer.mockResolvedValue({
       model_id: modelId,
@@ -34,7 +33,7 @@ describe("useTokenizerConsent", () => {
 
   it("continues immediately when every tokenizer is already available", async () => {
     const ready = vi.fn(async () => undefined);
-    const { result } = renderHook(() => useTokenizerConsent("token", vi.fn(), nodeSpecs));
+    const { result } = renderHook(() => useTokenizerConsent("token", vi.fn()));
 
     await act(() => result.current.ensureThen(definition, ready));
 
@@ -51,7 +50,7 @@ describe("useTokenizerConsent", () => {
       .mockResolvedValue({ model_id: modelId, cached: true });
     const ready = vi.fn(async () => undefined);
     const setMessage = vi.fn();
-    const { result } = renderHook(() => useTokenizerConsent("token", setMessage, nodeSpecs));
+    const { result } = renderHook(() => useTokenizerConsent("token", setMessage));
 
     await act(() => result.current.ensureThen(definition, ready));
     expect(result.current.modelId).toBe(modelId);
@@ -74,7 +73,7 @@ describe("useTokenizerConsent", () => {
       .mockRejectedValueOnce(new ApiError(400, "Download consent is required."))
       .mockRejectedValueOnce(new ApiError(502, "Tokenizer host unavailable."));
     const setMessage = vi.fn();
-    const { result } = renderHook(() => useTokenizerConsent("token", setMessage, nodeSpecs));
+    const { result } = renderHook(() => useTokenizerConsent("token", setMessage));
 
     await act(() => result.current.ensureThen(definition, vi.fn()));
     await act(() => result.current.confirm());
@@ -89,7 +88,7 @@ describe("useTokenizerConsent", () => {
     );
     const ready = vi.fn(async () => undefined);
     const setMessage = vi.fn();
-    const { result } = renderHook(() => useTokenizerConsent("token", setMessage, nodeSpecs));
+    const { result } = renderHook(() => useTokenizerConsent("token", setMessage));
 
     await act(() => result.current.ensureThen(definition, ready));
 
