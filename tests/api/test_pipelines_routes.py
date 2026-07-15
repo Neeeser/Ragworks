@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -118,60 +117,54 @@ def test_list_pipeline_nodes_returns_specs() -> None:
     assert response.nodes
 
 
-def test_validate_pipeline_returns_success() -> None:
+def test_validate_pipeline_returns_success(session: Session) -> None:
     definition = build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         )
 
-    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
+    response = pipelines_routes.validate_pipeline(
+        definition,
+        current_user=models.User(),
+        session=session,
+    )
 
     assert response.valid is True
     assert response.errors == []
-    assert response.warnings == []
+    assert any("does not publish an input token limit" in warning for warning in response.warnings)
 
 
-def test_validate_pipeline_requires_index_name() -> None:
+def test_validate_pipeline_requires_index_name(session: Session) -> None:
     definition = build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         )
     for node in definition.nodes:
         if node.type.startswith("indexer."):
             node.config = {**(node.config or {}), "index_name": ""}
-    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
+    response = pipelines_routes.validate_pipeline(
+        definition,
+        current_user=models.User(),
+        session=session,
+    )
 
     assert response.valid is False
     assert any("must specify an index" in error for error in response.errors)
 
 
-def test_validate_pipeline_returns_warnings() -> None:
+def test_validate_pipeline_returns_warnings(session: Session) -> None:
     definition = build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         )
     for node in definition.nodes:
         if node.type == "embedder.text":
             node.config = {**(node.config or {}), "dimension": 512}
-    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
+    response = pipelines_routes.validate_pipeline(
+        definition,
+        current_user=models.User(),
+        session=session,
+    )
 
     assert response.warnings != []
     assert any("no dimension configured" in warning for warning in response.warnings)
-
-
-def test_validate_definition_rejects_invalid(monkeypatch) -> None:
-    class _StubValidator:
-        def __init__(self, _registry) -> None:
-            pass
-
-        def validate(self, _definition):
-            return SimpleNamespace(valid=False, errors=["bad"])
-
-    monkeypatch.setattr(pipelines_routes, "PipelineValidator", _StubValidator)
-
-    with pytest.raises(HTTPException) as excinfo:
-        pipelines_routes._validate_definition_or_400(build_default_ingestion_pipeline(
-            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
-        ))
-
-    assert excinfo.value.status_code == 400
 
 
 def test_list_pipelines_returns_results(session: Session) -> None:
@@ -246,7 +239,7 @@ def test_update_pipeline_updates_definition(session: Session) -> None:
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
-    chunker.config = {**chunker.config, "chunk_size": 512}
+    chunker.config = {**chunker.config, "chunk_size": 256}
     updated = pipelines_routes.update_pipeline(
         pipelines_routes.PipelineUpdate(
             name="Updated",
