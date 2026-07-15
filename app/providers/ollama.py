@@ -104,6 +104,11 @@ class OllamaAdapter(ProviderAdapter):
                     name=description.name,
                     description=info.description,
                     context_length=description.context_length,
+                    max_input_tokens=(
+                        description.context_length
+                        if kind is ProviderKind.EMBEDDING
+                        else None
+                    ),
                     dimension=(
                         description.embedding_dimension
                         if kind is ProviderKind.EMBEDDING
@@ -143,4 +148,16 @@ class OllamaAdapter(ProviderAdapter):
         response = self._client().embed(["dimension_probe"], model=model_name)
         if response.embeddings:
             return len(response.embeddings[0])
+        return None
+
+    def embedding_input_limit(self, model_name: str) -> int | None:
+        """Read `/api/show` context metadata without loading the model."""
+        self.require_kind(ProviderKind.EMBEDDING)
+        normalized = model_name.casefold()
+        for description in self._client().describe_models().value:
+            if (
+                description.name.casefold() == normalized
+                and "embedding" in description.capabilities
+            ):
+                return description.context_length
         return None

@@ -73,6 +73,7 @@ export interface CatalogModel {
   name: string;
   description?: string | null;
   context_length?: number | null;
+  max_input_tokens?: number | null;
   pricing?: ModelPricing | null;
   dimension?: number | null;
   supported_parameters: string[];

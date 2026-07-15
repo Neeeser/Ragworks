@@ -116,6 +116,7 @@ class OpenRouterAdapter(ProviderAdapter):
                 context_length=(
                     int(model.context_length) if model.context_length else None
                 ),
+                max_input_tokens=model.max_input_tokens,
                 pricing=model.pricing,
                 dimension=model.dimension,
             )
@@ -139,6 +140,15 @@ class OpenRouterAdapter(ProviderAdapter):
         """Probe the embedding dimension for a model."""
         self.require_kind(ProviderKind.EMBEDDING)
         return self._client().get_embedding_dimension(model_name)
+
+    def embedding_input_limit(self, model_name: str) -> int | None:
+        """Read the resolved endpoint limit from cached OpenRouter metadata."""
+        self.require_kind(ProviderKind.EMBEDDING)
+        normalized = model_name.casefold()
+        for model in self._client().list_embedding_model_metadata().value:
+            if model.id.casefold() == normalized:
+                return model.max_input_tokens
+        return None
 
     def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
         """Return OpenRouter's per-provider endpoint directory for a model."""

@@ -37,6 +37,7 @@ class EmbeddingModelInfo(BaseModel):
     name: str
     description: str | None = None
     context_length: float | None = None
+    max_input_tokens: int | None = None
     pricing: ModelPricing | None = None
     dimension: int | None = None
 

@@ -95,12 +95,19 @@ class OpenRouterClient:
             model_id = item.get("id")
             if not model_id:
                 continue
+            top_provider = item.get("top_provider")
+            max_input_tokens = (
+                top_provider.get("context_length")
+                if isinstance(top_provider, dict)
+                else None
+            )
             models.append(
                 EmbeddingModelInfo(
                     id=str(model_id),
                     name=str(item.get("name") or model_id),
                     description=item.get("description"),
                     context_length=item.get("context_length"),
+                    max_input_tokens=max_input_tokens,
                     pricing=item.get("pricing"),
                 )
             )
@@ -123,9 +130,9 @@ class OpenRouterClient:
     def list_embedding_model_metadata(
         self,
         force_refresh: bool = False,
-    ) -> list[EmbeddingModelInfo]:
+    ) -> CacheSnapshot[list[EmbeddingModelInfo]]:
         """Return embedding model limits without dimension-probe API calls."""
-        return self._catalog.list_embedding_model_metadata(force_refresh=force_refresh)
+        return self._catalog.list_embedding_models(force_refresh=force_refresh)
 
     def get_embedding_dimension(self, model_id: str) -> int:
         """Return embedding dimension for the requested model."""
