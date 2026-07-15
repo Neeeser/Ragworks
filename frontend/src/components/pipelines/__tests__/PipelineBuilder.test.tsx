@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
+import { ApiError } from "@/lib/api-error";
 import * as apiModule from "@/lib/api";
 import {
   makeCollection,
@@ -258,6 +259,12 @@ vi.mock("@/components/pipelines/CreatePipelineWizard", () => ({
               created_at: baseTimestamp,
               updated_at: baseTimestamp,
               definition: { nodes: [], edges: [] },
+              validation_issues: [
+                {
+                  message: "Chunking may exceed the model limit.",
+                  severity: "warning",
+                },
+              ],
             })
           }
         >
@@ -382,6 +389,9 @@ describe("PipelineBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finish create" }));
 
     expect(screen.getByRole("button", { name: "Select pipeline" })).toBeInTheDocument();
+    expect(screen.getByTestId("canvas")).toHaveTextContent(
+      "Pipeline created with warnings: Chunking may exceed the model limit.",
+    );
   });
 
   it("handles connect, save, and delete logic", async () => {
@@ -486,12 +496,23 @@ describe("PipelineBuilder", () => {
       warnings: [],
       issues: [],
     });
-    api.updatePipeline.mockRejectedValueOnce("Save failed");
+    const staleIssue = {
+      message: "Selected model is no longer available.",
+      severity: "error" as const,
+      node_id: "node-1",
+      field: "model_name",
+    };
+    api.updatePipeline.mockRejectedValueOnce(
+      new ApiError(400, staleIssue.message, { errors: [staleIssue.message], issues: [staleIssue] }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => {
-      expect(screen.getByTestId("canvas")).toHaveTextContent("Unable to save pipeline.");
+      expect(screen.getByTestId("canvas")).toHaveTextContent(staleIssue.message);
+      expect(
+        (lastCanvasProps?.nodes as Array<{ data: { errors?: string[] } }>)[0]?.data.errors,
+      ).toContain(staleIssue.message);
     });
   });
 
