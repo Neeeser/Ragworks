@@ -10,11 +10,12 @@ from pydantic import BaseModel, Field
 from app.db.models import ChunkStrategy
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload
+from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload, TokenizerSpec
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_chunks, summarize_text
 from app.retrieval.chunkers import build_chunker
+from app.retrieval.tokenizers.resources import build_token_counter
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,15 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
     the only method either needs to override.
     """
 
-    input_ports = (NodePort(key="document", label="Document", data_type="document"),)
+    input_ports = (
+        NodePort(key="document", label="Document", data_type="document"),
+        NodePort(
+            key="tokenizer",
+            label="Tokenizer",
+            data_type="tokenizer",
+            required=False,
+        ),
+    )
     output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
     config_model = FixedChunkerConfig
     strategy: ChunkStrategy = ChunkStrategy.TOKEN
@@ -49,15 +58,26 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
         """Return the chunking strategy to use for this node instance."""
         return self.strategy
 
+    @staticmethod
+    def resolve_tokenizer(inputs: dict[str, object]) -> TokenizerSpec:
+        """Read the optional resource input, defaulting to bundled WordPiece."""
+        value = inputs.get("tokenizer")
+        return TokenizerSpec.model_validate(value) if value is not None else TokenizerSpec(
+            kind="wordpiece"
+        )
+
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Chunk a parsed document into segments."""
         payload = ParsedDocumentPayload.model_validate(inputs.get("document"))
         document = payload.document
 
+        tokenizer = self.resolve_tokenizer(inputs)
+        counter = build_token_counter(tokenizer, context.storage.base_path)
         chunker = build_chunker(
             self._resolve_strategy(),
             self.config.chunk_size,
             self.config.chunk_overlap,
+            counter=counter,
         )
         chunks = list(chunker.chunk(document))
         logger.info(

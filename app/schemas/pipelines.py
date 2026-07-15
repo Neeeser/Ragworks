@@ -95,6 +95,7 @@ class NodePortRead(BaseModel):
     label: str
     data_type: str
     required: bool = True
+    accepts_many: bool = False
 
 
 class NodeSpecRead(BaseModel):

@@ -21,7 +21,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.db import models
-from app.pipelines.definition import PipelineDefinition
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.nodes.chunking import (
     BaseChunkerNode,
     ChunkerConfig,
@@ -44,6 +44,8 @@ from app.pipelines.nodes.retrieval import (
     RetrieverConfig,
     VectorRetrieverNode,
 )
+from app.pipelines.nodes.tokenizers import BaseTokenizerNode
+from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template
 from app.schemas.enums import IndexBackend
@@ -79,6 +81,7 @@ class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
     chunk_strategy: models.ChunkStrategy
     chunk_size: int
     chunk_overlap: int
+    tokenizer: TokenizerSpec
     embedding_model: str
     backend: IndexBackend
     index_name: str
@@ -143,40 +146,54 @@ def _resolve_node_config(
     return model.model_validate(node.config if node else {})
 
 
-def _fixed_chunker_classes(
-    registry: NodeRegistry,
-) -> list[type[BaseChunkerNode[FixedChunkerConfig]]]:
-    """Return the registry's fixed-strategy chunker node classes.
-
-    `ChunkerNode` (the configurable-strategy variant) is excluded here --
-    `_resolve_chunker_config` falls back to it separately via
-    `_resolve_node_config`.
-    """
-    classes: list[type[BaseChunkerNode[FixedChunkerConfig]]] = []
-    for node_type in registry.node_types():
-        node_cls = registry.get_node_class(node_type)
-        if node_cls is None or node_cls is ChunkerNode:
-            continue
-        if issubclass(node_cls, BaseChunkerNode):
-            classes.append(node_cls)
-    return classes
-
-
 def _resolve_chunker_config(
     definition: PipelineDefinition,
     registry: NodeRegistry,
-) -> ChunkerConfig:
-    """Resolve chunking config from whichever chunker node is present."""
-    for node_cls in _fixed_chunker_classes(registry):
-        for candidate in definition.nodes:
-            if candidate.type == node_cls.type:
-                config = FixedChunkerConfig.model_validate(candidate.config)
-                return ChunkerConfig(
-                    strategy=node_cls.strategy,
-                    chunk_size=config.chunk_size,
-                    chunk_overlap=config.chunk_overlap,
-                )
-    return _resolve_node_config(definition, ChunkerNode.type, ChunkerConfig)
+) -> tuple[ChunkerConfig, PipelineNodeDefinition | None]:
+    """Resolve config and identity from the definition's registered chunker."""
+    for candidate in definition.nodes:
+        node_cls = registry.get_node_class(candidate.type)
+        if node_cls is None or not issubclass(node_cls, BaseChunkerNode):
+            continue
+        if node_cls is ChunkerNode:
+            return ChunkerConfig.model_validate(candidate.config), candidate
+        config = FixedChunkerConfig.model_validate(candidate.config)
+        return (
+            ChunkerConfig(
+                strategy=node_cls.strategy,
+                chunk_size=config.chunk_size,
+                chunk_overlap=config.chunk_overlap,
+            ),
+            candidate,
+        )
+    return ChunkerConfig(), None
+
+
+def _resolve_tokenizer_spec(
+    definition: PipelineDefinition,
+    registry: NodeRegistry,
+    chunker: PipelineNodeDefinition | None,
+) -> TokenizerSpec:
+    """Resolve the tokenizer wired to a chunker, with WordPiece as fallback."""
+    if chunker is None:
+        return TokenizerSpec(kind="wordpiece")
+    tokenizer_port = next(
+        port.key for port in BaseChunkerNode.input_ports if port.data_type == "tokenizer"
+    )
+    tokenizer_output = next(
+        port.key for port in BaseTokenizerNode.output_ports if port.data_type == "tokenizer"
+    )
+    node_map = definition.node_map()
+    for edge in definition.incoming_edges().get(chunker.id, []):
+        if edge.target_port != tokenizer_port or edge.source_port != tokenizer_output:
+            continue
+        source = node_map.get(edge.source)
+        if source is None:
+            continue
+        node = registry.create(source)
+        if isinstance(node, BaseTokenizerNode):
+            return node.tokenizer_spec()
+    return TokenizerSpec(kind="wordpiece")
 
 
 def _resolve_backend_node_config(
@@ -281,7 +298,7 @@ def resolve_ingestion_settings(
     registry: NodeRegistry,
 ) -> IngestionPipelineSettings:
     """Resolve ingestion settings from a pipeline definition."""
-    chunker = _resolve_chunker_config(definition, registry)
+    chunker, chunker_node = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
     backend, indexer_model, dense_found = _resolve_backend_node_config(
         definition, registry, BaseIndexerNode
@@ -296,6 +313,7 @@ def resolve_ingestion_settings(
         chunk_strategy=chunker.strategy,
         chunk_size=chunker.chunk_size,
         chunk_overlap=chunker.chunk_overlap,
+        tokenizer=_resolve_tokenizer_spec(definition, registry, chunker_node),
         embedding_model=embedder.model_name,
         embedding_connection_id=embedder.connection_id,
         backend=backend,

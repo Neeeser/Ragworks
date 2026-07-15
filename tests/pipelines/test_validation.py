@@ -603,7 +603,7 @@ def test_pipeline_validator_flags_unconfigured_embedder() -> None:
     assert any("no embedding model" in error for error in result.errors)
 
 
-def test_embedding_limit_uses_total_chunk_span_effective_margin_and_warning() -> None:
+def test_embedding_limit_is_an_error_for_real_tokenizers() -> None:
     connection_id = uuid4()
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=connection_id,
@@ -625,14 +625,78 @@ def test_embedding_limit_uses_total_chunk_span_effective_margin_and_warning() ->
     issue = next(
         item for item in result.issues if item.code == "embedding_input_limit_exceeded"
     )
-    assert result.valid is True
-    assert issue.severity == "warning"
+    assert result.valid is False
+    assert issue.severity == "error"
     assert issue.allowed_max == 496
     assert issue.configured_value == 500
     assert issue.node_id == "chunk-document"
     assert issue.field == "chunk_size"
-    assert "whitespace words" in issue.message
-    assert "underestimates model tokens" in issue.message
+    assert "WordPiece" in issue.message
+
+
+def test_embedding_limit_remains_a_warning_for_whitespace_tokenizer() -> None:
+    connection_id = uuid4()
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="sentence-transformers/all-minilm-l6-v2",
+        chunk_size=300,
+        chunk_overlap=200,
+    )
+    tokenizer = next(node for node in definition.nodes if node.id == "tokenize-document")
+    tokenizer.type = "tokenizer.whitespace"
+
+    result = PipelineValidator(
+        default_registry(), embedding_input_limit=lambda _connection_id, _model: 512
+    ).validate(definition)
+
+    issue = next(
+        item for item in result.issues if item.code == "embedding_input_limit_exceeded"
+    )
+    assert result.valid is True
+    assert issue.severity == "warning"
+    assert "whitespace" in issue.message
+    assert "undercounts" in issue.message
+
+
+def test_tokenizer_edge_without_its_output_port_does_not_downgrade_validation() -> None:
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=uuid4(),
+        embedding_model="sentence-transformers/all-minilm-l6-v2",
+        chunk_size=300,
+        chunk_overlap=200,
+    )
+    tokenizer = next(node for node in definition.nodes if node.id == "tokenize-document")
+    tokenizer.type = "tokenizer.whitespace"
+    edge = next(edge for edge in definition.edges if edge.id == "edge-tokenizer-chunker")
+    edge.source_port = None
+
+    result = PipelineValidator(
+        default_registry(), embedding_input_limit=lambda _connection_id, _model: 512
+    ).validate(definition)
+
+    issue = next(
+        item for item in result.issues if item.code == "embedding_input_limit_exceeded"
+    )
+    assert issue.severity == "error"
+
+
+def test_invalid_huggingface_config_does_not_mask_its_field_issue() -> None:
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=uuid4(),
+        embedding_model="sentence-transformers/all-minilm-l6-v2",
+        chunk_size=300,
+        chunk_overlap=200,
+    )
+    tokenizer = next(node for node in definition.nodes if node.id == "tokenize-document")
+    tokenizer.type = "tokenizer.huggingface"
+    tokenizer.config = {}
+
+    result = PipelineValidator(
+        default_registry(), embedding_input_limit=lambda _connection_id, _model: 512
+    ).validate(definition)
+
+    assert result.valid is False
+    assert any(issue.field == "hf_model_id" for issue in result.issues)
 
 
 def test_unknown_embedding_limit_warns_only_on_confirmed_chunker_path() -> None:

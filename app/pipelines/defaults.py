@@ -24,6 +24,7 @@ from app.pipelines.nodes.indexing import (
     default_index_name,
 )
 from app.pipelines.nodes.retrieval import Bm25RetrieverNode, VectorRetrieverNode
+from app.pipelines.nodes.tokenizers import WordPieceTokenizerNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
@@ -55,6 +56,28 @@ def bm25_sibling_index_name(index_name: str, backend: IndexBackend) -> str:
     return candidate
 
 
+def _clamp_chunk_window(
+    chunk_size: int, chunk_overlap: int, embedding_input_limit: int | None
+) -> tuple[int, int]:
+    """Fit the default chunk window within a known embedding token budget.
+
+    Scale both values together so the wizard preserves its requested overlap
+    ratio. Unknown limits leave the wizard's explicit values unchanged.
+    """
+    if embedding_input_limit is None or chunk_size + chunk_overlap <= embedding_input_limit:
+        return chunk_size, chunk_overlap
+    if embedding_input_limit <= 1:
+        return 1, 0
+    requested_total = chunk_size + chunk_overlap
+    scale = embedding_input_limit / requested_total
+    clamped_size = max(1, int(chunk_size * scale))
+    clamped_overlap = max(0, embedding_input_limit - clamped_size)
+    clamped_overlap = min(clamped_overlap, clamped_size - 1)
+    return clamped_size, clamped_overlap
+
+
+# The setup wizard passes the complete explicit scaffold configuration here.
+# pylint: disable=too-many-arguments
 def build_default_ingestion_pipeline(
     *,
     embedding_connection_id: UUID,
@@ -63,6 +86,7 @@ def build_default_ingestion_pipeline(
     index_name: str | None = None,
     chunk_size: int = 512,
     chunk_overlap: int = 200,
+    embedding_input_limit: int | None = None,
 ) -> PipelineDefinition:
     """Return the default (hybrid) ingestion pipeline definition.
 
@@ -76,6 +100,9 @@ def build_default_ingestion_pipeline(
     backend = backend or _default_backend()
     index_name = index_name or default_index_name(backend)
     include_bm25 = lexical_available(backend)
+    chunk_size, chunk_overlap = _clamp_chunk_window(
+        chunk_size, chunk_overlap, embedding_input_limit
+    )
     nodes = [
         PipelineNodeDefinition(
             id="ingest-input",
@@ -86,6 +113,11 @@ def build_default_ingestion_pipeline(
             id="parse-document",
             type="parser.document",
             name="Document Parser",
+        ),
+        PipelineNodeDefinition(
+            id="tokenize-document",
+            type=WordPieceTokenizerNode.type,
+            name="BERT WordPiece",
         ),
         PipelineNodeDefinition(
             id="chunk-document",
@@ -137,6 +169,13 @@ config={
             target="chunk-document",
             source_port="document",
             target_port="document",
+        ),
+        PipelineEdgeDefinition(
+            id="edge-tokenizer-chunker",
+            source="tokenize-document",
+            target="chunk-document",
+            source_port="tokenizer",
+            target_port="tokenizer",
         ),
         PipelineEdgeDefinition(
             id="edge-chunker-embedder",
@@ -193,6 +232,9 @@ config={
             ]
         )
     return PipelineDefinition(nodes=nodes, edges=edges, viewport={})
+
+
+# pylint: enable=too-many-arguments
 
 
 def build_default_retrieval_pipeline(
