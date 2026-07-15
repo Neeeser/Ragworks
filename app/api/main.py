@@ -24,6 +24,7 @@ from app.api.routes import (
     pipelines,
     search,
     setup,
+    tokenizers,
     traces,
     visualizations,
 )
@@ -111,5 +112,6 @@ app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)
 app.include_router(traces.router)
+app.include_router(tokenizers.router)
 app.include_router(chat.router)
 app.include_router(visualizations.router)

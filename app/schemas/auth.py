@@ -55,6 +55,7 @@ class UserRead(UserBase):
     last_used_tool_collection_ids: list[UUID] | None = None
     run_settings_order: list[RunSettingsSection] | None = None
     remember_session_days: Literal[30, 90, 180] = 30
+    remember_hf_tokenizer_downloads: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +65,7 @@ class UserSettingsUpdate(BaseModel):
 
     run_settings_order: list[RunSettingsSection] | None = None
     remember_session_days: Literal[30, 90, 180] | None = None
+    remember_hf_tokenizer_downloads: bool | None = None
 
     @field_validator("run_settings_order")
     @classmethod

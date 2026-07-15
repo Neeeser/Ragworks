@@ -63,6 +63,8 @@ class AccountService:
             user.run_settings_order = [entry.value for entry in payload.run_settings_order]
         if payload.remember_session_days is not None:
             user.remember_session_days = payload.remember_session_days
+        if payload.remember_hf_tokenizer_downloads is not None:
+            user.remember_hf_tokenizer_downloads = payload.remember_hf_tokenizer_downloads
         self.session.add(user)
         self.session.commit()
         self.session.refresh(user)

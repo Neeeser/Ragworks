@@ -124,6 +124,7 @@ def _build_user_read(user: models.User) -> UserRead:
         last_used_tool_collection_ids=user.last_used_tool_collection_ids,
         run_settings_order=user.run_settings_order,
         remember_session_days=user.remember_session_days,
+        remember_hf_tokenizer_downloads=user.remember_hf_tokenizer_downloads,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )

@@ -80,6 +80,7 @@ class User(SQLModel, TimestampMixin, table=True):
         sa_column=Column(JSON, nullable=True),
     )
     remember_session_days: int = Field(default=30, nullable=False)
+    remember_hf_tokenizer_downloads: bool = Field(default=False, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
     role: str = Field(
         default=UserRole.USER.value,
