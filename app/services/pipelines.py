@@ -3,14 +3,12 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session
 
-from app.clients.openrouter import get_openrouter_client
 from app.db import models
 from app.db.repositories import (
     CollectionRepository,
@@ -28,13 +26,14 @@ from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.upgrades import upgrade_definition
-from app.pipelines.validation import PipelineValidationResult, PipelineValidator
+from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
-from app.schemas.models import EmbeddingModelInfo
 from app.services.app_config import get_app_config
-from app.services.errors import InvalidInputError, NotFoundError, is_external_provider_error
-
-logger = logging.getLogger(__name__)
+from app.services.errors import InvalidInputError, NotFoundError
+from app.services.pipeline_validation import (
+    EmbeddingInputLimitResolver,
+    validate_pipeline_definition,
+)
 
 
 @dataclass
@@ -47,58 +46,32 @@ class DefaultPipelines:
 
 class PipelineService:
     """Service for pipeline CRUD and version management."""
-
     def __init__(
         self,
         session: Session,
         *,
-        embedding_models: Iterable[EmbeddingModelInfo] | None = None,
+        embedding_input_limit: EmbeddingInputLimitResolver | None = None,
     ) -> None:
-        """Initialize with an optional catalog override used by focused callers/tests."""
+        """Initialize with an optional provider-limit override for focused tests."""
         self.session = session
         self._pipelines = PipelineRepository(session)
         self._versions = PipelineVersionRepository(session)
         self._collections = CollectionRepository(session)
         self._users = UserRepository(session)
-        self._embedding_models = (
-            tuple(embedding_models) if embedding_models is not None else None
-        )
+        self._embedding_input_limit = embedding_input_limit
 
     def validate_definition(
         self,
         user: models.User,
         definition: PipelineDefinition,
     ) -> PipelineValidationResult:
-        """Validate a definition using the user's authoritative provider catalog."""
-        catalog = self._embedding_models_for_user(user)
-        return PipelineValidator(
-            default_registry(),
-            embedding_models=catalog,
-        ).validate(definition)
-
-    def _embedding_models_for_user(
-        self,
-        user: models.User,
-    ) -> Iterable[EmbeddingModelInfo] | None:
-        """Load cached OpenRouter model metadata, or skip when unavailable.
-
-        A catalog entry with no `context_length` is still returned so the
-        validator can emit its explicit unknown-limit warning. No key or an
-        unavailable provider yields no authoritative catalog and preserves
-        existing offline/service-test behavior.
-        """
-        if self._embedding_models is not None:
-            return self._embedding_models
-        key = (user.openrouter_api_key or "").strip()
-        if not key:
-            return None
-        try:
-            return get_openrouter_client(key).list_embedding_model_metadata()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            if not is_external_provider_error(exc):
-                raise
-            logger.warning("Skipping model-limit validation; OpenRouter catalog failed: %s", exc)
-            return None
+        """Validate a definition using its selected provider connections."""
+        return validate_pipeline_definition(
+            self.session,
+            user,
+            definition,
+            embedding_input_limit=self._embedding_input_limit,
+        )
 
     def _validate_before_persisting(
         self,

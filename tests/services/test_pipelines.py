@@ -12,7 +12,6 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
-from app.schemas.models import EmbeddingModelInfo
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
 from tests.utils.providers import add_openrouter_connection
@@ -131,97 +130,90 @@ def test_update_pipeline_creates_new_version(session: Session) -> None:
     assert len(versions) == 2
 
 
-def test_create_pipeline_rejects_embedding_limit_violation_before_persisting(
+def test_create_pipeline_persists_embedding_limit_warning(
     session: Session,
 ) -> None:
-    """Every service caller gets the same model-aware persistence guard."""
+    """Approximate word counts warn without blocking persistence."""
     user = _create_user(session)
     model_id = "sentence-transformers/all-minilm-l6-v2"
     definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID,
         embedding_model=model_id,
         chunk_size=1024,
     )
     service = PipelineService(
         session,
-        embedding_models=[
-            EmbeddingModelInfo(id=model_id, name="all-MiniLM-L6-v2", context_length=512)
-        ],
+        embedding_input_limit=lambda _connection_id, _model: 512,
     )
 
-    with pytest.raises(InvalidInputError) as excinfo:
-        service.create_pipeline(
-            user=user,
-            name="Invalid ingestion",
-            kind=models.PipelineKind.INGESTION,
-            definition=definition,
-        )
+    validation = service.validate_definition(user, definition)
+    pipeline = service.create_pipeline(
+        user=user,
+        name="Warning ingestion",
+        kind=models.PipelineKind.INGESTION,
+        definition=definition,
+    )
 
-    assert isinstance(excinfo.value.detail, dict)
-    issues = excinfo.value.detail["issues"]
-    assert isinstance(issues, list)
-    assert issues[0]["field"] == "chunk_size"
-    assert session.exec(select(models.Pipeline)).all() == []
+    assert validation.valid
+    assert validation.issues[0].severity == "warning"
+    assert validation.issues[0].field == "chunk_size"
+    assert pipeline.name == "Warning ingestion"
 
 
-def test_update_pipeline_rejects_embedding_limit_violation_before_new_version(
+def test_update_pipeline_persists_embedding_limit_warning_as_new_version(
     session: Session,
 ) -> None:
     user = _create_user(session)
     service = PipelineService(session)
     defaults = service.ensure_default_pipelines(user)
     session.commit()
-    invalid = build_default_ingestion_pipeline(chunk_size=1024)
+    warning_definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID,
+        embedding_model="test/embedding-model",
+        chunk_size=1024,
+    )
     validating_service = PipelineService(
         session,
-        embedding_models=[
-            EmbeddingModelInfo(
-                id="test/embedding-model",
-                name="Test embedding model",
-                context_length=512,
-            )
-        ],
+        embedding_input_limit=lambda _connection_id, _model: 512,
     )
 
-    with pytest.raises(InvalidInputError):
-        validating_service.update_pipeline(
-            pipeline=defaults.ingestion,
-            definition=invalid,
-            actor_id=user.id,
-        )
+    result = validating_service.validate_definition(user, warning_definition)
+    validating_service.update_pipeline(
+        pipeline=defaults.ingestion,
+        definition=warning_definition,
+        actor_id=user.id,
+    )
 
-    assert defaults.ingestion.current_version == 1
+    assert result.valid
+    assert result.issues[0].severity == "warning"
+    assert defaults.ingestion.current_version == 2
     versions = session.exec(
         select(models.PipelineVersion).where(
             models.PipelineVersion.pipeline_id == defaults.ingestion.id
         )
     ).all()
-    assert len(versions) == 1
+    assert len(versions) == 2
 
 
 def test_create_pipeline_remains_available_when_model_catalog_is_unreachable(
     session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A provider outage cannot make offline pipeline management unavailable."""
     user = _create_user(session)
-    user.openrouter_api_key = "or-key"
+    def unavailable_limit(_connection_id: UUID, _model: str) -> None:
+        request = httpx.Request("GET", "https://openrouter.ai/api/v1/embeddings/models")
+        raise httpx.ConnectError("provider unavailable", request=request)
 
-    class _UnavailableCatalog:
-        @staticmethod
-        def list_embedding_model_metadata() -> list[EmbeddingModelInfo]:
-            request = httpx.Request("GET", "https://openrouter.ai/api/v1/embeddings/models")
-            raise httpx.ConnectError("provider unavailable", request=request)
-
-    monkeypatch.setattr(
-        "app.services.pipelines.get_openrouter_client",
-        lambda _key: _UnavailableCatalog(),
-    )
-
-    pipeline = PipelineService(session).create_pipeline(
+    pipeline = PipelineService(
+        session, embedding_input_limit=unavailable_limit
+    ).create_pipeline(
         user=user,
         name="Offline-safe pipeline",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=EMBED_CONNECTION_ID,
+            embedding_model="test-embed",
+        ),
     )
 
     assert pipeline.name == "Offline-safe pipeline"

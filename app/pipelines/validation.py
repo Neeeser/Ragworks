@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable
+from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.pipelines.definition import (
     PipelineDefinition,
+    PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
 from app.pipelines.node import PipelineValidationIssue
@@ -15,7 +18,9 @@ from app.pipelines.nodes.chunking import BaseChunkerNode
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.ports import compatible
 from app.pipelines.registry import NodeRegistry
-from app.schemas.models import EmbeddingModelInfo
+from app.providers.base import effective_embedding_input_limit
+
+EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
 
 
 class PipelineValidationResult(BaseModel):
@@ -34,26 +39,11 @@ class PipelineValidator:
         self,
         registry: NodeRegistry,
         *,
-        embedding_models: Iterable[EmbeddingModelInfo] | None = None,
+        embedding_input_limit: EmbeddingInputLimitResolver | None = None,
     ) -> None:
-        """Initialize with registry metadata and an optional provider model catalog.
-
-        A missing catalog means the caller has no authoritative provider data
-        (for example, the user has no OpenRouter key), so model-dependent
-        checks are skipped. A present catalog with a missing/null limit emits
-        an explicit warning while remaining saveable for compatibility.
-        """
+        """Initialize with registry metadata and an optional limit resolver."""
         self._registry = registry
-        self._embedding_limits = (
-            None
-            if embedding_models is None
-            else {
-                model.id.casefold(): (
-                    int(model.context_length) if model.context_length is not None else None
-                )
-                for model in embedding_models
-            }
-        )
+        self._embedding_input_limit = embedding_input_limit
 
     def validate(self, definition: PipelineDefinition) -> PipelineValidationResult:
         """Validate the pipeline definition and return any errors."""
@@ -245,7 +235,7 @@ class PipelineValidator:
         definition: PipelineDefinition,
     ) -> list[PipelineValidationIssue]:
         """Compare each chunker feeding an embedder with its provider limit."""
-        if self._embedding_limits is None:
+        if self._embedding_input_limit is None:
             return []
         node_map = definition.node_map()
         incoming = definition.incoming_edges()
@@ -256,38 +246,81 @@ class PipelineValidator:
         for embedder in definition.nodes:
             if embedder.type != EmbedderNode.type:
                 continue
-            model = EmbedderConfig.model_validate(embedder.config or {}).model_name
-            maximum = self._embedding_limits.get(model.casefold())
-            if maximum is None:
-                issues.append(self._unknown_embedding_limit_issue(embedder.id, model))
+            config = EmbedderConfig.model_validate(embedder.config or {})
+            if config.connection_id is None or not config.model_name:
                 continue
-            for edge in incoming.get(embedder.id, []):
-                if edge.target_port not in (None, chunk_input):
-                    continue
-                chunker = node_map.get(edge.source)
-                if chunker is None:
-                    continue
-                chunker_cls = self._registry.get_node_class(chunker.type)
-                if chunker_cls is None or not issubclass(chunker_cls, BaseChunkerNode):
-                    continue
-                config = chunker_cls.config_model.model_validate(chunker.config or {})
-                chunk_size = getattr(config, "chunk_size", None)
-                if isinstance(chunk_size, int) and chunk_size > maximum:
-                    issues.append(
-                        PipelineValidationIssue(
-                            code="embedding_input_limit_exceeded",
-                            message=(
-                                f"Chunk size {chunk_size:,} on node '{chunker.id}' exceeds "
-                                f"embedding model '{model}' input limit of {maximum:,} tokens."
-                            ),
-                            node_id=chunker.id,
-                            field="chunk_size",
-                            configured_value=chunk_size,
-                            model=model,
-                            allowed_max=maximum,
-                        )
-                    )
+            chunkers = self._connected_chunkers(
+                incoming.get(embedder.id, []), node_map, chunk_input
+            )
+            if not chunkers:
+                continue
+            published_limit = self._embedding_input_limit(
+                config.connection_id, config.model_name
+            )
+            if published_limit is None:
+                issues.append(
+                    self._unknown_embedding_limit_issue(embedder.id, config.model_name)
+                )
+                continue
+            maximum = effective_embedding_input_limit(published_limit)
+            for chunker, chunker_cls in chunkers:
+                issue = self._chunk_limit_issue(
+                    chunker, chunker_cls, model=config.model_name, maximum=maximum
+                )
+                if issue is not None:
+                    issues.append(issue)
         return issues
+
+    def _connected_chunkers(
+        self,
+        edges: list[PipelineEdgeDefinition],
+        node_map: dict[str, PipelineNodeDefinition],
+        chunk_input: str,
+    ) -> list[tuple[PipelineNodeDefinition, type[BaseChunkerNode[Any]]]]:
+        """Return real chunker nodes connected to an embedder's chunk input."""
+        chunkers: list[tuple[PipelineNodeDefinition, type[BaseChunkerNode[Any]]]] = []
+        for edge in edges:
+            if edge.target_port not in (None, chunk_input):
+                continue
+            chunker = node_map.get(edge.source)
+            if chunker is None:
+                continue
+            chunker_cls = self._registry.get_node_class(chunker.type)
+            if chunker_cls is not None and issubclass(chunker_cls, BaseChunkerNode):
+                chunkers.append((chunker, chunker_cls))
+        return chunkers
+
+    @staticmethod
+    def _chunk_limit_issue(
+        chunker: PipelineNodeDefinition,
+        chunker_cls: type[BaseChunkerNode[Any]],
+        *,
+        model: str,
+        maximum: int,
+    ) -> PipelineValidationIssue | None:
+        """Build a warning when one chunker's total configured span is too large."""
+        config = chunker_cls.config_model.model_validate(chunker.config or {})
+        chunk_size = getattr(config, "chunk_size", None)
+        chunk_overlap = getattr(config, "chunk_overlap", None)
+        if not isinstance(chunk_size, int) or not isinstance(chunk_overlap, int):
+            return None
+        configured_span = chunk_size + chunk_overlap
+        if configured_span <= maximum:
+            return None
+        return PipelineValidationIssue(
+            code="embedding_input_limit_exceeded",
+            message=(
+                f"Chunk size plus overlap ({configured_span:,}) on node '{chunker.id}' "
+                f"exceeds embedding model '{model}' effective input limit of {maximum:,}. "
+                "Chunkers currently count whitespace words, which underestimates model tokens."
+            ),
+            severity="warning",
+            node_id=chunker.id,
+            field="chunk_size",
+            configured_value=configured_span,
+            model=model,
+            allowed_max=maximum,
+        )
 
     @staticmethod
     def _unknown_embedding_limit_issue(

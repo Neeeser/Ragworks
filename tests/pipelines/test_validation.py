@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from uuid import UUID, uuid4
+
 import pytest
 
+from app.pipelines.defaults import (
+    build_default_ingestion_pipeline,
+    build_default_retrieval_pipeline,
+)
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -16,7 +22,7 @@ from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
 from app.pipelines.nodes.io import RetrievalInputNode
 from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort
-from app.pipelines.registry import NodeRegistry
+from app.pipelines.registry import NodeRegistry, default_registry
 from app.pipelines.validation import PipelineValidator
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
@@ -595,3 +601,69 @@ def test_pipeline_validator_flags_unconfigured_embedder() -> None:
     assert result.valid is False
     assert any("no provider connection" in error for error in result.errors)
     assert any("no embedding model" in error for error in result.errors)
+
+
+def test_embedding_limit_uses_total_chunk_span_effective_margin_and_warning() -> None:
+    connection_id = uuid4()
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="sentence-transformers/all-minilm-l6-v2",
+        chunk_size=300,
+        chunk_overlap=200,
+    )
+
+    result = PipelineValidator(
+        default_registry(),
+        embedding_input_limit=lambda resolved_id, model: (
+            512
+            if resolved_id == connection_id
+            and model == "sentence-transformers/all-minilm-l6-v2"
+            else None
+        ),
+    ).validate(definition)
+
+    issue = next(
+        item for item in result.issues if item.code == "embedding_input_limit_exceeded"
+    )
+    assert result.valid is True
+    assert issue.severity == "warning"
+    assert issue.allowed_max == 496
+    assert issue.configured_value == 500
+    assert issue.node_id == "chunk-document"
+    assert issue.field == "chunk_size"
+    assert "whitespace words" in issue.message
+    assert "underestimates model tokens" in issue.message
+
+
+def test_unknown_embedding_limit_warns_only_on_confirmed_chunker_path() -> None:
+    connection_id = uuid4()
+    ingestion = build_default_ingestion_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="unknown/model",
+    )
+    retrieval = build_default_retrieval_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="unknown/model",
+    )
+    calls: list[tuple[UUID, str]] = []
+
+    def resolve_limit(resolved_id: UUID, model: str) -> None:
+        calls.append((resolved_id, model))
+        return None
+
+    ingestion_result = PipelineValidator(
+        default_registry(), embedding_input_limit=resolve_limit
+    ).validate(ingestion)
+    retrieval_result = PipelineValidator(
+        default_registry(), embedding_input_limit=resolve_limit
+    ).validate(retrieval)
+
+    assert any(
+        issue.code == "embedding_input_limit_unknown"
+        for issue in ingestion_result.issues
+    )
+    assert not any(
+        issue.code == "embedding_input_limit_unknown"
+        for issue in retrieval_result.issues
+    )
+    assert calls == [(connection_id, "unknown/model")]
