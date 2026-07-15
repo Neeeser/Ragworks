@@ -39,6 +39,7 @@ from app.services.pipelines import (
     upgrade_stored_pipeline_definitions,
 )
 from app.services.provider_migration import migrate_provider_connections
+from app.services.tokenizer_migration import migrate_tokenizer_nodes
 from app.telemetry import purge_expired as purge_expired_telemetry
 
 settings = get_settings()
@@ -72,6 +73,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
     with session_scope() as session:
         migrate_provider_connections(session)
+        migrate_tokenizer_nodes(session)
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
         backfill_file_nodes(session)
