@@ -88,8 +88,20 @@ export interface TraceOrigin {
   trace: PipelineTraceResponse;
 }
 
+/** `FocusedItemRead` — the concrete chunk behind a focused trace item. */
+export interface TraceFocusedItem {
+  id: string;
+  status: "resolved" | "missing";
+  text?: string | null;
+  document_id?: UUID | null;
+  filename?: string | null;
+  chunk_index?: number | null;
+  chunk_count?: number | null;
+}
+
 /** `EndToEndTraceResponse` — retrieval trace joined with chunk origin. */
 export interface EndToEndTrace {
   retrieval: PipelineTraceResponse;
   origin?: TraceOrigin | null;
+  focused_item?: TraceFocusedItem | null;
 }

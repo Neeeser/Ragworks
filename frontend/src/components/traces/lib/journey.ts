@@ -1,6 +1,6 @@
 import { isItemListTrace } from "@/components/traces/values/shape-guards";
 
-import type { TraceGraph, TraceStep } from "@/components/traces/trace-graph";
+import type { TraceGraph, TraceStage, TraceStep } from "@/components/traces/trace-graph";
 import type { ItemListTrace, ItemRef, PipelineNodeSummaryValue } from "@/lib/types";
 
 export type JourneyEffect =
@@ -15,11 +15,34 @@ export type JourneyEffect =
 export type JourneyStep = {
   nodeId: string;
   nodeName: string;
+  stage: TraceStage;
+  stageLabel: string;
   role: string;
   rank: number | null;
   score: number | null;
   delta: number | null;
   effect: JourneyEffect;
+  /** Node-local rank the item held coming in, when it appeared in an input list. */
+  inputRank: number | null;
+  /** Length of the input list the item was located in (or the first input list). */
+  inputCount: number | null;
+  /** Length of the output list the item was located in (or the first output list). */
+  outputCount: number | null;
+  /** How many distinct input item lists fed this node (fan-in width). */
+  inputListCount: number;
+};
+
+/**
+ * One pipeline stage's slice of a journey. `recorded` is false when the stage
+ * ran but none of its nodes attached item identity lists — a trace recorded
+ * before result tracing existed — which must read as "unrecorded", never as
+ * the item being absent from results.
+ */
+export type JourneySection = {
+  stage: TraceStage;
+  stageLabel: string;
+  steps: JourneyStep[];
+  recorded: boolean;
 };
 
 export type JourneyFocus = {
@@ -93,6 +116,9 @@ const traceRole = (selected: LocatedItem | null, lists: StepItemLists): string =
   lists.inputs[0]?.trace.kind ??
   "items";
 
+const listLength = (located: LocatedItem | null, fallback: ListValue[]): number | null =>
+  located?.list.trace.items.length ?? fallback[0]?.trace.items.length ?? null;
+
 const buildJourneyStep = (
   step: TraceStep,
   focusedItemId: string,
@@ -106,27 +132,52 @@ const buildJourneyStep = (
   return {
     nodeId: step.nodeId,
     nodeName: step.run?.node_name ?? step.nodeId,
+    stage: step.stage,
+    stageLabel: step.stageLabel,
     role,
     rank: selected?.rank ?? null,
     score: selected?.item.score ?? null,
     delta: inputItem && outputItem ? inputItem.rank - outputItem.rank : null,
     effect: deriveEffect(lists.inputs, inputItem, outputItem, role),
+    inputRank: inputItem?.rank ?? null,
+    inputCount: listLength(inputItem, lists.inputs),
+    outputCount: listLength(outputItem, lists.outputs),
+    inputListCount: lists.inputs.length,
   };
 };
 
 /**
- * Derive one focused result's node-local journey from complete item summary
- * lists. Effects are set/rank arithmetic only: adding a new item-capable node
- * requires item summaries, never a node-type branch in this module.
+ * Derive one focused result's journey, grouped by pipeline stage. Effects are
+ * set/rank arithmetic over complete item summary lists only: adding a new
+ * item-capable node requires item summaries, never a node-type branch in this
+ * module. A stage whose nodes recorded no item lists at all is returned with
+ * `recorded: false` so the UI can label the trace as predating result tracing
+ * instead of misreading it as the item being absent.
  */
-export const buildJourney = (graph: TraceGraph, focusedItemId: string | null): JourneyStep[] => {
+export const buildJourneySections = (
+  graph: TraceGraph,
+  focusedItemId: string | null,
+): JourneySection[] => {
   if (!focusedItemId) return [];
 
-  return graph.steps.flatMap((step) => {
+  const sections: JourneySection[] = [];
+  graph.steps.forEach((step) => {
+    let section = sections.at(-1);
+    if (!section || section.stage !== step.stage) {
+      section = { stage: step.stage, stageLabel: step.stageLabel, steps: [], recorded: false };
+      sections.push(section);
+    }
     const lists = stepItemLists(step);
-    return lists ? [buildJourneyStep(step, focusedItemId, lists)] : [];
+    if (!lists) return;
+    section.recorded = true;
+    section.steps.push(buildJourneyStep(step, focusedItemId, lists));
   });
+  return sections;
 };
+
+/** The flat journey across stages — the item-carrying steps in run order. */
+export const buildJourney = (graph: TraceGraph, focusedItemId: string | null): JourneyStep[] =>
+  buildJourneySections(graph, focusedItemId).flatMap((section) => section.steps);
 
 /** Build node and edge tint sets from a derived journey. */
 export const buildJourneyFocus = (graph: TraceGraph, journey: JourneyStep[]): JourneyFocus => {
