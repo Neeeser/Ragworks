@@ -9,6 +9,7 @@ export interface ChatSession {
   title: string;
   mode: ChatMode;
   chat_model: string;
+  provider_connection_id?: UUID | null;
   context_tokens: number;
   tool_collection_ids: UUID[];
   parameter_overrides?: Record<string, unknown> | null;
@@ -153,6 +154,7 @@ export interface ChatRequestPayload {
   title?: string;
   edit_message_id?: string;
   chat_model?: string;
+  provider_connection_id?: string;
   tool_collection_ids?: string[];
   generation?: ChatGenerationConfig;
   parameters?: Record<string, unknown>;

@@ -22,7 +22,7 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
-from app.api.dependencies import get_current_user, get_session, require_openrouter_key
+from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import get_collection_or_404, to_http_exception
 from app.db import models
 from app.db.repositories import FileNodeRepository
@@ -255,7 +255,7 @@ def get_file_content(
 def ingest_file(
     file_id: UUID,
     background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> FileNodeRead:
     """(Re)queue ingestion for a file — the retry / attempt-anyway path."""
@@ -280,7 +280,7 @@ def search_files(
     collection_id: UUID,
     q: str,
     modes: str | None = None,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> FileSearchResponse:
     """Search the tree by file name, folder name, and/or indexed content."""

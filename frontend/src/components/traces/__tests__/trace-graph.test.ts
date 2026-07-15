@@ -117,4 +117,16 @@ describe("buildTraceGraph", () => {
     expect(first.stageLabel).toBe("Ingestion · origin");
     expect(graph.steps.at(-1)?.stageLabel).toBe("Retrieval");
   });
+
+  it("keeps recorded execution order instead of inferring topology", () => {
+    const trace = retrievalTrace();
+    trace.node_runs = [
+      makeNodeRunTrace({ id: "r3", node_id: "retrieve", sequence_index: 1 }),
+      makeNodeRunTrace({ id: "r4", node_id: "out", sequence_index: 0 }),
+    ];
+
+    const graph = buildTraceGraph(trace, null, nodeSpecs);
+
+    expect(graph.steps.map((step) => step.nodeId)).toEqual(["out", "retrieve"]);
+  });
 });

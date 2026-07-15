@@ -21,8 +21,9 @@ describe("LandingPage", () => {
   it("leads with the headline thesis", () => {
     render(<LandingPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Every RAG signal, surfaced.",
+      "Build, run, and inspect RAG pipelines.",
     );
+    expect(screen.getByText("Open-source RAG workbench")).toBeInTheDocument();
   });
 
   it("offers a console entry and a source link", () => {

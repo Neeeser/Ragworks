@@ -13,7 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
-from app.api.dependencies import get_session, require_openrouter_key
+from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import collection_to_schema, get_collection_or_404, to_http_exception
 from app.db import models
 from app.db.repositories import (
@@ -60,7 +60,7 @@ def _stats_read(collection_id: UUID, stats: CollectionStats) -> CollectionStatsR
 
 @router.get("", response_model=list[CollectionRead])
 def list_collections(
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[CollectionRead]:
     """List collections owned by the current user."""
@@ -70,7 +70,7 @@ def list_collections(
 
 @router.get("/stats", response_model=list[CollectionStatsRead])
 def list_collection_stats(
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[CollectionStatsRead]:
     """Return aggregated stats for all collections."""
@@ -83,7 +83,7 @@ def list_collection_stats(
 @router.get("/{collection_id}/stats", response_model=CollectionStatsRead)
 def get_collection_stats(
     collection_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionStatsRead:
     """Return aggregated stats for a single collection."""
@@ -96,7 +96,7 @@ def get_collection_stats(
 def get_collection_stats_history(
     collection_id: UUID,
     range_: StatsHistoryRange = Query(default=StatsHistoryRange.DAYS_30, alias="range"),
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionStatsHistoryRead:
     """Return bucketed activity history for a collection's trailing window."""
@@ -122,7 +122,7 @@ def get_collection_stats_history(
 @router.get("/{collection_id}", response_model=CollectionRead)
 def get_collection(
     collection_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Return a collection by id."""
@@ -132,7 +132,7 @@ def get_collection(
 @router.get("/{collection_id}/prompt", response_model=CollectionPromptRead)
 def get_collection_prompt(
     collection_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionPromptRead:
     """Return the rendered system prompt for a collection."""
@@ -146,7 +146,7 @@ def get_collection_prompt(
 @router.post("", response_model=CollectionRead, status_code=201)
 def create_collection(
     payload: CollectionCreate,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Create a new collection for the current user."""
@@ -161,7 +161,7 @@ def create_collection(
 def update_collection(
     collection_id: UUID,
     payload: CollectionUpdate,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Update collection metadata for the current user."""
@@ -177,7 +177,7 @@ def update_collection(
 def update_collection_prompt(
     collection_id: UUID,
     payload: CollectionPromptUpdate,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionPromptRead:
     """Update the system prompt template for a collection."""
@@ -191,7 +191,7 @@ def update_collection_prompt(
 @router.delete("/{collection_id}", response_model=CollectionDeleteResponse, status_code=200)
 def delete_collection(
     collection_id: UUID,
-    current_user: models.User = Depends(require_openrouter_key),
+    current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionDeleteResponse:
     """Delete a collection and its associated vectors, files, and rows."""

@@ -5,6 +5,7 @@ import { AlertTriangle, Check, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { useFlowNodeActive } from "./flow/active-nodes-context";
 import { PineconeIcon } from "./icons/PineconeIcon";
 import { PostgresIcon } from "./icons/PostgresIcon";
 import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
@@ -161,6 +162,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
   const BackendIcon = signature?.backend ? BACKEND_ICONS[signature.backend] : null;
   const connecting = data.connecting ?? null;
   const hasErrors = (data.errors?.length ?? 0) > 0;
+  const active = useFlowNodeActive(id) || Boolean(data.active);
   const dimWholeNode =
     connecting !== null &&
     connecting.nodeId !== id &&
@@ -175,14 +177,13 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         familyStyles.border,
         familyStyles.glow,
         selected && "ring-2 ring-accent-violet/70",
-        data.active && "ring-2 ring-accent-cyan/80",
+        active && "ring-2 ring-accent-cyan/80",
         hasErrors && "border-data-neg/60",
         dimWholeNode && "opacity-40",
       )}
     >
-      {/* Fixed-height header so every card's port rows start at the same
-          offset from the top -- with top-aligned layout columns this makes
-          matching ports line up into straight, factory-style runs. */}
+      {/* Fixed-height header keeps port rows at a predictable offset so the
+          obstacle router can connect cards consistently across the graph. */}
       <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-primary">{data.label}</p>

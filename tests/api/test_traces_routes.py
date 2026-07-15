@@ -12,6 +12,7 @@ from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.schemas.traces import PipelineTraceResponse
 from app.services.pipelines import PipelineService
 from app.services.traces import TraceNotFoundError, TraceService
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 def _create_user(session: Session) -> models.User:
@@ -19,8 +20,6 @@ def _create_user(session: Session) -> models.User:
         email=f"trace-{uuid4().hex[:6]}@example.com",
         full_name="Trace User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter",
-        pinecone_api_key="pinecone",
     )
     session.add(user)
     session.commit()
@@ -34,7 +33,9 @@ def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
         user=user,
         name="Pipeline",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     session.refresh(pipeline)

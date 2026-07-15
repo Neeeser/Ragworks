@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { VariablesTree } from "@/components/traces/debugger/VariablesTree";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
-import { PineconeIcon } from "./icons/PineconeIcon";
-import { PostgresIcon } from "./icons/PostgresIcon";
+import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import {
   buildPipelineConfigFields,
   coerceFieldValue,
@@ -20,12 +21,7 @@ import { sortIndexesByName } from "./lib/pipeline-utils";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { PipelineNodeData } from "./PipelineNode";
-import type {
-  EmbeddingModelInfo,
-  IndexBackend,
-  PipelineValidationIssue,
-  VectorIndex,
-} from "@/lib/types";
+import type { CatalogModel, IndexBackend, ModelCatalogResponse, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type NodeConfigSectionsProps = {
@@ -33,13 +29,14 @@ export type NodeConfigSectionsProps = {
   onConfigChange: (config: Record<string, unknown>) => void;
   isPreview: boolean;
   validationErrors: string[];
-  validationIssues: PipelineValidationIssue[];
   vectorIndexes: VectorIndex[];
   onOpenIndexManager?: () => void;
-  embeddingModels: EmbeddingModelInfo[];
+  embeddingModels: CatalogModel[];
+  embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
-  onSelectEmbeddingModel: (modelId: string) => void;
+  onCatalogVisible?: () => void;
+  onSelectEmbeddingModel: (model: CatalogModel) => void;
 };
 
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
@@ -58,18 +55,23 @@ export function NodeConfigSections({
   onConfigChange,
   isPreview,
   validationErrors,
-  validationIssues,
   vectorIndexes,
   onOpenIndexManager,
   embeddingModels,
+  embeddingCatalog,
   embeddingModelsLoading,
   embeddingModelsError,
+  onCatalogVisible,
   onSelectEmbeddingModel,
 }: NodeConfigSectionsProps) {
   const { config: appConfig } = useAppConfig();
   const nodeType = node.data.nodeType;
   const config = useMemo<Record<string, unknown>>(() => node.data.config ?? {}, [node]);
-  const isEmbedder = nodeType === "embedder.openrouter";
+  const isEmbedder = nodeType === "embedder.text";
+
+  useEffect(() => {
+    if (isEmbedder) onCatalogVisible?.();
+  }, [isEmbedder, onCatalogVisible]);
   const isVectorNode = nodeType.startsWith("indexer.") || nodeType.startsWith("retriever.");
   // BM25 nodes target sparse (lexical) indexes; dense nodes never list them.
   const isBm25Node = nodeType.endsWith(".bm25");
@@ -84,11 +86,14 @@ export function NodeConfigSections({
 
   const fields = node.data.configSchema ? buildPipelineConfigFields(node.data.configSchema) : [];
   const filteredFields = fields.filter((field) => {
-    const embedderHidden = isEmbedder && ["model_name", "dimension"].includes(field.key);
+    const embedderHidden =
+      isEmbedder && ["connection_id", "model_name", "dimension"].includes(field.key);
     const vectorHidden = isVectorNode && ["backend", "index_name", "dimension"].includes(field.key);
     return !(embedderHidden || vectorHidden);
   });
   const selectedEmbeddingModelKey = typeof config.model_name === "string" ? config.model_name : "";
+  const selectedEmbeddingConnectionId =
+    typeof config.connection_id === "string" ? config.connection_id : null;
   const backendIndexes = useMemo(
     () =>
       sortIndexesByName(
@@ -150,6 +155,12 @@ export function NodeConfigSections({
         <EmbeddingModelSelectorCard
           models={embeddingModels}
           selectedModelKey={selectedEmbeddingModelKey}
+          selectedConnectionId={selectedEmbeddingConnectionId}
+          selectedAvailability={modelAvailability(
+            embeddingCatalog,
+            selectedEmbeddingConnectionId,
+            selectedEmbeddingModelKey || null,
+          )}
           modelsLoading={embeddingModelsLoading}
           modelsError={embeddingModelsError}
           onSelectModel={onSelectEmbeddingModel}
@@ -181,11 +192,7 @@ export function NodeConfigSections({
                       : "border-hairline bg-surface text-body hover:border-strong"
                   }`}
                 >
-                  {option.value === "pgvector" ? (
-                    <PostgresIcon className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <PineconeIcon className="h-4 w-4 shrink-0 text-primary" />
-                  )}
+                  <IndexBackendIcon backend={option.value} />
                   <span>
                     <span className="block font-semibold">{option.label}</span>
                     <span className="block text-[10px] text-meta">{option.hint}</span>
@@ -211,34 +218,43 @@ export function NodeConfigSections({
           actionDisabled={isPreview}
           onAction={onOpenIndexManager}
         >
-          <select
-            className="w-full rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-primary outline-none focus:border-accent-violet"
+          <CustomSelect
             value={indexValue}
-            onChange={(event) => handleIndexChange(event.target.value)}
+            onValueChange={handleIndexChange}
             disabled={isPreview}
             aria-label="Vector index"
-          >
-            <option value="">Select an index</option>
-            {indexValue && !selectedIndex ? (
-              <option value={indexValue}>{indexValue} (not created yet)</option>
-            ) : null}
-            {backendIndexes.map((index) => (
-              <option key={index.name} value={index.name}>
-                {index.name}
-                {typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""}
-              </option>
-            ))}
-            <option value={CREATE_SENTINEL}>+ Add new index...</option>
-          </select>
+            placeholder="Select an index"
+            options={[
+              { value: "", label: "Select an index" },
+              ...(indexValue && !selectedIndex
+                ? [
+                    {
+                      value: indexValue,
+                      label: `${indexValue} (not created yet)`,
+                      icon: <IndexBackendIcon backend={nodeBackend} />,
+                    },
+                  ]
+                : []),
+              ...backendIndexes.map((index) => ({
+                value: index.name,
+                label: `${index.name}${
+                  typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
+                }`,
+                icon: <IndexBackendIcon backend={index.backend} />,
+              })),
+              {
+                value: CREATE_SENTINEL,
+                label: "+ Add new index...",
+                preventFocusRestore: true,
+              },
+            ]}
+          />
         </ParameterFieldCard>
       ) : null}
       {filteredFields.length > 0 ? (
         <div className="space-y-3">
           {filteredFields.map((field) => {
             const value = getInputValue(field, config);
-            const fieldIssue = validationIssues.find(
-              (issue) => issue.node_id === node.id && issue.field === field.key,
-            );
             const helper =
               field.defaultValue !== undefined
                 ? `Default: ${formatConfigValue(field.defaultValue)}`
@@ -252,13 +268,12 @@ export function NodeConfigSections({
                 label={field.label}
                 description={field.description}
                 helper={helper}
-                error={fieldIssue?.message}
               >
                 <ParameterInput
                   input={field.input}
                   value={value}
                   min={field.min}
-                  max={fieldIssue?.allowed_max ?? field.max}
+                  max={field.max}
                   step={field.step}
                   placeholder={field.placeholder}
                   options={field.options}

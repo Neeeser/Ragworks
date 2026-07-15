@@ -27,8 +27,6 @@ def _create_user(session: Session) -> models.User:
         email="user@example.com",
         full_name="User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     UserRepository(session).add(user)
     session.commit()

@@ -12,10 +12,10 @@ const OVERLAY_TRIGGER_WIDTH_PX =
 
 type Dispatch<T> = React.Dispatch<React.SetStateAction<T>>;
 
-const usePersistentToggle = (key: string, defaultValue: boolean) => {
-  // First paint uses the default so server and client markup agree; the stored
-  // value is read after mount to avoid a hydration mismatch.
-  const [value, setValue] = useState(defaultValue);
+const usePersistentToggle = (key: string) => {
+  // First paint is closed so server and client markup agree; the stored value
+  // is read after mount to avoid a hydration mismatch.
+  const [value, setValue] = useState(false);
   const skipFirstPersistRef = useRef(true);
 
   useEffect(() => {
@@ -84,30 +84,26 @@ export interface UsePanelControlsResult {
 export function usePanelControls(params: UsePanelControlsParams): UsePanelControlsResult {
   const { setLoading } = params;
 
-  const [historyOpen, setHistoryOpen] = usePersistentToggle("chat.historyOpen", true);
-  const [telemetryOpen, setTelemetryOpen] = usePersistentToggle("chat.telemetryOpen", true);
+  const [historyOpen, setHistoryOpen] = usePersistentToggle("chat.historyOpen");
+  const [telemetryOpen, setTelemetryOpen] = usePersistentToggle("chat.telemetryOpen");
   const [modelSelectorOpen, setModelSelectorOpen, toggleModelSelector] = usePersistentToggle(
     "chat.telemetry.modelsOpen",
-    true,
   );
   const [systemPromptOpen, setSystemPromptOpen, toggleSystemPrompt] = usePersistentToggle(
     "chat.telemetry.promptOpen",
-    true,
   );
   const [collectionToolsOpen, setCollectionToolsOpen, toggleCollectionTools] = usePersistentToggle(
     "chat.telemetry.toolsOpen",
-    true,
   );
-  const [vitalsOpen, , toggleVitals] = usePersistentToggle("chat.telemetry.vitalsOpen", true);
-  const [usageOpen, , toggleUsage] = usePersistentToggle("chat.telemetry.usageOpen", true);
+  const [vitalsOpen, , toggleVitals] = usePersistentToggle("chat.telemetry.vitalsOpen");
+  const [usageOpen, , toggleUsage] = usePersistentToggle("chat.telemetry.usageOpen");
   const [modelParametersOpen, setModelParametersOpen, toggleModelParameters] = usePersistentToggle(
     "chat.telemetry.parametersOpen",
-    true,
   );
   const [providerPreferencesOpen, setProviderPreferencesOpen, toggleProviderPreferences] =
-    usePersistentToggle("chat.telemetry.providersOpen", true);
+    usePersistentToggle("chat.telemetry.providersOpen");
   const [streamingOptionsOpen, setStreamingOptionsOpen, toggleStreamingOptions] =
-    usePersistentToggle("chat.telemetry.streamingOpen", true);
+    usePersistentToggle("chat.telemetry.streamingOpen");
 
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   // Starts at 0 (non-overlay) for a stable first paint; the real width is measured

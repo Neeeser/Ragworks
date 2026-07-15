@@ -42,7 +42,14 @@ from app.retrieval.models import (
 )
 from app.retrieval.parsers.base import DocumentSource
 from app.utils.file_storage import FileStorage
-from tests.pipelines.conftest import StubVectorStore, StubVectorStoreProvider, make_stub_embedder
+from tests.pipelines.conftest import (
+    StubProviderResolver,
+    StubVectorStore,
+    StubVectorStoreProvider,
+    make_stub_embedder,
+)
+
+EMBED_CONNECTION_ID = uuid4()
 
 
 def _build_context(
@@ -65,7 +72,7 @@ def _build_context(
         document=document,
         query=query,
         top_k=top_k,
-        openrouter=object(),
+        providers=StubProviderResolver(),
         vector_stores=StubVectorStoreProvider(vector_store),
         storage=storage,
         settings=settings,
@@ -229,13 +236,11 @@ def test_default_ingestion_pipeline_executes(monkeypatch, session: Session, tmp_
     context = _build_context(
         session, user, collection, document=document, storage_path=tmp_path, vector_store=store
     )
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 3})
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(usage={"prompt_tokens": 3}),
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
     )
-
-    definition = build_default_ingestion_pipeline()
     executor = PipelineExecutor(build_default_registry())
     result = executor.execute(definition, context)
     payload = next(
@@ -265,12 +270,11 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
         session, user, collection, query="hello", top_k=3, vector_store=store
     )
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(usage={"prompt_tokens": 2}, query_result=[0.1, 0.2]),
-    )
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 2}, query_result=[0.1, 0.2])
 
-    definition = build_default_retrieval_pipeline()
+    definition = build_default_retrieval_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+    )
     executor = PipelineExecutor(build_default_registry())
     result = executor.execute(definition, context)
     payload = next(
@@ -350,6 +354,7 @@ def test_file_type_router_routes_pdf(session: Session) -> None:
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 3})
     outputs = node.run({"source": payload}, context)
 
     assert "pdf" in outputs
@@ -448,10 +453,6 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
     from app.pipelines.payloads import ChunkPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(documents_result=[[0.1, 0.2]]),
-    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
@@ -459,10 +460,11 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
         DocumentChunk(document_id="doc", chunk_id="doc:1", text="b", order=1, metadata=DocumentMetadata()),
     ]
     payload = ChunkPayload(document=document, chunks=chunks)
-    node = EmbedderNode(EmbedderConfig())
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(documents_result=[[0.1, 0.2]])
 
     with pytest.raises(ValueError, match="mismatched embeddings"):
         node.run({"chunks": payload}, context)
@@ -471,12 +473,12 @@ def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Ses
 def test_embedder_node_requires_a_mode(monkeypatch, session: Session) -> None:
     from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 
-    monkeypatch.setattr("app.pipelines.nodes.embedding.OpenRouterEmbedder", make_stub_embedder())
 
-    node = EmbedderNode(EmbedderConfig())
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder()
 
     with pytest.raises(ValueError, match="requires a chunk batch or query request"):
         node.run({}, context)
@@ -487,20 +489,17 @@ def test_embedder_node_summarizes_chunk_mode(monkeypatch, session: Session) -> N
     from app.pipelines.payloads import ChunkPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(usage={"prompt_tokens": 1}),
-    )
 
     document = Document(document_id="doc", text="hello", metadata=DocumentMetadata())
     chunks = [
         DocumentChunk(document_id="doc", chunk_id="doc:0", text="a", order=0, metadata=DocumentMetadata()),
     ]
     payload = ChunkPayload(document=document, chunks=chunks)
-    node = EmbedderNode(EmbedderConfig())
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 1})
 
     outputs = node.run({"chunks": payload}, context)
     summary = node.summarize_io({"chunks": payload}, outputs)
@@ -514,16 +513,13 @@ def test_embedder_node_summarizes_query_mode(monkeypatch, session: Session) -> N
     from app.pipelines.payloads import RetrievalRequestPayload
     from app.retrieval.models import QueryRequest
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(usage={"prompt_tokens": 1}),
-    )
 
     payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
-    node = EmbedderNode(EmbedderConfig())
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 1})
 
     outputs = node.run({"request": payload}, context)
     summary = node.summarize_io({"request": payload}, outputs)
@@ -537,16 +533,13 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
     from app.pipelines.payloads import QueryEmbeddingPayload, RetrievalRequestPayload
     from app.retrieval.models import QueryRequest
 
-    monkeypatch.setattr(
-        "app.pipelines.nodes.embedding.OpenRouterEmbedder",
-        make_stub_embedder(usage={"prompt_tokens": 4}, query_result=[0.1, 0.2, 0.3]),
-    )
 
     payload = RetrievalRequestPayload(request=QueryRequest(text="hello", top_k=3))
-    node = EmbedderNode(EmbedderConfig())
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 4}, query_result=[0.1, 0.2, 0.3])
 
     outputs = node.run({"request": payload}, context)
     result = QueryEmbeddingPayload.model_validate(outputs["query_embedding"])

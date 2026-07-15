@@ -27,6 +27,7 @@ from app.db.repositories.pipeline import (
     PipelineRunRepository,
     PipelineVersionRepository,
 )
+from app.db.repositories.provider import ProviderConnectionRepository
 from app.db.repositories.query import QueryRepository
 from app.db.repositories.telemetry import TelemetryRepository
 from app.db.repositories.user import AuthSessionRepository, UserRepository
@@ -46,6 +47,7 @@ __all__ = [
     "PipelineRepository",
     "PipelineRunRepository",
     "PipelineVersionRepository",
+    "ProviderConnectionRepository",
     "QueryRepository",
     "Repository",
     "TelemetryRepository",

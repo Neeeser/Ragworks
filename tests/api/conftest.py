@@ -29,20 +29,40 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.main import app
 from app.db import models
 from app.db.repositories import UserRepository
+from tests.utils.providers import install_default_pipelines as scaffold_default_pipelines
 
 
 @pytest.fixture(name="auth_user")
 def auth_user_fixture(session: Session) -> models.User:
-    """Persist and return the user the ``client`` fixture authenticates as."""
+    """Persist and return the user the ``client`` fixture authenticates as.
+
+    Comes with OpenRouter + Pinecone provider connections configured so
+    routes that resolve providers behave like a fully onboarded account.
+    """
     user = models.User(
         email="owner@example.com",
         full_name="Owner",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     UserRepository(session).add(user)
     session.commit()
+    session.refresh(user)
+    openrouter = models.ProviderConnection(
+        user_id=user.id,
+        provider_type="openrouter",
+        label="OpenRouter",
+        config={"api_key": "openrouter-key"},
+    )
+    pinecone = models.ProviderConnection(
+        user_id=user.id,
+        provider_type="pinecone",
+        label="Pinecone",
+        config={"api_key": "pinecone-key"},
+    )
+    session.add(openrouter)
+    session.add(pinecone)
+    session.commit()
+    scaffold_default_pipelines(session, user, openrouter)
     session.refresh(user)
     return user
 

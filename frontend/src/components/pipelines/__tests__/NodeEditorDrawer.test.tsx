@@ -1,20 +1,25 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
+import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 import type { ComponentProps } from "react";
 
-const NODE_TYPE_EMBEDDER = "embedder.openrouter";
+const NODE_TYPE_EMBEDDER = "embedder.text";
 const NODE_TYPE_INDEXER = "indexer.vector";
 const NODE_TYPE_PARSER = "parser.document";
 const INDEX_SELECT_LABEL = "Vector index";
 const SAVE_NODE = "Save node";
 const CLOSE_EDITOR = "Close node editor";
+const RENAMED_LABEL = "Renamed";
+const NODE_LABEL = "Node label";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -100,12 +105,44 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
     validationIssues: [],
     vectorIndexes: [],
     embeddingModels: [],
+    embeddingCatalog: null,
     embeddingModelsLoading: false,
     embeddingModelsError: null,
     ...overrides,
   };
   return render(<NodeEditorDrawer {...props} />);
 };
+
+function DrawerWithIndexManager() {
+  const [managerOpen, setManagerOpen] = React.useState(false);
+  return (
+    <>
+      <NodeEditorDrawer
+        node={makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" })}
+        onClose={() => undefined}
+        onApply={() => undefined}
+        isPreview={false}
+        validationErrors={[]}
+        vectorIndexes={indexes}
+        onOpenIndexManager={() => setManagerOpen(true)}
+        embeddingModels={[]}
+        embeddingCatalog={null}
+        embeddingModelsLoading={false}
+        embeddingModelsError={null}
+      />
+      <ModalOverlay
+        open={managerOpen}
+        onClose={() => setManagerOpen(false)}
+        labelledBy="index-manager-title"
+      >
+        <div>
+          <h2 id="index-manager-title">Index manager</h2>
+          <button type="button">Manager action</button>
+        </div>
+      </ModalOverlay>
+    </>
+  );
+}
 
 describe("NodeEditorDrawer", () => {
   beforeEach(() => {
@@ -183,7 +220,8 @@ describe("NodeEditorDrawer", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it("filters the index picker to the node's configured backend and saves the pick", () => {
+  it("filters the index picker to the node's configured backend and saves the pick", async () => {
+    const user = userEvent.setup();
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
@@ -191,12 +229,15 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    const select = screen.getByLabelText(INDEX_SELECT_LABEL);
+    const select = screen.getByRole("combobox", { name: INDEX_SELECT_LABEL });
+    await user.click(select);
+    expect(select).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /alpha/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /local/ })).not.toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "alpha" } });
-    fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
       config: { backend: "pinecone", index_name: "alpha", dimension: 768 },
@@ -223,31 +264,52 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
-  it("legacy backend-pinned nodes get the index picker but no backend picker", () => {
+  it("legacy backend-pinned nodes get the index picker but no backend picker", async () => {
+    const user = userEvent.setup();
     renderDrawer({
       node: makeNode("retriever.pgvector", {}),
       vectorIndexes: indexes,
     });
 
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
   });
 
-  it("opens the index manager from the create sentinel", () => {
-    const onOpenIndexManager = vi.fn();
+  it("displays and selects an index that has not been created yet", async () => {
+    const user = userEvent.setup();
     renderDrawer({
-      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "missing",
+        dimension: 768,
+      }),
       vectorIndexes: indexes,
-      onOpenIndexManager,
     });
 
-    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), {
-      target: { value: "__create__" },
-    });
-    expect(onOpenIndexManager).toHaveBeenCalled();
+    const select = screen.getByRole("combobox", { name: INDEX_SELECT_LABEL });
+    expect(select).toHaveTextContent("missing (not created yet)");
+
+    await user.click(select);
+    expect(screen.getByRole("option", { name: "missing (not created yet)" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
-  it("clearing the index removes index_name and dimension from the draft", () => {
+  it("keeps focus in the index manager opened from the create sentinel", async () => {
+    const user = userEvent.setup();
+    render(<DrawerWithIndexManager />);
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /Add new index/ }));
+
+    expect(screen.getByRole("dialog", { name: "Index manager" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manager action" })).toHaveFocus();
+  });
+
+  it("clearing the index removes index_name and dimension from the draft", async () => {
+    const user = userEvent.setup();
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
@@ -259,8 +321,9 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    fireEvent.change(screen.getByLabelText(INDEX_SELECT_LABEL), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
       config: { backend: "pinecone" },
@@ -270,32 +333,61 @@ describe("NodeEditorDrawer", () => {
   it("picking an embedding model updates the draft and never keeps a stale dimension", () => {
     const onApply = vi.fn();
     renderDrawer({
-      node: makeNode(NODE_TYPE_EMBEDDER, { model_name: "emb-1", dimension: 768 }),
-      embeddingModels: [{ id: "emb-1", name: "Embedding One", dimension: 768 }],
+      node: makeNode(NODE_TYPE_EMBEDDER, {
+        connection_id: "conn-openrouter-1",
+        model_name: "emb-1",
+        dimension: 768,
+      }),
+      embeddingModels: [
+        makeCatalogModel({ id: "emb-1", name: "Embedding One", dimension: 768 }),
+        makeCatalogModel({ id: "emb-2", name: "Embedding Two" }),
+      ],
       onApply,
     });
 
     expect(screen.getByTestId("embedding-selector")).toBeInTheDocument();
     expect(lastEmbeddingProps).toMatchObject({ selectedModelKey: "emb-1" });
     act(() => {
-      (lastEmbeddingProps?.onSelectModel as (id: string) => void)("emb-2");
+      (lastEmbeddingProps?.onSelectModel as (model: unknown) => void)(
+        makeCatalogModel({ id: "emb-2", name: "Embedding Two" }),
+      );
     });
     fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
-    // No explicit dimension: OpenRouter rejects a `dimensions` override for
-    // most embedding models.
+    // No explicit dimension: most embedding models reject a `dimensions`
+    // override, so the draft carries only the connection + model.
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
-      config: { model_name: "emb-2" },
+      config: { connection_id: "conn-openrouter-1", model_name: "emb-2" },
     });
+  });
+
+  it("blocks node edits when a refreshed catalog no longer contains the selected model", () => {
+    const onApply = vi.fn();
+    const otherConnection = makeCatalogModel({ connection_id: "conn-b", id: "removed-model" });
+    renderDrawer({
+      node: makeNode(NODE_TYPE_EMBEDDER, {
+        connection_id: "conn-a",
+        model_name: "removed-model",
+      }),
+      embeddingModels: [otherConnection],
+      embeddingCatalog: makeModelCatalog([otherConnection]),
+      onApply,
+    });
+
+    fireEvent.change(screen.getByLabelText(NODE_LABEL), { target: { value: RENAMED_LABEL } });
+    const saveButton = screen.getByRole("button", { name: SAVE_NODE });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(saveButton);
+    expect(onApply).not.toHaveBeenCalled();
   });
 
   it("saves a label edit through the draft", () => {
     const onApply = vi.fn();
     renderDrawer({ onApply });
 
-    fireEvent.change(screen.getByLabelText("Node label"), { target: { value: "Renamed" } });
+    fireEvent.change(screen.getByLabelText(NODE_LABEL), { target: { value: RENAMED_LABEL } });
     fireEvent.click(screen.getByRole("button", { name: SAVE_NODE }));
-    expect(onApply).toHaveBeenCalledWith("node-1", { label: "Renamed", config: {} });
+    expect(onApply).toHaveBeenCalledWith("node-1", { label: RENAMED_LABEL, config: {} });
   });
 
   it("surfaces validation errors", () => {
@@ -342,11 +434,21 @@ describe("NodeEditorDrawer", () => {
 
     // The label renders as a heading, not an editable input, and there is no
     // local save in preview mode.
-    expect(screen.queryByLabelText("Node label")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(NODE_LABEL)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: SAVE_NODE })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Node" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Add to canvas/ }));
     expect(onAddToCanvas).toHaveBeenCalled();
+  });
+
+  it("disables the index selector in preview mode", () => {
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone" }),
+      vectorIndexes: indexes,
+      isPreview: true,
+    });
+
+    expect(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL })).toBeDisabled();
   });
 });

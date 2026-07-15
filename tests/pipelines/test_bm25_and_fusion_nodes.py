@@ -41,7 +41,11 @@ from app.schemas.enums import IndexBackend
 from app.services.errors import InvalidInputError, NotFoundError
 from app.utils.file_storage import FileStorage
 from app.vectorstores.base import VectorStoreCapabilities
-from tests.pipelines.conftest import StubVectorStore, StubVectorStoreProvider
+from tests.pipelines.conftest import (
+    StubProviderResolver,
+    StubVectorStore,
+    StubVectorStoreProvider,
+)
 
 
 def _context(
@@ -60,7 +64,7 @@ def _context(
         document=None,
         query=query,
         top_k=top_k,
-        openrouter=object(),
+        providers=StubProviderResolver(),
         vector_stores=StubVectorStoreProvider(store),
         storage=FileStorage(),
         settings=get_settings(),

@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
@@ -14,7 +12,6 @@ import type { IndexBackend } from "@/lib/types";
 const KICKER = "First-run setup";
 
 export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
-  const [pineconeKey, setPineconeKey] = useState("");
   const { backend, indexName, embeddingDimension, embeddingModel } = wizard.state.choices;
   const backends = wizard.backends ?? [];
   const chosen = backends.find((info) => info.backend === backend);
@@ -25,7 +22,8 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
     embeddingDimension != null &&
     chosen != null &&
     embeddingDimension > chosen.capabilities.max_dimension;
-  const needsPineconeKey = backend === "pinecone" && !chosen?.configured && !pineconeKey.trim();
+  // Pinecone needs its connection from the providers step — no inline key form.
+  const needsPineconeConnection = backend === "pinecone" && !chosen?.configured;
 
   return (
     <SetupStepShell
@@ -41,8 +39,8 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
           <Button
             size="lg"
             loading={wizard.busy}
-            disabled={!indexName.trim() || overCap || needsPineconeKey}
-            onClick={() => void wizard.ensureIndex(pineconeKey)}
+            disabled={!indexName.trim() || overCap || needsPineconeConnection}
+            onClick={() => void wizard.ensureIndex()}
           >
             Create index
           </Button>
@@ -92,7 +90,7 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
               <span className="mt-1 block text-xs text-meta">
                 {info.backend === "pgvector"
                   ? "Built into the shipped Postgres — no account needed."
-                  : "Managed vector database — needs an API key."}
+                  : "Managed vector database — needs a Pinecone connection."}
               </span>
               {tooBig ? (
                 <span className="mt-1 block text-xs text-data-neg">
@@ -104,16 +102,8 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
           );
         })}
       </div>
-      {backend === "pinecone" && !chosen?.configured ? (
-        <Field label="Pinecone API key">
-          <TextInput
-            type="password"
-            value={pineconeKey}
-            onChange={(event) => setPineconeKey(event.target.value)}
-            placeholder="pcsk_…"
-            autoComplete="off"
-          />
-        </Field>
+      {needsPineconeConnection ? (
+        <SetupNotice message="Pinecone needs a connection — go back to the providers step and add one." />
       ) : null}
       <Field label="Index name" hint="Lowercase letters, digits, and dashes.">
         <TextInput

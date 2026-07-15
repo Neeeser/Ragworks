@@ -9,10 +9,7 @@
             "type": "ingestion.input",
             "name": "Ingestion Input",
             "config": {},
-            "position": {
-              "x": 0.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -20,10 +17,7 @@
             "type": "parser.document",
             "name": "Document Parser",
             "config": {},
-            "position": {
-              "x": 340.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -31,26 +25,21 @@
             "type": "chunker.token",
             "name": "Token Chunker",
             "config": {
-              "chunk_size": 512,
+              "chunk_size": 1024,
               "chunk_overlap": 200
             },
-            "position": {
-              "x": 680.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
             "id": "embed-chunks",
-            "type": "embedder.openrouter",
+            "type": "embedder.text",
             "name": "Embedder",
             "config": {
+              "connection_id": "00000000-0000-0000-0000-000000000001",
               "model_name": "openai/text-embedding-3-small"
             },
-            "position": {
-              "x": 1020.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -64,10 +53,7 @@
               "metric": "cosine",
               "ensure_index": true
             },
-            "position": {
-              "x": 1360.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -75,10 +61,7 @@
             "type": "ingestion.output",
             "name": "Ingestion Output",
             "config": {},
-            "position": {
-              "x": 1700.0,
-              "y": 130.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -91,10 +74,7 @@
               "namespace": "col-{collection_id}",
               "ensure_index": true
             },
-            "position": {
-              "x": 1020.0,
-              "y": 260.0
-            },
+            "position": null,
             "ui": {}
           }
         ],
@@ -168,23 +148,18 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {},
-            "position": {
-              "x": 0.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
             "id": "embed-query",
-            "type": "embedder.openrouter",
+            "type": "embedder.text",
             "name": "Embedder",
             "config": {
+              "connection_id": "00000000-0000-0000-0000-000000000001",
               "model_name": "openai/text-embedding-3-small"
             },
-            "position": {
-              "x": 340.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -196,10 +171,7 @@
               "index_name": "ragworks",
               "namespace": "col-{collection_id}"
             },
-            "position": {
-              "x": 680.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -207,10 +179,7 @@
             "type": "retrieval.output",
             "name": "Retrieval Output",
             "config": {},
-            "position": {
-              "x": 1360.0,
-              "y": 0.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -222,10 +191,7 @@
               "index_name": "ragworks-bm25",
               "namespace": "col-{collection_id}"
             },
-            "position": {
-              "x": 340.0,
-              "y": 260.0
-            },
+            "position": null,
             "ui": {}
           },
           {
@@ -233,10 +199,7 @@
             "type": "fusion.rrf",
             "name": "RRF Fusion",
             "config": {},
-            "position": {
-              "x": 1020.0,
-              "y": 130.0
-            },
+            "position": null,
             "ui": {}
           }
         ],
@@ -396,7 +359,7 @@
         "description": "Configuration for fixed-strategy chunking nodes.",
         "properties": {
           "chunk_size": {
-            "default": 512,
+            "default": 1024,
             "exclusiveMinimum": 0,
             "title": "Chunk Size",
             "type": "integer"
@@ -412,16 +375,16 @@
         "type": "object"
       },
       "default_config": {
-        "chunk_size": 512,
+        "chunk_size": 1024,
         "chunk_overlap": 200
       },
       "hidden": false
     },
     {
-      "type": "embedder.openrouter",
+      "type": "embedder.text",
       "label": "Embedder",
       "category": "ingestion",
-      "description": "Embed chunks using OpenRouter.",
+      "description": "Embed text using a configured provider connection.",
       "example": "ChunkPayload(chunks=['hello']) -> EmbeddingPayload(embeddings=[[0.12, 0.03, ...]]).",
       "input_ports": [
         {
@@ -456,9 +419,24 @@
         }
       ],
       "config_schema": {
-        "description": "Configuration for embedding nodes.",
+        "description": "Configuration for embedding nodes.\n\n`connection_id` names the provider connection that serves the model; both\nit and `model_name` are required for a runnable node, but stay optional on\nthe model so an incomplete draft validates in the editor and surfaces\nthrough node validation instead of a parse crash.",
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Provider connection that serves the embedding model.",
+            "title": "Connection Id"
+          },
           "model_name": {
+            "default": "",
             "title": "Model Name",
             "type": "string"
           },
@@ -481,6 +459,7 @@
         "type": "object"
       },
       "default_config": {
+        "connection_id": null,
         "model_name": "",
         "dimension": null
       },

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 
+import { PipelineEdgeRoutingProvider } from "./flow/PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./flow/TypedEdge";
 import { useFlowDotColor } from "./flow/use-flow-dot-color";
 import { getPortTypeColorVar, getPortTypeLabel } from "./lib/pipeline-theme";
@@ -135,35 +136,37 @@ export function PipelineCanvas({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
         >
-          <ReactFlow
-            key={canvasKey}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectStart={onConnectStart}
-            onConnectEnd={onConnectEnd}
-            isValidConnection={isValidConnection}
-            onNodeClick={(_, node) => onNodeSelect(node.id)}
-            onNodeDragStop={onNodeDragStop}
-            onInit={onInit}
-            nodeTypes={pipelineNodeTypes}
-            edgeTypes={pipelineEdgeTypes}
-            connectionLineType={ConnectionLineType.SmoothStep}
-            connectionLineStyle={{
-              stroke: "var(--text-muted)",
-              strokeWidth: 2,
-              strokeDasharray: "6 4",
-            }}
-            proOptions={{ hideAttribution: true }}
-            fitView
-            fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
-            minZoom={0.2}
-          >
-            <Background gap={18} size={1} color={dotColor} />
-            <Controls className="pipeline-controls" />
-          </ReactFlow>
+          <PipelineEdgeRoutingProvider nodes={nodes}>
+            <ReactFlow
+              key={canvasKey}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              isValidConnection={isValidConnection}
+              onNodeClick={(_, node) => onNodeSelect(node.id)}
+              onNodeDragStop={onNodeDragStop}
+              onInit={onInit}
+              nodeTypes={pipelineNodeTypes}
+              edgeTypes={pipelineEdgeTypes}
+              connectionLineType={ConnectionLineType.SmoothStep}
+              connectionLineStyle={{
+                stroke: "var(--text-muted)",
+                strokeWidth: 2,
+                strokeDasharray: "6 4",
+              }}
+              proOptions={{ hideAttribution: true }}
+              fitView
+              fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+              minZoom={0.2}
+            >
+              <Background gap={18} size={1} color={dotColor} />
+              <Controls className="pipeline-controls" />
+            </ReactFlow>
+          </PipelineEdgeRoutingProvider>
         </div>
       </GlassCard>
     </div>

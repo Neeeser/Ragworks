@@ -21,7 +21,6 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services import ingestion as ingestion_module
 from app.services import retrieval as retrieval_module
 from app.services.files import FileSystemService, UploadSpec
@@ -33,6 +32,7 @@ from app.services.pipeline_resolution import (
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
 from app.vectorstores.pgvector import PgvectorStore
+from tests.utils.providers import install_default_pipelines
 
 CONTENT = (
     b"Paris is the capital of France.\n\n"
@@ -41,27 +41,32 @@ CONTENT = (
 )
 
 
-class _StubOpenRouterClient:
-    """Stand-in for `OpenRouterClient` at the client boundary.
+class _StubEmbedder:
+    """Embedder stand-in: every text embeds to the same vector, so dense ranking alone can never prefer one chunk — any deterministic reordering must come from BM25."""
 
-    Every text embeds to the same vector, so dense ranking alone can never
-    prefer one chunk — any deterministic reordering must come from BM25.
-    """
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
 
-    def embed(
-        self,
-        texts: object,
-        model: str | None = None,
-        extra_headers: dict[str, str] | None = None,
-        dimensions: int | None = None,
-    ) -> OpenRouterEmbeddingsResponse:
-        texts = list(texts)  # type: ignore[arg-type]
-        return OpenRouterEmbeddingsResponse.model_validate(
-            {
-                "data": [{"embedding": [0.1, 0.2, 0.3]} for _ in texts],
-                "usage": {"prompt_tokens": len(texts) * 3, "total_tokens": len(texts) * 3},
-            }
-        )
+    @property
+    def usage(self) -> dict[str, int] | None:
+        return {"prompt_tokens": 5, "total_tokens": 5}
+
+    def embed_documents(self, chunks):
+        return [[0.1, 0.2, 0.3] for _ in chunks]
+
+    def embed_query(self, _query: str):
+        return [0.1, 0.2, 0.3]
+
+
+class _StubProviderResolver:
+    """ProviderResolver stand-in serving `_StubEmbedder` for any connection."""
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def embedder(self, _connection_id, model_name: str, dimensions=None):
+        del dimensions
+        return _StubEmbedder(model_name)
 
 
 def _create_user(session: Session) -> models.User:
@@ -69,12 +74,11 @@ def _create_user(session: Session) -> models.User:
         email="modality@example.com",
         full_name="Modality Tester",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key=None,
     )
     session.add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 
@@ -97,12 +101,8 @@ def _ingest(
     chunk_size: int = 16,
 ) -> models.Document:
     """Upload CONTENT and run the collection's real ingestion pipeline."""
-    monkeypatch.setattr(
-        ingestion_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
-    )
-    monkeypatch.setattr(
-        retrieval_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
-    )
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr(retrieval_module, "ProviderResolver", _StubProviderResolver)
     resolved = resolve_ingestion_pipeline(session, user, collection)
     definition = resolved.definition
     for node in definition.nodes:
@@ -280,16 +280,8 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
     session.commit()
     session.refresh(collection)
 
-    monkeypatch.setattr(
-        ingestion_module,
-        "get_openrouter_client",
-        lambda *_a, **_k: _FailIfUsedClient(),
-    )
-    monkeypatch.setattr(
-        retrieval_module,
-        "get_openrouter_client",
-        lambda *_a, **_k: _FailIfUsedClient(),
-    )
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _FailIfUsedResolver)
+    monkeypatch.setattr(retrieval_module, "ProviderResolver", _FailIfUsedResolver)
     result = FileSystemService(session).register_upload(
         user,
         collection,
@@ -318,8 +310,11 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
     ] == [("sparse", "lex-only")]
 
 
-class _FailIfUsedClient:
-    """An OpenRouter stand-in that fails the test if any embedding happens."""
+class _FailIfUsedResolver:
+    """A resolver stand-in that fails the test if any embedding happens."""
 
-    def embed(self, *_args: object, **_kwargs: object) -> None:
-        raise AssertionError("BM25-only pipelines must never call the embedder")
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def embedder(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("BM25-only pipelines must never resolve an embedder")

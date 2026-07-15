@@ -15,6 +15,7 @@ export type Dispatch<T> = React.Dispatch<React.SetStateAction<T>>;
 
 export interface NewChatDefaults {
   activeModelId: string | null;
+  activeConnectionId: string | null;
   parameterOverrides: ParameterOverrides;
   providerForm: ProviderFormState;
   streamingEnabled: boolean;
@@ -40,6 +41,7 @@ export interface UseChatMutationParams {
   toolsEnabled: boolean;
   // Run settings
   activeModelId: string | null;
+  activeConnectionId: string | null;
   buildParameterPayload: (overrides?: ParameterOverrides, modelId?: string) => ParameterOverrides;
   providerRuleCount: number;
   providerPayload: import("@/lib/types").ProviderPreferences;
@@ -75,6 +77,7 @@ export interface UseChatMutationParams {
   setContextConsumed: Dispatch<number>;
   setOptimisticMessages: Dispatch<ChatMessage[]>;
   setActiveModelId: Dispatch<string | null>;
+  setActiveConnectionId: Dispatch<string | null>;
   setParameterOverrides: Dispatch<ParameterOverrides>;
   setProviderForm: Dispatch<ProviderFormState>;
   setStreamingEnabled: Dispatch<boolean>;

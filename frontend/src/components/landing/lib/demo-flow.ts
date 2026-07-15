@@ -1,5 +1,8 @@
+import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
+import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
+
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
-import type { FlowStep } from "@/components/pipelines/flow/use-flow-playback";
+import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { NodePort } from "@/lib/types";
 import type { Node } from "@xyflow/react";
@@ -29,13 +32,17 @@ export type DemoNode = {
    * "no model selected" placeholder.
    */
   config?: Record<string, unknown>;
-  /** Grid column (left-to-right pipeline order). */
-  col: number;
   /**
-   * Grid row: 0 is the main path, 1 the parallel branch below it. Fractional
-   * rows (0.5) center a merge node between the branches so its inbound wires
-   * approach from above and below instead of hiding behind a card.
+   * Manual grid placement (column / row) — an escape hatch, STRONGLY NOT
+   * recommended. Scenes are placed by the shared pipeline auto-layout
+   * (`layoutPipelineNodes`, the same algorithm as the editor's Tidy button),
+   * so they stay correct when the algorithm, card sizes, or topologies
+   * change. Only reach for `col`/`row` when a scene needs deliberately
+   * choreographed placement the algorithm can't express — and if any node in
+   * a scene sets `col`, every node in that scene is placed manually.
    */
+  col?: number;
+  /** Manual grid row (see `col`) — 0 is the main path, fractions center merges. */
   row?: number;
 };
 
@@ -43,22 +50,11 @@ export type SceneDefinition = {
   nodes: DemoNode[];
   /** Wires as `[sourceId, targetId]`; handles/color derive from the node ports. */
   edges: [string, string][];
-  /**
-   * Playback stages, in order. Each stage's nodes glow together, and every
-   * edge from stage N into stage N+1 travels simultaneously — list a branch
-   * node in consecutive stages to hold its glow while the other branch
-   * catches up before a merge.
-   */
-  stages: string[][];
 };
 
-/** Matches the pipeline editor's scaffold spacing so the graph reads familiarly. */
+// Grid spacing for the manual `col`/`row` escape hatch only — auto-laid
+// scenes get their spacing from the shared layout module.
 const NODE_SPACING_X = 368;
-/**
- * Vertical drop of the parallel branch row — wide enough that a wire crossing
- * under a main-row card clears the card's bottom edge instead of hiding
- * behind it.
- */
 const NODE_SPACING_Y = 250;
 
 const toPort = (port: DemoPort): NodePort => ({
@@ -78,11 +74,12 @@ export type DemoFlow = {
 /** Turn a hand-authored scene definition into renderable flow data. Pure. */
 export function buildSceneFlow(scene: SceneDefinition): DemoFlow {
   const byId = new Map(scene.nodes.map((node) => [node.id, node]));
+  const manual = scene.nodes.some((node) => node.col !== undefined);
 
-  const nodes: Node<PipelineNodeData>[] = scene.nodes.map((node) => ({
+  const placedNodes: Node<PipelineNodeData>[] = scene.nodes.map((node) => ({
     id: node.id,
     type: "pipelineNode",
-    position: { x: NODE_SPACING_X * node.col, y: NODE_SPACING_Y * (node.row ?? 0) },
+    position: { x: NODE_SPACING_X * (node.col ?? 0), y: NODE_SPACING_Y * (node.row ?? 0) },
     data: {
       label: node.label,
       nodeType: node.nodeType,
@@ -111,7 +108,11 @@ export function buildSceneFlow(scene: SceneDefinition): DemoFlow {
     };
   });
 
-  const steps: FlowStep[] = scene.stages.map((nodeIds) => ({ nodeIds }));
+  // Default path: the same auto-layout the editor's Tidy button uses, so
+  // scenes track the real algorithm instead of hand-maintained grids.
+  const nodes = manual ? placedNodes : layoutPipelineNodes(placedNodes, edges);
+
+  const steps = buildTopologyPlaybackSteps({ nodes, edges });
 
   return { nodes, edges, steps };
 }

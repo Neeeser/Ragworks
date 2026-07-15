@@ -15,7 +15,6 @@ from collections.abc import Iterator
 import pytest
 from sqlmodel import Session
 
-from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import AppSettingRepository, UserRepository
 from app.schemas.admin import ConfigSource
@@ -26,7 +25,6 @@ from app.services.app_config import (
     invalidate_app_config_cache,
 )
 from app.services.errors import InvalidInputError
-from tests.utils.db import TEST_DEFAULT_EMBEDDING_MODEL
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +43,8 @@ def _make_admin(session: Session) -> models.User:
     return user
 
 
-def test_precedence_default_then_db_then_env(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_precedence_default_then_db(session: Session) -> None:
+    """A DB override beats the code default (no env-pinned fields remain)."""
     service = AppConfigService(session)
     assert service.effective_config().uploads.max_upload_size_mb == 50
 
@@ -53,30 +52,10 @@ def test_precedence_default_then_db_then_env(session: Session, monkeypatch: pyte
     session.commit()
     assert service.effective_config().uploads.max_upload_size_mb == 10
 
-    AppSettingRepository(session).upsert("models.default_chat_model", "db/model", updated_by=None)
-    session.commit()
-    monkeypatch.setenv("OPENROUTER_DEFAULT_CHAT_MODEL", "env/model")
-    get_settings.cache_clear()
-    try:
-        assert service.effective_config().models.default_chat_model == "env/model"
-    finally:
-        get_settings.cache_clear()
 
-
-def test_patch_rejects_env_pinned_unknown_and_invalid_fields(
-    session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_patch_rejects_unknown_and_invalid_fields(session: Session) -> None:
     admin = _make_admin(session)
     service = AppConfigService(session)
-
-    monkeypatch.setenv("OPENROUTER_DEFAULT_CHAT_MODEL", "env/model")
-    get_settings.cache_clear()
-    try:
-        with pytest.raises(InvalidInputError) as exc_info:
-            service.apply_update({"models": {"default_chat_model": "new/model"}}, admin.id)
-        assert "models.default_chat_model" in exc_info.value.detail
-    finally:
-        get_settings.cache_clear()
 
     with pytest.raises(InvalidInputError) as exc_info:
         service.apply_update({"uploads": {"nope": 1}}, admin.id)
@@ -96,10 +75,7 @@ def test_patch_writes_overrides_and_null_resets(session: Session) -> None:
 
     with Session(session.get_bind()) as fresh:
         overrides = AppSettingRepository(fresh).all_overrides()
-    assert overrides == {
-        "auth.allow_registration": False,
-        "models.default_embedding_model": TEST_DEFAULT_EMBEDDING_MODEL,
-    }
+    assert overrides == {"auth.allow_registration": False}
     assert service.effective_config().auth.allow_registration is False
 
     reset = service.apply_update({"auth": {"allow_registration": None}}, admin.id)
@@ -107,7 +83,7 @@ def test_patch_writes_overrides_and_null_resets(session: Session) -> None:
 
     with Session(session.get_bind()) as fresh:
         overrides = AppSettingRepository(fresh).all_overrides()
-    assert overrides == {"models.default_embedding_model": TEST_DEFAULT_EMBEDDING_MODEL}
+    assert overrides == {}
     assert service.effective_config().auth.allow_registration is True
 
 
@@ -174,14 +150,7 @@ def test_field_catalog_reports_source(session: Session, monkeypatch: pytest.Monk
     assert catalog["uploads.max_upload_size_mb"].source == ConfigSource.OVERRIDE
     assert catalog["uploads.max_upload_size_mb"].value == 10
 
-    monkeypatch.setenv("OPENROUTER_DEFAULT_CHAT_MODEL", "env/model")
-    get_settings.cache_clear()
-    try:
-        catalog = {field.key: field for field in service.field_catalog()}
-        assert catalog["models.default_chat_model"].source == ConfigSource.ENV
-        assert catalog["models.default_chat_model"].value == "env/model"
-    finally:
-        get_settings.cache_clear()
+
 
 
 def test_apply_update_rejects_unknown_section(session: Session) -> None:

@@ -11,8 +11,8 @@ from app.api.routes import pipelines as pipelines_routes
 from app.db import models
 from app.db.repositories import UserRepository
 from app.pipelines.defaults import build_default_ingestion_pipeline
-from app.schemas.models import EmbeddingModelInfo
 from app.services.pipelines import PipelineService
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 def _create_user(session: Session) -> models.User:
@@ -30,7 +30,9 @@ def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     session.refresh(pipeline)
@@ -116,78 +118,60 @@ def test_list_pipeline_nodes_returns_specs() -> None:
     assert response.nodes
 
 
-def test_validate_pipeline_returns_success(session: Session) -> None:
-    definition = build_default_ingestion_pipeline()
+def test_validate_pipeline_returns_success() -> None:
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
 
-    response = pipelines_routes.validate_pipeline(
-        definition,
-        current_user=models.User(),
-        session=session,
-    )
+    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
     assert response.valid is True
     assert response.errors == []
     assert response.warnings == []
-    assert response.issues == []
 
 
-def test_validate_pipeline_requires_index_name(session: Session) -> None:
-    definition = build_default_ingestion_pipeline()
+def test_validate_pipeline_requires_index_name() -> None:
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     for node in definition.nodes:
         if node.type.startswith("indexer."):
             node.config = {**(node.config or {}), "index_name": ""}
-    response = pipelines_routes.validate_pipeline(
-        definition,
-        current_user=models.User(),
-        session=session,
-    )
+    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
     assert response.valid is False
     assert any("must specify an index" in error for error in response.errors)
 
 
-def test_validate_pipeline_returns_warnings(session: Session) -> None:
-    definition = build_default_ingestion_pipeline()
+def test_validate_pipeline_returns_warnings() -> None:
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     for node in definition.nodes:
-        if node.type == "embedder.openrouter":
+        if node.type == "embedder.text":
             node.config = {**(node.config or {}), "dimension": 512}
-    response = pipelines_routes.validate_pipeline(
-        definition,
-        current_user=models.User(),
-        session=session,
-    )
+    response = pipelines_routes.validate_pipeline(definition, _current_user=models.User())
 
     assert response.warnings != []
     assert any("no dimension configured" in warning for warning in response.warnings)
 
 
-def test_validate_pipeline_returns_field_issue_for_embedding_limit(
-    session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    model_id = "sentence-transformers/all-minilm-l6-v2"
-    user = models.User(openrouter_api_key="or-key")
-    definition = build_default_ingestion_pipeline(
-        embedding_model=model_id,
-        chunk_size=1024,
-    )
-    client = SimpleNamespace(
-        list_embedding_model_metadata=lambda: [
-            EmbeddingModelInfo(id=model_id, name="all-MiniLM-L6-v2", context_length=512)
-        ]
-    )
-    monkeypatch.setattr("app.services.pipelines.get_openrouter_client", lambda _key: client)
+def test_validate_definition_rejects_invalid(monkeypatch) -> None:
+    class _StubValidator:
+        def __init__(self, _registry) -> None:
+            pass
 
-    response = pipelines_routes.validate_pipeline(
-        definition,
-        current_user=user,
-        session=session,
-    )
+        def validate(self, _definition):
+            return SimpleNamespace(valid=False, errors=["bad"])
 
-    assert response.valid is False
-    assert response.issues[0].node_id == "chunk-document"
-    assert response.issues[0].field == "chunk_size"
-    assert response.issues[0].allowed_max == 512
+    monkeypatch.setattr(pipelines_routes, "PipelineValidator", _StubValidator)
+
+    with pytest.raises(HTTPException) as excinfo:
+        pipelines_routes._validate_definition_or_400(build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ))
+
+    assert excinfo.value.status_code == 400
 
 
 def test_list_pipelines_returns_results(session: Session) -> None:
@@ -206,13 +190,17 @@ def test_list_pipelines_filters_by_kind(session: Session) -> None:
         user=user,
         name="Ingestion",
         kind=models.PipelineKind.INGESTION,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     service.create_pipeline(
         user=user,
         name="Retrieval",
         kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_ingestion_pipeline(),
+        definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
 
@@ -254,9 +242,11 @@ def test_update_pipeline_updates_definition(session: Session) -> None:
     pipeline = _create_pipeline(session, user)
     previous_version = pipeline.current_version
 
-    definition = build_default_ingestion_pipeline()
+    definition = build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
-    chunker.config = {**chunker.config, "chunk_size": 256}
+    chunker.config = {**chunker.config, "chunk_size": 512}
     updated = pipelines_routes.update_pipeline(
         pipelines_routes.PipelineUpdate(
             name="Updated",
@@ -279,7 +269,9 @@ def test_update_pipeline_rejects_no_change_save(session: Session) -> None:
 
     with pytest.raises(HTTPException) as excinfo:
         pipelines_routes.update_pipeline(
-            pipelines_routes.PipelineUpdate(definition=build_default_ingestion_pipeline()),
+            pipelines_routes.PipelineUpdate(definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        )),
             pipeline=pipeline,
             current_user=user,
             session=session,
@@ -331,42 +323,12 @@ def test_create_pipeline_creates_record(session: Session) -> None:
         pipelines_routes.PipelineCreate(
             name="New Pipeline",
             kind=models.PipelineKind.INGESTION,
-            definition=build_default_ingestion_pipeline(),
+            definition=build_default_ingestion_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
         ),
         current_user=user,
         session=session,
     )
 
     assert created.name == "New Pipeline"
-
-
-def test_create_pipeline_rejects_embedding_limit_with_structured_detail(
-    session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    model_id = "sentence-transformers/all-minilm-l6-v2"
-    user = _create_user(session)
-    user.openrouter_api_key = "or-key"
-    client = SimpleNamespace(
-        list_embedding_model_metadata=lambda: [
-            EmbeddingModelInfo(id=model_id, name="all-MiniLM-L6-v2", context_length=512)
-        ]
-    )
-    monkeypatch.setattr("app.services.pipelines.get_openrouter_client", lambda _key: client)
-
-    with pytest.raises(HTTPException) as excinfo:
-        pipelines_routes.create_pipeline(
-            pipelines_routes.PipelineCreate(
-                name="Invalid Pipeline",
-                kind=models.PipelineKind.INGESTION,
-                definition=build_default_ingestion_pipeline(
-                    embedding_model=model_id,
-                    chunk_size=1024,
-                ),
-            ),
-            current_user=user,
-            session=session,
-        )
-
-    assert excinfo.value.status_code == 400
-    assert excinfo.value.detail["issues"][0]["field"] == "chunk_size"

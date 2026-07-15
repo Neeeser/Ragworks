@@ -34,10 +34,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   if (!response.ok) {
     const errorData = await parseError(response);
     const detail = errorData?.detail || response.statusText || "Request failed";
-    throw new ApiError(
-      response.status,
-      typeof detail === "string" ? detail : formatApiErrorDetail(detail),
-    );
+    throw new ApiError(response.status, formatApiErrorDetail(detail));
   }
 
   if (response.status === 204) {

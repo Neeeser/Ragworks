@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -17,9 +16,9 @@ from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
 from app.pipelines.nodes.io import RetrievalInputNode
 from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort
-from app.pipelines.registry import NodeRegistry, default_registry
+from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
-from app.schemas.models import EmbeddingModelInfo
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 class _InputNode(PipelineNodeBase):
@@ -249,9 +248,13 @@ def test_pipeline_validator_reports_dimension_mismatch() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
-                config={"dimension": 512},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                    "dimension": 512,
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -290,9 +293,13 @@ def test_pipeline_validator_warns_when_dimension_missing() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
-                config={"dimension": 512},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                    "dimension": 512,
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -378,9 +385,12 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
             PipelineNodeDefinition(id="source", type="test.chunks", name="Source"),
             PipelineNodeDefinition(
                 id="embedder",
-                type="embedder.openrouter",
+                type="embedder.text",
                 name="Embedder",
-                config={},
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                },
             ),
             PipelineNodeDefinition(
                 id="indexer",
@@ -417,7 +427,15 @@ def test_pipeline_validator_requires_retriever_index() -> None:
     definition = PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="retrieval.input", name="Input"),
-            PipelineNodeDefinition(id="embedder", type="embedder.openrouter", name="Embedder"),
+            PipelineNodeDefinition(
+                id="embedder",
+                type="embedder.text",
+                name="Embedder",
+                config={
+                    "connection_id": str(TEST_EMBED_CONNECTION_ID),
+                    "model_name": "test-embed",
+                },
+            ),
             PipelineNodeDefinition(
                 id="retriever",
                 type="retriever.pinecone",
@@ -494,66 +512,6 @@ def test_pipeline_validator_detects_cycles() -> None:
     assert any("cycle" in error.lower() for error in result.errors)
 
 
-def test_pipeline_validator_rejects_chunk_size_above_embedding_model_limit() -> None:
-    """Regression: 1,024-token chunks exceed all-MiniLM's 512-token input limit."""
-    model_id = "sentence-transformers/all-minilm-l6-v2"
-    definition = build_default_ingestion_pipeline(
-        embedding_model=model_id,
-        chunk_size=1024,
-    )
-
-    result = PipelineValidator(
-        default_registry(),
-        embedding_models=[
-            EmbeddingModelInfo(id=model_id, name="all-MiniLM-L6-v2", context_length=512)
-        ],
-    ).validate(definition)
-
-    issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
-    assert result.valid is False
-    assert issue.node_id == "chunk-document"
-    assert issue.field == "chunk_size"
-    assert issue.configured_value == 1024
-    assert issue.model == model_id
-    assert issue.allowed_max == 512
-
-
-def test_pipeline_validator_checks_legacy_implicit_chunk_ports() -> None:
-    model_id = "sentence-transformers/all-minilm-l6-v2"
-    definition = build_default_ingestion_pipeline(
-        embedding_model=model_id,
-        chunk_size=1024,
-    )
-    edge = next(item for item in definition.edges if item.target == "embed-chunks")
-    edge.target_port = None
-
-    result = PipelineValidator(
-        default_registry(),
-        embedding_models=[
-            EmbeddingModelInfo(id=model_id, name="all-MiniLM-L6-v2", context_length=512)
-        ],
-    ).validate(definition)
-
-    assert any(issue.code == "embedding_input_limit_exceeded" for issue in result.issues)
-
-
-def test_pipeline_validator_warns_when_embedding_model_limit_is_unknown() -> None:
-    model_id = "provider/new-embedding-model"
-    definition = build_default_ingestion_pipeline(embedding_model=model_id, chunk_size=512)
-
-    result = PipelineValidator(
-        default_registry(),
-        embedding_models=[EmbeddingModelInfo(id=model_id, name="New model")],
-    ).validate(definition)
-
-    issue = next(item for item in result.issues if item.code == "embedding_input_limit_unknown")
-    assert result.valid is True
-    assert issue.severity == "warning"
-    assert issue.node_id == "embed-chunks"
-    assert issue.field == "model_name"
-    assert issue.model == model_id
-
-
 class _ManyJoinNode(PipelineNodeBase):
     type = "test.many_join"
     label = "Many Join"
@@ -620,3 +578,20 @@ def test_pipeline_validator_allows_multiple_edges_into_accepts_many_port() -> No
     result = validator.validate(_fan_in_definition("test.many_join", "items"))
 
     assert result.valid, result.errors
+
+
+def test_pipeline_validator_flags_unconfigured_embedder() -> None:
+    """An embedder with no connection/model is a definite runtime failure —
+    validation must say so instead of validating clean."""
+    registry = NodeRegistry([_ChunkSourceNode, EmbedderNode, IndexerNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="embedder", type="embedder.text", name="Embedder"),
+        ],
+        edges=[],
+    )
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    assert any("no provider connection" in error for error in result.errors)
+    assert any("no embedding model" in error for error in result.errors)

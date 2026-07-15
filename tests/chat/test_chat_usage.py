@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from app.chat.parameters import build_openrouter_body
 from app.chat.usage import (
     UsageSummary,
     coerce_float_value,
     coerce_usage_value,
     extract_reasoning_tokens_from_usage,
 )
+from app.providers.chat.openrouter import build_openrouter_body
 
 
 def test_coerce_usage_value_sums_nested_values() -> None:

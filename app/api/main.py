@@ -15,6 +15,7 @@ from app.api.routes import (
     chat,
     collections,
     config,
+    connections,
     documents,
     files,
     health,
@@ -29,12 +30,14 @@ from app.api.routes import (
 from app.core.config import get_settings
 from app.db.bootstrap import init_db
 from app.db.engine import session_scope
+from app.providers.registry import close_provider_clients
 from app.services.accounts import ensure_admin_exists
 from app.services.file_backfill import backfill_file_nodes
 from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
 )
+from app.services.provider_migration import migrate_provider_connections
 from app.telemetry import purge_expired as purge_expired_telemetry
 
 settings = get_settings()
@@ -67,12 +70,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level or "")
     init_db()
     with session_scope() as session:
+        migrate_provider_connections(session)
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
         backfill_file_nodes(session)
         ensure_admin_exists(session)
     purge_expired_telemetry()
-    yield
+    try:
+        yield
+    finally:
+        close_provider_clients()
 
 
 app = FastAPI(
@@ -93,6 +100,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(config.router)
 app.include_router(auth.router)
+app.include_router(connections.router)
 app.include_router(admin.router)
 app.include_router(models.router)
 app.include_router(pipelines.router)

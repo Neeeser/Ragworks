@@ -120,7 +120,7 @@ describe("ModelParametersCard", () => {
         modelsLoading={false}
       />,
     );
-    expect(screen.getByText(/Unable to find OpenRouter metadata/)).toBeInTheDocument();
+    expect(screen.getByText(/Unable to find provider metadata/)).toBeInTheDocument();
 
     rerender(
       <ModelParametersCard

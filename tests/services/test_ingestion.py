@@ -19,7 +19,6 @@ from sqlmodel import Session, select
 from app.db import models
 from app.db.models import DocumentStatus
 from app.pipelines.defaults import build_default_retrieval_pipeline
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 from app.services import ingestion as ingestion_module
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
@@ -27,25 +26,35 @@ from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingestion_pipeline
 from app.services.pipelines import PipelineService
 from app.vectorstores.pgvector import PgvectorStore
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
-class _StubOpenRouterClient:
-    """Stand-in for `OpenRouterClient` at the client boundary."""
+class _StubEmbedder:
+    """Embedder stand-in returning fixed 3-dimension vectors."""
 
-    def embed(
-        self,
-        texts: object,
-        model: str | None = None,
-        extra_headers: dict[str, str] | None = None,
-        dimensions: int | None = None,
-    ) -> OpenRouterEmbeddingsResponse:
-        texts = list(texts)  # type: ignore[arg-type]
-        return OpenRouterEmbeddingsResponse.model_validate(
-            {
-                "data": [{"embedding": [0.1, 0.2, 0.3]} for _ in texts],
-                "usage": {"prompt_tokens": len(texts) * 3, "total_tokens": len(texts) * 3},
-            }
-        )
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+
+    @property
+    def usage(self) -> dict[str, int] | None:
+        return {"prompt_tokens": 3, "total_tokens": 3}
+
+    def embed_documents(self, chunks):
+        return [[0.1, 0.2, 0.3] for _ in chunks]
+
+    def embed_query(self, _query: str):
+        return [0.1, 0.2, 0.3]
+
+
+class _StubProviderResolver:
+    """ProviderResolver stand-in serving `_StubEmbedder` for any connection."""
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def embedder(self, _connection_id, model_name: str, dimensions=None):
+        del dimensions
+        return _StubEmbedder(model_name)
 
 
 def _create_user(session: Session) -> models.User:
@@ -53,12 +62,11 @@ def _create_user(session: Session) -> models.User:
         email="unit@example.com",
         full_name="Unit Tester",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     session.add(user)
     session.commit()
     session.refresh(user)
+    install_default_pipelines(session, user)
     return user
 
 
@@ -101,9 +109,7 @@ def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
     and persists chunks; the document ends `READY` with a chunk count matching
     what's actually in the DB."""
     session = pg_search_session
-    monkeypatch.setattr(
-        ingestion_module, "get_openrouter_client", lambda *_a, **_k: _StubOpenRouterClient()
-    )
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -161,7 +167,7 @@ def test_failed_ingestion_keeps_file_and_records_descriptive_error(
         def execute(self, _definition: object, _context: object) -> None:
             raise RuntimeError("parse failed")
 
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)
@@ -212,7 +218,7 @@ def test_retry_after_failure_resets_the_same_document_row(
         def execute(self, _definition: object, _context: object) -> None:
             raise RuntimeError("parse failed")
 
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)
@@ -245,7 +251,7 @@ def test_ingest_document_wraps_pinecone_outage_as_external_service_error(
         def execute(self, _definition: object, _context: object) -> None:
             raise PineconeException("Pinecone is unavailable")
 
-    monkeypatch.setattr(ingestion_module, "get_openrouter_client", lambda *_a, **_k: object())
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _FailingExecutor)
 
     user = _create_user(session)
@@ -280,7 +286,9 @@ def test_resolve_ingestion_pipeline_rejects_missing(session: Session) -> None:
         user=user,
         name="Retrieval",
         kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_retrieval_pipeline(),
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
     )
     session.commit()
     collection = _create_collection(session, user, ingestion_pipeline_id=pipeline.id)

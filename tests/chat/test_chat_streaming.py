@@ -6,9 +6,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.chat.providers.base import ChatRequest, ParsedStreamChunk
-from app.chat.providers.openrouter import OpenRouterProvider
 from app.chat.streaming import StreamOutcome, stream_model_completion
+from app.providers.chat.base import ChatRequest, ParsedStreamChunk
+from app.providers.chat.openrouter import OpenRouterProvider
 from app.schemas.openrouter import OpenRouterStreamChunk
 
 
@@ -114,7 +114,6 @@ def test_stream_model_completion_yields_tokens_and_reasoning() -> None:
         messages=[{"role": "system", "content": "be helpful"}],
         tools=[{"type": "function", "function": {"name": "pinecone_query"}}],
         model="openrouter/test-model",
-        extra_body={"usage": {"include": True}},
         parameters={"temperature": 0},
     )
     gen = stream_model_completion(provider=provider, request=request)
@@ -183,7 +182,6 @@ def test_stream_model_completion_orders_tool_calls_by_index() -> None:
         messages=[],
         tools=[],
         model="openrouter/second",
-        extra_body={},
         parameters=None,
     )
     gen = stream_model_completion(provider=provider, request=request)
@@ -226,7 +224,7 @@ def test_stream_model_completion_handles_empty_deltas() -> None:
             )
 
     provider = _StubProvider()
-    request = ChatRequest(messages=[], tools=None, model="model", extra_body=None, parameters=None)
+    request = ChatRequest(messages=[], tools=None, model="model", parameters=None)
 
     events, result = _collect_stream_results(stream_model_completion(provider=provider, request=request))
     message, usage, provider_name = result.message, result.usage, result.provider
@@ -259,7 +257,7 @@ def test_stream_model_completion_skips_empty_reasoning_updates() -> None:
             )
 
     provider = _StubProvider()
-    request = ChatRequest(messages=[], tools=None, model="model", extra_body=None, parameters=None)
+    request = ChatRequest(messages=[], tools=None, model="model", parameters=None)
 
     events, result = _collect_stream_results(stream_model_completion(provider=provider, request=request))
     message, usage, provider_name = result.message, result.usage, result.provider
@@ -317,7 +315,6 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
         messages=[],
         tools=[],
         model="fallback-model",
-        extra_body={},
         parameters=None,
     )
     gen = stream_model_completion(provider=provider, request=request)
@@ -355,7 +352,6 @@ def test_stream_model_completion_skips_tool_calls_without_name() -> None:
         messages=[],
         tools=[],
         model="test-model",
-        extra_body={},
         parameters=None,
     )
     gen = stream_model_completion(provider=provider, request=request)

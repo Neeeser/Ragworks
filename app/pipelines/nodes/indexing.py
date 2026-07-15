@@ -18,7 +18,7 @@ from app.core.config import get_settings
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.nodes.embedding import EmbedderConfig
+from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.nodes.validators import (
     capability_issues,
     lexical_support_issue,
@@ -176,7 +176,7 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         node_map = definition.node_map()
         for edge in incoming_edges:
             source_def = node_map.get(edge.source)
-            if not source_def or source_def.type != "embedder.openrouter":
+            if not source_def or source_def.type != EmbedderNode.type:
                 continue
             embedder_config = EmbedderConfig.model_validate(source_def.config or {})
             issue = _dimension_issue(

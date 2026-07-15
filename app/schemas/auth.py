@@ -47,9 +47,8 @@ class UserRead(UserBase):
     id: UUID
     is_active: bool
     role: UserRole
-    openrouter_configured: bool
-    pinecone_configured: bool
     last_used_chat_model: str | None = None
+    last_used_chat_connection_id: UUID | None = None
     last_used_parameters: dict[str, Any] | None = None
     last_used_provider: dict[str, Any] | None = None
     last_used_stream: bool | None = None
@@ -63,8 +62,6 @@ class UserRead(UserBase):
 class UserSettingsUpdate(BaseModel):
     """Payload for updating user settings."""
 
-    openrouter_api_key: str | None = None
-    pinecone_api_key: str | None = None
     run_settings_order: list[RunSettingsSection] | None = None
     remember_session_days: Literal[30, 90, 180] | None = None
 
@@ -79,28 +76,6 @@ class UserSettingsUpdate(BaseModel):
         if len(set(value)) != len(value):
             raise ValueError("Run settings order must be unique.")
         return value
-
-
-class ProviderKeyStatus(BaseModel):
-    """Validation status for a provider API key."""
-
-    configured: bool
-    valid: bool
-    message: str | None = None
-
-
-class ProviderKeyValidateRequest(BaseModel):
-    """A pasted (not yet saved) provider key to probe."""
-
-    provider: Literal["openrouter", "pinecone"]
-    api_key: str = Field(min_length=1)
-
-
-class UserKeyValidation(BaseModel):
-    """Validation results for user API keys."""
-
-    openrouter: ProviderKeyStatus
-    pinecone: ProviderKeyStatus
 
 
 class Token(BaseModel):

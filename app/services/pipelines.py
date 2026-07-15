@@ -24,6 +24,7 @@ from app.pipelines.defaults import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.diff import DefinitionChange, diff_definitions, material_changes
+from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.upgrades import upgrade_definition
@@ -278,42 +279,79 @@ class PipelineService:
         A stored default whose vector-store backend no longer matches the
         deployment's `indexing.default_backend` is demoted (kept, renamed with
         its backend, still referenced by existing collections) and a fresh
-        default is scaffolded — so new collections always index into the
-        configured backend while old collections keep their data.
+        default is re-scaffolded around the demoted pipeline's own embedder —
+        so new collections always index into the configured backend while old
+        collections keep their data. There are no global default models: a
+        user with no defaults at all (first-run setup never completed) raises
+        `InvalidInputError` pointing at the wizard, which scaffolds with an
+        explicit embedding choice.
         """
         configured = IndexBackend(get_app_config().indexing.default_backend)
+        stored_ingestion = self._pipelines.get_default(user.id, models.PipelineKind.INGESTION)
+        stored_retrieval = self._pipelines.get_default(user.id, models.PipelineKind.RETRIEVAL)
         ingestion = self._demote_if_backend_stale(
-            self._pipelines.get_default(user.id, models.PipelineKind.INGESTION),
-            models.PipelineKind.INGESTION,
-            configured,
+            stored_ingestion, models.PipelineKind.INGESTION, configured
         )
         retrieval = self._demote_if_backend_stale(
-            self._pipelines.get_default(user.id, models.PipelineKind.RETRIEVAL),
-            models.PipelineKind.RETRIEVAL,
-            configured,
+            stored_retrieval, models.PipelineKind.RETRIEVAL, configured
         )
 
         if ingestion is None:
+            embedding = self._embedding_selection_from(stored_ingestion or stored_retrieval)
             ingestion = self.create_pipeline(
                 user=user,
                 name="Default Ingestion Pipeline",
                 description="Baseline ingestion pipeline for uploads.",
                 kind=models.PipelineKind.INGESTION,
-                definition=build_default_ingestion_pipeline(),
+                definition=build_default_ingestion_pipeline(
+                    embedding_connection_id=embedding[0],
+                    embedding_model=embedding[1],
+                ),
                 change_summary="Initial default ingestion pipeline.",
                 is_default=True,
             )
         if retrieval is None:
+            embedding = self._embedding_selection_from(
+                stored_retrieval or stored_ingestion or ingestion
+            )
             retrieval = self.create_pipeline(
                 user=user,
                 name="Default Retrieval Pipeline",
                 description="Baseline retrieval pipeline for queries.",
                 kind=models.PipelineKind.RETRIEVAL,
-                definition=build_default_retrieval_pipeline(),
+                definition=build_default_retrieval_pipeline(
+                    embedding_connection_id=embedding[0],
+                    embedding_model=embedding[1],
+                ),
                 change_summary="Initial default retrieval pipeline.",
                 is_default=True,
             )
         return DefaultPipelines(ingestion=ingestion, retrieval=retrieval)
+
+    def _embedding_selection_from(
+        self, pipeline: models.Pipeline | None
+    ) -> tuple[UUID, str]:
+        """Read `(connection_id, model)` off an existing pipeline's embedder.
+
+        Scaffolding a default needs an embedding choice, and with global
+        default models removed the only legitimate source outside the setup
+        wizard is an existing pipeline (e.g. the default demoted for a
+        backend change).
+        """
+        if pipeline is not None:
+            version = self.get_current_version(pipeline)
+            definition = PipelineDefinition.model_validate(version.definition)
+            for node in definition.nodes:
+                if node.type != EmbedderNode.type:
+                    continue
+                config = EmbedderConfig.model_validate(node.config or {})
+                if config.connection_id and config.model_name:
+                    return config.connection_id, config.model_name
+        raise InvalidInputError(
+            "No default pipelines exist yet. Complete the first-time setup "
+            "wizard (or create a collection with an explicit embedding model) "
+            "before this operation."
+        )
 
     def _demote_if_backend_stale(
         self,

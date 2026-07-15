@@ -11,7 +11,7 @@ import type { Connection, Node } from "@xyflow/react";
 
 const parserNodeType = "parser.document";
 const chunkerNodeType = "chunker.token";
-const embedderNodeType = "embedder.openrouter";
+const embedderNodeType = "embedder.text";
 const indexerNodeType = "indexer.pinecone";
 const retrieverNodeType = "retriever.pinecone";
 const EMBEDDING_DIMENSION_ERROR = "Embedding dimension";

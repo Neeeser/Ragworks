@@ -1,11 +1,6 @@
 import { apiFetch, API_BASE_URL, parseError } from "@/lib/api/client";
 
-import type {
-  ProviderKeyStatus,
-  RunSettingsSectionKey,
-  User,
-  UserKeyValidation,
-} from "@/lib/types";
+import type { RunSettingsSectionKey, User } from "@/lib/types";
 
 interface LoginResponse {
   access_token: string;
@@ -75,8 +70,6 @@ export async function getProfile(token: string): Promise<User> {
 export async function updateUserSettings(
   token: string,
   payload: {
-    openrouter_api_key?: string;
-    pinecone_api_key?: string;
     run_settings_order?: RunSettingsSectionKey[];
     remember_session_days?: 30 | 90 | 180;
   },
@@ -107,20 +100,4 @@ export async function updateRunSettingsOrder(
   order: RunSettingsSectionKey[],
 ): Promise<User> {
   return updateUserSettings(token, { run_settings_order: order });
-}
-
-export async function validateUserKeys(token: string): Promise<UserKeyValidation> {
-  return apiFetch<UserKeyValidation>("/api/auth/me/keys/validate", { token });
-}
-
-export async function validateProviderKey(
-  token: string,
-  provider: "openrouter" | "pinecone",
-  apiKey: string,
-): Promise<ProviderKeyStatus> {
-  return apiFetch<ProviderKeyStatus>("/api/auth/keys/validate", {
-    method: "POST",
-    token,
-    body: JSON.stringify({ provider, api_key: apiKey }),
-  });
 }

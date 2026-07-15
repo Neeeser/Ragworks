@@ -70,7 +70,7 @@ export interface PipelineNodeDefinition {
   type: string;
   name: string;
   config: Record<string, unknown>;
-  position?: PipelineNodePosition;
+  position?: PipelineNodePosition | null;
   ui?: Record<string, unknown>;
 }
 

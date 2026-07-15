@@ -39,9 +39,7 @@ export function DashboardCollections({ collections, pipelineNameById }: Dashboar
 
       {collections.length === 0 ? (
         <div className="mt-6 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-hairline px-6 py-12 text-center">
-          <p className="max-w-sm text-pretty text-body">
-            Create a collection to upload sources, tune a pipeline, and start retrieving.
-          </p>
+          <p className="max-w-sm text-pretty text-body">No collections yet.</p>
           <Link
             href="/collections"
             className="flex items-center gap-2 rounded-full bg-accent-violet px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"

@@ -30,6 +30,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     authToken,
     user,
     activeModelId,
+    activeConnectionId,
     buildParameterPayload,
     providerRuleCount,
     providerPayload,
@@ -62,6 +63,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
   const handleSend = useCallback(async () => {
     if (!authToken || !user) return;
     const targetModelId = activeModelId;
+    const targetConnectionId = activeConnectionId;
     if (!targetModelId) {
       setStatus("Select a chat model before sending a message.");
       return;
@@ -81,6 +83,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
         title: `Chat ${new Date().toLocaleTimeString()}`,
         mode: "chat",
         chat_model: targetModelId,
+        provider_connection_id: targetConnectionId,
         context_tokens: 0,
         tool_collection_ids: selectedToolCollectionIds,
         parameter_overrides: parameters ?? {},
@@ -126,6 +129,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
         mode: "chat",
         title: isNewSession ? `Chat ${new Date().toLocaleTimeString()}` : undefined,
         chat_model: targetModelId,
+        provider_connection_id: targetConnectionId ?? undefined,
         parameters,
         provider,
         stream: streamingEnabled,
@@ -153,6 +157,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     }
   }, [
     activeModelId,
+    activeConnectionId,
     authToken,
     buildParameterPayload,
     draft,

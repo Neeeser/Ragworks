@@ -118,11 +118,7 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Create a collection to upload sources, tune a pipeline, and start retrieving.",
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByText("No collections yet.")).toBeInTheDocument();
     });
     expect(
       screen.getByText("Uploaded sources land here as they finish processing."),

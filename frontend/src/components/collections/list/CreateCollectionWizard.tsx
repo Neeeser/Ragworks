@@ -357,7 +357,7 @@ export function CreateCollectionWizard({
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted">
-                Keep defaults for a fast setup or enable advanced overrides for deeper tuning.
+                The default pipelines apply unless you enable advanced overrides.
               </p>
             )}
           </div>

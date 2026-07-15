@@ -17,7 +17,8 @@ from app.clients.pinecone import get_pinecone_client
 from app.db import models
 from app.db.pg_search_support import pg_search_available
 from app.db.pgvector_support import pgvector_available
-from app.schemas.enums import IndexBackend
+from app.db.repositories import ProviderConnectionRepository
+from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
 from app.vectorstores.base import VectorStoreBackend, VectorStoreCapabilities
 from app.vectorstores.pgvector import PGVECTOR_CAPABILITIES, PgvectorStore
@@ -34,12 +35,24 @@ BACKEND_LABELS: dict[IndexBackend, str] = {
 }
 
 MISSING_PINECONE_KEY_DETAIL = (
-    "Pinecone API key is not configured. Update it in Settings to continue."
+    "No Pinecone connection is configured. Add one in Settings to continue."
 )
 PGVECTOR_UNAVAILABLE_DETAIL = (
     "The pgvector extension is not available on this deployment's Postgres "
     "server, so the pgvector index backend is disabled."
 )
+
+
+def _pinecone_api_key(user: models.User, session: Session) -> str | None:
+    """Return the user's Pinecone credential from their connection, if any."""
+    rows = ProviderConnectionRepository(session).list_for_user_of_type(
+        user.id, ProviderType.PINECONE.value
+    )
+    for row in rows:
+        api_key = str(row.config.get("api_key") or "").strip()
+        if api_key:
+            return api_key
+    return None
 
 
 def get_vector_store(
@@ -53,7 +66,7 @@ def get_vector_store(
         if not pgvector_available():
             raise InvalidInputError(PGVECTOR_UNAVAILABLE_DETAIL)
         return PgvectorStore(session)
-    api_key = (user.pinecone_api_key or "").strip()
+    api_key = _pinecone_api_key(user, session)
     if not api_key:
         raise InvalidInputError(MISSING_PINECONE_KEY_DETAIL)
     return PineconeStore(get_pinecone_client(api_key))
@@ -89,9 +102,9 @@ class BackendStatus:
     capabilities: VectorStoreCapabilities
 
 
-def backend_statuses(user: models.User) -> list[BackendStatus]:
+def backend_statuses(user: models.User, session: Session) -> list[BackendStatus]:
     """Describe every backend's usability for this user (pgvector first)."""
-    pinecone_configured = bool((user.pinecone_api_key or "").strip())
+    pinecone_configured = _pinecone_api_key(user, session) is not None
     return [
         BackendStatus(
             backend=IndexBackend.PGVECTOR,

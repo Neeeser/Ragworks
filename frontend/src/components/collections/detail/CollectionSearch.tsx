@@ -63,7 +63,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
               className="min-h-[96px] pl-11"
               value={search.query}
               onChange={(event) => search.setQuery(event.target.value)}
-              placeholder="Ask this collection anything…"
+              placeholder="Search this collection…"
               aria-label="Search query"
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -173,8 +173,8 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
 
       {!search.result && !search.error && (
         <p className="px-2 text-sm text-muted">
-          Queries run through this collection&apos;s retrieval pipeline — every result links into
-          its trace.
+          Queries run through this collection&apos;s retrieval pipeline; each result links to its
+          trace.
         </p>
       )}
     </div>

@@ -26,7 +26,7 @@ from app.pipelines.tracing import (
     serialize_payload,
 )
 from app.utils.file_storage import FileStorage
-from tests.pipelines.conftest import StubVectorStoreProvider
+from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
 
 
 class InputConfig(BaseModel):
@@ -110,8 +110,6 @@ def _create_user(session: Session) -> models.User:
         email=f"trace-{uuid4().hex[:6]}@example.com",
         full_name="Trace User",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key="pinecone-key",
     )
     session.add(user)
     session.commit()
@@ -191,7 +189,7 @@ def test_pipeline_trace_records_node_io(session: Session, tmp_path) -> None:
         document=None,
         query=None,
         top_k=None,
-        openrouter=object(),
+        providers=StubProviderResolver(),
         vector_stores=StubVectorStoreProvider(),
         storage=FileStorage(base_path=tmp_path),
         settings=get_settings(),

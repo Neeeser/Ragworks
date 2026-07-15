@@ -27,6 +27,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
   const {
     authToken,
     activeModelId,
+    activeConnectionId,
     parameterOverrides,
     providerForm,
     streamingEnabled,
@@ -66,6 +67,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     stopProgressPolling();
     newChatDefaultsRef.current = {
       activeModelId,
+      activeConnectionId,
       parameterOverrides,
       providerForm,
       streamingEnabled,
@@ -86,6 +88,7 @@ export function useChatMutation(params: UseChatMutationParams): UseChatMutationR
     navigateToChat(null, selectedToolCollectionIds);
   }, [
     activeModelId,
+    activeConnectionId,
     applyNewChatDefaultsRef,
     navigateToChat,
     newChatDefaultsRef,

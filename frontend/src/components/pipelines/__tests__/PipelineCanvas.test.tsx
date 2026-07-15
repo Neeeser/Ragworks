@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineCanvas } from "@/components/pipelines/PipelineCanvas";
 
@@ -9,6 +9,12 @@ import type { Node } from "@xyflow/react";
 import type { ReactNode } from "react";
 
 let lastReactFlowProps: Record<string, unknown> | null = null;
+
+vi.mock("@/components/pipelines/flow/PipelineEdgeRoutingProvider", () => ({
+  PipelineEdgeRoutingProvider: ({ children }: { children: ReactNode }) => (
+    <div data-testid="routing-provider">{children}</div>
+  ),
+}));
 
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: { children?: ReactNode } & Record<string, unknown>) => {
@@ -21,6 +27,10 @@ vi.mock("@xyflow/react", () => ({
 }));
 
 describe("PipelineCanvas", () => {
+  beforeEach(() => {
+    lastReactFlowProps = null;
+  });
+
   it("renders pipeline header and notice", () => {
     const onNodeSelect = vi.fn();
     const nodes: Node<PipelineNodeData>[] = [];
@@ -59,6 +69,7 @@ describe("PipelineCanvas", () => {
     expect(screen.getByText("Hello")).toBeInTheDocument();
     expect(screen.getByTestId("background")).toBeInTheDocument();
     expect(screen.getByTestId("controls")).toBeInTheDocument();
+    expect(screen.getByTestId("routing-provider")).toBeInTheDocument();
 
     const onNodeClick = lastReactFlowProps?.onNodeClick as
       | ((event: unknown, node: { id: string }) => void)

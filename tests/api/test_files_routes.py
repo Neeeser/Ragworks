@@ -34,7 +34,6 @@ def _other_user(session: Session) -> models.User:
         email="intruder@example.com",
         full_name="Intruder",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
     )
     UserRepository(session).add(user)
     session.commit()

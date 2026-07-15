@@ -36,7 +36,7 @@ export function PipelineHeader({
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-muted">Pipelines</p>
         <h1 className="text-3xl font-semibold tracking-tight text-primary">
-          {kind === "ingestion" ? "Build ingestion flows." : "Design retrieval flows."}
+          {kind === "ingestion" ? "Ingestion pipelines" : "Retrieval pipelines"}
         </h1>
         <div className="mt-3 flex flex-wrap gap-2">
           {PIPELINE_KINDS.map((value) => (

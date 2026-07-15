@@ -8,8 +8,6 @@ import pytest
 from openai import RateLimitError
 from sqlmodel import Session
 
-from app.chat import service as service_module
-from app.chat import setup as chat_setup_module
 from app.chat.service import ChatService
 from app.chat.setup import ChatSetupBuilder
 from app.db import models
@@ -19,8 +17,6 @@ from app.schemas.models import ModelInfo
 from app.services.errors import ExternalServiceError, InvalidInputError
 from tests.chat.conftest import (
     StubOpenRouter,
-    StubRetrievalService,
-    StubSettings,
     tool_model_info,
 )
 
@@ -90,7 +86,12 @@ def test_rejects_empty_content(session: Session, chat_user, install_chat_flow, s
 
 def test_rejects_unavailable_model(session: Session, chat_user, install_chat_flow, stream) -> None:
     install_chat_flow(openrouter=StubOpenRouter(None, {}), chat_model="test-model")
-    chat_session = models.ChatSession(user_id=chat_user.id, title="S", chat_model="missing-model")
+    chat_session = models.ChatSession(
+        user_id=chat_user.id,
+        title="S",
+        chat_model="missing-model",
+        provider_connection_id=chat_user.last_used_chat_connection_id,
+    )
     session.add(chat_session)
     session.commit()
     session.refresh(chat_session)
@@ -117,31 +118,44 @@ def test_rejects_model_without_tool_support(
 
 
 def test_rejects_when_no_chat_model_configured(
-    session: Session, chat_user, monkeypatch, stub_pipeline_settings, stream
+    session: Session, chat_user, install_chat_flow, stream
 ) -> None:
-    monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
-    monkeypatch.setattr(
-        service_module, "get_openrouter_client", lambda *_a, **_k: StubOpenRouter(tool_model_info(), {})
+    install_chat_flow(openrouter=StubOpenRouter(tool_model_info(), {}), chat_model=None)
+    chat_session = models.ChatSession(
+        user_id=chat_user.id,
+        title="S",
+        chat_model="",
+        provider_connection_id=chat_user.last_used_chat_connection_id,
     )
-    monkeypatch.setattr(service_module, "RetrievalService", StubRetrievalService)
-    # `default_chat_model` now comes from get_app_config().models, not Settings
-    # -- AppConfig's schema rejects an empty string (min_length=1), so the
-    # "no model configured" branch is driven with a stub carrying the same
-    # shape setup.py reads (`.models.default_chat_model`).
-    monkeypatch.setattr(
-        chat_setup_module,
-        "get_app_config",
-        lambda: SimpleNamespace(models=SimpleNamespace(default_chat_model="")),
-    )
-    stub_pipeline_settings(chat_model=None)
-    chat_session = models.ChatSession(user_id=chat_user.id, title="S", chat_model="")
     session.add(chat_session)
     session.commit()
     session.refresh(chat_session)
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", session_id=chat_session.id)
 
-    with pytest.raises(InvalidInputError, match="No chat model is configured"):
+    with pytest.raises(InvalidInputError, match="Pick a chat model"):
+        _drive(service, chat_user, payload, stream=stream)
+
+
+def test_rejects_when_session_has_no_provider_connection(
+    session: Session, chat_user, install_chat_flow, stream
+) -> None:
+    """A session whose provider connection was deleted (SET NULL) gets a clear
+    'pick a provider' error rather than an AttributeError or a silent default."""
+    install_chat_flow(openrouter=StubOpenRouter(tool_model_info(), {}), chat_model="test-model")
+    chat_session = models.ChatSession(
+        user_id=chat_user.id,
+        title="S",
+        chat_model="test-model",
+        provider_connection_id=None,
+    )
+    session.add(chat_session)
+    session.commit()
+    session.refresh(chat_session)
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", session_id=chat_session.id)
+
+    with pytest.raises(InvalidInputError, match="Pick a chat provider"):
         _drive(service, chat_user, payload, stream=stream)
 
 
@@ -172,20 +186,30 @@ def test_resolve_session_model_raises_when_edit_session_missing() -> None:
         builder._resolve_session_model(
             user=SimpleNamespace(id=uuid4()),
             payload=payload,
-            default_chat_model="m",
             primary_collection_id=None,
         )
 
 
 def _keyless_user(session: Session) -> models.User:
-    """A user with an OpenRouter key but no Pinecone key."""
+    """A user with an OpenRouter connection but no Pinecone connection."""
     user = models.User(
         email="keyless@example.com",
         full_name="Keyless",
         hashed_password="hashed",
-        openrouter_api_key="openrouter-key",
-        pinecone_api_key=None,
     )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    connection = models.ProviderConnection(
+        user_id=user.id,
+        provider_type="openrouter",
+        label="OpenRouter",
+        config={"api_key": "openrouter-key"},
+    )
+    session.add(connection)
+    session.commit()
+    user.last_used_chat_connection_id = connection.id
+    user.last_used_chat_model = "test-model"
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -205,7 +229,7 @@ def test_pinecone_backed_tools_require_pinecone_key(
     service = ChatService(session)
     payload = ChatMessageCreate(content="hi", tool_collection_ids=[collection.id])
 
-    with pytest.raises(InvalidInputError, match="Pinecone API key is not configured"):
+    with pytest.raises(InvalidInputError, match="No Pinecone connection is configured"):
         _drive(service, user, payload, stream=stream)
 
 
@@ -236,3 +260,23 @@ def test_pgvector_backed_tools_need_no_pinecone_key(
     result = service.send_message(user=user, payload=payload)
 
     assert result.messages[-1].content == "Answer"
+
+
+def test_payload_with_foreign_or_unknown_connection_is_rejected_before_any_write(
+    session: Session, chat_user, install_chat_flow, stream
+) -> None:
+    """A stale/foreign `provider_connection_id` must 404 via the ownership
+    check BEFORE any session row is written — not crash on the FK mid-flush
+    (regression: the id used to be persisted first)."""
+    from app.services.errors import NotFoundError
+
+    install_chat_flow(openrouter=StubOpenRouter(tool_model_info(), {}), chat_model="test-model")
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hi", provider_connection_id=uuid4())
+
+    with pytest.raises(NotFoundError):
+        _drive(service, chat_user, payload, stream=stream)
+
+    from app.db.repositories import ChatRepository
+
+    assert ChatRepository(session).list_sessions(user_id=chat_user.id) == []

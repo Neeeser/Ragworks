@@ -40,4 +40,17 @@ describe("ReadmePipelineCapture", () => {
       expect.objectContaining({ autoPlay: true, loop: false }),
     );
   });
+
+  it("lays out the fixture graph instead of stacking unpositioned nodes", () => {
+    render(<ReadmePipelineCapture kind="ingestion" />);
+
+    // The generated fixture carries no positions; without the shared
+    // auto-layout every node lands at (0,0) and the capture films a single
+    // stacked card instead of the pipeline.
+    const { nodes } = flowPlayerSpy.mock.calls.at(-1)?.[0] as {
+      nodes: { id: string; position: { x: number; y: number } }[];
+    };
+    const positions = new Set(nodes.map((node) => `${node.position.x}:${node.position.y}`));
+    expect(positions.size).toBe(nodes.length);
+  });
 });
