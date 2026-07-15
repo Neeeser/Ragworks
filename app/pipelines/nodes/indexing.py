@@ -28,7 +28,7 @@ from app.pipelines.payloads import ChunkPayload, EmbeddingPayload, IndexingPaylo
 from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import summarize_embeddings
+from app.pipelines.tracing.summaries import summarize_embeddings, trace_chunk_items
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.vectorstores.base import IndexSpec
@@ -234,7 +234,8 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
                     label="Embeddings",
                     value=summarize_embeddings(input_payload.chunks),
                     kind="embedding",
-                )
+                ),
+                NodeTraceValue(label="Embedded items", value=trace_chunk_items(input_payload.chunks), kind="items"),
             ],
             outputs=[
                 NodeTraceValue(
@@ -243,7 +244,8 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
                         "count": len(output_payload.chunks),
                         "backend": self.resolve_backend(self.config).value,
                     },
-                )
+                ),
+                NodeTraceValue(label="Indexed items", value=trace_chunk_items(output_payload.chunks), kind="items"),
             ],
         )
 
@@ -344,7 +346,10 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
                 NodeTraceValue(
                     label="Chunks",
                     value={"count": len(input_payload.chunks)},
-                )
+                ),
+                NodeTraceValue(
+                    label="Chunk items", value=trace_chunk_items(input_payload.chunks), kind="items"
+                ),
             ],
             outputs=[
                 NodeTraceValue(
@@ -354,7 +359,10 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
                         "backend": self.config.backend.value,
                         "index_type": "bm25",
                     },
-                )
+                ),
+                NodeTraceValue(
+                    label="Indexed items", value=trace_chunk_items(output_payload.chunks), kind="items"
+                ),
             ],
         )
 

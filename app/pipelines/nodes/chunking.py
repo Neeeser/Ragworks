@@ -13,7 +13,7 @@ from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload, TokenizerSpec
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import summarize_chunks, summarize_text
+from app.pipelines.tracing.summaries import summarize_chunks, summarize_text, trace_chunk_items
 from app.retrieval.chunkers import build_chunker
 from app.retrieval.tokenizers.huggingface import validate_hf_model_id
 from app.retrieval.tokenizers.resources import build_token_counter
@@ -152,7 +152,10 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
                 NodeTraceValue(
                     label="Chunks",
                     value=summarize_chunks(output_payload.chunks),
-                )
+                ),
+                NodeTraceValue(
+                    label="Chunk items", value=trace_chunk_items(output_payload.chunks), kind="items"
+                ),
             ],
         )
 

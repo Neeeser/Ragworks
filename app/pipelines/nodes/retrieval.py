@@ -26,7 +26,12 @@ from app.pipelines.payloads import (
 from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import summarize_match_order, summarize_matches, summarize_text
+from app.pipelines.tracing.summaries import (
+    summarize_match_order,
+    summarize_matches,
+    summarize_text,
+    trace_match_items,
+)
 from app.retrieval.models import RetrievalResponse
 from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 from app.schemas.enums import IndexBackend
@@ -148,23 +153,19 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         """Summarize retrieval inputs and outputs."""
         input_payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
         output_payload = RetrievalPayload.model_validate(outputs.get("results"))
+        item_trace = trace_match_items(output_payload.response.matches)
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query",
-                    value=summarize_text(input_payload.request.text, 200),
-                    kind="text",
+                    label="Query", value=summarize_text(input_payload.request.text, 200), kind="text"
                 ),
-                NodeTraceValue(
-                    label="Top K",
-                    value=input_payload.request.top_k,
-                ),
+                NodeTraceValue(label="Top K", value=input_payload.request.top_k),
             ],
             outputs=[
                 NodeTraceValue(
-                    label="Matches",
-                    value=summarize_matches(output_payload.response.matches),
-                )
+                    label="Matches", value=summarize_matches(output_payload.response.matches)
+                ),
+                NodeTraceValue(label="Match items", value=item_trace, kind="items"),
             ],
         )
 
@@ -313,23 +314,19 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         """Summarize BM25 retrieval inputs and outputs."""
         input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
         output_payload = RetrievalPayload.model_validate(outputs.get("results"))
+        item_trace = trace_match_items(output_payload.response.matches)
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query",
-                    value=summarize_text(input_payload.request.text, 200),
-                    kind="text",
+                    label="Query", value=summarize_text(input_payload.request.text, 200), kind="text"
                 ),
-                NodeTraceValue(
-                    label="Top K",
-                    value=input_payload.request.top_k,
-                ),
+                NodeTraceValue(label="Top K", value=input_payload.request.top_k),
             ],
             outputs=[
                 NodeTraceValue(
-                    label="Matches",
-                    value=summarize_matches(output_payload.response.matches),
-                )
+                    label="Matches", value=summarize_matches(output_payload.response.matches)
+                ),
+                NodeTraceValue(label="Match items", value=item_trace, kind="items"),
             ],
         )
 
@@ -382,18 +379,20 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
             "enabled": self.config.enabled,
             "model": self.config.model_name,
         }
+        original_items = trace_match_items(input_payload.response.matches)
+        reranked_items = trace_match_items(output_payload.response.matches)
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Original order",
-                    value=summarize_match_order(input_payload.response.matches),
-                )
+                    label="Original order", value=summarize_match_order(input_payload.response.matches)
+                ),
+                NodeTraceValue(label="Original items", value=original_items, kind="items"),
             ],
             outputs=[
                 NodeTraceValue(label="Reranker", value=reranker_info),
                 NodeTraceValue(
-                    label="Reranked order",
-                    value=summarize_match_order(output_payload.response.matches),
+                    label="Reranked order", value=summarize_match_order(output_payload.response.matches)
                 ),
+                NodeTraceValue(label="Reranked items", value=reranked_items, kind="items"),
             ],
         )

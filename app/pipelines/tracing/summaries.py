@@ -25,11 +25,47 @@ implementation detail.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel, model_serializer
 
 from app.retrieval.models import DocumentChunk, ScoredChunk
 from app.retrieval.parsers.base import DocumentSource
+
+
+class ItemRef(BaseModel):
+    """One result in an ordered trace list, identified without payload text."""
+
+    id: str
+    score: float | None = None
+
+
+class ItemListTrace(BaseModel):
+    """Complete ordered identities for one item-capable node port.
+
+    This is the traceability extension boundary. Item-producing nodes attach
+    this model alongside their human-readable previews; consumers derive node
+    effects from the complete lists, so this data must never be truncated.
+    """
+
+    kind: Literal["chunks", "matches"]
+    items: list[ItemRef]
+
+
+def trace_chunk_items(chunks: Sequence[DocumentChunk]) -> ItemListTrace:
+    """Preserve every chunk id in its node-local order."""
+    return ItemListTrace(
+        kind="chunks",
+        items=[ItemRef(id=chunk.chunk_id) for chunk in chunks],
+    )
+
+
+def trace_match_items(matches: Sequence[ScoredChunk]) -> ItemListTrace:
+    """Preserve every match id and score in its node-local order."""
+    return ItemListTrace(
+        kind="matches",
+        items=[ItemRef(id=match.chunk.chunk_id, score=match.score) for match in matches],
+    )
 
 
 class TokenUsage(BaseModel):

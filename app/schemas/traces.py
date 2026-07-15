@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,7 +41,7 @@ class PipelineNodeSummaryValueRead(BaseModel):
 
     label: str
     value: Any
-    kind: str = "json"
+    kind: Literal["json", "text", "embedding", "items"] = "json"
 
 
 class PipelineNodeSummaryRead(BaseModel):

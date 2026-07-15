@@ -19,7 +19,7 @@ from app.pipelines.node import PipelineNodeBase
 from app.pipelines.payloads import RetrievalPayload
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import combine_usage, summarize_match_order
+from app.pipelines.tracing.summaries import combine_usage, summarize_match_order, trace_match_items
 from app.retrieval.models import RetrievalResponse, ScoredChunk
 
 
@@ -76,12 +76,25 @@ class BaseFusionNode(PipelineNodeBase[FusionConfig]):
                     value=summarize_match_order(payload.response.matches),
                 )
                 for index, payload in enumerate(payloads, start=1)
+            ]
+            + [
+                NodeTraceValue(
+                    label=f"Branch {index} items",
+                    value=trace_match_items(payload.response.matches),
+                    kind="items",
+                )
+                for index, payload in enumerate(payloads, start=1)
             ],
             outputs=[
                 NodeTraceValue(
                     label="Fused order",
                     value=summarize_match_order(output_payload.response.matches),
-                )
+                ),
+                NodeTraceValue(
+                    label="Fused items",
+                    value=trace_match_items(output_payload.response.matches),
+                    kind="items",
+                ),
             ],
         )
 
