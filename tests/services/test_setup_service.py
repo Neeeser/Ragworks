@@ -123,8 +123,7 @@ def test_bootstrap_creates_default_pipelines_and_first_collection(
     result = SetupService(session).bootstrap(user, _bootstrap_request(connection))
     collection = result.collection
 
-    assert result.warnings
-    assert result.warnings[0].severity == "warning"
+    assert result.warnings == []
 
     with Session(session.get_bind()) as fresh:
         pipelines = fresh.exec(select(models.Pipeline)).all()
@@ -171,7 +170,7 @@ def test_bootstrap_writes_wizard_choices_into_pipelines(
         for node in definition["nodes"]
         if node["id"] == "chunk-document"
     ]
-    assert chunkers[0]["config"]["chunk_size"] == 512
+    assert chunkers[0]["config"] == {"chunk_size": 356, "chunk_overlap": 140}
 
 
 def test_bootstrap_rejects_missing_index(session: Session) -> None:

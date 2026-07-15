@@ -22,6 +22,7 @@ from app.chat import model_settings as model_settings_module
 from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.db import models
+from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
@@ -187,6 +188,7 @@ def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: mod
             chunk_strategy=models.ChunkStrategy.TOKEN,
             chunk_size=128,
             chunk_overlap=8,
+            tokenizer=TokenizerSpec(kind="wordpiece"),
             embedding_model="embed",
             backend=backend,
             index_name="idx",

@@ -143,6 +143,7 @@ def test_builders_stamp_the_explicit_embedding_choice(session: Session) -> None:
 
     embedder = next(node for node in ingestion.nodes if node.id == "embed-chunks")
     chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
+    tokenizer = next(node for node in ingestion.nodes if node.id == "tokenize-document")
     indexer = next(node for node in ingestion.nodes if node.id == "index-chunks")
     query_embedder = next(node for node in retrieval.nodes if node.id == "embed-query")
     retriever = next(node for node in retrieval.nodes if node.id == "vector-retriever")
@@ -150,10 +151,29 @@ def test_builders_stamp_the_explicit_embedding_choice(session: Session) -> None:
     assert embedder.config["model_name"] == "wizard/model"
     assert embedder.config["connection_id"] == str(EMBED_CONNECTION_ID)
     assert chunker.config == {"chunk_size": 512, "chunk_overlap": 64}
+    assert tokenizer.type == "tokenizer.wordpiece"
+    assert any(
+        edge.source == tokenizer.id
+        and edge.target == chunker.id
+        and edge.source_port == "tokenizer"
+        and edge.target_port == "tokenizer"
+        for edge in ingestion.edges
+    )
     assert indexer.config["index_name"] == "first-index"
     assert query_embedder.config["model_name"] == "wizard/model"
     assert query_embedder.config["connection_id"] == str(EMBED_CONNECTION_ID)
     assert retriever.config["index_name"] == "first-index"
+
+
+def test_ingestion_builder_scales_chunk_window_to_embedding_limit() -> None:
+    ingestion = _build_ingestion(
+        chunk_size=512,
+        chunk_overlap=200,
+        embedding_input_limit=496,
+    )
+
+    chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
+    assert chunker.config == {"chunk_size": 356, "chunk_overlap": 140}
 
 
 def test_default_scaffold_omits_bm25_when_pgvector_extension_unavailable(

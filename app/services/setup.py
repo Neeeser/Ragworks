@@ -26,6 +26,7 @@ from app.pipelines.defaults import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.node import PipelineValidationIssue
+from app.providers.base import effective_embedding_input_limit
 from app.providers.registry import build_adapter, get_provider, resolve_connection
 from app.schemas.enums import IndexBackend, ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
@@ -93,9 +94,15 @@ class SetupService:
     def bootstrap(self, user: models.User, payload: SetupBootstrapRequest) -> SetupBootstrapResult:
         """Install default pipelines and the first collection in one commit."""
         connection = resolve_connection(self.session, user, payload.embedding_connection_id)
-        get_provider(connection, ProviderKind.EMBEDDING)
+        embedding_provider = get_provider(connection, ProviderKind.EMBEDDING)
+        published_limit = embedding_provider.embedding_input_limit(payload.embedding_model)
+        effective_limit = (
+            effective_embedding_input_limit(published_limit)
+            if published_limit is not None
+            else None
+        )
         self._validate_index(user, payload)
-        defaults, warnings = self._install_default_pipelines(user, payload)
+        defaults, warnings = self._install_default_pipelines(user, payload, effective_limit)
         collection = models.Collection(
             id=uuid4(),
             user_id=user.id,
@@ -153,7 +160,10 @@ class SetupService:
             )
 
     def _install_default_pipelines(
-        self, user: models.User, payload: SetupBootstrapRequest
+        self,
+        user: models.User,
+        payload: SetupBootstrapRequest,
+        embedding_input_limit: int | None = None,
     ) -> tuple[
         dict[models.PipelineKind, models.Pipeline],
         list[PipelineValidationIssue],
@@ -167,6 +177,7 @@ class SetupService:
                 index_name=payload.index_name,
                 chunk_size=payload.chunk_size,
                 chunk_overlap=payload.chunk_overlap,
+                embedding_input_limit=embedding_input_limit,
             ),
             models.PipelineKind.RETRIEVAL: build_default_retrieval_pipeline(
                 embedding_connection_id=payload.embedding_connection_id,

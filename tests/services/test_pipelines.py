@@ -130,10 +130,10 @@ def test_update_pipeline_creates_new_version(session: Session) -> None:
     assert len(versions) == 2
 
 
-def test_create_pipeline_persists_embedding_limit_warning(
+def test_create_pipeline_rejects_embedding_limit_overflow(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Approximate word counts warn without blocking persistence."""
+    """Real tokenizer counts reject a chunk window above the model limit."""
     user = _create_user(session)
     model_id = "sentence-transformers/all-minilm-l6-v2"
     definition = build_default_ingestion_pipeline(
@@ -155,27 +155,27 @@ def test_create_pipeline_persists_embedding_limit_warning(
         return result
 
     monkeypatch.setattr(service, "validate_definition", capture_validation)
-    pipeline = service.create_pipeline(
-        user=user,
-        name="Warning ingestion",
-        kind=models.PipelineKind.INGESTION,
-        definition=definition,
-    )
+    with pytest.raises(InvalidInputError):
+        service.create_pipeline(
+            user=user,
+            name="Overflowing ingestion",
+            kind=models.PipelineKind.INGESTION,
+            definition=definition,
+        )
 
-    assert validation_results[0].valid
-    assert validation_results[0].issues[0].severity == "warning"
+    assert validation_results[0].valid is False
+    assert validation_results[0].issues[0].severity == "error"
     assert validation_results[0].issues[0].field == "chunk_size"
-    assert pipeline.name == "Warning ingestion"
 
 
-def test_update_pipeline_persists_embedding_limit_warning_as_new_version(
+def test_update_pipeline_rejects_embedding_limit_overflow(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     user = _create_user(session)
     service = PipelineService(session)
     defaults = service.ensure_default_pipelines(user)
     session.commit()
-    warning_definition = build_default_ingestion_pipeline(
+    overflowing_definition = build_default_ingestion_pipeline(
         embedding_connection_id=EMBED_CONNECTION_ID,
         embedding_model="test/embedding-model",
         chunk_size=1024,
@@ -194,21 +194,22 @@ def test_update_pipeline_persists_embedding_limit_warning_as_new_version(
         return result
 
     monkeypatch.setattr(validating_service, "validate_definition", capture_validation)
-    validating_service.update_pipeline(
-        pipeline=defaults.ingestion,
-        definition=warning_definition,
-        actor_id=user.id,
-    )
+    with pytest.raises(InvalidInputError):
+        validating_service.update_pipeline(
+            pipeline=defaults.ingestion,
+            definition=overflowing_definition,
+            actor_id=user.id,
+        )
 
-    assert validation_results[0].valid
-    assert validation_results[0].issues[0].severity == "warning"
-    assert defaults.ingestion.current_version == 2
+    assert validation_results[0].valid is False
+    assert validation_results[0].issues[0].severity == "error"
+    assert defaults.ingestion.current_version == 1
     versions = session.exec(
         select(models.PipelineVersion).where(
             models.PipelineVersion.pipeline_id == defaults.ingestion.id
         )
     ).all()
-    assert len(versions) == 2
+    assert len(versions) == 1
 
 
 def test_create_pipeline_remains_available_when_model_catalog_is_unreachable(

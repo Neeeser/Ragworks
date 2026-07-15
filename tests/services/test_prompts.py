@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.db import models
+from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.schemas.enums import IndexBackend
 from app.services.prompts import (
@@ -55,6 +56,7 @@ def _ingestion_settings(**overrides: Any) -> IngestionPipelineSettings:
         "chunk_strategy": models.ChunkStrategy.TOKEN,
         "chunk_size": 1024,
         "chunk_overlap": 200,
+        "tokenizer": TokenizerSpec(kind="wordpiece"),
         "embedding_model": "text-embed",
         "backend": IndexBackend.PINECONE,
         "index_name": "pinecone-index",

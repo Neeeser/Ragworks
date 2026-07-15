@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 
+from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import (
     CollectionRepository,
@@ -23,12 +24,14 @@ from app.pipelines.defaults import (
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.diff import DefinitionChange, diff_definitions, material_changes
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+from app.pipelines.nodes.tokenizers import HuggingFaceTokenizerNode
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
+from app.services.huggingface_tokenizers import HuggingFaceTokenizerService
 from app.services.pipeline_upgrades import (
     upgrade_stored_pipeline_definitions as upgrade_stored_pipeline_definitions,
 )
@@ -83,6 +86,7 @@ class PipelineService:
         """Reject invalid definitions with field-addressable issue metadata."""
         result = self.validate_definition(user, definition)
         if result.valid:
+            self._ensure_huggingface_tokenizers(user, definition)
             return
         raise InvalidInputError(
             {
@@ -94,6 +98,20 @@ class PipelineService:
                 ],
             }
         )
+
+    def _ensure_huggingface_tokenizers(
+        self,
+        user: models.User,
+        definition: PipelineDefinition,
+    ) -> None:
+        """Resolve HF tokenizer caches before a definition is persisted."""
+        service = HuggingFaceTokenizerService(self.session, get_settings().storage_path)
+        for node in definition.nodes:
+            if node.type != HuggingFaceTokenizerNode.type:
+                continue
+            config = HuggingFaceTokenizerNode.config_model.model_validate(node.config)
+            if config.hf_model_id:
+                service.ensure_available(user, config.hf_model_id)
 
     def list_pipelines(
         self,
