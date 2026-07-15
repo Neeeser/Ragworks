@@ -98,6 +98,13 @@ colocate a single file with its consumer.
   calls `handle.trace.mark_run_failed(exc)` — never hand-rolls the same
   status/error/completed_at update (that duplication is what `PipelineRunner`
   replaced).
+- **Trace summaries preserve complete result identity.** Every item-producing node
+  attaches a full ordered `ItemListTrace` for each relevant input/output port,
+  including stable ids and scores, alongside its unchanged human-readable preview.
+  Never truncate these identity lists or store derived effects: consumers need the
+  complete lists to explain filtering, branches, merges, and reordering. Provider-
+  only subchunks fold back into their original pipeline item before tracing or
+  indexing; re-keying split parts can make one result impersonate another chunk.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants

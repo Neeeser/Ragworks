@@ -48,6 +48,16 @@ adding one renderer entry + guard — never by branching inside the IO blocks. E
 view caps its own height and scrolls internally so a large value can't reflow the
 viewer.
 
+**Focused trace results stay renderer-driven.** Item-capable value renderers accept
+the optional `focusedItemId`/`onFocusItem` contract, preserve and pin the focused
+row with its node-local rank and score, and explain effects in that value's
+vocabulary. Journeys derive effects client-side from complete item lists; never
+store effects or add tracer-wide node-type conditionals, because new node types
+participate through their summary values and registry renderer. Keep identity-only
+values hidden until focus mode so the ordinary run inspector remains unchanged,
+and model every index target in combined graphs so hybrid branch paths do not end
+at the first store.
+
 **File previews are a matcher list, not an if-ladder.** The Files page resolves a
 preview renderer per file through `components/files/lib/preview.ts`: an ordered list
 of `{kind, types, typePrefix, extensions}` matchers (content type first, extension
