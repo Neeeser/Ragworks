@@ -188,11 +188,13 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
     ).one()
     definition = deepcopy(version.definition)
     for node in definition["nodes"]:
-        if str(node["type"]).startswith("tokenizer."):
-            node["type"] = "tokenizer.whitespace"
-            node["config"] = {}
         if str(node["type"]).startswith("chunker."):
-            node["config"] = {**node.get("config", {}), "chunk_size": 100, "chunk_overlap": 0}
+            node["config"] = {
+                **node.get("config", {}),
+                "chunk_size": 100,
+                "chunk_overlap": 0,
+                "tokenizer": "whitespace",
+            }
     version.definition = definition
     session.add(version)
     session.commit()
@@ -331,11 +333,13 @@ def test_background_ingestion_persists_pipeline_warnings_in_its_own_session(
     ).one()
     definition = deepcopy(version.definition)
     for node in definition["nodes"]:
-        if str(node["type"]).startswith("tokenizer."):
-            node["type"] = "tokenizer.whitespace"
-            node["config"] = {}
         if str(node["type"]).startswith("chunker."):
-            node["config"] = {**node.get("config", {}), "chunk_size": 100, "chunk_overlap": 0}
+            node["config"] = {
+                **node.get("config", {}),
+                "chunk_size": 100,
+                "chunk_overlap": 0,
+                "tokenizer": "whitespace",
+            }
     version.definition = definition
     session.add(version)
     session.commit()

@@ -3,11 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from app.db import models
-from app.pipelines.definition import (
-    PipelineDefinition,
-    PipelineEdgeDefinition,
-    PipelineNodeDefinition,
-)
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_ingestion_settings
@@ -91,29 +87,17 @@ def test_resolve_ingestion_settings_uses_fixed_strategy_chunker_config() -> None
     assert settings.chunk_overlap == 111
 
 
-def test_resolve_ingestion_settings_follows_tokenizer_wired_to_chunker() -> None:
+def test_resolve_ingestion_settings_uses_chunker_tokenizer_config() -> None:
     definition = PipelineDefinition(
         nodes=[
-            PipelineNodeDefinition(
-                id="tokenizer-1",
-                type="tokenizer.whitespace",
-                name="Whitespace tokenizer",
-            ),
             PipelineNodeDefinition(
                 id="chunker-1",
                 type="chunker.token",
                 name="Token Chunker",
+                config={"tokenizer": "whitespace"},
             ),
         ],
-        edges=[
-            PipelineEdgeDefinition(
-                id="edge-tokenizer-chunker",
-                source="tokenizer-1",
-                target="chunker-1",
-                source_port="tokenizer",
-                target_port="tokenizer",
-            )
-        ],
+        edges=[],
     )
 
     settings = resolve_ingestion_settings(definition, _collection(), default_registry())

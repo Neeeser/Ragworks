@@ -116,7 +116,6 @@ class NodeSpecRead(BaseModel):
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False
-    requires_model_id: bool = False
 
 
 class PipelineNodesResponse(BaseModel):

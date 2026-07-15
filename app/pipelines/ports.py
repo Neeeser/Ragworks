@@ -23,7 +23,6 @@ class PortType(StrEnum):
     QUERY_REQUEST = "query_request"
     QUERY_EMBEDDING = "query_embedding"
     RETRIEVAL_RESULTS = "retrieval_results"
-    TOKENIZER = "tokenizer"
 
 
 class NodePort(BaseModel):

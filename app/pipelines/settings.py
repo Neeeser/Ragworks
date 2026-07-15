@@ -21,7 +21,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.db import models
-from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.definition import PipelineDefinition
 from app.pipelines.nodes.chunking import (
     BaseChunkerNode,
     ChunkerConfig,
@@ -44,7 +44,6 @@ from app.pipelines.nodes.retrieval import (
     RetrieverConfig,
     VectorRetrieverNode,
 )
-from app.pipelines.nodes.tokenizers import BaseTokenizerNode
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template
@@ -149,51 +148,30 @@ def _resolve_node_config(
 def _resolve_chunker_config(
     definition: PipelineDefinition,
     registry: NodeRegistry,
-) -> tuple[ChunkerConfig, PipelineNodeDefinition | None]:
-    """Resolve config and identity from the definition's registered chunker."""
+) -> ChunkerConfig:
+    """Resolve config from the definition's registered chunker."""
     for candidate in definition.nodes:
         node_cls = registry.get_node_class(candidate.type)
         if node_cls is None or not issubclass(node_cls, BaseChunkerNode):
             continue
         if node_cls is ChunkerNode:
-            return ChunkerConfig.model_validate(candidate.config), candidate
+            return ChunkerConfig.model_validate(candidate.config)
         config = FixedChunkerConfig.model_validate(candidate.config)
-        return (
-            ChunkerConfig(
-                strategy=node_cls.strategy,
-                chunk_size=config.chunk_size,
-                chunk_overlap=config.chunk_overlap,
-            ),
-            candidate,
+        return ChunkerConfig(
+            strategy=node_cls.strategy,
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            tokenizer=config.tokenizer,
+            hf_model_id=config.hf_model_id,
         )
-    return ChunkerConfig(), None
+    return ChunkerConfig()
 
 
 def _resolve_tokenizer_spec(
-    definition: PipelineDefinition,
-    registry: NodeRegistry,
-    chunker: PipelineNodeDefinition | None,
+    config: ChunkerConfig,
 ) -> TokenizerSpec:
-    """Resolve the tokenizer wired to a chunker, with WordPiece as fallback."""
-    if chunker is None:
-        return TokenizerSpec(kind="wordpiece")
-    tokenizer_port = next(
-        port.key for port in BaseChunkerNode.input_ports if port.data_type == "tokenizer"
-    )
-    tokenizer_output = next(
-        port.key for port in BaseTokenizerNode.output_ports if port.data_type == "tokenizer"
-    )
-    node_map = definition.node_map()
-    for edge in definition.incoming_edges().get(chunker.id, []):
-        if edge.target_port != tokenizer_port or edge.source_port != tokenizer_output:
-            continue
-        source = node_map.get(edge.source)
-        if source is None:
-            continue
-        node = registry.create(source)
-        if isinstance(node, BaseTokenizerNode):
-            return node.tokenizer_spec()
-    return TokenizerSpec(kind="wordpiece")
+    """Build the ingestion tokenizer spec from the resolved chunker config."""
+    return TokenizerSpec(kind=config.tokenizer, hf_model_id=config.hf_model_id)
 
 
 def _resolve_backend_node_config(
@@ -298,7 +276,7 @@ def resolve_ingestion_settings(
     registry: NodeRegistry,
 ) -> IngestionPipelineSettings:
     """Resolve ingestion settings from a pipeline definition."""
-    chunker, chunker_node = _resolve_chunker_config(definition, registry)
+    chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
     backend, indexer_model, dense_found = _resolve_backend_node_config(
         definition, registry, BaseIndexerNode
@@ -313,7 +291,7 @@ def resolve_ingestion_settings(
         chunk_strategy=chunker.strategy,
         chunk_size=chunker.chunk_size,
         chunk_overlap=chunker.chunk_overlap,
-        tokenizer=_resolve_tokenizer_spec(definition, registry, chunker_node),
+        tokenizer=_resolve_tokenizer_spec(chunker),
         embedding_model=embedder.model_name,
         embedding_connection_id=embedder.connection_id,
         backend=backend,

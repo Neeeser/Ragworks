@@ -77,10 +77,10 @@ def test_pipeline_validation_route_returns_an_unsafe_model_id_issue() -> None:
         PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(
-                    id="tokenizer",
-                    type="tokenizer.huggingface",
-                    name="HuggingFace tokenizer",
-                    config={"hf_model_id": "../../unsafe"},
+                    id="chunker",
+                    type="chunker.token",
+                    name="Token Chunker",
+                    config={"tokenizer": "huggingface", "hf_model_id": "../../unsafe"},
                 )
             ]
         ),

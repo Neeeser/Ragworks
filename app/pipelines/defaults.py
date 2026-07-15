@@ -24,7 +24,6 @@ from app.pipelines.nodes.indexing import (
     default_index_name,
 )
 from app.pipelines.nodes.retrieval import Bm25RetrieverNode, VectorRetrieverNode
-from app.pipelines.nodes.tokenizers import WordPieceTokenizerNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
@@ -115,11 +114,6 @@ def build_default_ingestion_pipeline(
             name="Document Parser",
         ),
         PipelineNodeDefinition(
-            id="tokenize-document",
-            type=WordPieceTokenizerNode.type,
-            name="BERT WordPiece",
-        ),
-        PipelineNodeDefinition(
             id="chunk-document",
             type="chunker.token",
             name="Token Chunker",
@@ -169,13 +163,6 @@ config={
             target="chunk-document",
             source_port="document",
             target_port="document",
-        ),
-        PipelineEdgeDefinition(
-            id="edge-tokenizer-chunker",
-            source="tokenize-document",
-            target="chunk-document",
-            source_port="tokenizer",
-            target_port="tokenizer",
         ),
         PipelineEdgeDefinition(
             id="edge-chunker-embedder",

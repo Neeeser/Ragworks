@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.db.models import ChunkStrategy
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.node import PipelineNodeBase
+from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload, TokenizerSpec
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_chunks, summarize_text
 from app.retrieval.chunkers import build_chunker
+from app.retrieval.tokenizers.huggingface import validate_hf_model_id
 from app.retrieval.tokenizers.resources import build_token_counter
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+    from app.pipelines.registry import NodeRegistry
 
 
 class FixedChunkerConfig(BaseModel):
@@ -25,6 +30,19 @@ class FixedChunkerConfig(BaseModel):
 
     chunk_size: int = Field(default=512, gt=0)
     chunk_overlap: int = Field(default=200, ge=0)
+    tokenizer: Literal["wordpiece", "cl100k", "whitespace", "huggingface"] = "wordpiece"
+    hf_model_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_tokenizer_config(self) -> FixedChunkerConfig:
+        """Require a safe model id only for HuggingFace tokenizers."""
+        if self.tokenizer == "huggingface":
+            if self.hf_model_id is None:
+                raise ValueError("A HuggingFace tokenizer requires a model id.")
+            self.hf_model_id = validate_hf_model_id(self.hf_model_id)
+        elif self.hf_model_id is not None:
+            raise ValueError("Only a HuggingFace tokenizer accepts a model id.")
+        return self
 
 
 FixedConfigT = TypeVar("FixedConfigT", bound=FixedChunkerConfig)
@@ -41,37 +59,57 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
     the only method either needs to override.
     """
 
-    input_ports = (
-        NodePort(key="document", label="Document", data_type="document"),
-        NodePort(
-            key="tokenizer",
-            label="Tokenizer",
-            data_type="tokenizer",
-            required=False,
-        ),
-    )
+    input_ports = (NodePort(key="document", label="Document", data_type="document"),)
     output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
     config_model = FixedChunkerConfig
     strategy: ChunkStrategy = ChunkStrategy.TOKEN
+
+    @classmethod
+    def validation_issues_for_node(
+        cls,
+        node: PipelineNodeDefinition,
+        _definition: PipelineDefinition,
+        _registry: NodeRegistry,
+    ) -> list[PipelineValidationIssue]:
+        """Return field-addressable issues for invalid chunker config."""
+        try:
+            cls.config_model.model_validate(node.config or {})
+        except ValidationError as exc:
+            issues: list[PipelineValidationIssue] = []
+            for error in exc.errors():
+                location = error["loc"]
+                field = str(location[0]) if location else "hf_model_id"
+                if field in {"tokenizer", "hf_model_id"}:
+                    message = f"Node '{node.id}' has an invalid tokenizer configuration."
+                else:
+                    message = (
+                        f"Node '{node.id}' has an invalid value for '{field}': "
+                        f"{error['msg']}."
+                    )
+                issues.append(
+                    PipelineValidationIssue(
+                        message=message,
+                        node_id=node.id,
+                        field=field,
+                    )
+                )
+            return issues
+        return []
 
     def _resolve_strategy(self) -> ChunkStrategy:
         """Return the chunking strategy to use for this node instance."""
         return self.strategy
 
-    @staticmethod
-    def resolve_tokenizer(inputs: dict[str, object]) -> TokenizerSpec:
-        """Read the optional resource input, defaulting to bundled WordPiece."""
-        value = inputs.get("tokenizer")
-        return TokenizerSpec.model_validate(value) if value is not None else TokenizerSpec(
-            kind="wordpiece"
-        )
+    def tokenizer_spec(self) -> TokenizerSpec:
+        """Build the immutable tokenizer selection from this node's config."""
+        return TokenizerSpec(kind=self.config.tokenizer, hf_model_id=self.config.hf_model_id)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Chunk a parsed document into segments."""
         payload = ParsedDocumentPayload.model_validate(inputs.get("document"))
         document = payload.document
 
-        tokenizer = self.resolve_tokenizer(inputs)
+        tokenizer = self.tokenizer_spec()
         counter = build_token_counter(tokenizer, context.storage.base_path)
         chunker = build_chunker(
             self._resolve_strategy(),

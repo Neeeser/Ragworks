@@ -23,8 +23,8 @@ from app.pipelines.defaults import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.diff import DefinitionChange, diff_definitions, material_changes
+from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.nodes.tokenizers import HuggingFaceTokenizerNode
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.validation import PipelineValidationResult
@@ -107,10 +107,11 @@ class PipelineService:
         """Resolve HF tokenizer caches before a definition is persisted."""
         service = HuggingFaceTokenizerService(self.session, get_settings().storage_path)
         for node in definition.nodes:
-            if node.type != HuggingFaceTokenizerNode.type:
+            node_cls = default_registry().get_node_class(node.type)
+            if node_cls is None or not issubclass(node_cls, BaseChunkerNode):
                 continue
-            config = HuggingFaceTokenizerNode.config_model.model_validate(node.config)
-            if config.hf_model_id:
+            config = FixedChunkerConfig.model_validate(node.config or {})
+            if config.tokenizer == "huggingface" and config.hf_model_id:
                 service.ensure_available(user, config.hf_model_id)
 
     def list_pipelines(

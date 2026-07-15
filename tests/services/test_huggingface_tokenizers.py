@@ -130,10 +130,10 @@ def test_pipeline_persistence_checks_each_huggingface_tokenizer(monkeypatch) -> 
     definition = PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(
-                id="tokenizer",
-                type="tokenizer.huggingface",
-                name="HuggingFace tokenizer",
-                config={"hf_model_id": "owner/model"},
+                id="chunker",
+                type="chunker.token",
+                name="Token Chunker",
+                config={"tokenizer": "huggingface", "hf_model_id": "owner/model"},
             )
         ]
     )

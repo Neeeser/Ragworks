@@ -207,7 +207,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
 
         # A whitespace tokenizer is useful for legacy chunking, but it is not
         # an estimate of model tokens. The runtime guard must use a real model
-        # tokenizer whenever the wired tokenizer cannot enforce the provider's
+        # tokenizer whenever the configured tokenizer cannot enforce the provider's
         # limit, otherwise providers may still silently truncate the parts.
         tokenizer = payload.tokenizer
         if tokenizer.kind == "whitespace":

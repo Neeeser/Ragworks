@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
@@ -14,10 +13,8 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.nodes.chunking import BaseChunkerNode
+from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.nodes.tokenizers import BaseTokenizerNode
-from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.ports import compatible
 from app.pipelines.registry import NodeRegistry
 from app.providers.base import effective_embedding_input_limit
@@ -265,11 +262,9 @@ class PipelineValidator:
                 )
                 continue
             maximum = effective_embedding_input_limit(published_limit)
-            for chunker, chunker_cls in chunkers:
+            for chunker in chunkers:
                 issue = self._chunk_limit_issue(
-                    definition,
                     chunker,
-                    chunker_cls,
                     model=config.model_name,
                     maximum=maximum,
                 )
@@ -282,9 +277,9 @@ class PipelineValidator:
         edges: list[PipelineEdgeDefinition],
         node_map: dict[str, PipelineNodeDefinition],
         chunk_input: str,
-    ) -> list[tuple[PipelineNodeDefinition, type[BaseChunkerNode[Any]]]]:
+    ) -> list[PipelineNodeDefinition]:
         """Return real chunker nodes connected to an embedder's chunk input."""
-        chunkers: list[tuple[PipelineNodeDefinition, type[BaseChunkerNode[Any]]]] = []
+        chunkers: list[PipelineNodeDefinition] = []
         for edge in edges:
             if edge.target_port not in (None, chunk_input):
                 continue
@@ -293,20 +288,21 @@ class PipelineValidator:
                 continue
             chunker_cls = self._registry.get_node_class(chunker.type)
             if chunker_cls is not None and issubclass(chunker_cls, BaseChunkerNode):
-                chunkers.append((chunker, chunker_cls))
+                chunkers.append(chunker)
         return chunkers
 
     def _chunk_limit_issue(
         self,
-        definition: PipelineDefinition,
         chunker: PipelineNodeDefinition,
-        chunker_cls: type[BaseChunkerNode[Any]],
         *,
         model: str,
         maximum: int,
     ) -> PipelineValidationIssue | None:
         """Build a severity-aware issue for an oversized configured span."""
-        config = chunker_cls.config_model.model_validate(chunker.config or {})
+        try:
+            config = FixedChunkerConfig.model_validate(chunker.config or {})
+        except ValidationError:
+            return None
         chunk_size = getattr(config, "chunk_size", None)
         chunk_overlap = getattr(config, "chunk_overlap", None)
         if not isinstance(chunk_size, int) or not isinstance(chunk_overlap, int):
@@ -314,13 +310,13 @@ class PipelineValidator:
         configured_span = chunk_size + chunk_overlap
         if configured_span <= maximum:
             return None
-        tokenizer, tokenizer_label = self._tokenizer_for_chunker(definition, chunker)
-        is_whitespace = tokenizer.kind == "whitespace"
+        tokenizer = config.tokenizer
+        is_whitespace = tokenizer == "whitespace"
         severity = "warning" if is_whitespace else "error"
         detail = (
             "The whitespace counter undercounts model tokens."
             if is_whitespace
-            else f"The chunker uses {tokenizer_label} token counts."
+            else f"The chunker uses {self._tokenizer_label(tokenizer)} token counts."
         )
         return PipelineValidationIssue(
             code="embedding_input_limit_exceeded",
@@ -337,37 +333,14 @@ class PipelineValidator:
             allowed_max=maximum,
         )
 
-    def _tokenizer_for_chunker(
-        self,
-        definition: PipelineDefinition,
-        chunker: PipelineNodeDefinition,
-    ) -> tuple[TokenizerSpec, str]:
-        """Return the resource selection connected to one chunker."""
-        tokenizer_port = next(
-            port.key for port in BaseChunkerNode.input_ports if port.data_type == "tokenizer"
-        )
-        tokenizer_output = next(
-            port.key for port in BaseTokenizerNode.output_ports if port.data_type == "tokenizer"
-        )
-        node_map = definition.node_map()
-        for edge in definition.incoming_edges().get(chunker.id, []):
-            if edge.target_port != tokenizer_port or edge.source_port != tokenizer_output:
-                continue
-            source = node_map.get(edge.source)
-            if source is None:
-                continue
-            try:
-                node = self._registry.create(source)
-            except ValidationError:
-                return TokenizerSpec(kind="wordpiece"), "BERT WordPiece"
-            if isinstance(node, BaseTokenizerNode):
-                try:
-                    return node.tokenizer_spec(), node.label
-                except ValidationError:
-                    # The owning tokenizer node reports its field-level config
-                    # issue separately; keep limit validation from masking it.
-                    return TokenizerSpec(kind="wordpiece"), node.label
-        return TokenizerSpec(kind="wordpiece"), "BERT WordPiece"
+    @staticmethod
+    def _tokenizer_label(tokenizer: str) -> str:
+        """Return the established human-readable counter label."""
+        return {
+            "wordpiece": "BERT WordPiece",
+            "cl100k": "cl100k",
+            "huggingface": "HuggingFace tokenizer",
+        }.get(tokenizer, tokenizer)
 
     @staticmethod
     def _unknown_embedding_limit_issue(

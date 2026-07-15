@@ -36,12 +36,6 @@ from app.pipelines.nodes.retrieval import (
     RerankerNode,
     VectorRetrieverNode,
 )
-from app.pipelines.nodes.tokenizers import (
-    Cl100kTokenizerNode,
-    HuggingFaceTokenizerNode,
-    WhitespaceTokenizerNode,
-    WordPieceTokenizerNode,
-)
 
 
 class NodeRegistry:
@@ -89,10 +83,6 @@ def build_default_registry() -> NodeRegistry:
             SentenceChunkerNode,
             ParagraphChunkerNode,
             SemanticChunkerNode,
-            WordPieceTokenizerNode,
-            Cl100kTokenizerNode,
-            WhitespaceTokenizerNode,
-            HuggingFaceTokenizerNode,
             EmbedderNode,
             VectorIndexerNode,
             Bm25IndexerNode,
