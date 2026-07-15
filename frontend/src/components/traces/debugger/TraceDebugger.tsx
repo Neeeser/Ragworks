@@ -221,6 +221,7 @@ function LoadedTraceDebugger({
         <FocusHeader
           focusedItemId={focusedItemId}
           focusedItem={focusedItem}
+          ingestionOnly={trace.run.kind === "ingestion" && !graph.combined}
           onClearFocus={onClearFocus}
         />
       ) : null}

@@ -11,6 +11,8 @@ import type { TraceFocusedItem } from "@/lib/types";
 type FocusHeaderProps = {
   focusedItemId: string;
   focusedItem: TraceFocusedItem | null;
+  /** True when the trace covers only the ingestion run (Files-page entry). */
+  ingestionOnly?: boolean;
   onClearFocus: () => void;
 };
 
@@ -27,7 +29,12 @@ const chunkOrdinal = (item: TraceFocusedItem): string | null => {
  * raw vector id stays visible as monospace metadata — it's how the item
  * appears in node payloads — but never presented as a rank.
  */
-export function FocusHeader({ focusedItemId, focusedItem, onClearFocus }: FocusHeaderProps) {
+export function FocusHeader({
+  focusedItemId,
+  focusedItem,
+  ingestionOnly = false,
+  onClearFocus,
+}: FocusHeaderProps) {
   const [expanded, setExpanded] = useState(false);
   const resolved = focusedItem?.status === "resolved";
   const ordinal = focusedItem ? chunkOrdinal(focusedItem) : null;
@@ -78,6 +85,12 @@ export function FocusHeader({ focusedItemId, focusedItem, onClearFocus }: FocusH
           re-ingested content). The recorded journey below still applies.
         </p>
       )}
+      {ingestionOnly ? (
+        <p className="mt-2 text-xs text-muted">
+          This trace covers ingestion only — how the chunk was created and indexed. To follow it
+          through retrieval, trace it from a search result.
+        </p>
+      ) : null}
     </section>
   );
 }

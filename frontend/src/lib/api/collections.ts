@@ -12,6 +12,7 @@ import type {
   StatsHistoryRange,
   CollectionUpdatePayload,
   Document,
+  DocumentTrace,
   EndToEndTrace,
   PipelineTraceResponse,
   PromptDetails,
@@ -173,6 +174,15 @@ export async function fetchDocumentTrace(
   documentId: string,
 ): Promise<PipelineTraceResponse> {
   return apiFetch<PipelineTraceResponse>(`/api/documents/${documentId}/trace`, { token });
+}
+
+export async function fetchDocumentFocusedTrace(
+  token: string,
+  documentId: string,
+  chunkId: string,
+): Promise<DocumentTrace> {
+  const params = `?chunk_id=${encodeURIComponent(chunkId)}`;
+  return apiFetch<DocumentTrace>(`/api/documents/${documentId}/trace/full${params}`, { token });
 }
 
 export async function fetchQueryEventTrace(

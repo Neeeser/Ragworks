@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { buildTraceGraph } from "@/components/traces/trace-graph";
 import {
+  fetchDocumentFocusedTrace,
   fetchDocumentTrace,
   fetchPipelineNodes,
   fetchPipelineRunTrace,
@@ -65,6 +66,10 @@ async function loadTrace(token: string, source: TraceSource): Promise<LoadedTrac
     return { trace: await fetchQueryEventTrace(token, source.id), origin: null, focusedItem: null };
   }
   if (source.kind === "document") {
+    if (source.chunkId) {
+      const payload = await fetchDocumentFocusedTrace(token, source.id, source.chunkId);
+      return { trace: payload.trace, origin: null, focusedItem: payload.focused_item ?? null };
+    }
     return { trace: await fetchDocumentTrace(token, source.id), origin: null, focusedItem: null };
   }
   return { trace: await fetchPipelineRunTrace(token, source.id), origin: null, focusedItem: null };

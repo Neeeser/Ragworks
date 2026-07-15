@@ -130,6 +130,17 @@ class FocusedItemRead(BaseModel):
     chunk_count: int | None = None
 
 
+class DocumentTraceResponse(BaseModel):
+    """An ingestion trace focused on one of the document's chunks.
+
+    The chunk-focused variant of the plain document trace: same run payload,
+    plus the live-resolved chunk behind the focused id.
+    """
+
+    trace: PipelineTraceResponse
+    focused_item: FocusedItemRead | None = None
+
+
 class EndToEndTraceResponse(BaseModel):
     """A retrieval trace joined with the origin ingestion trace.
 

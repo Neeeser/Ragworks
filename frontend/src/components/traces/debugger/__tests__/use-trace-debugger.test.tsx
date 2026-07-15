@@ -52,6 +52,32 @@ describe("useTraceDebugger", () => {
     expect(result.current.focusedItemId).toBe("chunk-1");
   });
 
+  it("resolves the focused chunk when a document trace targets one", async () => {
+    api.fetchDocumentFocusedTrace.mockResolvedValueOnce({
+      trace: makeTraceResponse({
+        run: { ...makeTraceResponse().run, kind: "ingestion" },
+      }),
+      focused_item: {
+        id: "doc-1:7",
+        status: "resolved",
+        text: "The ingested chunk text.",
+        document_id: "doc-1",
+        filename: "doc.pdf",
+        chunk_index: 7,
+        chunk_count: 30,
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useTraceDebugger({ kind: "document", id: "doc-1", chunkId: "doc-1:7" }),
+    );
+
+    await waitFor(() => expect(result.current.graph).not.toBeNull());
+    expect(api.fetchDocumentFocusedTrace).toHaveBeenCalledWith(TEST_TOKEN, "doc-1", "doc-1:7");
+    expect(result.current.focusedItem?.text).toBe("The ingested chunk text.");
+    expect(result.current.focusedItemId).toBe("doc-1:7");
+  });
+
   it("owns focused item selection and clearing", async () => {
     const { result } = renderHook(() =>
       useTraceDebugger({ kind: "run", id: "run-1", chunkId: null }),

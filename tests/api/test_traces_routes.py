@@ -545,6 +545,55 @@ def test_end_to_end_trace_focused_item_missing_cases(session: Session) -> None:
     assert focused.text is None
 
 
+def test_document_focused_trace_resolves_chunk_text(session: Session) -> None:
+    """Tracing a chunk from the Files page (ingestion-only) resolves the same
+    focused-item payload as the retrieval path, so the focus header can show
+    the chunk's text instead of claiming it no longer exists."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = _create_pipeline(session, user)
+    run = _create_run(session, user, pipeline, collection)
+    document = _create_document_with_run(session, user, collection, run)
+    document.num_chunks = 2
+    session.add(document)
+    session.add(
+        models.DocumentChunkRecord(
+            document_id=document.id,
+            collection_id=collection.id,
+            chunk_index=1,
+            text="Ingested chunk text.",
+            embedding=[],
+            chunk_metadata={},
+            embedding_model="embed-model",
+        )
+    )
+    session.commit()
+
+    response = traces_routes.get_document_focused_trace(
+        document.id, chunk_id=f"{document.id}:1", current_user=user, session=session
+    )
+
+    assert response.trace.run.id == run.id
+    focused = response.focused_item
+    assert focused is not None
+    assert focused.status == "resolved"
+    assert focused.text == "Ingested chunk text."
+    assert focused.chunk_index == 1
+    assert focused.chunk_count == 2
+
+    # Without a chunk the endpoint degrades to the plain trace payload.
+    bare = traces_routes.get_document_focused_trace(
+        document.id, chunk_id=None, current_user=user, session=session
+    )
+    assert bare.focused_item is None
+
+    with pytest.raises(HTTPException) as excinfo:
+        traces_routes.get_document_focused_trace(
+            uuid4(), chunk_id=None, current_user=user, session=session
+        )
+    assert excinfo.value.status_code == 404
+
+
 def test_end_to_end_trace_route_translates_missing_event(session: Session) -> None:
     user = _create_user(session)
 

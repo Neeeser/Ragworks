@@ -129,6 +129,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     runCollectionQuery: vi.fn(async () => makeQueryResult()),
     fetchPipelineRunTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentTrace: vi.fn(async () => makeTraceResponse()),
+    fetchDocumentFocusedTrace: vi.fn(async () => ({
+      trace: makeTraceResponse(),
+      focused_item: null,
+    })),
     fetchQueryEventTrace: vi.fn(async () => makeTraceResponse()),
     fetchQueryEventEndToEndTrace: vi.fn(async () => ({
       retrieval: makeTraceResponse(),

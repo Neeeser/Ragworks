@@ -104,8 +104,12 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
                       variant="ghost"
                       size="sm"
                       onClick={() =>
+                        // The trace identifies results by vector id
+                        // ({document_id}:{order}), not the chunk row's UUID.
                         router.push(
-                          `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(chunk.id)}`,
+                          `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(
+                            `${ingestion.document_id}:${chunk.chunk_index}`,
+                          )}`,
                         )
                       }
                     >

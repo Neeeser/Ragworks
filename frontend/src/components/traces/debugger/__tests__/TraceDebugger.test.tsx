@@ -240,6 +240,29 @@ describe("TraceDebugger", () => {
     expect(routerReplace).toHaveBeenLastCalledWith("/traces/runs/run-1");
   });
 
+  it("labels a Files-page chunk trace as ingestion-only and shows its text", async () => {
+    const trace = makeTwoNodeTrace();
+    trace.run = { ...trace.run, kind: "ingestion" };
+    api.fetchDocumentFocusedTrace.mockResolvedValueOnce({
+      trace,
+      focused_item: {
+        id: "chunk-7",
+        status: "resolved",
+        text: "The ingested chunk body.",
+        document_id: "doc-1",
+        filename: "doc.pdf",
+        chunk_index: 7,
+        chunk_count: 30,
+      },
+    });
+
+    render(<TraceDebugger source={{ kind: "document", id: "doc-1", chunkId: "chunk-7" }} />);
+
+    await waitFor(() => expect(screen.getByText("The ingested chunk body.")).toBeInTheDocument());
+    expect(screen.getByText(/covers ingestion only/)).toBeInTheDocument();
+    expect(screen.queryByText(/Chunk text unavailable/)).not.toBeInTheDocument();
+  });
+
   it("offers a refresh for a still-running trace and refetches on click", async () => {
     const running = makeTwoNodeTrace();
     running.run = { ...running.run, status: "running", completed_at: null };

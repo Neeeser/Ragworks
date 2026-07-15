@@ -99,6 +99,12 @@ export interface TraceFocusedItem {
   chunk_count?: number | null;
 }
 
+/** `DocumentTraceResponse` — ingestion trace with one chunk resolved for focus. */
+export interface DocumentTrace {
+  trace: PipelineTraceResponse;
+  focused_item?: TraceFocusedItem | null;
+}
+
 /** `EndToEndTraceResponse` — retrieval trace joined with chunk origin. */
 export interface EndToEndTrace {
   retrieval: PipelineTraceResponse;

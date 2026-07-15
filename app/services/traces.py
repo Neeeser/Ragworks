@@ -24,6 +24,7 @@ from app.db.repositories import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.traces import (
+    DocumentTraceResponse,
     EndToEndTraceResponse,
     FocusedItemRead,
     PipelineNodeIORead,
@@ -67,6 +68,17 @@ class TraceService:
         if not document.ingestion_run_id:
             raise TraceNotFoundError("Trace not found.")
         return self.get_run_trace(document.ingestion_run_id, user_id)
+
+    def get_document_focused_trace(
+        self,
+        document_id: UUID,
+        user_id: UUID,
+        chunk_id: str | None = None,
+    ) -> DocumentTraceResponse:
+        """Return the ingestion trace with one chunk resolved for focus."""
+        trace = self.get_document_trace(document_id, user_id)
+        focused_item = self._resolve_focused_item(chunk_id, user_id) if chunk_id else None
+        return DocumentTraceResponse(trace=trace, focused_item=focused_item)
 
     def get_query_event_trace(self, query_event_id: UUID, user_id: UUID) -> PipelineTraceResponse:
         """Return the retrieval trace for a query event owned by the user."""
