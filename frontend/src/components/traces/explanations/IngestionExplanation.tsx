@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 
 import { ResultList } from "@/components/traces/explanations/ResultList";
 import {
@@ -8,8 +8,10 @@ import {
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
+import { fullTextFromRecords } from "@/components/traces/lib/artifacts";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
 import { isRecord } from "@/components/traces/values/shape-guards";
+import { Button } from "@/components/ui/button";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
 
@@ -46,10 +48,15 @@ export function IngestionInputExplanation({ step }: NodeExplanationProps) {
   );
 }
 
-export function ParserExplanation({ step }: NodeExplanationProps) {
+export function ParserExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
   const source = sourceSummary(step, "inputs");
   const text = textSummary(step, "outputs");
   if (!source || !text) return null;
+  const fullText = fullTextFromRecords(step.io.outputs) ?? text.full;
+  const sourceName =
+    contextItems.find((item) => item.document_id === source.document_id)?.filename ??
+    source.path.split("/").filter(Boolean).at(-1) ??
+    "Parsed document";
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-body">
@@ -65,9 +72,30 @@ export function ParserExplanation({ step }: NodeExplanationProps) {
             <p className={labelClass}>Parsed to text</p>
             <span className="font-mono text-[10px] text-meta">{text.length} characters</span>
           </div>
-          <p className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-body">
-            {text.full ?? text.preview}
+          <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-body">
+            {text.preview}
           </p>
+          {fullText && onOpenArtifact ? (
+            <div className="mt-3 flex justify-end border-t border-hairline pt-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  onOpenArtifact({
+                    id: source.document_id,
+                    status: "resolved",
+                    text: fullText,
+                    document_id: source.document_id,
+                    filename: `${sourceName} · Parsed text`,
+                  })
+                }
+                className="gap-1.5"
+              >
+                <FileText className="h-3.5 w-3.5" aria-hidden />
+                Open parsed text
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -26,6 +26,7 @@ from app.pipelines.tracing.summaries import (
 )
 from app.retrieval.models import DocumentMetadata, QueryRequest
 from app.retrieval.parsers.base import DocumentSource
+from app.services.files import FileSystemService
 
 
 class IngestionInputConfig(BaseModel):
@@ -54,11 +55,18 @@ class IngestionInputNode(PipelineNodeBase[IngestionInputConfig]):
             raise ValueError("Ingestion context is missing a document record.")
         if not context.document.source_path:
             raise ValueError("Document source path is not set for ingestion.")
+        display_path = context.document.name
+        if context.document.file_id:
+            file_service = FileSystemService(context.session)
+            file_node = file_service.nodes.get(context.document.file_id)
+            if file_node:
+                display_path = file_service.read_node(file_node).path
         metadata = DocumentMetadata(
             data={
                 "collection_id": str(context.collection.id),
                 "document_id": str(context.document.id),
                 "filename": context.document.name,
+                "path": display_path,
             }
         )
         source = DocumentSource(

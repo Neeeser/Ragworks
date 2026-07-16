@@ -55,7 +55,7 @@ export function ArtifactDrawer({ item, onClose }: ArtifactDrawerProps) {
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId} backdropClassName="bg-canvas/80">
-      <aside className="ml-auto flex h-full w-full max-w-3xl flex-col rounded-3xl border border-hairline bg-canvas-raised p-5 text-primary shadow-elevation-2 sm:p-6">
+      <aside className="ml-auto flex h-[calc(100dvh-5rem)] max-h-full w-full max-w-3xl flex-col rounded-3xl border border-hairline bg-canvas-raised p-5 text-primary shadow-elevation-2 sm:p-6">
         <header className="flex shrink-0 items-start gap-4 border-b border-hairline pb-4">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-hairline bg-surface text-accent-cyan">
             <FileText className="h-4 w-4" aria-hidden />
@@ -70,6 +70,7 @@ export function ArtifactDrawer({ item, onClose }: ArtifactDrawerProps) {
             <p className="mt-1 truncate font-mono text-[10px] text-meta">{item.id}</p>
           </div>
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={onClose}

@@ -161,9 +161,10 @@ class SourceSummary(BaseModel):
 
 def summarize_source(source: DocumentSource) -> SourceSummary:
     """Summarize a document source payload."""
+    display_path = source.metadata.data.get("path")
     return SourceSummary(
         document_id=source.document_id,
-        path=str(source.path),
+        path=display_path if isinstance(display_path, str) else str(source.path),
         content_type=source.content_type,
     )
 

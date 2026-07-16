@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { formatDuration } from "@/components/traces/debugger/format";
 import { PortInspector } from "@/components/traces/debugger/PortInspector";
 import { NodeExplanation } from "@/components/traces/explanations/NodeExplanation";
+import { mergeTraceItems, traceItemsFromRecords } from "@/components/traces/lib/artifacts";
 import { cn } from "@/lib/utils";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -55,6 +56,14 @@ export function NodeEvidencePanel({
   const failed = run?.status === "failed";
   const duration = formatDuration(run?.duration_ms);
   const summary = run?.summary ?? { inputs: [], outputs: [] };
+  const recordedItems = useMemo(
+    () => traceItemsFromRecords([...(step?.io.inputs ?? []), ...(step?.io.outputs ?? [])]),
+    [step],
+  );
+  const availableItems = useMemo(
+    () => mergeTraceItems(recordedItems, contextItems),
+    [contextItems, recordedItems],
+  );
 
   return (
     <section aria-label="Node evidence" className="flex h-full min-h-0 flex-col bg-canvas-raised">
@@ -117,7 +126,7 @@ export function NodeEvidencePanel({
             step={step}
             node={node}
             focusedItemId={focusedItemId}
-            contextItems={contextItems}
+            contextItems={availableItems}
             itemEffect={itemEffect}
             inputSources={inputSources}
             onFocusItem={onFocusItem}
@@ -129,8 +138,11 @@ export function NodeEvidencePanel({
           <PortInspector
             inputs={summary.inputs}
             outputs={summary.outputs}
+            io={step?.io ?? { inputs: [], outputs: [] }}
             focusedItemId={focusedItemId}
+            contextItems={availableItems}
             onFocusItem={onFocusItem}
+            onOpenArtifact={onOpenArtifact}
           />
         ) : null}
 

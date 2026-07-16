@@ -40,6 +40,29 @@ describe("TraceValueView registry", () => {
     expect(container.querySelector(".border-accent-cyan\\/70")).toBeInTheDocument();
   });
 
+  it("opens a recorded match without changing trace focus", () => {
+    const onOpenItem = vi.fn();
+    const onFocusItem = vi.fn();
+    render(
+      <TraceValueView
+        value={{
+          count: 1,
+          top_matches: [
+            { rank: 1, chunk_id: "c-1", document_id: "d-1", score: 0.9, preview: "Alpha" },
+          ],
+        }}
+        kind="json"
+        onOpenItem={onOpenItem}
+        onFocusItem={onFocusItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect result c-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open chunk c-1" }));
+    expect(onOpenItem).toHaveBeenCalledWith("c-1");
+    expect(onFocusItem).not.toHaveBeenCalled();
+  });
+
   it("renders an embedding summary with a dimension chip", () => {
     view(
       {

@@ -215,6 +215,7 @@ describe("TraceDebugger", () => {
     expect(screen.getByText("Chunk 8 of 42")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open focused chunk" }));
     const drawer = screen.getByRole("dialog", { name: "paper.pdf · Chunk 8 of 42" });
+    expect(within(drawer).getByRole("complementary")).toHaveClass("h-[calc(100dvh-5rem)]");
     expect(within(drawer).getByText(FOCUSED_CHUNK_TEXT)).toBeInTheDocument();
     fireEvent.click(within(drawer).getByRole("button", { name: "Close artifact" }));
     expect(
@@ -243,6 +244,7 @@ describe("TraceDebugger", () => {
     await waitFor(() => expect(screen.getByTestId("reactflow")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("tab", { name: "Node data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect result chunk-7" }));
     fireEvent.click(screen.getByRole("button", { name: "Trace this result chunk-7" }));
     const timeline = screen.getByRole("navigation", { name: EXECUTION_ORDER_LABEL });
     expect(routerReplace).toHaveBeenCalledWith("/traces/runs/run-1?chunk=chunk-7");

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { buildPreviewPayload } from "@/components/traces/trace-payload-utils";
+import { InspectableTraceItem } from "@/components/traces/values/InspectableTraceItem";
 import { TraceItemRow } from "@/components/traces/values/TraceItemRow";
 import { cn, prettyJson, truncate } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export type TraceValueViewProps = {
   kind: string;
   focusedItemId?: string | null;
   onFocusItem?: (itemId: string) => void;
+  onOpenItem?: (itemId: string) => void;
 };
 
 const chipClass =
@@ -93,7 +95,12 @@ export function SourceValue({ value }: TraceValueViewProps) {
 }
 
 /** A batch of chunks: a count (+ document) header and per-chunk preview cards. */
-export function ChunkListValue({ value, focusedItemId, onFocusItem }: TraceValueViewProps) {
+export function ChunkListValue({
+  value,
+  focusedItemId,
+  onFocusItem,
+  onOpenItem,
+}: TraceValueViewProps) {
   const batch = value as ChunkBatchShape;
   return (
     <div className="space-y-2">
@@ -105,12 +112,12 @@ export function ChunkListValue({ value, focusedItemId, onFocusItem }: TraceValue
         {batch.samples.map((sample) => {
           const active = focusedItemId ? sample.chunk_id === focusedItemId : false;
           return (
-            <TraceItemRow
+            <InspectableTraceItem
               key={sample.chunk_id}
               itemId={sample.chunk_id}
               focused={active}
               onFocusItem={onFocusItem}
-              className={cn("w-full rounded-xl border border-hairline bg-canvas p-2.5 text-left")}
+              onOpenItem={onOpenItem}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className={monoClass}>{sample.chunk_id}</span>
@@ -119,7 +126,7 @@ export function ChunkListValue({ value, focusedItemId, onFocusItem }: TraceValue
               <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-body">
                 {sample.preview}
               </p>
-            </TraceItemRow>
+            </InspectableTraceItem>
           );
         })}
         {batch.samples.length === 0 && <p className="text-xs text-meta">No chunk samples.</p>}
@@ -201,22 +208,27 @@ export function EmbeddingValue({ value, focusedItemId, onFocusItem }: TraceValue
 }
 
 /** Retrieval matches: ranked rows with score bars and previews. */
-export function MatchListValue({ value, focusedItemId, onFocusItem }: TraceValueViewProps) {
+export function MatchListValue({
+  value,
+  focusedItemId,
+  onFocusItem,
+  onOpenItem,
+}: TraceValueViewProps) {
   const list = value as MatchListShape;
   const maxScore = Math.max(...list.top_matches.map((match) => match.score), 1e-9);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <Chip>{list.count} matches</Chip>
       <ScrollBox>
         {list.top_matches.map((match) => {
           const active = focusedItemId ? match.chunk_id === focusedItemId : false;
           return (
-            <TraceItemRow
+            <InspectableTraceItem
               key={match.chunk_id}
               itemId={match.chunk_id}
               focused={active}
               onFocusItem={onFocusItem}
-              className="w-full rounded-xl border border-hairline bg-canvas p-2.5 text-left"
+              onOpenItem={onOpenItem}
             >
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-strong text-[10px] font-semibold leading-none text-body">
@@ -236,7 +248,7 @@ export function MatchListValue({ value, focusedItemId, onFocusItem }: TraceValue
                 {match.preview}
               </p>
               <p className={cn("mt-1 truncate", monoClass)}>{match.chunk_id}</p>
-            </TraceItemRow>
+            </InspectableTraceItem>
           );
         })}
       </ScrollBox>

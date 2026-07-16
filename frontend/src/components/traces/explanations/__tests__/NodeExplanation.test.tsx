@@ -11,11 +11,15 @@ import type { Node } from "@xyflow/react";
 
 const FOCUSED_TEXT = "Focused text";
 
-const makeStep = (nodeType: string, summary: PipelineNodeSummary): TraceStep => ({
+const makeStep = (
+  nodeType: string,
+  summary: PipelineNodeSummary,
+  io: TraceStep["io"] = { inputs: [], outputs: [] },
+): TraceStep => ({
   nodeId: "node",
   nodeIds: ["node"],
   run: makeNodeRunTrace({ node_id: "node", node_type: nodeType, summary }),
-  io: { inputs: [], outputs: [] },
+  io,
   stage: nodeType.startsWith("retriev") || nodeType.startsWith("fusion") ? "retrieval" : "origin",
   stageLabel: "Stage",
 });
@@ -42,6 +46,8 @@ const contextItem = (index: number, text: string): TraceFocusedItem => ({
 
 describe("NodeExplanation", () => {
   it("shows parser source path flowing into normalized text", () => {
+    const parsedText = "# Guide\nParsed content with the complete normalized document.";
+    const onOpenArtifact = vi.fn();
     const summary: PipelineNodeSummary = {
       inputs: [
         {
@@ -56,8 +62,7 @@ describe("NodeExplanation", () => {
           kind: "text",
           value: {
             preview: "# Guide\nParsed content",
-            length: 22,
-            full: "# Guide\nParsed content",
+            length: parsedText.length,
           },
         },
       ],
@@ -65,18 +70,38 @@ describe("NodeExplanation", () => {
 
     render(
       <NodeExplanation
-        step={makeStep("parser.document", summary)}
+        step={makeStep("parser.document", summary, {
+          inputs: [],
+          outputs: [
+            {
+              id: "io-output",
+              run_id: "run",
+              node_run_id: "node-run",
+              node_id: "node",
+              io_type: "output",
+              port: "document",
+              payload: { document: { document_id: "doc", text: parsedText } },
+              created_at: "2024-01-01T00:00:00Z",
+              updated_at: "2024-01-01T00:00:00Z",
+            },
+          ],
+        })}
         node={makeNode("parser.document")}
         focusedItemId={null}
-        contextItems={[]}
+        contextItems={[{ ...contextItem(0, "Chunk context"), filename: "logical-name.md" }]}
         itemEffect={null}
         inputSources={[]}
+        onOpenArtifact={onOpenArtifact}
       />,
     );
 
     expect(screen.getByText("/uploads/guide.md")).toBeInTheDocument();
     expect(screen.getByText("text/markdown")).toBeInTheDocument();
     expect(screen.getByText("# Guide Parsed content")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open parsed text" }));
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ text: parsedText, filename: "logical-name.md · Parsed text" }),
+    );
   });
 
   it("renders a focused chunk between its real neighbors", () => {
@@ -142,16 +167,19 @@ describe("NodeExplanation", () => {
       ],
     };
     const onFocusItem = vi.fn();
+    const onOpenArtifact = vi.fn();
+    const firstContext = contextItem(1, "Chunk 1");
 
     render(
       <NodeExplanation
         step={makeStep("retriever.bm25", summary)}
         node={makeNode("retriever.bm25")}
         focusedItemId="doc:2"
-        contextItems={[contextItem(2, "Chunk 2")]}
+        contextItems={[firstContext, contextItem(2, "Chunk 2")]}
         itemEffect={null}
         inputSources={[]}
         onFocusItem={onFocusItem}
+        onOpenArtifact={onOpenArtifact}
       />,
     );
 
@@ -165,6 +193,9 @@ describe("NodeExplanation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect result doc:1" }));
     expect(onFocusItem).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Chunk 1")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open chunk" }));
+    expect(onOpenArtifact).toHaveBeenCalledWith(firstContext);
     fireEvent.click(screen.getByRole("button", { name: "Trace this result" }));
     expect(onFocusItem).toHaveBeenCalledWith("doc:1");
   });

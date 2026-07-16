@@ -83,10 +83,22 @@ const RENDERERS: Renderer[] = [
 ];
 
 /** Render a trace summary/payload value using the best-matching view. */
-export function TraceValueView({ value, kind, focusedItemId, onFocusItem }: TraceValueViewProps) {
+export function TraceValueView({
+  value,
+  kind,
+  focusedItemId,
+  onFocusItem,
+  onOpenItem,
+}: TraceValueViewProps) {
   const renderer = RENDERERS.find((entry) => entry.match(value, kind));
   const Component = renderer?.Component ?? JsonValue;
   return (
-    <Component value={value} kind={kind} focusedItemId={focusedItemId} onFocusItem={onFocusItem} />
+    <Component
+      value={value}
+      kind={kind}
+      focusedItemId={focusedItemId}
+      onFocusItem={onFocusItem}
+      onOpenItem={onOpenItem}
+    />
   );
 }

@@ -390,6 +390,54 @@ def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) 
         node.run({}, context)
 
 
+def test_ingestion_input_summarizes_the_logical_file_path(
+    session: Session, tmp_path: Path
+) -> None:
+    from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
+    from app.pipelines.tracing.summaries import SourceSummary
+
+    user = _build_user()
+    session.add(user)
+    session.flush()
+    collection = _build_collection(user)
+    session.add(collection)
+    session.flush()
+    folder = models.FileNode(
+        collection_id=collection.id,
+        user_id=user.id,
+        parent_id=None,
+        kind=models.FileNodeKind.FOLDER,
+        name="reports",
+    )
+    session.add(folder)
+    session.flush()
+    file = models.FileNode(
+        collection_id=collection.id,
+        user_id=user.id,
+        parent_id=folder.id,
+        kind=models.FileNodeKind.FILE,
+        name="paper.pdf",
+        content_type="application/pdf",
+        storage_path=str(tmp_path / "stored-hash"),
+    )
+    session.add(file)
+    session.flush()
+    document = _build_document(user, collection, tmp_path / "stored-hash")
+    document.file_id = file.id
+    document.name = file.name
+    document.content_type = file.content_type or "application/octet-stream"
+    session.add(document)
+    session.commit()
+
+    node = IngestionInputNode(IngestionInputConfig())
+    outputs = node.run({}, _build_context(session, user, collection, document=document))
+    summary = node.summarize_io({}, outputs)
+
+    source = summary.outputs[0].value
+    assert isinstance(source, SourceSummary)
+    assert source.path == "/reports/paper.pdf"
+
+
 def test_document_parser_node_resolves_modes(session: Session) -> None:
     from app.pipelines.nodes.parsing import DocumentParserNode, ParserConfig
     from app.retrieval.parsers.pdf import PdfToTextParser

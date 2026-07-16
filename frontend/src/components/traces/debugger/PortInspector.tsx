@@ -3,16 +3,21 @@
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { hydrateTextValue } from "@/components/traces/lib/artifacts";
 import { TraceValueView } from "@/components/traces/values/TraceValueView";
 import { cn } from "@/lib/utils";
 
-import type { PipelineNodeSummaryValue } from "@/lib/types";
+import type { TraceIOGroup } from "@/components/traces/trace-graph";
+import type { PipelineNodeSummaryValue, TraceFocusedItem } from "@/lib/types";
 
 type PortInspectorProps = {
   inputs: PipelineNodeSummaryValue[];
   outputs: PipelineNodeSummaryValue[];
+  io: TraceIOGroup;
   focusedItemId?: string | null;
+  contextItems: TraceFocusedItem[];
   onFocusItem?: (itemId: string) => void;
+  onOpenArtifact?: (item: TraceFocusedItem) => void;
 };
 
 type PortEntry = {
@@ -31,7 +36,15 @@ const visibleEntries = (side: PortEntry["side"], items: PipelineNodeSummaryValue
 const valueType = (item: PipelineNodeSummaryValue): string => item.kind ?? "json";
 
 /** One-at-a-time typed inspection for a node's summarized inputs and outputs. */
-export function PortInspector({ inputs, outputs, focusedItemId, onFocusItem }: PortInspectorProps) {
+export function PortInspector({
+  inputs,
+  outputs,
+  io,
+  focusedItemId,
+  contextItems,
+  onFocusItem,
+  onOpenArtifact,
+}: PortInspectorProps) {
   const entries = useMemo(
     () => [...visibleEntries("input", inputs), ...visibleEntries("output", outputs)],
     [inputs, outputs],
@@ -39,6 +52,10 @@ export function PortInspector({ inputs, outputs, focusedItemId, onFocusItem }: P
   const defaultId = entries.find((entry) => entry.side === "output")?.id ?? entries[0]?.id ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(defaultId);
   const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0] ?? null;
+  const contextById = useMemo(
+    () => new Map(contextItems.map((item) => [item.id, item])),
+    [contextItems],
+  );
 
   if (!selected) {
     return <p className="text-xs text-muted">No summarized node data was recorded.</p>;
@@ -112,10 +129,25 @@ export function PortInspector({ inputs, outputs, focusedItemId, onFocusItem }: P
           </span>
         </div>
         <TraceValueView
-          value={selected.item.value}
+          value={
+            selected.item.kind === "text"
+              ? hydrateTextValue(
+                  selected.item.value,
+                  selected.side === "input" ? io.inputs : io.outputs,
+                )
+              : selected.item.value
+          }
           kind={selected.item.kind ?? "json"}
           focusedItemId={focusedItemId}
           onFocusItem={onFocusItem}
+          onOpenItem={
+            onOpenArtifact
+              ? (itemId) => {
+                  const item = contextById.get(itemId);
+                  if (item) onOpenArtifact(item);
+                }
+              : undefined
+          }
         />
       </section>
     </div>

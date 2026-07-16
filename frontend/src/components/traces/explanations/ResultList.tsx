@@ -48,9 +48,6 @@ export function ResultList({
     () => new Map(contextItems.map((item) => [item.id, item])),
     [contextItems],
   );
-  const inspected = inspectedItemId ? contextById.get(inspectedItemId) : null;
-  const inspectedPreview = inspectedItemId ? previews.get(inspectedItemId) : null;
-  const inspectedRank = items.findIndex((item) => item.id === inspectedItemId) + 1;
 
   useEffect(() => {
     focusedRef.current?.scrollIntoView?.({ block: "center", behavior: "auto" });
@@ -81,20 +78,21 @@ export function ResultList({
               key={item.id}
               ref={focused ? focusedRef : undefined}
               aria-current={focused ? "true" : undefined}
+              className={cn(
+                "overflow-hidden rounded-lg border transition",
+                focused
+                  ? "border-accent-cyan/60 bg-accent-cyan/10"
+                  : selected
+                    ? "border-strong bg-canvas"
+                    : "border-transparent hover:border-hairline hover:bg-canvas",
+              )}
             >
               <button
                 type="button"
                 aria-label={`Inspect result ${item.id}`}
                 aria-pressed={selected}
                 onClick={() => setInspectedItemId(item.id)}
-                className={cn(
-                  "w-full rounded-lg border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                  focused
-                    ? "border-accent-cyan/60 bg-accent-cyan/10"
-                    : selected
-                      ? "border-strong bg-canvas"
-                      : "border-transparent hover:border-hairline hover:bg-canvas",
-                )}
+                className="w-full px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
               >
                 <span className="flex items-center gap-2">
                   <span className="w-7 shrink-0 font-mono text-[10px] text-muted">
@@ -118,50 +116,31 @@ export function ResultList({
                   </span>
                 ) : null}
               </button>
+              {selected && (context || (onFocusItem && item.id !== focusedItemId)) ? (
+                <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-2.5 py-2">
+                  {context && onOpenArtifact ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onOpenArtifact(context)}
+                      className="gap-1.5"
+                    >
+                      <FileText className="h-3.5 w-3.5" aria-hidden />
+                      Open chunk
+                    </Button>
+                  ) : null}
+                  {onFocusItem && item.id !== focusedItemId ? (
+                    <Button size="sm" onClick={() => onFocusItem(item.id)} className="gap-1.5">
+                      Trace this result
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </li>
           );
         })}
       </ol>
-      {inspectedItemId ? (
-        <div className="mt-3 rounded-lg border border-hairline bg-canvas p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 truncate text-xs font-medium text-primary">
-              {inspected?.filename ?? `Result ${inspectedRank}`}
-            </span>
-            {inspected?.chunk_index !== null && inspected?.chunk_index !== undefined ? (
-              <span className="font-mono text-[10px] text-meta">
-                chunk {inspected.chunk_index + 1}
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-body">
-            {inspected?.text
-              ? formatTracePreview(inspected.text)
-              : inspectedPreview
-                ? formatTracePreview(inspectedPreview)
-                : "Chunk text was not included in this trace."}
-          </p>
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
-            {inspected && onOpenArtifact ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => onOpenArtifact(inspected)}
-                className="gap-1.5"
-              >
-                <FileText className="h-3.5 w-3.5" aria-hidden />
-                Open chunk
-              </Button>
-            ) : null}
-            {onFocusItem && inspectedItemId !== focusedItemId ? (
-              <Button size="sm" onClick={() => onFocusItem(inspectedItemId)} className="gap-1.5">
-                Trace this result
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
