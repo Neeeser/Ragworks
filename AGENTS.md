@@ -109,7 +109,19 @@ The app runs two ways, and a change isn't done until it works in both:
 
 - **Dev mode**: `make run` (or `make server` + `make frontend` separately) —
   uvicorn with reload, the Next.js dev server, `NEXT_PUBLIC_API_BASE_URL` pointing
-  the frontend straight at the backend, `DEBUG=true`.
+  the frontend straight at the backend, `DEBUG=true`. **The dev database is the
+  Dockerized ParadeDB from `docker-compose.dev.yml` — Docker is required for
+  local dev and `make run`/`make test` start it for you.** It provides
+  `pgvector` + `pg_search` so hybrid/BM25 search matches the release image. A
+  Postgres without `pg_search` (e.g. an external `DATABASE_URL` override pointing
+  at a bare server) silently loses BM25, so a green run there is not proof a
+  search-touching change is correct — verify against the ParadeDB dev DB. The
+  resolution lives in the `Makefile` (Docker, or external when `DATABASE_URL` /
+  `TEST_DATABASE_URL` is set — each controls only its respective app or test
+  target and is left unmanaged) + `scripts/ensure_postgres.py`; the dev database
+  is loopback-only, and remote Docker contexts must use an explicit external URL;
+  the shipped `docker-compose.yml` (release artifact) stays separate and
+  untouched.
 - **Docker**: `docker-compose.yml` — the primary target, because Docker is the
   release format. Same-origin `/api/*` through the runtime middleware proxy, no
   build-time API URL, `DEBUG=false`, secrets/volumes as described under Releases.
@@ -191,7 +203,11 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 # Make commands
 
 - `make env`: install backend deps via `uv` and frontend deps via `npm`
-- `make server` / `make frontend` / `make run`: run backend, frontend, or both (dev)
+- `make server` / `make frontend` / `make run`: run backend, frontend, or both
+  (dev). The DB-backed targets (`server`, `test`, `coverage`, …) first run
+  `scripts/ensure_postgres.py`, which starts the Dockerized ParadeDB dev DB
+  (Docker required) or waits on an external `DATABASE_URL` / `TEST_DATABASE_URL`
+  when one is set
 - `make verify`: the backend gate — typecheck → lint → test
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure);
