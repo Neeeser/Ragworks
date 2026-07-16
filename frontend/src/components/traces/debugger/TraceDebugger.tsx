@@ -12,6 +12,7 @@ import { useExecutionSelection } from "@/components/traces/debugger/hooks/use-ex
 import { useTraceDebugger } from "@/components/traces/debugger/hooks/use-trace-debugger";
 import { useTraceStepper } from "@/components/traces/debugger/hooks/use-trace-stepper";
 import { NodeEvidencePanel } from "@/components/traces/debugger/NodeEvidencePanel";
+import { RankPath } from "@/components/traces/debugger/RankPath";
 import { TraceHeader } from "@/components/traces/debugger/TraceHeader";
 import { traceNodeTypes } from "@/components/traces/IndexStoreNode";
 import { buildExecutionSections, traceQueryText } from "@/components/traces/lib/execution";
@@ -146,6 +147,11 @@ function LoadedTraceDebugger({
   const { selectedNodeId, selectedStep, selectNode } = useExecutionSelection(graph, focused);
   const [showFocusedPath, setShowFocusedPath] = useState(focused);
   const [artifactItem, setArtifactItem] = useState<TraceFocusedItem | null>(null);
+  const [artifactMode, setArtifactMode] = useState<"reader" | "context">("reader");
+  const openArtifact = (item: TraceFocusedItem) => {
+    setArtifactMode("reader");
+    setArtifactItem(item);
+  };
   const focusResult = (itemId: string) => {
     setShowFocusedPath(true);
     onFocusItem(itemId);
@@ -163,6 +169,35 @@ function LoadedTraceDebugger({
   const itemEffects = useMemo(
     () => sections.flatMap((section) => section.entries.flatMap((entry) => entry.itemEffect ?? [])),
     [sections],
+  );
+  const rankPath = useMemo(
+    () =>
+      sections.flatMap((section) =>
+        section.stage === "retrieval"
+          ? section.entries.flatMap((entry) =>
+              entry.itemEffect &&
+              entry.itemEffect.role !== "chunks" &&
+              entry.itemEffect.rank !== null
+                ? [entry.itemEffect]
+                : [],
+            )
+          : [],
+      ),
+    [sections],
+  );
+  const hasAdjacentContext = useMemo(
+    () =>
+      Boolean(
+        focusedItem &&
+        contextItems.some(
+          (item) =>
+            item.document_id === focusedItem.document_id &&
+            item.id !== focusedItem.id &&
+            item.chunk_index !== null &&
+            item.chunk_index !== undefined,
+        ),
+      ),
+    [contextItems, focusedItem],
   );
   const displayGraph = useMemo(() => {
     const focus = buildJourneyFocus(graph, showFocusedPath ? itemEffects : []);
@@ -229,9 +264,20 @@ function LoadedTraceDebugger({
           focusedItem={focusedItem}
           query={query}
           ingestionOnly={trace.run.kind === "ingestion" && !graph.combined}
-          onOpenArtifact={() => focusedItem && setArtifactItem(focusedItem)}
+          onOpenArtifact={() => focusedItem && openArtifact(focusedItem)}
+          onCompareContext={
+            hasAdjacentContext
+              ? () => {
+                  setArtifactMode("context");
+                  if (focusedItem) setArtifactItem(focusedItem);
+                }
+              : undefined
+          }
           onClearFocus={clearResult}
         />
+      ) : null}
+      {focused ? (
+        <RankPath steps={rankPath} selectedNodeId={selectedNodeId} onSelectNode={selectNode} />
       ) : null}
       <section
         aria-label="Trace graph"
@@ -293,15 +339,17 @@ function LoadedTraceDebugger({
             itemEffect={selectedEffect}
             inputSources={inputSources}
             onFocusItem={focusResult}
-            onOpenArtifact={setArtifactItem}
+            onOpenArtifact={openArtifact}
           />
         </div>
       </div>
       <ArtifactDrawer
-        key={artifactItem?.id ?? "closed"}
+        key={`${artifactItem?.id ?? "closed"}:${artifactMode}`}
         item={artifactItem}
         contextItems={contextItems}
-        onNavigate={setArtifactItem}
+        query={query}
+        initialMode={artifactMode}
+        onNavigate={openArtifact}
         onClose={() => setArtifactItem(null)}
       />
     </div>

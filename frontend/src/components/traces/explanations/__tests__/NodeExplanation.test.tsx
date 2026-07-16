@@ -269,7 +269,10 @@ describe("NodeExplanation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Inspect result doc:2" }));
+    expect(screen.getByRole("button", { name: "Inspect result doc:2" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByText("Focused text for pg_search ranking")).toBeInTheDocument();
     expect(screen.getByText("Vector similarity · 0.7000")).toBeInTheDocument();
     expect(screen.getByText("BM25 score · 12.400")).toBeInTheDocument();

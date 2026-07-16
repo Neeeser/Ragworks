@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelRightOpen, X } from "lucide-react";
+import { Columns3, PanelRightOpen, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +13,7 @@ type FocusHeaderProps = {
   /** True when the trace covers only the ingestion run (Files-page entry). */
   ingestionOnly?: boolean;
   onOpenArtifact: () => void;
+  onCompareContext?: () => void;
   onClearFocus: () => void;
 };
 
@@ -33,6 +34,7 @@ export function FocusHeader({
   query,
   ingestionOnly = false,
   onOpenArtifact,
+  onCompareContext,
   onClearFocus,
 }: FocusHeaderProps) {
   const resolved = focusedItem?.status === "resolved";
@@ -56,16 +58,30 @@ export function FocusHeader({
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           {resolved && focusedItem?.text ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onOpenArtifact}
-              className="gap-1.5"
-              aria-label="Open focused chunk"
-            >
-              <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-              Open chunk
-            </Button>
+            <>
+              {onCompareContext ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onCompareContext}
+                  className="gap-1.5"
+                  aria-label="Compare focused context"
+                >
+                  <Columns3 className="h-3.5 w-3.5" aria-hidden />
+                  Compare context
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenArtifact}
+                className="gap-1.5"
+                aria-label="Open focused chunk"
+              >
+                <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+                Open chunk
+              </Button>
+            </>
           ) : null}
           <Button
             variant="ghost"

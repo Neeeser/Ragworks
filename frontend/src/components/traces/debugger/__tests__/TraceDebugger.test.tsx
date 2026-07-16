@@ -17,6 +17,8 @@ const RETRIEVAL_QUERY = "Which provider handles embeddings and chat?";
 const FOCUSED_RESULT_LABEL = "Focused result";
 const OPEN_FOCUSED_CHUNK_LABEL = "Open focused chunk";
 const FOCUSED_DRAWER_TITLE = "paper.pdf · Chunk 8 of 42";
+const COMPARE_CONTEXT_LABEL = "Compare focused context";
+const RRF_FUSION_LABEL = "RRF Fusion";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/providers/auth-provider", async () =>
@@ -113,6 +115,106 @@ function makeTwoNodeTrace(overrides: Partial<PipelineTraceResponse> = {}): Pipel
     ],
     ...overrides,
   };
+}
+
+function makeRankingTrace(): PipelineTraceResponse {
+  const matches = (items: Array<{ id: string; score: number }>) => ({
+    label: "Matches",
+    kind: "items" as const,
+    value: { kind: "matches" as const, items },
+  });
+  return makeTraceResponse({
+    definition: {
+      nodes: [
+        {
+          id: "semantic",
+          type: "retriever.semantic",
+          name: "Semantic Retriever",
+          config: {},
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "fusion",
+          type: "fusion.rrf",
+          name: RRF_FUSION_LABEL,
+          config: { k: 60 },
+          position: { x: 100, y: 0 },
+        },
+        {
+          id: "output",
+          type: "retrieval.output",
+          name: "Retrieval Output",
+          config: {},
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        { id: "e1", source: "semantic", target: "fusion", source_port: "out", target_port: "in" },
+        { id: "e2", source: "fusion", target: "output", source_port: "out", target_port: "in" },
+      ],
+      viewport: {},
+    },
+    node_runs: [
+      makeNodeRunTrace({
+        id: "semantic-run",
+        node_id: "semantic",
+        node_type: "retriever.semantic",
+        node_name: "Semantic Retriever",
+        sequence_index: 0,
+        summary: {
+          inputs: [],
+          outputs: [
+            matches([
+              { id: "other", score: 0.9 },
+              { id: "chunk-7", score: 0.2134 },
+            ]),
+          ],
+        },
+      }),
+      makeNodeRunTrace({
+        id: "fusion-run",
+        node_id: "fusion",
+        node_type: "fusion.rrf",
+        node_name: RRF_FUSION_LABEL,
+        sequence_index: 1,
+        summary: {
+          inputs: [
+            matches([
+              { id: "other", score: 0.9 },
+              { id: "chunk-7", score: 0.2134 },
+            ]),
+          ],
+          outputs: [
+            matches([
+              { id: "chunk-7", score: 0.031 },
+              { id: "other", score: 0.016 },
+            ]),
+          ],
+        },
+      }),
+      makeNodeRunTrace({
+        id: "output-run",
+        node_id: "output",
+        node_type: "retrieval.output",
+        node_name: "Retrieval Output",
+        sequence_index: 2,
+        summary: {
+          inputs: [
+            matches([
+              { id: "chunk-7", score: 0.031 },
+              { id: "other", score: 0.016 },
+            ]),
+          ],
+          outputs: [
+            matches([
+              { id: "chunk-7", score: 0.031 },
+              { id: "other", score: 0.016 },
+            ]),
+          ],
+        },
+      }),
+    ],
+  });
 }
 
 describe("TraceDebugger", () => {
@@ -319,6 +421,109 @@ describe("TraceDebugger", () => {
     expect(screen.getByText("Next sentence fragment")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Previous chunk" }));
     expect(screen.getByRole("dialog", { name: "paper.pdf · Chunk 8 of 9" })).toBeInTheDocument();
+  });
+
+  it("opens previous, focused, and next context directly with query terms highlighted", async () => {
+    const retrieval = makeTwoNodeTrace();
+    retrieval.node_runs[0] = makeNodeRunTrace({
+      ...retrieval.node_runs[0],
+      summary: {
+        ...retrieval.node_runs[0].summary,
+        outputs: [
+          ...retrieval.node_runs[0].summary.outputs,
+          { label: "Query", kind: "text", value: "Which provider handles embeddings?" },
+        ],
+      },
+    });
+    api.fetchQueryEventEndToEndTrace.mockResolvedValueOnce({
+      retrieval,
+      origin: null,
+      context_items: [
+        {
+          id: "chunk-6",
+          status: "resolved",
+          text: "Ragworks uses the OpenRouter provider for",
+          document_id: "doc-1",
+          filename: "paper.pdf",
+          chunk_index: 6,
+          chunk_count: 9,
+        },
+        {
+          id: "chunk-7",
+          status: "resolved",
+          text: "embeddings and chat models.",
+          document_id: "doc-1",
+          filename: "paper.pdf",
+          chunk_index: 7,
+          chunk_count: 9,
+        },
+        {
+          id: "chunk-8",
+          status: "resolved",
+          text: "The next section covers storage.",
+          document_id: "doc-1",
+          filename: "paper.pdf",
+          chunk_index: 8,
+          chunk_count: 9,
+        },
+      ],
+      focused_item: {
+        id: "chunk-7",
+        status: "resolved",
+        text: "embeddings and chat models.",
+        document_id: "doc-1",
+        filename: "paper.pdf",
+        chunk_index: 7,
+        chunk_count: 9,
+      },
+    });
+
+    render(<TraceDebugger source={{ kind: "query", id: "qe-1", chunkId: "chunk-7" }} />);
+
+    await waitFor(() => expect(screen.getByText("Focused chunk")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: COMPARE_CONTEXT_LABEL }));
+    const context = screen.getByRole("region", { name: "Source context" });
+    expect(
+      within(context)
+        .getAllByRole("article")
+        .map((article) => article.textContent),
+    ).toEqual([
+      expect.stringContaining("OpenRouter provider"),
+      expect.stringContaining("embeddings and chat models"),
+      expect.stringContaining("next section covers storage"),
+    ]);
+    expect(context.querySelectorAll("mark").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("summarizes the focused result rank path and opens node evidence from it", async () => {
+    api.fetchQueryEventEndToEndTrace.mockResolvedValueOnce({
+      retrieval: makeRankingTrace(),
+      origin: null,
+      context_items: [],
+      focused_item: {
+        id: "chunk-7",
+        status: "resolved",
+        text: FOCUSED_CHUNK_TEXT,
+        document_id: "doc-1",
+        filename: "paper.pdf",
+        chunk_index: 7,
+        chunk_count: 9,
+      },
+    });
+
+    render(<TraceDebugger source={{ kind: "query", id: "qe-1", chunkId: "chunk-7" }} />);
+
+    const rankPath = await screen.findByRole("navigation", { name: "Rank path" });
+    expect(
+      within(rankPath).getByRole("button", {
+        name: "View Semantic Retriever evidence: rank 2, score 0.2134",
+      }),
+    ).toBeInTheDocument();
+    const fusion = within(rankPath).getByRole("button", {
+      name: "View RRF Fusion evidence: rank 1, score 0.0310",
+    });
+    fireEvent.click(fusion);
+    expect(screen.getByRole("heading", { name: RRF_FUSION_LABEL })).toBeInTheDocument();
   });
 
   it("traces an explicit result without replacing node evidence selection", async () => {

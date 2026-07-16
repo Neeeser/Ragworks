@@ -126,7 +126,11 @@ export function RankingResultList({
   onFocusItem,
   onOpenArtifact,
 }: RankingResultListProps) {
-  const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const [inspectedId, setInspectedId] = useState<string | null>(() =>
+    focusedItemId && evidence.results.some((result) => result.id === focusedItemId)
+      ? focusedItemId
+      : null,
+  );
   const focusedRef = useRef<HTMLLIElement | null>(null);
   const contextById = useMemo(
     () => new Map(contextItems.map((item) => [item.id, item])),
@@ -221,7 +225,10 @@ export function RankingResultList({
                   variant="ghost"
                   size="sm"
                   aria-label={`Focus trace on ${title}`}
-                  onClick={() => onFocusItem(result.id)}
+                  onClick={() => {
+                    setInspectedId(result.id);
+                    onFocusItem(result.id);
+                  }}
                   className="absolute right-2 top-2 h-7 gap-1 px-2 text-[10px]"
                 >
                   <LocateFixed className="h-3 w-3" aria-hidden />
