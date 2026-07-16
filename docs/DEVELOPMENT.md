@@ -9,8 +9,26 @@ project *is*, see the [README](../README.md). For binding engineering rules, see
 
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - Node 22 (pinned in `.nvmrc`)
-- Postgres (local instance; `make server` will try to start it — set
-  `POSTGRES_DATA_DIR` or `POSTGRES_START_COMMAND` if needed)
+- Docker — `make run`/`make test` start a Dockerized ParadeDB database
+  automatically (see [The dev database](#the-dev-database) below)
+
+## The dev database
+
+`make run` and `make test` start the Postgres they need in the background
+before running the app: they bring up `docker-compose.dev.yml` — a ParadeDB
+Postgres (`pgvector` + `pg_search`) on host port `54329` — so hybrid/BM25 search
+works exactly as it does in the shipped image, while the backend and frontend
+still run natively for hot reload. The container hosts both the dev database
+(`ragworks`) and the test database (`ragworks_test`), and data persists in a
+named volume across restarts. Its port is bound only to `127.0.0.1`, not the
+network. Docker must be running — if it isn't, startup stops with a message
+pointing you at the fix.
+
+Set `DATABASE_URL` (or `TEST_DATABASE_URL`) to point at your own Postgres — an
+explicit value is always respected and left unmanaged. The values are
+independent: `DATABASE_URL` controls the app run targets and `TEST_DATABASE_URL`
+controls the test targets. With a remote Docker context, set the appropriate URL
+explicitly so it is treated as external instead.
 
 ## Setup
 
@@ -18,8 +36,8 @@ project *is*, see the [README](../README.md). For binding engineering rules, see
 make env       # uv sync --locked + npm install in frontend/
 ```
 
-No configuration is required — every setting has a working dev default (local
-Postgres at `postgresql+psycopg://localhost:5432/ragworks`, `./storage` for
+No configuration is required — every setting has a working dev default (the
+[dev database](#the-dev-database) is provisioned for you, `./storage` for
 files, debug mode via `make server`). Provider API keys (OpenRouter, Pinecone)
 are configured **per user in the UI**, not in the environment. There are no
 env files: the app reads real environment variables only.
@@ -31,8 +49,8 @@ JWT_SECRET_KEY=…               # default: auto-generated on first boot, persis
                                # under the config path (.jwt-secret)
 CONFIG_PATH=…                  # small persistent app state (default: ./config)
 LOG_LEVEL=INFO                 # app log level (default: uvicorn's)
-DATABASE_URL=…                 # default: postgresql+psycopg://localhost:5432/ragworks
-TEST_DATABASE_URL=…            # test-suite database (default: derived locally)
+DATABASE_URL=…                 # override the dev database (see "The dev database")
+TEST_DATABASE_URL=…            # override the test database (see "The dev database")
 OPENROUTER_DEFAULT_EMBEDDING_MODEL=…   # default: qwen/qwen3-embedding-0.6b
 OPENROUTER_DEFAULT_CHAT_MODEL=…        # default: openai/gpt-oss-120b
 OPENROUTER_SITE_URL=… / OPENROUTER_SITE_NAME=…   # optional attribution headers

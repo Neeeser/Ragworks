@@ -284,10 +284,14 @@ frontend form code — only a new `ConfigFieldKind` would.
   `CREATE EXTENSION IF NOT EXISTS vector`; on failure it logs and flips the
   `app/db/pgvector_support.py` availability flag instead of failing startup.
   pg_search follows the same pattern (`app/db/pg_search_support.py`, clear
-  `InvalidInputError` at sparse-index creation). Dev machines need the extensions
-  for the full suite (`brew install pgvector`; run against
-  `paradedb/paradedb:latest-pg17` for BM25 coverage); dependent tests use the
-  `pgvector_session`/`pg_search_session` fixtures and skip with a named reason.
+  `InvalidInputError` at sparse-index creation). **Run the suite against the
+  Dockerized ParadeDB DB — `make test`/`make coverage` start it for you
+  (`docker-compose.dev.yml`, loopback-only port 54329); it ships the `pg_search`
+  the release image runs.** On a Postgres without `pg_search` (e.g. a bare
+  external `TEST_DATABASE_URL` override) the BM25 path is untested —
+  `pg_search_session` tests skip with a named reason — so a green run there is
+  not proof a sparse/hybrid change works; verify against the ParadeDB dev DB.
+  Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
 - **The lexical (BM25) plane mirrors the dense one, backend-natively.**
   `upsert_lexical`/`lexical_query` serve sparse indexes
   (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
