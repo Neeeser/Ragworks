@@ -46,6 +46,7 @@ class _RunState:
     incoming: dict[str, list[PipelineEdgeDefinition]]
     fanin: dict[tuple[str, str], int]
     inputs: dict[str, dict[str, object]]
+    delivered_many: dict[tuple[str, str], dict[str, object]]
     outputs: dict[str, dict[str, object]]
     pending: set[str]
     dead: set[str]
@@ -66,6 +67,7 @@ class _RunState:
             incoming=incoming,
             fanin=fanin,
             inputs={node_id: {} for node_id in node_map},
+            delivered_many={},
             outputs={},
             pending=set(node_map.keys()),
             dead=set(),
@@ -244,11 +246,15 @@ class PipelineExecutor:
             target_inputs = state.inputs[edge.target]
             input_key = edge.target_port or "default"
             if self._is_many_port(state.node_map.get(edge.target), input_key):
-                collected = target_inputs.get(input_key)
-                if isinstance(collected, list):
-                    collected.append(node_outputs[output_key])
-                else:
-                    target_inputs[input_key] = [node_outputs[output_key]]
+                key = (edge.target, input_key)
+                delivered = state.delivered_many.setdefault(key, {})
+                delivered[edge.id] = node_outputs[output_key]
+                target_inputs[input_key] = [
+                    delivered[incoming.id]
+                    for incoming in state.incoming.get(edge.target, [])
+                    if (incoming.target_port or "default") == input_key
+                    and incoming.id in delivered
+                ]
             else:
                 target_inputs[input_key] = node_outputs[output_key]
 

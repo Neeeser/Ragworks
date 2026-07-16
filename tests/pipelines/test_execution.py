@@ -196,6 +196,15 @@ class _ManyJoinNode(PipelineNodeBase):
         return None
 
 
+class _OrderedManyJoinNode(_ManyJoinNode):
+    type = "test.ordered_many_join"
+
+    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
+        items = inputs["items"]
+        assert isinstance(items, list)
+        return {"out": [str(item) for item in items]}
+
+
 @dataclass
 class _TraceRecorder:
     failed: list[Exception]
@@ -430,6 +439,45 @@ def test_accepts_many_port_collects_every_inbound_edge_before_running(
     result = executor.execute(definition, context)
 
     assert result.terminal_outputs["join"]["out"] == ["payload", "seed"]
+
+
+def test_accepts_many_port_preserves_definition_edge_order(session: Session) -> None:
+    """Variadic values keep wire order even when a later edge delivers first."""
+    registry = NodeRegistry([_DiamondSourceNode, _DiamondBranchNode, _OrderedManyJoinNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source", type="test.diamond_source", name="Source"),
+            PipelineNodeDefinition(id="branch", type="test.diamond_branch", name="Branch"),
+            PipelineNodeDefinition(id="join", type="test.ordered_many_join", name="Join"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="branch-first",
+                source="branch",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+            PipelineEdgeDefinition(
+                id="source-second",
+                source="source",
+                target="join",
+                source_port="out",
+                target_port="items",
+            ),
+            PipelineEdgeDefinition(
+                id="source-to-branch",
+                source="source",
+                target="branch",
+                source_port="out",
+                target_port="in",
+            ),
+        ],
+    )
+
+    result = PipelineExecutor(registry).execute(definition, _build_context(session))
+
+    assert result.terminal_outputs["join"]["out"] == ["seed-branched", "seed"]
 
 
 def test_accepts_many_port_runs_with_delivered_branches_when_one_never_fires(
