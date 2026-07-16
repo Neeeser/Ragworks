@@ -9,8 +9,29 @@ project *is*, see the [README](../README.md). For binding engineering rules, see
 
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - Node 22 (pinned in `.nvmrc`)
-- Postgres (local instance; `make server` will try to start it — set
-  `POSTGRES_DATA_DIR` or `POSTGRES_START_COMMAND` if needed)
+- Docker (recommended) — `make run`/`make test` start a Dockerized ParadeDB
+  database automatically (see [The dev database](#the-dev-database) below)
+
+## The dev database
+
+`make run` and `make test` start the Postgres they need in the background
+before running the app. The **recommended path is Docker**: when a Docker
+daemon is reachable they bring up `docker-compose.dev.yml` — a ParadeDB
+Postgres (`pgvector` + `pg_search`) on host port `54329` — so hybrid/BM25 search
+works exactly as it does in the shipped image, while the backend and frontend
+still run natively for hot reload. The container hosts both the dev database
+(`ragworks`) and the test database (`ragworks_test`), and data persists in a
+named volume across restarts.
+
+Without Docker they fall back to a **native** Postgres started via `pg_ctl`
+(set `POSTGRES_DATA_DIR` or `POSTGRES_START_COMMAND` if it can't find one). Only
+`pgvector` is available there — `pg_search` has no Homebrew build, so BM25 and
+hybrid retrieval degrade to dense-only with a startup warning; dense search
+still works. Prefer the Docker path so you exercise the same search stack the
+release ships and the BM25 test suite runs.
+
+Set `DATABASE_URL` (or `TEST_DATABASE_URL`) to point at your own Postgres — an
+explicit value is always respected and left unmanaged.
 
 ## Setup
 
@@ -18,8 +39,8 @@ project *is*, see the [README](../README.md). For binding engineering rules, see
 make env       # uv sync --locked + npm install in frontend/
 ```
 
-No configuration is required — every setting has a working dev default (local
-Postgres at `postgresql+psycopg://localhost:5432/ragworks`, `./storage` for
+No configuration is required — every setting has a working dev default (the
+[dev database](#the-dev-database) is provisioned for you, `./storage` for
 files, debug mode via `make server`). Provider API keys (OpenRouter, Pinecone)
 are configured **per user in the UI**, not in the environment. There are no
 env files: the app reads real environment variables only.
@@ -31,8 +52,8 @@ JWT_SECRET_KEY=…               # default: auto-generated on first boot, persis
                                # under the config path (.jwt-secret)
 CONFIG_PATH=…                  # small persistent app state (default: ./config)
 LOG_LEVEL=INFO                 # app log level (default: uvicorn's)
-DATABASE_URL=…                 # default: postgresql+psycopg://localhost:5432/ragworks
-TEST_DATABASE_URL=…            # test-suite database (default: derived locally)
+DATABASE_URL=…                 # override the dev database (see "The dev database")
+TEST_DATABASE_URL=…            # override the test database (see "The dev database")
 OPENROUTER_DEFAULT_EMBEDDING_MODEL=…   # default: qwen/qwen3-embedding-0.6b
 OPENROUTER_DEFAULT_CHAT_MODEL=…        # default: openai/gpt-oss-120b
 OPENROUTER_SITE_URL=… / OPENROUTER_SITE_NAME=…   # optional attribution headers

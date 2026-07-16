@@ -109,7 +109,16 @@ The app runs two ways, and a change isn't done until it works in both:
 
 - **Dev mode**: `make run` (or `make server` + `make frontend` separately) —
   uvicorn with reload, the Next.js dev server, `NEXT_PUBLIC_API_BASE_URL` pointing
-  the frontend straight at the backend, `DEBUG=true`.
+  the frontend straight at the backend, `DEBUG=true`. **The dev database is the
+  Dockerized ParadeDB from `docker-compose.dev.yml` — always use it (it's the
+  default whenever a Docker daemon is up).** It provides `pgvector` + `pg_search`
+  so hybrid/BM25 search matches the release image; the native-Postgres fallback
+  (Docker down) silently loses BM25, so "works natively" is not proof a
+  search-touching change is correct. Never point dev/tests at a bare Postgres to
+  "make it run" when Docker is available. The resolution lives in the `Makefile`
+  (Docker → native → external, an exported `DATABASE_URL`/`TEST_DATABASE_URL`
+  always wins and is left unmanaged) + `scripts/ensure_postgres.py`; the shipped
+  `docker-compose.yml` (release artifact) stays separate and untouched.
 - **Docker**: `docker-compose.yml` — the primary target, because Docker is the
   release format. Same-origin `/api/*` through the runtime middleware proxy, no
   build-time API URL, `DEBUG=false`, secrets/volumes as described under Releases.
@@ -191,7 +200,10 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 # Make commands
 
 - `make env`: install backend deps via `uv` and frontend deps via `npm`
-- `make server` / `make frontend` / `make run`: run backend, frontend, or both (dev)
+- `make server` / `make frontend` / `make run`: run backend, frontend, or both
+  (dev). The DB-backed targets (`server`, `test`, `coverage`, …) first run
+  `scripts/ensure_postgres.py`, which starts the Dockerized ParadeDB dev DB when
+  Docker is up (recommended) and otherwise falls back to native Postgres
 - `make verify`: the backend gate — typecheck → lint → test
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure);

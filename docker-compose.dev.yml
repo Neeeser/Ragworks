@@ -1,0 +1,31 @@
+name: ragworks-dev
+
+# Development-only database. `make run`/`make test` start this automatically
+# when Docker is available, giving every contributor the same ParadeDB Postgres
+# the release image ships (pgvector + pg_search, so hybrid/BM25 search works).
+# The backend and frontend still run natively for hot reload — this file holds
+# infrastructure only, never the app. It is deliberately separate from the
+# shipped docker-compose.yml (the release artifact mirrored in the README).
+#
+# Host port 54329 avoids colliding with a contributor's own Postgres on 5432.
+# One server hosts both the dev database (`ragworks`) and the test database
+# (`ragworks_test`, created on demand by the app/test bootstrap).
+services:
+  postgres:
+    image: paradedb/paradedb:latest-pg17
+    environment:
+      POSTGRES_USER: ragworks
+      POSTGRES_PASSWORD: ragworks
+      POSTGRES_DB: ragworks
+    ports:
+      - "54329:5432"
+    volumes:
+      - ragworks-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragworks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ragworks-dev-pgdata:

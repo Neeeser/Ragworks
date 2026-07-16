@@ -158,8 +158,8 @@ surface.
 
 ## Development
 
-Local development requires Python 3.11 or later, Node.js 22, PostgreSQL, and
-[uv](https://docs.astral.sh/uv/).
+Local development requires Python 3.11 or later, Node.js 22,
+[uv](https://docs.astral.sh/uv/), and Docker (recommended).
 
 ```bash
 git clone https://github.com/Neeeser/Ragworks.git
@@ -167,6 +167,12 @@ cd Ragworks
 make env
 make run
 ```
+
+The backend and frontend run natively (with hot reload); `make run` starts a
+Dockerized ParadeDB database in the background so `pgvector` and BM25/hybrid
+search work exactly as they do in the shipped image. Without a running Docker
+daemon it falls back to a native Postgres with BM25 disabled (dense-only search
+still works).
 
 The backend runs at <http://localhost:8000> and the frontend at
 <http://localhost:3000>. Provider credentials are configured in the UI rather

@@ -16,6 +16,33 @@ NEXT_PUBLIC_API_BASE_URL ?= http://$(API_HOST):$(API_PORT)
 # Dev opts into debug mode; the app default is production-safe (DEBUG=false).
 DEBUG ?= true
 
+# Dev database resolution — recommended path is a Dockerized ParadeDB
+# (pgvector + pg_search, so hybrid/BM25 search works); without a Docker daemon
+# we fall back to a native Postgres with BM25 disabled (dense-only). An
+# explicitly provided DATABASE_URL / TEST_DATABASE_URL (CI service container, a
+# contributor pointing at their own server) always wins and is left unmanaged.
+# Only computed for DB-touching goals so `make help`/`make lint` skip the probe.
+DB_GOALS := run server postgres test test-verbose coverage coverage-report verify
+ifneq ($(filter $(DB_GOALS),$(MAKECMDGOALS)),)
+  _DB_URL_ORIGIN := $(origin DATABASE_URL)$(origin TEST_DATABASE_URL)
+  ifneq ($(findstring environment,$(_DB_URL_ORIGIN)),)
+    DB_MODE := external
+  else ifneq ($(findstring command,$(_DB_URL_ORIGIN)),)
+    DB_MODE := external
+  else ifeq ($(shell docker info >/dev/null 2>&1 && echo yes),yes)
+    DB_MODE := docker
+    DATABASE_URL := postgresql+psycopg://ragworks:ragworks@localhost:54329/ragworks
+    TEST_DATABASE_URL := postgresql+psycopg://ragworks:ragworks@localhost:54329/ragworks_test
+  else
+    DB_MODE := native
+    DATABASE_URL := postgresql+psycopg://localhost:5432/ragworks
+    TEST_DATABASE_URL := postgresql+psycopg://localhost:5432/ragworks_test
+  endif
+  # The DB-readiness step waits on the run URL, falling back to whichever URL is
+  # externally provided (CI sets only TEST_DATABASE_URL).
+  DB_WAIT_URL := $(or $(DATABASE_URL),$(TEST_DATABASE_URL))
+endif
+
 help:
 	@echo "Targets:"
 	@echo "  make env       - create venv + install backend/frontend deps"
@@ -53,10 +80,10 @@ env-frontend:
 	$(NPM) --prefix frontend install
 
 postgres: env-backend
-	$(UV) run python scripts/ensure_postgres.py
+	DB_MODE="$(DB_MODE)" DATABASE_URL="$(DB_WAIT_URL)" $(UV) run python scripts/ensure_postgres.py
 
 server: postgres
-	DEBUG="$(DEBUG)" $(UV) run uvicorn app.api.main:app --reload --host $(API_HOST) --port $(API_PORT)
+	DEBUG="$(DEBUG)" DATABASE_URL="$(DATABASE_URL)" $(UV) run uvicorn app.api.main:app --reload --host $(API_HOST) --port $(API_PORT)
 
 frontend: env-frontend
 	NEXT_PUBLIC_API_BASE_URL="$(NEXT_PUBLIC_API_BASE_URL)" $(NPM) --prefix frontend run dev
@@ -65,19 +92,19 @@ run:
 	$(MAKE) -j2 server frontend
 
 test: postgres
-	$(UV) run pytest
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest
 
 test-verbose: postgres
-	$(UV) run pytest -vv --durations=0
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest -vv --durations=0
 
 test-frontend: env-frontend
 	$(NPM) --prefix frontend run test:run
 
 coverage: postgres
-	$(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
 
 coverage-report: postgres
-	-$(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
+	-TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest --cov --cov-report=term-missing:skip-covered --cov-report=html --cov-report=xml
 
 coverage-open:
 	@test -f htmlcov/index.html && open htmlcov/index.html || (echo "No report found. Run: make coverage" && exit 1)
