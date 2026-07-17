@@ -219,28 +219,19 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Create a QueryRequest from context.
 
-        A declared `top_k` argument (or variable) takes precedence over the
-        legacy `context.top_k`; pipelines declaring nothing keep the old
-        `context.top_k or 5` behavior byte for byte.
+        `context.top_k` is the run's effective depth: `PipelineRunner.start`
+        already replaced the legacy value with a declared `top_k` argument or
+        variable when one exists, so this node (and the fusion fallback) read
+        one agreed value.
         """
         if context.query is None:
             raise ValueError("Retrieval context is missing a query string.")
-        top_k = self._resolve_top_k(context)
         request = QueryRequest(
             text=context.query,
-            top_k=top_k,
+            top_k=context.top_k or 5,
             namespace=None,
         )
         return {"request": RetrievalRequestPayload(request=request)}
-
-    @staticmethod
-    def _resolve_top_k(context: PipelineRunContext) -> int:
-        """Return the effective request depth for this run."""
-        if context.variables is not None:
-            declared = context.variables.values.get("top_k")
-            if isinstance(declared, int) and not isinstance(declared, bool):
-                return declared
-        return context.top_k or 5
 
     def summarize_io(
         self,

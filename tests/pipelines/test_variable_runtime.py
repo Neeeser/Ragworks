@@ -100,32 +100,9 @@ def _input_definition(arguments: list[PipelineInputArgument]) -> PipelineDefinit
 
 
 class TestRetrievalInputNode:
-    """Declared top_k feeds the query request; legacy behavior is untouched."""
+    """The input node reads the run's effective top_k off the context."""
 
-    def test_declared_top_k_overrides_context(self, session: Session) -> None:
-        definition = _input_definition(
-            [PipelineInputArgument(name="top_k", type=VariableType.INTEGER, default=7)]
-        )
-        context = _context(session, top_k=3, definition=definition)
-        node = RetrievalInputNode(RetrievalInputConfig.model_validate(
-            definition.nodes[0].config
-        ))
-        outputs = node.run({}, context)
-        payload = RetrievalRequestPayload.model_validate(outputs["request"])
-        assert payload.request.top_k == 7
-
-    def test_supplied_argument_wins(self, session: Session) -> None:
-        definition = _input_definition(
-            [PipelineInputArgument(name="top_k", type=VariableType.INTEGER, default=7)]
-        )
-        context = _context(session, top_k=3, definition=definition, supplied={"top_k": 9})
-        node = RetrievalInputNode(RetrievalInputConfig.model_validate(
-            definition.nodes[0].config
-        ))
-        payload = RetrievalRequestPayload.model_validate(node.run({}, context)["request"])
-        assert payload.request.top_k == 9
-
-    def test_legacy_pipeline_uses_context_top_k(self, session: Session) -> None:
+    def test_uses_context_top_k(self, session: Session) -> None:
         context = _context(session, top_k=3)
         node = RetrievalInputNode(RetrievalInputConfig())
         payload = RetrievalRequestPayload.model_validate(node.run({}, context)["request"])
@@ -136,6 +113,71 @@ class TestRetrievalInputNode:
         node = RetrievalInputNode(RetrievalInputConfig())
         payload = RetrievalRequestPayload.model_validate(node.run({}, context)["request"])
         assert payload.request.top_k == 5
+
+
+class TestRunnerEffectiveTopK:
+    """PipelineRunner.start replaces the legacy top_k with a declared one."""
+
+    @staticmethod
+    def _start(session: Session, **start_overrides: object):
+        from app.pipelines.execution.runner import PipelineRunner
+        from app.services.pipelines import PipelineService
+
+        user = models.User(email="runner@test.local", hashed_password="hashed")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        definition = _input_definition(
+            [
+                PipelineInputArgument(
+                    name="top_k", type=VariableType.INTEGER, default=7, minimum=1
+                )
+            ]
+        )
+        pipeline = PipelineService(session).create_pipeline(
+            user=user,
+            name="Args",
+            kind=models.PipelineKind.RETRIEVAL,
+            definition=definition,
+        )
+        session.commit()
+        collection = models.Collection(
+            user_id=user.id, name="C", description="", extra_metadata={}
+        )
+        session.add(collection)
+        session.commit()
+        session.refresh(collection)
+        version = PipelineService(session).get_current_version(pipeline)
+        runner = PipelineRunner(session)
+        kwargs: dict[str, object] = {
+            "pipeline": pipeline,
+            "version": version,
+            "definition": definition,
+            "kind": models.PipelineKind.RETRIEVAL,
+            "user": user,
+            "collection": collection,
+            "settings": get_settings(),
+            "providers": StubProviderResolver(),
+            "vector_stores": StubVectorStoreProvider(None),
+            "storage": FileStorage(base_path=Path("/tmp/vars-tests")),
+            "query": "hello",
+        }
+        kwargs.update(start_overrides)
+        return runner.start(**kwargs)  # type: ignore[arg-type]
+
+    def test_supplied_argument_becomes_context_top_k(self, session: Session) -> None:
+        handle = self._start(session, top_k=3, arguments={"top_k": 9})
+        assert handle.context.top_k == 9
+
+    def test_declared_default_beats_legacy_absent_supplied(
+        self, session: Session
+    ) -> None:
+        handle = self._start(session)
+        assert handle.context.top_k == 7
+
+    def test_legacy_top_k_feeds_declared_argument(self, session: Session) -> None:
+        handle = self._start(session, top_k=3)
+        assert handle.context.top_k == 3
 
 
 class TestRetrieverTopKOverride:

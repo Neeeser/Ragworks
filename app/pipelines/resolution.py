@@ -134,6 +134,21 @@ def default_environment(definition: PipelineDefinition) -> VariableEnvironment:
     return build_environment(definition, static_defaults=True)
 
 
+def resolve_static_definition(definition: PipelineDefinition) -> PipelineDefinition:
+    """Resolve expressions against the static default environment.
+
+    The literal-config view every static consumer (settings resolution,
+    validation hooks, tokenizer prefetch) reads. When the environment itself
+    is broken, expressions are stripped instead — the validator reports the
+    underlying problem; static consumers just need configs their models can
+    parse.
+    """
+    try:
+        return resolve_definition(definition, default_environment(definition))
+    except VariableResolutionError:
+        return strip_expressions(definition)
+
+
 def resolve_definition(
     definition: PipelineDefinition,
     environment: VariableEnvironment,

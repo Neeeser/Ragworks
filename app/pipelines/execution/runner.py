@@ -87,6 +87,12 @@ class PipelineRunner:
             legacy_top_k=top_k,
         )
         resolved = resolve_definition(definition, environment)
+        # A declared `top_k` (argument or variable) becomes the run's effective
+        # depth — one owner, so every context.top_k consumer (input node,
+        # fusion fallback) agrees without re-reading the environment.
+        declared_top_k = environment.values.get("top_k")
+        if isinstance(declared_top_k, int) and not isinstance(declared_top_k, bool):
+            top_k = declared_top_k
         run = models.PipelineRun(
             pipeline_id=pipeline.id,
             pipeline_version_id=version.id,

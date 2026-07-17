@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from time import perf_counter
 
 from sqlmodel import Session
@@ -13,10 +14,15 @@ from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
-from app.pipelines.resolution import VariableResolutionError
+from app.pipelines.resolution import VariableResolutionError, declared_arguments
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
-from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
+from app.schemas.retrieval import (
+    CollectionQueryArgumentsResponse,
+    CollectionQueryResponse,
+    QueryArgumentRead,
+    RetrievedChunk,
+)
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedRetrievalPipeline, resolve_retrieval_pipeline
 from app.telemetry import record
@@ -39,7 +45,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int = 5,
-        arguments: dict[str, object] | None = None,
+        arguments: Mapping[str, object] | None = None,
     ) -> CollectionQueryResponse:
         """Run a query against a collection and return scored chunks.
 
@@ -63,6 +69,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                 collection=collection,
                 query=query,
                 top_k=top_k,
+                arguments=arguments,
                 resolved=resolved,
                 payload=payload,
                 handle=handle,
@@ -82,6 +89,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
+        arguments: Mapping[str, object] | None,
         resolved: ResolvedRetrievalPipeline,
         payload: RetrievalPayload,
         handle: PipelineRunHandle,
@@ -94,6 +102,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             collection=collection,
             query=query,
             top_k=top_k,
+            arguments=arguments,
             resolved=resolved,
             payload=payload,
             handle=handle,
@@ -113,8 +122,27 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             top_k=top_k,
             chunks=self._map_chunks(payload),
             usage=payload.usage.model_dump(),
+            outputs=payload.outputs,
             query_event_id=event.id,
             pipeline_run_id=handle.run.id,
+        )
+
+    def query_arguments(
+        self,
+        user: models.User,
+        collection: models.Collection,
+    ) -> CollectionQueryArgumentsResponse:
+        """Return the declared input arguments of the collection's retrieval pipeline.
+
+        An empty list means the pipeline declares none — callers fall back to
+        the legacy built-in `top_k` control.
+        """
+        resolved = self._resolve_pipeline(user, collection)
+        return CollectionQueryArgumentsResponse(
+            arguments=[
+                QueryArgumentRead.model_validate(argument.model_dump())
+                for argument in declared_arguments(resolved.definition)
+            ]
         )
 
     def _resolve_pipeline(
@@ -134,7 +162,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
-        arguments: dict[str, object] | None = None,
+        arguments: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the retrieval pipeline run."""
         providers = ProviderResolver(user, self.session)
@@ -178,6 +206,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
+        arguments: Mapping[str, object] | None,
         resolved: ResolvedRetrievalPipeline,
         payload: RetrievalPayload,
         handle: PipelineRunHandle,
@@ -186,6 +215,17 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         """Persist a `QueryEvent` recording this query's outcome and usage."""
         matches = payload.response.matches
         usage = payload.usage.model_dump()
+        response_payload: dict[str, object] = {
+            "match_count": len(matches),
+            "max_score": max((match.score for match in matches), default=0.0),
+            "min_score": min((match.score for match in matches), default=0.0),
+            "pipeline_id": str(resolved.pipeline.id),
+            "usage": usage,
+        }
+        if arguments:
+            response_payload["arguments"] = dict(arguments)
+        if payload.outputs:
+            response_payload["outputs"] = dict(payload.outputs)
         return QueryRepository(self.session).add_event(
             models.QueryEvent(
                 user_id=user.id,
@@ -195,13 +235,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                 model=resolved.settings.embedding_model,
                 context_tokens=self._context_tokens(payload.usage),
                 latency_ms=latency_ms,
-                response_payload={
-                    "match_count": len(matches),
-                    "max_score": max((match.score for match in matches), default=0.0),
-                    "min_score": min((match.score for match in matches), default=0.0),
-                    "pipeline_id": str(resolved.pipeline.id),
-                    "usage": usage,
-                },
+                response_payload=response_payload,
                 pipeline_run_id=handle.run.id,
             )
         )

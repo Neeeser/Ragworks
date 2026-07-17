@@ -17,12 +17,7 @@ from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.ports import compatible
 from app.pipelines.registry import NodeRegistry
-from app.pipelines.resolution import (
-    VariableResolutionError,
-    default_environment,
-    resolve_definition,
-    strip_expressions,
-)
+from app.pipelines.resolution import resolve_static_definition, strip_expressions
 from app.pipelines.validation_variables import collect_variable_issues
 from app.providers.base import effective_embedding_input_limit
 
@@ -92,10 +87,7 @@ class PipelineValidator:
         """Return the literal-config definition per-node validation hooks see."""
         if any(issue.severity == "error" for issue in variable_issues):
             return strip_expressions(definition)
-        try:
-            return resolve_definition(definition, default_environment(definition))
-        except VariableResolutionError:
-            return strip_expressions(definition)
+        return resolve_static_definition(definition)
 
     def _check_node_identity(
         self,

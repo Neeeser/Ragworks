@@ -255,3 +255,159 @@ def test_extract_retrieval_payload_raises_for_missing_result() -> None:
     it's pure data-in/data-out validation, not wiring."""
     with pytest.raises(InvalidInputError, match="retrieval result payload"):
         RetrievalService._extract_retrieval_payload({"node": {"data": {}}})
+
+
+def _declare_pipeline_variables(
+    session: Session,
+    user: models.User,
+    *,
+    arguments: list[dict[str, object]],
+    outputs: list[dict[str, str]] | None = None,
+    retriever_top_k_expression: str | None = None,
+) -> None:
+    """Rewrite the user's default retrieval pipeline with declared arguments."""
+    from app.pipelines.definition import PipelineDefinition
+
+    pipeline = session.exec(
+        select(models.Pipeline).where(
+            models.Pipeline.user_id == user.id,
+            models.Pipeline.kind == models.PipelineKind.RETRIEVAL,
+        )
+    ).one()
+    service = PipelineService(session)
+    version = service.get_current_version(pipeline)
+    definition = PipelineDefinition.model_validate(version.definition)
+    for node in definition.nodes:
+        if node.type == "retrieval.input":
+            node.config = {**node.config, "arguments": arguments}
+        if outputs is not None and node.type == "retrieval.output":
+            node.config = {**node.config, "outputs": outputs}
+        if retriever_top_k_expression is not None and node.type == "retriever.vector":
+            node.config = {**node.config, "top_k": {"$expr": retriever_top_k_expression}}
+    service.update_pipeline(
+        pipeline=pipeline, definition=definition, change_summary="Declare arguments."
+    )
+    session.commit()
+
+
+def test_query_arguments_empty_when_pipeline_declares_none(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    response = RetrievalService(session).query_arguments(user, collection)
+    assert response.arguments == []
+
+
+def test_query_arguments_lists_declared_arguments(session: Session) -> None:
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _declare_pipeline_variables(
+        session,
+        user,
+        arguments=[
+            {
+                "name": "top_k",
+                "type": "integer",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 10,
+                "expose_to_llm": True,
+            },
+            {
+                "name": "mode",
+                "type": "enum",
+                "default": "fast",
+                "choices": ["fast", "deep"],
+            },
+        ],
+    )
+    response = RetrievalService(session).query_arguments(user, collection)
+    assert [argument.name for argument in response.arguments] == ["top_k", "mode"]
+    top_k = response.arguments[0]
+    assert top_k.type == "integer"
+    assert top_k.default == 5
+    assert top_k.maximum == 10
+    assert top_k.expose_to_llm is True
+    assert response.arguments[1].choices == ["fast", "deep"]
+
+
+def test_query_collection_rejects_unknown_argument(monkeypatch, session: Session) -> None:
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    with pytest.raises(InvalidInputError, match="Unknown argument 'nope'"):
+        RetrievalService(session).query_collection(
+            user, collection, query="hello", arguments={"nope": 1}
+        )
+    # Rejected input never records a run.
+    assert session.exec(select(models.PipelineRun)).first() is None
+
+
+def test_query_collection_rejects_constraint_violation(
+    monkeypatch, session: Session
+) -> None:
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _declare_pipeline_variables(
+        session,
+        user,
+        arguments=[
+            {"name": "top_k", "type": "integer", "default": 5, "minimum": 1, "maximum": 10}
+        ],
+    )
+    with pytest.raises(InvalidInputError, match="must be at most 10"):
+        RetrievalService(session).query_collection(
+            user, collection, query="hello", arguments={"top_k": 99}
+        )
+
+
+def test_query_collection_arguments_drive_over_retrieval_and_outputs(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """Declared arguments flow into expressions (retriever top_k) and declared
+    outputs come back on the response and the recorded QueryEvent."""
+    session = pgvector_session
+    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _declare_pipeline_variables(
+        session,
+        user,
+        arguments=[
+            {"name": "top_k", "type": "integer", "default": 5, "minimum": 1, "maximum": 10}
+        ],
+        outputs=[{"name": "candidates", "expression": "top_k * 2"}],
+        retriever_top_k_expression="top_k * 2",
+    )
+
+    store = PgvectorStore(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
+    store.upsert(
+        "ragworks",
+        f"col-{collection.id}",
+        [
+            DocumentChunk(
+                document_id="doc-1",
+                chunk_id=f"chunk-{order}",
+                text=f"Paris fact {order}.",
+                order=order,
+                metadata=DocumentMetadata(data={}),
+                embedding=[0.1, 0.2, 0.3],
+            )
+            for order in range(4)
+        ],
+    )
+
+    response = RetrievalService(session).query_collection(
+        user, collection, query="capital of France", arguments={"top_k": 2}
+    )
+
+    assert response.outputs == {"candidates": 4}
+    # The declared top_k argument (2) caps the fused list even though the
+    # retriever over-fetched 4 candidates.
+    assert len(response.chunks) == 2
+
+    event = session.get(models.QueryEvent, response.query_event_id)
+    assert event is not None
+    assert event.response_payload["arguments"] == {"top_k": 2}
+    assert event.response_payload["outputs"] == {"candidates": 4}
