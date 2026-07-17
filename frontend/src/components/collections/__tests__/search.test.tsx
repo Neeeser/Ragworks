@@ -179,4 +179,22 @@ describe("CollectionSearch", () => {
     fireEvent.click(screen.getByRole("button", { name: traceResultLabel }));
     expect(getMockRouter().push).not.toHaveBeenCalled();
   });
+
+  it("renders no retrieval control until the argument spec resolves", async () => {
+    // Rendering the legacy Top K while the spec is in flight briefly
+    // misrepresents a declaring pipeline (and vice versa).
+    api.fetchCollectionQueryArguments.mockImplementationOnce(() => new Promise(() => {}));
+    render(<CollectionSearch collectionId="col-pending" token="token" />);
+    expect(screen.queryByText("Top K")).not.toBeInTheDocument();
+    await act(async () => Promise.resolve());
+  });
+
+  it("falls back to the legacy control with a notice when the spec fails to load", async () => {
+    api.fetchCollectionQueryArguments.mockRejectedValueOnce(new Error("spec down"));
+    render(<CollectionSearch collectionId="col-err" token="token" />);
+    await waitFor(() => {
+      expect(screen.getByText(/declared arguments/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Top K")).toBeInTheDocument();
+  });
 });

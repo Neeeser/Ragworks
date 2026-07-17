@@ -68,6 +68,10 @@ export type CollectionSearchState = {
   setTopK: (topK: number) => void;
   /** The retrieval pipeline's declared arguments; empty = legacy top_k control. */
   argumentsSpec: CollectionQueryArgument[];
+  /** True once the declared-arguments spec has loaded — controls render then. */
+  argumentsReady: boolean;
+  /** Spec load failure; queries fall back to the legacy top_k field. */
+  argumentsError: string | null;
   argumentValues: QueryArgumentValues;
   setArgumentValue: (name: string, value: number | string | boolean | undefined) => void;
   result: CollectionQueryResult | null;
@@ -197,6 +201,8 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     topK,
     setTopK,
     argumentsSpec,
+    argumentsReady: argumentsQuery.data !== null,
+    argumentsError: argumentsQuery.error,
     argumentValues,
     setArgumentValue,
     result,

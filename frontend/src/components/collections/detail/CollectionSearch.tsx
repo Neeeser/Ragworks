@@ -82,7 +82,10 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
                 values={search.argumentValues}
                 onChange={search.setArgumentValue}
               />
-            ) : (
+            ) : search.argumentsReady || search.argumentsError ? (
+              // Rendered only once the spec is known (or failed): showing the
+              // legacy control while the spec loads misrepresents a declaring
+              // pipeline for a moment.
               <label className="flex items-center gap-2 text-sm text-body">
                 <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
                   Top K
@@ -96,7 +99,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
                   className="w-20 px-3 py-1.5 text-center"
                 />
               </label>
-            )}
+            ) : null}
             <label className="flex items-center gap-2 text-sm text-body">
               <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
                 Min score
@@ -145,6 +148,13 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
               </button>
             ))}
           </div>
+        )}
+
+        {search.argumentsError && (
+          <p className="mt-3 text-xs text-data-warn" role="status">
+            Couldn&apos;t load this pipeline&apos;s declared arguments ({search.argumentsError}) —
+            queries fall back to the built-in top k.
+          </p>
         )}
 
         {search.error && (

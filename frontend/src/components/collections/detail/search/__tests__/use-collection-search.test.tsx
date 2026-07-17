@@ -98,6 +98,28 @@ describe("declared pipeline arguments", () => {
     });
   });
 
+  it("exposes the spec load state instead of swallowing a failed fetch", async () => {
+    // A transient failure (e.g. a token-rotation 401) must not silently render
+    // the legacy control as if the pipeline declared nothing.
+    api.fetchCollectionQueryArguments.mockRejectedValue(new Error("boom"));
+
+    const hook = renderHook(() => useCollectionSearch("token", "col-err"));
+    expect(hook.result.current.argumentsReady).toBe(false);
+    await act(async () => Promise.resolve());
+    expect(hook.result.current.argumentsError).toBeTruthy();
+    expect(hook.result.current.argumentsReady).toBe(false);
+  });
+
+  it("reports the spec ready once it resolves", async () => {
+    api.fetchCollectionQueryArguments.mockResolvedValue({ arguments: [] });
+
+    const hook = renderHook(() => useCollectionSearch("token", "col-ready"));
+    expect(hook.result.current.argumentsReady).toBe(false);
+    await act(async () => Promise.resolve());
+    expect(hook.result.current.argumentsReady).toBe(true);
+    expect(hook.result.current.argumentsError).toBeNull();
+  });
+
   it("keeps the legacy top_k request when the pipeline declares nothing", async () => {
     api.fetchCollectionQueryArguments.mockResolvedValue({ arguments: [] });
     api.runCollectionQuery.mockResolvedValueOnce(makeQueryResult());
