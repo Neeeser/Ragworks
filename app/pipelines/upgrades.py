@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
+from app.pipelines.defaults import DEFAULT_TOP_K_VARIABLE
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -101,7 +102,57 @@ def migrate_variables_definition(definition: PipelineDefinition) -> PipelineDefi
     variables = [variable.model_copy(deep=True) for variable in definition.variables]
     nodes = [_migrate_input_node(node, variables) for node in definition.nodes]
     nodes, edges = _insert_fusion_limits(nodes, list(definition.edges))
+    nodes = declare_default_top_k(nodes, variables)
     return definition.model_copy(update={"nodes": nodes, "edges": edges, "variables": variables})
+
+
+def declare_default_top_k(
+    nodes: list[PipelineNodeDefinition],
+    variables: list[PipelineVariable],
+) -> list[PipelineNodeDefinition]:
+    """Make the historical implicit top_k contract explicit on no-input pipelines.
+
+    A pre-variables retrieval definition declared nothing: the chat tool
+    schema fell back to the hardcoded ``top_k`` (integer, 1-10, default 5)
+    and fusion cut to the requested depth invisibly. Rewriting it to declare
+    the scaffold's ``top_k`` input variable, accept it on the input node, and
+    point unset Top-N cuts at ``{"$expr": "top_k"}`` keeps that contract
+    byte-for-byte while making it visible and editable. Definitions that
+    already declare any input variable are left alone. Appends to
+    `variables` in place; returns the rewritten node list.
+    """
+    input_nodes = [node for node in nodes if node.type == RETRIEVAL_INPUT_TYPE]
+    if not input_nodes:
+        return nodes
+    if any(variable.source is VariableSource.INPUT for variable in variables):
+        return nodes
+    if any(variable.name == DEFAULT_TOP_K_VARIABLE.name for variable in variables):
+        return nodes
+    variables.append(DEFAULT_TOP_K_VARIABLE.model_copy(deep=True))
+    rewritten: list[PipelineNodeDefinition] = []
+    for node in nodes:
+        if node.type == RETRIEVAL_INPUT_TYPE:
+            rewritten.append(
+                node.model_copy(
+                    update={
+                        "config": {**node.config, "arguments": [DEFAULT_TOP_K_VARIABLE.name]}
+                    }
+                )
+            )
+        elif node.type == LimitNode.type and node.config.get("top_n") is None:
+            rewritten.append(
+                node.model_copy(
+                    update={
+                        "config": {
+                            **node.config,
+                            "top_n": {"$expr": DEFAULT_TOP_K_VARIABLE.name},
+                        }
+                    }
+                )
+            )
+        else:
+            rewritten.append(node)
+    return rewritten
 
 
 def _migrate_input_node(

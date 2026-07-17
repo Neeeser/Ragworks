@@ -182,12 +182,12 @@ export const buildDefaultDefinition = (
           config: {},
         },
         // Fusion never cuts; the Top-N node is the explicit cut back to the
-        // requested top_k (its unset-config default).
+        // declared top_k input variable.
         {
           id: NODE_LIMIT_RESULTS,
           type: LIMIT_NODE_TYPE,
           name: "Top-N",
-          config: {},
+          config: { top_n: { $expr: "top_k" } },
         },
       );
       edges.push(

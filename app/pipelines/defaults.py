@@ -328,11 +328,12 @@ config={
                     name="RRF Fusion",
                 ),
                 # Fusion never cuts; the Top-N node is the explicit cut back
-                # to the requested top_k (its unset-config default).
+                # to the declared top_k input variable.
                 PipelineNodeDefinition(
                     id="limit-results",
                     type=LimitNode.type,
                     name="Top-N",
+                    config={"top_n": {"$expr": DEFAULT_TOP_K_VARIABLE.name}},
                 ),
             ]
         )

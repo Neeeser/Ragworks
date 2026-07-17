@@ -186,6 +186,35 @@ class TestMigrateVariablesDefinition:
         limit = next(node for node in migrated.nodes if node.type == "limit.top_n")
         assert limit.config == {}
 
+    def test_pre_variables_definition_gains_the_default_top_k(self) -> None:
+        """A pre-branch retrieval definition (no declarations at all) is rewritten
+        to the new-default shape: the implicit hardcoded tool contract becomes the
+        scaffold's explicit top_k input variable, accepted by the input node, with
+        the inserted Top-N pointed at it."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"] = {}  # pre-variables: no arguments key at all
+
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+
+        variable = next(v for v in migrated.variables if v.name == "top_k")
+        assert variable.source is VariableSource.INPUT
+        assert variable.value == 5
+        assert (variable.minimum, variable.maximum) == (1, 10)
+        assert variable.expose_to_llm is True
+        assert migrated.node_map()["in"].config["arguments"] == ["top_k"]
+        limit = next(node for node in migrated.nodes if node.type == "limit.top_n")
+        assert limit.config == {"top_n": {"$expr": "top_k"}}
+
+    def test_declared_pipelines_never_gain_a_second_top_k(self) -> None:
+        """A definition that already declares inputs keeps exactly its own."""
+        migrated = migrate_variables_definition(
+            PipelineDefinition.model_validate(_v1_raw_definition())
+        )
+        assert [v.name for v in migrated.variables] == ["top_k"]
+        assert migrated.variables[0].value == 5  # the declared one, not a duplicate
+
 
 def test_stored_v1_definition_is_migrated_once(session: Session) -> None:
     """A raw v1 row is rewritten and stamped; a later boot never touches it again."""

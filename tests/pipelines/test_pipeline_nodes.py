@@ -32,6 +32,7 @@ from app.pipelines.payloads import (
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, build_default_registry
+from app.pipelines.resolution import build_environment, resolve_definition
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
@@ -279,8 +280,13 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     definition = build_default_retrieval_pipeline(
         embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
     )
+    # Resolve-then-run: the scaffold's Top-N carries an `{"$expr": "top_k"}`
+    # config, so the executor only ever sees the resolved literal.
+    resolved = resolve_definition(
+        definition, build_environment(definition, query="hello", supplied={"top_k": 3})
+    )
     executor = PipelineExecutor(build_default_registry())
-    result = executor.execute(definition, context)
+    result = executor.execute(resolved, context)
     payload = next(
         RetrievalPayload.model_validate(outputs["result"])
         for outputs in result.terminal_outputs.values()

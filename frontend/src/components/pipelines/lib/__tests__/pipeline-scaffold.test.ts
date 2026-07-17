@@ -30,7 +30,7 @@ describe("buildDefaultDefinition", () => {
     const fusion = definition.nodes.find((node) => node.type === "fusion.rrf");
     const limit = definition.nodes.find((node) => node.type === "limit.top_n");
     expect(fusion?.config).toEqual({});
-    expect(limit?.config).toEqual({});
+    expect(limit?.config).toEqual({ top_n: { $expr: "top_k" } });
     expect(
       definition.edges.some((edge) => edge.source === fusion?.id && edge.target === limit?.id),
     ).toBe(true);

@@ -128,6 +128,11 @@ colocate a single file with its consumer.
   that both pytest and vitest execute. A grammar or semantics change lands in both
   implementations plus the vectors, never one side — the vectors are what make the
   drift impossible, so never skip them.
+- **One PR ships at most one stored-data migration.** A shape that only ever
+  existed on the branch is reworked *inside* the pending migration (hand-fix your
+  own dev DB rows), never patched with a second version bump — releases migrate
+  release-to-release, and stacked steps for shapes no deployment ever ran are
+  permanent startup complexity for nothing.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion

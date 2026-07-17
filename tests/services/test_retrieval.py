@@ -300,6 +300,11 @@ def _declare_pipeline_variables(
             node.config = {**node.config, "outputs": outputs}
         if retriever_top_k_expression is not None and node.type == "retriever.vector":
             node.config = {**node.config, "top_k": {"$expr": retriever_top_k_expression}}
+        if node.type == "limit.top_n" and "top_k" not in names:
+            # The scaffold's Top-N references the top_k variable this helper
+            # just replaced; unset it so the cut falls back to the requested
+            # depth instead of a dangling expression.
+            node.config = {key: value for key, value in node.config.items() if key != "top_n"}
     service.update_pipeline(
         pipeline=pipeline, definition=definition, change_summary="Declare arguments."
     )
