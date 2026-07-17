@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
@@ -24,6 +24,7 @@ from app.pipelines.tracing.summaries import (
     trace_chunk_items,
     trace_match_items,
 )
+from app.pipelines.variables import PipelineInputArgument, PipelineOutputField
 from app.retrieval.models import DocumentMetadata, QueryRequest
 from app.retrieval.parsers.base import DocumentSource
 from app.services.files import FileSystemService
@@ -191,7 +192,15 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
 
 
 class RetrievalInputConfig(BaseModel):
-    """Configuration for retrieval input nodes."""
+    """Configuration for retrieval input nodes.
+
+    `arguments` declares the caller-supplied inputs this pipeline accepts —
+    the search page renders a control per entry and the chat tool schema
+    publishes the `expose_to_llm` ones. The built-in `query` argument is
+    implicit and always present.
+    """
+
+    arguments: list[PipelineInputArgument] = Field(default_factory=list)
 
 
 class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
@@ -242,7 +251,14 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
 
 
 class RetrievalOutputConfig(BaseModel):
-    """Configuration for retrieval output nodes."""
+    """Configuration for retrieval output nodes.
+
+    `outputs` declares extra named expressions evaluated against the run's
+    variable environment and returned beside the results (e.g. the effective
+    over-retrieval depth). Purely additive: an empty list is today's behavior.
+    """
+
+    outputs: list[PipelineOutputField] = Field(default_factory=list)
 
 
 class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):

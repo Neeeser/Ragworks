@@ -18,7 +18,8 @@ from app.pipelines.definition import (
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.nodes.embedding import EmbedderNode
-from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+from app.pipelines.nodes.indexing import IndexerConfig
+from app.pipelines.nodes.indexing_legacy import IndexerNode
 from app.pipelines.nodes.io import RetrievalInputNode
 from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort

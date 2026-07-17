@@ -16,12 +16,8 @@ from app.pipelines.nodes.chunking import (
 )
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
-from app.pipelines.nodes.indexing import (
-    Bm25IndexerNode,
-    IndexerNode,
-    PgvectorIndexerNode,
-    VectorIndexerNode,
-)
+from app.pipelines.nodes.indexing import Bm25IndexerNode, VectorIndexerNode
+from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.nodes.io import (
     IngestionInputNode,
     IngestionOutputNode,
@@ -29,11 +25,11 @@ from app.pipelines.nodes.io import (
     RetrievalOutputNode,
 )
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
+from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import (
     Bm25RetrieverNode,
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
-    RerankerNode,
     VectorRetrieverNode,
 )
 

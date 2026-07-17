@@ -16,12 +16,8 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
-from app.pipelines.nodes.indexing import (
-    IndexerNode,
-    PgvectorIndexerNode,
-    VectorIndexerNode,
-    default_index_name,
-)
+from app.pipelines.nodes.indexing import VectorIndexerNode, default_index_name
+from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.nodes.retrieval import (
     PgvectorRetrieverNode,
     PineconeRetrieverNode,

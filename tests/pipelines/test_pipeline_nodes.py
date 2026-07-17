@@ -300,7 +300,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
 
 
 def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 
     chunk_a = DocumentChunk(
         document_id="doc",
@@ -333,7 +333,7 @@ def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
         def rerank(self, query: str, candidates: list[ScoredChunk], top_k: int | None = None):
             return list(reversed(candidates))
 
-    monkeypatch.setattr("app.pipelines.nodes.retrieval.CrossEncoderReranker", _StubReranker)
+    monkeypatch.setattr("app.pipelines.nodes.reranking.CrossEncoderReranker", _StubReranker)
 
     user = _build_user()
     collection = _build_collection(user)
@@ -725,7 +725,8 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -746,7 +747,8 @@ def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -775,7 +777,8 @@ def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -803,7 +806,8 @@ def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -843,7 +847,7 @@ def test_retrieval_input_requires_query(session: Session) -> None:
 
 
 def test_reranker_node_returns_when_disabled(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 
@@ -868,7 +872,7 @@ def test_reranker_node_returns_when_disabled(session: Session) -> None:
 
 
 def test_reranker_node_requires_query(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 
@@ -892,7 +896,7 @@ def test_reranker_node_requires_query(session: Session) -> None:
 
 
 def test_reranker_node_summarize_io(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 

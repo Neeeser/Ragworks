@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.pipelines.variables import PipelineVariable
+
 
 class PipelineNodePosition(BaseModel):
     """UI positioning metadata for a pipeline node."""
@@ -56,6 +58,7 @@ class PipelineDefinition(BaseModel):
     nodes: list[PipelineNodeDefinition] = Field(default_factory=list)
     edges: list[PipelineEdgeDefinition] = Field(default_factory=list)
     viewport: dict[str, Any] = Field(default_factory=dict)
+    variables: list[PipelineVariable] = Field(default_factory=list)
 
     def node_map(self) -> dict[str, PipelineNodeDefinition]:
         """Return nodes keyed by id."""

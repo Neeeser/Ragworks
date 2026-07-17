@@ -12,11 +12,8 @@ from app.db import models
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.nodes.indexing import (
-    IndexerNode,
-    PgvectorIndexerConfig,
-    PgvectorIndexerNode,
-)
+from app.pipelines.nodes.indexing import PgvectorIndexerConfig
+from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.payloads import EmbeddingPayload
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_ingestion_settings, resolve_retrieval_settings
