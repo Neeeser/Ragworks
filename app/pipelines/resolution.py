@@ -23,7 +23,6 @@ it to their boundary's error type (the retrieval service maps it to
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
@@ -45,6 +44,7 @@ from app.pipelines.variables import (
     QUERY_VARIABLE,
     PipelineInputArgument,
     PipelineVariable,
+    VariableEnvironment,
     VariableType,
     VariableValueError,
     coerce_literal,
@@ -59,15 +59,6 @@ class VariableResolutionError(ValueError):
         """Store every failure message; str() joins them."""
         super().__init__("; ".join(messages))
         self.messages = messages
-
-
-@dataclass(frozen=True)
-class VariableEnvironment:
-    """A fully-evaluated variable environment for one run (or static pass)."""
-
-    types: dict[str, ExprType]
-    values: dict[str, ExprValue]
-    tainted: frozenset[str] = field(default_factory=frozenset)
 
 
 def declared_arguments(definition: PipelineDefinition) -> list[PipelineInputArgument]:

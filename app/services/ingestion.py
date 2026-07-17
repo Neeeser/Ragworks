@@ -117,7 +117,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             )
             document.ingestion_run_id = handle.run.id
             self.session.add(document)
-            result = runner.execute(resolved.definition, handle)
+            result = runner.execute(handle)
             payload = self._extract_indexing_payload(result.terminal_outputs)
             document.warnings = [*handle.run.warnings]
             chunk_records = self._persist_chunks(

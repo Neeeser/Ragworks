@@ -24,6 +24,7 @@ from app.pipelines.nodes.io import (
     RetrievalInputNode,
     RetrievalOutputNode,
 )
+from app.pipelines.nodes.limiting import LimitNode
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import (
@@ -89,6 +90,7 @@ def build_default_registry() -> NodeRegistry:
             VectorRetrieverNode,
             Bm25RetrieverNode,
             RRFusionNode,
+            LimitNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,
             RerankerNode,

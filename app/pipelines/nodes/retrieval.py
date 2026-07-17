@@ -48,13 +48,23 @@ logger = logging.getLogger(__name__)
 
 
 class RetrieverConfig(BaseModel):
-    """Configuration for Pinecone retriever nodes."""
+    """Configuration for Pinecone retriever nodes.
+
+    `top_k` overrides the inbound request's depth when set — the
+    over-retrieval hook (e.g. the expression `top_k * 2` to fetch extra
+    candidates for fusion/reranking). Unset, the request's value applies.
+    """
 
     index_name: str = Field(
         default_factory=lambda: get_settings().pinecone_index_name,
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
     namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    top_k: int | None = Field(
+        default=None,
+        gt=0,
+        description="Override how many chunks to fetch; unset uses the request's top_k.",
+    )
 
 
 class PgvectorRetrieverConfig(RetrieverConfig):
@@ -135,7 +145,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
                 index_name,
                 namespace or "",
                 embedding=embedding,
-                top_k=request.top_k,
+                top_k=self.config.top_k if self.config.top_k is not None else request.top_k,
                 filter=request.filter,
             )
         except NotFoundError:
@@ -225,7 +235,11 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
 
 
 class Bm25RetrieverConfig(BaseModel):
-    """Configuration for BM25 (sparse/lexical) retriever nodes."""
+    """Configuration for BM25 (sparse/lexical) retriever nodes.
+
+    `top_k` mirrors the dense retriever's override: set (typically to an
+    expression) to over-retrieve; unset uses the request's depth.
+    """
 
     backend: IndexBackend = Field(
         default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend),
@@ -233,6 +247,11 @@ class Bm25RetrieverConfig(BaseModel):
     )
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
     namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    top_k: int | None = Field(
+        default=None,
+        gt=0,
+        description="Override how many chunks to fetch; unset uses the request's top_k.",
+    )
 
 
 class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
@@ -291,7 +310,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                 index_name,
                 namespace or "",
                 text=request.text,
-                top_k=request.top_k,
+                top_k=self.config.top_k if self.config.top_k is not None else request.top_k,
                 filter=request.filter,
             )
         except NotFoundError:

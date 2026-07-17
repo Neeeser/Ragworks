@@ -13,6 +13,7 @@ from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
+from app.pipelines.resolution import VariableResolutionError
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
 from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
@@ -32,24 +33,32 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         self.settings = get_settings()
         self.session = session
 
-    def query_collection(
+    def query_collection(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         user: models.User,
         collection: models.Collection,
         query: str,
         top_k: int = 5,
+        arguments: dict[str, object] | None = None,
     ) -> CollectionQueryResponse:
-        """Run a query against a collection and return scored chunks."""
+        """Run a query against a collection and return scored chunks.
+
+        `arguments` are the caller-supplied values for the pipeline's declared
+        input arguments; invalid values are an `InvalidInputError` (400).
+        """
         start_time = perf_counter()
         resolved = self._resolve_pipeline(user, collection)
         runner = PipelineRunner(self.session)
-        handle = self._start_run(runner, resolved, user, collection, query, top_k)
         try:
-            result = runner.execute(resolved.definition, handle)
+            handle = self._start_run(
+                runner, resolved, user, collection, query, top_k, arguments
+            )
+        except VariableResolutionError as exc:
+            raise InvalidInputError(str(exc)) from exc
+        try:
+            result = runner.execute(handle)
             payload = self._extract_retrieval_payload(result.terminal_outputs)
-            chunks = self._map_chunks(payload)
-            latency_ms = (perf_counter() - start_time) * 1000
-            event = self._record_query_event(
+            return self._record_and_respond(
                 user=user,
                 collection=collection,
                 query=query,
@@ -57,30 +66,56 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                 resolved=resolved,
                 payload=payload,
                 handle=handle,
-                latency_ms=latency_ms,
-            )
-            record(
-                RetrievalQueryRan(
-                    user_id=user.id,
-                    collection_id=collection.id,
-                    latency_ms=latency_ms,
-                    top_k=top_k,
-                    index_backend=resolved.settings.backend.value,
-                )
-            )
-            return CollectionQueryResponse(
-                query=query,
-                top_k=top_k,
-                chunks=chunks,
-                usage=payload.usage.model_dump(),
-                query_event_id=event.id,
-                pipeline_run_id=handle.run.id,
+                start_time=start_time,
             )
         except Exception as exc:
             handle.trace.mark_run_failed(exc)
             if is_external_provider_error(exc):
                 raise ExternalServiceError(f"Retrieval pipeline failed: {exc}") from exc
             raise
+
+    # pylint: disable-next=too-many-arguments
+    def _record_and_respond(
+        self,
+        *,
+        user: models.User,
+        collection: models.Collection,
+        query: str,
+        top_k: int,
+        resolved: ResolvedRetrievalPipeline,
+        payload: RetrievalPayload,
+        handle: PipelineRunHandle,
+        start_time: float,
+    ) -> CollectionQueryResponse:
+        """Persist the query event, record telemetry, and shape the response."""
+        latency_ms = (perf_counter() - start_time) * 1000
+        event = self._record_query_event(
+            user=user,
+            collection=collection,
+            query=query,
+            top_k=top_k,
+            resolved=resolved,
+            payload=payload,
+            handle=handle,
+            latency_ms=latency_ms,
+        )
+        record(
+            RetrievalQueryRan(
+                user_id=user.id,
+                collection_id=collection.id,
+                latency_ms=latency_ms,
+                top_k=top_k,
+                index_backend=resolved.settings.backend.value,
+            )
+        )
+        return CollectionQueryResponse(
+            query=query,
+            top_k=top_k,
+            chunks=self._map_chunks(payload),
+            usage=payload.usage.model_dump(),
+            query_event_id=event.id,
+            pipeline_run_id=handle.run.id,
+        )
 
     def _resolve_pipeline(
         self,
@@ -99,6 +134,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
+        arguments: dict[str, object] | None = None,
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the retrieval pipeline run."""
         providers = ProviderResolver(user, self.session)
@@ -117,6 +153,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             storage=FileStorage(),
             query=query,
             top_k=top_k,
+            arguments=arguments,
         )
 
     @staticmethod

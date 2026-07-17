@@ -22,19 +22,27 @@ from app.pipelines.expressions import (
     references,
 )
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.nodes.io import RetrievalInputConfig, RetrievalInputNode
+from app.pipelines.nodes.io import (
+    RetrievalInputConfig,
+    RetrievalInputNode,
+    RetrievalOutputConfig,
+    RetrievalOutputNode,
+)
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import (
     VariableResolutionError,
     build_environment,
 )
+from app.pipelines.validation_declarations import (
+    argument_issues,
+    name_issues,
+    variabledeclaration_issues,
+)
 from app.pipelines.variables import (
     EXPR_TYPES,
     QUERY_VARIABLE,
-    RESERVED_VARIABLE_NAMES,
     PipelineInputArgument,
     PipelineVariable,
-    VariableType,
     expression_source,
     valid_variable_name,
 )
@@ -49,16 +57,68 @@ def collect_variable_issues(
     seen: set[str] = {QUERY_VARIABLE}
     arguments = _collect_arguments(definition, issues)
     for argument in arguments:
-        issues.extend(_name_issues(argument.name, seen, "Argument"))
-        issues.extend(_argument_issues(argument))
+        issues.extend(name_issues(argument.name, seen, "Argument"))
+        issues.extend(argument_issues(argument))
     for variable in definition.variables:
-        issues.extend(_name_issues(variable.name, seen, "Variable"))
-        issues.extend(_variable_declaration_issues(variable))
+        issues.extend(name_issues(variable.name, seen, "Variable"))
+        issues.extend(variabledeclaration_issues(variable))
     types, tainted = _static_types(definition, arguments)
     issues.extend(_derived_expression_issues(definition.variables, types))
     issues.extend(_environment_issues(definition))
     issues.extend(_node_config_issues(definition, registry, types, tainted))
+    issues.extend(_output_issues(definition, types))
     return _dedupe(issues)
+
+
+def _output_issues(
+    definition: PipelineDefinition,
+    types: dict[str, ExprType],
+) -> list[PipelineValidationIssue]:
+    """Check declared output expressions on retrieval.output nodes."""
+    issues: list[PipelineValidationIssue] = []
+    for node in definition.nodes:
+        if node.type != RetrievalOutputNode.type:
+            continue
+        try:
+            config = RetrievalOutputConfig.model_validate(node.config or {})
+        except ValidationError:
+            issues.append(
+                PipelineValidationIssue(
+                    code="outputs_invalid",
+                    message=f"Node '{node.id}' has a malformed outputs declaration.",
+                    node_id=node.id,
+                    field="outputs",
+                )
+            )
+            continue
+        seen: set[str] = set()
+        for output in config.outputs:
+            message: str | None = None
+            if not valid_variable_name(output.name):
+                message = f"Output name '{output.name}' is invalid."
+            elif output.name in seen:
+                message = f"Duplicate output name '{output.name}'."
+            else:
+                seen.add(output.name)
+                try:
+                    result = check_type(parse(output.expression), types)
+                    if result is ExprType.MODEL:
+                        message = (
+                            f"Output '{output.name}': dereference the model variable "
+                            "with .connection_id or .model_name."
+                        )
+                except ExpressionError as error:
+                    message = f"Output '{output.name}': {error.message}."
+            if message is not None:
+                issues.append(
+                    PipelineValidationIssue(
+                        code="outputs_invalid",
+                        message=f"Node '{node.id}': {message}",
+                        node_id=node.id,
+                        field="outputs",
+                    )
+                )
+    return issues
 
 
 def _dedupe(issues: list[PipelineValidationIssue]) -> list[PipelineValidationIssue]:
@@ -98,99 +158,6 @@ def _collect_arguments(
             continue
         arguments.extend(config.arguments)
     return arguments
-
-
-def _name_issues(
-    name: str,
-    seen: set[str],
-    kind: str,
-) -> list[PipelineValidationIssue]:
-    """Check identifier validity, reservation, and uniqueness across the namespace."""
-    issues: list[PipelineValidationIssue] = []
-    if not valid_variable_name(name):
-        issues.append(
-            _declaration_issue(
-                f"{kind} name '{name}' is invalid: use lowercase letters, digits, "
-                "and underscores, starting with a letter or underscore."
-            )
-        )
-    elif name in RESERVED_VARIABLE_NAMES:
-        issues.append(_declaration_issue(f"{kind} name '{name}' is reserved."))
-    elif name in seen:
-        issues.append(_declaration_issue(f"Duplicate variable or argument name '{name}'."))
-    seen.add(name)
-    return issues
-
-
-def _declaration_issue(message: str) -> PipelineValidationIssue:
-    """Build a declaration-level issue (no node anchor)."""
-    return PipelineValidationIssue(code="variable_invalid", message=message)
-
-
-def _argument_issues(argument: PipelineInputArgument) -> list[PipelineValidationIssue]:
-    """Semantic checks for one input argument declaration."""
-    issues: list[PipelineValidationIssue] = []
-    if argument.type is VariableType.MODEL:
-        issues.append(
-            _declaration_issue(
-                f"Argument '{argument.name}': model-typed values cannot be "
-                "caller-supplied; declare a model variable instead."
-            )
-        )
-        return issues
-    if argument.type is VariableType.ENUM and not argument.choices:
-        issues.append(
-            _declaration_issue(f"Argument '{argument.name}': enum arguments need choices.")
-        )
-    if not argument.required and argument.default is None:
-        issues.append(
-            _declaration_issue(
-                f"Argument '{argument.name}': optional arguments must declare a default."
-            )
-        )
-    issues.extend(_bounds_issues(argument.name, argument.minimum, argument.maximum))
-    return issues
-
-
-def _variable_declaration_issues(
-    variable: PipelineVariable,
-) -> list[PipelineValidationIssue]:
-    """Semantic checks for one panel variable declaration."""
-    issues: list[PipelineValidationIssue] = []
-    has_value = variable.value is not None
-    has_expression = variable.expression is not None
-    if has_value == has_expression:
-        issues.append(
-            _declaration_issue(
-                f"Variable '{variable.name}' needs exactly one of a value or an expression."
-            )
-        )
-    if variable.type is VariableType.MODEL and has_expression:
-        issues.append(
-            _declaration_issue(
-                f"Variable '{variable.name}': model variables hold a picked model, "
-                "not an expression."
-            )
-        )
-    if variable.type is VariableType.ENUM and not variable.choices:
-        issues.append(
-            _declaration_issue(f"Variable '{variable.name}': enum variables need choices.")
-        )
-    issues.extend(_bounds_issues(variable.name, variable.minimum, variable.maximum))
-    return issues
-
-
-def _bounds_issues(
-    name: str,
-    minimum: float | None,
-    maximum: float | None,
-) -> list[PipelineValidationIssue]:
-    """Flag an inverted minimum/maximum pair."""
-    if minimum is not None and maximum is not None and minimum > maximum:
-        return [
-            _declaration_issue(f"'{name}': minimum {minimum:g} exceeds maximum {maximum:g}.")
-        ]
-    return []
 
 
 def _static_types(

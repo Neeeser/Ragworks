@@ -24,11 +24,12 @@ Node configs reference variables with a tagged wire value
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, JsonValue, ValidationError
 
-from app.pipelines.expressions import ExprType, ModelValue
+from app.pipelines.expressions import ExprType, ExprValue, ModelValue
 from app.pipelines.expressions.functions import BUILTINS
 
 EXPRESSION_KEY = "$expr"
@@ -117,6 +118,20 @@ class PipelineOutputField(BaseModel):
 
 class VariableValueError(ValueError):
     """A literal or supplied value does not satisfy its declaration."""
+
+
+@dataclass(frozen=True)
+class VariableEnvironment:
+    """A fully-evaluated variable environment for one run (or static pass).
+
+    Built by `app/pipelines/resolution.py`; carried on `PipelineRunContext`
+    so boundary nodes (retrieval input/output) can read argument values.
+    `tainted` names derive from caller input (arguments and `query`).
+    """
+
+    types: dict[str, ExprType]
+    values: dict[str, ExprValue]
+    tainted: frozenset[str] = field(default_factory=frozenset)
 
 
 def expression_source(value: object) -> str | None:
