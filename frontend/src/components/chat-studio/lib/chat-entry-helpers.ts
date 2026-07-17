@@ -109,6 +109,7 @@ export const buildChatEntries = ({
     const isAssistant = message.role === "assistant";
     const isUser = message.role === "user";
     const isSystem = message.role === "system";
+    const isError = message.role === "error";
     const isTool = message.role === "tool";
     const isToolCallPlaceholder =
       isAssistant &&
@@ -193,10 +194,10 @@ export const buildChatEntries = ({
       return entryList;
     }
 
-    if (!isToolCallPlaceholder && (isUser || isAssistant || isSystem)) {
+    if (!isToolCallPlaceholder && (isUser || isAssistant || isSystem || isError)) {
       entryList.push({
         id: message.id,
-        type: isAssistant ? "assistant" : isUser ? "user" : "system",
+        type: isAssistant ? "assistant" : isUser ? "user" : isError ? "error" : "system",
         message,
         messageId: message.id,
         content: trimmedContent || "No response captured.",

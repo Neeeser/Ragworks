@@ -9,7 +9,7 @@ pipeline-settings-derived ones rather than duplicating them.
 from __future__ import annotations
 
 import json
-from uuid import UUID
+import re
 
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
@@ -33,9 +33,10 @@ def _stringify(value: object, default: str = "N/A") -> str:
         return default
 
 
-def collection_tool_name(collection_id: UUID) -> str:
-    """Return the tool function name for a collection."""
-    return f"pinecone_query_{collection_id.hex}"
+def collection_tool_name(collection_name: str) -> str:
+    """Return a provider-safe, readable search tool name for a collection."""
+    slug = re.sub(r"[^a-z0-9]+", "_", collection_name.lower()).strip("_")
+    return f"search_{slug or 'collection'}"
 
 
 def _chunk_strategy_label(ingestion_settings: IngestionPipelineSettings | None) -> str | None:
@@ -89,7 +90,7 @@ def system_prompt_context(
             "collection.id": str(collection.id),
             "collection.name": _stringify(collection.name, "Untitled collection"),
             "collection.description": _stringify(collection.description),
-            "collection.tool_name": _stringify(tool_name or collection_tool_name(collection.id)),
+            "collection.tool_name": _stringify(tool_name or collection_tool_name(collection.name)),
             "collection.embedding_model": _stringify(embedding_model),
             "collection.chunk.strategy": _stringify(_chunk_strategy_label(ingestion_settings)),
             "collection.chunk.size": _stringify(

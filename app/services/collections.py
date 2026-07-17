@@ -138,7 +138,7 @@ class CollectionService:
             user,
             ingestion_settings=resolved_ingestion.settings,
             retrieval_settings=resolved_retrieval.settings,
-            tool_name=collection_tool_name(collection.id),
+            tool_name=collection_tool_name(collection.name),
         )
         return CollectionPromptRead(
             template=template,

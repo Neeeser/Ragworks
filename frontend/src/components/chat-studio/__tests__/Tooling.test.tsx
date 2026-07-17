@@ -156,6 +156,32 @@ describe("Tooling", () => {
     expect(getMockRouter().push).toHaveBeenCalledWith("/traces/queries/q1");
   });
 
+  it("shows the model tool-call object separately from retrieval output", () => {
+    render(
+      <ToolCallBubble
+        label="Search My first collection"
+        variantClass=""
+        args={{ query: "evaluation results" }}
+        response={{ chunks: [] }}
+        rawPayload={{
+          model_tool_call: {
+            id: "call-1",
+            type: "function",
+            function: {
+              name: "search_my_first_collection",
+              arguments: '{"query":"evaluation results"}',
+            },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Summary"));
+
+    const modelToolCall = screen.getByText("Model tool call").closest("details");
+    expect(modelToolCall).toHaveTextContent("search_my_first_collection");
+  });
+
   it("navigates to a chunk-targeted trace from the chunk list", () => {
     render(
       <ToolCallBubble

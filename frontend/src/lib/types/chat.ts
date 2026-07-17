@@ -1,7 +1,7 @@
 import type { ProviderPreferences, UUID } from "@/lib/types/common";
 
 export type ChatMode = "query" | "chat";
-export type ChatRole = "system" | "user" | "assistant" | "tool";
+export type ChatRole = "system" | "user" | "assistant" | "tool" | "error";
 
 export interface ChatSession {
   id: UUID;

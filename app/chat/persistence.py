@@ -191,6 +191,26 @@ def record_tool_call_assistant_message(
     context.session.flush()
 
 
+def record_error_message(
+    *,
+    context: RecordContext,
+    session_model: models.ChatSession,
+    content: str,
+) -> None:
+    """Persist a user-visible failure that must not be sent back to the provider."""
+    record_message(
+        context,
+        MessageRecord(
+            session_id=session_model.id,
+            role=models.ChatRole.ERROR,
+            content=content,
+        ),
+    )
+    session_model.updated_at = utc_now()
+    context.session.add(session_model)
+    context.session.flush()
+
+
 def record_partial_assistant_message(
     *,
     context: RecordContext,

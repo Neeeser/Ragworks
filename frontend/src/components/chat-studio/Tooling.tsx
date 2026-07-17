@@ -68,6 +68,8 @@ export const ToolCallBubble = ({
   const pipelineRunId =
     typeof response.pipeline_run_id === "string" ? response.pipeline_run_id : undefined;
   const traceAvailable = Boolean(queryEventId || pipelineRunId);
+  const modelToolCall = rawPayload.model_tool_call;
+  const hasModelToolCall = modelToolCall !== undefined;
 
   const openTrace = (chunkId?: string | null) => {
     if (!traceAvailable) {
@@ -157,6 +159,14 @@ export const ToolCallBubble = ({
                     emptyLabel="Tool did not return structured data."
                   />
                 </ToolPayloadSection>
+              )}
+              {hasModelToolCall && (
+                <details className="rounded-2xl border border-hairline bg-surface p-3 text-xs text-body">
+                  <summary className="cursor-pointer text-sm font-semibold text-body">
+                    Model tool call
+                  </summary>
+                  <JsonBlock data={modelToolCall} className="mt-3" />
+                </details>
               )}
               <details className="rounded-2xl border border-hairline bg-surface p-3 text-xs text-body">
                 <summary className="cursor-pointer text-sm font-semibold text-body">

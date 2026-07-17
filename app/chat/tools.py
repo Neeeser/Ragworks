@@ -154,6 +154,17 @@ class ToolExecutor:
             return next(iter(tool_map.values()))
         raise InvalidInputError("Tool call does not match an enabled collection.")
 
+    @classmethod
+    def validate_calls(
+        cls,
+        *,
+        tool_calls: list[ToolCall],
+        tool_map: dict[str, models.Collection],
+    ) -> None:
+        """Ensure every requested tool names one of this turn's collections."""
+        for tool_call in tool_calls:
+            cls.select_collection(tool_name=tool_call.function.name, tool_map=tool_map)
+
     @staticmethod
     def parse_call(
         tool_call: ToolCall,
@@ -218,7 +229,9 @@ class ToolExecutor:
                 arguments=parsed.arguments,
                 response=response_payload,
             )
-            tool_content = json.dumps(tool_result.model_dump())
+            tool_payload = tool_result.model_dump()
+            tool_payload["model_tool_call"] = tool_call.model_dump()
+            tool_content = json.dumps(tool_payload)
             reasoning_payload = build_reasoning_payload(
                 call_id=parsed.id,
                 run_state=context.run_state,
@@ -254,7 +267,7 @@ class ToolExecutor:
                     tool=ToolCallRecord(
                         name=parsed.name,
                         call_id=parsed.id,
-                        payload=tool_result.model_dump(),
+                        payload=tool_payload,
                     ),
                     reasoning=reasoning_payload,
                 ),
