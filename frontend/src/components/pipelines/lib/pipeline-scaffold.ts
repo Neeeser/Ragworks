@@ -5,7 +5,12 @@
  * holds one responsibility (and stays under the size cap).
  */
 
-import type { IndexBackend, PipelineDefinition, PipelineKind } from "@/lib/types";
+import type {
+  IndexBackend,
+  PipelineDefinition,
+  PipelineInputArgument,
+  PipelineKind,
+} from "@/lib/types";
 
 const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
@@ -46,6 +51,22 @@ export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
 // (the real cap is BackendCapabilities.index_name_max_length).
 const DEFAULT_INDEX_NAME_MAX_LENGTH = 45;
 const BM25_INDEX_SUFFIX = "-bm25";
+
+// Mirrors the backend scaffold (`app/pipelines/defaults.py`): retrieval
+// pipelines declare the historical top_k tool contract explicitly, so the
+// search page and the chat tool schema see the same argument whether the
+// pipeline was scaffolded by the wizard or by the backend.
+const DEFAULT_RETRIEVAL_ARGUMENTS: PipelineInputArgument[] = [
+  {
+    name: "top_k",
+    type: "integer",
+    description: "How many chunks to retrieve.",
+    default: 5,
+    minimum: 1,
+    maximum: 10,
+    expose_to_llm: true,
+  },
+];
 
 /** Derive the BM25 sibling index name paired with a dense index name. */
 export const bm25SiblingIndexName = (
@@ -110,7 +131,7 @@ export const buildDefaultDefinition = (
         id: NODE_QUERY_INPUT,
         type: "retrieval.input",
         name: "Retrieval Input",
-        config: {},
+        config: { arguments: DEFAULT_RETRIEVAL_ARGUMENTS },
       },
       {
         id: NODE_EMBED_QUERY,
