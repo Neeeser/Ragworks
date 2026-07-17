@@ -1,11 +1,12 @@
 "use client";
 
-import { CircleDot } from "lucide-react";
+import { CircleDot, CircleX } from "lucide-react";
 import { Fragment, useEffect, useRef } from "react";
 
 import { getNodeFamilyStyles, resolveNodeFamily } from "@/components/pipelines/lib/pipeline-theme";
 import { formatDuration } from "@/components/traces/debugger/format";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { ExecutionSection } from "@/components/traces/lib/execution";
@@ -56,6 +57,8 @@ export function ExecutionLedger({
                 const failed = entry.step.run?.status === "failed";
                 const family = resolveNodeFamily(entry.step.run?.node_type ?? "");
                 const duration = formatDuration(entry.step.run?.duration_ms);
+                const effectSentence = entry.itemEffect ? journeySentence(entry.itemEffect) : null;
+                const absent = entry.itemEffect?.effect === "absent";
                 return (
                   <Fragment key={entry.nodeId}>
                     <li>
@@ -84,6 +87,17 @@ export function ExecutionLedger({
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
                             {entry.step.run?.node_name ?? entry.nodeId}
                           </span>
+                          {absent && effectSentence ? (
+                            <Tooltip content={effectSentence} side="right">
+                              <span
+                                role="img"
+                                aria-label={effectSentence}
+                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-data-neg/40 bg-data-neg/10 text-data-neg"
+                              >
+                                <CircleX className="h-3.5 w-3.5" aria-hidden />
+                              </span>
+                            </Tooltip>
+                          ) : null}
                           {playing ? (
                             <CircleDot
                               className="h-3.5 w-3.5 shrink-0 text-accent-cyan"
@@ -94,9 +108,9 @@ export function ExecutionLedger({
                             <span className="font-mono text-[10px] text-meta">{duration}</span>
                           ) : null}
                         </span>
-                        {entry.itemEffect ? (
+                        {entry.itemEffect && !absent && effectSentence ? (
                           <span className="mt-1.5 flex items-center gap-2 pl-4 text-xs text-body">
-                            <span className="truncate">{journeySentence(entry.itemEffect)}</span>
+                            <span className="truncate">{effectSentence}</span>
                             {entry.itemEffect.rank !== null ? (
                               <span className="ml-auto shrink-0 font-mono text-[10px] text-accent-cyan">
                                 {entry.itemEffect.role === "chunks" ? "Chunk" : "Rank"}{" "}

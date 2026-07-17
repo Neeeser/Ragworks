@@ -89,4 +89,34 @@ describe("ExecutionLedger", () => {
     expect(screen.getByText("Rank 2")).toBeInTheDocument();
     expect(screen.queryByText("#2")).not.toBeInTheDocument();
   });
+
+  it("shows a compact explained badge when a retrieval branch misses the traced result", () => {
+    const matches = (id: string): PipelineNodeSummaryValue => ({
+      label: "Match items",
+      kind: "items",
+      value: { kind: "matches", items: [{ id, score: 0.8 }] },
+    });
+    const graph: TraceGraph = {
+      nodes: [],
+      edges: [],
+      steps: [
+        step("semantic", "Semantic retriever", [matches("focused")]),
+        step("bm25", "BM25 retriever", [matches("other")]),
+      ],
+      combined: false,
+    };
+
+    render(
+      <ExecutionLedger
+        sections={buildExecutionSections(graph, "focused")}
+        selectedNodeId="bm25"
+        playbackNodeId={null}
+        onSelectNode={vi.fn()}
+      />,
+    );
+
+    const explanation = "Not in this node's top 1";
+    expect(screen.getByRole("img", { name: explanation })).toHaveClass("text-data-neg");
+    expect(screen.getByRole("tooltip")).toHaveTextContent(explanation);
+  });
 });
