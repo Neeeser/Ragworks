@@ -117,6 +117,8 @@ describe("ExecutionLedger", () => {
 
     const explanation = "Not in this node's top 1";
     expect(screen.getByRole("img", { name: explanation })).toHaveClass("text-data-neg");
-    expect(screen.getByRole("tooltip")).toHaveTextContent(explanation);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent(explanation);
+    expect(tooltip).toHaveClass("right-full");
   });
 });

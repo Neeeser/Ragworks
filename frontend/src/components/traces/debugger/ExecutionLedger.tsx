@@ -88,7 +88,7 @@ export function ExecutionLedger({
                             {entry.step.run?.node_name ?? entry.nodeId}
                           </span>
                           {absent && effectSentence ? (
-                            <Tooltip content={effectSentence} side="right">
+                            <Tooltip content={effectSentence} side="left">
                               <span
                                 role="img"
                                 aria-label={effectSentence}
