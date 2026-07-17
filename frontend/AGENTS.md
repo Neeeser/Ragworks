@@ -145,6 +145,12 @@ the same PR.
 - **Effects must not write state they derive.** Computing a value in `useMemo` and
   copying it into `useState` via an effect adds a render per change and a stale
   window. Derive it where you use it.
+- **Background refetches must be invisible to in-progress work.** The auth
+  provider rotates the token every 12 minutes, re-running every data effect
+  keyed on it — a reload must preserve the user's selection (re-find by id, not
+  reset to `[0]`), return previous identities for unchanged content, and not
+  flip `loading`. A fresh `nodeSpecs` identity once re-fired the canvas-seeding
+  effect and silently wiped 12 minutes of unsaved pipeline edits.
 - **Worker-backed providers own their full teardown.** On unmount, terminate the
   worker, cancel in-flight and pending work, and make already-queued microtasks
   no-op so tests and route transitions cannot retain stale background work.
