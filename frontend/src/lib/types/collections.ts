@@ -181,11 +181,35 @@ export interface QueryChunk {
   [key: string]: unknown;
 }
 
+export interface CollectionQueryRequest {
+  query: string;
+  top_k?: number;
+  arguments?: Record<string, number | string | boolean> | null;
+}
+
 export interface CollectionQueryResult {
   query: string;
   top_k: number;
   chunks: QueryChunk[];
   usage: UsageBreakdown;
+  outputs?: Record<string, number | string | boolean>;
   query_event_id?: UUID;
   pipeline_run_id?: UUID;
+}
+
+/** Mirrors `app/schemas/retrieval.py::QueryArgumentRead`. */
+export interface CollectionQueryArgument {
+  name: string;
+  type: "integer" | "number" | "string" | "boolean" | "enum";
+  description: string;
+  required: boolean;
+  default: number | string | boolean | null;
+  minimum: number | null;
+  maximum: number | null;
+  choices: string[];
+  expose_to_llm: boolean;
+}
+
+export interface CollectionQueryArgumentsResponse {
+  arguments: CollectionQueryArgument[];
 }

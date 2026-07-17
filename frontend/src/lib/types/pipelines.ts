@@ -89,10 +89,52 @@ export interface PipelineEdgeDefinition {
   ui?: Record<string, unknown>;
 }
 
+export type VariableType = "integer" | "number" | "string" | "boolean" | "enum" | "model";
+
+export interface ModelVariableValue {
+  connection_id: string;
+  model_name: string;
+}
+
+export type VariableScalar = number | string | boolean;
+export type VariableValue = VariableScalar | ModelVariableValue;
+
+/** Mirrors `app/pipelines/variables.py::PipelineVariable`. */
+export interface PipelineVariable {
+  name: string;
+  type: VariableType;
+  description?: string;
+  value?: VariableValue | null;
+  expression?: string | null;
+  minimum?: number | null;
+  maximum?: number | null;
+  choices?: string[];
+}
+
+/** Mirrors `app/pipelines/variables.py::PipelineInputArgument`. */
+export interface PipelineInputArgument {
+  name: string;
+  type: VariableType;
+  description?: string;
+  required?: boolean;
+  default?: VariableScalar | null;
+  minimum?: number | null;
+  maximum?: number | null;
+  choices?: string[];
+  expose_to_llm?: boolean;
+}
+
+/** Mirrors `app/pipelines/variables.py::PipelineOutputField`. */
+export interface PipelineOutputField {
+  name: string;
+  expression: string;
+}
+
 export interface PipelineDefinition {
   nodes: PipelineNodeDefinition[];
   edges: PipelineEdgeDefinition[];
   viewport?: Record<string, unknown>;
+  variables?: PipelineVariable[];
 }
 
 export interface Pipeline {
