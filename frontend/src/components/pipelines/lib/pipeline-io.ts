@@ -1,3 +1,5 @@
+import { expressionSource } from "@/lib/expressions";
+
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
@@ -146,6 +148,11 @@ const resolveIndexName = (config: Record<string, unknown>) => {
   const value = config.index_name;
   if (typeof value === "string" && value.trim()) {
     return value.trim();
+  }
+  // An expression-valued index name counts as set here; the server validates
+  // it statically (type + the static-only taint rule).
+  if (expressionSource(value)) {
+    return "expression";
   }
   return "";
 };

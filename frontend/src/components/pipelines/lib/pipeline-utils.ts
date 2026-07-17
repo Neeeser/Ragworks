@@ -4,7 +4,7 @@ import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeli
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { PipelineNodeData } from "../PipelineNode";
-import type { NodeSpec, PipelineDefinition, VectorIndex } from "@/lib/types";
+import type { NodeSpec, PipelineDefinition, PipelineVariable, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export const createId = () => {
@@ -60,6 +60,7 @@ export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): 
 export const toPipelineDefinition = (
   nodes: Node<PipelineNodeData>[],
   edges: TypedEdgeType[],
+  variables: PipelineVariable[] = [],
 ): PipelineDefinition => ({
   nodes: nodes.map((node) => ({
     id: node.id,
@@ -76,6 +77,7 @@ export const toPipelineDefinition = (
     target_port: edge.targetHandle ?? undefined,
   })),
   viewport: {},
+  variables,
 });
 
 export const buildNodeCatalog = (specs: NodeSpec[]) => {
