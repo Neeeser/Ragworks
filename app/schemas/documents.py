@@ -66,6 +66,7 @@ class ChunkRead(DateTimeConfigMixin, BaseModel):
     chunk_index: int
     text: str
     metadata: dict[str, Any]
+    token_count: int
     chunk_size: int
     chunk_strategy: ChunkStrategy
     created_at: datetime
@@ -79,6 +80,7 @@ class ChunkRead(DateTimeConfigMixin, BaseModel):
             chunk_index=chunk.chunk_index,
             text=chunk.text,
             metadata=chunk.chunk_metadata,
+            token_count=chunk.token_count,
             chunk_size=chunk.chunk_size,
             chunk_strategy=chunk.chunk_strategy,
             created_at=chunk.created_at,
@@ -97,4 +99,3 @@ class ChunkDetailRead(BaseModel):
 
     document: DocumentRead
     chunk: ChunkRead
-

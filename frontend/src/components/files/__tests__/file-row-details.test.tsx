@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { FileRowDetails } from "@/components/files/FileRowDetails";
@@ -31,6 +32,40 @@ const ingestion: FileIngestion = {
 };
 
 describe("FileRowDetails", () => {
+  it("sorts expanded chunks by number by default and exposes the trace with metadata", async () => {
+    const user = userEvent.setup();
+    api.fetchDocumentChunks.mockResolvedValueOnce(
+      makeChunkVisualization({
+        chunks: [
+          makeChunk({ id: "chunk-2", chunk_index: 2, token_count: 30 }),
+          makeChunk({ id: "chunk-0", chunk_index: 0, token_count: 10 }),
+          makeChunk({ id: "chunk-1", chunk_index: 1, token_count: 20 }),
+        ],
+      }),
+    );
+
+    render(<FileRowDetails node={makeFileNode()} ingestion={ingestion} token="token" />);
+    await waitFor(() => expect(screen.getByText(/Chunk 00/)).toBeInTheDocument());
+
+    expect(screen.getByText("Trace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View ingestion trace" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Chunk \d{2}/).map((item) => item.textContent)).toEqual([
+      "Chunk 00",
+      "Chunk 01",
+      "Chunk 02",
+    ]);
+
+    await user.click(screen.getByRole("combobox", { name: "Sort chunks" }));
+    await user.click(screen.getByRole("option", { name: "Tokens" }));
+    await user.click(screen.getByRole("button", { name: "Sort descending" }));
+
+    expect(screen.getAllByText(/Chunk \d{2}/).map((item) => item.textContent)).toEqual([
+      "Chunk 02",
+      "Chunk 01",
+      "Chunk 00",
+    ]);
+  });
+
   it("traces a chunk by its vector id, not its database row id", async () => {
     // Trace identity lists key results as {document_id}:{order}; passing the
     // chunk row's UUID made the journey read as absent everywhere and the

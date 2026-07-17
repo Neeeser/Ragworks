@@ -2,9 +2,16 @@
 
 import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 
+import {
+  sortChunks,
+  type ChunkSortDirection,
+  type ChunkSortField,
+} from "@/components/files/lib/chunk-sort";
 import { Button } from "@/components/ui/button";
 import { Loader } from "@/components/ui/loader";
+import { SortControl } from "@/components/ui/sort-control";
 import { fetchDocumentChunks } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { truncate } from "@/lib/utils";
@@ -21,6 +28,8 @@ type FileRowDetailsProps = {
 export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) {
   const router = useRouter();
   const ready = ingestion.status === "ready";
+  const [sortField, setSortField] = useState<ChunkSortField>("chunk_number");
+  const [sortDirection, setSortDirection] = useState<ChunkSortDirection>("asc");
   const chunksQuery = useApiQuery(
     () => fetchDocumentChunks(token, ingestion.document_id),
     [token, ingestion.document_id, ingestion.updated_at],
@@ -35,6 +44,10 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
     { label: "Overlap", value: String(ingestion.chunk_overlap) },
     { label: "Embedding model", value: ingestion.embedding_model || "—" },
   ];
+  const sortedChunks = useMemo(
+    () => sortChunks(chunksQuery.data?.chunks ?? [], sortField, sortDirection),
+    [chunksQuery.data?.chunks, sortDirection, sortField],
+  );
 
   return (
     <div className="space-y-4 border-t border-hairline bg-surface px-4 py-4 sm:pl-16">
@@ -43,7 +56,7 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
           {ingestion.error_message ?? "Ingestion failed."}
         </p>
       )}
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         {stats.map((item) => (
           <div key={`${node.id}-${item.label}`}>
             <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
@@ -54,16 +67,21 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
             </dd>
           </div>
         ))}
+        {ingestion.ingestion_run_id && (
+          <div>
+            <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Trace</dt>
+            <dd className="mt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => router.push(`/traces/documents/${ingestion.document_id}`)}
+              >
+                View ingestion trace
+              </Button>
+            </dd>
+          </div>
+        )}
       </dl>
-      {ingestion.ingestion_run_id && (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => router.push(`/traces/documents/${ingestion.document_id}`)}
-        >
-          View ingestion trace
-        </Button>
-      )}
       {ready &&
         (chunksQuery.loading ? (
           <div className="flex items-center gap-2 text-sm text-muted">
@@ -73,52 +91,80 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
         ) : chunksQuery.error ? (
           <p className="text-sm text-data-neg">{chunksQuery.error}</p>
         ) : (
-          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-            {(chunksQuery.data?.chunks ?? []).map((chunk) => (
-              <details
-                key={chunk.id}
-                className="group rounded-2xl border border-hairline bg-canvas"
-              >
-                <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:bg-surface [&::-webkit-details-marker]:hidden">
-                  <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk" />
-                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                    Chunk {String(chunk.chunk_index).padStart(2, "0")}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-body">
-                    {truncate(chunk.text, 110)}
-                  </span>
-                  <ChevronRight
-                    className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-open:rotate-90"
-                    aria-hidden
-                  />
-                </summary>
-                <div className="border-t border-hairline px-4 py-3">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary">
-                    {chunk.text}
-                  </p>
-                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-                      {chunk.text.length} chars · {chunk.chunk_strategy}
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <SortControl
+                label="Sort chunks"
+                value={sortField}
+                direction={sortDirection}
+                options={[
+                  { value: "chunk_number", label: "Chunk number" },
+                  { value: "ingestion_time", label: "Ingestion time" },
+                  { value: "tokens", label: "Tokens" },
+                ]}
+                onValueChange={(value) => {
+                  if (
+                    value === "chunk_number" ||
+                    value === "ingestion_time" ||
+                    value === "tokens"
+                  ) {
+                    setSortField(value);
+                  }
+                }}
+                onDirectionChange={setSortDirection}
+              />
+            </div>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {sortedChunks.map((chunk) => (
+                <details
+                  key={chunk.id}
+                  className="group rounded-2xl border border-hairline bg-canvas"
+                >
+                  <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:bg-surface [&::-webkit-details-marker]:hidden">
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk"
+                    />
+                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                      Chunk {String(chunk.chunk_index).padStart(2, "0")}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        // The trace identifies results by vector id
-                        // ({document_id}:{order}), not the chunk row's UUID.
-                        router.push(
-                          `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(
-                            `${ingestion.document_id}:${chunk.chunk_index}`,
-                          )}`,
-                        )
-                      }
-                    >
-                      Trace this chunk
-                    </Button>
+                    <span className="min-w-0 flex-1 truncate text-sm text-body">
+                      {truncate(chunk.text, 110)}
+                    </span>
+                    <ChevronRight
+                      className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-open:rotate-90"
+                      aria-hidden
+                    />
+                  </summary>
+                  <div className="border-t border-hairline px-4 py-3">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary">
+                      {chunk.text}
+                    </p>
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
+                        {chunk.token_count} tokens · {chunk.text.length} chars ·{" "}
+                        {chunk.chunk_strategy}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          // The trace identifies results by vector id
+                          // ({document_id}:{order}), not the chunk row's UUID.
+                          router.push(
+                            `/traces/documents/${ingestion.document_id}?chunk=${encodeURIComponent(
+                              `${ingestion.document_id}:${chunk.chunk_index}`,
+                            )}`,
+                          )
+                        }
+                      >
+                        Trace this chunk
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </details>
-            ))}
+                </details>
+              ))}
+            </div>
           </div>
         ))}
     </div>
