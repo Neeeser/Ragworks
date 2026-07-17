@@ -93,16 +93,30 @@ class ChatSetupBuilder:
         )
 
     def _build_tool_collection_context(
-        self, user: models.User, collection: models.Collection
+        self, user: models.User, collection: models.Collection, tool_name: str
     ) -> ToolCollectionContext:
         """Build tool context for a collection."""
         pipeline = self._resolve_pipeline_context(user, collection)
         return ToolCollectionContext(
             collection=collection,
-            tool_name=collection_tool_name(collection.id),
+            tool_name=tool_name,
             ingestion_settings=pipeline.ingestion_settings,
             retrieval_settings=pipeline.retrieval_settings,
         )
+
+    def _tool_contexts_for_collections(
+        self, user: models.User, collections: list[models.Collection]
+    ) -> list[ToolCollectionContext]:
+        """Build uniquely named tool contexts for the selected collections."""
+        name_counts: dict[str, int] = {}
+        contexts: list[ToolCollectionContext] = []
+        for collection in collections:
+            base_name = collection_tool_name(collection.name)
+            occurrence = name_counts.get(base_name, 0) + 1
+            name_counts[base_name] = occurrence
+            tool_name = base_name if occurrence == 1 else f"{base_name}_{occurrence}"
+            contexts.append(self._build_tool_collection_context(user, collection, tool_name))
+        return contexts
 
     def _resolve_tool_collections(
         self,
@@ -139,7 +153,7 @@ class ChatSetupBuilder:
         if missing:
             raise InvalidInputError("Selected collections are not available.")
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
-        contexts = [self._build_tool_collection_context(user, collection) for collection in ordered]
+        contexts = self._tool_contexts_for_collections(user, ordered)
         # A Pinecone key is only required when one of the selected collections
         # actually retrieves from Pinecone (any of its index targets, dense or
         # BM25); pgvector-backed collections need none.
@@ -257,7 +271,11 @@ class ChatSetupBuilder:
             tool_contexts.append(PromptContext(template=template, context=context))
         system_prompt = render_system_prompt(tool_contexts, user)
         messages: list[ProviderMessage] = [SystemMessage(content=system_prompt)]
-        messages.extend(provider_message_from_model(msg) for msg in history)
+        messages.extend(
+            provider_message_from_model(message)
+            for message in history
+            if message.role != models.ChatRole.ERROR
+        )
         return messages
 
     # Orchestrates tool-collection resolution, model-settings resolution, and

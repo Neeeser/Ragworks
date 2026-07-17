@@ -50,6 +50,7 @@ class ChatRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
+    ERROR = "error"
 
 
 class PipelineKind(str, Enum):

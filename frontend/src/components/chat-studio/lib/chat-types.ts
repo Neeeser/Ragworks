@@ -9,7 +9,7 @@ interface ChatEntryBase {
 }
 
 export interface ChatMessageEntry extends ChatEntryBase {
-  type: "user" | "assistant" | "system";
+  type: "user" | "assistant" | "system" | "error";
   message: ChatMessage;
   content: string;
 }

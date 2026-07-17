@@ -72,6 +72,7 @@ class DocumentChunkRecord(SQLModel, TimestampMixin, table=True):
     collection_id: UUID = Field(foreign_key="collections.id", nullable=False, index=True)
     chunk_index: int = Field(nullable=False, index=True)
     text: str = Field(sa_column=Column(Text, nullable=False))
+    token_count: int = Field(default=0, nullable=False)
     embedding: list[float] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     chunk_metadata: dict[str, Any] = Field(
         default_factory=dict,

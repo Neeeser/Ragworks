@@ -148,6 +148,60 @@ def test_init_db_backfills_string_server_default_as_literal() -> None:
         assert fresh.role == UserRole.USER.value
 
 
+def test_init_db_backfills_legacy_chunk_token_counts() -> None:
+    """Existing chunks receive a sortable word-count fallback."""
+    SQLModel.metadata.drop_all(app_engine)
+    SQLModel.metadata.create_all(app_engine)
+
+    with Session(app_engine) as session:
+        user = models.User(email="chunks@example.com", hashed_password="hashed")
+        session.add(user)
+        session.flush()
+        collection = models.Collection(
+            user_id=user.id,
+            name="Chunks",
+            description="",
+            extra_metadata={},
+        )
+        session.add(collection)
+        session.flush()
+        document = models.Document(
+            collection_id=collection.id,
+            user_id=user.id,
+            name="chunk.txt",
+            content_type="text/plain",
+            embedding_model="embed",
+        )
+        session.add(document)
+        session.flush()
+        session.add(
+            models.DocumentChunkRecord(
+                document_id=document.id,
+                collection_id=collection.id,
+                chunk_index=0,
+                text="three word chunk",
+                embedding=[],
+                chunk_metadata={},
+                chunk_size=1,
+                chunk_overlap=0,
+                chunk_strategy=models.ChunkStrategy.TOKEN,
+                embedding_model="embed",
+            )
+        )
+        session.commit()
+
+    with app_engine.begin() as connection:
+        connection.execute(text("ALTER TABLE document_chunks DROP COLUMN token_count"))
+
+    init_db()
+
+    with app_engine.connect() as connection:
+        token_count = connection.execute(
+            text("SELECT token_count FROM document_chunks")
+        ).scalar_one()
+    assert token_count == 3
+
+
 def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
     """Existing document and trace rows receive empty warning lists."""
     SQLModel.metadata.drop_all(app_engine)

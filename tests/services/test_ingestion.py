@@ -140,6 +140,7 @@ def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
     assert len(chunk_records) == refreshed.num_chunks
     assert all(record.embedding == [0.1, 0.2, 0.3] for record in chunk_records)
     assert all(record.text for record in chunk_records)
+    assert all(record.token_count > 0 for record in chunk_records)
 
     # The indexer actually upserted the chunks into the pgvector index.
     store = PgvectorStore(session)
@@ -178,7 +179,6 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
             models.Pipeline.kind == models.PipelineKind.INGESTION,
             models.Pipeline.is_default.is_(True),
         )
-
     ).one()
     version = session.exec(
         select(models.PipelineVersion).where(
@@ -261,9 +261,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
             text=" ".join(original_tokens),
             top_k=100,
         )
-        assert {
-            match.chunk.chunk_id: match.chunk.text for match in sparse.matches
-        } == {
+        assert {match.chunk.chunk_id: match.chunk.text for match in sparse.matches} == {
             f"{document_id}:{chunk.chunk_index}": chunk.text for chunk in chunks
         }
 
@@ -289,10 +287,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
             == []
         )
         assert (
-            store.lexical_query(
-                "ragworks-bm25", namespace, text="token-1", top_k=50
-            ).matches
-            == []
+            store.lexical_query("ragworks-bm25", namespace, text="token-1", top_k=50).matches == []
         )
 
 
@@ -411,9 +406,7 @@ def test_failed_ingestion_keeps_file_and_records_descriptive_error(
     assert "parse failed" in event.details["error"]
 
 
-def test_retry_after_failure_resets_the_same_document_row(
-    monkeypatch, session: Session
-) -> None:
+def test_retry_after_failure_resets_the_same_document_row(monkeypatch, session: Session) -> None:
     """Re-queueing a failed file reuses its document row: status back to
     `pending`, error cleared — the X-badge retry path."""
 

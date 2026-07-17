@@ -40,7 +40,9 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     return collection
 
 
-def _create_document(session: Session, user: models.User, collection: models.Collection) -> models.Document:
+def _create_document(
+    session: Session, user: models.User, collection: models.Collection
+) -> models.Document:
     repo = DocumentRepository(session)
     document = models.Document(
         collection_id=collection.id,
@@ -63,7 +65,9 @@ def _create_document(session: Session, user: models.User, collection: models.Col
 
 def test_user_repository_roundtrip(session: Session) -> None:
     repo = UserRepository(session)
-    user = models.User(email="roundtrip@example.com", full_name="Round Trip", hashed_password="hashed")
+    user = models.User(
+        email="roundtrip@example.com", full_name="Round Trip", hashed_password="hashed"
+    )
     repo.add(user)
     session.commit()
 
@@ -92,25 +96,31 @@ def test_document_and_chunk_repositories(session: Session) -> None:
     assert len(list(doc_repo.list_for_collection(collection.id))) == 1
 
     chunk_repo = ChunkRepository(session)
-    chunk_record = models.DocumentChunkRecord(
-        document_id=document.id,
-        collection_id=collection.id,
-        chunk_index=0,
-        text="Hello world chunk",
-        embedding=[0.1, 0.2, 0.3],
-        chunk_metadata={"source": "unit-test"},
-        chunk_size=512,
-        chunk_overlap=32,
-        chunk_strategy=ChunkStrategy.TOKEN,
-        embedding_model="qwen/qwen3-embedding-0.6b",
+    chunk_repo.add_many(
+        [
+            models.DocumentChunkRecord(
+                document_id=document.id,
+                collection_id=collection.id,
+                chunk_index=index,
+                text=f"Chunk {index}",
+                embedding=[0.1, 0.2, 0.3],
+                chunk_metadata={"source": "unit-test"},
+                chunk_size=512,
+                chunk_overlap=32,
+                chunk_strategy=ChunkStrategy.TOKEN,
+                embedding_model="qwen/qwen3-embedding-0.6b",
+                token_count=index + 1,
+            )
+            for index in (2, 0, 1)
+        ]
     )
-    chunk_repo.add_many([chunk_record])
     session.commit()
 
     stored = list(chunk_repo.list_for_document(document.id))
-    assert len(stored) == 1
+    assert [chunk.chunk_index for chunk in stored] == [0, 1, 2]
     assert stored[0].chunk_metadata["source"] == "unit-test"
     assert stored[0].embedding_model == "qwen/qwen3-embedding-0.6b"
+    assert [chunk.token_count for chunk in stored] == [1, 2, 3]
 
 
 def test_collection_repository_get_filters_user(session: Session) -> None:

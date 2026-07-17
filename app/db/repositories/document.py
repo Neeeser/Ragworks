@@ -142,9 +142,13 @@ class ChunkRepository(Repository):
         ]
 
     def list_for_document(self, document_id: UUID) -> list[models.DocumentChunkRecord]:
-        """List chunks belonging to a document."""
-        statement = select(models.DocumentChunkRecord).where(
-            models.DocumentChunkRecord.document_id == document_id,
+        """List chunks belonging to a document in their source order."""
+        statement = (
+            select(models.DocumentChunkRecord)
+            .where(
+                models.DocumentChunkRecord.document_id == document_id,
+            )
+            .order_by(col(models.DocumentChunkRecord.chunk_index))
         )
         return list(self.session.exec(statement).all())
 

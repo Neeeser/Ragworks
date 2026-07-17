@@ -27,6 +27,7 @@ from app.chat.persistence import (
     convert_messages,
     convert_session,
     provider_message_from_model,
+    record_error_message,
     record_message,
     record_partial_assistant_message,
     record_tool_call_assistant_message,
@@ -47,6 +48,7 @@ from app.db import models
 from app.db.repositories import ChatRepository
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
+from app.services.errors import InvalidInputError
 from app.telemetry import record
 from app.telemetry.events import ChatTurnCompleted
 
@@ -319,6 +321,18 @@ def _iterate(
         )
         if resolution.pending_tool_calls:
             assistant_content = normalize_assistant_content(message.get("content"))
+            try:
+                run.tool_executor.validate_calls(
+                    tool_calls=resolution.pending_tool_calls,
+                    tool_map=run.setup.tool_collection_map,
+                )
+            except InvalidInputError:
+                record_error_message(
+                    context=RecordContext(session=run.session, chat_repo=run.chat_repo),
+                    session_model=run.setup.session_model,
+                    content="The model requested an unavailable collection tool.",
+                )
+                raise
             append_tool_call_assistant_message(
                 run,
                 assistant_content=assistant_content,

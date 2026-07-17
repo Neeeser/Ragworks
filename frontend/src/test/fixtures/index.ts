@@ -142,6 +142,7 @@ export function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
     chunk_index: 0,
     text: "Chunk text",
     metadata: {},
+    token_count: 2,
     chunk_size: 512,
     chunk_strategy: "token",
     created_at: TIMESTAMP,

@@ -107,18 +107,20 @@ class ToolExecutor:
         tool_map: dict[str, models.Collection] = {}
         for tool_context in tool_collections:
             tool_name = tool_context.tool_name
-            tool_map[tool_name] = tool_context.collection
+            collection = tool_context.collection
+            tool_map[tool_name] = collection
+            description_parts = [f"Search the document collection '{collection.name}'."]
+            if collection.description.strip():
+                description_parts.append(collection.description.strip())
+            description_parts.append(
+                "Always call this tool before answering questions about documents in this collection."
+            )
             tools.append(
                 {
                     "type": "function",
                     "function": {
                         "name": tool_name,
-                        "description": (
-                            "Search the Pinecone namespace for the collection "
-                            f"'{tool_context.collection.name}' to gather grounded context. "
-                            "Always call this tool before answering questions about "
-                            "documents in this collection."
-                        ),
+                        "description": " ".join(description_parts),
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -153,6 +155,17 @@ class ToolExecutor:
         if tool_name == "pinecone_query" and len(tool_map) == 1:
             return next(iter(tool_map.values()))
         raise InvalidInputError("Tool call does not match an enabled collection.")
+
+    @classmethod
+    def validate_calls(
+        cls,
+        *,
+        tool_calls: list[ToolCall],
+        tool_map: dict[str, models.Collection],
+    ) -> None:
+        """Ensure every requested tool names one of this turn's collections."""
+        for tool_call in tool_calls:
+            cls.select_collection(tool_name=tool_call.function.name, tool_map=tool_map)
 
     @staticmethod
     def parse_call(
@@ -218,7 +231,9 @@ class ToolExecutor:
                 arguments=parsed.arguments,
                 response=response_payload,
             )
-            tool_content = json.dumps(tool_result.model_dump())
+            tool_payload = tool_result.model_dump()
+            tool_payload["model_tool_call"] = tool_call.model_dump()
+            tool_content = json.dumps(tool_payload)
             reasoning_payload = build_reasoning_payload(
                 call_id=parsed.id,
                 run_state=context.run_state,
@@ -254,7 +269,7 @@ class ToolExecutor:
                     tool=ToolCallRecord(
                         name=parsed.name,
                         call_id=parsed.id,
-                        payload=tool_result.model_dump(),
+                        payload=tool_payload,
                     ),
                     reasoning=reasoning_payload,
                 ),

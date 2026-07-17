@@ -118,6 +118,7 @@ export interface Chunk {
   chunk_index: number;
   text: string;
   metadata: Record<string, unknown>;
+  token_count: number;
   chunk_size: number;
   chunk_strategy: ChunkStrategy;
   created_at: string;

@@ -24,6 +24,7 @@ from app.pipelines.settings import IngestionPipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.retrieval.models import DocumentChunk
+from app.retrieval.tokenizers.resources import build_token_counter
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedIngestionPipeline, resolve_ingestion_pipeline
 from app.telemetry import record
@@ -157,9 +158,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             raise
 
     @staticmethod
-    def _apply_settings(
-        document: models.Document, resolved: IngestionPipelineSettings
-    ) -> None:
+    def _apply_settings(document: models.Document, resolved: IngestionPipelineSettings) -> None:
         """Sync the document's pipeline-derived columns for this attempt."""
         document.chunk_size = resolved.chunk_size
         document.chunk_overlap = resolved.chunk_overlap
@@ -201,6 +200,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         resolved: IngestionPipelineSettings,
     ) -> list[models.DocumentChunkRecord]:
         """Persist embedded chunks and update document metadata."""
+        token_counter = build_token_counter(resolved.tokenizer, self.settings.storage_path)
         chunk_records: list[models.DocumentChunkRecord] = []
         for chunk in enriched_chunks:
             chunk_records.append(
@@ -209,6 +209,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                     collection_id=collection.id,
                     chunk_index=chunk.order,
                     text=chunk.text,
+                    token_count=token_counter.count(chunk.text),
                     embedding=chunk.embedding or [],
                     chunk_metadata=chunk.metadata.data,
                     chunk_size=resolved.chunk_size,
@@ -221,7 +222,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
 
         document.status = models.DocumentStatus.READY
         document.num_chunks = len(chunk_records)
-        document.num_tokens = sum(len(chunk.text.split()) for chunk in enriched_chunks)
+        document.num_tokens = sum(chunk.token_count for chunk in chunk_records)
         return chunk_records
 
     def _record_success(

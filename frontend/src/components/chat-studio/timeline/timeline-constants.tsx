@@ -4,6 +4,7 @@ export const roleVariants: Record<string, string> = {
   user: "border-accent-violet/50 bg-accent-violet/15 text-body backdrop-blur-sm",
   assistant: "border-hairline bg-surface-strong text-body backdrop-blur-sm",
   tool: "border-accent-cyan/40 bg-accent-cyan/10 text-body backdrop-blur-sm",
+  error: "border-data-neg/40 bg-data-neg/10 text-body backdrop-blur-sm",
   system: "border-hairline bg-surface text-body",
   reasoning: "border-stage-embed/50 bg-stage-embed/15 text-body backdrop-blur-sm",
 };

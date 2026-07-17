@@ -169,14 +169,14 @@ def test_render_system_prompt_uses_custom_template(monkeypatch) -> None:
         user,
         ingestion_settings=ingestion_settings,
         retrieval_settings=retrieval_settings,
-        tool_name=collection_tool_name(collection.id),
+        tool_name=collection_tool_name(collection.name),
     )
     rendered = render_system_prompt(
         [PromptContext(template=tool_template, context=context)],
         user,
     )
     assert "Base custom@example.com at 2024-01-02T03:04:05+00:00" in rendered
-    assert f"Tool Demo Collection via {collection_tool_name(collection.id)}" in rendered
+    assert f"Tool Demo Collection via {collection_tool_name(collection.name)}" in rendered
 
 
 def test_prompt_variables_payload_exposes_expected_names() -> None:
