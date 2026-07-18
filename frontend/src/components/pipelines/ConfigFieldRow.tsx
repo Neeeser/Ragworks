@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 import { expressionSource } from "@/lib/expressions";
+import { cn } from "@/lib/utils";
 
 import { ExpressionInput } from "./ExpressionInput";
 import { buildSuggestions } from "./lib/expression-suggest";
@@ -29,13 +30,41 @@ type ConfigFieldRowProps = {
 
 const IDENTIFIER_START = /^[a-z_]$/i;
 
+type FxToggleProps = {
+  active: boolean;
+  /** Welded onto the control's right edge; false renders a freestanding pill. */
+  joined: boolean;
+  onClick: () => void;
+};
+
+/** The expression-mode toggle, attached to the control it switches. */
+function FxToggle({ active, joined, onClick }: FxToggleProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label="Toggle expression mode"
+      title={active ? "Switch back to a literal value" : "Write an expression"}
+      onClick={onClick}
+      className={cn(
+        "shrink-0 border border-hairline bg-surface-strong px-3 font-mono text-xs transition focus-visible:ring-2 focus-visible:ring-accent-violet",
+        joined ? "rounded-r-2xl border-l-0" : "rounded-2xl px-2.5 py-1.5",
+        active ? "text-accent-violet" : "text-muted hover:text-primary",
+      )}
+    >
+      ƒx
+    </button>
+  );
+}
+
 /**
  * One schema-driven config field, switchable between its typed literal
  * control and expression mode (`{"$expr": ...}` on the wire). The ƒx toggle
- * appears on every scalar field; identity fields keep it but enforce the
- * static-only rule live. Literal number fields are variable-aware too:
- * focusing one offers the matching variables, and picking one — or typing a
- * letter — converts the field to expression mode without losing focus.
+ * sits welded to the control's right edge (pressed = expression mode) on
+ * every scalar field; identity fields keep it but enforce the static-only
+ * rule live. Literal number fields are variable-aware too: focusing one
+ * offers the matching variables, and picking one — or typing a letter —
+ * converts the field to expression mode without losing focus.
  */
 export function ConfigFieldRow({
   field,
@@ -116,6 +145,13 @@ export function ConfigFieldRow({
     convertToExpression(suggestion.insertText);
   };
 
+  const toggleExpression = () => {
+    setConvertedFocus(false);
+    onValueChange(field.key, isExpression ? undefined : { $expr: "" });
+  };
+  // The checkbox row has no bounding box to weld onto; every other control does.
+  const joined = field.input !== "boolean";
+
   return (
     <ParameterFieldCard
       label={field.label}
@@ -124,15 +160,6 @@ export function ConfigFieldRow({
       error={issue?.message}
       errorId={issueId}
       controlId={inputId}
-      actionLabel={canToggle ? (isExpression ? "literal" : "ƒx") : undefined}
-      onAction={
-        canToggle
-          ? () => {
-              setConvertedFocus(false);
-              onValueChange(field.key, isExpression ? undefined : { $expr: "" });
-            }
-          : undefined
-      }
     >
       {isExpression ? (
         <ExpressionInput
@@ -144,42 +171,50 @@ export function ConfigFieldRow({
           expectedType={field.exprType}
           staticOnly={field.staticOnly}
           autoFocus={convertedFocus}
+          addon={canToggle ? <FxToggle active joined onClick={toggleExpression} /> : undefined}
         />
       ) : (
-        <div
-          ref={anchorRef}
-          onFocusCapture={() => {
-            if (numericLiteral) {
-              setActiveIndex(0);
-              setSuggestOpen(true);
-            }
-          }}
-          onBlurCapture={() => setSuggestOpen(false)}
-          onKeyDownCapture={handleLiteralKeyDown}
-        >
-          <ParameterInput
-            id={inputId}
-            ariaInvalid={issue?.severity === "error"}
-            ariaDescribedBy={issueId}
-            input={field.input}
-            value={getInputValue(field, config)}
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            placeholder={field.placeholder}
-            options={field.options}
-            disabled={disabled}
-            onChange={(nextValue) => onLiteralChange(field, nextValue)}
-          />
-          {suggestOpen && suggestions.length > 0 ? (
-            <SuggestionListbox
-              listId={`${inputId}-suggestions`}
-              anchorRef={anchorRef}
-              suggestions={suggestions}
-              activeIndex={activeIndex}
-              onActiveIndexChange={setActiveIndex}
-              onAccept={handleAcceptSuggestion}
+        <div className={cn(canToggle && "flex", joined ? "items-stretch" : "items-center gap-2")}>
+          <div
+            ref={anchorRef}
+            className="min-w-0 flex-1"
+            onFocusCapture={() => {
+              if (numericLiteral) {
+                setActiveIndex(0);
+                setSuggestOpen(true);
+              }
+            }}
+            onBlurCapture={() => setSuggestOpen(false)}
+            onKeyDownCapture={handleLiteralKeyDown}
+          >
+            <ParameterInput
+              id={inputId}
+              ariaInvalid={issue?.severity === "error"}
+              ariaDescribedBy={issueId}
+              input={field.input}
+              value={getInputValue(field, config)}
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              placeholder={field.placeholder}
+              options={field.options}
+              disabled={disabled}
+              className={canToggle && joined ? "rounded-r-none" : undefined}
+              onChange={(nextValue) => onLiteralChange(field, nextValue)}
             />
+            {suggestOpen && suggestions.length > 0 ? (
+              <SuggestionListbox
+                listId={`${inputId}-suggestions`}
+                anchorRef={anchorRef}
+                suggestions={suggestions}
+                activeIndex={activeIndex}
+                onActiveIndexChange={setActiveIndex}
+                onAccept={handleAcceptSuggestion}
+              />
+            ) : null}
+          </div>
+          {canToggle ? (
+            <FxToggle active={false} joined={joined} onClick={toggleExpression} />
           ) : null}
         </div>
       )}

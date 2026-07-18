@@ -18,6 +18,7 @@ import { SuggestionListbox } from "./SuggestionListbox";
 import type { Suggestion } from "./lib/expression-suggest";
 import type { StaticEnvironment } from "./lib/variable-env";
 import type { ExprType } from "@/lib/expressions";
+import type { ReactNode } from "react";
 
 type ExpressionFeedback =
   | { kind: "empty" }
@@ -70,6 +71,8 @@ type ExpressionInputProps = {
   placeholder?: string;
   /** Grab focus on mount (literal fields converting to ƒx keep typing flow). */
   autoFocus?: boolean;
+  /** Control rendered welded to the input's right edge (e.g. the ƒx toggle). */
+  addon?: ReactNode;
   "aria-label"?: string;
 };
 
@@ -90,6 +93,7 @@ export function ExpressionInput({
   staticOnly,
   placeholder,
   autoFocus,
+  addon,
   "aria-label": ariaLabel,
 }: ExpressionInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -163,43 +167,50 @@ export function ExpressionInput({
 
   return (
     <div className="space-y-1.5">
-      <input
-        ref={inputRef}
-        id={id}
-        type="text"
-        value={value}
-        spellCheck={false}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open && suggestions.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={
-          open && suggestions.length > 0 ? `${listId}-${activeIndex}` : undefined
-        }
-        placeholder={placeholder ?? "top_k * 2"}
-        aria-label={ariaLabel}
-        aria-invalid={feedback.kind === "error"}
-        onChange={(event) => {
-          onChange(event.target.value);
-          const position = event.target.selectionStart;
-          if (typeof position === "number") setCaret(position);
-          setOpen(true);
-        }}
-        onFocus={() => {
-          syncCaret();
-          setOpen(true);
-        }}
-        onBlur={() => setOpen(false)}
-        onClick={syncCaret}
-        onKeyUp={(event) => {
-          if (!["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
-            syncCaret();
+      <div className={cn(addon != null && "flex items-stretch")}>
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          value={value}
+          spellCheck={false}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open && suggestions.length > 0}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && suggestions.length > 0 ? `${listId}-${activeIndex}` : undefined
           }
-        }}
-        onKeyDown={handleKeyDown}
-        className={cn(inputClass, "font-mono text-[13px]")}
-      />
+          placeholder={placeholder ?? "top_k * 2"}
+          aria-label={ariaLabel}
+          aria-invalid={feedback.kind === "error"}
+          onChange={(event) => {
+            onChange(event.target.value);
+            const position = event.target.selectionStart;
+            if (typeof position === "number") setCaret(position);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            syncCaret();
+            setOpen(true);
+          }}
+          onBlur={() => setOpen(false)}
+          onClick={syncCaret}
+          onKeyUp={(event) => {
+            if (!["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
+              syncCaret();
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          className={cn(
+            inputClass,
+            "font-mono text-[13px]",
+            addon != null && "min-w-0 flex-1 rounded-r-none",
+          )}
+        />
+        {addon}
+      </div>
       {open ? (
         <SuggestionListbox
           listId={listId}

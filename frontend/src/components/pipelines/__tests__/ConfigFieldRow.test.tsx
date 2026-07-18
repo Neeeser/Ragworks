@@ -40,6 +40,26 @@ const renderRow = (config: Record<string, unknown>, onValueChange = vi.fn()) => 
   return onValueChange;
 };
 
+describe("ConfigFieldRow ƒx toggle", () => {
+  it("switches between literal and expression mode with a pressed state", async () => {
+    const user = userEvent.setup();
+    const onValueChange = renderRow({ top_n: 3 });
+    const toggle = screen.getByRole("button", { name: "Toggle expression mode" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    expect(onValueChange).toHaveBeenCalledWith("top_n", { $expr: "" });
+  });
+
+  it("clears the expression back to a literal when pressed again", async () => {
+    const user = userEvent.setup();
+    const onValueChange = renderRow({ top_n: { $expr: "top_k" } });
+    const toggle = screen.getByRole("button", { name: "Toggle expression mode" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(toggle);
+    expect(onValueChange).toHaveBeenCalledWith("top_n", undefined);
+  });
+});
+
 describe("ConfigFieldRow literal-mode variable awareness", () => {
   it("offers type-matched variables when a number literal is focused", async () => {
     const user = userEvent.setup();
