@@ -64,9 +64,33 @@ class IndexerConfig(BaseModel):
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
     namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
-    dimension: int | None = Field(default=None, gt=0, json_schema_extra=STATIC_ONLY_EXTRA)
-    metric: str = Field(default="cosine", json_schema_extra=STATIC_ONLY_EXTRA)
-    ensure_index: bool = True
+    dimension: int | None = Field(
+        default=None,
+        gt=0,
+        json_schema_extra=STATIC_ONLY_EXTRA,
+        description=(
+            "Vector length the index is created with. Must equal the "
+            "connected embedding model's output dimension — validation "
+            "compares them, and a mismatched index rejects every upsert."
+        ),
+    )
+    metric: str = Field(
+        default="cosine",
+        json_schema_extra=STATIC_ONLY_EXTRA,
+        description=(
+            "Distance function the index scores matches with. Match how the "
+            "embedding model was trained — cosine for nearly all sentence "
+            "embedders; changing it changes what 'similar' means."
+        ),
+    )
+    ensure_index: bool = Field(
+        default=True,
+        description=(
+            "Create the index on first ingest if it does not exist. Disable "
+            "to require pre-provisioned indexes — runs fail instead of "
+            "creating one."
+        ),
+    )
 
 
 class PgvectorIndexerConfig(IndexerConfig):

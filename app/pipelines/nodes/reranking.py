@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
@@ -16,8 +16,21 @@ from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 class RerankerConfig(BaseModel):
     """Configuration for reranking nodes."""
 
-    enabled: bool = False
-    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Run the cross-encoder on this node's input. Disabled, the node "
+            "passes results through unchanged — flip it to compare ranked "
+            "and unranked quality on the same pipeline."
+        ),
+    )
+    model_name: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description=(
+            "Cross-encoder checkpoint (HuggingFace id) that scores each "
+            "query-chunk pair. Downloaded and run locally on first use."
+        ),
+    )
 
 
 class RerankerNode(PipelineNodeBase[RerankerConfig]):
@@ -26,7 +39,12 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
     type = "reranker.cross_encoder"
     label = "Cross-Encoder Reranker"
     category = "retrieval"
-    description = "Re-score retrieved chunks with a cross-encoder."
+    description = (
+        "Re-scores each retrieved chunk against the query with a "
+        "cross-encoder, which reads both texts together — slower than vector "
+        "similarity but sharper on relevance, so it usually runs after "
+        "fusion on a modest candidate set."
+    )
     example = "RetrievalPayload([chunk_b, chunk_a]) -> RetrievalPayload([chunk_a, chunk_b])."
     input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
     output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)

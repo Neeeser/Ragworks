@@ -72,7 +72,12 @@ class EmbedderConfig(BaseModel):
     dimension: int | None = Field(
         default=None,
         gt=0,
-        description="Optional override for the embedding vector dimension.",
+        description=(
+            "Requested output dimension, for models that support reduced "
+            "(Matryoshka-style) embeddings. Leave unset to store the model's "
+            "native dimension — most embedding models only serve that size "
+            "and error on an explicit request."
+        ),
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
 

@@ -32,7 +32,9 @@ class LimitConfig(BaseModel):
         default=None,
         gt=0,
         description=(
-            "Keep only the first N matches of the ordered input. "
+            "Keep the first N matches of the ordered input and drop the "
+            "rest — typically the top_k variable, so the caller's requested "
+            "depth is what survives an over-retrieving, fused pipeline. "
             "Unset: the run's requested top_k."
         ),
     )

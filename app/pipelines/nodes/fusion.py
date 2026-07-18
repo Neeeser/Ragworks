@@ -158,9 +158,12 @@ class RRFusionConfig(FusionConfig):
         ge=1,
         title="Rank dampening (k)",
         description=(
-            "Dampening constant in the RRF formula 1 / (k + rank). Higher "
-            "values flatten the difference between ranks. Not a result "
-            "count — fusion emits every fused candidate."
+            "Smoothing constant in the RRF score, 1 / (k + rank), summed "
+            "across every branch a chunk appears in. It sets how steeply "
+            "early ranks outweigh late ones: at k=1 a rank-1 hit scores 25x "
+            "a rank-49 hit; at the standard k=60, about 1.8x — so appearing "
+            "in several branches counts for more than winning any single "
+            "one. Fusion emits every fused candidate; the Top-N node cuts."
         ),
     )
 
