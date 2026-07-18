@@ -21,6 +21,7 @@ from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.indexing import IndexerConfig
 from app.pipelines.nodes.indexing_legacy import IndexerNode
 from app.pipelines.nodes.io import RetrievalInputNode
+from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 from app.pipelines.nodes.retrieval import PineconeRetrieverNode, RetrieverConfig
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, default_registry
@@ -154,6 +155,17 @@ def test_node_registry_create_unknown_type_raises() -> None:
     registry = NodeRegistry([_InputNode])
     with pytest.raises(ValueError, match="Unknown node type"):
         registry.create(PipelineNodeDefinition(id="x", type="missing", name="Missing"))
+
+
+def test_default_registry_exposes_only_provider_backed_reranker_config() -> None:
+    registry = default_registry()
+
+    assert "reranker.model" in registry.node_types()
+    assert "reranker.cross_encoder" not in registry.node_types()
+    spec = registry.get_spec("reranker.model")
+    assert spec is not None
+    assert set(spec.config_schema["properties"]) == {"connection_id", "model_name"}
+    assert spec.default_config == {"connection_id": None, "model_name": ""}
 
 
 def test_pipeline_validator_collects_errors() -> None:
@@ -602,6 +614,32 @@ def test_pipeline_validator_flags_unconfigured_embedder() -> None:
     assert result.valid is False
     assert any("no provider connection" in error for error in result.errors)
     assert any("no embedding model" in error for error in result.errors)
+
+
+def test_pipeline_validator_flags_unconfigured_reranker() -> None:
+    definition = PipelineDefinition(
+        nodes=[PipelineNodeDefinition(id="reranker", type="reranker.model", name="Reranker")]
+    )
+
+    result = PipelineValidator(NodeRegistry([RerankerNode])).validate(definition)
+
+    assert result.valid is False
+    assert any("no provider connection" in error for error in result.errors)
+    assert any("no reranking model" in error for error in result.errors)
+
+
+def test_reranker_validation_accepts_provider_and_model() -> None:
+    node = PipelineNodeDefinition(
+        id="reranker",
+        type="reranker.model",
+        name="Reranker",
+        config={"connection_id": str(uuid4()), "model_name": "rerank-model"},
+    )
+    definition = PipelineDefinition(nodes=[node])
+    registry = NodeRegistry([RerankerNode])
+
+    assert RerankerNode.validation_issues_for_node(node, definition, registry) == []
+    assert set(RerankerConfig.model_fields) == {"connection_id", "model_name"}
 
 
 @pytest.mark.parametrize(

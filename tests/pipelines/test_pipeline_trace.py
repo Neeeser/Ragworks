@@ -17,6 +17,8 @@ from app.pipelines.definition import (
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutor
 from app.pipelines.node import PipelineNodeBase
+from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
+from app.pipelines.payloads import RetrievalPayload
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.tracing import (
@@ -25,6 +27,7 @@ from app.pipelines.tracing import (
     PipelineTraceRecorder,
     serialize_payload,
 )
+from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
 
@@ -407,3 +410,32 @@ def test_trace_recorder_normalizes_base_model() -> None:
     payload = PipelineTraceRecorder._normalize_payload(_Payload(value="ok"))
 
     assert payload["value"] == "ok"
+
+
+def test_reranker_trace_identifies_provider_model_without_result_limit() -> None:
+    matches = [
+        ScoredChunk(
+            chunk=DocumentChunk(
+                document_id="doc",
+                chunk_id=f"doc:{index}",
+                text=f"chunk {index}",
+                order=index,
+                metadata=DocumentMetadata(),
+            ),
+            score=1.0 - index / 10,
+        )
+        for index in range(3)
+    ]
+    before = RetrievalPayload(response=RetrievalResponse(matches=matches))
+    after = RetrievalPayload(response=RetrievalResponse(matches=list(reversed(matches))))
+    connection_id = uuid4()
+    summary = RerankerNode(
+        RerankerConfig(connection_id=connection_id, model_name="rerank-model")
+    ).summarize_io({"results": before}, {"results": after})
+
+    reranker = next(value.value for value in summary.outputs if value.label == "Reranker")
+    assert reranker == {
+        "connection_id": str(connection_id),
+        "model_name": "rerank-model",
+    }
+    assert "max_results" not in reranker

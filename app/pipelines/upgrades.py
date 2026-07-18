@@ -3,10 +3,11 @@
 Node type ids are normally permanent, but the catalog has had explicit one-way
 transitions: backend-pinned indexer/retriever variants were superseded by the
 unified ``indexer.vector``/``retriever.vector`` nodes, the no-op
-``chat.settings`` node was removed, and this feature branch briefly persisted
-``limit.top_n`` before settling on ``limit.results``. `upgrade_definition`
-rewrites those stored definitions to the current vocabulary; startup applies
-the mechanical rewrite to every stored version in place, not as a new revision.
+``chat.settings`` node was removed, the local ``reranker.cross_encoder`` node
+was retired, and this feature branch briefly persisted ``limit.top_n`` before
+settling on ``limit.results``. `upgrade_definition` rewrites those stored
+definitions to the current vocabulary; startup applies the mechanical rewrite
+to every stored version in place, not as a new revision.
 
 `migrate_variables_definition` is the definition-schema v1 -> v2 rewrite
 (gated by the *absence* of ``schema_version`` in the raw stored dict, never by
@@ -58,6 +59,7 @@ LEGACY_BACKEND_NODE_TYPES: dict[str, tuple[str, IndexBackend]] = {
 
 # Node types that no longer exist; their class is gone, so the id is a literal.
 REMOVED_NODE_TYPES = frozenset({"chat.settings"})
+LEGACY_RERANKER_TYPE = "reranker.cross_encoder"
 LEGACY_RESULT_LIMIT_TYPE = "limit.top_n"
 
 
@@ -100,9 +102,14 @@ def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | N
     changed = False
     nodes: list[PipelineNodeDefinition] = []
     removed_ids: set[str] = set()
+    bypassed_ids: list[str] = []
     for node in definition.nodes:
         if node.type in REMOVED_NODE_TYPES:
             removed_ids.add(node.id)
+            changed = True
+            continue
+        if node.type == LEGACY_RERANKER_TYPE:
+            bypassed_ids.append(node.id)
             changed = True
             continue
         upgraded, node_changed = _upgrade_node(node)
@@ -116,15 +123,48 @@ def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | N
         variables = [migrate_variable(variable) for variable in definition.variables]
         nodes = [migrate_node_expressions(node) for node in nodes]
         nodes = [migrate_input_argument_names(node) for node in nodes]
-    edges: list[PipelineEdgeDefinition] = []
-    for edge in definition.edges:
+    edges = _bypass_nodes(list(definition.edges), bypassed_ids)
+    kept_edges: list[PipelineEdgeDefinition] = []
+    for edge in edges:
         if edge.source in removed_ids or edge.target in removed_ids:
             changed = True
             continue
-        edges.append(edge)
+        kept_edges.append(edge)
     if not changed:
         return None
-    return definition.model_copy(update={"nodes": nodes, "edges": edges, "variables": variables})
+    return definition.model_copy(
+        update={"nodes": nodes, "edges": kept_edges, "variables": variables}
+    )
+
+
+def _bypass_nodes(
+    edges: list[PipelineEdgeDefinition],
+    node_ids: list[str],
+) -> list[PipelineEdgeDefinition]:
+    """Delete each named node's incident edges and splice every input to every output."""
+    rewritten = edges
+    for node_id in node_ids:
+        incoming = [edge for edge in rewritten if edge.target == node_id]
+        outgoing = [edge for edge in rewritten if edge.source == node_id]
+        rewritten = [
+            edge
+            for edge in rewritten
+            if edge.source != node_id and edge.target != node_id
+        ]
+        for inbound in incoming:
+            for outbound in outgoing:
+                rewritten.append(
+                    PipelineEdgeDefinition(
+                        id=_unique_edge_id(
+                            f"edge-{inbound.source}-{outbound.target}", rewritten
+                        ),
+                        source=inbound.source,
+                        target=outbound.target,
+                        source_port=inbound.source_port,
+                        target_port=outbound.target_port,
+                    )
+                )
+    return rewritten
 
 
 RETRIEVAL_INPUT_TYPE = "retrieval.input"

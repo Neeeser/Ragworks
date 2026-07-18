@@ -306,7 +306,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     assert query_call["top_k"] == 3
 
 
-def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
+def test_reranker_node_rescores_every_candidate_through_provider(session: Session) -> None:
     from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 
     chunk_a = DocumentChunk(
@@ -334,22 +334,28 @@ def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
     )
 
     class _StubReranker:
-        def __init__(self, model_name: str, **_kwargs: object) -> None:
-            self.model_name = model_name
-
-        def rerank(self, query: str, candidates: list[ScoredChunk], top_k: int | None = None):
+        def rerank(self, query: str, candidates: list[ScoredChunk]) -> list[ScoredChunk]:
+            assert query == "rerank"
             return list(reversed(candidates))
 
-    monkeypatch.setattr("app.pipelines.nodes.reranking.CrossEncoderReranker", _StubReranker)
+    connection_id = uuid4()
+    provider_calls: list[tuple[object, str]] = []
 
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection, query="rerank")
-    node = RerankerNode(RerankerConfig(enabled=True))
+    context.providers.reranker = lambda resolved_id, model: (
+        provider_calls.append((resolved_id, model)) or _StubReranker()
+    )
+    node = RerankerNode(
+        RerankerConfig(connection_id=connection_id, model_name="rerank-model")
+    )
     outputs = node.run({"results": payload}, context)
 
     reranked = RetrievalPayload.model_validate(outputs["results"]).response.matches
-    assert reranked[0].chunk.chunk_id == "doc:1"
+    assert [match.chunk.chunk_id for match in reranked] == ["doc:1", "doc:0"]
+    assert len(reranked) == len(payload.response.matches)
+    assert provider_calls == [(connection_id, "rerank-model")]
 
 
 def test_file_type_router_routes_pdf(session: Session) -> None:
@@ -847,29 +853,21 @@ def test_retrieval_input_requires_query(session: Session) -> None:
         node.run({}, context)
 
 
-def test_reranker_node_returns_when_disabled(session: Session) -> None:
+def test_reranker_node_empty_input_bypasses_provider_and_requirements(session: Session) -> None:
     from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
-    from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+    from app.retrieval.models import RetrievalResponse
 
-    chunk = DocumentChunk(
-        document_id="doc",
-        chunk_id="doc:0",
-        text="alpha",
-        order=0,
-        metadata=DocumentMetadata(),
-    )
-    payload = RetrievalPayload(
-        response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
-    )
-    node = RerankerNode(RerankerConfig(enabled=False))
+    payload = RetrievalPayload(response=RetrievalResponse(matches=[]), usage={})
+    node = RerankerNode(RerankerConfig())
     user = _build_user()
     collection = _build_collection(user)
-    context = _build_context(session, user, collection, query="hi")
+    context = _build_context(session, user, collection, query=None)
+    context.providers.reranker = lambda *_args: pytest.fail("provider must not be resolved")
 
     outputs = node.run({"results": payload}, context)
 
-    assert outputs["results"].response.matches[0].chunk.chunk_id == "doc:0"
+    assert RetrievalPayload.model_validate(outputs["results"]) == payload
 
 
 def test_reranker_node_requires_query(session: Session) -> None:
@@ -887,12 +885,45 @@ def test_reranker_node_requires_query(session: Session) -> None:
     payload = RetrievalPayload(
         response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
     )
-    node = RerankerNode(RerankerConfig(enabled=True))
+    node = RerankerNode(RerankerConfig(connection_id=uuid4(), model_name="rerank-model"))
     user = _build_user()
     collection = _build_collection(user)
     context = _build_context(session, user, collection, query=None)
 
     with pytest.raises(ValueError, match="requires a query string"):
+        node.run({"results": payload}, context)
+
+
+@pytest.mark.parametrize(
+    ("connection_id", "model_name"),
+    [(None, "rerank-model"), (uuid4(), "")],
+)
+def test_reranker_node_requires_provider_and_model_for_candidates(
+    session: Session,
+    connection_id: object,
+    model_name: str,
+) -> None:
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
+    from app.pipelines.payloads import RetrievalPayload
+    from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:0",
+        text="alpha",
+        order=0,
+        metadata=DocumentMetadata(),
+    )
+    payload = RetrievalPayload(
+        response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
+    )
+    node = RerankerNode(
+        RerankerConfig(connection_id=connection_id, model_name=model_name)
+    )
+    user = _build_user()
+    context = _build_context(session, user, _build_collection(user), query="hi")
+
+    with pytest.raises(InvalidInputError, match="provider connection and model"):
         node.run({"results": payload}, context)
 
 
@@ -911,7 +942,7 @@ def test_reranker_node_summarize_io(session: Session) -> None:
     payload = RetrievalPayload(
         response=RetrievalResponse(matches=[ScoredChunk(chunk=chunk, score=0.5)]), usage={}
     )
-    node = RerankerNode(RerankerConfig(enabled=True))
+    node = RerankerNode(RerankerConfig(connection_id=uuid4(), model_name="rerank-model"))
 
     summary = node.summarize_io({"results": payload}, {"results": payload})
 

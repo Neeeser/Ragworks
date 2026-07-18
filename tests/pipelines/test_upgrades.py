@@ -72,6 +72,138 @@ def test_upgrade_definition_drops_edges_touching_removed_nodes() -> None:
     assert all(edge.target != "chat" for edge in upgraded.edges)
 
 
+def test_upgrade_definition_bypasses_legacy_reranker_and_keeps_result_limit() -> None:
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="retriever", type="retriever.vector", name="Retriever"),
+            PipelineNodeDefinition(
+                id="reranker",
+                type="reranker.cross_encoder",
+                name="Cross-Encoder Reranker",
+                config={"enabled": True, "model_name": "legacy-model"},
+            ),
+            PipelineNodeDefinition(
+                id="limit",
+                type="limit.results",
+                name="Result Limit",
+                config={"max_results": 7},
+            ),
+            PipelineNodeDefinition(id="out", type="retrieval.output", name="Output"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="retriever-reranker",
+                source="retriever",
+                target="reranker",
+                source_port="results",
+                target_port="results",
+            ),
+            PipelineEdgeDefinition(
+                id="reranker-limit",
+                source="reranker",
+                target="limit",
+                source_port="results",
+                target_port="results",
+            ),
+            PipelineEdgeDefinition(
+                id="limit-output",
+                source="limit",
+                target="out",
+                source_port="results",
+                target_port="results",
+            ),
+        ],
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    assert "reranker" not in upgraded.node_map()
+    assert upgraded.node_map()["limit"] == definition.node_map()["limit"]
+    assert upgraded.node_map()["limit"].config == {"max_results": 7}
+    assert any(
+        edge.source == "retriever"
+        and edge.target == "limit"
+        and edge.source_port == "results"
+        and edge.target_port == "results"
+        for edge in upgraded.edges
+    )
+    assert upgraded.node_map()["retriever"].config.get("top_k") is None
+
+
+def test_upgrade_definition_splices_reranker_fan_in_out_with_stable_unique_ids() -> None:
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source-a", type="retriever.vector", name="Source A"),
+            PipelineNodeDefinition(id="source-b", type="retriever.bm25", name="Source B"),
+            PipelineNodeDefinition(
+                id="reranker", type="reranker.cross_encoder", name="Legacy Reranker"
+            ),
+            PipelineNodeDefinition(id="target-a", type="limit.results", name="Limit"),
+            PipelineNodeDefinition(id="target-b", type="retrieval.output", name="Output"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="in-a",
+                source="source-a",
+                target="reranker",
+                source_port="results-a",
+                target_port="input-a",
+            ),
+            PipelineEdgeDefinition(
+                id="in-b",
+                source="source-b",
+                target="reranker",
+                source_port="results-b",
+                target_port="input-b",
+            ),
+            PipelineEdgeDefinition(
+                id="out-a",
+                source="reranker",
+                target="target-a",
+                source_port="output-a",
+                target_port="results-a",
+            ),
+            PipelineEdgeDefinition(
+                id="out-b",
+                source="reranker",
+                target="target-b",
+                source_port="output-b",
+                target_port="results-b",
+            ),
+            PipelineEdgeDefinition(
+                id="edge-source-a-target-a",
+                source="source-a",
+                target="target-a",
+                source_port="existing",
+                target_port="existing",
+            ),
+        ],
+    )
+
+    first = upgrade_definition(definition)
+    second = upgrade_definition(definition)
+
+    assert first is not None
+    assert second is not None
+    assert first.edges == second.edges
+    assert len({edge.id for edge in first.edges}) == len(first.edges)
+    spliced = [
+        edge
+        for edge in first.edges
+        if edge.source_port in {"results-a", "results-b"}
+        and edge.target_port in {"results-a", "results-b"}
+    ]
+    assert {
+        (edge.source, edge.target, edge.source_port, edge.target_port)
+        for edge in spliced
+    } == {
+        (source, target, source_port, target_port)
+        for source, source_port in (("source-a", "results-a"), ("source-b", "results-b"))
+        for target, target_port in (("target-a", "results-a"), ("target-b", "results-b"))
+    }
+
+
 def test_upgrade_definition_returns_none_when_already_current() -> None:
     definition = _legacy_retrieval_definition()
     first = upgrade_definition(definition)

@@ -206,7 +206,9 @@ def test_reranker_summary_keeps_complete_before_and_after_orders() -> None:
     before = RetrievalPayload(response=RetrievalResponse(matches=before_matches))
     after = RetrievalPayload(response=RetrievalResponse(matches=after_matches))
 
-    summary = RerankerNode(RerankerConfig(enabled=True)).summarize_io(
+    summary = RerankerNode(
+        RerankerConfig(connection_id=uuid4(), model_name="rerank-model")
+    ).summarize_io(
         {"results": before},
         {"results": after},
     )
