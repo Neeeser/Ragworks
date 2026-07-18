@@ -56,13 +56,19 @@ class ToolCallEvent(BaseModel):
 
 
 class ToolResultEvent(BaseModel):
-    """The result of an executed tool call."""
+    """The result of an executed tool call.
+
+    `error` is set (and `response` is None) when the model's arguments
+    violated the pipeline's declared constraints — the violation goes back to
+    the model as the tool result instead of failing the whole turn.
+    """
 
     type: Literal["tool_result"] = "tool_result"
     id: str | None
     name: str
     arguments: dict[str, Any]
-    response: CollectionQueryResponse
+    response: CollectionQueryResponse | None
+    error: str | None = None
     reasoning: dict[str, Any] | None = None
     collection_id: str
     collection_name: str

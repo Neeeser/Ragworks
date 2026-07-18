@@ -124,6 +124,8 @@ describe("pipeline-config", () => {
     input: "number",
     nullable: false,
     required: false,
+    staticOnly: false,
+    exprType: "number",
   };
   const integerField: PipelineConfigField = { ...numberField, key: "n", input: "integer" };
   const booleanField: PipelineConfigField = { ...numberField, key: "flag", input: "boolean" };

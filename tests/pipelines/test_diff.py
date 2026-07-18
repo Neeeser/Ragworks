@@ -84,3 +84,34 @@ def test_position_moves_collapse_to_one_layout_change() -> None:
 
     assert [change.kind for change in changes] == ["layout"]
     assert material_changes(changes) == []
+
+
+def test_variables_only_change_is_material() -> None:
+    """A variables-only edit must produce a material change — otherwise
+    update_pipeline rejects the save as 'No changes to save'."""
+    from app.pipelines.variables import PipelineVariable, VariableType
+
+    old = PipelineDefinition()
+    new = PipelineDefinition(
+        variables=[PipelineVariable(name="factor", type=VariableType.INTEGER, value=2)]
+    )
+    changes = diff_definitions(old, new)
+    assert any(change.kind == "variables" for change in changes)
+    assert material_changes(changes)
+
+
+def test_variable_update_and_removal_are_described() -> None:
+    from app.pipelines.variables import PipelineVariable, VariableType
+
+    old = PipelineDefinition(
+        variables=[
+            PipelineVariable(name="factor", type=VariableType.INTEGER, value=2),
+            PipelineVariable(name="gone", type=VariableType.STRING, value="x"),
+        ]
+    )
+    new = PipelineDefinition(
+        variables=[PipelineVariable(name="factor", type=VariableType.INTEGER, value=3)]
+    )
+    summaries = [change.summary for change in diff_definitions(old, new)]
+    assert "Variable factor updated" in summaries
+    assert "Removed variable gone" in summaries

@@ -136,7 +136,9 @@
             "ui": {}
           }
         ],
-        "viewport": {}
+        "viewport": {},
+        "variables": [],
+        "schema_version": 2
       }
     },
     {
@@ -147,7 +149,9 @@
             "id": "query-input",
             "type": "retrieval.input",
             "name": "Retrieval Input",
-            "config": {},
+            "config": {
+              "arguments": ["result_limit"]
+            },
             "position": null,
             "ui": {}
           },
@@ -169,7 +173,10 @@
             "config": {
               "backend": "pgvector",
               "index_name": "ragworks",
-              "namespace": "col-{collection_id}"
+              "namespace": "col-{collection_id}",
+              "top_k": {
+                "$expr": "result_limit"
+              }
             },
             "position": null,
             "ui": {}
@@ -189,7 +196,10 @@
             "config": {
               "backend": "pgvector",
               "index_name": "ragworks-bm25",
-              "namespace": "col-{collection_id}"
+              "namespace": "col-{collection_id}",
+              "top_k": {
+                "$expr": "result_limit"
+              }
             },
             "position": null,
             "ui": {}
@@ -199,6 +209,18 @@
             "type": "fusion.rrf",
             "name": "RRF Fusion",
             "config": {},
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "limit-results",
+            "type": "limit.results",
+            "name": "Result Limit",
+            "config": {
+              "max_results": {
+                "$expr": "result_limit"
+              }
+            },
             "position": null,
             "ui": {}
           }
@@ -245,15 +267,38 @@
             "ui": {}
           },
           {
-            "id": "edge-fusion-output",
+            "id": "edge-fusion-limit",
             "source": "fuse-results",
+            "target": "limit-results",
+            "source_port": "results",
+            "target_port": "results",
+            "ui": {}
+          },
+          {
+            "id": "edge-limit-output",
+            "source": "limit-results",
             "target": "retrieval-output",
             "source_port": "results",
             "target_port": "results",
             "ui": {}
           }
         ],
-        "viewport": {}
+        "viewport": {},
+        "variables": [
+          {
+            "name": "result_limit",
+            "type": "integer",
+            "source": "input",
+            "description": "Maximum number of results to return.",
+            "value": 5,
+            "expression": null,
+            "minimum": 1.0,
+            "maximum": 10.0,
+            "choices": [],
+            "expose_to_llm": true
+          }
+        ],
+        "schema_version": 2
       }
     }
   ],
@@ -360,18 +405,21 @@
         "properties": {
           "chunk_size": {
             "default": 512,
+            "description": "Maximum tokens per chunk, counted by the selected tokenizer. Larger chunks keep more context around each match but dilute the embedding and eat into the model's input limit; smaller chunks match more precisely but fragment context.",
             "exclusiveMinimum": 0,
             "title": "Chunk Size",
             "type": "integer"
           },
           "chunk_overlap": {
             "default": 200,
+            "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
             "minimum": 0,
             "title": "Chunk Overlap",
             "type": "integer"
           },
           "tokenizer": {
             "default": "wordpiece",
+            "description": "Counter used to measure chunk_size and overlap. Match the embedding model's own tokenizer \u2014 wordpiece for BERT-family embedders, cl100k for OpenAI-family. whitespace counts words, not tokens, and undercounts by roughly 25%.",
             "enum": ["wordpiece", "cl100k", "whitespace", "huggingface"],
             "title": "Tokenizer",
             "type": "string"
@@ -386,6 +434,7 @@
               }
             ],
             "default": null,
+            "description": "HuggingFace model id whose tokenizer to download and count with. Only used (and required) when tokenizer is huggingface.",
             "title": "Hf Model Id"
           }
         },
@@ -453,10 +502,12 @@
             ],
             "default": null,
             "description": "Provider connection that serves the embedding model.",
+            "static_only": true,
             "title": "Connection Id"
           },
           "model_name": {
             "default": "",
+            "static_only": true,
             "title": "Model Name",
             "type": "string"
           },
@@ -471,7 +522,8 @@
               }
             ],
             "default": null,
-            "description": "Optional override for the embedding vector dimension.",
+            "description": "Requested output dimension, for models that support reduced (Matryoshka-style) embeddings. Leave unset to store the model's native dimension \u2014 most embedding models only serve that size and error on an explicit request.",
+            "static_only": true,
             "title": "Dimension"
           }
         },
@@ -522,11 +574,13 @@
         "properties": {
           "index_name": {
             "default": "",
+            "static_only": true,
             "title": "Index Name",
             "type": "string"
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "static_only": true,
             "title": "Namespace",
             "type": "string"
           },
@@ -541,20 +595,26 @@
               }
             ],
             "default": null,
+            "description": "Vector length the index is created with. Must equal the connected embedding model's output dimension \u2014 validation compares them, and a mismatched index rejects every upsert.",
+            "static_only": true,
             "title": "Dimension"
           },
           "metric": {
             "default": "cosine",
+            "description": "Distance function the index scores matches with. Match how the embedding model was trained \u2014 cosine for nearly all sentence embedders; changing it changes what 'similar' means.",
+            "static_only": true,
             "title": "Metric",
             "type": "string"
           },
           "ensure_index": {
             "default": true,
+            "description": "Create the index on first ingest if it does not exist. Disable to require pre-provisioned indexes \u2014 runs fail instead of creating one.",
             "title": "Ensure Index",
             "type": "boolean"
           },
           "backend": {
-            "$ref": "#/$defs/IndexBackend"
+            "$ref": "#/$defs/IndexBackend",
+            "static_only": true
           }
         },
         "title": "VectorIndexerConfig",
@@ -606,15 +666,18 @@
         "description": "Configuration for BM25 (sparse/lexical) indexing nodes.\n\nNo dimension or metric: sparse indexes are text-scored (pg_search BM25 /\nPinecone's integrated sparse model). `index_name` defaults to empty like\nthe unified dense indexer \u2014 an index must be chosen explicitly.",
         "properties": {
           "backend": {
-            "$ref": "#/$defs/IndexBackend"
+            "$ref": "#/$defs/IndexBackend",
+            "static_only": true
           },
           "index_name": {
             "default": "",
+            "static_only": true,
             "title": "Index Name",
             "type": "string"
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "static_only": true,
             "title": "Namespace",
             "type": "string"
           },
@@ -685,12 +748,22 @@
         }
       ],
       "config_schema": {
-        "description": "Configuration for retrieval input nodes.",
-        "properties": {},
+        "description": "Configuration for retrieval input nodes.\n\n`arguments` lists the names of input-source variables (declared on\n`PipelineDefinition.variables`) this pipeline accepts from callers \u2014 the\nsearch page renders a control per accepted variable and the chat tool\nschema publishes the `expose_to_llm` ones. The built-in `query` argument\nis implicit and always present. Definition/bounds/default live on the\nvariable, never here.",
+        "properties": {
+          "arguments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Arguments",
+            "type": "array"
+          }
+        },
         "title": "RetrievalInputConfig",
         "type": "object"
       },
-      "default_config": {},
+      "default_config": {
+        "arguments": []
+      },
       "hidden": false
     },
     {
@@ -730,16 +803,33 @@
         "properties": {
           "index_name": {
             "default": "",
+            "static_only": true,
             "title": "Index Name",
             "type": "string"
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "static_only": true,
             "title": "Namespace",
             "type": "string"
           },
+          "top_k": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
+            "title": "Top K"
+          },
           "backend": {
-            "$ref": "#/$defs/IndexBackend"
+            "$ref": "#/$defs/IndexBackend",
+            "static_only": true
           }
         },
         "title": "VectorRetrieverConfig",
@@ -748,6 +838,7 @@
       "default_config": {
         "index_name": "",
         "namespace": "col-{collection_id}",
+        "top_k": null,
         "backend": "pgvector"
       },
       "hidden": false
@@ -785,20 +876,37 @@
             "type": "string"
           }
         },
-        "description": "Configuration for BM25 (sparse/lexical) retriever nodes.",
+        "description": "Configuration for BM25 (sparse/lexical) retriever nodes.\n\n`top_k` mirrors the dense retriever's contract: required for a runnable\nnode, typically the `top_k` variable or an over-retrieval expression.",
         "properties": {
           "backend": {
-            "$ref": "#/$defs/IndexBackend"
+            "$ref": "#/$defs/IndexBackend",
+            "static_only": true
           },
           "index_name": {
             "default": "",
+            "static_only": true,
             "title": "Index Name",
             "type": "string"
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "static_only": true,
             "title": "Namespace",
             "type": "string"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
+            "title": "Top K"
           }
         },
         "title": "Bm25RetrieverConfig",
@@ -807,7 +915,8 @@
       "default_config": {
         "backend": "pgvector",
         "index_name": "",
-        "namespace": "col-{collection_id}"
+        "namespace": "col-{collection_id}",
+        "top_k": null
       },
       "hidden": false
     },
@@ -836,15 +945,52 @@
         }
       ],
       "config_schema": {
-        "description": "Configuration for reciprocal rank fusion.\n\n`k` is the standard RRF dampening constant (Cormack et al.: 60): higher\nvalues flatten the difference between ranks. `top_k` caps the fused list;\nunset, it falls back to the run's requested top_k.",
+        "description": "Configuration for reciprocal rank fusion.\n\n`k` is the standard RRF dampening constant (Cormack et al.: 60): higher\nvalues flatten the difference between ranks. Fusion never truncates \u2014\ncutting the fused list is the Result Limit node's job (`limit.results`), so the\ncut is always an explicit, traced step.",
         "properties": {
           "k": {
             "default": 60,
+            "description": "Smoothing constant in the RRF score, 1 / (k + rank), summed across every branch a chunk appears in. It sets how steeply early ranks outweigh late ones: at k=1 a rank-1 hit scores 25x a rank-49 hit; at the standard k=60, about 1.8x \u2014 so appearing in several branches counts for more than winning any single one. Fusion emits every fused candidate; Result Limit cuts.",
             "minimum": 1,
-            "title": "K",
+            "title": "Rank dampening (k)",
             "type": "integer"
-          },
-          "top_k": {
+          }
+        },
+        "title": "RRFusionConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "k": 60
+      },
+      "hidden": false
+    },
+    {
+      "type": "limit.results",
+      "label": "Result Limit",
+      "category": "retrieval",
+      "description": "Cut ordered results to the requested maximum result count.",
+      "example": "RetrievalPayload(a, b, c), max_results=2 -> RetrievalPayload(a, b).",
+      "input_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "results",
+          "label": "Results",
+          "data_type": "retrieval_results",
+          "required": true,
+          "accepts_many": false
+        }
+      ],
+      "config_schema": {
+        "description": "Configuration for result-limiting nodes.",
+        "properties": {
+          "max_results": {
             "anyOf": [
               {
                 "exclusiveMinimum": 0,
@@ -855,15 +1001,15 @@
               }
             ],
             "default": null,
-            "title": "Top K"
+            "description": "Keep the first N matches of the ordered input and drop the rest \u2014 typically the result_limit variable, so the caller's requested limit survives an over-retrieving, fused pipeline. Unset: the run's requested result limit.",
+            "title": "Max Results"
           }
         },
-        "title": "RRFusionConfig",
+        "title": "ResultLimitConfig",
         "type": "object"
       },
       "default_config": {
-        "k": 60,
-        "top_k": null
+        "max_results": null
       },
       "hidden": false
     },
@@ -892,12 +1038,42 @@
         }
       ],
       "config_schema": {
-        "description": "Configuration for retrieval output nodes.",
-        "properties": {},
+        "$defs": {
+          "PipelineOutputField": {
+            "description": "A named expression evaluated at run end and returned beside results.",
+            "properties": {
+              "name": {
+                "maxLength": 64,
+                "title": "Name",
+                "type": "string"
+              },
+              "expression": {
+                "default": "",
+                "title": "Expression",
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "title": "PipelineOutputField",
+            "type": "object"
+          }
+        },
+        "description": "Configuration for retrieval output nodes.\n\n`outputs` declares extra named expressions evaluated against the run's\nvariable environment and returned beside the results (e.g. the effective\nover-retrieval depth). Purely additive: an empty list is today's behavior.",
+        "properties": {
+          "outputs": {
+            "items": {
+              "$ref": "#/$defs/PipelineOutputField"
+            },
+            "title": "Outputs",
+            "type": "array"
+          }
+        },
         "title": "RetrievalOutputConfig",
         "type": "object"
       },
-      "default_config": {},
+      "default_config": {
+        "outputs": []
+      },
       "hidden": false
     }
   ]

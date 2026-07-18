@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LANDING_SCENES } from "@/components/landing/lib/scenes";
+import { DEFAULT_PIPELINE_FIXTURE } from "@/components/pipelines/lib/default-pipeline-flow";
 
 const HYBRID_RETRIEVAL_ID = "hybrid-retrieval";
 const HYBRID_INGESTION_ID = "hybrid-ingestion";
@@ -90,11 +91,31 @@ describe("LANDING_SCENES registry", () => {
     }
   });
 
+  it.each([
+    [HYBRID_INGESTION_ID, "ingestion"],
+    [HYBRID_RETRIEVAL_ID, "retrieval"],
+  ] as const)("builds %s directly from the generated default definition", (sceneId, kind) => {
+    const scene = LANDING_SCENES.find((entry) => entry.id === sceneId);
+    const generated = DEFAULT_PIPELINE_FIXTURE.scenes.find(
+      (entry) => entry.kind === kind,
+    )?.definition;
+    expect(scene).toBeDefined();
+    expect(generated).toBeDefined();
+
+    const flow = scene!.build();
+    expect(flow.nodes.map((node) => node.id).sort()).toEqual(
+      generated!.nodes.map((node) => node.id).sort(),
+    );
+    expect(flow.edges.map((edge) => edge.id).sort()).toEqual(
+      generated!.edges.map((edge) => edge.id).sort(),
+    );
+  });
+
   it("hybrid ingestion splits at the chunker and merges both indexes downstream", () => {
     const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_INGESTION_ID);
     expect(scene).toBeDefined();
     const { edges } = scene!.build();
-    const fanOut = edges.filter((edge) => edge.source === "chunk");
+    const fanOut = edges.filter((edge) => edge.source === "chunk-document");
     expect(fanOut).toHaveLength(2);
     const mergeTargets = new Map<string, number>();
     edges.forEach((edge) =>
@@ -124,8 +145,16 @@ describe("LANDING_SCENES registry", () => {
   // regression the manual grid used to hand-maintain.
   it("auto-layout centers hybrid merge nodes between their branch rows", () => {
     const cases = [
-      { sceneId: HYBRID_INGESTION_ID, branches: ["index", "index-bm25"], merge: "collection" },
-      { sceneId: HYBRID_RETRIEVAL_ID, branches: ["retrieve", "bm25-retrieve"], merge: "fusion" },
+      {
+        sceneId: HYBRID_INGESTION_ID,
+        branches: ["index-chunks", "index-bm25"],
+        merge: "ingest-output",
+      },
+      {
+        sceneId: HYBRID_RETRIEVAL_ID,
+        branches: ["vector-retriever", "bm25-retriever"],
+        merge: "fuse-results",
+      },
     ];
     cases.forEach(({ sceneId, branches, merge }) => {
       const scene = LANDING_SCENES.find((entry) => entry.id === sceneId);

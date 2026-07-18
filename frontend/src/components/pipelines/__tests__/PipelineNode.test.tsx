@@ -80,6 +80,68 @@ describe("PipelineNode", () => {
     expect(screen.getByTestId("source-embedded")).toBeInTheDocument();
   });
 
+  it("marks variadic inputs as (many) and single inputs with a one-connection tooltip", () => {
+    render(
+      <PipelineNode
+        {...nodeProps({
+          label: "RRF Fusion",
+          nodeType: "fusion.rrf",
+          inputs: [
+            {
+              key: "results",
+              label: "Results",
+              data_type: "retrieval_results",
+              required: true,
+              accepts_many: true,
+            },
+          ],
+          outputs: [
+            {
+              key: "results",
+              label: "Results",
+              data_type: "retrieval_results",
+              required: true,
+              accepts_many: false,
+            },
+          ],
+          config: {},
+        })}
+      />,
+    );
+
+    const variadic = screen.getByTitle(/accepts any number of connections/);
+    expect(variadic).toHaveTextContent("Results (many)");
+    // The output side carries no connection-cardinality claim.
+    expect(screen.queryAllByTitle(/accepts any number/)).toHaveLength(1);
+
+    render(
+      <PipelineNode
+        {...nodeProps(
+          {
+            label: "Result Limit",
+            nodeType: "limit.results",
+            inputs: [
+              {
+                key: "results",
+                label: "Results",
+                data_type: "retrieval_results",
+                required: true,
+                accepts_many: false,
+              },
+            ],
+            outputs: [],
+            config: {},
+          },
+          "node-2",
+        )}
+      />,
+    );
+
+    const single = screen.getByTitle(/accepts one connection/);
+    expect(single).toHaveTextContent("Results");
+    expect(single).not.toHaveTextContent("(many)");
+  });
+
   it("hides at-default settings but counts edited ones", () => {
     const data: PipelineNodeData = {
       label: "Parser",

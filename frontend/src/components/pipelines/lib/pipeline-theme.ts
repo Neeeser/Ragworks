@@ -6,8 +6,7 @@ export type NodeFamily =
   | "indexer"
   | "parser"
   | "retriever"
-  | "fusion"
-  | "reranker"
+  | "ranking"
   | "router"
   | "ingestion"
   | "retrieval"
@@ -21,8 +20,7 @@ const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
   indexer: "Indexers",
   parser: "Parsers",
   retriever: "Retrievers",
-  fusion: "Fusion",
-  reranker: "Rerankers",
+  ranking: "Ranking",
   router: "Routers",
   ingestion: "Ingestion",
   retrieval: "Retrieval",
@@ -40,8 +38,7 @@ const NODE_FAMILY_ORDER: NodeFamily[] = [
   "embedder",
   "indexer",
   "retriever",
-  "fusion",
-  "reranker",
+  "ranking",
   "chat",
   "utility",
   "other",
@@ -74,7 +71,8 @@ const ROUTER_STYLE: FamilyStyle = {
   glow: GLOW,
   badge: "text-stage-router",
 };
-// Shared by the fusion and reranker families (both re-rank result streams).
+// The ranking family: everything that reorders or cuts a result stream
+// (fusion, rerankers, Result Limit) shares the rerank stage token.
 const RERANK_STYLE: FamilyStyle = {
   accent: "bg-stage-rerank",
   border: "border-stage-rerank/40",
@@ -121,10 +119,7 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
     glow: GLOW,
     badge: "text-stage-retrieve",
   },
-  // Fusion nodes combine/re-rank result streams, so they share the rerank
-  // stage token rather than minting a new hue for the same semantic stage.
-  fusion: RERANK_STYLE,
-  reranker: RERANK_STYLE,
+  ranking: RERANK_STYLE,
   router: ROUTER_STYLE,
   ingestion: NEUTRAL_STYLE,
   retrieval: ROUTER_STYLE,
@@ -194,8 +189,7 @@ const NODE_FAMILY_VAR: Record<NodeFamily, string> = {
   indexer: "var(--stage-index)",
   parser: "var(--stage-parse)",
   retriever: "var(--stage-retrieve)",
-  fusion: RERANK_VAR,
-  reranker: RERANK_VAR,
+  ranking: RERANK_VAR,
   router: ROUTER_VAR,
   ingestion: NEUTRAL_VAR,
   retrieval: ROUTER_VAR,
@@ -221,8 +215,9 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   if (prefix === "indexer") return "indexer";
   if (prefix === "parser") return "parser";
   if (prefix === "retriever") return "retriever";
-  if (prefix === "fusion") return "fusion";
-  if (prefix === "reranker") return "reranker";
+  // One ranking family: fusion merges, rerankers reorder, limit cuts —
+  // the same semantic stage, so they share a section and stage color.
+  if (prefix === "fusion" || prefix === "reranker" || prefix === "limit") return "ranking";
   if (prefix === "router") return "router";
   if (prefix === "ingestion") return "ingestion";
   if (prefix === "retrieval") return "retrieval";

@@ -53,6 +53,11 @@ describe("PipelineSidebar", () => {
         onDeletePipeline={() => undefined}
         pipelineUsage={new Set()}
         onPreviewNode={() => undefined}
+        variables={[]}
+        onVariablesChange={() => undefined}
+        variableNodes={[]}
+        modelOptions={[]}
+        variablesDisabled={false}
       />,
     );
 

@@ -5,7 +5,7 @@
  * holds one responsibility (and stays under the size cap).
  */
 
-import type { IndexBackend, PipelineDefinition, PipelineKind } from "@/lib/types";
+import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable } from "@/lib/types";
 
 const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
@@ -20,6 +20,7 @@ const NODE_EMBED_QUERY = "embed-query";
 const NODE_VECTOR_RETRIEVER = "vector-retriever";
 const NODE_BM25_RETRIEVER = "bm25-retriever";
 const NODE_FUSE_RESULTS = "fuse-results";
+const NODE_LIMIT_RESULTS = "limit-results";
 const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
 const NODE_PARSE_DOCUMENT = "parse-document";
@@ -35,6 +36,7 @@ export const RETRIEVER_NODE_TYPE = "retriever.vector";
 export const BM25_INDEXER_NODE_TYPE = "indexer.bm25";
 export const BM25_RETRIEVER_NODE_TYPE = "retriever.bm25";
 export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
+export const LIMIT_NODE_TYPE = "limit.results";
 
 // Scaffolds deliberately carry no node positions: the shared auto-layout
 // (`layoutPipelineNodes`) places any definition whose nodes lack saved
@@ -46,6 +48,24 @@ export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
 // (the real cap is BackendCapabilities.index_name_max_length).
 const DEFAULT_INDEX_NAME_MAX_LENGTH = 45;
 const BM25_INDEX_SUFFIX = "-bm25";
+
+// Mirrors the backend scaffold (`app/pipelines/defaults.py`): retrieval
+// pipelines declare the caller-facing result limit as an input variable
+// (the retrieval input node accepts it by name), so the search page and the
+// chat tool schema see the same argument whether the pipeline was scaffolded
+// by the wizard or by the backend.
+const DEFAULT_RETRIEVAL_VARIABLES: PipelineVariable[] = [
+  {
+    name: "result_limit",
+    type: "integer",
+    source: "input",
+    description: "Maximum number of results to return.",
+    value: 5,
+    minimum: 1,
+    maximum: 10,
+    expose_to_llm: true,
+  },
+];
 
 /** Derive the BM25 sibling index name paired with a dense index name. */
 export const bm25SiblingIndexName = (
@@ -103,14 +123,23 @@ export const buildDefaultDefinition = (
   }
 
   if (kind === "retrieval") {
-    const retrieverConfig = { ...indexConfig };
+    // Fetch depth is always explicit — the declared result limit, never an
+    // invisible request fallback.
+    const retrieverConfig: Record<string, unknown> = {
+      ...indexConfig,
+      top_k: { $expr: "result_limit" },
+    };
     delete retrieverConfig.dimension;
+    const bm25RetrieverConfig: Record<string, unknown> = {
+      ...bm25Config,
+      top_k: { $expr: "result_limit" },
+    };
     const nodes: PipelineDefinition["nodes"] = [
       {
         id: NODE_QUERY_INPUT,
         type: "retrieval.input",
         name: "Retrieval Input",
-        config: {},
+        config: { arguments: ["result_limit"] },
       },
       {
         id: NODE_EMBED_QUERY,
@@ -153,13 +182,21 @@ export const buildDefaultDefinition = (
           id: NODE_BM25_RETRIEVER,
           type: BM25_RETRIEVER_NODE_TYPE,
           name: "BM25 Retriever",
-          config: bm25Config,
+          config: bm25RetrieverConfig,
         },
         {
           id: NODE_FUSE_RESULTS,
           type: RRF_FUSION_NODE_TYPE,
           name: "RRF Fusion",
           config: {},
+        },
+        // Fusion never cuts; Result Limit is the explicit cut back to the
+        // declared result_limit input variable.
+        {
+          id: NODE_LIMIT_RESULTS,
+          type: LIMIT_NODE_TYPE,
+          name: "Result Limit",
+          config: { max_results: { $expr: "result_limit" } },
         },
       );
       edges.push(
@@ -185,8 +222,15 @@ export const buildDefaultDefinition = (
           target_port: PORT_RESULTS,
         },
         {
-          id: "edge-fusion-output",
+          id: "edge-fusion-limit",
           source: NODE_FUSE_RESULTS,
+          target: NODE_LIMIT_RESULTS,
+          source_port: PORT_RESULTS,
+          target_port: PORT_RESULTS,
+        },
+        {
+          id: "edge-limit-output",
+          source: NODE_LIMIT_RESULTS,
           target: NODE_RETRIEVAL_OUTPUT,
           source_port: PORT_RESULTS,
           target_port: PORT_RESULTS,
@@ -201,7 +245,12 @@ export const buildDefaultDefinition = (
         target_port: PORT_RESULTS,
       });
     }
-    return { nodes, edges, viewport: {} };
+    return {
+      nodes,
+      edges,
+      viewport: {},
+      variables: DEFAULT_RETRIEVAL_VARIABLES.map((variable) => ({ ...variable })),
+    };
   }
 
   const nodes: PipelineDefinition["nodes"] = [

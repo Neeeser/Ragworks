@@ -1,4 +1,4 @@
-"""Stored-definition upgrades: legacy backend-pinned nodes and chat.settings."""
+"""Stored-definition upgrades: legacy nodes and the variables v1 -> v2 migration."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.upgrades import upgrade_definition
+from app.pipelines.upgrades import migrate_variables_definition, upgrade_definition
 from app.pipelines.validation import PipelineValidationResult
+from app.pipelines.variables import VariableSource
 from app.services.pipelines import PipelineService, upgrade_stored_pipeline_definitions
 
 
@@ -77,6 +78,363 @@ def test_upgrade_definition_returns_none_when_already_current() -> None:
     assert first is not None
 
     assert upgrade_definition(first) is None
+
+
+def test_upgrade_definition_renames_result_limit_in_place_and_preserves_edges() -> None:
+    definition = PipelineDefinition.model_validate(
+        {
+            "schema_version": 2,
+            "variables": [
+                {
+                    "name": "top_k",
+                    "type": "integer",
+                    "source": "input",
+                    "value": 5,
+                }
+            ],
+            "nodes": [
+                {
+                    "id": "in",
+                    "type": "retrieval.input",
+                    "name": "Input",
+                    "config": {"arguments": ["top_k"]},
+                },
+                {
+                    "id": "fusion",
+                    "type": "fusion.rrf",
+                    "name": "Fusion",
+                    "config": {"k": 60},
+                },
+                {
+                    "id": "limit",
+                    "type": "limit.top_n",
+                    "name": "Top-N",
+                    "config": {"top_n": {"$expr": "top_k"}},
+                },
+                {
+                    "id": "out",
+                    "type": "retrieval.output",
+                    "name": "Output",
+                    "config": {},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "fusion-limit",
+                    "source": "fusion",
+                    "target": "limit",
+                    "source_port": "results",
+                    "target_port": "results",
+                },
+                {
+                    "id": "limit-out",
+                    "source": "limit",
+                    "target": "out",
+                    "source_port": "results",
+                    "target_port": "results",
+                },
+            ],
+        }
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    limit = upgraded.node_map()["limit"]
+    assert limit.type == "limit.results"
+    assert limit.name == "Result Limit"
+    assert limit.config == {"max_results": {"$expr": "result_limit"}}
+    assert upgraded.node_map()["in"].config["arguments"] == ["result_limit"]
+    assert [variable.name for variable in upgraded.variables] == ["result_limit"]
+    assert upgraded.edges == definition.edges
+    assert upgrade_definition(upgraded) is None
+
+
+def test_upgrade_definition_preserves_custom_result_limit_name() -> None:
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(
+                id="limit",
+                type="limit.top_n",
+                name="Keep the best chunks",
+                config={"top_n": 7},
+            )
+        ]
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    assert upgraded.nodes[0].name == "Keep the best chunks"
+
+
+def _v1_raw_definition(*, fusion_top_k: object | None = None) -> dict[str, object]:
+    """A raw stored definition exactly as the pre-variables release wrote it.
+
+    No `variables` list and no `schema_version` key — argument objects live on
+    the input node's config and fusion truncated (config `top_k`, else the
+    run's requested top_k).
+    """
+    fusion_config: dict[str, object] = {"k": 60}
+    if fusion_top_k is not None:
+        fusion_config["top_k"] = fusion_top_k
+    return {
+        "nodes": [
+            {
+                "id": "in",
+                "type": "retrieval.input",
+                "name": "Input",
+                "config": {
+                    "arguments": [
+                        {
+                            "name": "top_k",
+                            "type": "integer",
+                            "description": "How many chunks to retrieve.",
+                            "default": 5,
+                            "minimum": 1,
+                            "maximum": 10,
+                            "expose_to_llm": True,
+                        }
+                    ]
+                },
+            },
+            {
+                "id": "sem",
+                "type": "retriever.vector",
+                "name": "Semantic",
+                "config": {"backend": "pgvector", "index_name": "docs"},
+            },
+            {"id": "fuse", "type": "fusion.rrf", "name": "Fusion", "config": fusion_config},
+            {"id": "out", "type": "retrieval.output", "name": "Output", "config": {}},
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "source": "in",
+                "target": "sem",
+                "source_port": "request",
+                "target_port": "request",
+            },
+            {
+                "id": "e2",
+                "source": "sem",
+                "target": "fuse",
+                "source_port": "results",
+                "target_port": "results",
+            },
+            {
+                "id": "e3",
+                "source": "fuse",
+                "target": "out",
+                "source_port": "results",
+                "target_port": "results",
+            },
+        ],
+        "viewport": {},
+    }
+
+
+class TestMigrateVariablesDefinition:
+    """The v1 -> v2 rewrite: arguments become input variables, fusion gets a cut."""
+
+    def test_argument_objects_become_input_variables(self) -> None:
+        definition = PipelineDefinition.model_validate(_v1_raw_definition())
+
+        migrated = migrate_variables_definition(definition)
+
+        input_node = migrated.node_map()["in"]
+        assert input_node.config["arguments"] == ["result_limit"]
+        variable = next(v for v in migrated.variables if v.name == "result_limit")
+        assert variable.source is VariableSource.INPUT
+        assert variable.value == 5
+        assert variable.minimum == 1
+        assert variable.maximum == 10
+        assert variable.expose_to_llm is True
+
+    def test_partially_migrated_string_arguments_use_the_new_name(self) -> None:
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"]["arguments"] = ["top_k"]
+        raw["variables"] = [
+            {
+                "name": "top_k",
+                "type": "integer",
+                "source": "input",
+                "value": 5,
+            }
+        ]
+
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+
+        assert migrated.node_map()["in"].config["arguments"] == ["result_limit"]
+        assert [variable.name for variable in migrated.variables] == ["result_limit"]
+
+    def test_required_argument_migrates_to_no_default(self) -> None:
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"]["arguments"] = [
+            {"name": "mode", "type": "string", "required": True, "default": "x"}
+        ]
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+        variable = next(v for v in migrated.variables if v.name == "mode")
+        assert variable.value is None  # required stays required
+
+    def test_fusion_gets_topn_inserted_preserving_the_cut(self) -> None:
+        definition = PipelineDefinition.model_validate(
+            _v1_raw_definition(fusion_top_k={"$expr": "top_k * 2"})
+        )
+
+        migrated = migrate_variables_definition(definition)
+
+        fusion = migrated.node_map()["fuse"]
+        assert "top_k" not in fusion.config
+        limit = next(node for node in migrated.nodes if node.type == "limit.results")
+        assert limit.name == "Result Limit"
+        assert limit.config == {"max_results": {"$expr": "result_limit * 2"}}
+        # Fusion's old outgoing edge now leaves the Top-N node.
+        assert any(edge.source == limit.id and edge.target == "out" for edge in migrated.edges)
+        assert any(edge.source == "fuse" and edge.target == limit.id for edge in migrated.edges)
+
+    def test_fusion_without_explicit_top_k_gets_unset_topn(self) -> None:
+        """v1 fusion fell back to the requested top_k; the unset Top-N keeps that."""
+        migrated = migrate_variables_definition(
+            PipelineDefinition.model_validate(_v1_raw_definition())
+        )
+        limit = next(node for node in migrated.nodes if node.type == "limit.results")
+        assert limit.config == {}
+
+    def test_pre_variables_definition_gains_the_default_result_limit(self) -> None:
+        """A pre-branch retrieval definition (no declarations at all) is rewritten
+        to the new-default shape: the implicit hardcoded tool contract becomes the
+        scaffold's explicit top_k input variable, accepted by the input node, with
+        the inserted Top-N pointed at it."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"] = {}  # pre-variables: no arguments key at all
+
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+
+        variable = next(v for v in migrated.variables if v.name == "result_limit")
+        assert variable.source is VariableSource.INPUT
+        assert variable.value == 5
+        assert (variable.minimum, variable.maximum) == (1, 10)
+        assert variable.expose_to_llm is True
+        assert migrated.node_map()["in"].config["arguments"] == ["result_limit"]
+        limit = next(node for node in migrated.nodes if node.type == "limit.results")
+        assert limit.config == {"max_results": {"$expr": "result_limit"}}
+        # Retrievers lose the invisible request-depth fallback: the migration
+        # pins their fetch depth to the declared top_k variable.
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "result_limit"}
+
+    def test_retrievers_gain_the_top_k_expression(self) -> None:
+        """Every retriever with no configured depth gets `top_k` pinned to the
+        declared variable — the v1 request-depth fallback made explicit."""
+        migrated = migrate_variables_definition(
+            PipelineDefinition.model_validate(_v1_raw_definition())
+        )
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "result_limit"}
+
+    def test_explicit_top_k_expression_tracks_the_renamed_argument(self) -> None:
+        """Config expressions migrate with the caller-facing variable name."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[1]["config"]["top_k"] = {"$expr": "top_k * 2"}
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "result_limit * 2"}
+
+    def test_derived_and_output_expressions_track_the_renamed_argument(self) -> None:
+        raw = _v1_raw_definition()
+        raw["variables"] = [
+            {
+                "name": "candidate_pool",
+                "type": "integer",
+                "expression": "top_k * 2",
+            }
+        ]
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[-1]["config"] = {"outputs": [{"name": "requested", "expression": "top_k + 1"}]}
+
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+
+        candidate_pool = next(v for v in migrated.variables if v.name == "candidate_pool")
+        assert candidate_pool.expression == "result_limit * 2"
+        assert migrated.node_map()["out"].config["outputs"] == [
+            {"name": "requested", "expression": "result_limit + 1"}
+        ]
+
+    def test_retrievers_get_literal_depth_when_no_top_k_variable(self) -> None:
+        """A definition whose declared inputs never included a depth gets the
+        literal historical default — there is no variable to reference."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"]["arguments"] = [{"name": "mode", "type": "string", "default": "fast"}]
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+        assert migrated.node_map()["sem"].config["top_k"] == 5
+
+    def test_declared_pipelines_rename_top_k_without_adding_a_duplicate(self) -> None:
+        """A definition that already declares inputs keeps exactly its own."""
+        migrated = migrate_variables_definition(
+            PipelineDefinition.model_validate(_v1_raw_definition())
+        )
+        assert [v.name for v in migrated.variables] == ["result_limit"]
+        assert migrated.variables[0].value == 5  # the declared one, not a duplicate
+
+
+def test_stored_v1_definition_is_migrated_once(session: Session) -> None:
+    """A raw v1 row is rewritten and stamped; a later boot never touches it again."""
+    user = models.User(email="v1@example.com", hashed_password="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    pipeline = models.Pipeline(user_id=user.id, name="V1", kind=models.PipelineKind.RETRIEVAL)
+    session.add(pipeline)
+    session.flush()
+    version = models.PipelineVersion(
+        pipeline_id=pipeline.id,
+        version=1,
+        definition=_v1_raw_definition(),
+        created_by=user.id,
+    )
+    session.add(version)
+    session.commit()
+
+    assert upgrade_stored_pipeline_definitions(session) == 1
+    session.commit()
+
+    stored = PipelineService(session).get_definition(pipeline)
+    assert any(node.type == "limit.results" for node in stored.nodes)
+    assert any(variable.source is VariableSource.INPUT for variable in stored.variables)
+    assert version.definition.get("schema_version") == 2
+
+    # The user deletes the migrated Top-N node — the next boot must not reinsert it.
+    trimmed = stored.model_copy(
+        update={
+            "nodes": [node for node in stored.nodes if node.type != "limit.results"],
+            "edges": [
+                edge
+                for edge in stored.edges
+                if all(
+                    node.type != "limit.results"
+                    for node in stored.nodes
+                    if node.id in (edge.source, edge.target)
+                )
+            ],
+        }
+    )
+    version.definition = trimmed.model_dump(mode="json")
+    session.add(version)
+    session.commit()
+
+    assert upgrade_stored_pipeline_definitions(session) == 0
+    session.commit()
+    after = PipelineService(session).get_definition(pipeline)
+    assert all(node.type != "limit.results" for node in after.nodes)
 
 
 def test_upgrade_stored_pipeline_definitions_rewrites_versions_in_place(

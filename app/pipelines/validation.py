@@ -17,6 +17,8 @@ from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.ports import compatible
 from app.pipelines.registry import NodeRegistry
+from app.pipelines.resolution import resolve_static_definition, strip_expressions
+from app.pipelines.validation_variables import collect_variable_issues
 from app.providers.base import effective_embedding_input_limit
 
 EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
@@ -58,8 +60,14 @@ class PipelineValidator:
         if self._has_cycle(definition):
             errors.append("Pipeline contains at least one cycle.")
 
-        issues = self._collect_node_issues(definition)
-        issues.extend(self._check_embedding_input_limits(definition))
+        issues = collect_variable_issues(definition, self._registry)
+        # Per-node hooks validate configs through their config models, which
+        # cannot hold `{"$expr": ...}` values — run them against the statically
+        # resolved definition (argument defaults), falling back to stripping
+        # expressions when the environment itself is broken.
+        hook_definition = self._definition_for_node_hooks(definition, issues)
+        issues.extend(self._collect_node_issues(hook_definition))
+        issues.extend(self._check_embedding_input_limits(hook_definition))
         node_errors = [issue.message for issue in issues if issue.severity == "error"]
         warnings = [issue.message for issue in issues if issue.severity == "warning"]
         errors.extend(node_errors)
@@ -70,6 +78,16 @@ class PipelineValidator:
             warnings=warnings,
             issues=issues,
         )
+
+    @staticmethod
+    def _definition_for_node_hooks(
+        definition: PipelineDefinition,
+        variable_issues: list[PipelineValidationIssue],
+    ) -> PipelineDefinition:
+        """Return the literal-config definition per-node validation hooks see."""
+        if any(issue.severity == "error" for issue in variable_issues):
+            return strip_expressions(definition)
+        return resolve_static_definition(definition)
 
     def _check_node_identity(
         self,

@@ -133,6 +133,7 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
     embeddingCatalog: null,
     embeddingModelsLoading: false,
     embeddingModelsError: null,
+    variables: [],
     ...overrides,
   };
   return render(<NodeEditorDrawer {...props} />);
@@ -147,6 +148,7 @@ function DrawerWithIndexManager() {
         onClose={() => undefined}
         onApply={() => undefined}
         isPreview={false}
+        variables={[]}
         validationErrors={[]}
         vectorIndexes={indexes}
         onOpenIndexManager={() => setManagerOpen(true)}

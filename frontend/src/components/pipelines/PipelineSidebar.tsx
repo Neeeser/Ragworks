@@ -1,12 +1,18 @@
 "use client";
 
+import { useState } from "react";
+
 import { GlassCard } from "@/components/ui/panel";
+import { TabList, tabId } from "@/components/ui/tabs";
 
 import { PipelineCatalog } from "./PipelineCatalog";
 import { PipelineNodeLibrary } from "./PipelineNodeLibrary";
+import { VariablesPanel } from "./VariablesPanel";
 
 import type { NodeFamily } from "./lib/pipeline-theme";
-import type { NodeSpec, Pipeline } from "@/lib/types";
+import type { CatalogModel, NodeSpec, Pipeline, PipelineVariable } from "@/lib/types";
+
+type SidebarTab = "pipelines" | "variables";
 
 type PipelineSidebarProps = {
   pipelines: Pipeline[];
@@ -16,6 +22,11 @@ type PipelineSidebarProps = {
   onDeletePipeline: (pipeline: Pipeline) => void;
   pipelineUsage: Set<string>;
   onPreviewNode: (spec: NodeSpec) => void;
+  variables: PipelineVariable[];
+  onVariablesChange: (variables: PipelineVariable[]) => void;
+  variableNodes: Array<{ type: string; config: Record<string, unknown> }>;
+  modelOptions: CatalogModel[];
+  variablesDisabled: boolean;
 };
 
 export function PipelineSidebar({
@@ -26,17 +37,48 @@ export function PipelineSidebar({
   onDeletePipeline,
   pipelineUsage,
   onPreviewNode,
+  variables,
+  onVariablesChange,
+  variableNodes,
+  modelOptions,
+  variablesDisabled,
 }: PipelineSidebarProps) {
+  const [tab, setTab] = useState<SidebarTab>("pipelines");
+
   return (
     <GlassCard className="rounded-3xl p-5 xl:h-full xl:overflow-y-auto">
-      <PipelineCatalog
-        pipelines={pipelines}
-        selectedPipelineId={selectedPipelineId}
-        onSelect={onSelectPipeline}
-        onDelete={onDeletePipeline}
-        pipelineUsage={pipelineUsage}
+      <TabList<SidebarTab>
+        tabs={[
+          { id: "pipelines", label: "Pipelines" },
+          { id: "variables", label: "Variables" },
+        ]}
+        active={tab}
+        onSelect={setTab}
+        label="Sidebar sections"
+        className="mb-4"
       />
-      <PipelineNodeLibrary catalog={catalog} onPreviewNode={onPreviewNode} />
+      {tab === "pipelines" ? (
+        <div role="tabpanel" aria-labelledby={tabId("pipelines")}>
+          <PipelineCatalog
+            pipelines={pipelines}
+            selectedPipelineId={selectedPipelineId}
+            onSelect={onSelectPipeline}
+            onDelete={onDeletePipeline}
+            pipelineUsage={pipelineUsage}
+          />
+          <PipelineNodeLibrary catalog={catalog} onPreviewNode={onPreviewNode} />
+        </div>
+      ) : (
+        <div role="tabpanel" aria-labelledby={tabId("variables")}>
+          <VariablesPanel
+            variables={variables}
+            onChange={onVariablesChange}
+            nodes={variableNodes}
+            modelOptions={modelOptions}
+            disabled={variablesDisabled}
+          />
+        </div>
+      )}
     </GlassCard>
   );
 }

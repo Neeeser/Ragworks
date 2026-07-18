@@ -86,7 +86,13 @@ class QueryEmbeddingPayload(BaseModel):
 
 
 class RetrievalPayload(BaseModel):
-    """Payload containing retrieval results."""
+    """Payload containing retrieval results.
+
+    `outputs` carries the extra named values the retrieval output node
+    evaluated from its declared output expressions; empty for pipelines that
+    declare none.
+    """
 
     response: RetrievalResponse
     usage: TokenUsage = Field(default_factory=TokenUsage)
+    outputs: dict[str, int | float | str | bool] = Field(default_factory=dict)

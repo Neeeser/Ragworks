@@ -70,3 +70,30 @@ describe("diffDefinitions", () => {
     expect(materialChanges(changes)).toEqual([]);
   });
 });
+
+describe("variable changes", () => {
+  it("reports added, updated, and removed variables as material changes", () => {
+    const oldDefinition = {
+      nodes: [],
+      edges: [],
+      variables: [
+        { name: "factor", type: "integer" as const, value: 2 },
+        { name: "gone", type: "string" as const, value: "x" },
+      ],
+    };
+    const newDefinition = {
+      nodes: [],
+      edges: [],
+      variables: [
+        { name: "factor", type: "integer" as const, value: 3 },
+        { name: "fresh", type: "integer" as const, value: 1 },
+      ],
+    };
+    const changes = diffDefinitions(oldDefinition, newDefinition);
+    const summaries = changes.map((change) => change.summary);
+    expect(summaries).toContain("Variable factor updated");
+    expect(summaries).toContain("Added variable fresh");
+    expect(summaries).toContain("Removed variable gone");
+    expect(materialChanges(changes)).toHaveLength(3);
+  });
+});

@@ -30,6 +30,9 @@ interface UsePipelinesParams {
   kind: PipelineKind;
 }
 
+/** Structural equality for API payloads (stable key order from the backend). */
+const sameContent = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 export interface UsePipelinesResult {
   pipelines: Pipeline[];
   collections: Collection[];
@@ -83,13 +86,20 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
   const layoutSaveInFlight = useRef(false);
   const pendingLayout = useRef<PipelineDefinition | null>(null);
 
+  // Background reloads (the auth provider rotates the token every 12 minutes)
+  // must be invisible: keep the user's selection, keep object identities for
+  // unchanged content (PipelineBuilder's canvas-seeding effect keys on
+  // nodeSpecs — a fresh identity reseeds the canvas and wipes unsaved edits),
+  // and don't flip `loading`, which unmounts the editor behind a spinner.
+  const loadedKindRef = useRef<PipelineKind | null>(null);
+
   useEffect(() => {
     const authToken = token ?? "";
     if (!authToken) return;
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+      if (loadedKindRef.current !== kind) setLoading(true);
       try {
         const [pipelinesResponse, nodesResponse, collectionsResponse] = await Promise.all([
           fetchPipelines(authToken, kind),
@@ -98,9 +108,18 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
         ]);
         if (cancelled) return;
         setPipelines(pipelinesResponse);
-        setNodeSpecs(nodesResponse);
+        setNodeSpecs((previous) =>
+          sameContent(previous, nodesResponse) ? previous : nodesResponse,
+        );
         setCollections(collectionsResponse);
-        setSelectedPipeline(pipelinesResponse[0] ?? null);
+        setSelectedPipeline((previous) => {
+          const match = previous
+            ? pipelinesResponse.find((pipeline) => pipeline.id === previous.id)
+            : undefined;
+          if (previous && match && sameContent(previous, match)) return previous;
+          return match ?? pipelinesResponse[0] ?? null;
+        });
+        loadedKindRef.current = kind;
       } catch (error) {
         if (!cancelled) {
           setMessage(getErrorMessage(error, "Unable to load pipelines."));

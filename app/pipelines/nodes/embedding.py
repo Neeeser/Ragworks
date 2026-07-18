@@ -37,6 +37,7 @@ from app.pipelines.tracing.summaries import (
     summarize_text,
     trace_chunk_items,
 )
+from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.providers.base import effective_embedding_input_limit
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk
@@ -65,12 +66,19 @@ class EmbedderConfig(BaseModel):
     connection_id: UUID | None = Field(
         default=None,
         description="Provider connection that serves the embedding model.",
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    model_name: str = ""
+    model_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
     dimension: int | None = Field(
         default=None,
         gt=0,
-        description="Optional override for the embedding vector dimension.",
+        description=(
+            "Requested output dimension, for models that support reduced "
+            "(Matryoshka-style) embeddings. Leave unset to store the model's "
+            "native dimension — most embedding models only serve that size "
+            "and error on an explicit request."
+        ),
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
 
 

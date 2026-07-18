@@ -46,6 +46,7 @@ from app.pipelines.nodes.retrieval import (
 )
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import NodeRegistry
+from app.pipelines.resolution import resolve_static_definition
 from app.pipelines.template import resolve_collection_template
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
@@ -253,7 +254,9 @@ def resolve_definition_backend(
     base_class: type[BaseIndexerNode] | type[BaseRetrieverNode] = (
         BaseIndexerNode if kind is models.PipelineKind.INGESTION else BaseRetrieverNode
     )
-    backend, _, _ = _resolve_backend_node_config(definition, registry, base_class)
+    backend, _, _ = _resolve_backend_node_config(
+        resolve_static_definition(definition), registry, base_class
+    )
     return backend
 
 
@@ -275,7 +278,13 @@ def resolve_ingestion_settings(
     collection: models.Collection,
     registry: NodeRegistry,
 ) -> IngestionPipelineSettings:
-    """Resolve ingestion settings from a pipeline definition."""
+    """Resolve ingestion settings from a pipeline definition.
+
+    Expressions resolve against the static default environment first — the
+    taint rule guarantees identity fields never depend on runtime input, so
+    the static view is the authoritative one for index targets and purges.
+    """
+    definition = resolve_static_definition(definition)
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
     backend, indexer_model, dense_found = _resolve_backend_node_config(
@@ -312,7 +321,12 @@ def resolve_retrieval_settings(
     collection: models.Collection,
     registry: NodeRegistry,
 ) -> RetrievalPipelineSettings:
-    """Resolve retrieval settings from a pipeline definition."""
+    """Resolve retrieval settings from a pipeline definition.
+
+    Expressions resolve against the static default environment first (see
+    `resolve_ingestion_settings`).
+    """
+    definition = resolve_static_definition(definition)
     backend, retriever_model, dense_found = _resolve_backend_node_config(
         definition, registry, BaseRetrieverNode
     )

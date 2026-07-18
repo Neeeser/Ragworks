@@ -13,6 +13,7 @@ export type PendingChangeKind =
   | "node_config"
   | "edge_added"
   | "edge_removed"
+  | "variables"
   | "layout";
 
 export type PendingChange = {
@@ -119,6 +120,21 @@ export const diffDefinitions = (
         kind: "edge_removed",
         summary: `Disconnected ${label(oldDefinition, edge.source)} → ${label(oldDefinition, edge.target)}`,
       });
+    }
+  });
+
+  const oldVariables = new Map((oldDefinition.variables ?? []).map((v) => [v.name, v]));
+  const newVariables = new Map((newDefinition.variables ?? []).map((v) => [v.name, v]));
+  newVariables.forEach((variable, name) => {
+    if (!oldVariables.has(name)) {
+      changes.push({ kind: "variables", summary: `Added variable ${name}` });
+    } else if (!valuesEqual(oldVariables.get(name), variable)) {
+      changes.push({ kind: "variables", summary: `Variable ${name} updated` });
+    }
+  });
+  oldVariables.forEach((_variable, name) => {
+    if (!newVariables.has(name)) {
+      changes.push({ kind: "variables", summary: `Removed variable ${name}` });
     }
   });
 

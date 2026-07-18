@@ -106,7 +106,7 @@ def test_search_route_translates_retrieval_value_error(monkeypatch, session: Ses
         def __init__(self, _session) -> None:
             pass
 
-        def query_collection(self, _user, _collection, *, query, top_k):
+        def query_collection(self, _user, _collection, *, query, top_k, arguments=None):
             raise InvalidInputError("Retrieval pipeline could not be resolved.")
 
     monkeypatch.setattr(search_routes, "RetrievalService", _StubRetrievalService)

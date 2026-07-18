@@ -29,13 +29,66 @@ from app.chat.persistence import (
     ToolCallRecord,
     record_message,
 )
-from app.chat.state import RunState, ToolExecutionContext
+from app.chat.state import RunState, ToolCollectionContext, ToolExecutionContext
 from app.chat.tool_calls import ParsedToolCall, ToolResultPayload, parse_tool_call
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.pipelines.variables import PipelineInputArgument, VariableType
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
-from app.services.errors import InvalidInputError
+from app.schemas.retrieval import CollectionQueryResponse
+from app.services.errors import InvalidInputError, InvalidQueryArgumentsError
 from app.services.retrieval import RetrievalService
+
+
+def build_parameter_schema(
+    arguments: tuple[PipelineInputArgument, ...],
+) -> dict[str, object]:
+    """Build a tool's JSON parameter schema from its pipeline's declared arguments.
+
+    A pipeline declaring no arguments keeps the historical contract (`query`
+    plus the built-in 1-10 `top_k`); a declaring pipeline publishes exactly
+    its `expose_to_llm` arguments beside the always-required `query`.
+    """
+    properties: dict[str, object] = {
+        "query": {
+            "type": "string",
+            "description": "Natural language search query.",
+        }
+    }
+    required = ["query"]
+    if not arguments:
+        properties["top_k"] = {
+            "type": "integer",
+            "description": "How many chunks to retrieve (max 10).",
+            "default": 5,
+            "minimum": 1,
+            "maximum": 10,
+        }
+        return {"type": "object", "properties": properties, "required": required}
+    for argument in arguments:
+        if not argument.expose_to_llm or argument.type is VariableType.MODEL:
+            continue
+        properties[argument.name] = _argument_property(argument)
+        if argument.required:
+            required.append(argument.name)
+    return {"type": "object", "properties": properties, "required": required}
+
+
+def _argument_property(argument: PipelineInputArgument) -> dict[str, object]:
+    """Map one declared argument onto its JSON Schema property."""
+    if argument.type is VariableType.ENUM:
+        prop: dict[str, object] = {"type": "string", "enum": list(argument.choices)}
+    else:
+        prop = {"type": argument.type.value}
+    if argument.description:
+        prop["description"] = argument.description
+    if argument.default is not None:
+        prop["default"] = argument.default
+    if argument.minimum is not None:
+        prop["minimum"] = argument.minimum
+    if argument.maximum is not None:
+        prop["maximum"] = argument.maximum
+    return prop
 
 
 def select_tool_reasoning(
@@ -93,25 +146,27 @@ class ToolExecutor:
 
     @staticmethod
     def specs(
-        tool_collections: list[Any],
-    ) -> tuple[list[dict[str, object]], dict[str, models.Collection]]:
-        """Return tool schemas and the tool-name -> collection map for the request.
+        tool_collections: list[ToolCollectionContext],
+    ) -> tuple[list[dict[str, object]], dict[str, ToolCollectionContext]]:
+        """Return tool schemas and the tool-name -> tool-context map for the request.
 
         Static because spec building is pure (it reads only the resolved tool
         collections); callers use it during request setup before an executor
-        instance exists.
+        instance exists. Each tool's parameter schema comes from its
+        pipeline's declared arguments (`build_parameter_schema`).
         """
         if not tool_collections:
             return [], {}
         tools: list[dict[str, object]] = []
-        tool_map: dict[str, models.Collection] = {}
+        tool_map: dict[str, ToolCollectionContext] = {}
         for tool_context in tool_collections:
             tool_name = tool_context.tool_name
             collection = tool_context.collection
-            tool_map[tool_name] = collection
+            tool_map[tool_name] = tool_context
             description_parts = [f"Search the document collection '{collection.name}'."]
-            if collection.description.strip():
-                description_parts.append(collection.description.strip())
+            description = (collection.description or "").strip()
+            if description:
+                description_parts.append(description)
             description_parts.append(
                 "Always call this tool before answering questions about documents in this collection."
             )
@@ -121,35 +176,19 @@ class ToolExecutor:
                     "function": {
                         "name": tool_name,
                         "description": " ".join(description_parts),
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "Natural language search query.",
-                                },
-                                "top_k": {
-                                    "type": "integer",
-                                    "description": "How many chunks to retrieve (max 10).",
-                                    "default": 5,
-                                    "minimum": 1,
-                                    "maximum": 10,
-                                },
-                            },
-                            "required": ["query"],
-                        },
+                        "parameters": build_parameter_schema(tool_context.query_arguments),
                     },
                 }
             )
         return tools, tool_map
 
     @staticmethod
-    def select_collection(
+    def select_context(
         *,
         tool_name: str,
-        tool_map: dict[str, models.Collection],
-    ) -> models.Collection:
-        """Return the collection a tool call targets, or raise for an unknown tool."""
+        tool_map: dict[str, ToolCollectionContext],
+    ) -> ToolCollectionContext:
+        """Return the tool context a call targets, or raise for an unknown tool."""
         if tool_name in tool_map:
             return tool_map[tool_name]
         if tool_name == "pinecone_query" and len(tool_map) == 1:
@@ -161,11 +200,11 @@ class ToolExecutor:
         cls,
         *,
         tool_calls: list[ToolCall],
-        tool_map: dict[str, models.Collection],
+        tool_map: dict[str, ToolCollectionContext],
     ) -> None:
         """Ensure every requested tool names one of this turn's collections."""
         for tool_call in tool_calls:
-            cls.select_collection(tool_name=tool_call.function.name, tool_map=tool_map)
+            cls.select_context(tool_name=tool_call.function.name, tool_map=tool_map)
 
     @staticmethod
     def parse_call(
@@ -185,6 +224,47 @@ class ToolExecutor:
             use_fallback_id=True,
         )
 
+    def _run_retrieval(
+        self,
+        user: models.User,
+        tool_context: ToolCollectionContext,
+        parsed: ParsedToolCall,
+    ) -> tuple[CollectionQueryResponse | None, str | None]:
+        """Run retrieval for one parsed call, returning `(response, tool_error)`.
+
+        Pipelines with declared arguments get the model's arguments validated
+        against the declarations; a violation becomes a tool error the model
+        can react to instead of failing the turn. Legacy pipelines keep the
+        historical clamped `top_k` path byte for byte.
+        """
+        if not tool_context.query_arguments:
+            return (
+                self.retrieval.query_collection(
+                    user,
+                    tool_context.collection,
+                    parsed.query_text,
+                    top_k=parsed.top_k,
+                ),
+                None,
+            )
+        supplied = {
+            key: value
+            for key, value in parsed.arguments.items()
+            if key not in ("query", "text")
+        }
+        try:
+            return (
+                self.retrieval.query_collection(
+                    user,
+                    tool_context.collection,
+                    parsed.query_text,
+                    arguments=supplied,
+                ),
+                None,
+            )
+        except InvalidQueryArgumentsError as exc:
+            return None, f"Invalid tool arguments: {exc}"
+
     def execute(
         self,
         *,
@@ -201,10 +281,11 @@ class ToolExecutor:
         """
         for tool_call in tool_calls:
             parsed = self.parse_call(tool_call, context.payload)
-            collection = self.select_collection(
+            tool_context = self.select_context(
                 tool_name=parsed.name,
                 tool_map=context.tool_collection_map,
             )
+            collection = tool_context.collection
             reasoning_entry = select_tool_reasoning(
                 call_id=parsed.id,
                 run_state=context.run_state,
@@ -218,13 +299,14 @@ class ToolExecutor:
                 collection_id=str(collection.id),
                 collection_name=collection.name,
             ).model_dump()
-            retrieval_response = self.retrieval.query_collection(
-                context.user,
-                collection,
-                parsed.query_text,
-                top_k=parsed.top_k,
+            retrieval_response, tool_error = self._run_retrieval(
+                context.user, tool_context, parsed
             )
-            response_payload = jsonable_encoder(retrieval_response)
+            response_payload: Any = (
+                jsonable_encoder(retrieval_response)
+                if retrieval_response is not None
+                else {"error": tool_error}
+            )
             tool_result = ToolResultPayload(
                 collection_id=str(collection.id),
                 collection_name=collection.name,
@@ -244,6 +326,7 @@ class ToolExecutor:
                 name=parsed.name,
                 arguments=parsed.arguments,
                 response=retrieval_response,
+                error=tool_error,
                 reasoning=reasoning_payload,
                 collection_id=str(collection.id),
                 collection_name=collection.name,

@@ -114,6 +114,20 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
       consumedKeys: ["mode"],
     };
   },
+  "retrieval.input": (read) => {
+    const raw = read("arguments");
+    const names = Array.isArray(raw)
+      ? raw
+          .map((entry) => (entry as { name?: unknown }).name)
+          .filter((name): name is string => typeof name === "string")
+      : [];
+    if (names.length === 0) return null;
+    return {
+      label: "Arguments",
+      value: names.join(", "),
+      consumedKeys: ["arguments"],
+    };
+  },
 };
 
 const FAMILY_SIGNATURES: Partial<Record<ReturnType<typeof resolveNodeFamily>, SignatureResolver>> =

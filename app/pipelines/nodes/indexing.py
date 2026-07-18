@@ -29,6 +29,7 @@ from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_embeddings, trace_chunk_items
+from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.vectorstores.base import IndexSpec
@@ -58,17 +59,44 @@ def default_index_name(backend: IndexBackend) -> str:
 class IndexerConfig(BaseModel):
     """Configuration for Pinecone indexing nodes."""
 
-    index_name: str = Field(default_factory=lambda: get_settings().pinecone_index_name)
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
-    dimension: int | None = Field(default=None, gt=0)
-    metric: str = "cosine"
-    ensure_index: bool = True
+    index_name: str = Field(
+        default_factory=lambda: get_settings().pinecone_index_name,
+        json_schema_extra=STATIC_ONLY_EXTRA,
+    )
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    dimension: int | None = Field(
+        default=None,
+        gt=0,
+        json_schema_extra=STATIC_ONLY_EXTRA,
+        description=(
+            "Vector length the index is created with. Must equal the "
+            "connected embedding model's output dimension — validation "
+            "compares them, and a mismatched index rejects every upsert."
+        ),
+    )
+    metric: str = Field(
+        default="cosine",
+        json_schema_extra=STATIC_ONLY_EXTRA,
+        description=(
+            "Distance function the index scores matches with. Match how the "
+            "embedding model was trained — cosine for nearly all sentence "
+            "embedders; changing it changes what 'similar' means."
+        ),
+    )
+    ensure_index: bool = Field(
+        default=True,
+        description=(
+            "Create the index on first ingest if it does not exist. Disable "
+            "to require pre-provisioned indexes — runs fail instead of "
+            "creating one."
+        ),
+    )
 
 
 class PgvectorIndexerConfig(IndexerConfig):
     """Configuration for pgvector indexing nodes (local default index name)."""
 
-    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME)
+    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA)
 
 
 class VectorIndexerConfig(IndexerConfig):
@@ -81,9 +109,10 @@ class VectorIndexerConfig(IndexerConfig):
     """
 
     backend: IndexBackend = Field(
-        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend),
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    index_name: str = ""
+    index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
 
 
 def _dimension_issue(
@@ -269,10 +298,11 @@ class Bm25IndexerConfig(BaseModel):
     """
 
     backend: IndexBackend = Field(
-        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend),
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    index_name: str = ""
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
+    index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
     ensure_index: bool = True
 
 
@@ -365,34 +395,3 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
                 ),
             ],
         )
-
-
-class IndexerNode(BaseIndexerNode):
-    """Deprecated Pinecone-pinned indexer; new pipelines use `indexer.vector`.
-
-    Kept registered because node type ids are permanent -- persisted pipeline
-    versions may still reference it -- but hidden from the editor catalog.
-    """
-
-    backend: ClassVar[IndexBackend] = IndexBackend.PINECONE
-    type = "indexer.pinecone"
-    label = "Pinecone Indexer"
-    description = "Upsert embeddings into Pinecone."
-    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pinecone')."
-    hidden = True
-
-
-class PgvectorIndexerNode(BaseIndexerNode):
-    """Deprecated pgvector-pinned indexer; new pipelines use `indexer.vector`.
-
-    Kept registered because node type ids are permanent -- persisted pipeline
-    versions may still reference it -- but hidden from the editor catalog.
-    """
-
-    backend: ClassVar[IndexBackend] = IndexBackend.PGVECTOR
-    type = "indexer.pgvector"
-    label = "pgvector Indexer"
-    description = "Upsert embeddings into the built-in Postgres (pgvector)."
-    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pgvector')."
-    config_model = PgvectorIndexerConfig
-    hidden = True

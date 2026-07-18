@@ -127,6 +127,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchCollectionUmap: vi.fn(async () => null),
     computeCollectionUmap: vi.fn(async () => makeUmapVisualization()),
     runCollectionQuery: vi.fn(async () => makeQueryResult()),
+    fetchCollectionQueryArguments: vi.fn(async () => ({ arguments: [] })),
     fetchPipelineRunTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentFocusedTrace: vi.fn(async () => ({

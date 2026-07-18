@@ -89,10 +89,66 @@ export interface PipelineEdgeDefinition {
   ui?: Record<string, unknown>;
 }
 
+export type VariableType = "integer" | "number" | "string" | "boolean" | "enum" | "model";
+
+export interface ModelVariableValue {
+  connection_id: string;
+  model_name: string;
+}
+
+export type VariableScalar = number | string | boolean;
+export type VariableValue = VariableScalar | ModelVariableValue;
+
+export type VariableSource = "value" | "expression" | "input";
+
+/** Mirrors `app/pipelines/variables.py::PipelineVariable`.
+ *
+ * `source: "input"` marks a caller-supplied variable: `value` is its default
+ * (null/absent = the caller must supply one) and `expose_to_llm` publishes it
+ * in the chat tool schema. Definitions saved before `source` existed omit it;
+ * the backend infers expression-vs-value.
+ */
+export interface PipelineVariable {
+  name: string;
+  type: VariableType;
+  source?: VariableSource;
+  description?: string;
+  value?: VariableValue | null;
+  expression?: string | null;
+  minimum?: number | null;
+  maximum?: number | null;
+  choices?: string[];
+  expose_to_llm?: boolean;
+}
+
+/** Mirrors `app/pipelines/variables.py::PipelineInputArgument` — the derived
+ * caller-facing shape served by the query-arguments endpoint, never stored on
+ * a definition. */
+export interface PipelineInputArgument {
+  name: string;
+  type: VariableType;
+  description?: string;
+  required?: boolean;
+  default?: VariableScalar | null;
+  minimum?: number | null;
+  maximum?: number | null;
+  choices?: string[];
+  expose_to_llm?: boolean;
+}
+
+/** Mirrors `app/pipelines/variables.py::PipelineOutputField`. */
+export interface PipelineOutputField {
+  name: string;
+  expression: string;
+}
+
 export interface PipelineDefinition {
   nodes: PipelineNodeDefinition[];
   edges: PipelineEdgeDefinition[];
   viewport?: Record<string, unknown>;
+  variables?: PipelineVariable[];
+  /** Definition shape version; the backend stamps and migrates it. */
+  schema_version?: number;
 }
 
 export interface Pipeline {

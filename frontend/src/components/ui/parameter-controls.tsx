@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import type { ParameterInputKind } from "@/lib/types";
 import type { ReactNode } from "react";
 
@@ -83,6 +85,8 @@ type ParameterInputProps = {
   id?: string;
   ariaInvalid?: boolean;
   ariaDescribedBy?: string;
+  /** Extra classes merged onto the control (e.g. unrounding an edge a welded addon joins). */
+  className?: string;
   onChange: (value: string | boolean) => void;
 };
 
@@ -103,6 +107,7 @@ export function ParameterInput({
   id,
   ariaInvalid,
   ariaDescribedBy,
+  className,
   onChange,
 }: ParameterInputProps) {
   if (input === "number" || input === "integer") {
@@ -115,7 +120,7 @@ export function ParameterInput({
         min={min}
         max={max}
         step={step ?? (input === "integer" ? 1 : 0.05)}
-        className={inputClasses}
+        className={cn(inputClasses, className)}
         placeholder={placeholder}
         value={typeof value === "number" ? value : ""}
         disabled={disabled}
@@ -148,7 +153,7 @@ export function ParameterInput({
         id={id}
         aria-invalid={ariaInvalid || undefined}
         aria-describedby={ariaDescribedBy}
-        className={inputClasses}
+        className={cn(inputClasses, className)}
         value={typeof value === "string" ? value : ""}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
@@ -169,7 +174,7 @@ export function ParameterInput({
         id={id}
         aria-invalid={ariaInvalid || undefined}
         aria-describedby={ariaDescribedBy}
-        className={`${inputClasses} h-auto`}
+        className={cn(inputClasses, "h-auto", className)}
         rows={rows ?? 2}
         placeholder={placeholder}
         value={typeof value === "string" ? value : ""}
@@ -185,7 +190,7 @@ export function ParameterInput({
       aria-invalid={ariaInvalid || undefined}
       aria-describedby={ariaDescribedBy}
       type="text"
-      className={inputClasses}
+      className={cn(inputClasses, className)}
       placeholder={placeholder}
       value={typeof value === "string" ? value : ""}
       disabled={disabled}

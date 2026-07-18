@@ -12,6 +12,17 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.pipelines.variables import PipelineVariable
+
+CURRENT_DEFINITION_SCHEMA_VERSION = 2
+"""Bumped when a stored definition's shape changes (see `app/pipelines/upgrades.py`).
+
+Version 2: variables own input declarations (`source="input"`); the
+`retrieval.input` node's `arguments` config is a list of variable names; and
+fusion nodes never truncate (a Result Limit node carries the cut). Stored raw
+definitions *without* the key predate the field and are treated as version 1.
+"""
+
 
 class PipelineNodePosition(BaseModel):
     """UI positioning metadata for a pipeline node."""
@@ -56,6 +67,10 @@ class PipelineDefinition(BaseModel):
     nodes: list[PipelineNodeDefinition] = Field(default_factory=list)
     edges: list[PipelineEdgeDefinition] = Field(default_factory=list)
     viewport: dict[str, Any] = Field(default_factory=dict)
+    variables: list[PipelineVariable] = Field(default_factory=list)
+    # New payloads are current-shape by definition; the startup migration
+    # detects legacy rows by the key's *absence* in the raw stored dict.
+    schema_version: int = CURRENT_DEFINITION_SCHEMA_VERSION
 
     def node_map(self) -> dict[str, PipelineNodeDefinition]:
         """Return nodes keyed by id."""

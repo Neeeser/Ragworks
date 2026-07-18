@@ -28,10 +28,42 @@ if TYPE_CHECKING:
 class FixedChunkerConfig(BaseModel):
     """Configuration for fixed-strategy chunking nodes."""
 
-    chunk_size: int = Field(default=512, gt=0)
-    chunk_overlap: int = Field(default=200, ge=0)
-    tokenizer: Literal["wordpiece", "cl100k", "whitespace", "huggingface"] = "wordpiece"
-    hf_model_id: str | None = None
+    chunk_size: int = Field(
+        default=512,
+        gt=0,
+        description=(
+            "Maximum tokens per chunk, counted by the selected tokenizer. "
+            "Larger chunks keep more context around each match but dilute the "
+            "embedding and eat into the model's input limit; smaller chunks "
+            "match more precisely but fragment context."
+        ),
+    )
+    chunk_overlap: int = Field(
+        default=200,
+        ge=0,
+        description=(
+            "Tokens repeated from the end of one chunk at the start of the "
+            "next, so text straddling a boundary stays retrievable from both "
+            "sides. The cost is index size — overlapped tokens are stored and "
+            "embedded twice."
+        ),
+    )
+    tokenizer: Literal["wordpiece", "cl100k", "whitespace", "huggingface"] = Field(
+        default="wordpiece",
+        description=(
+            "Counter used to measure chunk_size and overlap. Match the "
+            "embedding model's own tokenizer — wordpiece for BERT-family "
+            "embedders, cl100k for OpenAI-family. whitespace counts words, "
+            "not tokens, and undercounts by roughly 25%."
+        ),
+    )
+    hf_model_id: str | None = Field(
+        default=None,
+        description=(
+            "HuggingFace model id whose tokenizer to download and count with. "
+            "Only used (and required) when tokenizer is huggingface."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_tokenizer_config(self) -> FixedChunkerConfig:

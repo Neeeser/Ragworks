@@ -42,6 +42,7 @@ from app.db.repositories import (
     CollectionRepository,
     ProviderConnectionRepository,
 )
+from app.pipelines.resolution import declared_arguments
 from app.providers.registry import resolve_connection
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend, ProviderType
@@ -90,6 +91,7 @@ class ChatSetupBuilder:
         return PipelineContext(
             ingestion_settings=ingestion.settings,
             retrieval_settings=retrieval.settings,
+            query_arguments=tuple(declared_arguments(retrieval.definition)),
         )
 
     def _build_tool_collection_context(
@@ -102,6 +104,7 @@ class ChatSetupBuilder:
             tool_name=tool_name,
             ingestion_settings=pipeline.ingestion_settings,
             retrieval_settings=pipeline.retrieval_settings,
+            query_arguments=pipeline.query_arguments,
         )
 
     def _tool_contexts_for_collections(

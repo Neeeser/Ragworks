@@ -64,5 +64,14 @@ class InvalidInputError(ServiceError):
     """The request is well-formed but semantically invalid (maps to 400)."""
 
 
+class InvalidQueryArgumentsError(InvalidInputError):
+    """Supplied query arguments violate the pipeline's declarations.
+
+    Distinguished from other 400s so chat tool execution can feed the
+    violation back to the model as a tool error (the model chose the values
+    and can retry) instead of failing the whole turn on a config problem.
+    """
+
+
 class ExternalServiceError(ServiceError):
     """An upstream provider (Pinecone, OpenRouter) failed (maps to 502)."""

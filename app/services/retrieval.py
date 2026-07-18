@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from time import perf_counter
 
 from sqlmodel import Session
@@ -13,10 +14,21 @@ from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import RetrievalPayload
+from app.pipelines.resolution import VariableResolutionError, declared_arguments
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
-from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
-from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
+from app.schemas.retrieval import (
+    CollectionQueryArgumentsResponse,
+    CollectionQueryResponse,
+    QueryArgumentRead,
+    RetrievedChunk,
+)
+from app.services.errors import (
+    ExternalServiceError,
+    InvalidInputError,
+    InvalidQueryArgumentsError,
+    is_external_provider_error,
+)
 from app.services.pipeline_resolution import ResolvedRetrievalPipeline, resolve_retrieval_pipeline
 from app.telemetry import record
 from app.telemetry.events import RetrievalQueryRan
@@ -32,55 +44,112 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         self.settings = get_settings()
         self.session = session
 
-    def query_collection(
+    def query_collection(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         user: models.User,
         collection: models.Collection,
         query: str,
         top_k: int = 5,
+        arguments: Mapping[str, object] | None = None,
     ) -> CollectionQueryResponse:
-        """Run a query against a collection and return scored chunks."""
+        """Run a query against a collection and return scored chunks.
+
+        `arguments` are the caller-supplied values for the pipeline's declared
+        input arguments; invalid values are an `InvalidInputError` (400).
+        """
         start_time = perf_counter()
         resolved = self._resolve_pipeline(user, collection)
         runner = PipelineRunner(self.session)
-        handle = self._start_run(runner, resolved, user, collection, query, top_k)
         try:
-            result = runner.execute(resolved.definition, handle)
+            handle = self._start_run(
+                runner, resolved, user, collection, query, top_k, arguments
+            )
+        except VariableResolutionError as exc:
+            raise InvalidQueryArgumentsError(str(exc)) from exc
+        try:
+            result = runner.execute(handle)
             payload = self._extract_retrieval_payload(result.terminal_outputs)
-            chunks = self._map_chunks(payload)
-            latency_ms = (perf_counter() - start_time) * 1000
-            event = self._record_query_event(
+            effective_top_k = handle.context.top_k if handle.context.top_k is not None else top_k
+            return self._record_and_respond(
                 user=user,
                 collection=collection,
                 query=query,
-                top_k=top_k,
+                top_k=effective_top_k,
+                arguments=arguments,
                 resolved=resolved,
                 payload=payload,
                 handle=handle,
-                latency_ms=latency_ms,
-            )
-            record(
-                RetrievalQueryRan(
-                    user_id=user.id,
-                    collection_id=collection.id,
-                    latency_ms=latency_ms,
-                    top_k=top_k,
-                    index_backend=resolved.settings.backend.value,
-                )
-            )
-            return CollectionQueryResponse(
-                query=query,
-                top_k=top_k,
-                chunks=chunks,
-                usage=payload.usage.model_dump(),
-                query_event_id=event.id,
-                pipeline_run_id=handle.run.id,
+                start_time=start_time,
             )
         except Exception as exc:
             handle.trace.mark_run_failed(exc)
             if is_external_provider_error(exc):
                 raise ExternalServiceError(f"Retrieval pipeline failed: {exc}") from exc
             raise
+
+    # pylint: disable-next=too-many-arguments
+    def _record_and_respond(
+        self,
+        *,
+        user: models.User,
+        collection: models.Collection,
+        query: str,
+        top_k: int,
+        arguments: Mapping[str, object] | None,
+        resolved: ResolvedRetrievalPipeline,
+        payload: RetrievalPayload,
+        handle: PipelineRunHandle,
+        start_time: float,
+    ) -> CollectionQueryResponse:
+        """Persist the query event, record telemetry, and shape the response."""
+        latency_ms = (perf_counter() - start_time) * 1000
+        event = self._record_query_event(
+            user=user,
+            collection=collection,
+            query=query,
+            top_k=top_k,
+            arguments=arguments,
+            resolved=resolved,
+            payload=payload,
+            handle=handle,
+            latency_ms=latency_ms,
+        )
+        record(
+            RetrievalQueryRan(
+                user_id=user.id,
+                collection_id=collection.id,
+                latency_ms=latency_ms,
+                top_k=top_k,
+                index_backend=resolved.settings.backend.value,
+            )
+        )
+        return CollectionQueryResponse(
+            query=query,
+            top_k=top_k,
+            chunks=self._map_chunks(payload),
+            usage=payload.usage.model_dump(),
+            outputs=payload.outputs,
+            query_event_id=event.id,
+            pipeline_run_id=handle.run.id,
+        )
+
+    def query_arguments(
+        self,
+        user: models.User,
+        collection: models.Collection,
+    ) -> CollectionQueryArgumentsResponse:
+        """Return the declared input arguments of the collection's retrieval pipeline.
+
+        An empty list means the pipeline declares none — callers fall back to
+        the legacy built-in `top_k` control.
+        """
+        resolved = self._resolve_pipeline(user, collection)
+        return CollectionQueryArgumentsResponse(
+            arguments=[
+                QueryArgumentRead.model_validate(argument.model_dump())
+                for argument in declared_arguments(resolved.definition)
+            ]
+        )
 
     def _resolve_pipeline(
         self,
@@ -99,6 +168,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
+        arguments: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the retrieval pipeline run."""
         providers = ProviderResolver(user, self.session)
@@ -117,6 +187,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
             storage=FileStorage(),
             query=query,
             top_k=top_k,
+            arguments=arguments,
         )
 
     @staticmethod
@@ -141,6 +212,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         collection: models.Collection,
         query: str,
         top_k: int,
+        arguments: Mapping[str, object] | None,
         resolved: ResolvedRetrievalPipeline,
         payload: RetrievalPayload,
         handle: PipelineRunHandle,
@@ -149,6 +221,17 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         """Persist a `QueryEvent` recording this query's outcome and usage."""
         matches = payload.response.matches
         usage = payload.usage.model_dump()
+        response_payload: dict[str, object] = {
+            "match_count": len(matches),
+            "max_score": max((match.score for match in matches), default=0.0),
+            "min_score": min((match.score for match in matches), default=0.0),
+            "pipeline_id": str(resolved.pipeline.id),
+            "usage": usage,
+        }
+        if arguments:
+            response_payload["arguments"] = dict(arguments)
+        if payload.outputs:
+            response_payload["outputs"] = dict(payload.outputs)
         return QueryRepository(self.session).add_event(
             models.QueryEvent(
                 user_id=user.id,
@@ -158,13 +241,7 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
                 model=resolved.settings.embedding_model,
                 context_tokens=self._context_tokens(payload.usage),
                 latency_ms=latency_ms,
-                response_payload={
-                    "match_count": len(matches),
-                    "max_score": max((match.score for match in matches), default=0.0),
-                    "min_score": min((match.score for match in matches), default=0.0),
-                    "pipeline_id": str(resolved.pipeline.id),
-                    "usage": usage,
-                },
+                response_payload=response_payload,
                 pipeline_run_id=handle.run.id,
             )
         )

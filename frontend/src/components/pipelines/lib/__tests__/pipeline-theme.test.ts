@@ -15,7 +15,9 @@ describe("pipeline-theme", () => {
     expect(resolveNodeFamily("indexer.pinecone")).toBe("indexer");
     expect(resolveNodeFamily("parser.document")).toBe("parser");
     expect(resolveNodeFamily("retriever.pinecone")).toBe("retriever");
-    expect(resolveNodeFamily("reranker.cross")).toBe("reranker");
+    expect(resolveNodeFamily("reranker.cross")).toBe("ranking");
+    expect(resolveNodeFamily("fusion.rrf")).toBe("ranking");
+    expect(resolveNodeFamily("limit.results")).toBe("ranking");
     expect(resolveNodeFamily("router.file_type")).toBe("router");
     expect(resolveNodeFamily("ingestion.input")).toBe("ingestion");
     expect(resolveNodeFamily("retrieval.output")).toBe("retrieval");

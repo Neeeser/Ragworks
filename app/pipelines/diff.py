@@ -23,6 +23,7 @@ ChangeKind = Literal[
     "node_config",
     "edge_added",
     "edge_removed",
+    "variables",
     "layout",
 ]
 
@@ -159,6 +160,26 @@ def _edge_changes(
     return changes
 
 
+def _variable_changes(
+    old: PipelineDefinition,
+    new: PipelineDefinition,
+) -> list[DefinitionChange]:
+    """Describe added/removed/updated pipeline variables (material changes)."""
+    old_variables = {variable.name: variable for variable in old.variables}
+    new_variables = {variable.name: variable for variable in new.variables}
+    changes: list[DefinitionChange] = []
+    for name in sorted(new_variables.keys() - old_variables.keys()):
+        changes.append(DefinitionChange(kind="variables", summary=f"Added variable {name}"))
+    for name in sorted(old_variables.keys() - new_variables.keys()):
+        changes.append(DefinitionChange(kind="variables", summary=f"Removed variable {name}"))
+    for name in sorted(new_variables.keys() & old_variables.keys()):
+        if old_variables[name] != new_variables[name]:
+            changes.append(
+                DefinitionChange(kind="variables", summary=f"Variable {name} updated")
+            )
+    return changes
+
+
 def diff_definitions(
     old: PipelineDefinition,
     new: PipelineDefinition,
@@ -166,6 +187,7 @@ def diff_definitions(
     """Return the changes that turn `old` into `new`, most significant first."""
     changes, layout_changed = _node_changes(old, new)
     changes.extend(_edge_changes(old, new))
+    changes.extend(_variable_changes(old, new))
     if layout_changed:
         changes.append(DefinitionChange(kind="layout", summary="Layout updated"))
     return changes

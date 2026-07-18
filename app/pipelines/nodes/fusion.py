@@ -148,12 +148,24 @@ class RRFusionConfig(FusionConfig):
     """Configuration for reciprocal rank fusion.
 
     `k` is the standard RRF dampening constant (Cormack et al.: 60): higher
-    values flatten the difference between ranks. `top_k` caps the fused list;
-    unset, it falls back to the run's requested top_k.
+    values flatten the difference between ranks. Fusion never truncates —
+    cutting the fused list is the Result Limit node's job (`limit.results`), so the
+    cut is always an explicit, traced step.
     """
 
-    k: int = Field(default=60, ge=1)
-    top_k: int | None = Field(default=None, gt=0)
+    k: int = Field(
+        default=60,
+        ge=1,
+        title="Rank dampening (k)",
+        description=(
+            "Smoothing constant in the RRF score, 1 / (k + rank), summed "
+            "across every branch a chunk appears in. It sets how steeply "
+            "early ranks outweigh late ones: at k=1 a rank-1 hit scores 25x "
+            "a rank-49 hit; at the standard k=60, about 1.8x — so appearing "
+            "in several branches counts for more than winning any single "
+            "one. Fusion emits every fused candidate; Result Limit cuts."
+        ),
+    )
 
 
 class RRFusionNode(BaseFusionNode):
@@ -181,7 +193,8 @@ class RRFusionNode(BaseFusionNode):
         Chunk identity is `chunk_id` (stable `{document_id}:{order}` across
         indexes, so the same chunk retrieved by several branches accumulates).
         The fused score replaces per-branch scores — raw BM25 and cosine
-        values are not comparable.
+        values are not comparable. Every fused chunk is emitted; cutting the
+        list is the Result Limit node's job.
         """
         scores: dict[str, float] = {}
         first_seen: dict[str, ScoredChunk] = {}
@@ -191,17 +204,9 @@ class RRFusionNode(BaseFusionNode):
                 scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (self.config.k + rank)
                 first_seen.setdefault(chunk_id, match)
         ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        # Explicit None checks: a top_k of 0 means zero results, never
-        # "unset — return every fused chunk".
-        if self.config.top_k is not None:
-            limit = self.config.top_k
-        elif context.top_k is not None:
-            limit = max(context.top_k, 0)
-        else:
-            limit = len(ordered)
         return [
             ScoredChunk(chunk=first_seen[chunk_id].chunk, score=score)
-            for chunk_id, score in ordered[:limit]
+            for chunk_id, score in ordered
         ]
 
     def _ranking_evidence(

@@ -1,0 +1,442 @@
+{
+  "description": "Shared conformance vectors for the pipeline expression language. Executed by BOTH the Python suite (tests/pipelines/expressions/test_expression_vectors.py) and the TypeScript suite (frontend/src/lib/expressions/__tests__/vectors.test.ts) so the two implementations cannot drift. Each case: parse `source`; if error=syntax expect a syntax error; else type-check against env types (error=type expects failure, otherwise the result type must equal expect.type); then evaluate against env values (error=eval expects failure, otherwise the value must equal expect.value; numbers compare with 1e-9 tolerance).",
+  "cases": [
+    {
+      "name": "int_literal",
+      "source": "42",
+      "env": {},
+      "expect": { "type": "integer", "value": 42 }
+    },
+    {
+      "name": "float_literal",
+      "source": "2.5",
+      "env": {},
+      "expect": { "type": "number", "value": 2.5 }
+    },
+    {
+      "name": "string_literal_double_quotes",
+      "source": "\"hello\"",
+      "env": {},
+      "expect": { "type": "string", "value": "hello" }
+    },
+    {
+      "name": "string_literal_single_quotes",
+      "source": "'world'",
+      "env": {},
+      "expect": { "type": "string", "value": "world" }
+    },
+    {
+      "name": "string_escapes",
+      "source": "\"line\\nbreak\\t\\\"quoted\\\"\"",
+      "env": {},
+      "expect": { "type": "string", "value": "line\nbreak\t\"quoted\"" }
+    },
+    {
+      "name": "boolean_true_literal",
+      "source": "true",
+      "env": {},
+      "expect": { "type": "boolean", "value": true }
+    },
+    {
+      "name": "boolean_variable_passthrough",
+      "source": "flag",
+      "env": { "flag": { "type": "boolean", "value": false } },
+      "expect": { "type": "boolean", "value": false }
+    },
+    {
+      "name": "over_retrieval",
+      "source": "top_k * 2",
+      "env": { "top_k": { "type": "integer", "value": 10 } },
+      "expect": { "type": "integer", "value": 20 }
+    },
+    {
+      "name": "precedence_multiplication_first",
+      "source": "1 + 2 * 3",
+      "env": {},
+      "expect": { "type": "integer", "value": 7 }
+    },
+    {
+      "name": "parentheses_override_precedence",
+      "source": "(1 + 2) * 3",
+      "env": {},
+      "expect": { "type": "integer", "value": 9 }
+    },
+    {
+      "name": "subtraction_left_associative",
+      "source": "10 - 4 - 3",
+      "env": {},
+      "expect": { "type": "integer", "value": 3 }
+    },
+    {
+      "name": "unary_minus",
+      "source": "-top_k",
+      "env": { "top_k": { "type": "integer", "value": 10 } },
+      "expect": { "type": "integer", "value": -10 }
+    },
+    {
+      "name": "double_unary_minus",
+      "source": "--top_k",
+      "env": { "top_k": { "type": "integer", "value": 10 } },
+      "expect": { "type": "integer", "value": 10 }
+    },
+    {
+      "name": "division_always_number",
+      "source": "10 / 4",
+      "env": {},
+      "expect": { "type": "number", "value": 2.5 }
+    },
+    {
+      "name": "division_of_integers_is_number_type",
+      "source": "10 / 2",
+      "env": {},
+      "expect": { "type": "number", "value": 5.0 }
+    },
+    {
+      "name": "floor_division",
+      "source": "7 // 2",
+      "env": {},
+      "expect": { "type": "integer", "value": 3 }
+    },
+    {
+      "name": "floor_division_negative_floors",
+      "source": "-7 // 2",
+      "env": {},
+      "expect": { "type": "integer", "value": -4 }
+    },
+    {
+      "name": "modulo",
+      "source": "2 * 3 % 4",
+      "env": {},
+      "expect": { "type": "integer", "value": 2 }
+    },
+    {
+      "name": "modulo_negative_follows_floor_semantics",
+      "source": "-7 % 3",
+      "env": {},
+      "expect": { "type": "integer", "value": 2 }
+    },
+    {
+      "name": "int_float_promotion",
+      "source": "2 + 3.0",
+      "env": {},
+      "expect": { "type": "number", "value": 5.0 }
+    },
+    {
+      "name": "ieee_double_semantics",
+      "source": "0.1 + 0.2",
+      "env": {},
+      "expect": { "type": "number", "value": 0.30000000000000004 }
+    },
+    {
+      "name": "min_preserves_integer",
+      "source": "min(3, 7)",
+      "env": {},
+      "expect": { "type": "integer", "value": 3 }
+    },
+    {
+      "name": "min_promotes_with_float_arg",
+      "source": "min(3, 1.5)",
+      "env": {},
+      "expect": { "type": "number", "value": 1.5 }
+    },
+    {
+      "name": "max_variadic",
+      "source": "max(1, 9, 4, 6)",
+      "env": {},
+      "expect": { "type": "integer", "value": 9 }
+    },
+    {
+      "name": "clamp_upper_bound",
+      "source": "clamp(15, 1, 10)",
+      "env": {},
+      "expect": { "type": "integer", "value": 10 }
+    },
+    {
+      "name": "clamp_within_range",
+      "source": "clamp(top_k * 3, 5, 50)",
+      "env": { "top_k": { "type": "integer", "value": 4 } },
+      "expect": { "type": "integer", "value": 12 }
+    },
+    {
+      "name": "floor_returns_integer",
+      "source": "floor(2.9)",
+      "env": {},
+      "expect": { "type": "integer", "value": 2 }
+    },
+    {
+      "name": "floor_negative",
+      "source": "floor(-1.5)",
+      "env": {},
+      "expect": { "type": "integer", "value": -2 }
+    },
+    {
+      "name": "ceil_returns_integer",
+      "source": "ceil(1.2)",
+      "env": {},
+      "expect": { "type": "integer", "value": 2 }
+    },
+    {
+      "name": "round_half_away_from_zero",
+      "source": "round(2.5)",
+      "env": {},
+      "expect": { "type": "integer", "value": 3 }
+    },
+    {
+      "name": "round_half_away_from_zero_negative",
+      "source": "round(-2.5)",
+      "env": {},
+      "expect": { "type": "integer", "value": -3 }
+    },
+    {
+      "name": "round_down",
+      "source": "round(2.4)",
+      "env": {},
+      "expect": { "type": "integer", "value": 2 }
+    },
+    {
+      "name": "nested_calls",
+      "source": "min(max(top_k * 3, 5), 50)",
+      "env": { "top_k": { "type": "integer", "value": 30 } },
+      "expect": { "type": "integer", "value": 50 }
+    },
+    {
+      "name": "string_concatenation",
+      "source": "'docs-' + tenant",
+      "env": { "tenant": { "type": "string", "value": "acme" } },
+      "expect": { "type": "string", "value": "docs-acme" }
+    },
+    {
+      "name": "enum_variables_are_strings",
+      "source": "mode + '-branch'",
+      "env": { "mode": { "type": "string", "value": "deep" } },
+      "expect": { "type": "string", "value": "deep-branch" }
+    },
+    {
+      "name": "model_member_connection_id",
+      "source": "emb_model.connection_id",
+      "env": {
+        "emb_model": {
+          "type": "model",
+          "value": {
+            "connection_id": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+            "model_name": "text-embedding-3-small"
+          }
+        }
+      },
+      "expect": { "type": "string", "value": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff" }
+    },
+    {
+      "name": "model_member_model_name",
+      "source": "emb_model.model_name",
+      "env": {
+        "emb_model": {
+          "type": "model",
+          "value": {
+            "connection_id": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+            "model_name": "text-embedding-3-small"
+          }
+        }
+      },
+      "expect": { "type": "string", "value": "text-embedding-3-small" }
+    },
+    {
+      "name": "whitespace_insensitive",
+      "source": "  top_k   *   2  ",
+      "env": { "top_k": { "type": "integer", "value": 5 } },
+      "expect": { "type": "integer", "value": 10 }
+    },
+    {
+      "name": "type_error_string_plus_int",
+      "source": "top_k + name",
+      "env": {
+        "top_k": { "type": "integer", "value": 5 },
+        "name": { "type": "string", "value": "a" }
+      },
+      "error": "type"
+    },
+    {
+      "name": "type_error_boolean_arithmetic",
+      "source": "flag + 1",
+      "env": { "flag": { "type": "boolean", "value": true } },
+      "error": "type"
+    },
+    {
+      "name": "type_error_model_arithmetic",
+      "source": "emb_model * 2",
+      "env": {
+        "emb_model": {
+          "type": "model",
+          "value": {
+            "connection_id": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+            "model_name": "m"
+          }
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "type_error_unknown_variable",
+      "source": "missing_var + 1",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_unknown_function",
+      "source": "nope(1)",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_min_arity",
+      "source": "min(1)",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_clamp_arity",
+      "source": "clamp(1, 2)",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_floor_of_string",
+      "source": "floor('a')",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_float_floor_division",
+      "source": "7.5 // 2",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_string_subtraction",
+      "source": "'a' - 'b'",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "type_error_member_on_integer",
+      "source": "top_k.connection_id",
+      "env": { "top_k": { "type": "integer", "value": 5 } },
+      "error": "type"
+    },
+    {
+      "name": "type_error_unknown_model_member",
+      "source": "emb_model.oops",
+      "env": {
+        "emb_model": {
+          "type": "model",
+          "value": {
+            "connection_id": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+            "model_name": "m"
+          }
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "type_error_unary_minus_on_string",
+      "source": "-'a'",
+      "env": {},
+      "error": "type"
+    },
+    {
+      "name": "eval_error_division_by_zero",
+      "source": "1 / 0",
+      "env": {},
+      "error": "eval"
+    },
+    {
+      "name": "eval_error_modulo_by_zero",
+      "source": "top_k % 0",
+      "env": { "top_k": { "type": "integer", "value": 5 } },
+      "error": "eval"
+    },
+    {
+      "name": "eval_error_floor_division_by_zero",
+      "source": "5 // 0",
+      "env": {},
+      "error": "eval"
+    },
+    {
+      "name": "eval_error_inverted_clamp_range",
+      "source": "clamp(5, 10, 1)",
+      "env": {},
+      "error": "eval"
+    },
+    {
+      "name": "syntax_error_empty",
+      "source": "",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_blank",
+      "source": "   ",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_trailing_operator",
+      "source": "top_k *",
+      "env": { "top_k": { "type": "integer", "value": 5 } },
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_unclosed_paren",
+      "source": "(1 + 2",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_adjacent_values",
+      "source": "1 2",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_unterminated_string",
+      "source": "\"unterminated",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_trailing_decimal_point",
+      "source": "1.",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_leading_decimal_point",
+      "source": ".5",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_unexpected_character",
+      "source": "1 @ 2",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_trailing_comma_in_call",
+      "source": "min(1, 2,)",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_member_without_name",
+      "source": "emb_model.",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "syntax_error_unknown_escape",
+      "source": "\"bad\\qescape\"",
+      "env": {},
+      "error": "syntax"
+    }
+  ]
+}

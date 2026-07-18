@@ -4,6 +4,7 @@ import { History, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { QueryArgumentControls } from "@/components/collections/detail/search/QueryArgumentControls";
 import { SearchResultCard } from "@/components/collections/detail/search/SearchResultCard";
 import { useCollectionSearch } from "@/components/collections/detail/search/use-collection-search";
 import { Button } from "@/components/ui/button";
@@ -75,19 +76,30 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <label className="flex items-center gap-2 text-sm text-body">
-              <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                Top K
-              </span>
-              <TextInput
-                type="number"
-                min={1}
-                max={50}
-                value={search.topK}
-                onChange={(event) => search.setTopK(Number(event.target.value))}
-                className="w-20 px-3 py-1.5 text-center"
+            {search.argumentsSpec.length > 0 ? (
+              <QueryArgumentControls
+                argumentsSpec={search.argumentsSpec}
+                values={search.argumentValues}
+                onChange={search.setArgumentValue}
               />
-            </label>
+            ) : search.argumentsReady || search.argumentsError ? (
+              // Rendered only once the spec is known (or failed): showing the
+              // legacy control while the spec loads misrepresents a declaring
+              // pipeline for a moment.
+              <label className="flex items-center gap-2 text-sm text-body">
+                <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                  Top K
+                </span>
+                <TextInput
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={search.topK}
+                  onChange={(event) => search.setTopK(Number(event.target.value))}
+                  className="w-20 px-3 py-1.5 text-center"
+                />
+              </label>
+            ) : null}
             <label className="flex items-center gap-2 text-sm text-body">
               <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
                 Min score
@@ -138,6 +150,13 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
           </div>
         )}
 
+        {search.argumentsError && (
+          <p className="mt-3 text-xs text-data-warn" role="status">
+            Couldn&apos;t load this pipeline&apos;s declared arguments ({search.argumentsError}) —
+            queries fall back to the built-in top k.
+          </p>
+        )}
+
         {search.error && (
           <div className="mt-4 rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
             {search.error}
@@ -161,6 +180,19 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
               </span>
             )}
           </div>
+
+          {search.result.outputs && Object.keys(search.result.outputs).length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {Object.entries(search.result.outputs).map(([name, value]) => (
+                <span
+                  key={name}
+                  className="rounded-full border border-hairline bg-surface px-3 py-1 font-mono text-[11px] text-muted"
+                >
+                  {name} = {String(value)}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-5 space-y-3">
             {visibleChunks.map((chunk, index) => (

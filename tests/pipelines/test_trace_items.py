@@ -20,11 +20,10 @@ from app.pipelines.nodes.io import (
     RetrievalOutputConfig,
     RetrievalOutputNode,
 )
+from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 from app.pipelines.nodes.retrieval import (
     Bm25RetrieverConfig,
     Bm25RetrieverNode,
-    RerankerConfig,
-    RerankerNode,
     VectorRetrieverConfig,
     VectorRetrieverNode,
 )

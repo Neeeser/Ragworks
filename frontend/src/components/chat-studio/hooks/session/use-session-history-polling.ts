@@ -21,6 +21,8 @@ interface UseSessionHistoryPollingParams {
   selectedSessionId: string | null;
   /** Mirror of the streaming flag; polling pauses while a stream is active. */
   isStreamingResponseRef: React.MutableRefObject<boolean>;
+  /** Sessions whose creating turn is still in flight — no row to fetch yet. */
+  pendingSessionIdsRef: React.MutableRefObject<Set<string>>;
   syncMessages: SyncMessagesFn;
   setToolTraces: (traces: ToolCallTrace[]) => void;
   setUsage: (usage: UsageBreakdown | null) => void;
@@ -40,6 +42,7 @@ export function useSessionHistoryPolling({
   authToken,
   selectedSessionId,
   isStreamingResponseRef,
+  pendingSessionIdsRef,
   syncMessages,
   setToolTraces,
   setUsage,
@@ -85,7 +88,12 @@ export function useSessionHistoryPolling({
     (sessionId: string) => {
       if (!authToken) return;
       activePollingSession.current = sessionId;
-      void pollSessionHistory(sessionId);
+      // A brand-new session's first turn is the request that creates its row,
+      // so an immediate poll is a guaranteed 404 — let the interval take the
+      // first look instead.
+      if (!pendingSessionIdsRef.current.has(sessionId)) {
+        void pollSessionHistory(sessionId);
+      }
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }
@@ -93,7 +101,7 @@ export function useSessionHistoryPolling({
         void pollSessionHistory(sessionId);
       }, PROGRESS_POLL_INTERVAL);
     },
-    [authToken, pollSessionHistory],
+    [authToken, pendingSessionIdsRef, pollSessionHistory],
   );
 
   useEffect(() => () => stopProgressPolling(), [stopProgressPolling]);

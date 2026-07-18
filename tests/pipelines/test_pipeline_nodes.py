@@ -32,6 +32,7 @@ from app.pipelines.payloads import (
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, build_default_registry
+from app.pipelines.resolution import build_environment, resolve_definition
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
@@ -279,8 +280,14 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
     definition = build_default_retrieval_pipeline(
         embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
     )
+    # Resolve-then-run: Result Limit carries an explicit result_limit expression,
+    # config, so the executor only ever sees the resolved literal.
+    resolved = resolve_definition(
+        definition,
+        build_environment(definition, query="hello", supplied={"result_limit": 3}),
+    )
     executor = PipelineExecutor(build_default_registry())
-    result = executor.execute(definition, context)
+    result = executor.execute(resolved, context)
     payload = next(
         RetrievalPayload.model_validate(outputs["result"])
         for outputs in result.terminal_outputs.values()
@@ -300,7 +307,7 @@ def test_default_retrieval_pipeline_executes(monkeypatch, session: Session) -> N
 
 
 def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 
     chunk_a = DocumentChunk(
         document_id="doc",
@@ -333,7 +340,7 @@ def test_reranker_node_rescores(monkeypatch, session: Session) -> None:
         def rerank(self, query: str, candidates: list[ScoredChunk], top_k: int | None = None):
             return list(reversed(candidates))
 
-    monkeypatch.setattr("app.pipelines.nodes.retrieval.CrossEncoderReranker", _StubReranker)
+    monkeypatch.setattr("app.pipelines.nodes.reranking.CrossEncoderReranker", _StubReranker)
 
     user = _build_user()
     collection = _build_collection(user)
@@ -390,9 +397,7 @@ def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) 
         node.run({}, context)
 
 
-def test_ingestion_input_summarizes_the_logical_file_path(
-    session: Session, tmp_path: Path
-) -> None:
+def test_ingestion_input_summarizes_the_logical_file_path(session: Session, tmp_path: Path) -> None:
     from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
     from app.pipelines.tracing.summaries import SourceSummary
 
@@ -570,9 +575,7 @@ def test_embedder_guard_handles_missing_connection_and_zero_effective_limit(
     assert no_connection._guard_embedding_inputs(payload, context) == payload.chunks
     assert no_connection._embedding_input_limit(context) is None
 
-    node = EmbedderNode(
-        EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed")
-    )
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     context.providers = StubProviderResolver(embedding_input_limit=16)
     result = node.run({"chunks": payload}, context)
     assert isinstance(result["embedded"], EmbeddingPayload)
@@ -633,9 +636,7 @@ def test_embedder_node_skips_guard_when_limit_lookup_is_unavailable() -> None:
         ],
         tokenizer=TokenizerSpec(kind="whitespace"),
     )
-    node = EmbedderNode(
-        EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed")
-    )
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
     user = _build_user()
     context = _build_context(Session(), user, _build_collection(user))
     context.providers = _UnavailableLimitResolver()
@@ -725,7 +726,8 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -746,7 +748,8 @@ def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -775,7 +778,8 @@ def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -803,7 +807,8 @@ def test_indexer_node_infers_dimension(monkeypatch, session: Session) -> None:
 
 
 def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -> None:
-    from app.pipelines.nodes.indexing import IndexerConfig, IndexerNode
+    from app.pipelines.nodes.indexing import IndexerConfig
+    from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.pipelines.payloads import EmbeddingPayload
     from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 
@@ -843,7 +848,7 @@ def test_retrieval_input_requires_query(session: Session) -> None:
 
 
 def test_reranker_node_returns_when_disabled(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 
@@ -868,7 +873,7 @@ def test_reranker_node_returns_when_disabled(session: Session) -> None:
 
 
 def test_reranker_node_requires_query(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 
@@ -892,7 +897,7 @@ def test_reranker_node_requires_query(session: Session) -> None:
 
 
 def test_reranker_node_summarize_io(session: Session) -> None:
-    from app.pipelines.nodes.retrieval import RerankerConfig, RerankerNode
+    from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
     from app.pipelines.payloads import RetrievalPayload
     from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
 

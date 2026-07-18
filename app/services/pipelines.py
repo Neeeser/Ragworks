@@ -26,6 +26,7 @@ from app.pipelines.diff import DefinitionChange, diff_definitions, material_chan
 from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.registry import default_registry
+from app.pipelines.resolution import resolve_static_definition
 from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
@@ -106,7 +107,7 @@ class PipelineService:
     ) -> None:
         """Resolve HF tokenizer caches before a definition is persisted."""
         service = HuggingFaceTokenizerService(self.session, get_settings().storage_path)
-        for node in definition.nodes:
+        for node in resolve_static_definition(definition).nodes:
             node_cls = default_registry().get_node_class(node.type)
             if node_cls is None or not issubclass(node_cls, BaseChunkerNode):
                 continue
@@ -334,7 +335,8 @@ class PipelineService:
         """
         if pipeline is not None:
             version = self.get_current_version(pipeline)
-            definition = PipelineDefinition.model_validate(version.definition)
+            stored = PipelineDefinition.model_validate(version.definition)
+            definition = resolve_static_definition(stored)
             for node in definition.nodes:
                 if node.type != EmbedderNode.type:
                     continue

@@ -8,6 +8,7 @@ import { Loader } from "@/components/ui/loader";
 import { GlassCard } from "@/components/ui/panel";
 import { useAuth } from "@/providers/auth-provider";
 
+import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
 import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useEmbeddingModelCatalog } from "./hooks/use-embedding-model-catalog";
@@ -16,10 +17,10 @@ import { useIndexes } from "./hooks/use-indexes";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
 import { useNodeEditing } from "./hooks/use-node-editing";
 import { usePipelines } from "./hooks/use-pipelines";
+import { useSidebarWidth } from "./hooks/use-sidebar-width";
 import { useTokenizerConsent } from "./hooks/use-tokenizer-consent";
 import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
 import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
-import { validatePipelineConfig, validatePipelineEdges } from "./lib/pipeline-io";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
 import { layoutPipelineNodes, needsAutoLayout } from "./lib/pipeline-layout";
 import {
@@ -39,7 +40,7 @@ import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 import type { TypedEdgeType } from "./flow/TypedEdge";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { NodeSpec, PipelineKind } from "@/lib/types";
+import type { NodeSpec, PipelineKind, PipelineVariable } from "@/lib/types";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type PipelineBuilderProps = {
@@ -90,6 +91,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<TypedEdgeType>([]);
+  const [variables, setVariables] = useState<PipelineVariable[]>([]);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
@@ -164,6 +166,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     if (!pipeline || nodeSpecs.length === 0 || pipeline.id !== selectedPipelineId) {
       setNodes([]);
       setEdges([]);
+      setVariables([]);
       return;
     }
     let flowNodes = toFlowNodes(pipeline.definition, nodeSpecs);
@@ -173,6 +176,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     }
     setNodes(flowNodes);
     setEdges(flowEdges);
+    setVariables(pipeline.definition.variables ?? []);
     closeEditor();
     dragDrop.handleDragLeave();
     // The camera re-fits via PipelineCanvas's remount key (id+version), which
@@ -182,24 +186,23 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPipelineId, selectedPipelineVersion, nodeSpecs, setNodes, setEdges, closeEditor]);
 
-  const { edgeErrors, nodeErrors } = useMemo(() => {
-    const edgeValidation = validatePipelineEdges(nodes, edges);
-    const configValidation = validatePipelineConfig(nodes);
-    const mergedNodeErrors: Record<string, string[]> = { ...edgeValidation.nodeErrors };
-    Object.entries(configValidation.nodeErrors).forEach(([nodeId, errors]) => {
-      mergedNodeErrors[nodeId] = [...(mergedNodeErrors[nodeId] ?? []), ...errors];
-    });
-    return { edgeErrors: edgeValidation.edgeErrors, nodeErrors: mergedNodeErrors };
-  }, [nodes, edges]);
-
   const pendingChanges = useMemo(() => {
     if (!selectedPipeline) return [];
-    return diffDefinitions(selectedPipeline.definition, toPipelineDefinition(nodes, edges));
-  }, [selectedPipeline, nodes, edges]);
+    return diffDefinitions(
+      selectedPipeline.definition,
+      toPipelineDefinition(nodes, edges, variables),
+    );
+  }, [selectedPipeline, nodes, edges, variables]);
   const pendingMaterialChanges = useMemo(() => materialChanges(pendingChanges), [pendingChanges]);
   const dirty = pendingMaterialChanges.length > 0;
 
   const { guard, confirmOpen, confirmDiscard, cancelDiscard } = useUnsavedChangesGuard(dirty);
+  const sidebar = useSidebarWidth();
+
+  const variableNodes = useMemo(
+    () => nodes.map((node) => ({ type: node.data.nodeType, config: node.data.config })),
+    [nodes],
+  );
 
   const handleSelectPipeline = (pipeline: typeof selectedPipeline) => {
     if (pipeline?.id === selectedPipeline?.id) return;
@@ -213,6 +216,15 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       setEdges,
       onInvalidConnection: setMessage,
     });
+
+  const { nodeErrors, nodesForCanvas, edgesWithValidation } = useCanvasDecorations({
+    nodes,
+    edges,
+    connecting,
+    validationIssues,
+    dropPreviewPosition: dragDrop.dropPreviewPosition,
+    dropPreviewLabel: dragDrop.dropPreviewLabel,
+  });
 
   const { scheduleLayoutSave, handleAutoLayout } = useLayoutPersistence({
     selectedPipelineRef,
@@ -241,7 +253,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       .slice(0, 3)
       .map((change) => change.summary)
       .join("; ");
-    const definition = toPipelineDefinition(nodes, edges);
+    const definition = toPipelineDefinition(nodes, edges, variables);
     await tokenizerConsent.ensureThen(definition, async () => {
       const saved = await handleSavePipeline(definition, fallbackSummary);
       if (saved) setSaveDialogOpen(false);
@@ -252,58 +264,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const selectedValidationIssues = selectedNode
     ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
     : [];
-
-  const serverNodeErrors = useMemo(() => {
-    const byNode: Record<string, string[]> = {};
-    validationIssues.forEach((issue) => {
-      if (!issue.node_id || issue.severity !== "error") return;
-      byNode[issue.node_id] = [...(byNode[issue.node_id] ?? []), issue.message];
-    });
-    return byNode;
-  }, [validationIssues]);
-
-  const nodesForCanvas = useMemo(() => {
-    const decorated = nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        connecting,
-        errors: [...(nodeErrors[node.id] ?? []), ...(serverNodeErrors[node.id] ?? [])],
-      },
-    }));
-    if (!dragDrop.dropPreviewPosition) return decorated;
-    const dropPreviewNode = {
-      id: "drop-preview",
-      type: "dropPreview",
-      position: dragDrop.dropPreviewPosition,
-      data: { label: dragDrop.dropPreviewLabel ?? "Drop here" },
-      selectable: false,
-      draggable: false,
-      connectable: false,
-      focusable: false,
-    } satisfies Node;
-    // The drop-preview node carries DropPreviewNodeData, not PipelineNodeData; xyflow
-    // dispatches rendering by `type`, so the heterogeneous array is safe at runtime even
-    // though it can't be expressed without a discriminated Node union across this module.
-    return [...decorated, dropPreviewNode as unknown as Node<PipelineNodeData>];
-  }, [
-    nodes,
-    connecting,
-    nodeErrors,
-    serverNodeErrors,
-    dragDrop.dropPreviewLabel,
-    dragDrop.dropPreviewPosition,
-  ]);
-
-  const edgesWithValidation = useMemo(
-    () =>
-      edges.map((edge) => {
-        const error = edgeErrors[edge.id];
-        if (!error) return edge;
-        return { ...edge, data: { ...edge.data, error: true } };
-      }),
-    [edges, edgeErrors],
-  );
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -345,7 +305,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           </GlassCard>
         </div>
       ) : (
-        <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[280px_1fr]">
+        <div
+          className="grid flex-1 min-h-0 gap-3 xl:[grid-template-columns:var(--sidebar-width)_auto_1fr]"
+          style={{ "--sidebar-width": `${sidebar.width}px` } as React.CSSProperties}
+        >
           <div className="min-h-0">
             <PipelineSidebar
               pipelines={pipelines}
@@ -355,8 +318,26 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
               onDeletePipeline={handleDeletePipeline}
               pipelineUsage={pipelineUsage}
               onPreviewNode={previewNodeSpec}
+              variables={variables}
+              onVariablesChange={setVariables}
+              variableNodes={variableNodes}
+              modelOptions={embeddingModels}
+              variablesDisabled={!selectedPipeline}
             />
           </div>
+
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            tabIndex={0}
+            onPointerDown={sidebar.startResize}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") sidebar.resizeBy(-16);
+              if (event.key === "ArrowRight") sidebar.resizeBy(16);
+            }}
+            className="hidden w-1.5 cursor-col-resize self-stretch rounded-full bg-surface transition-colors hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet xl:block"
+          />
 
           <PipelineCanvas
             canvasKey={`${selectedPipelineId ?? "none"}-v${selectedPipelineVersion}`}
@@ -393,6 +374,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onAddToCanvas={previewSpec ? () => handleAddNode(previewSpec) : undefined}
         validationErrors={selectedNodeErrors}
         validationIssues={selectedValidationIssues}
+        variables={variables}
         vectorIndexes={indexes}
         onOpenIndexManager={handleOpenIndexManager}
         embeddingModels={embeddingModels}

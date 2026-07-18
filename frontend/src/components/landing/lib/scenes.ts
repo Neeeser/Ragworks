@@ -1,4 +1,5 @@
 import { buildSceneFlow } from "@/components/landing/lib/demo-flow";
+import { buildDefaultPipelineFlow } from "@/components/pipelines/lib/default-pipeline-flow";
 
 import type { DemoFlow, DemoNode, SceneDefinition } from "@/components/landing/lib/demo-flow";
 
@@ -22,18 +23,11 @@ export type LandingScene = {
 
 // Node ids referenced across edges and stages — defined once.
 const NODE_EMBED_QUERY = "embed-query";
-const NODE_INDEX_BM25 = "index-bm25";
-const NODE_BM25_RETRIEVE = "bm25-retrieve";
 
 // Fake-but-plausible signature values so no card reads "no model selected".
 const EMBED_CONFIG = { model_name: "all-MiniLM-L6-v2", dimension: 384 } as const;
 const DENSE_INDEX_CONFIG = {
   index_name: "ragworks-docs",
-  namespace: "docs",
-  backend: "pgvector",
-} as const;
-const BM25_INDEX_CONFIG = {
-  index_name: "ragworks-docs-bm25",
   namespace: "docs",
   backend: "pgvector",
 } as const;
@@ -153,80 +147,9 @@ const SEMANTIC_RETRIEVAL: SceneDefinition = {
   ],
 };
 
-// Placed by the shared auto-layout (see demo-flow.ts) — no manual grid.
-const HYBRID_INGESTION: SceneDefinition = {
-  nodes: [
-    source(),
-    parse(),
-    chunk(),
-    embed(),
-    index(),
-    {
-      id: NODE_INDEX_BM25,
-      nodeType: "indexer.bm25",
-      label: "BM25 Index",
-      description: "Index raw chunk text for keyword search.",
-      input: PORT.chunks,
-      output: PORT.indexed,
-      config: BM25_INDEX_CONFIG,
-    },
-    {
-      id: "collection",
-      nodeType: "ingestion.output",
-      label: "Collection",
-      description: "Both indexes back one collection.",
-      input: PORT.indexed,
-    },
-  ],
-  edges: [
-    ["source", "parse"],
-    ["parse", "chunk"],
-    ["chunk", "embed"],
-    ["chunk", NODE_INDEX_BM25],
-    ["embed", "index"],
-    ["index", "collection"],
-    [NODE_INDEX_BM25, "collection"],
-  ],
-};
-
-const HYBRID_RETRIEVAL: SceneDefinition = {
-  nodes: [
-    query(),
-    embedQuery(),
-    retrieve(),
-    {
-      id: NODE_BM25_RETRIEVE,
-      nodeType: "retriever.bm25",
-      label: "BM25 Retrieve",
-      description: "Match the question's exact keywords.",
-      input: PORT.query,
-      output: PORT.results,
-      config: BM25_INDEX_CONFIG,
-    },
-    {
-      id: "fusion",
-      nodeType: "fusion.rrf",
-      label: "RRF Fusion",
-      description: "Merge both rankings by reciprocal rank.",
-      input: PORT.results,
-      output: PORT.results,
-      config: { k: 60 },
-    },
-    results(),
-  ],
-  edges: [
-    ["query", NODE_EMBED_QUERY],
-    ["query", NODE_BM25_RETRIEVE],
-    [NODE_EMBED_QUERY, "retrieve"],
-    ["retrieve", "fusion"],
-    [NODE_BM25_RETRIEVE, "fusion"],
-    ["fusion", "results"],
-  ],
-};
-
 export const LANDING_SCENES: LandingScene[] = [
   { id: "semantic-ingestion", kind: "ingestion", build: () => buildSceneFlow(SEMANTIC_INGESTION) },
   { id: "semantic-retrieval", kind: "retrieval", build: () => buildSceneFlow(SEMANTIC_RETRIEVAL) },
-  { id: "hybrid-ingestion", kind: "ingestion", build: () => buildSceneFlow(HYBRID_INGESTION) },
-  { id: "hybrid-retrieval", kind: "retrieval", build: () => buildSceneFlow(HYBRID_RETRIEVAL) },
+  { id: "hybrid-ingestion", kind: "ingestion", build: () => buildDefaultPipelineFlow("ingestion") },
+  { id: "hybrid-retrieval", kind: "retrieval", build: () => buildDefaultPipelineFlow("retrieval") },
 ];

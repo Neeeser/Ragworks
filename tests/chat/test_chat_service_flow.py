@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -27,6 +26,7 @@ from tests.chat.conftest import (
     StubOpenRouter,
     StubRetrievalService,
     StubSettings,
+    make_tool_collection_context,
     stub_resolver_class,
     tool_model_info,
 )
@@ -46,7 +46,7 @@ def test_collection_tool_spec_includes_collection_description(
     collection.description = "Peer-reviewed evaluation results and methods."
 
     tools, _ = ToolExecutor.specs(
-        [SimpleNamespace(tool_name="search_evaluation_papers", collection=collection)]
+        [make_tool_collection_context(collection, tool_name="search_evaluation_papers")]
     )
 
     description = tools[0]["function"]["description"]
@@ -280,7 +280,7 @@ def test_normalize_tool_calls_backfills_missing_id_then_executes(
         messages=[],
         run_state=run_state,
         shared_tool_reasoning=None,
-        tool_collection_map={"pinecone_query": collection},
+        tool_collection_map={"pinecone_query": make_tool_collection_context(collection)},
     )
 
     # Non-streaming callers drain the iterator without forwarding.

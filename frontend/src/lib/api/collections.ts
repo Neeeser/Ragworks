@@ -6,6 +6,8 @@ import type {
   Collection,
   CollectionCreatePayload,
   CollectionPromptDetails,
+  CollectionQueryArgumentsResponse,
+  CollectionQueryRequest,
   CollectionQueryResult,
   CollectionStats,
   CollectionStatsHistory,
@@ -153,13 +155,23 @@ export async function computeCollectionUmap(
 export async function runCollectionQuery(
   token: string,
   collectionId: string,
-  payload: { query: string; top_k?: number },
+  payload: CollectionQueryRequest,
 ): Promise<CollectionQueryResult> {
   return apiFetch<CollectionQueryResult>(`/api/collections/${collectionId}/query`, {
     method: "POST",
     body: JSON.stringify(payload),
     token,
   });
+}
+
+export async function fetchCollectionQueryArguments(
+  token: string,
+  collectionId: string,
+): Promise<CollectionQueryArgumentsResponse> {
+  return apiFetch<CollectionQueryArgumentsResponse>(
+    `/api/collections/${collectionId}/query-arguments`,
+    { token },
+  );
 }
 
 export async function fetchPipelineRunTrace(

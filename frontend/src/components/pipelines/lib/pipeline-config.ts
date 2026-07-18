@@ -14,6 +14,11 @@ export type PipelineConfigField = {
   defaultValue?: unknown;
   nullable: boolean;
   required: boolean;
+  /** Identity field (index name, backend, dimension): expressions on it may
+   * not depend on caller input. Mirrors the backend `static_only` marker. */
+  staticOnly: boolean;
+  /** Expression type the field accepts in expression mode; null = no ƒx toggle. */
+  exprType: "integer" | "number" | "string" | "boolean" | null;
 };
 
 type JsonSchema = Record<string, unknown>;
@@ -131,6 +136,9 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
       : undefined;
 
     const examples = Array.isArray(node.examples) ? node.examples : undefined;
+    // json_schema_extra lands on the outer property, even when the type
+    // resolves through anyOf/$ref.
+    const staticOnly = rawSchema.static_only === true || node.static_only === true;
 
     return {
       key,
@@ -145,8 +153,19 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
       defaultValue,
       nullable,
       required: requiredSet.has(key),
+      staticOnly,
+      exprType: expressionTypeFor(input),
     };
   });
+};
+
+/** Expression type a field accepts in ƒx mode; json/list fields get none. */
+const expressionTypeFor = (input: ParameterInputKind): PipelineConfigField["exprType"] => {
+  if (input === "integer") return "integer";
+  if (input === "number") return "number";
+  if (input === "boolean") return "boolean";
+  if (input === "text" || input === "select") return "string";
+  return null;
 };
 
 export const formatConfigValue = (value: unknown) => {

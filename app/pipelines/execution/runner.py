@@ -13,6 +13,7 @@ through `PipelineRunHandle.trace` for failures that happen outside of
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sqlmodel import Session
@@ -23,6 +24,7 @@ from app.pipelines.definition import PipelineDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
 from app.pipelines.registry import NodeRegistry, default_registry
+from app.pipelines.resolution import build_environment, resolve_definition
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.utils.file_storage import FileStorage
@@ -32,11 +34,17 @@ from app.vectorstores.registry import VectorStoreProvider
 
 @dataclass
 class PipelineRunHandle:
-    """A bootstrapped pipeline run: its row, trace recorder, and context."""
+    """A bootstrapped pipeline run: its row, trace recorder, and context.
+
+    `definition` is the *resolved* definition (every `$expr` config value
+    evaluated against this run's variable environment) — the one the run
+    executes and the trace records, so traces show effective literals.
+    """
 
     run: models.PipelineRun
     trace: PipelineTraceRecorder
     context: PipelineRunContext
+    definition: PipelineDefinition
 
 
 class PipelineRunner:
@@ -63,8 +71,28 @@ class PipelineRunner:
         document: models.Document | None = None,
         query: str | None = None,
         top_k: int | None = None,
+        arguments: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
-        """Create a pipeline run row, its trace recorder, and its context."""
+        """Create a pipeline run row, its trace recorder, and its context.
+
+        Builds the run's variable environment (validating `arguments` against
+        the definition's declarations) and resolves every `$expr` config
+        value before the run row is created — invalid caller input raises
+        `VariableResolutionError` and never records a failed run.
+        """
+        environment = build_environment(
+            definition,
+            query=query,
+            supplied=arguments,
+            request_top_k=top_k,
+        )
+        resolved = resolve_definition(definition, environment)
+        # The caller-facing result limit becomes the run's effective request
+        # depth at this boundary. Retriever configs still use their precise
+        # `top_k` field name and may deliberately over-fetch.
+        result_limit = environment.values.get("result_limit")
+        if isinstance(result_limit, int) and not isinstance(result_limit, bool):
+            top_k = result_limit
         run = models.PipelineRun(
             pipeline_id=pipeline.id,
             pipeline_version_id=version.id,
@@ -77,7 +105,7 @@ class PipelineRunner:
         )
         self._session.add(run)
         self._session.flush()
-        trace = PipelineTraceRecorder(self._session, run, definition)
+        trace = PipelineTraceRecorder(self._session, run, resolved)
         context = PipelineRunContext(
             session=self._session,
             user=user,
@@ -90,13 +118,10 @@ class PipelineRunner:
             storage=storage,
             settings=settings,
             trace=trace,
+            variables=environment,
         )
-        return PipelineRunHandle(run=run, trace=trace, context=context)
+        return PipelineRunHandle(run=run, trace=trace, context=context, definition=resolved)
 
-    def execute(
-        self,
-        definition: PipelineDefinition,
-        handle: PipelineRunHandle,
-    ) -> PipelineExecutionResult:
-        """Run the definition against the handle's context."""
-        return self._executor.execute(definition, handle.context)
+    def execute(self, handle: PipelineRunHandle) -> PipelineExecutionResult:
+        """Run the handle's resolved definition against its context."""
+        return self._executor.execute(handle.definition, handle.context)

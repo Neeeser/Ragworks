@@ -112,6 +112,27 @@ colocate a single file with its consumer.
   type ids off node *classes* and walks the registry for interchangeable variants
   (fixed-strategy chunkers), so a newly registered variant is picked up with no
   second place to update.
+- **Config values may be expression-tagged (`{"$expr": "top_k * 2"}`) — resolve
+  before you `model_validate`.** `PipelineRunner.start` resolves the whole
+  definition against the run's variable environment before the run row exists;
+  every *static* consumer (settings resolution, validation hooks, tokenizer
+  prefetch, embedding-choice extraction) reads configs through
+  `resolution.resolve_static_definition` — validating a raw definition's config
+  crashes the moment a field holds an expression (that shipped as a
+  `resolve_retrieval_settings` crash). Identity fields (backend, index name,
+  namespace, dimension, embedder model) carry the `static_only` marker so the
+  taint rule keeps them independent of caller input — purge coverage depends on it.
+- **The expression grammar lives twice** (`app/pipelines/expressions/` is the
+  source of truth; `frontend/src/lib/expressions/` mirrors it for live editor
+  feedback), pinned by the shared vectors in `tests/assets/expression_vectors.json`
+  that both pytest and vitest execute. A grammar or semantics change lands in both
+  implementations plus the vectors, never one side — the vectors are what make the
+  drift impossible, so never skip them.
+- **One PR ships at most one stored-data migration.** A shape that only ever
+  existed on the branch is reworked *inside* the pending migration (hand-fix your
+  own dev DB rows), never patched with a second version bump — releases migrate
+  release-to-release, and stacked steps for shapes no deployment ever ran are
+  permanent startup complexity for nothing.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion

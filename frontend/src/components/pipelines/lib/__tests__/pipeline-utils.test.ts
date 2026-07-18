@@ -64,7 +64,11 @@ describe("pipeline-utils", () => {
   it("scaffolds unified vector nodes carrying the chosen backend in config", () => {
     const retrieval = buildDefaultDefinition("retrieval", "pgvector", { indexName: "docs" });
     const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
-    expect(retriever?.config).toEqual({ backend: "pgvector", index_name: "docs" });
+    expect(retriever?.config).toEqual({
+      backend: "pgvector",
+      index_name: "docs",
+      top_k: { $expr: "result_limit" },
+    });
     const ingestion = buildDefaultDefinition("ingestion", "pgvector", { indexName: "docs" });
     const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
     expect(indexer?.config).toEqual({ backend: "pgvector", index_name: "docs" });
@@ -78,7 +82,11 @@ describe("pipeline-utils", () => {
     expect(retrieval.nodes).toHaveLength(4);
     expect(retrieval.edges).toHaveLength(3);
     const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
-    expect(retriever?.config).toEqual({ backend: "pinecone", index_name: "index-a" });
+    expect(retriever?.config).toEqual({
+      backend: "pinecone",
+      index_name: "index-a",
+      top_k: { $expr: "result_limit" },
+    });
     const ingestionCheck = buildDefaultDefinition("ingestion", "pinecone", {
       indexName: "index-a",
       indexDimension: 384,
@@ -369,17 +377,26 @@ describe("hybrid BM25 scaffolding", () => {
       includeBm25: true,
     });
     const bm25Retriever = retrieval.nodes.find((node) => node.type === "retriever.bm25");
-    expect(bm25Retriever?.config).toEqual({ backend: "pgvector", index_name: "docs-bm25" });
+    expect(bm25Retriever?.config).toEqual({
+      backend: "pgvector",
+      index_name: "docs-bm25",
+      top_k: { $expr: "result_limit" },
+    });
     const fusion = retrieval.nodes.find((node) => node.type === "fusion.rrf");
     expect(fusion).toBeDefined();
-    // Both retriever branches feed the fusion node, which feeds the output.
+    // Both retriever branches feed fusion, which feeds Result Limit and then output.
     const fusionTargets = retrieval.edges.filter((edge) => edge.target === fusion?.id);
     expect(fusionTargets.map((edge) => edge.source).sort()).toEqual([
       "bm25-retriever",
       "vector-retriever",
     ]);
+    const limit = retrieval.nodes.find((node) => node.type === "limit.results");
+    expect(limit).toBeDefined();
     expect(retrieval.edges).toContainEqual(
-      expect.objectContaining({ source: fusion?.id, target: "retrieval-output" }),
+      expect.objectContaining({ source: fusion?.id, target: limit?.id }),
+    );
+    expect(retrieval.edges).toContainEqual(
+      expect.objectContaining({ source: limit?.id, target: "retrieval-output" }),
     );
   });
 

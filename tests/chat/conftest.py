@@ -22,6 +22,7 @@ from app.chat import model_settings as model_settings_module
 from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.db import models
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
 from app.schemas.enums import IndexBackend
@@ -38,10 +39,14 @@ class StubSettings:
 
 
 class StubRetrievalService:
-    """Retrieval service returning empty results for any query."""
+    """Retrieval service returning empty results for any query.
+
+    Records every call's kwargs so tests can assert whether the executor took
+    the legacy `top_k` path or the declared-`arguments` path.
+    """
 
     def __init__(self, *_args: object, **_kwargs: object) -> None:
-        pass
+        self.calls: list[dict[str, object]] = []
 
     def query_collection(
         self,
@@ -49,7 +54,9 @@ class StubRetrievalService:
         _collection: models.Collection,
         query: str,
         top_k: int = 5,
+        arguments: dict[str, object] | None = None,
     ) -> CollectionQueryResponse:
+        self.calls.append({"query": query, "top_k": top_k, "arguments": arguments})
         return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
 
 
@@ -162,24 +169,62 @@ def make_collection_fixture(session: Session):
     return _make
 
 
+def make_tool_collection_context(
+    collection: models.Collection,
+    *,
+    tool_name: str = "pinecone_query",
+    query_arguments: tuple = (),
+) -> setup_module.ToolCollectionContext:
+    """Build a minimal ToolCollectionContext for direct ToolExecutor tests."""
+    from app.chat.state import ToolCollectionContext
+
+    return ToolCollectionContext(
+        collection=collection,
+        tool_name=tool_name,
+        ingestion_settings=IngestionPipelineSettings(
+            chunk_strategy=models.ChunkStrategy.TOKEN,
+            chunk_size=128,
+            chunk_overlap=8,
+            tokenizer=TokenizerSpec(kind="wordpiece"),
+            embedding_model="embed",
+            backend=IndexBackend.PINECONE,
+            index_name="idx",
+            namespace="ns",
+            dimension=128,
+            metric="cosine",
+        ),
+        retrieval_settings=RetrievalPipelineSettings(
+            embedding_model="embed",
+            backend=IndexBackend.PINECONE,
+            index_name="idx",
+            namespace="ns",
+            dimension=128,
+        ),
+        query_arguments=query_arguments,
+    )
+
+
 @pytest.fixture(name="stub_pipeline_settings")
 def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: models.User):
     """Return a factory that patches pipeline resolution in setup.
 
     Patches `resolve_ingestion_pipeline` / `resolve_retrieval_pipeline` (the
     consolidated resolver from `app.services.pipeline_resolution`) as imported
-    by `app.chat.setup` -- chat's setup only reads `.settings` off the resolved
-    result, so the stubs return a namespace carrying just that.
+    by `app.chat.setup` -- chat's setup reads `.settings` off both results and
+    `.definition` off the retrieval one (for declared query arguments), so the
+    stubs return namespaces carrying exactly those.
 
     `chat_model` stamps the user's sticky last-used model (there are no
     global default models) so a new session seeds it exactly the way a
-    returning user's would.
+    returning user's would. `query_arguments` declares input arguments on the
+    stubbed retrieval definition (the pipeline-driven tool schema path).
     """
 
     def _stub(
         *,
         chat_model: str | None,
         backend: IndexBackend = IndexBackend.PINECONE,
+        query_arguments: list[dict[str, object]] | None = None,
     ) -> None:
         chat_user.last_used_chat_model = chat_model
         session.add(chat_user)
@@ -203,6 +248,17 @@ def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: mod
             namespace="ns",
             dimension=128,
         )
+        nodes = []
+        if query_arguments is not None:
+            nodes.append(
+                PipelineNodeDefinition(
+                    id="input",
+                    type="retrieval.input",
+                    name="Input",
+                    config={"arguments": query_arguments},
+                )
+            )
+        retrieval_definition = PipelineDefinition(nodes=nodes)
         monkeypatch.setattr(
             setup_module,
             "resolve_ingestion_pipeline",
@@ -211,7 +267,9 @@ def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: mod
         monkeypatch.setattr(
             setup_module,
             "resolve_retrieval_pipeline",
-            lambda *_a, **_k: SimpleNamespace(settings=retrieval_settings),
+            lambda *_a, **_k: SimpleNamespace(
+                settings=retrieval_settings, definition=retrieval_definition
+            ),
         )
 
     return _stub

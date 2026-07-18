@@ -88,6 +88,7 @@ type PortRowProps = {
   label: string;
   dataType: string;
   required: boolean;
+  acceptsMany: boolean;
   side: "input" | "output";
   connecting?: ConnectingContext | null;
   nodeId: string;
@@ -96,14 +97,18 @@ type PortRowProps = {
 
 /**
  * One port row: label + typed color dot, with its xyflow Handle anchored on the
- * card edge at the row's height. While a wire is dragged, compatible handles
- * swell and pulse; incompatible ones fade so valid drop targets are obvious.
+ * card edge at the row's height. Color encodes the data type; a variadic input
+ * (accepts_many — any number of edges may land) gets a stacked double dot and a
+ * "(many)" suffix so fan-in ports read differently from single-edge ones.
+ * While a wire is dragged, compatible handles swell and pulse; incompatible
+ * ones fade so valid drop targets are obvious.
  */
 function PortRow({
   portKey,
   label,
   dataType,
   required,
+  acceptsMany,
   side,
   connecting,
   nodeId,
@@ -128,10 +133,34 @@ function PortRow({
       )}
     >
       {isTargetSide ? (
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
+        acceptsMany ? (
+          <span className="relative h-1.5 w-2.5 shrink-0" aria-hidden>
+            <span
+              className={cn(
+                "absolute left-1 top-0 h-1.5 w-1.5 rounded-full opacity-40",
+                portClasses.dot,
+              )}
+            />
+            <span
+              className={cn("absolute left-0 top-0 h-1.5 w-1.5 rounded-full", portClasses.dot)}
+            />
+          </span>
+        ) : (
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
+        )
       ) : null}
-      <span className="truncate text-muted" title={`${label} · ${getPortTypeLabel(dataType)}`}>
+      <span
+        className="truncate text-muted"
+        title={
+          isTargetSide
+            ? `${label} · ${getPortTypeLabel(dataType)} · ${
+                acceptsMany ? "accepts any number of connections" : "accepts one connection"
+              }`
+            : `${label} · ${getPortTypeLabel(dataType)}`
+        }
+      >
         {label}
+        {acceptsMany && isTargetSide ? <span className="text-faint"> (many)</span> : null}
         {!required && isTargetSide ? <span className="text-faint"> (optional)</span> : null}
       </span>
       {!isTargetSide ? (
@@ -211,6 +240,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
                 label={port.label}
                 dataType={port.data_type}
                 required={port.required}
+                acceptsMany={port.accepts_many}
                 side="input"
                 connecting={connecting}
                 nodeId={id}
@@ -226,6 +256,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
                 label={port.label}
                 dataType={port.data_type}
                 required={port.required}
+                acceptsMany={false}
                 side="output"
                 connecting={connecting}
                 nodeId={id}

@@ -9,6 +9,7 @@ from app.chat.messages import ProviderMessage, ToolCall
 from app.chat.usage import UsageSummary
 from app.db import models
 from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.variables import PipelineInputArgument
 from app.providers.chat.base import ChatProvider
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
 from app.schemas.models import ModelInfo
@@ -16,10 +17,15 @@ from app.schemas.models import ModelInfo
 
 @dataclass(frozen=True)
 class PipelineContext:
-    """Resolved pipeline settings for ingestion and retrieval."""
+    """Resolved pipeline settings for ingestion and retrieval.
+
+    `query_arguments` are the retrieval pipeline's declared input arguments;
+    the LLM-exposed subset becomes the collection tool's parameter schema.
+    """
 
     ingestion_settings: IngestionPipelineSettings
     retrieval_settings: RetrievalPipelineSettings
+    query_arguments: tuple[PipelineInputArgument, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -30,6 +36,7 @@ class ToolCollectionContext:
     tool_name: str
     ingestion_settings: IngestionPipelineSettings
     retrieval_settings: RetrievalPipelineSettings
+    query_arguments: tuple[PipelineInputArgument, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,7 +60,7 @@ class ChatSetup:
     messages: list[ProviderMessage]
     tools: list[dict[str, Any]]
     tool_collections: list[ToolCollectionContext]
-    tool_collection_map: dict[str, models.Collection]
+    tool_collection_map: dict[str, ToolCollectionContext]
     pipeline: PipelineContext | None
     model: ModelSettings
     provider: ChatProvider
@@ -101,7 +108,7 @@ class ToolExecutionContext:
     messages: list[ProviderMessage]
     run_state: RunState
     shared_tool_reasoning: dict[str, Any] | None
-    tool_collection_map: dict[str, models.Collection]
+    tool_collection_map: dict[str, ToolCollectionContext]
 
 
 @dataclass(frozen=True)

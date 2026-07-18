@@ -1,7 +1,8 @@
-"""Retriever and reranker pipeline nodes.
+"""Retriever pipeline nodes.
 
 The retrieval boundary nodes (`retrieval.input`/`retrieval.output`) live in
-`io.py` with the ingestion boundaries; fusion nodes live in `fusion.py`.
+`io.py` with the ingestion boundaries; fusion nodes live in `fusion.py`;
+reranking lives in `reranking.py`.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
-from app.pipelines.nodes.validators import lexical_support_issue, missing_index_issue
+from app.pipelines.nodes.validators import (
+    lexical_support_issue,
+    missing_index_issue,
+    missing_top_k_issue,
+)
 from app.pipelines.payloads import (
     QueryEmbeddingPayload,
     RetrievalPayload,
@@ -27,13 +32,12 @@ from app.pipelines.ports import NodePort
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
-    summarize_match_order,
     summarize_matches,
     summarize_text,
     trace_match_items,
 )
+from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.retrieval.models import RetrievalResponse
-from app.retrieval.rerankers.cross_encoder import CrossEncoderReranker
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
@@ -48,16 +52,34 @@ logger = logging.getLogger(__name__)
 
 
 class RetrieverConfig(BaseModel):
-    """Configuration for Pinecone retriever nodes."""
+    """Configuration for Pinecone retriever nodes.
 
-    index_name: str = Field(default_factory=lambda: get_settings().pinecone_index_name)
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
+    `top_k` is how many chunks the node fetches — required for a runnable
+    node (validation flags an unset one), but kept optional on the model so
+    an in-progress editor draft still parses. Typically the `top_k` variable,
+    or an over-retrieval expression (`top_k * 2`) to fetch extra candidates
+    for fusion/reranking.
+    """
+
+    index_name: str = Field(
+        default_factory=lambda: get_settings().pinecone_index_name,
+        json_schema_extra=STATIC_ONLY_EXTRA,
+    )
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    top_k: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "How many chunks to fetch — typically the top_k variable, or an "
+            "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
+    )
 
 
 class PgvectorRetrieverConfig(RetrieverConfig):
     """Configuration for pgvector retriever nodes (local default index name)."""
 
-    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME)
+    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA)
 
 
 class VectorRetrieverConfig(RetrieverConfig):
@@ -70,9 +92,10 @@ class VectorRetrieverConfig(RetrieverConfig):
     """
 
     backend: IndexBackend = Field(
-        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend),
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    index_name: str = ""
+    index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
 
 
 class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
@@ -108,16 +131,24 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         _definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
-        """Validate required index selection."""
+        """Validate required index selection and an explicit fetch depth."""
         config = cls.config_model.model_validate(node.config or {})
-        issue = missing_index_issue(config.index_name, node.id, "Retriever")
-        return [issue] if issue else []
+        issues = [
+            missing_index_issue(config.index_name, node.id, "Retriever"),
+            missing_top_k_issue(config.top_k, node.id, "Retriever"),
+        ]
+        return [issue for issue in issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve chunks for the query request."""
         payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
         request = payload.request
         embedding = payload.embedding
+        if self.config.top_k is None:  # validation blocks this; honest error if reached
+            raise InvalidInputError(
+                "Retriever node has no top_k configured. Set how many chunks "
+                "it fetches (e.g. the top_k variable) in the pipeline editor."
+            )
 
         namespace = resolve_collection_template(self.config.namespace, context.collection)
         index_name = (
@@ -131,7 +162,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
                 index_name,
                 namespace or "",
                 embedding=embedding,
-                top_k=request.top_k,
+                top_k=self.config.top_k,
                 filter=request.filter,
             )
         except NotFoundError:
@@ -221,13 +252,26 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
 
 
 class Bm25RetrieverConfig(BaseModel):
-    """Configuration for BM25 (sparse/lexical) retriever nodes."""
+    """Configuration for BM25 (sparse/lexical) retriever nodes.
+
+    `top_k` mirrors the dense retriever's contract: required for a runnable
+    node, typically the `top_k` variable or an over-retrieval expression.
+    """
 
     backend: IndexBackend = Field(
-        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend)
+        default_factory=lambda: IndexBackend(get_app_config().indexing.default_backend),
+        json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    index_name: str = ""
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE)
+    index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    top_k: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "How many chunks to fetch — typically the top_k variable, or an "
+            "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
+    )
 
 
 class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
@@ -256,23 +300,26 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         _definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
-        """Validate index selection and the backend's lexical support."""
+        """Validate index selection, fetch depth, and the backend's lexical support."""
         config = cls.config_model.model_validate(node.config or {})
-        issues: list[PipelineValidationIssue] = []
-        index_issue = missing_index_issue(config.index_name, node.id, "BM25 retriever")
-        if index_issue:
-            issues.append(index_issue)
-        support_issue = lexical_support_issue(
-            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
-        )
-        if support_issue:
-            issues.append(support_issue)
-        return issues
+        maybe_issues = [
+            missing_index_issue(config.index_name, node.id, "BM25 retriever"),
+            missing_top_k_issue(config.top_k, node.id, "BM25 retriever"),
+            lexical_support_issue(
+                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+            ),
+        ]
+        return [issue for issue in maybe_issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve lexically matching chunks for the query request."""
         payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
         request = payload.request
+        if self.config.top_k is None:  # validation blocks this; honest error if reached
+            raise InvalidInputError(
+                "BM25 retriever node has no top_k configured. Set how many "
+                "chunks it fetches (e.g. the top_k variable) in the pipeline editor."
+            )
 
         namespace = resolve_collection_template(self.config.namespace, context.collection)
         index_name = (
@@ -286,7 +333,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                 index_name,
                 namespace or "",
                 text=request.text,
-                top_k=request.top_k,
+                top_k=self.config.top_k,
                 filter=request.filter,
             )
         except NotFoundError:
@@ -327,72 +374,5 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                     label="Matches", value=summarize_matches(output_payload.response.matches)
                 ),
                 NodeTraceValue(label="Match items", value=item_trace, kind="items"),
-            ],
-        )
-
-
-class RerankerConfig(BaseModel):
-    """Configuration for reranking nodes."""
-
-    enabled: bool = False
-    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
-
-class RerankerNode(PipelineNodeBase[RerankerConfig]):
-    """Rerank retrieval results using a cross-encoder."""
-
-    type = "reranker.cross_encoder"
-    label = "Cross-Encoder Reranker"
-    category = "retrieval"
-    description = "Re-score retrieved chunks with a cross-encoder."
-    example = "RetrievalPayload([chunk_b, chunk_a]) -> RetrievalPayload([chunk_a, chunk_b])."
-    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
-    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
-    config_model = RerankerConfig
-
-    def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Rerank results when enabled."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
-        if not self.config.enabled:
-            return {"results": payload}
-        if context.query is None:
-            raise ValueError("Reranker requires a query string in context.")
-        reranker = CrossEncoderReranker(model_name=self.config.model_name)
-        top_k = len(payload.response.matches) or None
-        reranked = reranker.rerank(
-            query=context.query,
-            candidates=payload.response.matches,
-            top_k=top_k,
-        )
-        response = payload.response.model_copy(update={"matches": list(reranked)})
-        return {"results": RetrievalPayload(response=response, usage=payload.usage)}
-
-    def summarize_io(
-        self,
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize reranking inputs and outputs."""
-        input_payload = RetrievalPayload.model_validate(inputs.get("results"))
-        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
-        reranker_info = {
-            "enabled": self.config.enabled,
-            "model": self.config.model_name,
-        }
-        original_items = trace_match_items(input_payload.response.matches)
-        reranked_items = trace_match_items(output_payload.response.matches)
-        return NodeTraceSummary(
-            inputs=[
-                NodeTraceValue(
-                    label="Original order", value=summarize_match_order(input_payload.response.matches)
-                ),
-                NodeTraceValue(label="Original items", value=original_items, kind="items"),
-            ],
-            outputs=[
-                NodeTraceValue(label="Reranker", value=reranker_info),
-                NodeTraceValue(
-                    label="Reranked order", value=summarize_match_order(output_payload.response.matches)
-                ),
-                NodeTraceValue(label="Reranked items", value=reranked_items, kind="items"),
             ],
         )

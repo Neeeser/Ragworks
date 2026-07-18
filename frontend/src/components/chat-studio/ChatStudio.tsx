@@ -135,6 +135,7 @@ export function ChatStudio() {
     authToken,
     selectedSessionId,
     isStreamingResponseRef: chatStream.isStreamingResponseRef,
+    pendingSessionIdsRef: state.pendingSessionIdsRef,
     syncMessages,
     setToolTraces: state.setToolTraces,
     setUsage: state.setUsage,

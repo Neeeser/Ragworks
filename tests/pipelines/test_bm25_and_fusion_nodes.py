@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from sqlmodel import Session
 
 from app.core.config import get_settings
@@ -165,6 +166,48 @@ def test_bm25_nodes_flag_missing_index_name() -> None:
     assert any("must specify an index" in issue.message for issue in issues)
 
 
+def test_retriever_nodes_flag_missing_top_k() -> None:
+    """Fetch depth is required config — no silent fallback to the request's depth."""
+    retriever = PipelineNodeDefinition(
+        id="r1", type="retriever.vector", name="R", config={"index_name": "docs"}
+    )
+    issues = VectorRetrieverNode.validation_issues_for_node(
+        retriever, PipelineDefinition(nodes=[retriever], edges=[]), default_registry()
+    )
+    assert any("no top_k configured" in issue.message for issue in issues)
+
+    bm25 = PipelineNodeDefinition(
+        id="r2", type="retriever.bm25", name="B", config={"index_name": "docs-bm25"}
+    )
+    issues = Bm25RetrieverNode.validation_issues_for_node(
+        bm25, PipelineDefinition(nodes=[bm25], edges=[]), default_registry()
+    )
+    assert any("no top_k configured" in issue.message for issue in issues)
+
+
+def test_retriever_run_refuses_unset_top_k(session: Session) -> None:
+    """An unset depth is an honest error at run time, never a hidden fallback."""
+    store = StubVectorStore()
+    context = _context(session, store)
+    dense = VectorRetrieverNode(
+        VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs")
+    )
+    payload = QueryEmbeddingPayload(
+        request=QueryRequest(text="q", top_k=4), embedding=[0.1, 0.2]
+    )
+    with pytest.raises(InvalidInputError, match="top_k"):
+        dense.run({"query_embedding": payload}, context)
+    assert store.query_calls == []
+
+    sparse = Bm25RetrieverNode(
+        Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
+    )
+    request_payload = RetrievalRequestPayload(request=QueryRequest(text="q", top_k=4))
+    with pytest.raises(InvalidInputError, match="top_k"):
+        sparse.run({"request": request_payload}, context)
+    assert store.lexical_query_calls == []
+
+
 def test_lexical_support_issue_flags_dense_only_backend() -> None:
     dense_only = VectorStoreCapabilities(
         max_dimension=1024,
@@ -180,9 +223,10 @@ def test_bm25_retriever_queries_lexically_with_raw_text(session: Session) -> Non
     store = StubVectorStore(lexical_matches=[_scored("doc:1", 2.5)])
     context = _context(session, store)
     node = Bm25RetrieverNode(
-        Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
+        Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25", top_k=4)
     )
-    payload = RetrievalRequestPayload(request=QueryRequest(text="error E1042", top_k=4))
+    # The request's depth is never consulted — the config is the only source.
+    payload = RetrievalRequestPayload(request=QueryRequest(text="error E1042", top_k=9))
 
     outputs = node.run({"request": payload}, context)
 
@@ -207,7 +251,9 @@ def test_bm25_retriever_degrades_to_empty_when_index_is_wrong_type(session: Sess
         "pgvector index 'docs' is a dense index; this operation requires a sparse index."
     )
     context = _context(session, store)
-    node = Bm25RetrieverNode(Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs"))
+    node = Bm25RetrieverNode(
+        Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs", top_k=4)
+    )
     payload = RetrievalRequestPayload(request=QueryRequest(text="q", top_k=4))
 
     outputs = node.run({"request": payload}, context)
@@ -224,7 +270,7 @@ def test_vector_retriever_degrades_to_empty_when_index_not_created_yet(
     store.query_error = NotFoundError("pgvector index 'docs' not found.")
     context = _context(session, store)
     node = VectorRetrieverNode(
-        VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs")
+        VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs", top_k=4)
     )
     payload = QueryEmbeddingPayload(
         request=QueryRequest(text="q", top_k=4), embedding=[0.1, 0.2]
@@ -256,7 +302,8 @@ def test_rrf_fusion_accumulates_rank_scores_across_branches(session: Session) ->
     assert result.response.matches[0].score == 1 / 62 + 1 / 61
 
 
-def test_rrf_fusion_caps_at_requested_top_k(session: Session) -> None:
+def test_rrf_fusion_never_cuts(session: Session) -> None:
+    """Fusion emits every fused candidate; cutting is the Top-N node's job."""
     node = RRFusionNode(RRFusionConfig())
     context = _context(session, StubVectorStore(), query="q", top_k=2)
     branches = [_retrieval_payload("a", "b", "c"), _retrieval_payload("d")]
@@ -264,7 +311,7 @@ def test_rrf_fusion_caps_at_requested_top_k(session: Session) -> None:
     outputs = node.run({"results": branches}, context)
 
     result = RetrievalPayload.model_validate(outputs["results"])
-    assert len(result.response.matches) == 2
+    assert len(result.response.matches) == 4
 
 
 def test_rrf_fusion_sums_usage_across_branches(session: Session) -> None:
@@ -312,18 +359,16 @@ def test_ingestion_output_merges_branches_preferring_embedded_chunks(
     assert result.usage.prompt_tokens == 11
 
 
-def test_rrf_fusion_honors_zero_top_k_instead_of_returning_everything(
-    session: Session,
-) -> None:
-    """A falsy context top_k is honored, not treated as 'unset'."""
-    node = RRFusionNode(RRFusionConfig())
-    context = _context(session, StubVectorStore(), query="q", top_k=0)
-    branches = [_retrieval_payload("a", "b", "c"), _retrieval_payload("d")]
+def test_rrf_fusion_config_rejects_removed_top_k_silently(session: Session) -> None:
+    """A legacy `top_k` config key is ignored (extra keys don't parse), never a cut."""
+    node = RRFusionNode(RRFusionConfig.model_validate({"k": 60, "top_k": 1}))
+    context = _context(session, StubVectorStore(), query="q", top_k=1)
+    branches = [_retrieval_payload("a", "b"), _retrieval_payload("c")]
 
     outputs = node.run({"results": branches}, context)
 
     result = RetrievalPayload.model_validate(outputs["results"])
-    assert result.response.matches == []
+    assert len(result.response.matches) == 3
 
 
 def test_ingestion_output_merge_is_not_fooled_by_unembedded_first_chunk(
