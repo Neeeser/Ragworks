@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.schemas.openrouter import (
     OpenRouterChatResponse,
     OpenRouterEmbeddingsResponse,
+    OpenRouterRerankResponse,
     OpenRouterStreamChunk,
 )
 
@@ -87,3 +88,21 @@ def test_openrouter_embeddings_response_allows_extra_fields() -> None:
     assert dumped["new_field"]["nested"] is True
     assert dumped["data"][0]["extra"] == "keep"
     assert dumped["usage"]["cost"] == 0.01
+
+
+def test_openrouter_rerank_response_parses_ranked_indexes() -> None:
+    parsed = OpenRouterRerankResponse.model_validate(
+        {
+            "id": "rank-1",
+            "model": "cohere/rerank-v3.5",
+            "results": [
+                {"index": 1, "relevance_score": 0.9},
+                {"index": 0, "relevance_score": 0.2},
+            ],
+            "usage": {"total_tokens": 12},
+        }
+    )
+
+    assert [result.index for result in parsed.results] == [1, 0]
+    assert parsed.usage
+    assert parsed.usage.total_tokens == 12

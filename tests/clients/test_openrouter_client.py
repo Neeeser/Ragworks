@@ -41,9 +41,17 @@ class _StubHttpClient:
         self.headers = headers
         self.timeout = timeout
         self.get_calls: list[str] = []
+        self.post_calls: list[tuple[str, dict[str, Any]]] = []
 
     def get(self, path: str) -> _StubResponse:
         self.get_calls.append(path)
+        payloads = self.responses.get(path)
+        if not payloads:
+            raise AssertionError(f"No response queued for {path}")
+        return _StubResponse(payloads.pop(0))
+
+    def post(self, path: str, json: dict[str, Any]) -> _StubResponse:
+        self.post_calls.append((path, json))
         payloads = self.responses.get(path)
         if not payloads:
             raise AssertionError(f"No response queued for {path}")
@@ -322,6 +330,66 @@ def test_list_embedding_models_caches_and_refreshes(client: OpenRouterClient) ->
     assert second.value[0].id == "embed-a"
     assert refreshed.value[0].id == "embed-b"
     assert client._http.get_calls.count("/embeddings/models") == 2
+
+
+def test_list_rerank_models_preserves_context_and_modalities(
+    client: OpenRouterClient,
+) -> None:
+    _StubHttpClient.responses = {
+        "/models?output_modalities=rerank": [
+            {
+                "data": [
+                    {
+                        "id": "nvidia/rerank-vl",
+                        "name": "Rerank VL",
+                        "context_length": 10240,
+                        "architecture": {
+                            "input_modalities": ["text", "image"],
+                            "output_modalities": ["rerank"],
+                        },
+                    }
+                ]
+            }
+        ]
+    }
+
+    model = client.list_rerank_models().value[0]
+
+    assert model.context_length == 10240
+    assert model.architecture["input_modalities"] == ["text", "image"]
+    assert client._http.get_calls == ["/models?output_modalities=rerank"]
+
+
+def test_rerank_requests_every_document(client: OpenRouterClient) -> None:
+    _StubHttpClient.responses = {
+        "/rerank": [
+            {
+                "id": "rank-1",
+                "model": "cohere/rerank-v3.5",
+                "results": [
+                    {"index": 1, "relevance_score": 0.9},
+                    {"index": 0, "relevance_score": 0.2},
+                ],
+            }
+        ]
+    }
+
+    response = client.rerank(
+        model="cohere/rerank-v3.5", query="query", documents=["a", "b"]
+    )
+
+    assert response.results[0].index == 1
+    assert client._http.post_calls == [
+        (
+            "/rerank",
+            {
+                "model": "cohere/rerank-v3.5",
+                "query": "query",
+                "documents": ["a", "b"],
+                "top_n": 2,
+            },
+        )
+    ]
 
 
 def test_list_embedding_model_metadata_preserves_limits_without_dimension_probes(

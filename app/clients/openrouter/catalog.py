@@ -30,16 +30,19 @@ class ModelCatalog:
         self,
         fetch_models: Callable[[], list[ModelInfo]],
         fetch_embedding_models: Callable[[], list[EmbeddingModelInfo]],
+        fetch_rerank_models: Callable[[], list[ModelInfo]],
         probe_embedding: Callable[[str], OpenRouterEmbeddingsResponse],
     ) -> None:
         """Store the injected fetch/probe callables and initialize empty caches."""
         self._fetch_models = fetch_models
         self._fetch_embedding_models = fetch_embedding_models
+        self._fetch_rerank_models = fetch_rerank_models
         self._probe_embedding = probe_embedding
         self._models = ValueCache[str, list[ModelInfo]](_CATALOG_POLICY)
         self._embedding_models = ValueCache[str, list[EmbeddingModelInfo]](
             _CATALOG_POLICY
         )
+        self._rerank_models = ValueCache[str, list[ModelInfo]](_CATALOG_POLICY)
 
     def list_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return available models with cache freshness metadata."""
@@ -67,7 +70,16 @@ class ModelCatalog:
             raise ValueError("OpenRouter embeddings response missing embedding values.")
         return len(list(embedding))
 
+    def list_rerank_models(
+        self, force_refresh: bool = False
+    ) -> CacheSnapshot[list[ModelInfo]]:
+        """Return models whose output modality is reranking."""
+        return self._rerank_models.get(
+            "reranking", self._fetch_rerank_models, force_refresh=force_refresh
+        )
+
     def close(self) -> None:
         """Wait for catalog refreshes before the owning transport closes."""
         self._models.close()
         self._embedding_models.close()
+        self._rerank_models.close()

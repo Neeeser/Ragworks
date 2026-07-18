@@ -132,6 +132,27 @@ class OpenRouterEmbeddingsResponse(BaseModel):
     error: dict[str, Any] | None = None
 
 
+class OpenRouterRerankResult(BaseModel):
+    """One scored original-document index from the rerank endpoint."""
+
+    model_config = ConfigDict(extra="allow")
+
+    index: int
+    relevance_score: float
+
+
+class OpenRouterRerankResponse(BaseModel):
+    """Top-level response from OpenRouter's rerank endpoint."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    results: list[OpenRouterRerankResult] = Field(default_factory=list)
+    usage: OpenRouterUsage | None = None
+
+
 class OpenRouterKeyRateLimit(BaseModel):
     """Legacy rate-limit block on key metadata; OpenRouter always returns -1 here."""
 
