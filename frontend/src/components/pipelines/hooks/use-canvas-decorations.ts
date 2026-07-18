@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { validatePipelineConfig, validatePipelineEdges } from "../lib/pipeline-io";
+import { ESTIMATED_NODE_WIDTH } from "../lib/pipeline-layout";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { ConnectingContext, PipelineNodeData } from "../PipelineNode";
@@ -64,6 +65,11 @@ export function useCanvasDecorations({
       id: "drop-preview",
       type: "dropPreview",
       position: dropPreviewPosition,
+      // Edge routing receives every canvas node before React Flow has measured
+      // the preview. Pin its rendered geometry so the router never falls back
+      // to the PipelineNodeData estimator for this intentionally lighter shape.
+      width: ESTIMATED_NODE_WIDTH,
+      height: 80,
       data: { label: dropPreviewLabel ?? "Drop here" },
       selectable: false,
       draggable: false,

@@ -80,6 +80,94 @@ def test_upgrade_definition_returns_none_when_already_current() -> None:
     assert upgrade_definition(first) is None
 
 
+def test_upgrade_definition_renames_result_limit_in_place_and_preserves_edges() -> None:
+    definition = PipelineDefinition.model_validate(
+        {
+            "schema_version": 2,
+            "variables": [
+                {
+                    "name": "top_k",
+                    "type": "integer",
+                    "source": "input",
+                    "value": 5,
+                }
+            ],
+            "nodes": [
+                {
+                    "id": "in",
+                    "type": "retrieval.input",
+                    "name": "Input",
+                    "config": {"arguments": ["top_k"]},
+                },
+                {
+                    "id": "fusion",
+                    "type": "fusion.rrf",
+                    "name": "Fusion",
+                    "config": {"k": 60},
+                },
+                {
+                    "id": "limit",
+                    "type": "limit.top_n",
+                    "name": "Top-N",
+                    "config": {"top_n": {"$expr": "top_k"}},
+                },
+                {
+                    "id": "out",
+                    "type": "retrieval.output",
+                    "name": "Output",
+                    "config": {},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "fusion-limit",
+                    "source": "fusion",
+                    "target": "limit",
+                    "source_port": "results",
+                    "target_port": "results",
+                },
+                {
+                    "id": "limit-out",
+                    "source": "limit",
+                    "target": "out",
+                    "source_port": "results",
+                    "target_port": "results",
+                },
+            ],
+        }
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    limit = upgraded.node_map()["limit"]
+    assert limit.type == "limit.results"
+    assert limit.name == "Result Limit"
+    assert limit.config == {"max_results": {"$expr": "result_limit"}}
+    assert upgraded.node_map()["in"].config["arguments"] == ["result_limit"]
+    assert [variable.name for variable in upgraded.variables] == ["result_limit"]
+    assert upgraded.edges == definition.edges
+    assert upgrade_definition(upgraded) is None
+
+
+def test_upgrade_definition_preserves_custom_result_limit_name() -> None:
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(
+                id="limit",
+                type="limit.top_n",
+                name="Keep the best chunks",
+                config={"top_n": 7},
+            )
+        ]
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    assert upgraded.nodes[0].name == "Keep the best chunks"
+
+
 def _v1_raw_definition(*, fusion_top_k: object | None = None) -> dict[str, object]:
     """A raw stored definition exactly as the pre-variables release wrote it.
 

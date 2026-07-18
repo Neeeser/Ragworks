@@ -1,12 +1,12 @@
 """One-way upgrades applied to stored pipeline definitions.
 
-Node type ids are permanent, but the catalog moves on: the backend-pinned
-indexer/retriever variants were superseded by the unified ``indexer.vector``/
-``retriever.vector`` nodes (backend selected in config), and the no-op
-``chat.settings`` node was removed outright (the chat model is a session-level
-choice made in the chat UI). `upgrade_definition` rewrites a stored definition
-to the current vocabulary; the startup migration applies it to every stored
-version in place -- a mechanical rewrite, not a new revision.
+Node type ids are normally permanent, but the catalog has had explicit one-way
+transitions: backend-pinned indexer/retriever variants were superseded by the
+unified ``indexer.vector``/``retriever.vector`` nodes, the no-op
+``chat.settings`` node was removed, and this feature branch briefly persisted
+``limit.top_n`` before settling on ``limit.results``. `upgrade_definition`
+rewrites those stored definitions to the current vocabulary; startup applies
+the mechanical rewrite to every stored version in place, not as a new revision.
 
 `migrate_variables_definition` is the definition-schema v1 -> v2 rewrite
 (gated by the *absence* of ``schema_version`` in the raw stored dict, never by
@@ -29,8 +29,6 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
-from app.pipelines.expressions.errors import ExpressionSyntaxError
-from app.pipelines.expressions.parser import TokenKind, tokenize
 from app.pipelines.nodes.indexing import VectorIndexerNode, default_index_name
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.nodes.limiting import ResultLimitNode
@@ -39,6 +37,13 @@ from app.pipelines.nodes.retrieval import (
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
     VectorRetrieverNode,
+)
+from app.pipelines.result_limit_upgrades import (
+    migrate_input_argument_names,
+    migrate_node_expressions,
+    migrate_top_k_expression,
+    migrate_variable,
+    migrated_limit_name,
 )
 from app.pipelines.variables import PipelineInputArgument, PipelineVariable, VariableSource
 from app.schemas.enums import IndexBackend
@@ -53,10 +58,27 @@ LEGACY_BACKEND_NODE_TYPES: dict[str, tuple[str, IndexBackend]] = {
 
 # Node types that no longer exist; their class is gone, so the id is a literal.
 REMOVED_NODE_TYPES = frozenset({"chat.settings"})
+LEGACY_RESULT_LIMIT_TYPE = "limit.top_n"
 
 
 def _upgrade_node(node: PipelineNodeDefinition) -> tuple[PipelineNodeDefinition, bool]:
     """Return the node rewritten to the unified vocabulary, and whether it changed."""
+    if node.type == LEGACY_RESULT_LIMIT_TYPE:
+        config = {
+            key: migrate_top_k_expression(value)
+            for key, value in node.config.items()
+            if key != "top_n"
+        }
+        if "top_n" in node.config:
+            config["max_results"] = migrate_top_k_expression(node.config["top_n"])
+        upgraded = node.model_copy(
+            update={
+                "type": ResultLimitNode.type,
+                "name": ResultLimitNode.label if node.name == "Top-N" else node.name,
+                "config": config,
+            }
+        )
+        return upgraded, True
     mapping = LEGACY_BACKEND_NODE_TYPES.get(node.type)
     if mapping is None:
         return node, False
@@ -72,6 +94,9 @@ def _upgrade_node(node: PipelineNodeDefinition) -> tuple[PipelineNodeDefinition,
 
 def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | None:
     """Return an upgraded copy of the definition, or None when nothing changed."""
+    has_legacy_result_limit = any(
+        node.type == LEGACY_RESULT_LIMIT_TYPE for node in definition.nodes
+    )
     changed = False
     nodes: list[PipelineNodeDefinition] = []
     removed_ids: set[str] = set()
@@ -83,6 +108,14 @@ def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | N
         upgraded, node_changed = _upgrade_node(node)
         changed = changed or node_changed
         nodes.append(upgraded)
+    variables = definition.variables
+    if has_legacy_result_limit:
+        # ``limit.top_n`` existed on this feature branch after schema v2 had
+        # already been stamped. Rewrite that persisted transitional shape here,
+        # outside the v1 gate, while retaining node ids and every graph edge.
+        variables = [migrate_variable(variable) for variable in definition.variables]
+        nodes = [migrate_node_expressions(node) for node in nodes]
+        nodes = [migrate_input_argument_names(node) for node in nodes]
     edges: list[PipelineEdgeDefinition] = []
     for edge in definition.edges:
         if edge.source in removed_ids or edge.target in removed_ids:
@@ -91,7 +124,7 @@ def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | N
         edges.append(edge)
     if not changed:
         return None
-    return definition.model_copy(update={"nodes": nodes, "edges": edges})
+    return definition.model_copy(update={"nodes": nodes, "edges": edges, "variables": variables})
 
 
 RETRIEVAL_INPUT_TYPE = "retrieval.input"
@@ -104,9 +137,9 @@ def migrate_variables_definition(definition: PipelineDefinition) -> PipelineDefi
     Always returns a copy: the caller re-dumps it, which stamps the current
     ``schema_version`` so the migration never reconsiders the row.
     """
-    variables = [_migrate_variable(variable) for variable in definition.variables]
+    variables = [migrate_variable(variable) for variable in definition.variables]
     nodes = [_migrate_input_node(node, variables) for node in definition.nodes]
-    nodes = [_migrate_node_expressions(node) for node in nodes]
+    nodes = [migrate_node_expressions(node) for node in nodes]
     nodes, edges = _insert_fusion_limits(nodes, list(definition.edges))
     nodes = declare_default_result_limit(nodes, variables)
     nodes = fill_retriever_top_k(nodes, variables)
@@ -221,13 +254,13 @@ def _migrate_input_node(
     names: list[str] = []
     for entry in raw:
         if isinstance(entry, str):
-            names.append(_migrated_limit_name(entry))
+            names.append(migrated_limit_name(entry))
             continue
         try:
             argument = PipelineInputArgument.model_validate(entry)
         except ValidationError:
             continue
-        migrated_name = _migrated_limit_name(argument.name)
+        migrated_name = migrated_limit_name(argument.name)
         names.append(migrated_name)
         variables.append(
             PipelineVariable(
@@ -266,7 +299,7 @@ def _insert_fusion_limits(
         result_nodes.append(node.model_copy(update={"config": config}))
         limit_id = _unique_id(f"{node.id}-limit", taken_ids)
         limit_config = (
-            {"max_results": _migrate_top_k_expression(node.config["top_k"])}
+            {"max_results": migrate_top_k_expression(node.config["top_k"])}
             if node.config.get("top_k") is not None
             else {}
         )
@@ -292,71 +325,6 @@ def _insert_fusion_limits(
             )
         )
     return result_nodes, edges
-
-
-def _migrated_limit_name(name: str) -> str:
-    """Rename the v1 caller-facing depth argument to the v2 result-limit name."""
-    return DEFAULT_RESULT_LIMIT_VARIABLE.name if name == "top_k" else name
-
-
-def _migrate_variable(variable: PipelineVariable) -> PipelineVariable:
-    """Rename a v1 declaration and any derived expression that references it."""
-    expression = (
-        _rename_top_k_identifier(variable.expression) if variable.expression is not None else None
-    )
-    return variable.model_copy(
-        deep=True,
-        update={
-            "name": _migrated_limit_name(variable.name),
-            "expression": expression,
-        },
-    )
-
-
-def _migrate_node_expressions(node: PipelineNodeDefinition) -> PipelineNodeDefinition:
-    """Rename references to the migrated caller argument in every node config."""
-    config = {key: _migrate_top_k_expression(value) for key, value in node.config.items()}
-    outputs = config.get("outputs")
-    if node.type == "retrieval.output" and isinstance(outputs, list):
-        config["outputs"] = [
-            {
-                **output,
-                "expression": _rename_top_k_identifier(output["expression"]),
-            }
-            if isinstance(output, dict) and isinstance(output.get("expression"), str)
-            else output
-            for output in outputs
-        ]
-    return node.model_copy(update={"config": config})
-
-
-def _migrate_top_k_expression(value: object) -> object:
-    """Rename `top_k` identifier tokens inside a tagged v1 expression."""
-    if not isinstance(value, dict) or set(value) != {"$expr"}:
-        return value
-    source = value.get("$expr")
-    if not isinstance(source, str):
-        return value
-    return {"$expr": _rename_top_k_identifier(source)}
-
-
-def _rename_top_k_identifier(source: str) -> str:
-    """Rename identifier tokens without changing string literals or partial names."""
-    try:
-        replacements = [
-            token
-            for token in tokenize(source)
-            if token.kind is TokenKind.IDENT and token.text == "top_k"
-        ]
-    except ExpressionSyntaxError:
-        return source
-    for token in reversed(replacements):
-        source = (
-            source[: token.position]
-            + DEFAULT_RESULT_LIMIT_VARIABLE.name
-            + source[token.position + len(token.text) :]
-        )
-    return source
 
 
 def _unique_id(base: str, taken: set[str]) -> str:
