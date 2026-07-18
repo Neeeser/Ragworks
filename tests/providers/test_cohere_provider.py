@@ -8,11 +8,16 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from app.cache import CacheSnapshot
 from app.clients.cohere import CohereClient
+from app.clients.cohere.schemas import CohereModel
 from app.db import models
 from app.providers import cohere as cohere_module
+from app.providers.chat.cohere import CohereChatProvider
 from app.providers.cohere import CohereAdapter
+from app.retrieval.embedders.cohere_embedder import CohereEmbedder
 from app.retrieval.models import DocumentChunk, ScoredChunk
+from app.retrieval.rerankers.cohere import CohereReranker
 from app.schemas.enums import ProviderKind, ProviderType
 
 
@@ -77,6 +82,31 @@ def test_validation_reports_connected_and_rejected_keys(
     assert invalid.message == "Invalid Cohere API key."
 
 
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [
+        (httpx.Response(500, json={"message": "upstream error"}), "Cohere validation failed."),
+        (httpx.ConnectError("connection refused"), "Cohere is unreachable."),
+    ],
+)
+def test_validation_normalizes_non_authentication_provider_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: httpx.Response | httpx.ConnectError,
+    message: str,
+) -> None:
+    """Validation does not mislabel server failures or network outages as bad keys."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
+    result = _adapter(monkeypatch, _client(httpx.MockTransport(handler))).validate_connection()
+
+    assert result.valid is False
+    assert result.message == message
+
+
 def test_catalog_paginates_filters_and_exposes_capability_modalities(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -125,6 +155,26 @@ def test_catalog_paginates_filters_and_exposes_capability_modalities(
     ]
 
 
+def test_adapter_factories_bind_the_connection_client_and_model_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adapter factories preserve the requested model and optional dimensions."""
+    client = _client(httpx.MockTransport(lambda _: httpx.Response(200, json={"models": []})))
+    adapter = _adapter(monkeypatch, client)
+
+    embedder = adapter.embedder("embed-v4.0", dimensions=1024)
+    chat = adapter.chat_provider()
+    reranker = adapter.reranker("rerank-v4.0-fast")
+
+    assert isinstance(embedder, CohereEmbedder)
+    assert embedder.model_name == "embed-v4.0"
+    assert embedder.dimensions == 1024
+    assert isinstance(chat, CohereChatProvider)
+    assert chat.name == "cohere"
+    assert isinstance(reranker, CohereReranker)
+    assert reranker.model_name == "rerank-v4.0-fast"
+
+
 def test_embedding_dimension_uses_catalog_then_probes_as_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -161,6 +211,40 @@ def test_embedding_dimension_uses_catalog_then_probes_as_fallback(
             "embedding_types": ["float"],
         }
     ]
+
+
+def test_embedding_dimension_and_input_limit_return_none_without_model_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown catalog entries do not invent a dimension or input-token limit."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"models": [{"name": "embed-v4.0", "context_length": 8192}]},
+            )
+        return httpx.Response(200, json={"embeddings": {"float": []}})
+
+    adapter = _adapter(monkeypatch, _client(httpx.MockTransport(handler)))
+
+    assert adapter.embedding_input_limit("EMBED-V4.0") == 8192
+    assert adapter.embedding_input_limit("missing-model") is None
+    assert adapter.embedding_dimension("missing-model") is None
+
+
+def test_embedding_input_limit_propagates_catalog_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Input-limit discovery retains provider catalog failures for the caller."""
+
+    class Client:
+        @staticmethod
+        def list_models(*_args: object, **_kwargs: object) -> CacheSnapshot[list[CohereModel]]:
+            raise RuntimeError("catalog unavailable")
+
+    with pytest.raises(RuntimeError, match="catalog unavailable"):
+        _adapter(monkeypatch, Client()).embedding_input_limit("embed-v4.0")  # type: ignore[arg-type]
 
 
 def test_adapter_reranker_orders_complete_results_and_rejects_non_finite_scores(
