@@ -5,10 +5,8 @@ package holds the other pluggable RAG stages: parsers, chunkers, embedders,
 and rerankers, plus the shared domain models.
 """
 
-# NOTE: Keep imports lightweight so optional dependencies (e.g.
-# sentence-transformers) are not pulled in when the retrieval package is
-# imported. Users that need concrete implementations such as
-# CrossEncoderReranker can import that module directly.
+# Keep imports lightweight so provider clients are constructed only by the
+# configured adapter when a retrieval stage needs them.
 
 from .chunkers import DocumentChunker
 from .embedders import Embedder

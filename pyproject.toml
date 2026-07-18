@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pinecone>=5.0.0",
-    "sentence-transformers>=2.5.1",
     "umap-learn>=0.5.5",
     "pydantic>=2.6.0",
     "pypdf>=4.0.0",
@@ -93,6 +92,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-q", "--strict-markers"]
+norecursedirs = ["live"]
+markers = [
+    "live_provider_reranking: opt-in smoke test that contacts a configured provider",
+]
 
 [tool.coverage.run]
 branch = true
