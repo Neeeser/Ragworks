@@ -37,6 +37,7 @@ TEI_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.URL,
             required=True,
             placeholder="http://localhost:8080",
+            description="Each TEI connection serves one model and task.",
         ),
         ProviderConfigField(
             name="api_key",

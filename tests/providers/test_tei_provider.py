@@ -22,6 +22,14 @@ def _connection() -> models.ProviderConnection:
     )
 
 
+def test_descriptor_explains_one_model_per_connection() -> None:
+    base_url = next(
+        field for field in TEIAdapter.descriptor.config_fields if field.name == "base_url"
+    )
+
+    assert base_url.description == "Each TEI connection serves one model and task."
+
+
 @pytest.mark.parametrize(
     ("model_type", "requested", "expected"),
     [
