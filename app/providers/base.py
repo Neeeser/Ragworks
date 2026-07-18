@@ -89,10 +89,15 @@ class ProviderAdapter(ABC):
 
     def require_kind(self, kind: ProviderKind) -> None:
         """Raise `InvalidInputError` when this provider type lacks a kind."""
-        if kind not in self.descriptor.kinds:
+        if kind not in self.kinds:
             raise InvalidInputError(
                 f"{self.descriptor.label} connections do not provide {kind.value} models."
             )
+
+    @property
+    def kinds(self) -> tuple[ProviderKind, ...]:
+        """Return the capabilities served by this configured connection."""
+        return self.descriptor.kinds
 
     @abstractmethod
     def validate_connection(self) -> ConnectionValidationResult:

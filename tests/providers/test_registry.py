@@ -128,3 +128,25 @@ def test_provider_adapter_has_a_reranker_factory() -> None:
 
     with pytest.raises(InvalidInputError, match="do not provide reranking models"):
         adapter.reranker("example")
+
+
+def test_provider_adapter_kind_gate_uses_instance_kinds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = models.ProviderConnection(
+        user_id=uuid4(),
+        provider_type=ProviderType.OLLAMA.value,
+        label="Ollama",
+        config={"base_url": "http://localhost:11434"},
+    )
+    adapter = build_adapter(connection)
+    monkeypatch.setattr(
+        OllamaAdapter,
+        "kinds",
+        property(lambda _self: (ProviderKind.RERANKING,)),
+        raising=False,
+    )
+
+    adapter.require_kind(ProviderKind.RERANKING)
+    with pytest.raises(InvalidInputError, match="do not provide embedding models"):
+        adapter.require_kind(ProviderKind.EMBEDDING)

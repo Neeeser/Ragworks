@@ -8,10 +8,12 @@ import httpx
 import pytest
 from sqlmodel import Session
 
+from app.clients.tei.schemas import TEIInfo
 from app.db import models
 from app.providers.base import CatalogResult
 from app.providers.ollama import OllamaAdapter
 from app.providers.openrouter import OpenRouterAdapter
+from app.providers.tei import TEIAdapter
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import CatalogMetadata, CatalogModel
 from app.services.errors import InvalidInputError
@@ -137,6 +139,33 @@ def test_kind_filter_skips_connections_without_the_kind(session: Session) -> Non
     assert catalog.models == []
     assert catalog.connection_errors == []
     assert catalog.meta == CatalogMetadata()
+
+
+def test_kind_filter_uses_the_configured_tei_task(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user(session)
+    add_connection(
+        session,
+        user,
+        "tei",
+        {"base_url": "http://tei.test:8080"},
+        label="Embedding TEI",
+    )
+    monkeypatch.setattr(
+        TEIAdapter,
+        "_info",
+        lambda _self, _force_refresh=False: TEIInfo(
+            model_id="BAAI/bge-small-en-v1.5",
+            model_type={"embedding": {"pooling": "mean"}},
+            max_input_length=512,
+        ),
+    )
+
+    catalog = list_models_for_user(session, user, ProviderKind.RERANKING)
+
+    assert catalog.models == []
+    assert catalog.connection_errors == []
 
 
 def test_metadata_aggregates_stale_refreshing_and_warning(

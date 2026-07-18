@@ -53,7 +53,16 @@ def list_models_for_user(
         except InvalidInputError as exc:
             errors.append(_catalog_error(connection, exc))
             continue
-        if kind not in adapter.descriptor.kinds:
+        try:
+            if kind not in adapter.kinds:
+                continue
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            if not (
+                is_external_provider_error(exc)
+                or isinstance(exc, ServiceError)
+            ):
+                raise
+            errors.append(_catalog_error(connection, exc))
             continue
         jobs.append((connection, adapter))
 

@@ -16,6 +16,7 @@ from uuid import UUID
 from sqlmodel import Session
 
 from app.cache import CachePolicy, ValueCache
+from app.clients.cohere import close_cohere_clients, invalidate_cohere_client
 from app.clients.ollama.client import (
     close_ollama_clients,
     invalidate_ollama_client,
@@ -24,22 +25,32 @@ from app.clients.openrouter.client import (
     close_openrouter_clients,
     invalidate_openrouter_client,
 )
+from app.clients.tei import close_tei_clients, invalidate_tei_client
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository
 from app.providers.base import ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
+from app.providers.cohere import CohereAdapter
 from app.providers.ollama import OllamaAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
+from app.providers.tei import TEIAdapter
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.rerankers.base import Reranker
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.providers import OllamaConnectionConfig, OpenRouterConnectionConfig
+from app.schemas.providers import (
+    CohereConnectionConfig,
+    OllamaConnectionConfig,
+    OpenRouterConnectionConfig,
+    TEIConnectionConfig,
+)
 from app.services.errors import InvalidInputError, NotFoundError
 
 ADAPTERS: dict[ProviderType, type[ProviderAdapter]] = {
     ProviderType.OPENROUTER: OpenRouterAdapter,
     ProviderType.OLLAMA: OllamaAdapter,
+    ProviderType.COHERE: CohereAdapter,
+    ProviderType.TEI: TEIAdapter,
     ProviderType.PINECONE: PineconeAdapter,
 }
 
@@ -67,9 +78,21 @@ def _invalidate_ollama(config: dict[str, object]) -> None:
     invalidate_ollama_client(parsed.base_url, parsed.api_key)
 
 
+def _invalidate_cohere(config: dict[str, object]) -> None:
+    parsed = CohereConnectionConfig.model_validate(config)
+    invalidate_cohere_client(parsed.api_key)
+
+
+def _invalidate_tei(config: dict[str, object]) -> None:
+    parsed = TEIConnectionConfig.model_validate(config)
+    invalidate_tei_client(parsed.base_url, parsed.api_key)
+
+
 _CACHE_INVALIDATORS: dict[ProviderType, Callable[[dict[str, object]], None]] = {
     ProviderType.OPENROUTER: _invalidate_openrouter,
     ProviderType.OLLAMA: _invalidate_ollama,
+    ProviderType.COHERE: _invalidate_cohere,
+    ProviderType.TEI: _invalidate_tei,
 }
 
 
@@ -158,6 +181,8 @@ def close_provider_clients() -> None:
     _dimension_cache.close()
     close_openrouter_clients()
     close_ollama_clients()
+    close_cohere_clients()
+    close_tei_clients()
 
 
 class ProviderResolver:

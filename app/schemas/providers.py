@@ -64,6 +64,12 @@ class OpenRouterConnectionConfig(BaseModel):
     api_key: str = Field(min_length=1)
 
 
+class CohereConnectionConfig(BaseModel):
+    """Stored config for a Cohere connection."""
+
+    api_key: str = Field(min_length=1)
+
+
 class OllamaConnectionConfig(BaseModel):
     """Stored config for an Ollama connection."""
 
@@ -74,6 +80,22 @@ class OllamaConnectionConfig(BaseModel):
     @classmethod
     def normalize_base_url(cls, value: str) -> str:
         """Require an http(s) URL and strip the trailing slash."""
+        cleaned = value.strip().rstrip("/")
+        if not cleaned.startswith(("http://", "https://")):
+            raise ValueError("Base URL must start with http:// or https://.")
+        return cleaned
+
+
+class TEIConnectionConfig(BaseModel):
+    """Stored config for a Text Embeddings Inference connection."""
+
+    base_url: str = Field(min_length=1)
+    api_key: str | None = None
+
+    @field_validator("base_url")
+    @classmethod
+    def normalize_base_url(cls, value: str) -> str:
+        """Require an http(s) URL and strip trailing slashes."""
         cleaned = value.strip().rstrip("/")
         if not cleaned.startswith(("http://", "https://")):
             raise ValueError("Base URL must start with http:// or https://.")
@@ -195,4 +217,5 @@ class ProviderCoverage(BaseModel):
 
     has_embedding: bool
     has_chat: bool
+    has_reranking: bool
     has_vector_store: bool
