@@ -225,3 +225,18 @@ def test_default_retrieval_pipeline_declares_top_k_argument() -> None:
     assert top_k.default == 5
     assert (top_k.minimum, top_k.maximum) == (1, 10)
     assert top_k.expose_to_llm is True
+
+
+def test_default_retrieval_pipeline_pins_retriever_depth_to_top_k() -> None:
+    """Every scaffold retriever carries its fetch depth explicitly — the
+    declared top_k variable, never an invisible request fallback."""
+    definition = build_default_retrieval_pipeline(
+        embedding_connection_id=uuid4(), embedding_model="test-embed"
+    )
+    retrievers = [
+        node
+        for node in definition.nodes
+        if node.type in ("retriever.vector", "retriever.bm25")
+    ]
+    assert retrievers
+    assert all(node.config["top_k"] == {"$expr": "top_k"} for node in retrievers)

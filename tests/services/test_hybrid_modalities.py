@@ -254,7 +254,8 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
                     id="bm25",
                     type="retriever.bm25",
                     name="BM25 Retriever",
-                    config={"backend": "pgvector", "index_name": "lex-only"},
+                    # Fetch depth is required config on retrievers.
+                    config={"backend": "pgvector", "index_name": "lex-only", "top_k": 5},
                 ),
                 PipelineNodeDefinition(id="out", type="retrieval.output", name="Out"),
             ],

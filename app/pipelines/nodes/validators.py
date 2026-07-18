@@ -25,6 +25,26 @@ def missing_index_issue(index_name: str, node_id: str, role: str) -> PipelineVal
     )
 
 
+def missing_top_k_issue(
+    top_k: int | None, node_id: str, role: str
+) -> PipelineValidationIssue | None:
+    """Flag a retriever with no fetch depth configured.
+
+    Retrieval depth is an explicit design choice — typically the `top_k`
+    variable, or an over-retrieval expression like `top_k * 2` — never an
+    invisible fallback to the run's requested depth.
+    """
+    if top_k is not None:
+        return None
+    return PipelineValidationIssue(
+        message=(
+            f"{role} node '{node_id}' has no top_k configured. Set how many "
+            "chunks it fetches (e.g. the top_k variable)."
+        ),
+        severity="error",
+    )
+
+
 def lexical_support_issue(
     capabilities: VectorStoreCapabilities,
     backend_label: str,

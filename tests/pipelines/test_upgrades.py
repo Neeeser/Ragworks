@@ -206,6 +206,38 @@ class TestMigrateVariablesDefinition:
         assert migrated.node_map()["in"].config["arguments"] == ["top_k"]
         limit = next(node for node in migrated.nodes if node.type == "limit.top_n")
         assert limit.config == {"top_n": {"$expr": "top_k"}}
+        # Retrievers lose the invisible request-depth fallback: the migration
+        # pins their fetch depth to the declared top_k variable.
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "top_k"}
+
+    def test_retrievers_gain_the_top_k_expression(self) -> None:
+        """Every retriever with no configured depth gets `top_k` pinned to the
+        declared variable — the v1 request-depth fallback made explicit."""
+        migrated = migrate_variables_definition(
+            PipelineDefinition.model_validate(_v1_raw_definition())
+        )
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "top_k"}
+
+    def test_retriever_with_explicit_top_k_keeps_it(self) -> None:
+        """A retriever that already chose its depth (literal or expression) is untouched."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[1]["config"]["top_k"] = {"$expr": "top_k * 2"}
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+        assert migrated.node_map()["sem"].config["top_k"] == {"$expr": "top_k * 2"}
+
+    def test_retrievers_get_literal_depth_when_no_top_k_variable(self) -> None:
+        """A definition whose declared inputs never included a depth gets the
+        literal historical default — there is no variable to reference."""
+        raw = _v1_raw_definition()
+        nodes = raw["nodes"]
+        assert isinstance(nodes, list)
+        nodes[0]["config"]["arguments"] = [
+            {"name": "mode", "type": "string", "default": "fast"}
+        ]
+        migrated = migrate_variables_definition(PipelineDefinition.model_validate(raw))
+        assert migrated.node_map()["sem"].config["top_k"] == 5
 
     def test_declared_pipelines_never_gain_a_second_top_k(self) -> None:
         """A definition that already declares inputs keeps exactly its own."""

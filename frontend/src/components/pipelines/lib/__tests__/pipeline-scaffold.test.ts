@@ -31,6 +31,11 @@ describe("buildDefaultDefinition", () => {
     const limit = definition.nodes.find((node) => node.type === "limit.top_n");
     expect(fusion?.config).toEqual({});
     expect(limit?.config).toEqual({ top_n: { $expr: "top_k" } });
+    // Retrievers carry their fetch depth explicitly — no invisible fallback.
+    for (const type of ["retriever.vector", "retriever.bm25"]) {
+      const retriever = definition.nodes.find((node) => node.type === type);
+      expect(retriever?.config).toMatchObject({ top_k: { $expr: "top_k" } });
+    }
     expect(
       definition.edges.some((edge) => edge.source === fusion?.id && edge.target === limit?.id),
     ).toBe(true);

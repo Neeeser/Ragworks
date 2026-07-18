@@ -18,7 +18,11 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
-from app.pipelines.nodes.validators import lexical_support_issue, missing_index_issue
+from app.pipelines.nodes.validators import (
+    lexical_support_issue,
+    missing_index_issue,
+    missing_top_k_issue,
+)
 from app.pipelines.payloads import (
     QueryEmbeddingPayload,
     RetrievalPayload,
@@ -50,9 +54,11 @@ logger = logging.getLogger(__name__)
 class RetrieverConfig(BaseModel):
     """Configuration for Pinecone retriever nodes.
 
-    `top_k` overrides the inbound request's depth when set — the
-    over-retrieval hook (e.g. the expression `top_k * 2` to fetch extra
-    candidates for fusion/reranking). Unset, the request's value applies.
+    `top_k` is how many chunks the node fetches — required for a runnable
+    node (validation flags an unset one), but kept optional on the model so
+    an in-progress editor draft still parses. Typically the `top_k` variable,
+    or an over-retrieval expression (`top_k * 2`) to fetch extra candidates
+    for fusion/reranking.
     """
 
     index_name: str = Field(
@@ -63,7 +69,10 @@ class RetrieverConfig(BaseModel):
     top_k: int | None = Field(
         default=None,
         gt=0,
-        description="Override how many chunks to fetch; unset uses the request's top_k.",
+        description=(
+            "How many chunks to fetch — typically the top_k variable, or an "
+            "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
     )
 
 
@@ -122,16 +131,24 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         _definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
-        """Validate required index selection."""
+        """Validate required index selection and an explicit fetch depth."""
         config = cls.config_model.model_validate(node.config or {})
-        issue = missing_index_issue(config.index_name, node.id, "Retriever")
-        return [issue] if issue else []
+        issues = [
+            missing_index_issue(config.index_name, node.id, "Retriever"),
+            missing_top_k_issue(config.top_k, node.id, "Retriever"),
+        ]
+        return [issue for issue in issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve chunks for the query request."""
         payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
         request = payload.request
         embedding = payload.embedding
+        if self.config.top_k is None:  # validation blocks this; honest error if reached
+            raise InvalidInputError(
+                "Retriever node has no top_k configured. Set how many chunks "
+                "it fetches (e.g. the top_k variable) in the pipeline editor."
+            )
 
         namespace = resolve_collection_template(self.config.namespace, context.collection)
         index_name = (
@@ -145,7 +162,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
                 index_name,
                 namespace or "",
                 embedding=embedding,
-                top_k=self.config.top_k if self.config.top_k is not None else request.top_k,
+                top_k=self.config.top_k,
                 filter=request.filter,
             )
         except NotFoundError:
@@ -237,8 +254,8 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
 class Bm25RetrieverConfig(BaseModel):
     """Configuration for BM25 (sparse/lexical) retriever nodes.
 
-    `top_k` mirrors the dense retriever's override: set (typically to an
-    expression) to over-retrieve; unset uses the request's depth.
+    `top_k` mirrors the dense retriever's contract: required for a runnable
+    node, typically the `top_k` variable or an over-retrieval expression.
     """
 
     backend: IndexBackend = Field(
@@ -250,7 +267,10 @@ class Bm25RetrieverConfig(BaseModel):
     top_k: int | None = Field(
         default=None,
         gt=0,
-        description="Override how many chunks to fetch; unset uses the request's top_k.",
+        description=(
+            "How many chunks to fetch — typically the top_k variable, or an "
+            "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
     )
 
 
@@ -280,23 +300,26 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         _definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
-        """Validate index selection and the backend's lexical support."""
+        """Validate index selection, fetch depth, and the backend's lexical support."""
         config = cls.config_model.model_validate(node.config or {})
-        issues: list[PipelineValidationIssue] = []
-        index_issue = missing_index_issue(config.index_name, node.id, "BM25 retriever")
-        if index_issue:
-            issues.append(index_issue)
-        support_issue = lexical_support_issue(
-            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
-        )
-        if support_issue:
-            issues.append(support_issue)
-        return issues
+        maybe_issues = [
+            missing_index_issue(config.index_name, node.id, "BM25 retriever"),
+            missing_top_k_issue(config.top_k, node.id, "BM25 retriever"),
+            lexical_support_issue(
+                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+            ),
+        ]
+        return [issue for issue in maybe_issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve lexically matching chunks for the query request."""
         payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
         request = payload.request
+        if self.config.top_k is None:  # validation blocks this; honest error if reached
+            raise InvalidInputError(
+                "BM25 retriever node has no top_k configured. Set how many "
+                "chunks it fetches (e.g. the top_k variable) in the pipeline editor."
+            )
 
         namespace = resolve_collection_template(self.config.namespace, context.collection)
         index_name = (
@@ -310,7 +333,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                 index_name,
                 namespace or "",
                 text=request.text,
-                top_k=self.config.top_k if self.config.top_k is not None else request.top_k,
+                top_k=self.config.top_k,
                 filter=request.filter,
             )
         except NotFoundError:

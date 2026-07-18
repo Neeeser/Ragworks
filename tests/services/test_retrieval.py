@@ -305,6 +305,14 @@ def _declare_pipeline_variables(
             # just replaced; unset it so the cut falls back to the requested
             # depth instead of a dangling expression.
             node.config = {key: value for key, value in node.config.items() if key != "top_n"}
+        if (
+            node.type in ("retriever.vector", "retriever.bm25")
+            and "top_k" not in names
+            and retriever_top_k_expression is None
+        ):
+            # Same for the scaffold retrievers' required depth: pin a literal
+            # when the top_k variable is gone.
+            node.config = {**node.config, "top_k": 5}
     service.update_pipeline(
         pipeline=pipeline, definition=definition, change_summary="Declare arguments."
     )

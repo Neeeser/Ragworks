@@ -11,10 +11,12 @@ version in place -- a mechanical rewrite, not a new revision.
 `migrate_variables_definition` is the definition-schema v1 -> v2 rewrite
 (gated by the *absence* of ``schema_version`` in the raw stored dict, never by
 shape alone): argument objects on `retrieval.input` configs become
-input-source variables with the node keeping only the name list, and every
+input-source variables with the node keeping only the name list; every
 fusion node gets a Top-N node inserted downstream carrying its old `top_k`
-config -- fusion no longer truncates, so behavior is preserved only with the
-explicit cut in place.
+config (fusion no longer truncates, so behavior is preserved only with the
+explicit cut in place); no-input pipelines gain the historical implicit
+`top_k` contract as a declared variable; and every retriever's fetch depth
+becomes an explicit config -- the request-depth fallback is gone.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from app.pipelines.nodes.indexing import VectorIndexerNode, default_index_name
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.nodes.limiting import LimitNode
 from app.pipelines.nodes.retrieval import (
+    Bm25RetrieverNode,
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
     VectorRetrieverNode,
@@ -103,6 +106,7 @@ def migrate_variables_definition(definition: PipelineDefinition) -> PipelineDefi
     nodes = [_migrate_input_node(node, variables) for node in definition.nodes]
     nodes, edges = _insert_fusion_limits(nodes, list(definition.edges))
     nodes = declare_default_top_k(nodes, variables)
+    nodes = fill_retriever_top_k(nodes, variables)
     return definition.model_copy(update={"nodes": nodes, "edges": edges, "variables": variables})
 
 
@@ -153,6 +157,45 @@ def declare_default_top_k(
         else:
             rewritten.append(node)
     return rewritten
+
+
+RETRIEVER_NODE_TYPES = frozenset(
+    {
+        VectorRetrieverNode.type,
+        Bm25RetrieverNode.type,
+        PineconeRetrieverNode.type,
+        PgvectorRetrieverNode.type,
+    }
+)
+
+
+def fill_retriever_top_k(
+    nodes: list[PipelineNodeDefinition],
+    variables: list[PipelineVariable],
+) -> list[PipelineNodeDefinition]:
+    """Give every retriever with no fetch depth an explicit `top_k`.
+
+    v1 retrievers silently fell back to the request's depth; v2 makes the
+    depth a required, visible config. Behavior-preserving fill: the `top_k`
+    variable when the definition declares one (guaranteed for pre-variables
+    rows by `declare_default_top_k`), else the literal historical default —
+    that case can only be a definition whose declared inputs never included
+    a depth, where the caller couldn't steer it anyway.
+    """
+    has_top_k_variable = any(
+        variable.name == DEFAULT_TOP_K_VARIABLE.name for variable in variables
+    )
+    fill: object = (
+        {"$expr": DEFAULT_TOP_K_VARIABLE.name}
+        if has_top_k_variable
+        else DEFAULT_TOP_K_VARIABLE.value
+    )
+    return [
+        node.model_copy(update={"config": {**node.config, "top_k": fill}})
+        if node.type in RETRIEVER_NODE_TYPES and node.config.get("top_k") is None
+        else node
+        for node in nodes
+    ]
 
 
 def _migrate_input_node(

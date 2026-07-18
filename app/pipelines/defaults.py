@@ -281,10 +281,13 @@ config={
             id="vector-retriever",
             type=VectorRetrieverNode.type,
             name="Semantic Retriever",
+            # Fetch depth is always explicit — the declared top_k variable,
+            # never an invisible request fallback.
             config={
                 "backend": backend.value,
                 "index_name": index_name,
                 "namespace": DEFAULT_NAMESPACE_TEMPLATE,
+                "top_k": {"$expr": DEFAULT_TOP_K_VARIABLE.name},
             },
         ),
         PipelineNodeDefinition(
@@ -320,6 +323,7 @@ config={
                         "backend": backend.value,
                         "index_name": bm25_sibling_index_name(index_name, backend),
                         "namespace": DEFAULT_NAMESPACE_TEMPLATE,
+                        "top_k": {"$expr": DEFAULT_TOP_K_VARIABLE.name},
                     },
                 ),
                 PipelineNodeDefinition(

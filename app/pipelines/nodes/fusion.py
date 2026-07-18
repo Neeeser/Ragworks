@@ -153,7 +153,16 @@ class RRFusionConfig(FusionConfig):
     cut is always an explicit, traced step.
     """
 
-    k: int = Field(default=60, ge=1)
+    k: int = Field(
+        default=60,
+        ge=1,
+        title="Rank dampening (k)",
+        description=(
+            "Dampening constant in the RRF formula 1 / (k + rank). Higher "
+            "values flatten the difference between ranks. Not a result "
+            "count — fusion emits every fused candidate."
+        ),
+    )
 
 
 class RRFusionNode(BaseFusionNode):

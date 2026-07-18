@@ -202,7 +202,8 @@ class TestRunnerEffectiveTopK:
 
 
 class TestRetrieverTopKOverride:
-    """A configured retriever top_k overrides the request's depth."""
+    """The configured retriever top_k is the only depth source (an unset one
+    is a run error — pinned in test_bm25_and_fusion_nodes)."""
 
     def test_config_top_k_reaches_store(self, session: Session) -> None:
         store = StubVectorStore(query_matches=[_chunk(0)])
@@ -221,25 +222,6 @@ class TestRetrieverTopKOverride:
             context,
         )
         assert store.query_calls[0]["top_k"] == 20
-
-    def test_unset_top_k_uses_request(self, session: Session) -> None:
-        store = StubVectorStore(query_matches=[_chunk(0)])
-        context = _context(session, vector_store=store)
-        node = VectorRetrieverNode(
-            VectorRetrieverConfig(backend="pgvector", index_name="docs")
-        )
-        request = QueryRequest(text="hello", top_k=5)
-        node.run(
-            {
-                "query_embedding": {
-                    "request": request.model_dump(),
-                    "embedding": [0.1, 0.2],
-                }
-            },
-            context,
-        )
-        assert store.query_calls[0]["top_k"] == 5
-
 
 class TestLimitNode:
     """The clamp node truncates ordered results and traces the cut honestly."""

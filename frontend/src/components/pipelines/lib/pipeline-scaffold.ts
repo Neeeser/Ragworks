@@ -123,8 +123,17 @@ export const buildDefaultDefinition = (
   }
 
   if (kind === "retrieval") {
-    const retrieverConfig = { ...indexConfig };
+    // Fetch depth is always explicit — the declared top_k variable, never an
+    // invisible request fallback.
+    const retrieverConfig: Record<string, unknown> = {
+      ...indexConfig,
+      top_k: { $expr: "top_k" },
+    };
     delete retrieverConfig.dimension;
+    const bm25RetrieverConfig: Record<string, unknown> = {
+      ...bm25Config,
+      top_k: { $expr: "top_k" },
+    };
     const nodes: PipelineDefinition["nodes"] = [
       {
         id: NODE_QUERY_INPUT,
@@ -173,7 +182,7 @@ export const buildDefaultDefinition = (
           id: NODE_BM25_RETRIEVER,
           type: BM25_RETRIEVER_NODE_TYPE,
           name: "BM25 Retriever",
-          config: bm25Config,
+          config: bm25RetrieverConfig,
         },
         {
           id: NODE_FUSE_RESULTS,
