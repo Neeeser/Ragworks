@@ -82,6 +82,7 @@ class CohereAdapter(ProviderAdapter):
             ProviderKind.RERANKING: "rerank",
         }[kind]
         snapshot = self._client().list_models(endpoint, force_refresh=force_refresh)
+        input_modalities, output_modalities = _modalities(kind)
         models = [
             CatalogModel(
                 connection_id=self.connection.id,
@@ -93,6 +94,8 @@ class CohereAdapter(ProviderAdapter):
                 context_length=model.context_length,
                 max_input_tokens=model.context_length if kind is ProviderKind.EMBEDDING else None,
                 dimension=model.output_dimension if kind is ProviderKind.EMBEDDING else None,
+                input_modalities=input_modalities,
+                output_modalities=output_modalities,
                 supported_parameters=_supported_parameters(kind),
             )
             for model in snapshot.value
@@ -155,6 +158,16 @@ def _supported_parameters(kind: ProviderKind) -> list[str]:
         "stop",
         "tools",
     ]
+
+
+def _modalities(kind: ProviderKind) -> tuple[list[str], list[str]]:
+    """Return factual input and output modalities for one Cohere endpoint."""
+    output = {
+        ProviderKind.CHAT: "text",
+        ProviderKind.EMBEDDING: "embedding",
+        ProviderKind.RERANKING: "rerank",
+    }[kind]
+    return ["text"], [output]
 
 
 def _catalog_metadata(snapshot: CacheSnapshot[SnapshotValueT]) -> CatalogMetadata:

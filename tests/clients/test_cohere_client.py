@@ -96,8 +96,8 @@ def test_embed_sends_input_type_and_optional_output_dimension() -> None:
     ]
 
 
-def test_chat_stream_parses_sse_events_and_rejects_provider_error() -> None:
-    """SSE frames become typed stream events and failed frames surface externally."""
+def test_chat_stream_parses_sse_events() -> None:
+    """SSE frames become typed stream events."""
     frames = "\n\n".join(
         [
             'event: content-delta\ndata: {"type":"content-delta","index":0,"delta":{"message":{"content":{"text":"Hi"}}}}',
@@ -118,6 +118,25 @@ def test_chat_stream_parses_sse_events_and_rejects_provider_error() -> None:
     assert events[0].delta.message is not None
     assert events[0].delta.message.content is not None
     assert events[0].delta.message.content.text == "Hi"
+
+
+def test_chat_stream_non_2xx_is_classified_as_an_external_provider_error() -> None:
+    """A real failed Cohere response surfaces through the shared external mapping."""
+    from app.services.errors import is_external_provider_error
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"message": "temporarily unavailable"})
+
+    client = _client(httpx.MockTransport(handler))
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        list(
+            client.chat_stream(
+                [{"role": "user", "content": "hello"}], model="command-a"
+            )
+        )
+
+    assert exc_info.value.response.status_code == 503
+    assert is_external_provider_error(exc_info.value) is True
 
 
 def test_rerank_requests_every_candidate_and_surfaces_status_errors() -> None:

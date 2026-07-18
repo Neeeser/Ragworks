@@ -13,7 +13,12 @@ def _request(**overrides: Any):
         "messages": [{"role": "user", "content": "find weather"}],
         "tools": [{"type": "function", "function": {"name": "weather", "parameters": {}}}],
         "model": "command-a",
-        "parameters": {"temperature": 0.2, "top_p": 0.7, "max_tokens": 64},
+        "parameters": {
+            "temperature": 0.2,
+            "top_p": 0.7,
+            "max_tokens": 64,
+            "stop": ["END"],
+        },
     }
     values.update(overrides)
     return ChatRequest(**values)
@@ -34,7 +39,13 @@ def test_chat_maps_openai_tools_parameters_and_message_content() -> None:
     client = Client()
     CohereChatProvider(client).chat(_request())
 
-    assert client.kwargs["parameters"] == {"temperature": 0.2, "p": 0.7, "max_tokens": 64}
+    assert client.kwargs["parameters"] == {
+        "temperature": 0.2,
+        "p": 0.7,
+        "max_tokens": 64,
+        "stop_sequences": ["END"],
+    }
+    assert "stop" not in client.kwargs["parameters"]
     assert client.kwargs["tools"] == [{"type": "function", "function": {"name": "weather", "parameters": {}}}]
     assert client.kwargs["messages"] == [{"role": "user", "content": "find weather"}]
 

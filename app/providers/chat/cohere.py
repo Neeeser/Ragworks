@@ -10,7 +10,11 @@ from app.clients.cohere.schemas import CohereChatResponse, CohereMessage, Cohere
 from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.schemas.models import ModelInfo
 
-_PARAMETER_MAP = {"top_p": "p", "top_k": "k"}
+_PARAMETER_MAP = {
+    "top_p": "p",
+    "top_k": "k",
+    "stop": "stop_sequences",
+}
 
 
 def _text_content(content: Any) -> str:
