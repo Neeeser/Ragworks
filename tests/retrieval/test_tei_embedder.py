@@ -50,3 +50,18 @@ def test_embed_query_returns_the_servers_first_vector() -> None:
     embedder = TEIEmbedder(_TEIClient([[0.5, 0.6]]), "BAAI/bge-base-en-v1.5")  # type: ignore[arg-type]
 
     assert embedder.embed_query("hello") == [0.5, 0.6]
+
+
+def test_embed_query_rejects_a_missing_vector() -> None:
+    embedder = TEIEmbedder(_TEIClient([]), "BAAI/bge-base-en-v1.5")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="exactly one"):
+        embedder.embed_query("hello")
+
+
+def test_embed_query_rejects_multiple_vectors() -> None:
+    client = _TEIClient([[0.5, 0.6], [0.7, 0.8]])
+    embedder = TEIEmbedder(client, "BAAI/bge-base-en-v1.5")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="exactly one"):
+        embedder.embed_query("hello")

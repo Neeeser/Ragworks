@@ -11,7 +11,7 @@ from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores
 
 
 class TEIReranker(Reranker):
-    """Rerank text candidates through a TEI classifier server."""
+    """Rerank text candidates through a TEI reranker server."""
 
     def __init__(self, client: TEIClient, model_name: str) -> None:
         self._client = client

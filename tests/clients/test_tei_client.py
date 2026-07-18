@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
+import pytest
 
 from app.clients.tei import TEIClient
 
@@ -19,7 +21,9 @@ def _build_client(handler: httpx.MockTransport) -> TEIClient:
     return client
 
 
-def test_info_normalizes_url_and_sends_optional_bearer_header() -> None:
+def test_info_normalizes_url_and_sends_optional_bearer_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -34,7 +38,14 @@ def test_info_normalizes_url_and_sends_optional_bearer_header() -> None:
             },
         )
 
-    info = _build_client(httpx.MockTransport(handler)).info()
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.Client
+
+    def client_with_transport(**kwargs: Any) -> httpx.Client:
+        return http_client(transport=transport, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", client_with_transport)
+    info = TEIClient("http://tei.test:8080///", api_key="proxy-token").info()
 
     assert seen == {
         "url": "http://tei.test:8080/info",

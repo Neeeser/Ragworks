@@ -33,4 +33,6 @@ class TEIEmbedder(Embedder):
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed one retrieval query."""
         vectors = self._client.embed([query])
-        return vectors[0] if vectors else []
+        if len(vectors) != 1:
+            raise ValueError("TEI must return exactly one embedding vector for a query.")
+        return vectors[0]
