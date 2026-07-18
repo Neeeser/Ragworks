@@ -34,14 +34,27 @@ def test_provider_catalog_lists_types_with_kind_badges(client: TestClient) -> No
 
     assert response.status_code == 200
     by_type = {entry["provider_type"]: entry for entry in response.json()}
-    assert set(by_type) == {"openrouter", "ollama", "pinecone", "pgvector"}
-    assert by_type["openrouter"]["kinds"] == ["embedding", "chat"]
+    assert set(by_type) == {
+        "openrouter",
+        "ollama",
+        "cohere",
+        "tei",
+        "pinecone",
+        "pgvector",
+    }
+    assert by_type["openrouter"]["kinds"] == ["embedding", "chat", "reranking"]
     assert by_type["openrouter"]["recommended"] is True
+    assert by_type["cohere"]["kinds"] == ["embedding", "chat", "reranking"]
+    assert by_type["tei"]["kinds"] == ["embedding", "reranking"]
     assert by_type["pinecone"]["kinds"] == ["vector_store"]
     assert by_type["pgvector"]["builtin"] is True
     ollama_fields = {field["name"]: field for field in by_type["ollama"]["config_fields"]}
     assert ollama_fields["base_url"]["kind"] == "url"
     assert ollama_fields["api_key"]["required"] is False
+    tei_fields = {field["name"]: field for field in by_type["tei"]["config_fields"]}
+    assert tei_fields["base_url"]["description"] == (
+        "Each TEI connection serves one model and task."
+    )
 
 
 def test_create_list_and_delete_ollama_connection(client: TestClient) -> None:
