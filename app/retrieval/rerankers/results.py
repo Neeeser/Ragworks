@@ -20,11 +20,11 @@ class RerankScore:
 def apply_rerank_scores(
     candidates: Sequence[ScoredChunk], scores: Sequence[RerankScore]
 ) -> list[ScoredChunk]:
-    """Validate a complete provider ranking and map it back to chunks."""
+    """Validate provider scores and rank every candidate by relevance."""
     if len(scores) != len(candidates):
         raise ValueError("Reranking provider must return every candidate.")
     seen: set[int] = set()
-    ranked: list[ScoredChunk] = []
+    score_by_index: dict[int, float] = {}
     for result in scores:
         if result.index in seen:
             raise ValueError("Reranking provider returned a duplicate candidate index.")
@@ -33,7 +33,10 @@ def apply_rerank_scores(
         if not math.isfinite(result.score):
             raise ValueError("Reranking provider returned a non-finite relevance score.")
         seen.add(result.index)
-        ranked.append(
-            candidates[result.index].model_copy(update={"score": result.score})
-        )
+        score_by_index[result.index] = result.score
+    ranked = [
+        candidate.model_copy(update={"score": score_by_index[index]})
+        for index, candidate in enumerate(candidates)
+    ]
+    ranked.sort(key=lambda candidate: candidate.score, reverse=True)
     return ranked

@@ -55,6 +55,58 @@ def test_openrouter_reranker_reorders_and_rescores_every_candidate() -> None:
     assert client.calls[0]["documents"] == ["alpha", "beta"]
 
 
+def test_openrouter_reranker_sorts_unsorted_provider_results_by_score() -> None:
+    reranker = OpenRouterReranker(
+        _OpenRouterClient(
+            {
+                "results": [
+                    {"index": 0, "relevance_score": 0.2},
+                    {"index": 2, "relevance_score": 0.9},
+                    {"index": 1, "relevance_score": 0.5},
+                ]
+            }
+        ),
+        "ranker",
+    )
+
+    ranked = reranker.rerank(
+        "query",
+        [_candidate("alpha", 0), _candidate("beta", 1), _candidate("gamma", 2)],
+    )
+
+    assert [(item.chunk.text, item.score) for item in ranked] == [
+        ("gamma", 0.9),
+        ("beta", 0.5),
+        ("alpha", 0.2),
+    ]
+
+
+def test_openrouter_reranker_stable_ties_follow_original_candidate_order() -> None:
+    reranker = OpenRouterReranker(
+        _OpenRouterClient(
+            {
+                "results": [
+                    {"index": 2, "relevance_score": 0.8},
+                    {"index": 1, "relevance_score": 0.8},
+                    {"index": 0, "relevance_score": 0.1},
+                ]
+            }
+        ),
+        "ranker",
+    )
+
+    ranked = reranker.rerank(
+        "query",
+        [_candidate("alpha", 0), _candidate("beta", 1), _candidate("gamma", 2)],
+    )
+
+    assert [(item.chunk.text, item.score) for item in ranked] == [
+        ("beta", 0.8),
+        ("gamma", 0.8),
+        ("alpha", 0.1),
+    ]
+
+
 @pytest.mark.parametrize(
     ("results", "message"),
     [
