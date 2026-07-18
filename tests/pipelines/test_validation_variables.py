@@ -141,11 +141,22 @@ class TestDeclarations:
 
     def test_input_without_default_is_required_and_clean(self) -> None:
         definition = _definition(
-            arguments=[
-                PipelineInputArgument(name="mode", type=VariableType.STRING, required=True)
-            ]
+            arguments=[PipelineInputArgument(name="mode", type=VariableType.STRING, required=True)]
         )
         assert _issues(definition) == []
+
+    def test_duplicate_enum_choices_flagged(self) -> None:
+        definition = _definition(
+            arguments=[
+                PipelineInputArgument(
+                    name="mode",
+                    type=VariableType.ENUM,
+                    default="focused",
+                    choices=["focused", "focused", "broad"],
+                )
+            ]
+        )
+        assert any("duplicate choices" in message for message in _issues(definition))
 
     def test_accepted_name_without_input_variable_flagged(self) -> None:
         node = PipelineNodeDefinition(

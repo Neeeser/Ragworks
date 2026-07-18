@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -54,6 +54,62 @@ describe("VariablesPanel", () => {
     expect(next[0].expose_to_llm).toBe(true);
   });
 
+  it.each(["string", "boolean", "enum"] as const)(
+    "makes a new %s input required instead of installing a default",
+    async (type) => {
+      const onChange = renderPanel([
+        {
+          name: "required_value",
+          type,
+          source: "value",
+          value: type === "boolean" ? false : type === "enum" ? "focused" : "text",
+          choices: type === "enum" ? ["focused", "broad"] : undefined,
+        },
+      ]);
+      await userEvent.click(screen.getByText("required_value"));
+      await userEvent.click(screen.getByRole("combobox", { name: "Source" }));
+      await userEvent.click(screen.getByRole("option", { name: "Input" }));
+
+      const next = onChange.mock.calls.at(-1)?.[0] as PipelineVariable[];
+      expect(next[0].source).toBe("input");
+      expect(next[0].value).toBeNull();
+    },
+  );
+
+  it("keeps an input required when its type changes", async () => {
+    const onChange = renderPanel([
+      { name: "required_value", type: "integer", source: "input", value: null },
+    ]);
+    await userEvent.click(screen.getByText("required_value"));
+    await userEvent.click(screen.getByRole("combobox", { name: "Type" }));
+    await userEvent.click(screen.getByRole("option", { name: "String" }));
+
+    const next = onChange.mock.calls.at(-1)?.[0] as PipelineVariable[];
+    expect(next[0].type).toBe("string");
+    expect(next[0].value).toBeNull();
+  });
+
+  it.each([
+    { type: "string" as const, value: "text" },
+    { type: "boolean" as const, value: false },
+    { type: "enum" as const, value: "focused", choices: ["focused", "broad"] },
+  ])("clears a $type input default back to required", async (variable) => {
+    const onChange = renderPanel([{ name: "required_value", source: "input", ...variable }]);
+    const user = userEvent.setup();
+    await user.click(screen.getByText("required_value"));
+
+    const control = screen.getByLabelText("Default");
+    if (variable.type === "string") {
+      await user.clear(control);
+    } else {
+      await user.click(control);
+      await user.click(screen.getByRole("option", { name: "No default" }));
+    }
+
+    const next = onChange.mock.calls.at(-1)?.[0] as PipelineVariable[];
+    expect(next[0].value).toBeNull();
+  });
+
   it("adds a variable with a non-colliding name", async () => {
     const onChange = renderPanel([{ name: "variable", type: "integer", value: 1 }]);
     await userEvent.click(screen.getByRole("button", { name: "Add variable" }));
@@ -85,5 +141,26 @@ describe("VariablesPanel", () => {
   it("flags a reserved name on the row", async () => {
     renderPanel([{ name: "query", type: "string", value: "x" }]);
     expect(screen.getByText("'query' is reserved.")).toBeInTheDocument();
+  });
+
+  it("deduplicates enum choices while preserving their first-seen order", async () => {
+    const onChange = renderPanel([
+      {
+        name: "mode",
+        type: "enum",
+        source: "input",
+        value: "focused",
+        choices: ["focused", "broad"],
+      },
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByText("mode"));
+    const choices = screen.getByLabelText("Choices");
+    fireEvent.change(choices, {
+      target: { value: "focused, focused, broad, focused" },
+    });
+
+    const next = onChange.mock.calls.at(-1)?.[0] as PipelineVariable[];
+    expect(next[0].choices).toEqual(["focused", "broad"]);
   });
 });

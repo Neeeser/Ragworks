@@ -209,7 +209,7 @@ function typePatch(variable: PipelineVariable, type: VariableType): Partial<Pipe
   const source = variableSource(variable);
   return {
     type,
-    value: source === "expression" ? null : DEFAULT_VALUES[type],
+    value: source === "expression" || source === "input" ? null : DEFAULT_VALUES[type],
     expression: type === "model" ? null : variable.expression,
     source: type === "model" && source !== "value" ? "value" : variable.source,
     choices: type === "enum" ? (variable.choices ?? []) : undefined,
@@ -223,7 +223,7 @@ function sourcePatch(variable: PipelineVariable, next: VariableSource): Partial<
   return {
     source: next,
     expression: next === "expression" ? "" : null,
-    value: next === "expression" ? null : DEFAULT_VALUES[variable.type],
+    value: next === "expression" || next === "input" ? null : DEFAULT_VALUES[variable.type],
     expose_to_llm: next === "input" ? (variable.expose_to_llm ?? false) : undefined,
     minimum: next === "input" ? variable.minimum : undefined,
     maximum: next === "input" ? variable.maximum : undefined,
@@ -300,7 +300,10 @@ function VariableEditor({
                 choices: event.target.value
                   .split(",")
                   .map((choice) => choice.trim())
-                  .filter(Boolean),
+                  .filter(
+                    (choice, index, choices) =>
+                      Boolean(choice) && choices.indexOf(choice) === index,
+                  ),
               })
             }
           />

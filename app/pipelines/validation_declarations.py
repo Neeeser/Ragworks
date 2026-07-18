@@ -51,9 +51,10 @@ def variabledeclaration_issues(
     variable: PipelineVariable,
 ) -> list[PipelineValidationIssue]:
     """Semantic checks for one variable declaration, per its source."""
+    issues = _enum_choice_issues(variable)
     if variable.source is VariableSource.INPUT:
-        return _input_variable_issues(variable)
-    issues: list[PipelineValidationIssue] = []
+        issues.extend(_input_variable_issues(variable))
+        return issues
     if variable.source is VariableSource.EXPRESSION:
         if variable.expression is None:
             issues.append(
@@ -80,6 +81,17 @@ def variabledeclaration_issues(
         )
     issues.extend(bounds_issues(variable.name, variable.minimum, variable.maximum))
     return issues
+
+
+def _enum_choice_issues(variable: PipelineVariable) -> list[PipelineValidationIssue]:
+    """Reject ambiguous enum declarations before they reach keyed UI controls."""
+    if variable.type is VariableType.ENUM and len(set(variable.choices)) != len(variable.choices):
+        return [
+            declaration_issue(
+                f"Variable '{variable.name}': enum variables cannot contain duplicate choices."
+            )
+        ]
+    return []
 
 
 def _input_variable_issues(variable: PipelineVariable) -> list[PipelineValidationIssue]:

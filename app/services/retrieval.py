@@ -69,11 +69,12 @@ class RetrievalService:  # pylint: disable=too-few-public-methods
         try:
             result = runner.execute(handle)
             payload = self._extract_retrieval_payload(result.terminal_outputs)
+            effective_top_k = handle.context.top_k if handle.context.top_k is not None else top_k
             return self._record_and_respond(
                 user=user,
                 collection=collection,
                 query=query,
-                top_k=top_k,
+                top_k=effective_top_k,
                 arguments=arguments,
                 resolved=resolved,
                 payload=payload,

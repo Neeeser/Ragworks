@@ -19,6 +19,7 @@ from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
+from app.telemetry.events import RetrievalQueryRan
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
@@ -404,7 +405,9 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
     """Declared arguments flow into expressions (retriever top_k) and declared
     outputs come back on the response and the recorded QueryEvent."""
     session = pgvector_session
+    recorded_events: list[RetrievalQueryRan] = []
     monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.retrieval.record", recorded_events.append)
     user = _create_user(session)
     collection = _create_collection(session, user)
     _declare_pipeline_variables(
@@ -439,6 +442,7 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
         user, collection, query="capital of France", arguments={"top_k": 2}
     )
 
+    assert response.top_k == 2
     assert response.outputs == {"candidates": 4}
     # The declared top_k argument (2) caps the fused list even though the
     # retriever over-fetched 4 candidates.
@@ -446,5 +450,8 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
 
     event = session.get(models.QueryEvent, response.query_event_id)
     assert event is not None
+    assert event.top_k == 2
     assert event.response_payload["arguments"] == {"top_k": 2}
     assert event.response_payload["outputs"] == {"candidates": 4}
+    assert len(recorded_events) == 1
+    assert recorded_events[0].top_k == 2

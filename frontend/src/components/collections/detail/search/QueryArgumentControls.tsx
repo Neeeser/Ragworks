@@ -51,11 +51,17 @@ function ArgumentControl({
   const ariaLabel = `Argument ${argument.name}`;
   if (argument.type === "boolean") {
     return (
-      <input
-        type="checkbox"
+      <CustomSelect
         aria-label={ariaLabel}
-        checked={value === true}
-        onChange={(event) => onChange(argument.name, event.target.checked)}
+        value={value === true ? "true" : value === false ? "false" : ""}
+        placeholder="—"
+        className="w-28 px-3 py-1.5"
+        options={[
+          { value: "", label: "No value" },
+          { value: "true", label: "true" },
+          { value: "false", label: "false" },
+        ]}
+        onValueChange={(next) => onChange(argument.name, next === "" ? undefined : next === "true")}
       />
     );
   }
