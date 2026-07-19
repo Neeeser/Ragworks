@@ -10,11 +10,12 @@ import { cn } from "@/lib/utils";
 
 import { pipelineNodeTypes } from "../PipelineNode";
 
-import { ActiveFlowNodesContext } from "./active-nodes-context";
+import { ActiveFlowNodesContext, FlowPlaybackTimingContext } from "./active-nodes-context";
+import { buildFlowTiming } from "./flow-timing";
 import { PipelineEdgeRoutingProvider } from "./PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./TypedEdge";
 import { useFlowDotColor } from "./use-flow-dot-color";
-import { useFlowPlayback } from "./use-flow-playback";
+import { DEFAULT_PROCESS_MS, useFlowPlayback } from "./use-flow-playback";
 import { ViewportNodeFocus } from "./ViewportNodeFocus";
 import { ViewportVerticalAnchor } from "./ViewportVerticalAnchor";
 
@@ -91,9 +92,12 @@ const resolveInternalAutoPlay = (
 ): boolean => (externalPlayback ? false : autoPlay);
 
 /**
- * Read-only pipeline graph with synchronized playback: the active node glows
- * while it "processes", then a payload dot rides the actual edge path to the
- * next node. The camera fits the whole graph once and stays put -- pipelines
+ * Read-only pipeline graph with synchronized playback rendered as one
+ * continuous line of light flowing left to right with the DAG: entering the
+ * active node, the line splits around its border — one beam over the top,
+ * one under the bottom — meeting at the exit side when the stage's process
+ * window ends, then a comet rides the actual edge path into the next node.
+ * The camera fits the whole graph once and stays put -- pipelines
  * are small enough that panning per step is disorienting, not helpful.
  */
 export function FlowPlayer({
@@ -121,17 +125,24 @@ export function FlowPlayer({
   // Always created so hook order is stable; inert (autoPlay off, no timers
   // running) whenever an external playback is in charge.
   const internalAutoPlay = resolveInternalAutoPlay(externalPlayback, autoPlay);
+  // Geometry-derived durations: every node beam and edge comet moves at one
+  // continuous speed, calibrated so a reference card takes processMs.
+  const timing = useMemo(
+    () => buildFlowTiming(nodes, edges, processMs ?? DEFAULT_PROCESS_MS),
+    [nodes, edges, processMs],
+  );
   const internalPlayback = useFlowPlayback({
     steps,
     edges,
     autoPlay: internalAutoPlay,
     processMs,
     travelMs,
+    timing,
     loop: loop ?? ambient,
     onRunComplete,
   });
   const playback = externalPlayback ?? internalPlayback;
-  const { activeIndex } = playback;
+  const { activeIndex, travelMsForEdge } = playback;
   const dotColor = useFlowDotColor();
 
   const mergedNodeTypes = useMemo(
@@ -178,8 +189,9 @@ export function FlowPlayer({
   const decoratedEdges = useMemo(
     () =>
       edges.map((edge) => {
-        // The dot's <g> unmounts whenever `traveling` flips off, so each travel
-        // phase remounts it and animateMotion restarts from the edge's start.
+        // The comet's <g> unmounts whenever `traveling` flips off, so each
+        // travel phase remounts it and the CSS animation restarts from the
+        // edge's start.
         const traveling = playback.travelingEdgeIds.has(edge.id);
         return {
           ...edge,
@@ -187,12 +199,17 @@ export function FlowPlayer({
             ...edge.data,
             active: traveling,
             traveling,
-            travelMs: playback.travelMs,
+            travelMs: travelMsForEdge(edge.id),
             visited: playback.visitedEdgeIds.has(edge.id),
           },
         };
       }),
-    [edges, playback.travelingEdgeIds, playback.visitedEdgeIds, playback.travelMs],
+    [edges, playback.travelingEdgeIds, playback.visitedEdgeIds, travelMsForEdge],
+  );
+
+  const playbackTiming = useMemo(
+    () => ({ processMs: playback.processMs, processMsByNodeId: playback.processMsByNodeId }),
+    [playback.processMs, playback.processMsByNodeId],
   );
 
   return (
@@ -201,40 +218,42 @@ export function FlowPlayer({
       aria-hidden={ambient || undefined}
     >
       <ActiveFlowNodesContext.Provider value={activeNodeIds}>
-        <PipelineEdgeRoutingProvider nodes={decoratedNodes}>
-          <ReactFlow
-            nodes={decoratedNodes}
-            edges={decoratedEdges}
-            nodeTypes={mergedNodeTypes}
-            edgeTypes={pipelineEdgeTypes}
-            onNodeClick={
-              ambient
-                ? undefined
-                : (_event, node) => {
-                    if (onNodeSelect) {
-                      onNodeSelect(node.id);
-                      return;
+        <FlowPlaybackTimingContext.Provider value={playbackTiming}>
+          <PipelineEdgeRoutingProvider nodes={decoratedNodes}>
+            <ReactFlow
+              nodes={decoratedNodes}
+              edges={decoratedEdges}
+              nodeTypes={mergedNodeTypes}
+              edgeTypes={pipelineEdgeTypes}
+              onNodeClick={
+                ambient
+                  ? undefined
+                  : (_event, node) => {
+                      if (onNodeSelect) {
+                        onNodeSelect(node.id);
+                        return;
+                      }
+                      const index = stepIndexByNodeId.get(node.id);
+                      if (index !== undefined) playback.seek(index);
                     }
-                    const index = stepIndexByNodeId.get(node.id);
-                    if (index !== undefined) playback.seek(index);
-                  }
-            }
-            fitView
-            fitViewOptions={{ padding: fitViewPadding, maxZoom: 1 }}
-            minZoom={minZoom}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            zoomOnScroll={interactive && !ambient}
-            panOnDrag={(interactive || !compact) && !ambient}
-            preventScrolling={interactive && !ambient}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background gap={18} size={1} color={dotColor} />
-            {anchorNodeId ? <ViewportVerticalAnchor nodeId={anchorNodeId} /> : null}
-            {centerNodeId !== undefined ? <ViewportNodeFocus nodeId={centerNodeId} /> : null}
-          </ReactFlow>
-        </PipelineEdgeRoutingProvider>
+              }
+              fitView
+              fitViewOptions={{ padding: fitViewPadding, maxZoom: 1 }}
+              minZoom={minZoom}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+              zoomOnScroll={interactive && !ambient}
+              panOnDrag={(interactive || !compact) && !ambient}
+              preventScrolling={interactive && !ambient}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background gap={18} size={1} color={dotColor} />
+              {anchorNodeId ? <ViewportVerticalAnchor nodeId={anchorNodeId} /> : null}
+              {centerNodeId !== undefined ? <ViewportNodeFocus nodeId={centerNodeId} /> : null}
+            </ReactFlow>
+          </PipelineEdgeRoutingProvider>
+        </FlowPlaybackTimingContext.Provider>
       </ActiveFlowNodesContext.Provider>
 
       {steps.length > 0 && !ambient ? (

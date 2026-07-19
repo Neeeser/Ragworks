@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { FlowPlaybackTimingContext } from "@/components/pipelines/flow/active-nodes-context";
 import {
   DropPreviewNode,
   PipelineNode,
@@ -184,6 +185,69 @@ describe("PipelineNode", () => {
     expect(screen.getByText("Input")).toBeInTheDocument();
     expect(screen.queryByText("Model")).not.toBeInTheDocument();
     expect(screen.queryByText(/edited setting/)).not.toBeInTheDocument();
+  });
+
+  it("surrounds the active node with split progress beams paced by the playback clock", () => {
+    const data: PipelineNodeData = {
+      label: "Parser",
+      nodeType: "parser.document",
+      inputs: [],
+      outputs: [],
+      config: {},
+    };
+
+    const beamSelector = ".pipeline-node-beam";
+    // Inactive: no beams at all — the light only surrounds the working box.
+    const { container, rerender } = render(<PipelineNode {...nodeProps(data)} />);
+    expect(container.querySelectorAll(beamSelector)).toHaveLength(0);
+
+    // Active without a playback surface: the default process window paces
+    // the flow, which splits into an over-the-top and an under-the-bottom
+    // beam (each with a glow and a core stroke).
+    rerender(<PipelineNode {...nodeProps({ ...data, active: true })} />);
+    expect(container.querySelectorAll(beamSelector)).toHaveLength(4);
+    expect(container.querySelectorAll(".pipeline-node-beam-over")).toHaveLength(2);
+    expect(container.querySelectorAll(".pipeline-node-beam-under")).toHaveLength(2);
+    container.querySelectorAll(beamSelector).forEach((beam) => {
+      expect(beam).toHaveStyle({ animationDuration: "1250ms" });
+      expect(beam).toHaveAttribute("pathLength", "1");
+    });
+    // Both routes share the entry and exit midpoints (`M x,y` … `L x,y`) so
+    // the mirrored beams depart together and arrive together; the routes
+    // between them differ (one over the top, one under the bottom).
+    const overPath = container.querySelector(".pipeline-node-beam-over")?.getAttribute("d") ?? "";
+    const underPath = container.querySelector(".pipeline-node-beam-under")?.getAttribute("d") ?? "";
+    const endpoints = (d: string) => {
+      const points = d.match(/-?[\d.]+,-?[\d.]+/g) ?? [];
+      return { start: points.at(0), end: points.at(-1) };
+    };
+    expect(overPath).not.toEqual(underPath);
+    expect(endpoints(overPath).start).toEqual(endpoints(underPath).start);
+    expect(endpoints(overPath).end).toEqual(endpoints(underPath).end);
+
+    // A playback surface's clock (e.g. the README capture's faster pace)
+    // reaches the beams through the timing context.
+    rerender(
+      <FlowPlaybackTimingContext.Provider value={{ processMs: 550, processMsByNodeId: null }}>
+        <PipelineNode {...nodeProps({ ...data, active: true })} />
+      </FlowPlaybackTimingContext.Provider>,
+    );
+    container.querySelectorAll(beamSelector).forEach((beam) => {
+      expect(beam).toHaveStyle({ animationDuration: "550ms" });
+    });
+
+    // A geometry-derived per-node duration wins over the fallback window, so
+    // taller cards get a longer trip at the same light speed.
+    rerender(
+      <FlowPlaybackTimingContext.Provider
+        value={{ processMs: 550, processMsByNodeId: new Map([["node-1", 820]]) }}
+      >
+        <PipelineNode {...nodeProps({ ...data, active: true })} />
+      </FlowPlaybackTimingContext.Provider>,
+    );
+    container.querySelectorAll(beamSelector).forEach((beam) => {
+      expect(beam).toHaveStyle({ animationDuration: "820ms" });
+    });
   });
 });
 

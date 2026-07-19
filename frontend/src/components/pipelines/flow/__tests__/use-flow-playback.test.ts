@@ -1,11 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
+import { DEFAULT_PROCESS_MS, useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
 
 const steps = [{ nodeIds: ["a"] }, { nodeIds: ["b"] }];
 const edges = [{ id: "a-b", source: "a", target: "b" }];
-const PROCESS_MS = 1000;
+const PROCESS_MS = DEFAULT_PROCESS_MS;
 const TRAVEL_MS = 650;
 
 /** Advance one full step: the node processes, then the payload crosses its edge. */

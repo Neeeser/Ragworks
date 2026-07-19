@@ -13,11 +13,11 @@ export { PIPELINE_EDGE_ROUTING_OPTIONS } from "./PipelineEdgeRoutingProvider";
 export type TypedEdgeData = {
   /** Port data type leaving the source handle; colors the wire. */
   dataType?: string;
-  /** Trace playback: this edge is the one the payload is crossing right now. */
+  /** Trace playback: this edge is the one the flow is crossing right now. */
   active?: boolean;
-  /** Trace playback: run the payload dot along the path (implies active). */
+  /** Trace playback: run the flow comet along the path (implies active). */
   traveling?: boolean;
-  /** Duration of one dot crossing, in ms. */
+  /** Duration of one comet crossing, in ms. */
   travelMs?: number;
   /** Playback edges already crossed stay softly lit. */
   visited?: boolean;
@@ -54,12 +54,12 @@ const towardHandleCenter = (position: Position | undefined): { x: number; y: num
 };
 
 /**
- * The payload dot's motion path. React Flow anchors edges at the handle's
+ * The flow comet's motion path. React Flow anchors edges at the handle's
  * outer edge while the visible port dot is centered one handle-radius
- * inward — a dot frozen at the raw path end rests visibly offset beside the
- * gray handle dot, so the travel path is extended to both handle centers.
+ * inward — a comet ending at the raw path end stops visibly short of the
+ * port dot, so the travel path is extended to both handle centers.
  */
-const buildDotPath = (path: string, coordinates: EdgeCoordinates) => {
+const buildCometPath = (path: string, coordinates: EdgeCoordinates) => {
   const start = towardHandleCenter(coordinates.sourcePosition);
   const end = towardHandleCenter(coordinates.targetPosition);
   const startX = coordinates.sourceX + start.x;
@@ -89,8 +89,9 @@ const resolveEdgeAppearance = (data: TypedEdgeData | undefined, selected: boolea
 
 /**
  * Orthogonal step edge colored by the data type it carries -- the same color
- * language as the port dots -- with an optional animated payload dot for
- * trace playback. Used by both the editor canvas and the read-only player.
+ * language as the port dots -- with an animated flow comet (a light segment
+ * riding the wire, globals.css `pipeline-edge-comet`) for trace playback.
+ * Used by both the editor canvas and the read-only player.
  */
 export function TypedEdge({
   id,
@@ -118,6 +119,7 @@ export function TypedEdge({
   // Theme-aware color via CSS var; applied through `style` (var() is invalid in
   // SVG presentation attributes like fill=/stroke=, valid only in inline style).
   const { color, emphasized, lit, dimmed, travelMs } = resolveEdgeAppearance(data, selected);
+  const cometPath = data?.traveling ? buildCometPath(path, coordinates) : null;
 
   return (
     <>
@@ -131,22 +133,35 @@ export function TypedEdge({
           transition: "stroke-width 150ms ease, opacity 200ms ease",
         }}
       />
-      {data?.traveling ? (
-        <g>
-          <circle r={9} style={{ fill: color }} opacity={0.25}>
-            <animateMotion
-              dur={`${travelMs}ms`}
-              fill="freeze"
-              path={buildDotPath(path, coordinates)}
+      {cometPath !== null ? (
+        // Hidden under reduced motion: the emphasized base edge above then
+        // carries the crossing indication on its own.
+        <g aria-hidden className="motion-reduce:hidden">
+          <g opacity={0.35}>
+            <path
+              className="pipeline-edge-comet"
+              d={cometPath}
+              pathLength={1}
+              fill="none"
+              strokeLinecap="round"
+              strokeWidth={7}
+              style={{ stroke: color, animationDuration: `${travelMs}ms` }}
             />
-          </circle>
-          <circle r={4.5} strokeWidth={1} style={{ fill: color, stroke: "var(--canvas)" }}>
-            <animateMotion
-              dur={`${travelMs}ms`}
-              fill="freeze"
-              path={buildDotPath(path, coordinates)}
-            />
-          </circle>
+          </g>
+          <path
+            className="pipeline-edge-comet"
+            d={cometPath}
+            pathLength={1}
+            fill="none"
+            strokeLinecap="round"
+            strokeWidth={3}
+            style={{
+              // A whitened core reads as light moving over the lit wire
+              // instead of a second stroke of the same color.
+              stroke: `color-mix(in srgb, ${color} 55%, white)`,
+              animationDuration: `${travelMs}ms`,
+            }}
+          />
         </g>
       ) : null}
     </>

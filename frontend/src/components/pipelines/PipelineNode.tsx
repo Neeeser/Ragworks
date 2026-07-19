@@ -2,10 +2,12 @@
 
 import { Handle, Position } from "@xyflow/react";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { useFlowNodeActive } from "./flow/active-nodes-context";
+import { useFlowNodeActive, useFlowPlaybackTiming } from "./flow/active-nodes-context";
+import { BEAM_CORNER_RADIUS } from "./flow/flow-timing";
 import { PineconeIcon } from "./icons/PineconeIcon";
 import { PostgresIcon } from "./icons/PostgresIcon";
 import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
@@ -183,6 +185,92 @@ function PortRow({
   );
 }
 
+/** Fallback card size until the ResizeObserver delivers a measurement. */
+const BEAM_FALLBACK_SIZE = { width: 264, height: 120 };
+
+/**
+ * One beam route from the card's entry midpoint to its exit midpoint —
+ * `over` runs up and across the top edge, `under` mirrors it along the
+ * bottom. The two routes are exact mirrors, so equal-duration linear
+ * traversals keep both beam heads on the same horizontal progress at all
+ * times and land them on the exit point simultaneously.
+ */
+const buildBeamPath = (width: number, height: number, side: "over" | "under"): string => {
+  const r = Math.min(BEAM_CORNER_RADIUS, width / 2, height / 2);
+  const mid = height / 2;
+  if (side === "over") {
+    return `M 0,${mid} L 0,${r} Q 0,0 ${r},0 L ${width - r},0 Q ${width},0 ${width},${r} L ${width},${mid}`;
+  }
+  return `M 0,${mid} L 0,${height - r} Q 0,${height} ${r},${height} L ${width - r},${height} Q ${width},${height} ${width},${height - r} L ${width},${mid}`;
+};
+
+/**
+ * The active node's progress beams: the incoming line splits at the entry
+ * side into two light segments — one riding over the top of the card, one
+ * under the bottom — that stay horizontally in step and meet at the exit
+ * side in exactly one process window (globals.css `pipeline-node-beam`,
+ * a single run-once dash traversal on two mirrored pathLength-normalized
+ * paths built from the card's measured size). Mounted only while the node
+ * is active, so each activation restarts the flow; hidden under reduced
+ * motion, where the full-strength ring carries the active indication.
+ */
+function NodeBeam({ nodeId }: { nodeId: string }) {
+  const { processMs, processMsByNodeId } = useFlowPlaybackTiming();
+  const beamMs = processMsByNodeId?.get(nodeId) ?? processMs;
+  const [size, setSize] = useState(BEAM_FALLBACK_SIZE);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 0 && rect.height > 0) {
+        setSize({ width: rect.width, height: rect.height });
+      }
+    });
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, []);
+
+  const style = { stroke: "var(--accent-cyan)", animationDuration: `${beamMs}ms` };
+  return (
+    <svg
+      ref={svgRef}
+      aria-hidden
+      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible motion-reduce:hidden"
+    >
+      {(["over", "under"] as const).map((side) => {
+        const d = buildBeamPath(size.width, size.height, side);
+        return (
+          <g key={side}>
+            <g opacity={0.35}>
+              <path
+                className={cn("pipeline-node-beam", `pipeline-node-beam-${side}`)}
+                d={d}
+                pathLength={1}
+                fill="none"
+                strokeLinecap="round"
+                strokeWidth={7}
+                style={style}
+              />
+            </g>
+            <path
+              className={cn("pipeline-node-beam", `pipeline-node-beam-${side}`)}
+              d={d}
+              pathLength={1}
+              fill="none"
+              strokeLinecap="round"
+              strokeWidth={2.5}
+              style={style}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNodeData>>) {
   const family = resolveNodeFamily(data.nodeType);
   const familyStyles = getNodeFamilyStyles(family);
@@ -208,7 +296,10 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         familyStyles.border,
         familyStyles.glow,
         selected && "ring-2 ring-accent-violet/70",
-        active && "ring-2 ring-accent-cyan/80",
+        // The beams run on this ring as their track; under reduced motion
+        // they are hidden, so the ring returns to full strength as the
+        // static active indicator.
+        active && "ring-2 ring-accent-cyan/40 motion-reduce:ring-accent-cyan/80",
         data.itemFocus === "traveled" && "border-accent-cyan/70",
         data.itemFocus === "absent" && "opacity-30",
         hasErrors && "border-data-neg/60",
@@ -297,6 +388,8 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
           · {hiddenOverrides} edited setting{hiddenOverrides === 1 ? "" : "s"}
         </p>
       ) : null}
+
+      {active ? <NodeBeam nodeId={id} /> : null}
     </div>
   );
 }

@@ -361,6 +361,83 @@ html {
   stroke: var(--data-neg);
 }
 
+/* Playback motion: one continuous line of light per run, flowing left to
+   right with the DAG. Entering the active node, the line splits into two
+   beams that surround the border — one over the top, one under the bottom —
+   and meet again at the exit side in exactly one process window (their
+   spread around the box doubles as stage progress); then a comet rides the
+   outgoing edge into the next node. All are dash tricks on pathLength=1
+   shapes, and all take their duration from the playback clock (inline
+   animation-duration) so the light can never drift from the step timing.
+   No-ops under reduced motion — the static active ring and the emphasized
+   edge remain as the indicators. */
+@keyframes pipeline-node-beam {
+  0% {
+    /* Beam just short of the path start, about to emerge at the entry
+       midpoint (each beam path runs entry → around its side → exit). */
+    stroke-dashoffset: 0.18;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    /* Head at the exit midpoint; both mirrored beams arrive together and
+       the light fades as the outgoing comet takes over. */
+    stroke-dashoffset: -1;
+    opacity: 0;
+  }
+}
+
+@keyframes pipeline-edge-comet {
+  0% {
+    /* Comet just short of the path start, about to emerge from the handle. */
+    stroke-dashoffset: 0.26;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    /* Tail past the path end: the comet has flowed fully into the target. */
+    stroke-dashoffset: -1;
+    opacity: 0;
+  }
+}
+
+.pipeline-node-beam {
+  stroke-dasharray: 0.18 1;
+  animation-name: pipeline-node-beam;
+  animation-timing-function: linear;
+  /* Runs once per activation (the beam remounts when a node becomes
+     active) and holds its faded end state — looping would restart the
+     traversal mid-stage and chop it off when the step advances. */
+  animation-fill-mode: forwards;
+}
+
+.pipeline-edge-comet {
+  stroke-dasharray: 0.26 1;
+  animation-name: pipeline-edge-comet;
+  /* Linear, like the node beams — an eased comet decelerates into the node
+     while the beams depart at constant speed, reading as a hitch at every
+     handoff instead of one continuous line of light. */
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-node-beam,
+  .pipeline-edge-comet {
+    animation: none !important;
+  }
+}
+
 /* Staggered first-paint entrance (eyebrow → headline → actions). Delay is
    set per-element via inline style. No-ops under reduced motion. */
 @keyframes landingRise {
