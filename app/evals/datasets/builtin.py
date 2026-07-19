@@ -24,11 +24,19 @@ _BEIR_HOST = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets
 
 @dataclass(frozen=True)
 class BuiltinEntry:
-    """One curated benchmark in the registry, before it is imported."""
+    """One curated benchmark in the registry, before it is imported.
+
+    `domain` and `measures` are the user-facing framing: the corpus/query
+    domain, and what a good or bad score on this benchmark actually tells you
+    about a pipeline. Each entry is its own per-dataset BEIR archive — importing
+    one downloads only that dataset's zip.
+    """
 
     key: str
     name: str
     description: str
+    domain: str
+    measures: str
     url: str
     num_queries: int
     num_corpus_docs: int
@@ -39,6 +47,12 @@ _ENTRIES: tuple[BuiltinEntry, ...] = (
         key="scifact",
         name="SciFact",
         description="Scientific claim verification against a corpus of abstracts.",
+        domain="Biomedical literature",
+        measures=(
+            "Claim-style queries against dense scientific abstracts. Scores track"
+            " precise semantic matching in technical prose; keyword overlap alone"
+            " does poorly here."
+        ),
         url=f"{_BEIR_HOST}/scifact.zip",
         num_queries=300,
         num_corpus_docs=5183,
@@ -47,6 +61,13 @@ _ENTRIES: tuple[BuiltinEntry, ...] = (
         key="nfcorpus",
         name="NFCorpus",
         description="Medical information-retrieval queries over PubMed documents.",
+        domain="Medical / nutrition",
+        measures=(
+            "Plain-language health questions against clinical PubMed text. The"
+            " lay-to-clinical vocabulary gap is the difficulty: lexical-only"
+            " retrieval degrades, so it separates embedding quality from term"
+            " matching."
+        ),
         url=f"{_BEIR_HOST}/nfcorpus.zip",
         num_queries=323,
         num_corpus_docs=3633,
@@ -55,6 +76,12 @@ _ENTRIES: tuple[BuiltinEntry, ...] = (
         key="arguana",
         name="ArguAna",
         description="Counter-argument retrieval for debate-style claims.",
+        domain="Argumentation / debate",
+        measures=(
+            "Finds the best counterargument to a full argument passage. Query and"
+            " document are both long, so it stresses long-text embeddings and"
+            " chunking choices more than short-query benchmarks."
+        ),
         url=f"{_BEIR_HOST}/arguana.zip",
         num_queries=1406,
         num_corpus_docs=8674,
@@ -63,6 +90,12 @@ _ENTRIES: tuple[BuiltinEntry, ...] = (
         key="fiqa",
         name="FiQA-2018",
         description="Financial-domain opinion question answering over forum posts.",
+        domain="Finance",
+        measures=(
+            "Opinion questions over informal, jargon-heavy forum and StackExchange"
+            " posts. Scores reflect robustness to noisy user-generated text and"
+            " domain slang."
+        ),
         url=f"{_BEIR_HOST}/fiqa.zip",
         num_queries=648,
         num_corpus_docs=57638,

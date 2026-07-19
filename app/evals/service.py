@@ -81,6 +81,8 @@ class EvalService:
                 key=entry.key,
                 name=entry.name,
                 description=entry.description,
+                domain=entry.domain,
+                measures=entry.measures,
                 num_queries=entry.num_queries,
                 num_corpus_docs=entry.num_corpus_docs,
             )

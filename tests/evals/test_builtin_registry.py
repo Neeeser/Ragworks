@@ -33,7 +33,12 @@ def test_registry_lists_curated_datasets() -> None:
     for entry in entries:
         assert entry.name
         assert entry.description
+        assert entry.domain
+        assert entry.measures
         assert entry.url
+        # Every entry is its own per-dataset archive: importing one benchmark
+        # never downloads the others.
+        assert entry.url.endswith(f"{entry.key}.zip")
 
 
 def test_get_builtin_rejects_unknown_key() -> None:

@@ -34,12 +34,16 @@ class BuiltinDatasetInfo(BaseModel):
 
     `key` is the stable registry identifier passed to import a builtin
     benchmark; the counts are advisory (from the registry manifest) so the UI
-    can warn about run cost before download.
+    can warn about run cost before download. `domain` and `measures` tell the
+    user what the benchmark's corpus covers and what a score on it indicates,
+    so results across benchmarks can be read as domain strengths/weaknesses.
     """
 
     key: str
     name: str
     description: str
+    domain: str
+    measures: str
     num_queries: int
     num_corpus_docs: int
 
