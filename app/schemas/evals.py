@@ -110,6 +110,15 @@ class EvalRunConfig(BaseModel):
         description="Random non-gold docs added to the corpus alongside every gold doc.",
     )
     seed: int = Field(default=0, description="Sampling seed; fixes reproducibility.")
+    concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=8,
+        description=(
+            "Retrieval queries (and corpus ingestions) in flight at once. Provider"
+            " capacity is not discoverable, so this is a user-set ceiling."
+        ),
+    )
     k_values: list[int] = Field(
         default_factory=lambda: list(DEFAULT_K_VALUES),
         description="Cutoffs at which @k metrics are computed.",

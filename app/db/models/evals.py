@@ -123,6 +123,9 @@ class EvalRunItem(SQLModel, table=True):
     pipeline_run_id: UUID | None = Field(
         default=None, foreign_key="pipeline_runs.id", nullable=True, index=True
     )
+    query_event_id: UUID | None = Field(
+        default=None, foreign_key="query_events.id", nullable=True, index=True
+    )
     result_count: int = Field(default=0, sa_column=Column(Integer, nullable=False))
     gold_doc_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     retrieved: list[dict[str, Any]] = Field(

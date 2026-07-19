@@ -1,17 +1,21 @@
 """The eval run engine: provision, evaluate every query, aggregate, attribute.
 
 `run_eval` is the background-task entry point (own `session_scope`, never
-re-raises — the run row records the outcome). Each query runs through the real
-retrieval path (`RetrievalService.query_collection`), its `EvalRunItem` is
-persisted the moment it completes (live progress, restart resilience), and
-cancellation is checked cooperatively between queries. On completion the runner
-aggregates metrics, builds the node-addressed recall funnel from the recorded
-traces, and stores both on the run row.
+re-raises — the run row records the outcome). Queries run through the real
+retrieval path (`RetrievalService.query_collection`) on a worker pool sized by
+the run's `concurrency` — each worker opens its own session, so the main
+session stays the single owner of the run row, item persistence, and progress.
+Each `EvalRunItem` is persisted the moment it completes (live progress, restart
+resilience), and cancellation is checked cooperatively between completions. On
+completion the runner aggregates metrics, builds the node-addressed recall
+funnel from the recorded traces, and stores both on the run row.
 """
 
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session, col, select
@@ -44,6 +48,81 @@ def run_eval(run_id: UUID) -> None:
             # Deliberately broad: the failed status is already persisted on the
             # run row; a background task has no caller left to re-raise to.
             logger.exception("Eval run %s failed", run_id)
+
+
+@dataclass(frozen=True)
+class _QueryContext:
+    """Shared, read-only inputs every query evaluation worker needs."""
+
+    run_id: UUID
+    user_id: UUID
+    collection_id: UUID
+    top_k: int
+    config: EvalRunConfig
+    mapping: dict[str, str]
+    indexed_external_ids: set[str]
+
+
+@dataclass(frozen=True)
+class _QueryTask:
+    """One sampled query, reduced to primitives safe to hand a worker thread."""
+
+    external_id: str
+    text: str
+    gold: frozenset[str]
+
+
+def _evaluate_task(
+    context: _QueryContext, task: _QueryTask
+) -> tuple[models.EvalRunItem, QueryFunnelInput | None]:
+    """Evaluate one query in its own session; a failure is recorded, never fatal.
+
+    Runs on a worker thread: everything it touches comes from `context`/`task`
+    primitives or its own `session_scope`, never the runner's session.
+    """
+    with session_scope() as session:
+        user = session.get(models.User, context.user_id)
+        collection = session.get(models.Collection, context.collection_id)
+        if user is None or collection is None:
+            raise ValueError("Eval run lost its user or collection mid-run.")
+        try:
+            response = RetrievalService(session).query_collection(
+                user,
+                collection,
+                task.text,
+                top_k=context.top_k,
+                arguments=context.config.run_inputs or None,
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            # One provider hiccup fails one item, not the whole run.
+            logger.warning("Eval query %s failed: %s", task.external_id, exc)
+            return (
+                failed_item(context.run_id, task.external_id, task.text, set(task.gold), exc),
+                None,
+            )
+        return score_query(
+            run_id=context.run_id,
+            query_external_id=task.external_id,
+            query_text=task.text,
+            gold=set(task.gold),
+            config=context.config,
+            mapping=context.mapping,
+            indexed_external_ids=context.indexed_external_ids,
+            response=response,
+            node_runs=_load_node_runs(session, response.pipeline_run_id),
+        )
+
+
+def _load_node_runs(session: Session, pipeline_run_id: UUID | None) -> list[models.PipelineNodeRun]:
+    """Load the recorded node runs for one query's pipeline run, in order."""
+    if pipeline_run_id is None:
+        return []
+    statement = (
+        select(models.PipelineNodeRun)
+        .where(col(models.PipelineNodeRun.run_id) == pipeline_run_id)
+        .order_by(col(models.PipelineNodeRun.sequence_index))
+    )
+    return list(session.exec(statement).all())
 
 
 class EvalRunner:
@@ -81,7 +160,7 @@ class EvalRunner:
         self.session.add(run)
         self.session.commit()
 
-        provision = self._provision(run, user, dataset, plan)
+        provision = self._provision(run, user, dataset, plan, config)
         if self._cancelled(run):
             return
 
@@ -120,12 +199,14 @@ class EvalRunner:
             seed=config.seed,
         )
 
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _provision(
         self,
         run: models.EvalRun,
         user: models.User,
         dataset: models.EvalDataset,
         plan: SamplePlan,
+        config: EvalRunConfig,
     ) -> ProvisionResult:
         """Ensure the eval collection exists and is ingested; track progress."""
         pipelines = PipelineService(self.session)
@@ -152,6 +233,7 @@ class EvalRunner:
                 cache_key=cache_key,
                 ingestion_pipeline=ingestion,
                 retrieval_pipeline=retrieval,
+                concurrency=config.concurrency,
             ),
             corpus_docs=corpus_docs,
             on_document_done=bump,
@@ -176,73 +258,45 @@ class EvalRunner:
         mapping: dict[str, str],
         indexed_external_ids: set[str],
     ) -> list[QueryFunnelInput]:
-        """Run every sampled query, persisting each item as it completes."""
-        retrieval = RetrievalService(self.session)
-        corpus = set(plan.corpus_doc_ids)
-        top_k = self._effective_top_k(config)
-        funnel_inputs: list[QueryFunnelInput] = []
-        for query in queries:
-            if self._cancelled(run):
-                return funnel_inputs
-            gold = qrels.get(query.external_query_id, set()) & corpus
-            item, funnel_input = self._evaluate_one(
-                retrieval=retrieval,
-                run=run,
-                user=user,
-                collection=collection,
-                query=query,
-                gold=gold,
-                config=config,
-                top_k=top_k,
-                mapping=mapping,
-                indexed_external_ids=indexed_external_ids,
-            )
-            self.runs.add_item(item)
-            if funnel_input is not None:
-                funnel_inputs.append(funnel_input)
-            run.progress_done += 1
-            self.session.add(run)
-            self.session.commit()
-        return funnel_inputs
+        """Fan sampled queries across the worker pool, persisting each result.
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
-    def _evaluate_one(
-        self,
-        *,
-        retrieval: RetrievalService,
-        run: models.EvalRun,
-        user: models.User,
-        collection: models.Collection,
-        query: models.EvalDatasetQuery,
-        gold: set[str],
-        config: EvalRunConfig,
-        top_k: int,
-        mapping: dict[str, str],
-        indexed_external_ids: set[str],
-    ) -> tuple[models.EvalRunItem, QueryFunnelInput | None]:
-        """Evaluate one query; a failure is recorded on the item, never fatal."""
-        try:
-            response = retrieval.query_collection(
-                user,
-                collection,
-                query.text,
-                top_k=top_k,
-                arguments=config.run_inputs or None,
-            )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            # One provider hiccup fails one item, not the whole run.
-            logger.warning("Eval query %s failed: %s", query.external_query_id, exc)
-            return failed_item(run, query, gold, exc), None
-        return score_query(
-            run=run,
-            query=query,
-            gold=gold,
+        Workers only retrieve and score (own sessions); the main thread stays
+        the single writer of items, progress, and the cancellation check.
+        """
+        corpus = set(plan.corpus_doc_ids)
+        context = _QueryContext(
+            run_id=run.id,
+            user_id=user.id,
+            collection_id=collection.id,
+            top_k=self._effective_top_k(config),
             config=config,
             mapping=mapping,
             indexed_external_ids=indexed_external_ids,
-            response=response,
-            node_runs=self._node_runs(response.pipeline_run_id),
         )
+        tasks = [
+            _QueryTask(
+                external_id=query.external_query_id,
+                text=query.text,
+                gold=frozenset(qrels.get(query.external_query_id, set()) & corpus),
+            )
+            for query in queries
+        ]
+        funnel_inputs: list[QueryFunnelInput] = []
+        with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
+            futures = [pool.submit(_evaluate_task, context, task) for task in tasks]
+            for future in as_completed(futures):
+                if self._cancelled(run):
+                    for pending in futures:
+                        pending.cancel()
+                    break
+                item, funnel_input = future.result()
+                self.runs.add_item(item)
+                if funnel_input is not None:
+                    funnel_inputs.append(funnel_input)
+                run.progress_done += 1
+                self.session.add(run)
+                self.session.commit()
+        return funnel_inputs
 
     def _finalize(self, run: models.EvalRun, funnel_inputs: list[QueryFunnelInput]) -> None:
         """Aggregate metrics and the funnel, then mark the run completed."""
@@ -277,17 +331,6 @@ class EvalRunner:
         for judgment in self.datasets.list_judgments(dataset_id):
             qrels.setdefault(judgment.query_external_id, set()).add(judgment.doc_external_id)
         return qrels
-
-    def _node_runs(self, pipeline_run_id: UUID | None) -> list[models.PipelineNodeRun]:
-        """Load the recorded node runs for one query's pipeline run, in order."""
-        if pipeline_run_id is None:
-            return []
-        statement = (
-            select(models.PipelineNodeRun)
-            .where(col(models.PipelineNodeRun.run_id) == pipeline_run_id)
-            .order_by(col(models.PipelineNodeRun.sequence_index))
-        )
-        return list(self.session.exec(statement).all())
 
     def _retrieval_edges(self, run: models.EvalRun) -> list[tuple[str, str]]:
         """Read (source, target) edges off the retrieval pipeline definition."""

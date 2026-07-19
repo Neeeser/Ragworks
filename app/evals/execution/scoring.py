@@ -9,8 +9,10 @@ funnel input for this query.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from uuid import UUID
 
 from app.db import models
+from app.evals.attribution.constants import INGESTION_NODE_ID
 from app.evals.attribution.funnel import QueryFunnelInput
 from app.evals.execution.trace_extraction import extract_node_traces
 from app.evals.metrics.registry import evaluate_metrics
@@ -21,8 +23,9 @@ from app.schemas.retrieval import CollectionQueryResponse
 # pylint: disable-next=too-many-arguments
 def score_query(
     *,
-    run: models.EvalRun,
-    query: models.EvalDatasetQuery,
+    run_id: UUID,
+    query_external_id: str,
+    query_text: str,
     gold: set[str],
     config: EvalRunConfig,
     mapping: Mapping[str, str],
@@ -47,10 +50,11 @@ def score_query(
         nodes=node_traces,
     )
     item = models.EvalRunItem(
-        run_id=run.id,
-        query_external_id=query.external_query_id,
-        query_text=query.text,
+        run_id=run_id,
+        query_external_id=query_external_id,
+        query_text=query_text,
         pipeline_run_id=response.pipeline_run_id,
+        query_event_id=response.query_event_id,
         result_count=len(response.chunks),
         gold_doc_ids=sorted(gold),
         retrieved=[
@@ -62,25 +66,34 @@ def score_query(
             for chunk in response.chunks
         ],
         metrics=metrics,
+        # The ingestion sentinel leads so the per-document journey starts at
+        # indexed coverage, mirroring the run-level funnel's stage 0.
         per_node_funnel=[
-            {"node_id": trace.node_id, "document_ids": trace.document_ids}
-            for trace in node_traces
+            {
+                "node_id": INGESTION_NODE_ID,
+                "document_ids": sorted(gold & indexed_external_ids),
+            },
+            *(
+                {"node_id": trace.node_id, "document_ids": trace.document_ids}
+                for trace in node_traces
+            ),
         ],
     )
     return item, funnel_input
 
 
 def failed_item(
-    run: models.EvalRun,
-    query: models.EvalDatasetQuery,
+    run_id: UUID,
+    query_external_id: str,
+    query_text: str,
     gold: set[str],
     exc: Exception,
 ) -> models.EvalRunItem:
     """Record one query whose retrieval raised, without failing the run."""
     return models.EvalRunItem(
-        run_id=run.id,
-        query_external_id=query.external_query_id,
-        query_text=query.text,
+        run_id=run_id,
+        query_external_id=query_external_id,
+        query_text=query_text,
         gold_doc_ids=sorted(gold),
         failed=True,
         error_message=str(exc) or exc.__class__.__name__,

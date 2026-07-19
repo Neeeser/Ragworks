@@ -16,12 +16,14 @@ import io
 import json
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, col, select
 
 from app.db import models
+from app.db.engine import session_scope
 from app.db.repositories import CollectionRepository
 from app.services.errors import InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
@@ -48,12 +50,17 @@ class ProvisionResult:
 
 @dataclass(frozen=True)
 class ProvisionSpec:
-    """What identifies the eval collection one run needs."""
+    """What identifies the eval collection one run needs, and how hard to ingest.
+
+    `concurrency` only paces the ingest worker pool; it never affects the
+    cache key or the resulting collection's contents.
+    """
 
     dataset: models.EvalDataset
     cache_key: str
     ingestion_pipeline: models.Pipeline
     retrieval_pipeline: models.Pipeline
+    concurrency: int = 1
 
 
 def compute_cache_key(
@@ -148,7 +155,7 @@ class EvalProvisioner:
         self.session.commit()
         self.session.refresh(collection)
 
-        self._materialize_and_ingest(user, collection, corpus_docs, on_document_done)
+        self._materialize_and_ingest(user, collection, corpus_docs, on_document_done, spec)
         indexed, failed = self._ingestion_outcomes(collection.id)
         return ProvisionResult(
             collection=collection,
@@ -183,23 +190,41 @@ class EvalProvisioner:
         collection: models.Collection,
         corpus_docs: list[models.EvalDatasetDocument],
         on_document_done: ProgressCallback | None,
+        spec: ProvisionSpec,
     ) -> None:
-        """Write each corpus doc as a file and run the ingestion pipeline on it."""
+        """Write every corpus doc as a file, then ingest across the worker pool.
+
+        Registration stays serial on the provisioner's session (fast, local,
+        and sibling-name checks want one writer). Ingestion is serial only
+        until the first document succeeds — that first ingest creates the
+        pipeline's indexes, so pooled workers never race index creation — then
+        the remainder fans out, each worker in its own session.
+        """
         files = FileSystemService(self.session)
-        ingestion = IngestionService(self.session)
-        for corpus_doc in corpus_docs:
-            document = self._register(files, user, collection, corpus_doc)
-            try:
-                ingestion.ingest_document(user=user, collection=collection, document=document)
-            except Exception:  # pylint: disable=broad-exception-caught
-                # Deliberately broad, mirroring background ingestion: the FAILED
-                # document row is the recorded outcome (stage-0 funnel loss),
-                # and one unparseable/failing doc must not kill the whole run.
-                logger.exception(
-                    "Eval corpus document %s failed to ingest", corpus_doc.external_doc_id
-                )
+        document_ids = [
+            self._register(files, user, collection, corpus_doc).id
+            for corpus_doc in corpus_docs
+        ]
+        self.session.commit()
+
+        remaining = list(document_ids)
+        while remaining:
+            succeeded = _ingest_one(user.id, collection.id, remaining.pop(0))
             if on_document_done is not None:
                 on_document_done()
+            if succeeded:
+                break
+        if not remaining:
+            return
+        with ThreadPoolExecutor(max_workers=max(spec.concurrency, 1)) as pool:
+            futures = [
+                pool.submit(_ingest_one, user.id, collection.id, document_id)
+                for document_id in remaining
+            ]
+            for future in as_completed(futures):
+                future.result()
+                if on_document_done is not None:
+                    on_document_done()
 
     @staticmethod
     def _register(
@@ -228,6 +253,9 @@ class EvalProvisioner:
 
     def _ingestion_outcomes(self, collection_id: UUID) -> tuple[set[str], set[str]]:
         """Split the collection's documents into indexed vs failed external ids."""
+        # Ingest workers wrote document statuses in their own sessions; drop
+        # this session's cached instances so the read reflects the database.
+        self.session.expire_all()
         statement = select(models.Document).where(
             col(models.Document.collection_id) == collection_id
         )
@@ -240,6 +268,31 @@ class EvalProvisioner:
             else:
                 failed.add(external_id)
         return indexed, failed
+
+
+def _ingest_one(user_id: UUID, collection_id: UUID, document_id: UUID) -> bool:
+    """Ingest one registered corpus document in its own session.
+
+    Worker-safe: loads its rows fresh and never touches the provisioner's
+    session. A failure is deliberately non-fatal, mirroring background
+    ingestion — the FAILED document row is the recorded outcome (stage-0
+    funnel loss), and one unparseable/failing doc must not kill the run.
+    """
+    with session_scope() as session:
+        user = session.get(models.User, user_id)
+        collection = session.get(models.Collection, collection_id)
+        document = session.get(models.Document, document_id)
+        if user is None or collection is None or document is None:
+            return False
+        try:
+            IngestionService(session).ingest_document(
+                user=user, collection=collection, document=document
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            # Deliberately broad: see docstring.
+            logger.exception("Eval corpus document %s failed to ingest", document.name)
+            return False
+        return True
 
 
 def _file_name_for(external_doc_id: str) -> str:

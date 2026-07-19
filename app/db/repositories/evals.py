@@ -128,6 +128,14 @@ class EvalRunRepository(Repository):
         return self._add(item)
 
     def list_items(self, run_id: UUID) -> list[models.EvalRunItem]:
-        """Return every persisted item for a run."""
-        statement = select(models.EvalRunItem).where(col(models.EvalRunItem.run_id) == run_id)
+        """Return every persisted item for a run, in stable query order.
+
+        Concurrent evaluation persists items in completion order, so the read
+        side owns the deterministic ordering the UI and aggregation rely on.
+        """
+        statement = (
+            select(models.EvalRunItem)
+            .where(col(models.EvalRunItem.run_id) == run_id)
+            .order_by(col(models.EvalRunItem.query_external_id))
+        )
         return list(self.session.exec(statement).all())

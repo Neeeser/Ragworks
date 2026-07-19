@@ -137,12 +137,17 @@ def _start_run(
     )
 
 
+@pytest.mark.parametrize("concurrency", [1, 3])
 @pytest.mark.usefixtures("stubbed_providers")
-def test_eval_run_end_to_end(pg_search_session: Session) -> None:
-    """A run provisions, ingests, evaluates every query, and aggregates."""
+def test_eval_run_end_to_end(pg_search_session: Session, concurrency: int) -> None:
+    """A run provisions, ingests, evaluates every query, and aggregates.
+
+    Parametrized over the worker-pool size: 1 pins the serial path, 3 pins
+    pooled ingestion and evaluation (workers in their own sessions).
+    """
     session = pg_search_session
     user = _create_user(session)
-    run = _start_run(session, user)
+    run = _start_run(session, user, concurrency=concurrency)
 
     EvalRunner(session).execute(run)
 
@@ -159,7 +164,13 @@ def test_eval_run_end_to_end(pg_search_session: Session) -> None:
         assert len(items) == 2
         assert all(not item.failed for item in items)
         assert all(item.pipeline_run_id is not None for item in items)
+        assert all(item.query_event_id is not None for item in items)
         assert all(item.result_count > 0 for item in items)
+        # Every item's per-node journey starts at the ingestion sentinel so the
+        # UI can render a per-document indexed→retrieved→kept path.
+        for item in items:
+            assert item.per_node_funnel[0]["node_id"] == "ingestion"
+            assert len(item.per_node_funnel) > 1
 
         # With 3 tiny docs indexed and top_k=10, every gold doc is retrieved.
         assert stored.aggregate_metrics["recall@10"] == pytest.approx(1.0)
