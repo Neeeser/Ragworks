@@ -42,6 +42,13 @@ type RoutingContextValue = {
   scheduler: LatestOnlyRoutingScheduler;
   nodeSignature: string;
   registerEdge: (input: BatchEdgeInput) => () => void;
+  /**
+   * A node is being dragged. Its geometry changes every frame, so a routed
+   * result only ever matches on frames where the cursor pauses — rendering it
+   * flips the wire between the node-avoiding route and the native step path.
+   * Edges hold the native fallback for the whole drag and snap on drop.
+   */
+  dragging: boolean;
 };
 type WorkerResponse = { version: number; results: ReturnType<typeof routeSmartEdgesBatch> };
 
@@ -213,9 +220,10 @@ export function PipelineEdgeRoutingProvider({
   }, [runtime]);
 
   const nodesKey = makeNodeSignature({ nodes: currentGeometry.nodes, edges: [] });
+  const dragging = nodes.some((node) => node.dragging);
   const value = useMemo(
-    () => ({ scheduler, nodeSignature: nodesKey, registerEdge }),
-    [scheduler, nodesKey, registerEdge],
+    () => ({ scheduler, nodeSignature: nodesKey, registerEdge, dragging }),
+    [scheduler, nodesKey, registerEdge, dragging],
   );
   return <RoutingContext.Provider value={value}>{children}</RoutingContext.Provider>;
 }
@@ -253,9 +261,12 @@ export const usePipelineEdgeRoute = (edge: EdgeRouteInput) => {
     return registerEdge(inputRef.current);
   }, [registerEdge, signature]);
 
-  return useSyncExternalStore(
+  const route = useSyncExternalStore(
     context?.scheduler.subscribe ?? (() => () => undefined),
     () => context?.scheduler.getMatchingResult(edge.id, context.nodeSignature, signature) ?? null,
     () => null,
   );
+  // Hold the native step fallback while dragging so the wire keeps one constant
+  // path instead of flashing to the route on frames where the cursor pauses.
+  return context?.dragging ? null : route;
 };

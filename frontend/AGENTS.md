@@ -117,6 +117,14 @@ the same PR.
   block is the classic symptom.
 - **Pages are thin shells.** Route files under `app/` delegate to
   components/hooks; no business logic or fetch orchestration in a `page.tsx`.
+- **An async-computed edge route must never render against stale geometry, and
+  is suppressed entirely while a node drags.** The smart router
+  (`usePipelineEdgeRoute`) publishes a route only when it matches the live node
+  signature exactly; during a drag the geometry changes every frame, so a routed
+  result only lands on frames where the cursor pauses — rendering it flipped the
+  wire between the node-avoiding route and the native step path (the drag-flash
+  bug). Edges hold the native `getSmoothStepPath` fallback for the whole drag
+  (gated on `node.dragging`) and snap to the route on drop.
 - **Shared downstream nodes sit between parallel branch rows.** In a hybrid
   pipeline graph, center a merge/output node vertically between its inputs so
   smooth-step edges don't route through either branch's node card.

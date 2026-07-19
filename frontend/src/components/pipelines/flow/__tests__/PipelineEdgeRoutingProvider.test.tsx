@@ -152,6 +152,26 @@ describe("PipelineEdgeRoutingProvider", () => {
     expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("current-c");
   });
 
+  it("holds the native fallback while a node is dragging, even when a route matches", async () => {
+    const draggingNodes = nodes.map((node) =>
+      node.id === "source" ? { ...node, dragging: true } : node,
+    );
+    const { rerender } = render(graph(264, draggingNodes));
+    const worker = FakeWorker.instances[0];
+    await waitFor(() => expect(worker.messages).toHaveLength(1));
+
+    // The worker completes a route that exactly matches current geometry, but a
+    // drag is in progress: the edge must not flash to the routed path.
+    act(() => worker.complete(0, "routed-mid-drag"));
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
+
+    // On drag stop the same geometry is no longer dragging: the route applies.
+    rerender(graph(264, nodes));
+    await waitFor(() =>
+      expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("routed-mid-drag"),
+    );
+  });
+
   it("keeps routes for multiple ports distinct within one batch", async () => {
     render(
       <PipelineEdgeRoutingProvider nodes={nodes}>
