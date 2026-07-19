@@ -97,11 +97,17 @@ def test_embed_sends_input_type_and_optional_output_dimension() -> None:
 
 
 def test_chat_stream_parses_sse_events() -> None:
-    """SSE frames become typed stream events."""
+    """SSE frames become typed stream events; the terminal ``[DONE]`` is skipped.
+
+    The frame list mirrors a captured live v2 stream tail: Cohere always closes
+    the stream with a bare ``data: [DONE]`` sentinel after ``message-end``.
+    Regression: parsing it as JSON raised mid-stream on every streamed turn.
+    """
     frames = "\n\n".join(
         [
             'event: content-delta\ndata: {"type":"content-delta","index":0,"delta":{"message":{"content":{"text":"Hi"}}}}',
             'event: message-end\ndata: {"type":"message-end","delta":{"finish_reason":"COMPLETE","usage":{"tokens":{"input_tokens":2,"output_tokens":1}}}}',
+            "data: [DONE]",
         ]
     )
 

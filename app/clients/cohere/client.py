@@ -143,12 +143,17 @@ class CohereClient:
                     elif line.startswith("data:"):
                         data_lines.append(line.removeprefix("data:").strip())
                     continue
-                if data_lines:
+                if data_lines and not self._is_done_sentinel(data_lines):
                     yield self._parse_stream_event(event_name, data_lines)
                 event_name = None
                 data_lines = []
-            if data_lines:
+            if data_lines and not self._is_done_sentinel(data_lines):
                 yield self._parse_stream_event(event_name, data_lines)
+
+    @staticmethod
+    def _is_done_sentinel(data_lines: list[str]) -> bool:
+        """True for Cohere's terminal ``data: [DONE]`` frame, which is not JSON."""
+        return data_lines == ["[DONE]"]
 
     @staticmethod
     def _parse_stream_event(
