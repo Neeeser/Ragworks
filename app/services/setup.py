@@ -67,7 +67,13 @@ class SetupService:
         coverage = self._provider_coverage(user)
         has_index = self._has_index(user)
         has_collection = bool(self._collections.list_for_user(user.id))
-        providers_ready = all(coverage[kind] for kind in ProviderKind)
+        # Setup needs exactly these kinds — never `all(ProviderKind)`, which
+        # silently strengthens the gate whenever the enum grows (adding
+        # RERANKING once trapped users in the wizard on every page load).
+        providers_ready = all(
+            coverage[kind]
+            for kind in (ProviderKind.EMBEDDING, ProviderKind.CHAT, ProviderKind.VECTOR_STORE)
+        )
         return SetupStatusRead(
             has_embedding_provider=coverage[ProviderKind.EMBEDDING],
             has_chat_provider=coverage[ProviderKind.CHAT],
