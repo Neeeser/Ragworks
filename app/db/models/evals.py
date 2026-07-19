@@ -99,7 +99,9 @@ class EvalRun(SQLModel, TimestampMixin, table=True):
     status: str = Field(default="pending", sa_column=Column(String, nullable=False))
     progress_done: int = Field(default=0, sa_column=Column(Integer, nullable=False))
     progress_total: int = Field(default=0, sa_column=Column(Integer, nullable=False))
-    failed_count: int = Field(default=0, sa_column=Column(Integer, nullable=False))
+    # `default=0` on the Column (not just the Field) so the bootstrap
+    # auto-migration can backfill dev DBs whose eval_runs predate the column.
+    failed_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
     aggregate_metrics: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )

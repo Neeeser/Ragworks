@@ -21,7 +21,7 @@ from types import SimpleNamespace
 from sqlalchemy import Column, ForeignKeyConstraint, Integer, MetaData, String, Table, text
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 
-from app.db import migrations
+from app.db import migrations, models
 
 
 def test_resolve_default_sql_handles_server_default() -> None:
@@ -69,6 +69,24 @@ def test_missing_warning_columns_backfill_empty_json_lists() -> None:
     assert migrations._missing_column_default("documents", "warnings") == ("'[]'", True)
     assert migrations._missing_column_default("pipeline_runs", "warnings") == ("'[]'", True)
     assert migrations._missing_column_default("documents", "unrelated") == (None, False)
+
+
+def test_eval_run_failed_count_declares_a_resolvable_column_default() -> None:
+    """`eval_runs.failed_count` was added after the table shipped on dev DBs,
+    so the auto-migration must find a Column-level default to backfill with.
+
+    Regression test: `Field(default=0, sa_column=Column(...))` puts the 0 on
+    the Pydantic side only — the Column carried no default, so `_add_column`
+    added the column nullable with NULL rows, and the run-list endpoint 500'd
+    validating `failed_count=None` against `EvalRunSummary.failed_count: int`.
+    """
+    column = models.EvalRun.__table__.c.failed_count
+    default_sql, drop_default = migrations._resolve_default_sql(
+        column, sqlite_dialect(), allow_application_default=True
+    )
+
+    assert default_sql == "0"
+    assert drop_default is True
 
 
 def test_foreign_key_name_truncates_long_identifiers() -> None:
