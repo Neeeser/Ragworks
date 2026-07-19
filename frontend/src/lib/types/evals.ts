@@ -150,6 +150,7 @@ export interface EvalRun {
   config: EvalRunConfig;
   progress_done: number;
   progress_total: number;
+  failed_count: number;
   aggregate_metrics: Record<string, number>;
   funnel: FunnelSummary;
   error_message?: string | null;
@@ -166,6 +167,7 @@ export interface EvalRunSummary {
   status: EvalRunStatus;
   progress_done: number;
   progress_total: number;
+  failed_count: number;
   aggregate_metrics: Record<string, number>;
   created_at: string;
 }

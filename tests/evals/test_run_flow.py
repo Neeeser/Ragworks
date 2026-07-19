@@ -18,6 +18,7 @@ from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig, EvalRunCreate
+from app.services.retrieval import RetrievalService
 from tests.utils.providers import install_default_pipelines
 
 
@@ -221,6 +222,45 @@ def test_relevance_zero_judgments_are_not_gold(pg_search_session: Session) -> No
         assert by_query["q1"].gold_doc_ids == ["docA"]  # docC's 0-row is not gold
         stored = fresh.get(models.EvalRun, run.id)
         assert stored is not None
+        assert stored.aggregate_metrics["recall@10"] == pytest.approx(1.0)
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_failed_queries_are_recorded_and_counted(
+    pg_search_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed retrieval is one failed item, and the run reports how many.
+
+    Aggregates mean only the successfully evaluated queries, so `failed_count`
+    must be persisted beside them — otherwise a run with heavy provider
+    failures silently reports survivor-only numbers as if they covered every
+    sampled query.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    original = RetrievalService.query_collection
+
+    def flaky(self, user_arg, collection, query, **kwargs):  # type: ignore[no-untyped-def]
+        if "Italy" in query:
+            raise RuntimeError("provider down")
+        return original(self, user_arg, collection, query, **kwargs)
+
+    monkeypatch.setattr(RetrievalService, "query_collection", flaky)
+    run = _start_run(session, user, concurrency=1)
+
+    EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        assert stored.status == EvalRunStatus.COMPLETED.value
+        assert stored.failed_count == 1
+        items = fresh.exec(
+            select(models.EvalRunItem).where(models.EvalRunItem.run_id == run.id)
+        ).all()
+        by_query = {item.query_external_id: item for item in items}
+        assert by_query["q2"].failed
+        assert "provider down" in (by_query["q2"].error_message or "")
         assert stored.aggregate_metrics["recall@10"] == pytest.approx(1.0)
 
 

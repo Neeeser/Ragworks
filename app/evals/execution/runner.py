@@ -323,8 +323,15 @@ class EvalRunner:
         return funnel_inputs
 
     def _finalize(self, run: models.EvalRun, funnel_inputs: list[QueryFunnelInput]) -> None:
-        """Aggregate metrics and the funnel, then mark the run completed."""
+        """Aggregate metrics and the funnel, then mark the run completed.
+
+        Aggregates mean over the successfully evaluated queries only — a failed
+        retrieval is an infrastructure outcome, not a relevance one — and
+        `failed_count` is persisted beside them so the survivorship is always
+        visible next to every aggregate rather than silently hidden.
+        """
         items = self.runs.list_items(run.id)
+        run.failed_count = sum(1 for item in items if item.failed)
         run.aggregate_metrics = aggregate_metrics_mean(
             [item.metrics for item in items if not item.failed]
         )

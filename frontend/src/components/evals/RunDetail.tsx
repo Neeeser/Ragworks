@@ -60,6 +60,12 @@ export function RunDetail({ runId }: { runId: string }) {
 
       {actionError && <p className="text-sm text-data-neg">{actionError}</p>}
       {detail.error_message && <p className="text-sm text-data-neg">{detail.error_message}</p>}
+      {detail.failed_count > 0 && (
+        <p className="text-sm text-data-neg">
+          {detail.failed_count} of {detail.config.num_queries} queries failed to evaluate;
+          aggregates are means over the remaining queries only.
+        </p>
+      )}
 
       {active && <ProgressCard detail={detail} />}
 

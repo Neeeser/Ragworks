@@ -58,6 +58,7 @@ def to_run_read(run: models.EvalRun) -> EvalRunRead:
         config=EvalRunConfig.model_validate(run.config),
         progress_done=run.progress_done,
         progress_total=run.progress_total,
+        failed_count=run.failed_count,
         aggregate_metrics={
             key: float(value)
             for key, value in run.aggregate_metrics.items()
@@ -82,6 +83,7 @@ def to_run_summary(run: models.EvalRun) -> EvalRunSummary:
         status=EvalRunStatus(run.status),
         progress_done=run.progress_done,
         progress_total=run.progress_total,
+        failed_count=run.failed_count,
         aggregate_metrics={
             key: float(value)
             for key, value in run.aggregate_metrics.items()

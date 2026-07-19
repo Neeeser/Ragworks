@@ -261,6 +261,7 @@ class EvalRunRead(BaseModel):
     config: EvalRunConfig
     progress_done: int
     progress_total: int
+    failed_count: int = 0
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     funnel: FunnelSummary = Field(default_factory=FunnelSummary)
     error_message: str | None = None
@@ -278,6 +279,7 @@ class EvalRunSummary(BaseModel):
     status: EvalRunStatus
     progress_done: int
     progress_total: int
+    failed_count: int = 0
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     created_at: datetime
 
