@@ -8,6 +8,7 @@ document UUIDs map back to benchmark external ids (unknown ids are dropped).
 
 from __future__ import annotations
 
+from app.db import models
 from app.evals.execution.trace_extraction import extract_node_traces
 
 DOC_A = "0be3a4e6-0000-0000-0000-000000000001"
@@ -26,21 +27,30 @@ def _summary(items: list[dict[str, object]], kind: str = "items") -> dict[str, o
     }
 
 
+def _node_run(
+    node_id: str,
+    summary: dict[str, object],
+    node_type: str = "retriever.vector",
+    node_name: str = "Dense",
+) -> models.PipelineNodeRun:
+    return models.PipelineNodeRun(
+        node_id=node_id, node_type=node_type, node_name=node_name, summary=summary
+    )
+
+
 def test_extracts_document_ids_in_rank_order_deduplicated() -> None:
     """Chunk ids reduce to parent documents, first occurrence wins."""
     node_runs = [
-        {
-            "node_id": "R1",
-            "node_type": "retriever.vector",
-            "node_name": "Dense",
-            "summary": _summary(
+        _node_run(
+            "R1",
+            _summary(
                 [
                     {"id": f"{DOC_A}:2", "score": 0.9},
                     {"id": f"{DOC_A}:0", "score": 0.8},
                     {"id": f"{DOC_B}:1", "score": 0.7},
                 ]
             ),
-        }
+        )
     ]
     traces = extract_node_traces(node_runs, MAPPING)
     assert len(traces) == 1
@@ -52,12 +62,12 @@ def test_extracts_document_ids_in_rank_order_deduplicated() -> None:
 def test_nodes_without_item_lists_are_skipped() -> None:
     """A node whose summary has no items-kind output contributes no trace."""
     node_runs = [
-        {
-            "node_id": "E1",
-            "node_type": "embedder.text",
-            "node_name": "Embedder",
-            "summary": {"inputs": [], "outputs": [{"label": "x", "value": {}, "kind": "json"}]},
-        }
+        _node_run(
+            "E1",
+            {"inputs": [], "outputs": [{"label": "x", "value": {}, "kind": "json"}]},
+            node_type="embedder.text",
+            node_name="Embedder",
+        )
     ]
     assert extract_node_traces(node_runs, MAPPING) == []
 
@@ -65,21 +75,20 @@ def test_nodes_without_item_lists_are_skipped() -> None:
 def test_unknown_document_ids_are_dropped() -> None:
     """A chunk whose document is not in the mapping (not benchmark-owned) is dropped."""
     node_runs = [
-        {
-            "node_id": "R1",
-            "node_type": "retriever.vector",
-            "node_name": "Dense",
-            "summary": _summary([{"id": "ffffffff-0000-0000-0000-00000000000f:0", "score": 0.5}]),
-        }
+        _node_run("R1", _summary([{"id": "ffffffff-0000-0000-0000-00000000000f:0", "score": 0.5}]))
     ]
     traces = extract_node_traces(node_runs, MAPPING)
     assert traces[0].document_ids == []
 
 
-def test_malformed_summaries_are_tolerated() -> None:
-    """A summary that is not the expected shape yields no trace, never a crash."""
+def test_malformed_summaries_are_skipped_with_a_warning() -> None:
+    """A summary that breaks the trace contract is a logged skip, never a crash.
+
+    Parsing goes through the tracing wire models, so drift is a visible
+    warning rather than a silently empty funnel stage.
+    """
     node_runs = [
-        {"node_id": "X", "node_type": "t", "node_name": "n", "summary": {}},
-        {"node_id": "Y", "node_type": "t", "node_name": "n", "summary": {"outputs": "bad"}},
+        _node_run("X", {}),
+        _node_run("Y", {"outputs": "bad"}),
     ]
     assert extract_node_traces(node_runs, MAPPING) == []
