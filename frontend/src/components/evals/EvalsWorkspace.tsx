@@ -35,6 +35,7 @@ export function EvalsWorkspace() {
       <RunsPanel
         runs={workspace.runs.data ?? []}
         datasets={workspace.datasets.data ?? []}
+        metricCatalog={workspace.metricCatalog.data ?? []}
         loading={workspace.runs.loading}
         onNewRun={() => setWizardOpen(true)}
         onDeleteRun={workspace.removeRun}
@@ -57,11 +58,15 @@ export function EvalsWorkspace() {
         />
       </div>
 
-      <NewRunWizard
-        open={wizardOpen}
-        datasets={workspace.datasets.data ?? []}
-        onClose={() => setWizardOpen(false)}
-      />
+      {/* Mounted per open so every launch starts from a clean wizard state. */}
+      {wizardOpen && (
+        <NewRunWizard
+          open
+          datasets={workspace.datasets.data ?? []}
+          pipelines={workspace.pipelines.data ?? []}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
     </div>
   );
 }

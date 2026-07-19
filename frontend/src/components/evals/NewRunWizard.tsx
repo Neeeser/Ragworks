@@ -1,14 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useReducer } from "react";
 
+import { initialWizardState, wizardReducer } from "@/components/evals/lib/new-run-wizard-reducer";
 import {
   clampToBounds,
   coerceInputs,
   CONCURRENCY_CHOICES,
-  DEFAULT_CONCURRENCY,
-  DEFAULT_SELECTED_K,
   declaredInputs,
   defaultInputValue,
   effectiveResultDepth,
@@ -19,9 +18,8 @@ import {
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { createEvalRun, fetchPipelines } from "@/lib/api";
+import { createEvalRun } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
-import { useApiQuery } from "@/lib/use-api-query";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -30,6 +28,7 @@ import type { EvalDataset, Pipeline, PipelineVariable } from "@/lib/types";
 interface NewRunWizardProps {
   open: boolean;
   datasets: EvalDataset[];
+  pipelines: Pipeline[];
   onClose: () => void;
 }
 
@@ -75,32 +74,32 @@ const STEPS = [
   { id: "scope", label: "Scope", description: "How much of the dataset the run covers." },
 ];
 
-export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
+export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizardProps) {
   const { token } = useAuth();
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [datasetId, setDatasetId] = useState("");
-  const [ingestionId, setIngestionId] = useState("");
-  const [retrievalId, setRetrievalId] = useState("");
-  const [preset, setPreset] = useState("quick");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [numQueries, setNumQueries] = useState("");
-  const [distractors, setDistractors] = useState("");
-  const [seed, setSeed] = useState("0");
-  const [concurrency, setConcurrency] = useState(DEFAULT_CONCURRENCY);
-  const [kSelected, setKSelected] = useState<number[]>([...DEFAULT_SELECTED_K]);
-  const [runInputs, setRunInputs] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
+  const {
+    step,
+    datasetId,
+    ingestionId,
+    retrievalId,
+    preset,
+    advancedOpen,
+    numQueries,
+    distractors,
+    seed,
+    concurrency,
+    kSelected,
+    runInputs,
+    busy,
+    message,
+  } = state;
 
-  const pipelines = useApiQuery(() => fetchPipelines(token!), [token], {
-    enabled: !!token && open,
-  });
-  const ingestionOptions = usePipelineOptions(pipelines.data, "ingestion");
-  const retrievalOptions = usePipelineOptions(pipelines.data, "retrieval");
+  const ingestionOptions = usePipelineOptions(pipelines, "ingestion");
+  const retrievalOptions = usePipelineOptions(pipelines, "retrieval");
 
   const dataset = datasets.find((entry) => entry.id === datasetId) ?? null;
-  const retrieval = (pipelines.data ?? []).find((pipeline) => pipeline.id === retrievalId);
+  const retrieval = pipelines.find((pipeline) => pipeline.id === retrievalId);
   const inputVariables = useMemo(
     () => declaredInputs(retrieval?.definition.variables),
     [retrieval],
@@ -124,19 +123,10 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
     kSelected.length > 0,
   ][step];
 
-  const toggleK = (k: number) => {
-    setKSelected((current) =>
-      current.includes(k)
-        ? current.filter((value) => value !== k)
-        : [...current, k].sort((a, b) => a - b),
-    );
-  };
-
   const launch = async () => {
     if (!dataset) return;
     const chosen = PRESETS.find((entry) => entry.key === preset) ?? PRESETS[0];
-    setBusy(true);
-    setMessage(null);
+    dispatch({ type: "launch_started" });
     try {
       const run = await createEvalRun(token!, {
         dataset_id: dataset.id,
@@ -159,8 +149,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
       });
       router.push(`/evals/runs/${run.id}`);
     } catch (err) {
-      setMessage(getErrorMessage(err, "Could not start the run"));
-      setBusy(false);
+      dispatch({ type: "launch_failed", message: getErrorMessage(err, "Could not start the run") });
     }
   };
 
@@ -172,14 +161,16 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
       steps={STEPS}
       activeStepIndex={step}
       message={message}
-      onStepChange={setStep}
+      onStepChange={(next) => dispatch({ type: "set_step", step: next })}
       onClose={onClose}
       footer={
         <WizardFooter
           step={step}
           stepCount={STEPS.length}
-          onBack={() => setStep((current) => Math.max(0, current - 1))}
-          onNext={() => (step === STEPS.length - 1 ? launch() : setStep(step + 1))}
+          onBack={() => dispatch({ type: "back" })}
+          onNext={() =>
+            step === STEPS.length - 1 ? launch() : dispatch({ type: "set_step", step: step + 1 })
+          }
           nextLabel="Start run"
           nextDisabled={!stepReady}
           busy={busy}
@@ -197,7 +188,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                 value: entry.id,
                 label: `${entry.name} (${entry.num_queries} queries, ${entry.num_corpus_docs} docs)`,
               }))}
-              onValueChange={setDatasetId}
+              onValueChange={(value) => dispatch({ type: "select_dataset", datasetId: value })}
               aria-label="Dataset"
             />
           </Field>
@@ -213,7 +204,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
               value={ingestionId}
               placeholder="Select an ingestion pipeline"
               options={ingestionOptions}
-              onValueChange={setIngestionId}
+              onValueChange={(value) => dispatch({ type: "select_ingestion", pipelineId: value })}
               aria-label="Ingestion pipeline"
             />
           </Field>
@@ -222,7 +213,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
               value={retrievalId}
               placeholder="Select a retrieval pipeline"
               options={retrievalOptions}
-              onValueChange={setRetrievalId}
+              onValueChange={(value) => dispatch({ type: "select_retrieval", pipelineId: value })}
               aria-label="Retrieval pipeline"
             />
           </Field>
@@ -231,7 +222,11 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
               <TextInput
                 value={runInputs[variable.name] ?? defaultInputValue(variable, maxK)}
                 onChange={(event) =>
-                  setRunInputs((prev) => ({ ...prev, [variable.name]: event.target.value }))
+                  dispatch({
+                    type: "set_run_input",
+                    name: variable.name,
+                    value: event.target.value,
+                  })
                 }
               />
             </Field>
@@ -247,7 +242,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                 type="button"
                 role="radio"
                 aria-checked={preset === entry.key}
-                onClick={() => setPreset(entry.key)}
+                onClick={() => dispatch({ type: "set_preset", preset: entry.key })}
                 className={`rounded-2xl border p-4 text-left transition focus-visible:ring-2 focus-visible:ring-accent-violet ${
                   preset === entry.key
                     ? "border-accent-violet bg-surface-strong"
@@ -275,7 +270,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                     key={k}
                     type="button"
                     aria-pressed={selected}
-                    onClick={() => toggleK(k)}
+                    onClick={() => dispatch({ type: "toggle_k", k })}
                     className={cn(
                       "rounded-full border px-3.5 py-1.5 font-mono text-xs transition",
                       "focus-visible:ring-2 focus-visible:ring-accent-violet",
@@ -303,7 +298,7 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
             type="button"
             className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
             aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen((prev) => !prev)}
+            onClick={() => dispatch({ type: "toggle_advanced" })}
           >
             Advanced {advancedOpen ? "−" : "+"}
           </button>
@@ -313,7 +308,9 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                 <TextInput
                   inputMode="numeric"
                   value={numQueries}
-                  onChange={(event) => setNumQueries(event.target.value)}
+                  onChange={(event) =>
+                    dispatch({ type: "set_field", field: "numQueries", value: event.target.value })
+                  }
                   placeholder={String(presetQueries(preset, dataset))}
                 />
               </Field>
@@ -321,7 +318,9 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                 <TextInput
                   inputMode="numeric"
                   value={distractors}
-                  onChange={(event) => setDistractors(event.target.value)}
+                  onChange={(event) =>
+                    dispatch({ type: "set_field", field: "distractors", value: event.target.value })
+                  }
                   placeholder={String(presetDistractors(preset, dataset))}
                 />
               </Field>
@@ -329,7 +328,9 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                 <TextInput
                   inputMode="numeric"
                   value={seed}
-                  onChange={(event) => setSeed(event.target.value)}
+                  onChange={(event) =>
+                    dispatch({ type: "set_field", field: "seed", value: event.target.value })
+                  }
                 />
               </Field>
               <Field
@@ -343,7 +344,9 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
                     value: String(value),
                     label: String(value),
                   }))}
-                  onValueChange={(value) => setConcurrency(Number(value))}
+                  onValueChange={(value) =>
+                    dispatch({ type: "set_concurrency", value: Number(value) })
+                  }
                   aria-label="Parallel requests"
                 />
               </Field>
@@ -355,10 +358,10 @@ export function NewRunWizard({ open, datasets, onClose }: NewRunWizardProps) {
   );
 }
 
-function usePipelineOptions(pipelines: Pipeline[] | null, kind: "ingestion" | "retrieval") {
+function usePipelineOptions(pipelines: Pipeline[], kind: "ingestion" | "retrieval") {
   return useMemo(
     () =>
-      (pipelines ?? [])
+      pipelines
         .filter((pipeline) => pipeline.kind === kind)
         .map((pipeline) => ({ value: pipeline.id, label: pipeline.name })),
     [pipelines, kind],
