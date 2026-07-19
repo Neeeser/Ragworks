@@ -20,7 +20,7 @@ from app.db.repositories import CollectionRepository, EvalDatasetRepository, Eva
 from app.evals.datasets.base import DatasetTriple
 from app.evals.datasets.builtin import download_builtin, get_builtin, list_builtin
 from app.evals.datasets.upload import parse_beir_upload
-from app.evals.metrics.registry import list_metrics
+from app.evals.metrics.registry import get_metric, list_metrics
 from app.schemas.enums import EvalDatasetSource, EvalDatasetStatus, EvalRunStatus
 from app.schemas.evals import (
     BuiltinDatasetInfo,
@@ -237,6 +237,8 @@ class EvalService:
         self._require_pipeline(
             user, payload.retrieval_pipeline_id, models.PipelineKind.RETRIEVAL
         )
+        for metric_name in payload.config.selected_metrics:
+            get_metric(metric_name)  # unknown name -> InvalidInputError before any work
         run = self.runs.add(
             models.EvalRun(
                 user_id=user.id,

@@ -110,6 +110,29 @@ def test_create_run_rejects_wrong_pipeline_kind(session: Session) -> None:
         )
 
 
+def test_create_run_rejects_unknown_metric_names(session: Session) -> None:
+    """A typo'd metric is a 400 at create time, not a failed run hours later.
+
+    Without this gate the run provisions and ingests the whole corpus before
+    the first score_query call raises in a background task.
+    """
+    service = EvalService(session)
+    user = _user(session, pipelines=True)
+    dataset = _upload(service, user)
+    with pytest.raises(InvalidInputError, match="Unknown metric"):
+        service.create_run(
+            user,
+            EvalRunCreate(
+                dataset_id=dataset.id,
+                ingestion_pipeline_id=_pipeline_id(session, user, models.PipelineKind.INGESTION),
+                retrieval_pipeline_id=_pipeline_id(session, user, models.PipelineKind.RETRIEVAL),
+                config=EvalRunConfig(
+                    num_queries=1, distractor_pool_size=0, selected_metrics=["recal"]
+                ),
+            ),
+        )
+
+
 def test_create_run_rejects_missing_dataset(session: Session) -> None:
     """A run against a nonexistent dataset is not-found."""
     service = EvalService(session)

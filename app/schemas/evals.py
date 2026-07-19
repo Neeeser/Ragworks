@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.enums import (
     EvalDatasetSource,
@@ -135,6 +135,14 @@ class EvalRunConfig(BaseModel):
         default_factory=dict,
         description="Values bound once for the retrieval pipeline's declared variables.",
     )
+
+    @field_validator("k_values")
+    @classmethod
+    def _positive_cutoffs(cls, value: list[int]) -> list[int]:
+        """Reject non-positive cutoffs; `name@0` would be meaningless."""
+        if any(k <= 0 for k in value):
+            raise ValueError("Every k_values cutoff must be a positive integer.")
+        return value
 
 
 class EvalRunCreate(BaseModel):

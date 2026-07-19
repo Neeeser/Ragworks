@@ -11,16 +11,22 @@ from collections.abc import Mapping, Sequence
 
 from app.evals.metrics.base import Metric
 from app.evals.metrics.retrieval import RETRIEVAL_METRICS
+from app.services.errors import InvalidInputError
 
 _REGISTRY: dict[str, Metric] = {metric.name: metric for metric in RETRIEVAL_METRICS}
 
 
 def get_metric(name: str) -> Metric:
-    """Return a registered metric by name, or raise for an unknown name."""
+    """Return a registered metric by name.
+
+    An unknown name is an `InvalidInputError` (→400): run creation validates
+    selections through this function, so a typo is rejected before the run
+    provisions and ingests anything.
+    """
     try:
         return _REGISTRY[name]
     except KeyError as exc:
-        raise ValueError(f"Unknown metric: {name}") from exc
+        raise InvalidInputError(f"Unknown metric: {name}") from exc
 
 
 def list_metrics() -> list[Metric]:
