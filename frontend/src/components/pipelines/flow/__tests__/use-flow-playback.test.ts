@@ -1,11 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
+import { DEFAULT_PROCESS_MS, useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
 
 const steps = [{ nodeIds: ["a"] }, { nodeIds: ["b"] }];
 const edges = [{ id: "a-b", source: "a", target: "b" }];
-const PROCESS_MS = 1000;
+const PROCESS_MS = DEFAULT_PROCESS_MS;
 const TRAVEL_MS = 650;
 
 /** Advance one full step: the node processes, then the payload crosses its edge. */
@@ -57,6 +57,10 @@ describe("useFlowPlayback parallel stages", () => {
     { nodeIds: ["embed", "bm25"] },
     { nodeIds: ["out"] },
   ];
+  const EDGE_EMBED_INDEX = "embed-index";
+  const EDGE_BM25_COLLECTION = "bm25-collection";
+  const EDGE_INDEX_COLLECTION = "index-collection";
+
   const branchEdges = [
     { id: EDGE_CHUNK_EMBED, source: "chunk", target: "embed" },
     { id: EDGE_CHUNK_BM25, source: "chunk", target: "bm25" },
@@ -92,9 +96,9 @@ describe("useFlowPlayback parallel stages", () => {
     const asymmetricEdges = [
       { id: EDGE_CHUNK_EMBED, source: "chunk", target: "embed" },
       { id: EDGE_CHUNK_BM25, source: "chunk", target: "bm25" },
-      { id: "embed-index", source: "embed", target: "index" },
-      { id: "bm25-collection", source: "bm25", target: "collection" },
-      { id: "index-collection", source: "index", target: "collection" },
+      { id: EDGE_EMBED_INDEX, source: "embed", target: "index" },
+      { id: EDGE_BM25_COLLECTION, source: "bm25", target: "collection" },
+      { id: EDGE_INDEX_COLLECTION, source: "index", target: "collection" },
     ];
     const { result } = renderHook(() =>
       useFlowPlayback({ steps: asymmetricSteps, edges: asymmetricEdges, autoPlay: true }),
@@ -102,11 +106,58 @@ describe("useFlowPlayback parallel stages", () => {
 
     advanceOneHop(); // chunk → split
     act(() => vi.advanceTimersByTime(PROCESS_MS));
-    expect(result.current.travelingEdgeIds).toEqual(new Set(["embed-index", "bm25-collection"]));
+    expect(result.current.travelingEdgeIds).toEqual(
+      new Set([EDGE_EMBED_INDEX, EDGE_BM25_COLLECTION]),
+    );
 
     act(() => vi.advanceTimersByTime(TRAVEL_MS));
     act(() => vi.advanceTimersByTime(PROCESS_MS));
-    expect(result.current.travelingEdgeIds).toEqual(new Set(["index-collection"]));
+    expect(result.current.travelingEdgeIds).toEqual(new Set([EDGE_INDEX_COLLECTION]));
+  });
+
+  it("advances past a hop when its next-stage edge arrives, letting a slow merge edge keep flying", () => {
+    // Hybrid-graph stall: embed→index is short while bm25→collection (a
+    // merge edge skipping the index stage) is long. The index stage must
+    // light up when ITS edge arrives — the long comet keeps traveling
+    // through the next process window instead of pausing the whole flow.
+    const asymmetricSteps = [
+      { nodeIds: ["embed", "bm25"] },
+      { nodeIds: ["index"] },
+      { nodeIds: ["collection"] },
+    ];
+    const asymmetricEdges = [
+      { id: EDGE_EMBED_INDEX, source: "embed", target: "index" },
+      { id: EDGE_BM25_COLLECTION, source: "bm25", target: "collection" },
+      { id: EDGE_INDEX_COLLECTION, source: "index", target: "collection" },
+    ];
+    const timing = {
+      processMsByNodeId: new Map<string, number>(),
+      travelMsByEdgeId: new Map([
+        [EDGE_EMBED_INDEX, 200],
+        [EDGE_BM25_COLLECTION, 900],
+        [EDGE_INDEX_COLLECTION, 200],
+      ]),
+    };
+    const { result } = renderHook(() =>
+      useFlowPlayback({ steps: asymmetricSteps, edges: asymmetricEdges, timing, autoPlay: true }),
+    );
+
+    act(() => vi.advanceTimersByTime(PROCESS_MS));
+    expect(result.current.travelingEdgeIds).toEqual(
+      new Set([EDGE_EMBED_INDEX, EDGE_BM25_COLLECTION]),
+    );
+
+    // The hop is gated by the short next-stage edge only: 200ms later the
+    // index stage processes while the merge comet is still in flight.
+    act(() => vi.advanceTimersByTime(200));
+    expect(result.current.activeIndex).toBe(1);
+    expect(result.current.phase).toBe("process");
+    expect(result.current.travelingEdgeIds).toEqual(new Set([EDGE_BM25_COLLECTION]));
+
+    // The merge comet expires after its own remaining 700ms, mid-process.
+    act(() => vi.advanceTimersByTime(700));
+    expect(result.current.activeIndex).toBe(1);
+    expect(result.current.travelingEdgeIds).toEqual(new Set());
   });
 
   it("marks every crossed branch edge as visited after the merge", () => {

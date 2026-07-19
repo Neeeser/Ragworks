@@ -63,6 +63,8 @@ const edgeProps = {
   selected: false,
 } satisfies EdgeProps<TypedEdgeType>;
 
+const COMET_SELECTOR = ".pipeline-edge-comet";
+
 describe("TypedEdge", () => {
   it("uses the shared batch route while preserving state styles and playback", () => {
     const { container } = render(
@@ -87,17 +89,19 @@ describe("TypedEdge", () => {
       STROKE_ATTRIBUTE,
       "var(--port-document)",
     );
-    expect(container.querySelectorAll("animateMotion")).toHaveLength(2);
-    container.querySelectorAll("animateMotion").forEach((motion) => {
-      expect(motion).toHaveAttribute(
-        "path",
+    const comets = container.querySelectorAll(COMET_SELECTOR);
+    expect(comets).toHaveLength(2);
+    comets.forEach((comet) => {
+      expect(comet).toHaveAttribute(
+        "d",
         `M 258,74 L 264 74 L 680 74 L 680 222 L 736 222 L 742,222`,
       );
-      expect(motion).toHaveAttribute("dur", "500ms");
+      expect(comet).toHaveAttribute("pathLength", "1");
+      expect(comet).toHaveStyle({ animationDuration: "500ms" });
     });
   });
 
-  it("extends the payload dot's travel to rest on the port handle centers", () => {
+  it("extends the flow comet's travel to rest on the port handle centers", () => {
     const { container } = render(
       <svg>
         <TypedEdge {...edgeProps} />
@@ -105,12 +109,22 @@ describe("TypedEdge", () => {
     );
 
     // React Flow anchors edges at the handle's outer edge; the visible port
-    // dot is centered one handle-radius inward. A dot frozen at the raw path
-    // end sits visibly offset beside the gray handle dot.
-    const motion = container.querySelector("animateMotion");
-    const path = motion?.getAttribute("path") ?? "";
+    // dot is centered one handle-radius inward. A comet ending at the raw
+    // path end stops visibly short of the gray handle dot.
+    const comet = container.querySelector(COMET_SELECTOR);
+    const path = comet?.getAttribute("d") ?? "";
     expect(path.startsWith("M 258,74 ")).toBe(true); // source: Right → center 6px left of anchor
     expect(path.endsWith(" L 742,222")).toBe(true); // target: Left → center 6px right of anchor
+  });
+
+  it("runs no comet while the edge is not traveling", () => {
+    const { container } = render(
+      <svg>
+        <TypedEdge {...edgeProps} data={{ ...edgeProps.data, traveling: false }} />
+      </svg>,
+    );
+
+    expect(container.querySelectorAll(COMET_SELECTOR)).toHaveLength(0);
   });
 
   it("uses the smooth-step fallback while a batch route is pending", () => {

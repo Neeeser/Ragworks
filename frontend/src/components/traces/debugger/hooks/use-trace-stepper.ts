@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo } from "react";
 
-import { useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
+import { buildFlowTiming } from "@/components/pipelines/flow/flow-timing";
+import { DEFAULT_PROCESS_MS, useFlowPlayback } from "@/components/pipelines/flow/use-flow-playback";
 
 import type { UseFlowPlaybackResult } from "@/components/pipelines/flow/use-flow-playback";
 import type { TraceGraph, TraceStep } from "@/components/traces/trace-graph";
@@ -36,7 +37,16 @@ export function useTraceStepper(graph: TraceGraph): UseTraceStepperResult {
     return 0;
   }, [graph.combined, graph.steps]);
 
-  const playback = useFlowPlayback({ steps: graph.steps, edges: graph.edges, initialIndex });
+  const timing = useMemo(
+    () => buildFlowTiming(graph.nodes, graph.edges, DEFAULT_PROCESS_MS),
+    [graph.nodes, graph.edges],
+  );
+  const playback = useFlowPlayback({
+    steps: graph.steps,
+    edges: graph.edges,
+    timing,
+    initialIndex,
+  });
   const { activeIndex, stepForward, stepBack, toggle, seek } = playback;
 
   useEffect(() => {
