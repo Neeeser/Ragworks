@@ -32,6 +32,10 @@ class Collection(SQLModel, TimestampMixin, table=True):
         nullable=True,
         index=True,
     )
+    system_purpose: str | None = Field(
+        default=None,
+        sa_column=Column(String, nullable=True, index=True),
+    )
     extra_metadata: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column("metadata", JSON, nullable=False),

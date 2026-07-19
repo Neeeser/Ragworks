@@ -21,6 +21,7 @@ from app.db.repositories.collection_stats import (
     HistoryWindow,
 )
 from app.db.repositories.document import ChunkRepository, DocumentRepository
+from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
 from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.pipeline import (
     PipelineRepository,
@@ -42,6 +43,8 @@ __all__ = [
     "CollectionStats",
     "CollectionStatsRepository",
     "DocumentRepository",
+    "EvalDatasetRepository",
+    "EvalRunRepository",
     "FileNodeRepository",
     "HistoryWindow",
     "PipelineRepository",

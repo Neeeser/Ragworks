@@ -119,3 +119,69 @@ class StatsHistoryRange(str, Enum):
     HOURS_24 = "24h"
     DAYS_7 = "7d"
     DAYS_30 = "30d"
+
+
+class CollectionPurpose(str, Enum):
+    """System role of a collection.
+
+    A normal user collection carries no purpose (the column is NULL); an
+    eval-owned collection is transient scaffolding materialized from a
+    benchmark corpus and is excluded from the user-facing Collections page.
+    Values are persisted -- add new ones, never rename existing ones.
+    """
+
+    EVAL = "eval"
+
+
+class EvalDatasetSource(str, Enum):
+    """Where an eval dataset's corpus/queries/qrels came from.
+
+    `SYNTHETIC` is reserved for a future generator that emits the same triple;
+    it is declared but not implemented in v1. Values are persisted -- add new
+    ones, never rename existing ones.
+    """
+
+    BUILTIN_BENCHMARK = "builtin_benchmark"
+    CUSTOM_UPLOAD = "custom_upload"
+    SYNTHETIC = "synthetic"
+
+
+class EvalDatasetStatus(str, Enum):
+    """Lifecycle of an eval dataset's stored corpus/queries/qrels."""
+
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class RelevanceGranularity(str, Enum):
+    """Granularity at which relevance judgments (qrels) are expressed.
+
+    Benchmark qrels are per-document; a retrieved chunk counts toward a gold
+    document when its parent document is in the gold set. `CHUNK` is reserved
+    for future synthetic datasets that label individual chunks.
+    """
+
+    DOCUMENT = "document"
+    CHUNK = "chunk"
+
+
+class EvalRunStatus(str, Enum):
+    """Execution status values for an eval run."""
+
+    PENDING = "pending"
+    PROVISIONING = "provisioning"
+    INGESTING = "ingesting"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class EvalFindingSeverity(str, Enum):
+    """How strongly a trace-attribution finding is flagged to the user."""
+
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
