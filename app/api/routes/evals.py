@@ -5,7 +5,6 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
@@ -24,20 +23,11 @@ from app.schemas.evals import (
     EvalRunRead,
     EvalRunSummary,
     ImportBuiltinDatasetRequest,
+    UploadDatasetRequest,
 )
 from app.services.errors import ServiceError
 
 router = APIRouter(prefix="/api/evals", tags=["evals"])
-
-
-class UploadDatasetRequest(BaseModel):
-    """A custom golden dataset upload, as BEIR-format file contents."""
-
-    name: str
-    description: str | None = None
-    corpus: str
-    queries: str
-    qrels: str
 
 
 @router.get("/benchmarks", response_model=list[BuiltinDatasetInfo])

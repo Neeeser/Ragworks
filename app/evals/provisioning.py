@@ -24,7 +24,8 @@ from sqlmodel import Session, col, select
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import CollectionRepository
+from app.db.repositories import CollectionRepository, DocumentRepository
+from app.schemas.enums import CollectionPurpose
 from app.services.errors import InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
@@ -105,7 +106,7 @@ class EvalProvisioner:
         """Return the user's eval collection for this cache key, if provisioned."""
         statement = select(models.Collection).where(
             col(models.Collection.user_id) == user.id,
-            col(models.Collection.system_purpose) == "eval",
+            col(models.Collection.system_purpose) == CollectionPurpose.EVAL.value,
         )
         for collection in self.session.exec(statement).all():
             if collection.extra_metadata.get(EVAL_CACHE_KEY) == cache_key:
@@ -145,7 +146,7 @@ class EvalProvisioner:
             description=f"Benchmark corpus for eval runs against '{spec.dataset.name}'.",
             ingestion_pipeline_id=spec.ingestion_pipeline.id,
             retrieval_pipeline_id=spec.retrieval_pipeline.id,
-            system_purpose="eval",
+            system_purpose=CollectionPurpose.EVAL.value,
             extra_metadata={
                 EVAL_CACHE_KEY: spec.cache_key,
                 EVAL_DATASET_KEY: str(spec.dataset.id),
@@ -166,12 +167,9 @@ class EvalProvisioner:
 
     def document_mapping(self, collection_id: UUID) -> dict[str, str]:
         """Map Ragworks document UUIDs (str) to benchmark external doc ids."""
-        statement = select(models.Document).where(
-            col(models.Document.collection_id) == collection_id
-        )
         return {
             str(document.id): _external_id_from_name(document.name)
-            for document in self.session.exec(statement).all()
+            for document in DocumentRepository(self.session).list_for_collection(collection_id)
         }
 
     def _bind_retrieval(
@@ -256,12 +254,9 @@ class EvalProvisioner:
         # Ingest workers wrote document statuses in their own sessions; drop
         # this session's cached instances so the read reflects the database.
         self.session.expire_all()
-        statement = select(models.Document).where(
-            col(models.Document.collection_id) == collection_id
-        )
         indexed: set[str] = set()
         failed: set[str] = set()
-        for document in self.session.exec(statement).all():
+        for document in DocumentRepository(self.session).list_for_collection(collection_id):
             external_id = _external_id_from_name(document.name)
             if document.status == models.DocumentStatus.READY and document.num_chunks > 0:
                 indexed.add(external_id)

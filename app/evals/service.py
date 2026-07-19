@@ -12,16 +12,27 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from sqlmodel import Session, col, func, select
+from sqlmodel import Session
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import CollectionRepository, EvalDatasetRepository, EvalRunRepository
+from app.db.repositories import (
+    CollectionRepository,
+    CollectionStats,
+    CollectionStatsRepository,
+    EvalDatasetRepository,
+    EvalRunRepository,
+)
 from app.evals.datasets.base import DatasetTriple
 from app.evals.datasets.builtin import download_builtin, get_builtin, list_builtin
 from app.evals.datasets.upload import parse_beir_upload
 from app.evals.metrics.registry import get_metric, list_metrics
-from app.schemas.enums import EvalDatasetSource, EvalDatasetStatus, EvalRunStatus
+from app.schemas.enums import (
+    CollectionPurpose,
+    EvalDatasetSource,
+    EvalDatasetStatus,
+    EvalRunStatus,
+)
 from app.schemas.evals import (
     BuiltinDatasetInfo,
     EvalCollectionRead,
@@ -214,10 +225,7 @@ class EvalService:
     def delete_dataset(self, user: models.User, dataset_id: UUID) -> None:
         """Delete a dataset; blocked while runs still reference it."""
         dataset = self.get_dataset(user, dataset_id)
-        statement = select(func.count(col(models.EvalRun.id))).where(  # pylint: disable=not-callable
-            col(models.EvalRun.dataset_id) == dataset.id
-        )
-        if self.session.exec(statement).one() > 0:
+        if self.runs.count_for_dataset(dataset.id) > 0:
             raise InvalidInputError(
                 "This dataset has eval runs referencing it. Delete those runs first."
             )
@@ -302,9 +310,7 @@ class EvalService:
         run = self.get_run(user, run_id)
         if run.status in _ACTIVE_RUN_STATUSES:
             raise InvalidInputError("Cancel the eval run before deleting it.")
-        for item in self.runs.list_items(run.id):
-            self.session.delete(item)
-        self.session.delete(run)
+        self.runs.delete_with_items(run)
         self.session.commit()
 
     # -- eval collections ---------------------------------------------------------
@@ -312,31 +318,34 @@ class EvalService:
     def list_eval_collections(self, user: models.User) -> list[EvalCollectionRead]:
         """Return the user's provisioned eval collections with size stats."""
         collections = CollectionRepository(self.session).list_eval_for_user(user.id)
-        return [self._to_eval_collection(collection) for collection in collections]
+        stats = CollectionStatsRepository(self.session).stats_for(
+            user.id, [collection.id for collection in collections]
+        )
+        return [
+            self._to_eval_collection(collection, stats.get(collection.id))
+            for collection in collections
+        ]
 
     def delete_eval_collection(self, user: models.User, collection_id: UUID) -> None:
         """Purge one eval collection (vectors, files, rows) to reclaim space."""
         collection = CollectionRepository(self.session).get(collection_id, user.id)
-        if collection is None or collection.system_purpose != "eval":
+        if collection is None or collection.system_purpose != CollectionPurpose.EVAL.value:
             raise NotFoundError("Eval collection not found.")
         CollectionDeletionService(self.session).delete(user, collection)
 
-    def _to_eval_collection(self, collection: models.Collection) -> EvalCollectionRead:
+    @staticmethod
+    def _to_eval_collection(
+        collection: models.Collection, stats: CollectionStats | None
+    ) -> EvalCollectionRead:
         """Shape one eval collection row for the management page."""
-        documents = select(func.count(col(models.Document.id))).where(  # pylint: disable=not-callable
-            col(models.Document.collection_id) == collection.id
-        )
-        chunks = select(func.count(col(models.DocumentChunkRecord.id))).where(  # pylint: disable=not-callable
-            col(models.DocumentChunkRecord.collection_id) == collection.id
-        )
         dataset_ref = collection.extra_metadata.get("eval_dataset_id")
         return EvalCollectionRead(
             id=collection.id,
             name=collection.name,
             dataset_id=UUID(dataset_ref) if isinstance(dataset_ref, str) else None,
             ingestion_pipeline_id=collection.ingestion_pipeline_id,
-            num_documents=self.session.exec(documents).one(),
-            num_chunks=self.session.exec(chunks).one(),
+            num_documents=stats.document_count if stats else 0,
+            num_chunks=stats.chunk_count if stats else 0,
             created_at=collection.created_at,
             updated_at=collection.updated_at,
         )

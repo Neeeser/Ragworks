@@ -101,16 +101,21 @@ def _message(category: str, stage: FunnelStage, drop: float) -> str:
     return f"{identity} dropped {drop:.0%} of gold documents relative to its inputs."
 
 
+# Node type ids are `<family>.<variant>` (`retriever.vector`, `fusion.rrf`,
+# `reranker.model`), and the family segment is as permanent as the id itself —
+# classifying on it means a new variant is categorized with no second place to
+# update, where substring matching silently missorted new families.
+_CATEGORY_BY_FAMILY = {
+    "reranker": "reranking",
+    "fusion": "fusion",
+    "retriever": "retrieval",
+}
+
+
 def _classify(node_type: str) -> str:
-    """Map a node type id to a finding category."""
-    lowered = node_type.lower()
-    if "rerank" in lowered or "ranker" in lowered:
-        return "reranking"
-    if "fusion" in lowered:
-        return "fusion"
-    if "retriev" in lowered or "bm25" in lowered or "vector" in lowered:
-        return "retrieval"
-    return "pipeline"
+    """Map a node type id to a finding category via its family prefix."""
+    family = node_type.split(".", 1)[0].lower()
+    return _CATEGORY_BY_FAMILY.get(family, "pipeline")
 
 
 def _upstream_map(edges: Sequence[tuple[str, str]]) -> dict[str, list[str]]:
@@ -134,6 +139,13 @@ def _baseline_retention(
     return max(sources)
 
 
+_SEVERITY_RANK = {
+    EvalFindingSeverity.INFO: 0,
+    EvalFindingSeverity.WARNING: 1,
+    EvalFindingSeverity.CRITICAL: 2,
+}
+
+
 def _severity(drop: float) -> EvalFindingSeverity:
     """Map a retention drop to a finding severity."""
     if drop >= _DROP_CRITICAL:
@@ -145,8 +157,4 @@ def _severity(drop: float) -> EvalFindingSeverity:
 
 def _severity_rank(drop: float) -> int:
     """Sortable rank for a drop's severity (higher is more severe)."""
-    if drop >= _DROP_CRITICAL:
-        return 2
-    if drop >= _DROP_WARNING:
-        return 1
-    return 0
+    return _SEVERITY_RANK[_severity(drop)]

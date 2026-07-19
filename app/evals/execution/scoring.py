@@ -18,6 +18,7 @@ from app.evals.execution.trace_extraction import extract_node_traces
 from app.evals.metrics.registry import evaluate_metrics
 from app.schemas.evals import EvalRunConfig
 from app.schemas.retrieval import CollectionQueryResponse
+from app.utils.ordering import unique_in_order
 
 
 # pylint: disable-next=too-many-arguments
@@ -109,15 +110,11 @@ def rank_ordered_documents(
     document_uuids: Sequence[str], mapping: Mapping[str, str]
 ) -> list[str]:
     """Map retrieved document UUIDs to external ids, rank-ordered, deduplicated."""
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for document_uuid in document_uuids:
-        external = mapping.get(document_uuid)
-        if external is None or external in seen:
-            continue
-        seen.add(external)
-        ordered.append(external)
-    return ordered
+    return unique_in_order(
+        external
+        for document_uuid in document_uuids
+        if (external := mapping.get(document_uuid)) is not None
+    )
 
 
 def aggregate_metrics_mean(per_item_metrics: Sequence[Mapping[str, object]]) -> dict[str, float]:

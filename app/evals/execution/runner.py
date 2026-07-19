@@ -18,11 +18,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import EvalDatasetRepository, EvalRunRepository
+from app.db.repositories import EvalDatasetRepository, EvalRunRepository, PipelineRunRepository
 from app.evals.attribution.funnel import QueryFunnelInput, build_funnel
 from app.evals.execution.scoring import aggregate_metrics_mean, failed_item, score_query
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
@@ -120,20 +120,12 @@ def _evaluate_task(
             mapping=context.mapping,
             indexed_external_ids=context.indexed_external_ids,
             response=response,
-            node_runs=_load_node_runs(session, response.pipeline_run_id),
+            node_runs=(
+                PipelineRunRepository(session).list_node_runs(response.pipeline_run_id)
+                if response.pipeline_run_id is not None
+                else []
+            ),
         )
-
-
-def _load_node_runs(session: Session, pipeline_run_id: UUID | None) -> list[models.PipelineNodeRun]:
-    """Load the recorded node runs for one query's pipeline run, in order."""
-    if pipeline_run_id is None:
-        return []
-    statement = (
-        select(models.PipelineNodeRun)
-        .where(col(models.PipelineNodeRun.run_id) == pipeline_run_id)
-        .order_by(col(models.PipelineNodeRun.sequence_index))
-    )
-    return list(session.exec(statement).all())
 
 
 class EvalRunner:
@@ -164,7 +156,9 @@ class EvalRunner:
         if user is None or dataset is None:
             raise ValueError("Eval run references a missing user or dataset.")
         config = EvalRunConfig.model_validate(run.config)
-        plan = self._build_plan(dataset, config)
+        all_queries = self.datasets.list_queries(dataset.id)
+        qrels = positive_qrels(self.datasets.list_judgments(dataset.id))
+        plan = self._build_plan(dataset, config, all_queries, qrels)
 
         run.status = EvalRunStatus.PROVISIONING.value
         run.progress_total = len(plan.corpus_doc_ids) + len(plan.query_ids)
@@ -179,8 +173,7 @@ class EvalRunner:
         self.session.add(run)
         self.session.commit()
 
-        queries = self._sampled_queries(dataset.id, plan)
-        qrels = self._qrels_by_query(dataset.id)
+        queries = self._sampled_queries(all_queries, plan)
         mapping = EvalProvisioner(self.session).document_mapping(provision.collection.id)
         funnel_inputs = self._evaluate_queries(
             run, user, provision.collection, queries, qrels, plan, config, mapping,
@@ -193,14 +186,18 @@ class EvalRunner:
 
     # -- phases ---------------------------------------------------------------
 
-    def _build_plan(self, dataset: models.EvalDataset, config: EvalRunConfig) -> SamplePlan:
+    def _build_plan(
+        self,
+        dataset: models.EvalDataset,
+        config: EvalRunConfig,
+        queries: list[models.EvalDatasetQuery],
+        qrels: dict[str, dict[str, int]],
+    ) -> SamplePlan:
         """Sample queries, gold docs, and distractors for this run."""
-        queries = self.datasets.list_queries(dataset.id)
-        graded = positive_qrels(self.datasets.list_judgments(dataset.id))
         documents = self.datasets.list_documents(dataset.id)
         return build_sample_plan(
             query_ids=[query.external_query_id for query in queries],
-            qrels={query_id: set(grades) for query_id, grades in graded.items()},
+            qrels={query_id: set(grades) for query_id, grades in qrels.items()},
             corpus_doc_ids=[doc.external_doc_id for doc in documents],
             num_queries=config.num_queries,
             distractor_pool_size=config.distractor_pool_size,
@@ -344,21 +341,16 @@ class EvalRunner:
 
     # -- helpers ---------------------------------------------------------------
 
+    @staticmethod
     def _sampled_queries(
-        self, dataset_id: UUID, plan: SamplePlan
+        queries: list[models.EvalDatasetQuery], plan: SamplePlan
     ) -> list[models.EvalDatasetQuery]:
-        """Load the sampled queries in plan order."""
+        """Filter the loaded queries down to the plan's sample, in plan order."""
         sampled = set(plan.query_ids)
-        queries = [
-            query
-            for query in self.datasets.list_queries(dataset_id)
-            if query.external_query_id in sampled
-        ]
-        return sorted(queries, key=lambda query: query.external_query_id)
-
-    def _qrels_by_query(self, dataset_id: UUID) -> dict[str, dict[str, int]]:
-        """Group the dataset's positive qrels (grades by doc) per query."""
-        return positive_qrels(self.datasets.list_judgments(dataset_id))
+        return sorted(
+            (query for query in queries if query.external_query_id in sampled),
+            key=lambda query: query.external_query_id,
+        )
 
     def _retrieval_definition(self, run: models.EvalRun) -> PipelineDefinition | None:
         """Load the retrieval pipeline's definition, or None when it is gone."""

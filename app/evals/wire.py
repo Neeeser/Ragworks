@@ -6,8 +6,6 @@ Kept beside the service so routes stay thin and the API never returns a db model
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from app.db import models
 from app.schemas.enums import (
     EvalDatasetSource,
@@ -25,6 +23,7 @@ from app.schemas.evals import (
     EvalRunSummary,
     FunnelSummary,
 )
+from app.utils.ordering import unique_in_order
 
 
 def to_dataset_read(dataset: models.EvalDataset) -> EvalDatasetRead:
@@ -108,7 +107,7 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         query_event_id=item.query_event_id,
         result_count=item.result_count,
         gold_doc_ids=list(item.gold_doc_ids),
-        retrieved_document_ids=_rank_ordered_unique(
+        retrieved_document_ids=unique_in_order(
             chunk.document_id for chunk in retrieved
         ),
         retrieved=retrieved,
@@ -125,15 +124,3 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         failed=item.failed,
         error_message=item.error_message,
     )
-
-
-def _rank_ordered_unique(document_ids: Iterable[str]) -> list[str]:
-    """Deduplicate document ids while preserving rank order."""
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for document_id in document_ids:
-        if document_id in seen:
-            continue
-        seen.add(document_id)
-        ordered.append(document_id)
-    return ordered

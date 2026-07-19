@@ -75,6 +75,16 @@ class ImportBuiltinDatasetRequest(BaseModel):
     )
 
 
+class UploadDatasetRequest(BaseModel):
+    """A custom golden dataset upload, as BEIR-format file contents."""
+
+    name: str
+    description: str | None = None
+    corpus: str
+    queries: str
+    qrels: str
+
+
 # --------------------------------------------------------------------------- #
 # Metric catalog
 # --------------------------------------------------------------------------- #

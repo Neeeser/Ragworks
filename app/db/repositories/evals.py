@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from app.db import models
 from app.db.repositories.base import Repository
@@ -141,6 +141,25 @@ class EvalRunRepository(Repository):
             .order_by(col(models.EvalRun.created_at).desc())
         )
         return list(self.session.exec(statement).all())
+
+    def count_for_dataset(self, dataset_id: UUID) -> int:
+        """Count every run (any status) referencing a dataset."""
+        statement = select(func.count(col(models.EvalRun.id))).where(  # pylint: disable=not-callable
+            col(models.EvalRun.dataset_id) == dataset_id
+        )
+        return int(self.session.exec(statement).one())
+
+    def delete_with_items(self, run: models.EvalRun) -> None:
+        """Delete a run and bulk-delete its per-query items.
+
+        Items are bulk-deleted first: the ORM has no mapped relationship here,
+        and per-row deletes were O(n) round trips for large runs.
+        """
+        self.session.execute(
+            sa_delete(models.EvalRunItem).where(col(models.EvalRunItem.run_id) == run.id)
+        )
+        self.session.delete(run)
+        self.session.flush()
 
     def add_item(self, item: models.EvalRunItem) -> models.EvalRunItem:
         """Persist one evaluated-query item and return it."""

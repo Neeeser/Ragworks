@@ -15,6 +15,7 @@ from sqlmodel import col, select
 
 from app.db import models
 from app.db.repositories.base import Repository, user_scoped
+from app.schemas.enums import CollectionPurpose
 
 
 class CollectionRepository(Repository):
@@ -37,7 +38,7 @@ class CollectionRepository(Repository):
         """List the user's eval-owned collections for the Evals management page."""
         statement = select(models.Collection).where(
             col(models.Collection.user_id) == user_id,
-            col(models.Collection.system_purpose) == "eval",
+            col(models.Collection.system_purpose) == CollectionPurpose.EVAL.value,
         )
         return list(self.session.exec(statement).all())
 
