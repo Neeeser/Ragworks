@@ -261,10 +261,26 @@ class EvalService:
             raise NotFoundError("Eval run not found.")
         return run
 
-    def list_run_items(self, user: models.User, run_id: UUID) -> list[models.EvalRunItem]:
-        """Return the persisted per-query items for a user-owned run."""
+    def list_run_items(
+        self, user: models.User, run_id: UUID
+    ) -> tuple[list[models.EvalRunItem], dict[str, str]]:
+        """Return a run's per-query items plus titles for the documents involved.
+
+        The title map covers every gold and retrieved external doc id across
+        the items, so the UI can name documents instead of showing raw ids.
+        """
         run = self.get_run(user, run_id)
-        return self.runs.list_items(run.id)
+        items = self.runs.list_items(run.id)
+        involved: set[str] = set()
+        for item in items:
+            involved.update(item.gold_doc_ids)
+            involved.update(
+                str(entry["document_id"])
+                for entry in item.retrieved
+                if isinstance(entry, dict) and "document_id" in entry
+            )
+        titles = self.datasets.get_titles_by_external_ids(run.dataset_id, sorted(involved))
+        return items, titles
 
     def cancel_run(self, user: models.User, run_id: UUID) -> models.EvalRun:
         """Request cooperative cancellation of an in-flight run."""

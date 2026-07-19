@@ -6,6 +6,8 @@ Kept beside the service so routes stay thin and the API never returns a db model
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from app.db import models
 from app.schemas.enums import (
     EvalDatasetSource,
@@ -15,6 +17,8 @@ from app.schemas.enums import (
 )
 from app.schemas.evals import (
     EvalDatasetRead,
+    EvalItemNodeDocs,
+    EvalRetrievedChunk,
     EvalRunConfig,
     EvalRunItemRead,
     EvalRunRead,
@@ -89,17 +93,27 @@ def to_run_summary(run: models.EvalRun) -> EvalRunSummary:
 
 def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
     """Shape one per-query item row for the wire."""
+    retrieved = [
+        EvalRetrievedChunk.model_validate(entry)
+        for entry in item.retrieved
+        if isinstance(entry, dict) and "document_id" in entry
+    ]
     return EvalRunItemRead(
         id=item.id,
         query_external_id=item.query_external_id,
         query_text=item.query_text,
         pipeline_run_id=item.pipeline_run_id,
+        query_event_id=item.query_event_id,
         result_count=item.result_count,
         gold_doc_ids=list(item.gold_doc_ids),
-        retrieved_document_ids=[
-            str(entry["document_id"])
-            for entry in item.retrieved
-            if isinstance(entry, dict) and "document_id" in entry
+        retrieved_document_ids=_rank_ordered_unique(
+            chunk.document_id for chunk in retrieved
+        ),
+        retrieved=retrieved,
+        per_node_funnel=[
+            EvalItemNodeDocs.model_validate(entry)
+            for entry in item.per_node_funnel
+            if isinstance(entry, dict) and "node_id" in entry
         ],
         metrics={
             key: float(value)
@@ -109,3 +123,15 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         failed=item.failed,
         error_message=item.error_message,
     )
+
+
+def _rank_ordered_unique(document_ids: Iterable[str]) -> list[str]:
+    """Deduplicate document ids while preserving rank order."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for document_id in document_ids:
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+        ordered.append(document_id)
+    return ordered

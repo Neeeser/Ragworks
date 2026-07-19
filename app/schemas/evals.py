@@ -187,6 +187,26 @@ class FunnelSummary(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
+class EvalRetrievedChunk(BaseModel):
+    """One retrieved chunk within an evaluated query, in rank order."""
+
+    chunk_id: str | None = None
+    document_id: str
+    score: float | None = None
+
+
+class EvalItemNodeDocs(BaseModel):
+    """The documents one pipeline node emitted for one evaluated query.
+
+    `node_id` matches the run-level funnel stages (including the `"ingestion"`
+    sentinel), so the UI can render a per-document retained/dropped path across
+    the same stage sequence.
+    """
+
+    node_id: str
+    document_ids: list[str]
+
+
 class EvalRunItemRead(BaseModel):
     """One evaluated query's result within a run."""
 
@@ -194,12 +214,26 @@ class EvalRunItemRead(BaseModel):
     query_external_id: str
     query_text: str
     pipeline_run_id: UUID | None = None
+    query_event_id: UUID | None = None
     result_count: int
     gold_doc_ids: list[str]
     retrieved_document_ids: list[str]
+    retrieved: list[EvalRetrievedChunk] = Field(default_factory=list)
+    per_node_funnel: list[EvalItemNodeDocs] = Field(default_factory=list)
     metrics: dict[str, float]
     failed: bool = False
     error_message: str | None = None
+
+
+class EvalRunItemsResponse(BaseModel):
+    """A run's per-query items plus display titles for the documents involved.
+
+    `document_titles` maps external doc ids (gold and retrieved) to their
+    corpus titles so the UI can name documents instead of showing raw ids.
+    """
+
+    items: list[EvalRunItemRead]
+    document_titles: dict[str, str] = Field(default_factory=dict)
 
 
 class EvalRunRead(BaseModel):

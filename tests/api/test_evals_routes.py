@@ -81,6 +81,57 @@ def test_create_run_validates_references(client: TestClient) -> None:
     )
 
 
+def test_run_items_response_names_documents(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """Items come back with typed detail plus a gold/retrieved title map."""
+    dataset = models.EvalDataset(
+        user_id=auth_user.id, name="Golden", source="custom_upload", status="ready"
+    )
+    ingestion = models.Pipeline(
+        user_id=auth_user.id, name="Ing", kind=models.PipelineKind.INGESTION
+    )
+    retrieval = models.Pipeline(
+        user_id=auth_user.id, name="Ret", kind=models.PipelineKind.RETRIEVAL
+    )
+    session.add_all([dataset, ingestion, retrieval])
+    session.commit()
+    session.add(
+        models.EvalDatasetDocument(
+            dataset_id=dataset.id, external_doc_id="d1", title="Alpha doc", text="alpha"
+        )
+    )
+    run = models.EvalRun(
+        user_id=auth_user.id,
+        dataset_id=dataset.id,
+        ingestion_pipeline_id=ingestion.id,
+        retrieval_pipeline_id=retrieval.id,
+        status="completed",
+    )
+    session.add(run)
+    session.commit()
+    session.add(
+        models.EvalRunItem(
+            run_id=run.id,
+            query_external_id="q1",
+            query_text="what is alpha",
+            result_count=1,
+            gold_doc_ids=["d1"],
+            retrieved=[{"chunk_id": "c1:0", "document_id": "d1", "score": 0.9}],
+            metrics={"recall@10": 1.0},
+            per_node_funnel=[{"node_id": "ingestion", "document_ids": ["d1"]}],
+        )
+    )
+    session.commit()
+
+    payload = client.get(f"/api/evals/runs/{run.id}/items").json()
+    assert payload["document_titles"] == {"d1": "Alpha doc"}
+    item = payload["items"][0]
+    assert item["retrieved"] == [{"chunk_id": "c1:0", "document_id": "d1", "score": 0.9}]
+    assert item["retrieved_document_ids"] == ["d1"]
+    assert item["per_node_funnel"] == [{"node_id": "ingestion", "document_ids": ["d1"]}]
+
+
 def test_cross_user_run_isolation(
     client: TestClient, session: Session
 ) -> None:

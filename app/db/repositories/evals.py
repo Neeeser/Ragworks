@@ -83,6 +83,25 @@ class EvalDatasetRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def get_titles_by_external_ids(
+        self, dataset_id: UUID, external_ids: Sequence[str]
+    ) -> dict[str, str]:
+        """Map external doc ids to their corpus titles (untitled docs omitted)."""
+        if not external_ids:
+            return {}
+        statement = select(
+            col(models.EvalDatasetDocument.external_doc_id),
+            col(models.EvalDatasetDocument.title),
+        ).where(
+            col(models.EvalDatasetDocument.dataset_id) == dataset_id,
+            col(models.EvalDatasetDocument.external_doc_id).in_(list(external_ids)),
+        )
+        return {
+            external_id: title
+            for external_id, title in self.session.exec(statement).all()
+            if title
+        }
+
     def delete(self, dataset: models.EvalDataset) -> None:
         """Delete a dataset and all of its corpus/queries/qrels rows.
 

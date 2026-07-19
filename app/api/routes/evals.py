@@ -20,7 +20,7 @@ from app.schemas.evals import (
     EvalDatasetRead,
     EvalMetricInfo,
     EvalRunCreate,
-    EvalRunItemRead,
+    EvalRunItemsResponse,
     EvalRunRead,
     EvalRunSummary,
     ImportBuiltinDatasetRequest,
@@ -166,18 +166,21 @@ def get_run(
         raise to_http_exception(exc) from exc
 
 
-@router.get("/runs/{run_id}/items", response_model=list[EvalRunItemRead])
+@router.get("/runs/{run_id}/items", response_model=EvalRunItemsResponse)
 def list_run_items(
     run_id: UUID,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
-) -> list[EvalRunItemRead]:
-    """Return the per-query results for one run."""
+) -> EvalRunItemsResponse:
+    """Return the per-query results for one run, with document display titles."""
     try:
-        items = EvalService(session).list_run_items(current_user, run_id)
+        items, titles = EvalService(session).list_run_items(current_user, run_id)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-    return [to_run_item_read(item) for item in items]
+    return EvalRunItemsResponse(
+        items=[to_run_item_read(item) for item in items],
+        document_titles=titles,
+    )
 
 
 @router.post("/runs/{run_id}/cancel", response_model=EvalRunRead)
