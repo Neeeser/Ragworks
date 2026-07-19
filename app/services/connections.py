@@ -111,6 +111,7 @@ def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
         provider_type=ProviderType(connection.provider_type),
         label=connection.label,
         kinds=list(descriptor.kinds if adapter is None else _connection_kinds(adapter)),
+        config_valid=adapter is not None,
         config=public_config,
         secrets_configured=secrets_configured,
         created_at=connection.created_at,

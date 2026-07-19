@@ -136,6 +136,9 @@ class ConnectionRead(DateTimeConfigMixin, BaseModel):
     provider_type: ProviderType
     label: str
     kinds: list[ProviderKind]
+    # False when the stored config no longer validates: the row still lists
+    # (visible and deletable) but must not satisfy capability gates.
+    config_valid: bool = True
     config: dict[str, str]
     secrets_configured: dict[str, bool]
     created_at: datetime

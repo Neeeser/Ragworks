@@ -15,6 +15,7 @@ export function makeConnection(overrides: Partial<ProviderConnection> = {}): Pro
     provider_type: "openrouter",
     label: "OpenRouter",
     kinds: ["embedding", "chat"],
+    config_valid: true,
     config: {},
     secrets_configured: { api_key: true },
     created_at: "2026-01-01T00:00:00Z",

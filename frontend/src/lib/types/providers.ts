@@ -39,6 +39,8 @@ export interface ProviderConnection {
   provider_type: ProviderType;
   label: string;
   kinds: ProviderKind[];
+  /** False when the stored config no longer validates — the row lists but must not satisfy capability gates. */
+  config_valid: boolean;
   config: Record<string, string>;
   secrets_configured: Record<string, boolean>;
   created_at: string;

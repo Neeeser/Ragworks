@@ -170,6 +170,9 @@ export function computeKindCoverage(
     vector_store: false,
   };
   for (const connection of connections) {
+    // Invalid-config rows list their potential kinds for visibility only;
+    // they cannot serve models, so they never satisfy coverage.
+    if (connection.config_valid === false) continue;
     for (const kind of connection.kinds) {
       coverage[kind] = true;
     }
