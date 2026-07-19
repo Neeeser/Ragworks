@@ -427,6 +427,10 @@ this file in the same PR.
 
 ## Code quality standards
 
+- **A gate never iterates a whole enum** (`all(coverage[k] for k in ProviderKind)`)
+  — enumerate the members it actually requires. Adding an enum member silently
+  strengthens every whole-enum gate: adding `RERANKING` once trapped users in the
+  setup wizard on every page load.
 - **Strong typing everywhere.** No `Any` as an escape hatch; no `isinstance`
   ladders in place of a schema or discriminated union. Python ≥3.11 house style:
   `X | None`, `list[X]`, `dict[K, V]` — not `Optional`/`List` (ruff `UP` flags
@@ -534,6 +538,11 @@ this file in the same PR.
   carries `dimension` (for index creation/validation). When the embeddings envelope
   carries an `error` instead of `data`, raise `ExternalServiceError` with the
   provider's message (502), never a bare `ValueError` (500).
+- **A stream parser is written against captured wire frames, not assumed shapes**
+  — Cohere's v2 SSE stream ends with a bare `data: [DONE]` sentinel and its chat
+  API 400s on an empty assistant history entry; both shipped as live-only bugs
+  because the mocked fixtures encoded the shape we expected instead of a
+  captured stream tail.
 - **Never feature-detect a pinned SDK with `inspect.signature`.** A runtime probe
   of Pinecone's `create_index` was always-false dead code on the version actually
   pinned, silently no-opping a config field. Introspect the *installed* SDK while
