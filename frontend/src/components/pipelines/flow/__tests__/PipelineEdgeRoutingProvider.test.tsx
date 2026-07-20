@@ -1,12 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { Position } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineEdgeRoutingProvider, usePipelineEdgeRoute } from "../PipelineEdgeRoutingProvider";
 
 import type { PipelineNodeData } from "../../PipelineNode";
-import type { RoutingSnapshot } from "../pipeline-edge-routing-controller";
-import type { BatchRoutingResults } from "@tisoap/react-flow-smart-edge";
 import type { Node } from "@xyflow/react";
 
 const syncRoute = vi.fn((input: unknown) => {
@@ -14,91 +12,85 @@ const syncRoute = vi.fn((input: unknown) => {
   return {};
 });
 const ROUTE_TEST_ID = "route-edge-1";
+const EDGE_2_TEST_ID = "route-edge-2";
+const EDGE_1_ROUTE_AT_264 = "route:edge-1:264";
+const EDGE_2_ROUTE_AT_264 = "route:edge-2:264";
 
 vi.mock("@tisoap/react-flow-smart-edge", () => ({
   routeSmartEdgesBatch: (input: unknown) => syncRoute(input),
 }));
 
+/** Stub proving no Worker is ever constructed or messaged. */
 class FakeWorker {
   static instances: FakeWorker[] = [];
-  static throwOnPost = false;
-  readonly messages: RoutingSnapshot[] = [];
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onerror: (() => void) | null = null;
-  terminated = false;
+  readonly messages: unknown[] = [];
 
   constructor() {
     FakeWorker.instances.push(this);
   }
 
-  postMessage(snapshot: RoutingSnapshot) {
-    if (FakeWorker.throwOnPost) throw new DOMException("clone failed", "DataCloneError");
-    this.messages.push(snapshot);
+  postMessage(message: unknown) {
+    this.messages.push(message);
   }
 
-  terminate() {
-    this.terminated = true;
-  }
+  terminate() {}
+}
 
-  complete(index: number, path: string) {
-    this.completeWithResults(index, {
-      "edge-1": {
-        svgPathString: path,
+const makeNode = (id: string, x: number, y: number): Node<PipelineNodeData> => ({
+  id,
+  position: { x, y },
+  measured: { width: 264, height: 92 },
+  data: {
+    label: id,
+    nodeType: "utility.passthrough",
+    inputs: [],
+    outputs: [],
+    config: {},
+  },
+});
+
+const nodes = [makeNode("source", 0, 0), makeNode("target", 736, 0)];
+
+type RoutingInput = {
+  nodes: { id: string; position: { x: number; y: number } }[];
+  edges: { id: string; sourceX: number; sourceY: number; targetY: number }[];
+};
+
+/** Routes every submitted edge to a path naming the edge and its sourceX. */
+const routeAllEdges = (input: unknown) => {
+  const { edges } = input as RoutingInput;
+  return Object.fromEntries(
+    edges.map((edge) => [
+      edge.id,
+      {
+        svgPathString: `route:${edge.id}:${edge.sourceX}`,
         edgeCenterX: 500,
         edgeCenterY: 74,
         points: [],
       },
-    });
-  }
-
-  completeWithResults(index: number, results: BatchRoutingResults) {
-    const snapshot = this.messages[index];
-    this.onmessage?.({ data: { version: snapshot.version, results } } as MessageEvent);
-  }
-}
-
-const nodes: Node<PipelineNodeData>[] = [
-  {
-    id: "source",
-    position: { x: 0, y: 0 },
-    measured: { width: 264, height: 92 },
-    data: {
-      label: "Source",
-      nodeType: "utility.passthrough",
-      inputs: [],
-      outputs: [],
-      config: {},
-    },
-  },
-  {
-    id: "target",
-    position: { x: 736, y: 0 },
-    measured: { width: 264, height: 92 },
-    data: {
-      label: "Target",
-      nodeType: "utility.passthrough",
-      inputs: [],
-      outputs: [],
-      config: {},
-    },
-  },
-];
+    ]),
+  );
+};
 
 function RouteProbe({
   edgeId = "edge-1",
+  source = "source",
+  target = "target",
   sourceX,
   sourceY = 74,
   targetY = 74,
 }: {
   edgeId?: string;
+  source?: string;
+  target?: string;
   sourceX: number;
   sourceY?: number;
   targetY?: number;
 }) {
   const route = usePipelineEdgeRoute({
     id: edgeId,
-    source: "source",
-    target: "target",
+    source,
+    target,
     sourceX,
     sourceY,
     targetX: 736,
@@ -115,61 +107,29 @@ const graph = (sourceX: number, routingNodes = nodes) => (
   </PipelineEdgeRoutingProvider>
 );
 
+const flush = () => act(async () => Promise.resolve());
+
 describe("PipelineEdgeRoutingProvider", () => {
   beforeEach(() => {
-    FakeWorker.instances = [];
-    FakeWorker.throwOnPost = false;
     syncRoute.mockClear();
-    vi.stubGlobal("Worker", FakeWorker);
+    syncRoute.mockImplementation(routeAllEdges);
   });
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("falls back immediately and applies only the newest rapid endpoint snapshot", async () => {
+  it("applies only the newest of rapid endpoint snapshots", async () => {
     const { rerender } = render(graph(264));
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
-    act(() => worker.complete(0, "seed"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("seed");
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent(EDGE_1_ROUTE_AT_264);
 
     rerender(graph(274));
-    await waitFor(() => expect(worker.messages).toHaveLength(2));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
     rerender(graph(284));
     rerender(graph(294));
+    // Until the pre-paint flush lands, a changed edge renders its native
+    // fallback rather than a route computed for stale endpoints.
     expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-
-    act(() => worker.complete(1, "stale-a"));
-    await waitFor(() => expect(worker.messages).toHaveLength(3));
-    expect(worker.messages.map((message) => message.input.edges[0]?.sourceX)).toEqual([
-      264, 274, 294,
-    ]);
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-
-    act(() => worker.complete(1, "late-a"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-    act(() => worker.complete(2, "current-c"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("current-c");
-  });
-
-  it("holds the native fallback while a node is dragging, even when a route matches", async () => {
-    const draggingNodes = nodes.map((node) =>
-      node.id === "source" ? { ...node, dragging: true } : node,
-    );
-    const { rerender } = render(graph(264, draggingNodes));
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
-
-    // The worker completes a route that exactly matches current geometry, but a
-    // drag is in progress: the edge must not flash to the routed path.
-    act(() => worker.complete(0, "routed-mid-drag"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-
-    // On drag stop the same geometry is no longer dragging: the route applies.
-    rerender(graph(264, nodes));
-    await waitFor(() =>
-      expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("routed-mid-drag"),
-    );
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("route:edge-1:294");
   });
 
   it("keeps routes for multiple ports distinct within one batch", async () => {
@@ -179,45 +139,20 @@ describe("PipelineEdgeRoutingProvider", () => {
         <RouteProbe edgeId="edge-bottom" sourceX={264} sourceY={86} targetY={86} />
       </PipelineEdgeRoutingProvider>,
     );
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
-    expect(
-      worker.messages[0].input.edges.map(({ id, sourceY, targetY }) => ({
-        id,
-        sourceY,
-        targetY,
-      })),
-    ).toEqual([
+    await flush();
+    const submitted = syncRoute.mock.calls.at(-1)?.[0] as RoutingInput;
+    expect(submitted.edges.map(({ id, sourceY, targetY }) => ({ id, sourceY, targetY }))).toEqual([
       { id: "edge-top", sourceY: 62, targetY: 62 },
       { id: "edge-bottom", sourceY: 86, targetY: 86 },
     ]);
-
-    act(() =>
-      worker.completeWithResults(0, {
-        "edge-top": {
-          svgPathString: "top-path",
-          edgeCenterX: 500,
-          edgeCenterY: 62,
-          points: [],
-        },
-        "edge-bottom": {
-          svgPathString: "bottom-path",
-          edgeCenterX: 500,
-          edgeCenterY: 86,
-          points: [],
-        },
-      }),
-    );
-    expect(screen.getByTestId("route-edge-top")).toHaveTextContent("top-path");
-    expect(screen.getByTestId("route-edge-bottom")).toHaveTextContent("bottom-path");
+    expect(screen.getByTestId("route-edge-top")).toHaveTextContent("route:edge-top:264");
+    expect(screen.getByTestId("route-edge-bottom")).toHaveTextContent("route:edge-bottom:264");
   });
 
   it("clears a route immediately when obstacle geometry changes", async () => {
     const { rerender } = render(graph(264));
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
-    act(() => worker.complete(0, "seed"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("seed");
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent(EDGE_1_ROUTE_AT_264);
 
     const movedNodes = nodes.map((node) =>
       node.id === "source" ? { ...node, position: { x: 24, y: 0 } } : node,
@@ -225,44 +160,113 @@ describe("PipelineEdgeRoutingProvider", () => {
     rerender(graph(264, movedNodes));
 
     expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-    await waitFor(() => expect(worker.messages).toHaveLength(2));
-    expect(worker.messages[1].input.nodes[0].position.x).toBe(24);
-    act(() => worker.complete(1, "moved"));
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("moved");
+    await flush();
+    const submitted = syncRoute.mock.calls.at(-1)?.[0] as RoutingInput;
+    expect(submitted.nodes[0].position.x).toBe(24);
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent(EDGE_1_ROUTE_AT_264);
   });
 
-  it("keeps the native fallback when the worker fails and sync routing finds no path", async () => {
+  it("keeps the native fallback when routing finds no path", async () => {
+    syncRoute.mockImplementation(() => ({}));
     render(graph(264));
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
-
-    act(() => worker.onerror?.());
-
-    await waitFor(() => expect(syncRoute).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(syncRoute).toHaveBeenCalled();
     expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
   });
 
-  it("switches to the safe fallback when posting to the worker throws", async () => {
-    FakeWorker.throwOnPost = true;
-
-    render(graph(264));
-
-    await waitFor(() => expect(syncRoute).toHaveBeenCalledTimes(1));
-    expect(FakeWorker.instances[0].terminated).toBe(true);
-    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
-  });
-
-  it("terminates the worker and drops pending snapshots on unmount", async () => {
+  it("computes no routes after unmount", async () => {
     const { rerender, unmount } = render(graph(264));
-    const worker = FakeWorker.instances[0];
-    await waitFor(() => expect(worker.messages).toHaveLength(1));
+    await flush();
+    syncRoute.mockClear();
     rerender(graph(274));
-    rerender(graph(284));
     unmount();
+    await flush();
+    expect(syncRoute).not.toHaveBeenCalled();
+  });
+});
 
-    expect(worker.terminated).toBe(true);
-    act(() => worker.complete(0, "stale"));
-    await act(async () => Promise.resolve());
-    expect(worker.messages).toHaveLength(1);
+describe("definitive edge layout", () => {
+  // jsdom has no Worker, and the stubbed one must stay untouched: routing
+  // resolves on the main thread in a pre-paint microtask, so a graph never
+  // paints native fallbacks first and shifts to routes later.
+  beforeEach(() => {
+    syncRoute.mockClear();
+    syncRoute.mockImplementation(routeAllEdges);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  const fourNodes = [...nodes, makeNode("other-a", 0, 300), makeNode("other-b", 736, 300)];
+
+  const twoEdgeGraph = (routingNodes: Node<PipelineNodeData>[], sourceX: number) => (
+    <PipelineEdgeRoutingProvider nodes={routingNodes}>
+      <RouteProbe edgeId="edge-1" sourceX={sourceX} />
+      <RouteProbe
+        edgeId="edge-2"
+        source="other-a"
+        target="other-b"
+        sourceX={264}
+        sourceY={374}
+        targetY={374}
+      />
+    </PipelineEdgeRoutingProvider>
+  );
+
+  it("publishes initial routes from the main thread without a worker roundtrip", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    FakeWorker.instances = [];
+    render(graph(264));
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent(EDGE_1_ROUTE_AT_264);
+    expect(FakeWorker.instances.flatMap((worker) => worker.messages)).toHaveLength(0);
+  });
+
+  it("keeps unmoved edges on their routed paths when a node drag begins", async () => {
+    const { rerender } = render(twoEdgeGraph(fourNodes, 264));
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent(EDGE_1_ROUTE_AT_264);
+    expect(screen.getByTestId(EDGE_2_TEST_ID)).toHaveTextContent(EDGE_2_ROUTE_AT_264);
+
+    const draggedNodes = fourNodes.map((node) =>
+      node.id === "source" ? { ...node, position: { x: 10, y: 0 }, dragging: true } : node,
+    );
+    rerender(twoEdgeGraph(draggedNodes, 274));
+    await flush();
+
+    // The dragged node's own edge follows the cursor on the native path; every
+    // other edge keeps its exact routed path — no graph-wide flip at grab.
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("fallback");
+    expect(screen.getByTestId(EDGE_2_TEST_ID)).toHaveTextContent(EDGE_2_ROUTE_AT_264);
+
+    const droppedNodes = fourNodes.map((node) =>
+      node.id === "source" ? { ...node, position: { x: 10, y: 0 }, dragging: false } : node,
+    );
+    rerender(twoEdgeGraph(droppedNodes, 274));
+    await flush();
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("route:edge-1:274");
+    expect(screen.getByTestId(EDGE_2_TEST_ID)).toHaveTextContent(EDGE_2_ROUTE_AT_264);
+  });
+
+  it("computes no routes while a drag is in progress and snaps once on drop", async () => {
+    const { rerender } = render(twoEdgeGraph(fourNodes, 264));
+    await flush();
+    syncRoute.mockClear();
+
+    for (const x of [8, 16, 24]) {
+      const draggingNodes = fourNodes.map((node) =>
+        node.id === "source" ? { ...node, position: { x, y: 0 }, dragging: true } : node,
+      );
+      rerender(twoEdgeGraph(draggingNodes, 264 + x));
+      await flush();
+    }
+    expect(syncRoute).not.toHaveBeenCalled();
+
+    const droppedNodes = fourNodes.map((node) =>
+      node.id === "source" ? { ...node, position: { x: 24, y: 0 }, dragging: false } : node,
+    );
+    rerender(twoEdgeGraph(droppedNodes, 288));
+    await flush();
+    expect(syncRoute).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(ROUTE_TEST_ID)).toHaveTextContent("route:edge-1:288");
   });
 });
