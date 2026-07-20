@@ -38,8 +38,10 @@ export function Tooltip({ content, children, side = "top", className }: TooltipP
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-20 whitespace-nowrap rounded-2xl border border-hairline",
-          "bg-canvas-raised/95 px-3 py-2 text-[11px] font-semibold text-body",
+          // w-max + max-w keeps short labels on one line while long
+          // descriptions wrap instead of running off the viewport.
+          "pointer-events-none absolute z-20 w-max max-w-72 whitespace-normal rounded-2xl border border-hairline",
+          "bg-canvas-raised/95 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-body",
           "shadow-elevation-2 backdrop-blur",
           "opacity-0 transition duration-150 group-hover:opacity-100 group-hover:scale-100",
           "group-focus-within:opacity-100 group-focus-within:scale-100",

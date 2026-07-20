@@ -56,6 +56,14 @@ def open_session() -> Iterator[Session]:
     ensure_database_exists(get_database_url())
     engine = create_test_engine()
     reset_database(engine)
+    # The schema reset re-creates the pgvector type with a new OID; pooled
+    # connections on the process-wide app engine (used by `session_scope()` in
+    # background/worker paths) cache the old OID and fail with "cache lookup
+    # failed for type" on their next vector bind. Drop the pool so every test
+    # starts on fresh connections.
+    from app.db.engine import engine as app_engine
+
+    app_engine.dispose()
     invalidate_app_config_cache()
     with Session(engine) as session:
         yield session

@@ -8,3 +8,4 @@ export * from "@/lib/types/traces";
 export * from "@/lib/types/config";
 export * from "@/lib/types/setup";
 export * from "@/lib/types/providers";
+export * from "@/lib/types/evals";

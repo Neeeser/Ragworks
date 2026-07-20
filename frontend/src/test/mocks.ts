@@ -139,6 +139,19 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
       retrieval: makeTraceResponse(),
       origin: null,
     })),
+    // evals
+    fetchEvalBenchmarks: vi.fn(async () => []),
+    fetchEvalMetricCatalog: vi.fn(async () => []),
+    fetchEvalDatasets: vi.fn(async () => []),
+    fetchEvalDataset: vi.fn(async () => null),
+    fetchEvalRuns: vi.fn(async () => []),
+    fetchEvalCollections: vi.fn(async () => []),
+    fetchEvalCollectionDocuments: vi.fn(async () => ({ total: 0, items: [] })),
+    fetchEvalDatasetDocument: vi.fn(async () => ({
+      external_doc_id: "d1",
+      title: null,
+      text: "",
+    })),
     // pipelines
     fetchPipelines: vi.fn(async () => []),
     fetchPipeline: vi.fn(async () => makePipeline()),

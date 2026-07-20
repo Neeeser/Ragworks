@@ -1,6 +1,15 @@
 "use client";
 
-import { FolderTree, GitBranch, Home, LogOut, MessageSquare, Settings, Shield } from "lucide-react";
+import {
+  FolderTree,
+  Gauge,
+  GitBranch,
+  Home,
+  LogOut,
+  MessageSquare,
+  Settings,
+  Shield,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,6 +26,7 @@ const navLinks = [
   { href: "/collections", label: "Collections", icon: FolderTree },
   { href: "/chat", label: "Chat Studio", icon: MessageSquare },
   { href: "/pipelines", label: "Pipelines", icon: GitBranch },
+  { href: "/evals", label: "Evals", icon: Gauge },
 ];
 
 function ConsoleLayoutContent({ children }: { children: React.ReactNode }) {

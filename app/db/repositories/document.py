@@ -35,6 +35,26 @@ class DocumentRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def ready_counts_by_collection(
+        self, collection_ids: Iterable[UUID]
+    ) -> dict[UUID, int]:
+        """Count READY (indexed) documents per collection, in one query."""
+        ids = list(collection_ids)
+        if not ids:
+            return {}
+        statement = (
+            select(
+                col(models.Document.collection_id),
+                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+            )
+            .where(
+                col(models.Document.collection_id).in_(ids),
+                col(models.Document.status) == models.DocumentStatus.READY,
+            )
+            .group_by(col(models.Document.collection_id))
+        )
+        return {row[0]: int(row[1]) for row in self.session.exec(statement).all()}
+
     def add(self, document: models.Document) -> models.Document:
         """Persist a new document and return it."""
         return self._add(document)

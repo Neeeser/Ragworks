@@ -44,11 +44,14 @@ const PORT_ROW_HEIGHT = 24;
  * straight instead of picking up a phantom vertical leg.
  */
 const handleOffsetY = (
-  ports: { key: string }[],
+  ports: { key: string }[] | undefined,
   handle: string | null | undefined,
   height: number,
 ): number => {
-  if (ports.length === 0) return height / 2;
+  // The combined trace's index-store node carries IndexStoreNodeData, not
+  // PipelineNodeData, so it has no port arrays. Anchor its edges at the card's
+  // vertical center rather than crashing on a missing `inputs`/`outputs`.
+  if (!ports || ports.length === 0) return height / 2;
   const index = Math.max(
     0,
     ports.findIndex((port) => port.key === handle),

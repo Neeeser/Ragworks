@@ -53,4 +53,25 @@ describe("buildFlowTiming", () => {
     );
     expect(travelMsByEdgeId.has("dangling")).toBe(false);
   });
+
+  it("handles an index-store node whose data has no ports", () => {
+    // The end-to-end (combined ingestion + retrieval) trace draws an index
+    // store between the two bands. It carries IndexStoreNodeData — no
+    // inputs/outputs — and sits on the index read/write edges. buildFlowTiming
+    // must not assume every node's data has port arrays, or the whole
+    // end-to-end trace crashes (the "no ingestion view from an eval" bug).
+    const indexer = makeNode("indexer", 0, 0, 180);
+    const store = {
+      id: "index-store",
+      type: "indexStore",
+      position: { x: 400, y: 0 },
+      width: 220,
+      height: 88,
+      data: { indexName: "ragworks", backend: "pgvector" },
+    } as unknown as Node<PipelineNodeData>;
+    const edges = [{ id: "index::write", source: "indexer", target: "index-store" }];
+
+    const { travelMsByEdgeId } = buildFlowTiming([indexer, store], edges, 1000);
+    expect(travelMsByEdgeId.get("index::write")).toBeGreaterThan(0);
+  });
 });

@@ -425,3 +425,5 @@ export {
   makeModelCatalog,
   makeProviderType,
 } from "@/test/fixtures/providers";
+
+export * from "@/test/fixtures/evals";

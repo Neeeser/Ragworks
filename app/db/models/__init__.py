@@ -19,6 +19,14 @@ from app.db.models.app_setting import AppSetting
 from app.db.models.chat import ChatMessage, ChatSession, ChatSessionCollection
 from app.db.models.collection import Collection
 from app.db.models.document import Document, DocumentChunkRecord
+from app.db.models.evals import (
+    EvalDataset,
+    EvalDatasetDocument,
+    EvalDatasetQuery,
+    EvalRelevanceJudgment,
+    EvalRun,
+    EvalRunItem,
+)
 from app.db.models.events import IngestionEvent, QueryEvent
 from app.db.models.files import FileNode
 from app.db.models.pipeline import (
@@ -57,6 +65,12 @@ __all__ = [
     "Document",
     "DocumentChunkRecord",
     "DocumentStatus",
+    "EvalDataset",
+    "EvalDatasetDocument",
+    "EvalDatasetQuery",
+    "EvalRelevanceJudgment",
+    "EvalRun",
+    "EvalRunItem",
     "FileNode",
     "FileNodeKind",
     "IngestionEvent",

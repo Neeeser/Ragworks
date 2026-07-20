@@ -15,15 +15,30 @@ from sqlmodel import col, select
 
 from app.db import models
 from app.db.repositories.base import Repository, user_scoped
+from app.schemas.enums import CollectionPurpose
 
 
 class CollectionRepository(Repository):
     """Data access helpers for collections."""
 
     def list_for_user(self, user_id: UUID) -> list[models.Collection]:
-        """List collections belonging to a user."""
+        """List a user's own collections, excluding system-purposed ones.
+
+        Eval collections (`system_purpose = "eval"`) are provisioned scaffolding
+        managed from the Evals section; they never appear in the user-facing
+        collection surfaces this method feeds.
+        """
         statement = select(models.Collection).where(
-            models.Collection.user_id == user_id,
+            col(models.Collection.user_id) == user_id,
+            col(models.Collection.system_purpose).is_(None),
+        )
+        return list(self.session.exec(statement).all())
+
+    def list_eval_for_user(self, user_id: UUID) -> list[models.Collection]:
+        """List the user's eval-owned collections for the Evals management page."""
+        statement = select(models.Collection).where(
+            col(models.Collection.user_id) == user_id,
+            col(models.Collection.system_purpose) == CollectionPurpose.EVAL.value,
         )
         return list(self.session.exec(statement).all())
 

@@ -58,6 +58,14 @@ values hidden until focus mode so the ordinary run inspector remains unchanged,
 and model every index target in combined graphs so hybrid branch paths do not end
 at the first store.
 
+**The combined end-to-end graph carries non-`PipelineNodeData` nodes — never
+assume `data.inputs`/`data.outputs` exists.** The index store joining the
+ingestion and retrieval bands is `IndexStoreNodeData` (no port arrays) and sits on
+the index read/write edges. Layout/timing helpers that read `data.inputs.length`
+or `data.outputs.length` must tolerate their absence — an unguarded read crashed
+the whole end-to-end trace (the "no ingestion view from an eval" bug), and it's
+reachable on every hybrid document trace since default pipelines draw a store.
+
 **File previews are a matcher list, not an if-ladder.** The Files page resolves a
 preview renderer per file through `components/files/lib/preview.ts`: an ordered list
 of `{kind, types, typePrefix, extensions}` matchers (content type first, extension

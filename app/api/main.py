@@ -17,6 +17,7 @@ from app.api.routes import (
     config,
     connections,
     documents,
+    evals,
     files,
     health,
     indexes,
@@ -110,6 +111,7 @@ app.include_router(pipelines.router)
 app.include_router(indexes.router)
 app.include_router(collections.router)
 app.include_router(documents.router)
+app.include_router(evals.router)
 app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)
