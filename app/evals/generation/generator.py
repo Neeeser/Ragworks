@@ -215,7 +215,7 @@ def _run_plan(
             setup.config,
             context_text=context_text,
             plan=plan,
-            distractor_texts=distractor_texts(setup.doc_plans, plan, setup.chunk_map, rng),
+            distractor_snippets=distractor_texts(setup.doc_plans, plan, setup.chunk_map, rng),
             accepted_texts=state.accepted_texts,
         )
         state.consecutive_failures = 0
@@ -262,7 +262,7 @@ def _generate_for_context(
     *,
     context_text: str,
     plan: ContextPlan,
-    distractor_texts: list[str],
+    distractor_snippets: list[str],
     accepted_texts: list[str],
 ) -> _ContextBatch:
     """One generation call plus (when needed) one critique call for a context."""
@@ -275,7 +275,7 @@ def _generate_for_context(
             candidates_per_context=CANDIDATES_PER_CONTEXT,
             audience=config.audience,
             example_queries=config.example_queries,
-            distractor_texts=distractor_texts,
+            distractor_texts=distractor_snippets,
         ),
         temperature=GENERATION_TEMPERATURE,
     )
