@@ -1,11 +1,11 @@
 """HTTP contract for GET /api/config and the admin config catalog/PATCH routes.
 
-Every test that touches an env-pin monkeypatches `os.environ` (via
-`monkeypatch.setenv`) and must clear the `get_settings` cache both before and
-after so the pin takes effect and never leaks into later tests. The autouse
-`_invalidate_cache` fixture below resets `get_app_config`'s process cache
-around each test for the same reason -- route tests hit the module cache, not
-a fresh service per call.
+The autouse `_invalidate_cache` fixture below resets `get_app_config`'s
+process cache around each test -- route tests hit the module cache, not a
+fresh service per call. Env-pinned-field rejection is exercised at the
+service layer (`tests/services/test_app_config_service.py`), not here: no
+current field carries an `env_var`, so simulating one needs `iter_config_fields`
+patched, which belongs next to `AppConfigService.apply_update`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.core.config import get_settings
 from app.db import models
 from app.services.app_config import invalidate_app_config_cache
 
@@ -177,26 +176,3 @@ def test_patch_config_unknown_key_is_400(
 
     assert response.status_code == 400
     assert "uploads.nope" in response.json()["detail"]
-
-
-def test_patch_config_env_pinned_field_is_400(
-    client: TestClient,
-    session: Session,
-    auth_user: models.User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _promote(session, auth_user)
-
-    monkeypatch.setenv("OPENROUTER_DEFAULT_CHAT_MODEL", "env/model")
-    get_settings.cache_clear()
-    invalidate_app_config_cache()
-    try:
-        response = client.patch(
-            "/api/admin/config",
-            json={"models": {"default_chat_model": "new/model"}},
-        )
-        assert response.status_code == 400
-        assert "models.default_chat_model" in response.json()["detail"]
-    finally:
-        get_settings.cache_clear()
-        invalidate_app_config_cache()
