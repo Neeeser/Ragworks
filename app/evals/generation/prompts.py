@@ -1,12 +1,14 @@
-"""Prompt builders for synthetic question generation and critique.
+"""Prompt and response-schema builders for synthetic generation and critique.
 
-Plain functions returning chat messages. The prompts encode the
-research-backed guardrails: a verbatim quote requirement (mechanical
-groundedness), distractor conditioning (questions only the target context
-answers), type-specific instructions (paraphrased questions avoid the
-source's wording), and optional audience/example steering toward realistic
-usage. Both calls demand a bare JSON array so small models have the simplest
-possible output contract.
+Plain functions returning chat messages plus the `response_format` JSON
+schemas the calls are made with. The prompts encode the research-backed
+guardrails: a verbatim quote requirement (mechanical groundedness),
+distractor conditioning (questions only the target context answers),
+type-specific instructions (paraphrased questions avoid the source's
+wording), and optional audience/example steering toward realistic usage.
+Output shape is enforced by the provider's structured-outputs feature, never
+by prompt formatting alone — the in-prompt shape line is only the safety net
+for providers that ignore `response_format`.
 """
 
 from __future__ import annotations
@@ -18,14 +20,70 @@ GENERATION_SYSTEM_PROMPT = (
     "You write retrieval evaluation questions for a document collection. Every"
     " question must be answerable from the given context excerpt alone, make"
     " sense to someone who has never seen the excerpt, and read like something"
-    " a real user would type. Reply with a JSON array only — no prose, no"
-    " markdown fences."
+    " a real user would type."
 )
 
 CRITIQUE_SYSTEM_PROMPT = (
     "You grade retrieval evaluation questions against their source excerpt."
-    " Reply with a JSON array only — no prose, no markdown fences."
 )
+
+_SCORE_PROPERTY = {"type": "integer", "minimum": 1, "maximum": 5}
+
+GENERATION_RESPONSE_FORMAT: dict[str, object] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "eval_question_candidates",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question": {"type": "string"},
+                            "answer": {"type": "string"},
+                            "quote": {"type": "string"},
+                        },
+                        "required": ["question", "answer", "quote"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["candidates"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+CRITIQUE_RESPONSE_FORMAT: dict[str, object] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "eval_question_scores",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "scores": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "groundedness": _SCORE_PROPERTY,
+                            "standalone": _SCORE_PROPERTY,
+                            "realism": _SCORE_PROPERTY,
+                        },
+                        "required": ["groundedness", "standalone", "realism"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["scores"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 _TYPE_INSTRUCTIONS: dict[EvalQuestionType, str] = {
     EvalQuestionType.SINGLE_FACT: (
@@ -85,8 +143,8 @@ def build_generation_messages(
         )
     parts.append(f"CONTEXT:\n{context_text}")
     parts.append(
-        'Reply with a JSON array of objects: [{"question": "...", "answer":'
-        ' "...", "quote": "..."}]'
+        'Reply with a JSON object: {"candidates": [{"question": "...",'
+        ' "answer": "...", "quote": "..."}]}'
     )
     return [
         {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
@@ -114,8 +172,8 @@ def build_critique_messages(
         "- realism: a real user of this collection would plausibly ask it.\n\n"
         f"EXCERPT:\n{context_text}\n\n"
         f"CANDIDATES:\n{listed}\n\n"
-        "Reply with a JSON array, one object per candidate in order:"
-        ' [{"groundedness": 1-5, "standalone": 1-5, "realism": 1-5}]'
+        "Reply with a JSON object, one entry per candidate in order:"
+        ' {"scores": [{"groundedness": 1-5, "standalone": 1-5, "realism": 1-5}]}'
     )
     return [
         {"role": "system", "content": CRITIQUE_SYSTEM_PROMPT},

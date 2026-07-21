@@ -10,6 +10,7 @@ import {
   MAX_EXAMPLE_QUERIES,
   mixIsEmpty,
   resolvedQuestionCount,
+  supportsStructuredOutputs,
 } from "@/components/evals/lib/generate-dataset-wizard-reducer";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
@@ -66,10 +67,12 @@ export function GenerateDatasetWizard({
 
   const modelOptions = useMemo(
     () =>
-      chatModels.map((model) => ({
-        value: `${model.connection_id}::${model.id}`,
-        label: `${model.connection_label} · ${model.name}`,
-      })),
+      chatModels
+        .filter((model) => supportsStructuredOutputs(model))
+        .map((model) => ({
+          value: `${model.connection_id}::${model.id}`,
+          label: `${model.connection_label} · ${model.name}`,
+        })),
     [chatModels],
   );
 
@@ -147,11 +150,15 @@ export function GenerateDatasetWizard({
         <div className="space-y-4">
           <Field
             label="Generation model"
-            hint="Writes candidate questions and grades them. Each question costs two calls."
+            hint="Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed."
           >
             <CustomSelect
               value={state.modelKey}
-              placeholder={modelOptions.length ? "Select a chat model" : "No chat models available"}
+              placeholder={
+                modelOptions.length
+                  ? "Select a chat model"
+                  : "No chat models with structured-output support available"
+              }
               options={modelOptions}
               onValueChange={(value) => dispatch({ type: "select_model", modelKey: value })}
               aria-label="Generation model"

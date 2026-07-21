@@ -20,6 +20,16 @@ _CONTEXT = (
 class TestParseCandidates:
     """Tolerant JSON extraction from generation replies."""
 
+    def test_parses_structured_output_object(self) -> None:
+        """The structured-outputs contract — a `candidates` wrapper — is the primary path."""
+        raw = (
+            '{"candidates": [{"question": "When was the Treaty of Utrecht signed?",'
+            ' "answer": "April 1713", "quote": "signed in April 1713"}]}'
+        )
+        candidates = parse_candidates(raw)
+        assert len(candidates) == 1
+        assert candidates[0].answer == "April 1713"
+
     def test_parses_plain_json_array(self) -> None:
         """A clean array yields every well-formed candidate."""
         raw = (
@@ -107,6 +117,17 @@ class TestDedup:
 
 class TestParseCritiques:
     """Critique reply parsing and the acceptance floor."""
+
+    def test_parses_structured_output_scores_object(self) -> None:
+        """The structured-outputs `scores` wrapper is the primary path."""
+        raw = (
+            '{"scores": [{"groundedness": 5, "standalone": 4, "realism": 4},'
+            ' {"groundedness": 3, "standalone": 5, "realism": 5}]}'
+        )
+        scores = parse_critiques(raw, expected=2)
+        assert scores is not None
+        assert scores[0].standalone == 4
+        assert scores[1].groundedness == 3
 
     def test_parses_scores_in_order(self) -> None:
         """Well-formed rows come back as typed scores."""

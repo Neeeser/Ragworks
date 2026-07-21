@@ -92,7 +92,12 @@ def persist_generated_dataset(
     )
     dataset.generation_config = {
         **(dataset.generation_config or {}),
-        "stats": {"generated": generated_count, "accepted": len(accepted)},
+        "stats": {
+            "generated": generated_count,
+            "accepted": len(accepted),
+            "documents_covered": len({item.doc_id for item in accepted}),
+            "documents_total": len(corpus),
+        },
     }
     dataset.progress_done = len(accepted)
     EvalService(session).persist_triple(dataset, triple)

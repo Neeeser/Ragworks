@@ -4,7 +4,19 @@
  * unit-testable.
  */
 
-import type { EvalDatasetGeneratePayload, EvalQuestionType } from "@/lib/types";
+import type { CatalogModel, EvalDatasetGeneratePayload, EvalQuestionType } from "@/lib/types";
+
+/**
+ * Generation calls enforce their output shape through the provider's
+ * structured-outputs feature, so the wizard only offers models that
+ * advertise support for it.
+ */
+export function supportsStructuredOutputs(model: CatalogModel): boolean {
+  return (model.supported_parameters || []).some((parameter) => {
+    const normalized = parameter.toLowerCase();
+    return normalized === "structured_outputs" || normalized === "response_format";
+  });
+}
 
 export interface CountPreset {
   key: string;

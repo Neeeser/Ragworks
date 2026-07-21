@@ -552,6 +552,15 @@ this file in the same PR.
   carries `dimension` (for index creation/validation). When the embeddings envelope
   carries an `error` instead of `data`, raise `ExternalServiceError` with the
   provider's message (502), never a bare `ValueError` (500).
+- **Never rely on prompt wording to get machine-readable model output.** When a
+  chat call's reply is parsed by code (JSON, scores, labels), enforce the shape
+  with the inference feature built for it — structured outputs
+  (`response_format` with a strict JSON schema) or forced tool calling — and
+  surface only models that advertise support (`supported_parameters`) in any UI
+  picker for that task; "reply with JSON only" prompts silently degrade into
+  parse-and-discard churn on models that add prose or fences. A tolerant parser
+  may remain as a safety net for providers that ignore the parameter, never as
+  the primary contract.
 - **A stream parser is written against captured wire frames, not assumed shapes**
   — Cohere's v2 SSE stream ends with a bare `data: [DONE]` sentinel and its chat
   API 400s on an empty assistant history entry; both shipped as live-only bugs

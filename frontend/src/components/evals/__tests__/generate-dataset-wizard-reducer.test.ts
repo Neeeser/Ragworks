@@ -6,7 +6,9 @@ import {
   initialGenerateWizardState,
   mixIsEmpty,
   resolvedQuestionCount,
+  supportsStructuredOutputs,
 } from "@/components/evals/lib/generate-dataset-wizard-reducer";
+import { makeCatalogModel } from "@/test/fixtures";
 
 import type {
   GenerateWizardAction,
@@ -93,5 +95,27 @@ describe("generate-dataset wizard reducer", () => {
     ]);
     expect(state.busy).toBe(false);
     expect(state.message).toBe("Could not start");
+  });
+});
+
+describe("supportsStructuredOutputs", () => {
+  it("keeps models advertising structured_outputs or response_format", () => {
+    expect(
+      supportsStructuredOutputs(
+        makeCatalogModel({ supported_parameters: ["temperature", "structured_outputs"] }),
+      ),
+    ).toBe(true);
+    expect(
+      supportsStructuredOutputs(makeCatalogModel({ supported_parameters: ["RESPONSE_FORMAT"] })),
+    ).toBe(true);
+  });
+
+  it("drops models without structured-output support", () => {
+    expect(
+      supportsStructuredOutputs(
+        makeCatalogModel({ supported_parameters: ["temperature", "tools"] }),
+      ),
+    ).toBe(false);
+    expect(supportsStructuredOutputs(makeCatalogModel({ supported_parameters: [] }))).toBe(false);
   });
 });

@@ -29,7 +29,12 @@ from app.evals.generation.candidates import (
     parse_critiques,
     quote_matches,
 )
-from app.evals.generation.contexts import ContextPlan, DocumentPlan, sample_contexts
+from app.evals.generation.contexts import (
+    ContextPlan,
+    DocumentPlan,
+    per_document_cap,
+    sample_contexts,
+)
 from app.evals.generation.corpus import join_chunks
 from app.evals.generation.persistence import (
     AcceptedQuestion,
@@ -37,6 +42,8 @@ from app.evals.generation.persistence import (
     record_generation_outcome,
 )
 from app.evals.generation.prompts import (
+    CRITIQUE_RESPONSE_FORMAT,
+    GENERATION_RESPONSE_FORMAT,
     build_critique_messages,
     build_generation_messages,
 )
@@ -105,14 +112,22 @@ class _RunSetup:
 
 @dataclass
 class _LoopState:
-    """Mutable accumulator for the generation loop."""
+    """Mutable accumulator for the generation loop.
+
+    `doc_cap` bounds *accepted* questions per document — the context sampler's
+    own cap only spreads generation calls, and without this one the first few
+    documents' contexts (at up to `CANDIDATES_PER_CONTEXT` acceptances each)
+    would fill the whole target before most of the collection contributed.
+    """
 
     limit: int
+    doc_cap: int
 
     def __post_init__(self) -> None:
         """Start empty: nothing accepted, nothing generated, no failures."""
         self.accepted: list[AcceptedQuestion] = []
         self.accepted_texts: list[str] = []
+        self.per_doc_accepted: dict[str, int] = {}
         self.generated = 0
         self.consecutive_failures = 0
 
@@ -120,6 +135,10 @@ class _LoopState:
     def done(self) -> bool:
         """True once the acceptance target is reached."""
         return len(self.accepted) >= self.limit
+
+    def doc_capped(self, doc_id: str) -> bool:
+        """True when a document has already contributed its share of questions."""
+        return self.per_doc_accepted.get(doc_id, 0) >= self.doc_cap
 
 
 def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] | None:
@@ -137,7 +156,10 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
         type_mix=config.type_mix,
         seed=config.seed,
     )
-    state = _LoopState(limit=config.num_questions)
+    state = _LoopState(
+        limit=config.num_questions,
+        doc_cap=per_document_cap(config.num_questions, len(setup.doc_plans)),
+    )
     distractor_rng = random.Random(config.seed + 1)
     for plan in plans:
         if state.done:
@@ -203,6 +225,8 @@ def _run_plan(
     in a row (then re-raised — a wrong key or dead endpoint should fail the
     dataset quickly, not burn through every context).
     """
+    if state.doc_capped(plan.doc_id):
+        return
     context_chunks = setup.chunk_map.get(plan.doc_id, [])[
         plan.start_index : plan.start_index + plan.span
     ]
@@ -232,7 +256,7 @@ def _run_plan(
     state.generated += batch.generated
     chunk_ids = [str(chunk.id) for chunk in context_chunks]
     for candidate, scores in batch.kept:
-        if state.done:
+        if state.done or state.doc_capped(plan.doc_id):
             break
         state.accepted.append(
             AcceptedQuestion(
@@ -246,6 +270,9 @@ def _run_plan(
             )
         )
         state.accepted_texts.append(candidate.question)
+        state.per_doc_accepted[plan.doc_id] = (
+            state.per_doc_accepted.get(plan.doc_id, 0) + 1
+        )
 
 
 @dataclass(frozen=True)
@@ -278,6 +305,7 @@ def _generate_for_context(
             distractor_texts=distractor_snippets,
         ),
         temperature=GENERATION_TEMPERATURE,
+        response_format=GENERATION_RESPONSE_FORMAT,
     )
     candidates = parse_candidates(reply)
     generated = len(candidates)
@@ -294,6 +322,7 @@ def _generate_for_context(
         config.model_name,
         build_critique_messages(context_text=context_text, candidates=candidates),
         temperature=CRITIQUE_TEMPERATURE,
+        response_format=CRITIQUE_RESPONSE_FORMAT,
     )
     scores = parse_critiques(critique_reply, len(candidates))
     if scores is None:
@@ -316,13 +345,20 @@ def _chat_text(
     messages: list[dict[str, str]],
     *,
     temperature: float,
+    response_format: dict[str, object],
 ) -> str:
-    """One non-streaming chat call, reduced to its text content."""
+    """One non-streaming structured-output chat call, reduced to its text.
+
+    The output shape is enforced by the provider's structured-outputs feature
+    (`response_format` with a strict JSON schema) — the wizard only offers
+    models that advertise support, and the tolerant parsers remain as the
+    safety net for providers that ignore the parameter.
+    """
     request = ChatRequest(
         messages=[dict(message) for message in messages],
         tools=None,
         model=model,
-        parameters={"temperature": temperature},
+        parameters={"temperature": temperature, "response_format": response_format},
     )
     parsed = chat.parse_chat_response(chat.chat(request))
     content = parsed.message.get("content")

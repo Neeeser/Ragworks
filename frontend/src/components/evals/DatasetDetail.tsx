@@ -9,6 +9,7 @@ import {
   DATASET_DOCS_PAGE_SIZE,
   useDatasetDetail,
 } from "@/components/evals/hooks/use-dataset-detail";
+import { coverageLabel, readGenerationCoverage } from "@/components/evals/lib/generation-stats";
 import { GlassCard } from "@/components/ui/panel";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
     return <p className="text-sm text-muted">Loading dataset…</p>;
   }
   const detail = dataset.data;
+  const coverage = readGenerationCoverage(detail);
   const pipelineName = (id: string | null | undefined) =>
     (pipelines.data ?? []).find((pipeline) => pipeline.id === id)?.name ?? "Unknown pipeline";
 
@@ -62,6 +64,11 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
           {detail.status === "generating" &&
             ` · generating ${detail.progress_done} of ${detail.progress_total}`}
         </p>
+        {coverage && (
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+            queries cover {coverageLabel(coverage)}
+          </p>
+        )}
       </div>
 
       {detail.status === "ready" && <DatasetQueriesTable datasetId={datasetId} />}

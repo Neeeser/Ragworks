@@ -67,9 +67,28 @@ def extract_json_array(raw: str) -> list[object] | None:
     return value if isinstance(value, list) else None
 
 
+def extract_items(raw: str, key: str) -> list[object] | None:
+    """Read the item list from a structured-output reply, tolerantly.
+
+    The primary path is the structured-outputs contract: a JSON object whose
+    `key` field holds the list. The bare-array scan remains as the safety net
+    for providers that ignore `response_format` and reply with a fenced or
+    prose-wrapped array.
+    """
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        value = None
+    if isinstance(value, dict):
+        items = value.get(key)
+        if isinstance(items, list):
+            return items
+    return extract_json_array(raw)
+
+
 def parse_candidates(raw: str) -> list[CandidateQuestion]:
     """Parse a generation reply into candidates, dropping malformed items."""
-    items = extract_json_array(raw)
+    items = extract_items(raw, "candidates")
     if items is None:
         return []
     candidates: list[CandidateQuestion] = []
@@ -88,7 +107,7 @@ def parse_candidates(raw: str) -> list[CandidateQuestion]:
 
 def parse_critiques(raw: str, expected: int) -> list[CritiqueScores] | None:
     """Parse a critique reply; None when it does not cover every candidate."""
-    items = extract_json_array(raw)
+    items = extract_items(raw, "scores")
     if items is None or len(items) < expected:
         return None
     scores: list[CritiqueScores] = []

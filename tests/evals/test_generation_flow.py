@@ -263,6 +263,104 @@ class TestRunDatasetGeneration:
             assert config["stats"]["generated"] >= 4
             _assert_triple_shape(fresh, dataset.id, collection.id)
 
+    def test_spreads_acceptance_across_documents(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No document exceeds its acceptance share even when every candidate passes.
+
+        A greedy model (three all-passing candidates per context) must not let
+        the first few sampled documents fill the whole target: acceptances per
+        document stay within the per-document cap, so an 8-question dataset
+        over 8 documents draws from at least 4 of them.
+        """
+        user = _user(session)
+        collection = _collection_with_documents(session, user, docs=8, chunks_per_doc=4)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection, num_questions=8)
+        )
+
+        class _GreedyChat(_ScriptedChat):
+            """Every generation call yields three candidates that all pass."""
+
+            def chat(self, request: ChatRequest) -> dict[str, object]:
+                self.calls += 1
+                prompt = str(request.messages[-1]["content"])
+                if "Score each candidate" in prompt:
+                    count = len(
+                        re.findall(r"^\d+\. question:", prompt, flags=re.MULTILINE)
+                    )
+                    rows = [{"groundedness": 5, "standalone": 5, "realism": 5}] * count
+                    return {"content": json.dumps({"scores": rows})}
+                context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
+                items = []
+                for _ in range(3):
+                    text = _DISTINCT_QUESTIONS[self._counter % len(_DISTINCT_QUESTIONS)]
+                    items.append(
+                        {
+                            "question": f"{text} (variant {self._counter})",
+                            "answer": "A topic.",
+                            "quote": context[:60],
+                        }
+                    )
+                    self._counter += 1
+                return {"content": json.dumps({"candidates": items})}
+
+        _wire(monkeypatch, session, _GreedyChat())
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            assert stored.status == EvalDatasetStatus.READY.value
+            qrels = fresh.exec(
+                select(models.EvalRelevanceJudgment).where(
+                    models.EvalRelevanceJudgment.dataset_id == dataset.id
+                )
+            ).all()
+            per_doc: dict[str, int] = {}
+            for qrel in qrels:
+                per_doc[qrel.doc_external_id] = per_doc.get(qrel.doc_external_id, 0) + 1
+            assert max(per_doc.values()) <= 2
+            assert len(per_doc) >= 4
+            stats = (stored.generation_config or {})["stats"]
+            assert stats["documents_covered"] == len(per_doc)
+            assert stats["documents_total"] == 8
+
+    def test_calls_carry_structured_output_schemas(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Both call kinds enforce their shape via `response_format`, not prompt text."""
+        user = _user(session)
+        collection = _collection_with_documents(session, user)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection)
+        )
+
+        requests: list[ChatRequest] = []
+
+        class _RecordingChat(_ScriptedChat):
+            def chat(self, request: ChatRequest) -> dict[str, object]:
+                requests.append(request)
+                return super().chat(request)
+
+        _wire(monkeypatch, session, _RecordingChat())
+
+        run_dataset_generation(dataset.id)
+
+        assert requests
+        for request in requests:
+            response_format = (request.parameters or {}).get("response_format")
+            assert isinstance(response_format, dict)
+            assert response_format["type"] == "json_schema"
+        names = {
+            request.parameters["response_format"]["json_schema"]["name"]
+            for request in requests
+        }
+        assert names == {"eval_question_candidates", "eval_question_scores"}
+
     def test_persistent_provider_failure_lands_failed(
         self, session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
