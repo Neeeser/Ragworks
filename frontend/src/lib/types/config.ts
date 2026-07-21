@@ -31,9 +31,14 @@ export interface PublicConfig {
   features: PublicFeatureFlags;
 }
 
-export type ConfigFieldKind = "bool" | "int" | "string" | "string_list";
+export type ConfigFieldKind = "bool" | "int" | "string" | "string_list" | "select" | "multi_select";
 
 export type ConfigSource = "default" | "db" | "env-locked";
+
+export interface ConfigFieldOption {
+  value: string;
+  label: string;
+}
 
 export interface ConfigFieldRead {
   key: string;
@@ -42,6 +47,9 @@ export interface ConfigFieldRead {
   kind: ConfigFieldKind;
   public: boolean;
   env_var: string | null;
+  options: ConfigFieldOption[] | null;
+  min_value: number | null;
+  max_value: number | null;
   value: unknown;
   default: unknown;
   source: ConfigSource;

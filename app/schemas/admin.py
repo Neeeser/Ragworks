@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.schemas.app_config import ConfigFieldKind
+from app.schemas.app_config import ConfigFieldKind, ConfigFieldOption
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.enums import UserRole
 
@@ -54,6 +54,9 @@ class ConfigFieldRead(BaseModel):
     kind: ConfigFieldKind
     public: bool
     env_var: str | None
+    options: list[ConfigFieldOption] | None
+    min_value: int | None
+    max_value: int | None
     value: Any
     default: Any
     source: ConfigSource

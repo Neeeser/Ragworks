@@ -159,3 +159,31 @@ def test_apply_update_rejects_unknown_section(session: Session) -> None:
     with pytest.raises(InvalidInputError) as exc_info:
         service.apply_update({"bogus_section": {"x": 1}}, admin.id)
     assert "bogus_section.x" in exc_info.value.detail
+
+
+def test_apply_update_rejects_env_pinned_field(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A field whose `env_var` is set in the environment is read-only via
+    PATCH, rejected with a field-specific error -- not a generic 500.
+
+    No shipped field carries an `env_var` today (the last one was removed
+    with global default models), so the scenario is simulated by patching
+    one field's catalog metadata rather than skipping the behavior untested.
+    """
+    admin = _make_admin(session)
+    monkeypatch.setenv("RAGWORKS_TEST_PIN", "1")
+
+    real_fields = app_config_module.iter_config_fields()
+    pinned_fields = [
+        field.model_copy(update={"env_var": "RAGWORKS_TEST_PIN"})
+        if field.key == "auth.allow_registration"
+        else field
+        for field in real_fields
+    ]
+    monkeypatch.setattr(app_config_module, "iter_config_fields", lambda: pinned_fields)
+
+    service = AppConfigService(session)
+    with pytest.raises(InvalidInputError) as exc_info:
+        service.apply_update({"auth": {"allow_registration": False}}, admin.id)
+    assert "auth.allow_registration" in exc_info.value.detail

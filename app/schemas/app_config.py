@@ -9,11 +9,16 @@ an enforcement site) is the whole recipe; see app/AGENTS.md.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any
 
+import annotated_types
 from pydantic import BaseModel, Field, field_validator
+from pydantic.fields import FieldInfo
 
+from app.schemas.content_types import DEFAULT_ALLOWED_CONTENT_TYPES, KNOWN_CONTENT_TYPE_VALUES
+from app.schemas.content_types import KNOWN_CONTENT_TYPES as KNOWN_CONTENT_TYPE_OPTIONS
 from app.schemas.enums import IndexBackend
 
 # Code defaults for the model fields mirror app/core/config.py's Settings
@@ -29,13 +34,23 @@ def _meta(
     *,
     public: bool = False,
     env_var: str | None = None,
+    options: Sequence[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Build the json_schema_extra payload every config field carries."""
+    """Build the json_schema_extra payload every config field carries.
+
+    `options` declares a field's finite valid-value domain as `(value, label)`
+    pairs — its presence is what turns a `str`/`list[str]` field into a
+    `select`/`multi_select` control (see `iter_config_fields`) instead of free
+    text. Numeric bounds need no equivalent here: they're read straight off
+    the field's own `ge`/`le` constraints, so there's one place to keep them
+    in sync.
+    """
     return {
         "label": label,
         "description": description,
         "public": public,
         "env_var": env_var,
+        "options": list(options) if options is not None else None,
     }
 
 
@@ -72,20 +87,26 @@ class UploadSettings(BaseModel):
         ),
     )
     allowed_content_types: list[str] = Field(
-        default_factory=lambda: [
-            "text/plain",
-            "text/markdown",
-            "text/csv",
-            "application/pdf",
-        ],
+        default_factory=lambda: list(DEFAULT_ALLOWED_CONTENT_TYPES),
         json_schema_extra=_meta(
             "Auto-ingested content types",
             "Uploads whose MIME type is in this list are automatically run "
             "through the collection's ingestion pipeline; other types are "
-            "stored without indexing (and can be ingested manually).",
+            "stored without indexing (and can be ingested manually). Limited "
+            "to MIME types a shipped parser actually handles.",
             public=True,
+            options=[(option.value, option.label) for option in KNOWN_CONTENT_TYPE_OPTIONS],
         ),
     )
+
+    @field_validator("allowed_content_types")
+    @classmethod
+    def _known_content_types(cls, value: list[str]) -> list[str]:
+        """Restrict the field to MIME types a shipped parser handles."""
+        unknown = sorted({item for item in value if item not in KNOWN_CONTENT_TYPE_VALUES})
+        if unknown:
+            raise ValueError(f"unsupported content type(s): {', '.join(unknown)}")
+        return value
 
 
 class IndexingSettings(BaseModel):
@@ -100,6 +121,10 @@ class IndexingSettings(BaseModel):
             "'pinecone' (requires a per-user API key). Existing pipelines "
             "are unaffected.",
             public=True,
+            options=[
+                (IndexBackend.PGVECTOR.value, "pgvector"),
+                (IndexBackend.PINECONE.value, "Pinecone"),
+            ],
         ),
     )
 
@@ -167,12 +192,27 @@ class AppConfig(BaseModel):
 
 
 class ConfigFieldKind(StrEnum):
-    """Input widget kinds the admin settings renderer understands."""
+    """Input widget kinds the admin settings renderer understands.
+
+    A field's kind is inferred from its storage type (`_KIND_BY_ANNOTATION`)
+    *unless* it declares `options` in its metadata, in which case a `str`
+    becomes `SELECT` and a `list[str]` becomes `MULTI_SELECT` — the storage
+    type stays the wire shape, `options` is what says the domain is finite.
+    """
 
     BOOL = "bool"
     INT = "int"
     STRING = "string"
     STRING_LIST = "string_list"
+    SELECT = "select"
+    MULTI_SELECT = "multi_select"
+
+
+class ConfigFieldOption(BaseModel):
+    """One selectable value for a `select`/`multi_select` config field."""
+
+    value: str
+    label: str
 
 
 class ConfigFieldMeta(BaseModel):
@@ -184,6 +224,9 @@ class ConfigFieldMeta(BaseModel):
     kind: ConfigFieldKind
     public: bool
     env_var: str | None
+    options: list[ConfigFieldOption] | None = None
+    min_value: int | None = None
+    max_value: int | None = None
 
 
 _KIND_BY_ANNOTATION: dict[Any, ConfigFieldKind] = {
@@ -192,6 +235,39 @@ _KIND_BY_ANNOTATION: dict[Any, ConfigFieldKind] = {
     str: ConfigFieldKind.STRING,
     list[str]: ConfigFieldKind.STRING_LIST,
 }
+
+_SELECT_KIND_BY_STORAGE_KIND: dict[ConfigFieldKind, ConfigFieldKind] = {
+    ConfigFieldKind.STRING: ConfigFieldKind.SELECT,
+    ConfigFieldKind.STRING_LIST: ConfigFieldKind.MULTI_SELECT,
+}
+
+
+def _numeric_bounds(leaf: FieldInfo) -> tuple[int | None, int | None]:
+    """Read a field's `ge`/`le` constraints off its own Pydantic metadata.
+
+    Bounds live nowhere else so the admin catalog can never disagree with
+    the validation `AppConfig.model_validate` already enforces on PATCH.
+    """
+    min_value: int | None = None
+    max_value: int | None = None
+    for constraint in leaf.metadata:
+        if isinstance(constraint, annotated_types.Ge) and isinstance(constraint.ge, int):
+            min_value = constraint.ge
+        elif isinstance(constraint, annotated_types.Le) and isinstance(constraint.le, int):
+            max_value = constraint.le
+    return min_value, max_value
+
+
+def _parse_options(raw: object) -> list[ConfigFieldOption] | None:
+    """Narrow a metadata `options` entry (loosely typed by pydantic's own
+    `json_schema_extra` stubs) into `ConfigFieldOption`s."""
+    if not isinstance(raw, list):
+        return None
+    return [
+        ConfigFieldOption(value=str(pair[0]), label=str(pair[1]))
+        for pair in raw
+        if isinstance(pair, list | tuple) and len(pair) == 2
+    ]
 
 
 def _section_models() -> list[tuple[str, type[BaseModel]]]:
@@ -220,6 +296,12 @@ def iter_config_fields() -> list[ConfigFieldMeta]:
             if not isinstance(extra, dict):
                 raise TypeError(f"{section_name}.{leaf_name} missing _meta")
             kind = _KIND_BY_ANNOTATION[leaf.annotation]
+            options = _parse_options(extra.get("options"))
+            if options is not None:
+                kind = _SELECT_KIND_BY_STORAGE_KIND[kind]
+            min_value, max_value = (
+                _numeric_bounds(leaf) if kind == ConfigFieldKind.INT else (None, None)
+            )
             env_var = extra["env_var"]
             entries.append(
                 ConfigFieldMeta(
@@ -229,6 +311,9 @@ def iter_config_fields() -> list[ConfigFieldMeta]:
                     kind=kind,
                     public=bool(extra["public"]),
                     env_var=env_var if isinstance(env_var, str) else None,
+                    options=options,
+                    min_value=min_value,
+                    max_value=max_value,
                 )
             )
     return entries

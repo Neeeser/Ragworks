@@ -260,6 +260,20 @@ architecture" in the root `AGENTS.md`.
    json_schema_extra=_meta(label, description, public=..., env_var=...))`.
    `env_var` names a `Settings` field that pins it read-only when set (needs the
    matching `_ENV_PINNED_SETTINGS_ATTR` entry in `app/services/app_config.py`).
+   **A field with a finite valid-value domain passes `_meta(..., options=[(value,
+   label), ...])`** — that alone turns a `str`/`list[str]` field into a
+   `select`/`multi_select` catalog kind (`iter_config_fields` derives the kind from
+   the pairing, not a separate control flag) and the admin UI renders a constrained
+   picker instead of free text. Add a Pydantic `field_validator` restricting the
+   field to the same domain so a PATCH bypassing the UI is rejected too — the
+   catalog's `options` and the validator must name the same set, never one
+   hardcoded twice. A bounded `int` field needs no separate declaration: its
+   catalog `min_value`/`max_value` are read straight off the field's own `ge`/`le`
+   constraints (`_numeric_bounds`), so there is exactly one place the bound lives.
+   When the valid-value set is itself domain logic (e.g. which MIME types a parser
+   supports), put it in its own schema module (`app/schemas/content_types.py`) that
+   both the field's default and its `options` import from, not a literal duplicated
+   between the two.
 2. **Read site** — read through `get_app_config()` at the point of use, never
    `get_settings()`. Never cache the returned `AppConfig` across requests or at
    import time — call fresh each read (it's TTL-cached internally; see pitfalls).

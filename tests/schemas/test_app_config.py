@@ -74,3 +74,57 @@ def test_invalid_override_shapes_are_rejected() -> None:
         AppConfig.model_validate({"uploads": {"max_upload_size_mb": "not-a-number"}})
     with pytest.raises(ValidationError):
         AppConfig.model_validate({"uploads": {"max_upload_size_mb": 0}})  # ge=1 bound
+
+
+def test_constrained_fields_are_select_or_multi_select_kinds() -> None:
+    """A field with a finite domain renders as select/multi_select, not free text.
+
+    Regression for issue #76: `allowed_content_types` and `default_backend`
+    used to be `string_list`/`string` with no options, so the admin UI
+    rendered them as an unconstrained textarea/text input.
+    """
+    by_key = {field.key: field for field in iter_config_fields()}
+
+    content_types_field = by_key["uploads.allowed_content_types"]
+    assert content_types_field.kind == ConfigFieldKind.MULTI_SELECT
+    assert content_types_field.options is not None
+    assert {option.value for option in content_types_field.options} == {
+        "application/pdf",
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+    }
+
+    backend_field = by_key["indexing.default_backend"]
+    assert backend_field.kind == ConfigFieldKind.SELECT
+    assert backend_field.options is not None
+    assert {option.value for option in backend_field.options} == {"pgvector", "pinecone"}
+
+
+def test_bounded_int_fields_expose_their_ge_le_as_catalog_bounds() -> None:
+    by_key = {field.key: field for field in iter_config_fields()}
+    upload_size = by_key["uploads.max_upload_size_mb"]
+    assert (upload_size.min_value, upload_size.max_value) == (1, 1024)
+    retention = by_key["telemetry.retention_days"]
+    assert (retention.min_value, retention.max_value) == (1, 3650)
+
+
+def test_unconstrained_fields_have_no_options_or_bounds() -> None:
+    by_key = {field.key: field for field in iter_config_fields()}
+    assert by_key["auth.allow_registration"].options is None
+    assert by_key["auth.allow_registration"].min_value is None
+
+
+def test_allowed_content_types_rejects_unknown_mime_types() -> None:
+    """A crafted PATCH must not persist a MIME type no shipped parser
+    understands, even though the field is a plain `list[str]` at the storage
+    layer (issue #76)."""
+    with pytest.raises(ValidationError):
+        AppConfig.model_validate(
+            {"uploads": {"allowed_content_types": ["application/x-not-a-real-type"]}}
+        )
+
+
+def test_default_backend_rejects_unregistered_backend_values() -> None:
+    with pytest.raises(ValidationError):
+        AppConfig.model_validate({"indexing": {"default_backend": "not-a-backend"}})

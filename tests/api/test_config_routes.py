@@ -1,11 +1,11 @@
 """HTTP contract for GET /api/config and the admin config catalog/PATCH routes.
 
-Every test that touches an env-pin monkeypatches `os.environ` (via
-`monkeypatch.setenv`) and must clear the `get_settings` cache both before and
-after so the pin takes effect and never leaks into later tests. The autouse
-`_invalidate_cache` fixture below resets `get_app_config`'s process cache
-around each test for the same reason -- route tests hit the module cache, not
-a fresh service per call.
+The autouse `_invalidate_cache` fixture below resets `get_app_config`'s
+process cache around each test -- route tests hit the module cache, not a
+fresh service per call. Env-pinned-field rejection is exercised at the
+service layer (`tests/services/test_app_config_service.py`), not here: no
+current field carries an `env_var`, so simulating one needs `iter_config_fields`
+patched, which belongs next to `AppConfigService.apply_update`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.core.config import get_settings
 from app.db import models
 from app.services.app_config import invalidate_app_config_cache
 
@@ -112,6 +111,62 @@ def test_patch_config_round_trips_through_public_get(
     assert public["auth"]["allow_registration"] is False
 
 
+def test_admin_config_catalog_exposes_options_and_numeric_bounds(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """The catalog must carry the same constraints `AppConfig` enforces, or
+    the admin UI renders a free-text control for a field with a finite
+    domain (issue #76)."""
+    _promote(session, auth_user)
+
+    body = {entry["key"]: entry for entry in client.get("/api/admin/config").json()}
+
+    content_types = body["uploads.allowed_content_types"]
+    assert content_types["kind"] == "multi_select"
+    assert {option["value"] for option in content_types["options"]} == {
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "application/pdf",
+    }
+
+    backend = body["indexing.default_backend"]
+    assert backend["kind"] == "select"
+    assert {option["value"] for option in backend["options"]} == {"pgvector", "pinecone"}
+
+    upload_size = body["uploads.max_upload_size_mb"]
+    assert (upload_size["min_value"], upload_size["max_value"]) == (1, 1024)
+
+
+def test_patch_config_rejects_unknown_content_type(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """A crafted PATCH bypassing the UI must not persist an unsupported MIME
+    type -- the frontend constrains input, the backend is the boundary."""
+    _promote(session, auth_user)
+
+    response = client.patch(
+        "/api/admin/config",
+        json={"uploads": {"allowed_content_types": ["application/x-not-a-real-type"]}},
+    )
+
+    assert response.status_code == 400
+    assert "uploads.allowed_content_types" in response.json()["detail"]
+
+
+def test_patch_config_rejects_unregistered_backend(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    _promote(session, auth_user)
+
+    response = client.patch(
+        "/api/admin/config", json={"indexing": {"default_backend": "not-a-backend"}}
+    )
+
+    assert response.status_code == 400
+    assert "indexing.default_backend" in response.json()["detail"]
+
+
 def test_patch_config_unknown_key_is_400(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:
@@ -121,26 +176,3 @@ def test_patch_config_unknown_key_is_400(
 
     assert response.status_code == 400
     assert "uploads.nope" in response.json()["detail"]
-
-
-def test_patch_config_env_pinned_field_is_400(
-    client: TestClient,
-    session: Session,
-    auth_user: models.User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _promote(session, auth_user)
-
-    monkeypatch.setenv("OPENROUTER_DEFAULT_CHAT_MODEL", "env/model")
-    get_settings.cache_clear()
-    invalidate_app_config_cache()
-    try:
-        response = client.patch(
-            "/api/admin/config",
-            json={"models": {"default_chat_model": "new/model"}},
-        )
-        assert response.status_code == 400
-        assert "models.default_chat_model" in response.json()["detail"]
-    finally:
-        get_settings.cache_clear()
-        invalidate_app_config_cache()
