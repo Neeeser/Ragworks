@@ -247,3 +247,168 @@ def test_dataset_document_text(client: TestClient) -> None:
         client.get(f"/api/evals/datasets/{dataset['id']}/documents/missing").status_code
         == 404
     )
+
+
+# --- synthetic generation -----------------------------------------------------
+
+
+def _generation_inputs(
+    session: Session, auth_user: models.User
+) -> tuple[models.Collection, models.ProviderConnection]:
+    """A ready collection (one chunked document) plus a chat connection."""
+    collection = models.Collection(name="Papers", user_id=auth_user.id)
+    session.add(collection)
+    session.commit()
+    session.refresh(collection)
+    document = models.Document(
+        collection_id=collection.id,
+        user_id=auth_user.id,
+        name="doc.txt",
+        content_type="text/plain",
+        status=models.DocumentStatus.READY,
+        num_chunks=1,
+        embedding_model="stub-embedder",
+    )
+    session.add(document)
+    session.commit()
+    session.refresh(document)
+    session.add(
+        models.DocumentChunkRecord(
+            document_id=document.id,
+            collection_id=collection.id,
+            chunk_index=0,
+            text="The alpha subsystem retries twice before failing over.",
+            embedding=[],
+            embedding_model="stub-embedder",
+        )
+    )
+    connection = models.ProviderConnection(
+        user_id=auth_user.id,
+        provider_type="openrouter",
+        label="OpenRouter",
+        config={"api_key": "sk-test"},
+    )
+    session.add(connection)
+    session.commit()
+    session.refresh(connection)
+    return collection, connection
+
+
+def _generate_body(collection_id: str, connection_id: str) -> dict[str, object]:
+    return {
+        "name": "Synthetic set",
+        "collection_id": collection_id,
+        "connection_id": connection_id,
+        "model_name": "test/model",
+        "num_questions": 5,
+    }
+
+
+def test_generate_dataset_records_generating_row(
+    client: TestClient, session: Session, auth_user: models.User, monkeypatch
+) -> None:
+    """A valid generate request 202s with a generating synthetic dataset."""
+    collection, connection = _generation_inputs(session, auth_user)
+    monkeypatch.setattr("app.api.routes.evals.run_dataset_generation", lambda _id: None)
+    response = client.post(
+        "/api/evals/datasets/generate",
+        json=_generate_body(str(collection.id), str(connection.id)),
+    )
+    assert response.status_code == 202
+    dataset = response.json()
+    assert dataset["status"] == "generating"
+    assert dataset["source"] == "synthetic"
+    assert dataset["progress_total"] == 5
+    assert dataset["generation_config"]["model_name"] == "test/model"
+
+
+def test_generate_dataset_validation_failures(
+    client: TestClient, session: Session, auth_user: models.User, monkeypatch
+) -> None:
+    """Unknown collection 404s, empty collection 400s, bad count 422s."""
+    collection, connection = _generation_inputs(session, auth_user)
+    monkeypatch.setattr("app.api.routes.evals.run_dataset_generation", lambda _id: None)
+    body = _generate_body(str(uuid4()), str(connection.id))
+    assert client.post("/api/evals/datasets/generate", json=body).status_code == 404
+
+    empty = models.Collection(name="Empty", user_id=auth_user.id)
+    session.add(empty)
+    session.commit()
+    session.refresh(empty)
+    body = _generate_body(str(empty.id), str(connection.id))
+    assert client.post("/api/evals/datasets/generate", json=body).status_code == 400
+
+    body = {**_generate_body(str(collection.id), str(connection.id)), "num_questions": 0}
+    assert client.post("/api/evals/datasets/generate", json=body).status_code == 422
+
+
+def test_dataset_query_review_flow(client: TestClient) -> None:
+    """Queries list with gold titles, edit in place, and delete with qrels."""
+    corpus = (
+        '{"_id": "d1", "title": "Alpha doc", "text": "alpha"}\n'
+        '{"_id": "d2", "title": "Beta doc", "text": "beta"}\n'
+    )
+    queries = (
+        '{"_id": "q1", "text": "what is alpha"}\n'
+        '{"_id": "q2", "text": "what is beta"}\n'
+    )
+    qrels = "q1\td1\t1\nq2\td2\t1\n"
+    dataset = client.post(
+        "/api/evals/datasets/upload",
+        json={**UPLOAD_BODY, "corpus": corpus, "queries": queries, "qrels": qrels},
+    ).json()
+
+    page = client.get(f"/api/evals/datasets/{dataset['id']}/queries").json()
+    assert page["total"] == 2
+    assert [item["external_query_id"] for item in page["items"]] == ["q1", "q2"]
+    assert page["items"][0]["gold"] == [
+        {"external_doc_id": "d1", "title": "Alpha doc"}
+    ]
+    assert page["items"][0]["question_type"] is None
+
+    first_id = page["items"][0]["id"]
+    edited = client.patch(
+        f"/api/evals/datasets/{dataset['id']}/queries/{first_id}",
+        json={"text": "what exactly is alpha?"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["text"] == "what exactly is alpha?"
+    assert edited.json()["gold"] == [{"external_doc_id": "d1", "title": "Alpha doc"}]
+
+    deleted = client.delete(f"/api/evals/datasets/{dataset['id']}/queries/{first_id}")
+    assert deleted.status_code == 204
+    after = client.get(f"/api/evals/datasets/{dataset['id']}/queries").json()
+    assert after["total"] == 1
+    refreshed = client.get(f"/api/evals/datasets/{dataset['id']}").json()
+    assert refreshed["num_queries"] == 1
+
+    last_id = after["items"][0]["id"]
+    blocked = client.delete(f"/api/evals/datasets/{dataset['id']}/queries/{last_id}")
+    assert blocked.status_code == 400
+
+
+def test_dataset_queries_cross_user_isolation(
+    client: TestClient, session: Session
+) -> None:
+    """Another user's dataset queries are invisible on every verb."""
+    other = models.User(email="o@example.com", full_name="O", hashed_password="x")
+    session.add(other)
+    session.commit()
+    session.refresh(other)
+    dataset = models.EvalDataset(
+        user_id=other.id, name="Theirs", source="custom_upload", status="ready"
+    )
+    session.add(dataset)
+    session.commit()
+    session.refresh(dataset)
+    query = models.EvalDatasetQuery(
+        dataset_id=dataset.id, external_query_id="q1", text="theirs"
+    )
+    session.add(query)
+    session.commit()
+    session.refresh(query)
+
+    base = f"/api/evals/datasets/{dataset.id}/queries"
+    assert client.get(base).status_code == 404
+    assert client.patch(f"{base}/{query.id}", json={"text": "mine"}).status_code == 404
+    assert client.delete(f"{base}/{query.id}").status_code == 404

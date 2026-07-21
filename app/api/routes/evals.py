@@ -11,7 +11,10 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import to_http_exception
 from app.db import models
 from app.evals.collections import EvalCollectionService
+from app.evals.dataset_queries import DatasetQueryService
 from app.evals.execution.runner import run_eval
+from app.evals.generation import run_dataset_generation
+from app.evals.generation.requests import create_generation_dataset
 from app.evals.service import EvalService, run_dataset_download
 from app.evals.wire import to_dataset_read, to_run_item_read, to_run_read, to_run_summary
 from app.schemas.evals import (
@@ -27,6 +30,12 @@ from app.schemas.evals import (
     EvalRunSummary,
     ImportBuiltinDatasetRequest,
     UploadDatasetRequest,
+)
+from app.schemas.evals_generation import (
+    EvalDatasetGenerateRequest,
+    EvalDatasetQueriesPage,
+    EvalDatasetQueryRead,
+    EvalDatasetQueryUpdate,
 )
 from app.services.errors import ServiceError
 
@@ -93,6 +102,72 @@ def upload_dataset(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return to_dataset_read(dataset)
+
+
+@router.post("/datasets/generate", response_model=EvalDatasetRead, status_code=202)
+def generate_dataset(
+    payload: EvalDatasetGenerateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> EvalDatasetRead:
+    """Record a synthetic dataset and generate it in the background."""
+    try:
+        dataset = create_generation_dataset(session, current_user, payload)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    background_tasks.add_task(run_dataset_generation, dataset.id)
+    return to_dataset_read(dataset)
+
+
+@router.get("/datasets/{dataset_id}/queries", response_model=EvalDatasetQueriesPage)
+def list_dataset_queries(
+    dataset_id: UUID,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> EvalDatasetQueriesPage:
+    """Page one dataset's queries with gold references and generation metadata."""
+    try:
+        return DatasetQueryService(session).list_queries(
+            current_user, dataset_id, offset=offset, limit=limit
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.patch(
+    "/datasets/{dataset_id}/queries/{query_id}", response_model=EvalDatasetQueryRead
+)
+def update_dataset_query(
+    dataset_id: UUID,
+    query_id: UUID,
+    payload: EvalDatasetQueryUpdate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> EvalDatasetQueryRead:
+    """Edit one dataset query's text (gold labels unchanged)."""
+    try:
+        return DatasetQueryService(session).update_query_text(
+            current_user, dataset_id, query_id, payload.text
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.delete("/datasets/{dataset_id}/queries/{query_id}", status_code=204)
+def delete_dataset_query(
+    dataset_id: UUID,
+    query_id: UUID,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    """Delete one dataset query and its relevance judgments."""
+    try:
+        DatasetQueryService(session).delete_query(current_user, dataset_id, query_id)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.get("/datasets/{dataset_id}", response_model=EvalDatasetRead)

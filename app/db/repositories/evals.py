@@ -65,6 +65,65 @@ class EvalDatasetRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def page_queries(
+        self, dataset_id: UUID, *, offset: int, limit: int
+    ) -> tuple[list[models.EvalDatasetQuery], int]:
+        """Page a dataset's queries in stable external-id order, with the total."""
+        total_statement = select(
+            func.count(col(models.EvalDatasetQuery.id))  # pylint: disable=not-callable
+        ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
+        total = int(self.session.exec(total_statement).one())
+        statement = (
+            select(models.EvalDatasetQuery)
+            .where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
+            .order_by(col(models.EvalDatasetQuery.external_query_id))
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self.session.exec(statement).all()), total
+
+    def count_queries(self, dataset_id: UUID) -> int:
+        """Count a dataset's queries."""
+        statement = select(
+            func.count(col(models.EvalDatasetQuery.id))  # pylint: disable=not-callable
+        ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
+        return int(self.session.exec(statement).one())
+
+    def get_query(
+        self, dataset_id: UUID, query_id: UUID
+    ) -> models.EvalDatasetQuery | None:
+        """Return one query only when it belongs to the dataset."""
+        query = self.session.get(models.EvalDatasetQuery, query_id)
+        if query is None or query.dataset_id != dataset_id:
+            return None
+        return query
+
+    def judgments_for_queries(
+        self, dataset_id: UUID, query_external_ids: Sequence[str]
+    ) -> list[models.EvalRelevanceJudgment]:
+        """Return the qrels rows for the given queries of a dataset."""
+        if not query_external_ids:
+            return []
+        statement = select(models.EvalRelevanceJudgment).where(
+            col(models.EvalRelevanceJudgment.dataset_id) == dataset_id,
+            col(models.EvalRelevanceJudgment.query_external_id).in_(
+                list(query_external_ids)
+            ),
+        )
+        return list(self.session.exec(statement).all())
+
+    def delete_query_with_judgments(self, query: models.EvalDatasetQuery) -> None:
+        """Delete one query row together with its relevance judgments."""
+        self.session.execute(
+            sa_delete(models.EvalRelevanceJudgment).where(
+                col(models.EvalRelevanceJudgment.dataset_id) == query.dataset_id,
+                col(models.EvalRelevanceJudgment.query_external_id)
+                == query.external_query_id,
+            )
+        )
+        self.session.delete(query)
+        self.session.flush()
+
     def list_judgments(self, dataset_id: UUID) -> list[models.EvalRelevanceJudgment]:
         """Return every relevance judgment in a dataset."""
         statement = select(models.EvalRelevanceJudgment).where(

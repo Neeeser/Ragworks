@@ -21,8 +21,6 @@ from sqlmodel import Session, col, select
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import ChunkRepository, DocumentRepository
-from app.evals.datasets.base import CorpusDoc, DatasetTriple, Qrel, QueryRecord
 from app.evals.generation.candidates import (
     CandidateQuestion,
     CritiqueScores,
@@ -31,30 +29,27 @@ from app.evals.generation.candidates import (
     parse_critiques,
     quote_matches,
 )
-from app.evals.generation.contexts import (
-    ContextPlan,
-    DocumentPlan,
-    pick_distractor_positions,
-    sample_contexts,
-)
+from app.evals.generation.contexts import ContextPlan, DocumentPlan, sample_contexts
 from app.evals.generation.corpus import join_chunks
+from app.evals.generation.persistence import (
+    AcceptedQuestion,
+    persist_generated_dataset,
+    record_generation_outcome,
+)
 from app.evals.generation.prompts import (
     build_critique_messages,
     build_generation_messages,
 )
-from app.evals.service import EvalService
+from app.evals.generation.sources import (
+    distractor_texts,
+    eligible_documents,
+    load_chunks,
+)
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import get_provider, resolve_connection
-from app.schemas.enums import (
-    DocumentStatus,
-    EvalDatasetStatus,
-    ProviderKind,
-    RelevanceGranularity,
-)
-from app.schemas.evals import EvalDatasetGenerateRequest
+from app.schemas.enums import EvalDatasetStatus, ProviderKind
+from app.schemas.evals_generation import EvalDatasetGenerateRequest
 from app.services.errors import InvalidInputError
-from app.telemetry import record
-from app.telemetry.events import EvalDatasetGenerated
 
 logger = logging.getLogger(__name__)
 
@@ -64,21 +59,6 @@ CONTEXT_OVERSAMPLE = 2
 MAX_CONSECUTIVE_CALL_FAILURES = 3
 GENERATION_TEMPERATURE = 0.7
 CRITIQUE_TEMPERATURE = 0.0
-DISTRACTOR_SNIPPET_CHARS = 600
-TEXT_MODALITY = "text"
-
-
-@dataclass(frozen=True)
-class _Accepted:
-    """One question that survived every gate, with its provenance."""
-
-    question: str
-    answer: str
-    quote: str
-    scores: CritiqueScores
-    doc_id: str
-    chunk_ids: list[str]
-    question_type: str
 
 
 def run_dataset_generation(dataset_id: UUID) -> None:
@@ -104,10 +84,10 @@ def run_dataset_generation(dataset_id: UUID) -> None:
             session.commit()
             stats = None
         if stats is None:
-            _record_outcome(session, dataset_id, started, generated=0, accepted=0)
+            record_generation_outcome(session, dataset_id, started, generated=0, accepted=0)
             return
         generated, accepted = stats
-        _record_outcome(
+        record_generation_outcome(
             session, dataset_id, started, generated=generated, accepted=accepted
         )
 
@@ -131,7 +111,7 @@ class _LoopState:
 
     def __post_init__(self) -> None:
         """Start empty: nothing accepted, nothing generated, no failures."""
-        self.accepted: list[_Accepted] = []
+        self.accepted: list[AcceptedQuestion] = []
         self.accepted_texts: list[str] = []
         self.generated = 0
         self.consecutive_failures = 0
@@ -173,7 +153,14 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
             "No generated questions passed the quality filters. Try a different"
             " model or a collection with more substantial text."
         )
-    _persist(session, dataset, setup, state)
+    persist_generated_dataset(
+        session,
+        dataset,
+        documents=setup.documents,
+        chunk_map=setup.chunk_map,
+        accepted=state.accepted,
+        generated_count=state.generated,
+    )
     return state.generated, len(state.accepted)
 
 
@@ -183,7 +170,7 @@ def _prepare(session: Session, dataset: models.EvalDataset) -> _RunSetup:
     user = session.get(models.User, dataset.user_id)
     if user is None:
         raise InvalidInputError("The dataset's owning user no longer exists.")
-    documents = _eligible_documents(session, config.collection_id)
+    documents = eligible_documents(session, config.collection_id)
     if not documents:
         raise InvalidInputError(
             "The collection has no ingested documents with stored chunks."
@@ -198,7 +185,7 @@ def _prepare(session: Session, dataset: models.EvalDataset) -> _RunSetup:
         config=config,
         documents=documents,
         doc_plans=doc_plans,
-        chunk_map=_load_chunks(session, documents),
+        chunk_map=load_chunks(session, documents),
         chat=chat,
     )
 
@@ -228,7 +215,7 @@ def _run_plan(
             setup.config,
             context_text=context_text,
             plan=plan,
-            distractor_texts=_distractor_texts(setup.doc_plans, plan, setup.chunk_map, rng),
+            distractor_texts=distractor_texts(setup.doc_plans, plan, setup.chunk_map, rng),
             accepted_texts=state.accepted_texts,
         )
         state.consecutive_failures = 0
@@ -248,7 +235,7 @@ def _run_plan(
         if state.done:
             break
         state.accepted.append(
-            _Accepted(
+            AcceptedQuestion(
                 question=candidate.question,
                 answer=candidate.answer,
                 quote=candidate.quote,
@@ -350,46 +337,6 @@ def _chat_text(
     return ""
 
 
-def _eligible_documents(
-    session: Session, collection_id: UUID
-) -> list[models.Document]:
-    """READY documents with stored chunks, in a stable order."""
-    documents = DocumentRepository(session).list_for_collection(collection_id)
-    eligible = [
-        doc
-        for doc in documents
-        if doc.status == DocumentStatus.READY and doc.num_chunks > 0
-    ]
-    eligible.sort(key=lambda doc: str(doc.id))
-    return eligible
-
-
-def _load_chunks(
-    session: Session, documents: list[models.Document]
-) -> dict[str, list[models.DocumentChunkRecord]]:
-    """Every eligible document's chunks, ordered, keyed by document id."""
-    records = ChunkRepository(session).list_for_documents([doc.id for doc in documents])
-    chunk_map: dict[str, list[models.DocumentChunkRecord]] = {}
-    for record_ in records:
-        chunk_map.setdefault(str(record_.document_id), []).append(record_)
-    return chunk_map
-
-
-def _distractor_texts(
-    doc_plans: list[DocumentPlan],
-    plan: ContextPlan,
-    chunk_map: dict[str, list[models.DocumentChunkRecord]],
-    rng: random.Random,
-) -> list[str]:
-    """Snippets from other documents, trimmed to prompt-friendly size."""
-    texts: list[str] = []
-    for doc_id, index in pick_distractor_positions(doc_plans, plan, rng=rng):
-        chunks = chunk_map.get(doc_id, [])
-        if index < len(chunks):
-            texts.append(chunks[index].text[:DISTRACTOR_SNIPPET_CHARS])
-    return texts
-
-
 def _commit_progress(
     session: Session, dataset_id: UUID, accepted: int
 ) -> models.EvalDataset | None:
@@ -415,88 +362,3 @@ def _select_dataset(session: Session, dataset_id: UUID) -> models.EvalDataset | 
     """Read the dataset row straight from the database."""
     statement = select(models.EvalDataset).where(col(models.EvalDataset.id) == dataset_id)
     return session.exec(statement).first()
-
-
-def _persist(
-    session: Session,
-    dataset: models.EvalDataset,
-    setup: _RunSetup,
-    state: _LoopState,
-) -> None:
-    """Assemble the triple, persist it, and stamp the generation stats."""
-    accepted = state.accepted
-    corpus: list[CorpusDoc] = []
-    for doc in setup.documents:
-        text = join_chunks(
-            [chunk.text for chunk in setup.chunk_map.get(str(doc.id), [])]
-        )
-        if text:
-            corpus.append(
-                CorpusDoc(
-                    external_doc_id=str(doc.id),
-                    title=doc.name,
-                    text=text,
-                    metadata={"modality": TEXT_MODALITY},
-                )
-            )
-    queries: list[QueryRecord] = []
-    qrels: list[Qrel] = []
-    for index, item in enumerate(accepted, start=1):
-        external_id = f"synth-{index:04d}"
-        queries.append(
-            QueryRecord(
-                external_query_id=external_id,
-                text=item.question,
-                metadata={
-                    "question_type": item.question_type,
-                    "scores": item.scores.as_dict(),
-                    "quote": item.quote,
-                    "answer": item.answer,
-                    "source_chunk_ids": item.chunk_ids,
-                    "modality": TEXT_MODALITY,
-                },
-            )
-        )
-        qrels.append(
-            Qrel(query_external_id=external_id, doc_external_id=item.doc_id, relevance=1)
-        )
-    triple = DatasetTriple(
-        name=dataset.name,
-        corpus=corpus,
-        queries=queries,
-        qrels=qrels,
-        description=dataset.description,
-        relevance_granularity=RelevanceGranularity.DOCUMENT,
-    )
-    dataset.generation_config = {
-        **(dataset.generation_config or {}),
-        "stats": {"generated": state.generated, "accepted": len(accepted)},
-    }
-    dataset.progress_done = len(accepted)
-    EvalService(session).persist_triple(dataset, triple)
-
-
-def _record_outcome(
-    session: Session, dataset_id: UUID, started: float, *, generated: int, accepted: int
-) -> None:
-    """Emit the aggregatable telemetry fact for a finished generation."""
-    dataset = session.get(models.EvalDataset, dataset_id)
-    if dataset is None:
-        return
-    config = dataset.generation_config or {}
-    collection_ref = config.get("collection_id")
-    try:
-        collection_id = UUID(str(collection_ref))
-    except ValueError:
-        return
-    record(
-        EvalDatasetGenerated(
-            user_id=dataset.user_id,
-            dataset_id=dataset.id,
-            collection_id=collection_id,
-            status=dataset.status,
-            generated_count=generated,
-            accepted_count=accepted,
-            duration_ms=int((time.monotonic() - started) * 1000),
-        )
-    )
