@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 
 import type { ConfigFieldRead } from "@/lib/types";
@@ -16,6 +17,17 @@ function parseStringList(text: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+function numericHint(field: ConfigFieldRead): string {
+  if (field.min_value == null && field.max_value == null) {
+    return field.description;
+  }
+  const range =
+    field.min_value != null && field.max_value != null
+      ? `${field.min_value}–${field.max_value}`
+      : (field.min_value ?? field.max_value)?.toString();
+  return `${field.description} Allowed range: ${range}.`;
 }
 
 type ConfigFieldControlProps = {
@@ -62,9 +74,11 @@ export function ConfigFieldControl({
 
   if (field.kind === "int") {
     return (
-      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+      <Field label={field.label} hint={numericHint(field)} labelEnd={labelEnd}>
         <TextInput
           type="number"
+          min={field.min_value ?? undefined}
+          max={field.max_value ?? undefined}
           value={typeof value === "number" ? value : ""}
           disabled={locked}
           onChange={(event) => {
@@ -79,6 +93,55 @@ export function ConfigFieldControl({
             onChange(parsed);
           }}
         />
+      </Field>
+    );
+  }
+
+  if (field.kind === "select") {
+    const options = field.options ?? [];
+    return (
+      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+        <CustomSelect
+          value={typeof value === "string" ? value : ""}
+          options={options.map((option) => ({ value: option.value, label: option.label }))}
+          placeholder="Select a value"
+          disabled={locked}
+          onValueChange={onChange}
+        />
+      </Field>
+    );
+  }
+
+  if (field.kind === "multi_select") {
+    const options = field.options ?? [];
+    const selected = new Set(toStringList(value));
+    return (
+      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+        <div role="group" aria-label={field.label} className="space-y-2">
+          {options.map((option) => {
+            const checked = selected.has(option.value);
+            return (
+              <label key={option.value} className="flex items-center gap-2 text-sm text-body">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-strong bg-transparent accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                  checked={checked}
+                  disabled={locked}
+                  onChange={(event) => {
+                    const next = new Set(selected);
+                    if (event.target.checked) {
+                      next.add(option.value);
+                    } else {
+                      next.delete(option.value);
+                    }
+                    onChange(Array.from(next));
+                  }}
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
       </Field>
     );
   }
