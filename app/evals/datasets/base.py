@@ -25,10 +25,15 @@ class CorpusDoc:
 
 @dataclass(frozen=True)
 class QueryRecord:
-    """One query, keyed by its dataset-native external id."""
+    """One query, keyed by its dataset-native external id.
+
+    `metadata` is populated by synthetic generation (question type, critique
+    scores, source chunk ids); benchmark and uploaded queries leave it empty.
+    """
 
     external_query_id: str
     text: str
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

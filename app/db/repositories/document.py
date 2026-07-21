@@ -161,6 +161,23 @@ class ChunkRepository(Repository):
             if (chunk.document_id, chunk.chunk_index) in requested
         ]
 
+    def list_for_documents(
+        self, document_ids: Iterable[UUID]
+    ) -> list[models.DocumentChunkRecord]:
+        """Return every chunk of the given documents, in document/index order."""
+        ids = list(document_ids)
+        if not ids:
+            return []
+        statement = (
+            select(models.DocumentChunkRecord)
+            .where(col(models.DocumentChunkRecord.document_id).in_(ids))
+            .order_by(
+                col(models.DocumentChunkRecord.document_id),
+                col(models.DocumentChunkRecord.chunk_index),
+            )
+        )
+        return list(self.session.exec(statement).all())
+
     def list_for_document(self, document_id: UUID) -> list[models.DocumentChunkRecord]:
         """List chunks belonging to a document in their source order."""
         statement = (

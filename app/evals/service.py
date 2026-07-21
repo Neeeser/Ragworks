@@ -183,6 +183,7 @@ class EvalService:
                     dataset_id=dataset.id,
                     external_query_id=query.external_query_id,
                     text=query.text,
+                    query_metadata=dict(query.metadata) if query.metadata else None,
                 )
                 for query in triple.queries
             ]

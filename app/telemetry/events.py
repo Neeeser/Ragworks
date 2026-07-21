@@ -100,6 +100,18 @@ class CollectionDeleted(_BaseEvent):
     collection_id: UUID
 
 
+class EvalDatasetGenerated(_BaseEvent):
+    """A synthetic eval dataset generation finished (successfully or not)."""
+
+    type: Literal["evals.dataset_generated"] = "evals.dataset_generated"
+    dataset_id: UUID
+    collection_id: UUID
+    status: str
+    generated_count: int
+    accepted_count: int
+    duration_ms: int
+
+
 TelemetryEvent = Annotated[
     ChatTurnCompleted
     | DocumentIngested
@@ -109,6 +121,7 @@ TelemetryEvent = Annotated[
     | IndexCreated
     | IndexDeleted
     | CollectionCreated
-    | CollectionDeleted,
+    | CollectionDeleted
+    | EvalDatasetGenerated,
     Field(discriminator="type"),
 ]
