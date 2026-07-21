@@ -179,6 +179,14 @@ def test_render_system_prompt_uses_custom_template(monkeypatch) -> None:
     assert f"Tool Demo Collection via {collection_tool_name(collection.name)}" in rendered
 
 
+def test_default_system_prompt_without_collections_is_tool_agnostic() -> None:
+    user = _build_user()
+
+    rendered = render_system_prompt([], user)
+
+    assert "tool" not in rendered.casefold()
+
+
 def test_prompt_variables_payload_exposes_expected_names() -> None:
     base_names = {variable.name for variable in prompt_variables_payload(scope="base")}
     assert "user.email" in base_names
