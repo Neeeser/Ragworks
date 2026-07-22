@@ -132,6 +132,20 @@ image bakes build-time values), debug defaults, and storage paths. When a change
 touches startup, config, routing, storage, or anything env-dependent, verify it in
 (or reason it through for) both modes — "works with `make run`" alone is not done.
 
+# End-to-end testing — seeded scenarios, never manual setup
+
+Manual end-to-end testing never starts from a blank app: `uv run python -m sandbox up
+<scenario>` (or `make sandbox-up SCENARIO=<name>`) resets the dedicated sandbox
+database, seeds a named application state through the real service layer,
+starts backend (8010) + frontend (3010) against it, and prints the seeded
+login plus a ready JWT — registering accounts and walking the setup wizard
+by hand wastes the tokens this harness exists to save. The scenario catalog
+is `docs/sandbox-scenarios.md` (generated — never hand-edited); usage, key setup
+(`.env.sandbox`), and how to add builders/scenarios are in `docs/sandbox.md`.
+When a new feature needs a state no scenario covers, add the
+scenario/builder in the same PR as the feature — that is how the catalog
+stays useful.
+
 # Configuration architecture
 
 The project is heading toward being fully config-driven (runtime-editable settings,
