@@ -12,6 +12,7 @@ replace them:
 
 - Backend (`app/`): @app/AGENTS.md
 - Frontend (`frontend/`): @frontend/AGENTS.md
+- Sandbox harness (`sandbox/` + `frontend/e2e/`): @sandbox/AGENTS.md
 
 # Writing voice — plain, factual, never pitchy
 
@@ -134,17 +135,19 @@ touches startup, config, routing, storage, or anything env-dependent, verify it 
 
 # End-to-end testing — seeded scenarios, never manual setup
 
-Manual end-to-end testing never starts from a blank app: `uv run python -m sandbox up
-<scenario>` (or `make sandbox-up SCENARIO=<name>`) resets the dedicated sandbox
-database, seeds a named application state through the real service layer,
-starts backend (8010) + frontend (3010) against it, and prints the seeded
-login plus a ready JWT — registering accounts and walking the setup wizard
-by hand wastes the tokens this harness exists to save. The scenario catalog
-is `docs/sandbox-scenarios.md` (generated — never hand-edited); usage, key setup
-(`.env.sandbox`), and how to add builders/scenarios are in `docs/sandbox.md`.
-When a new feature needs a state no scenario covers, add the
-scenario/builder in the same PR as the feature — that is how the catalog
-stays useful.
+Manual end-to-end testing never starts from a blank app: `uv run python -m
+sandbox up <scenario>` seeds a named application state into an isolated
+sandbox (own DB, storage, ports) and prints the login, a ready JWT, and deep
+links — registering accounts and walking the setup wizard by hand wastes the
+tokens the harness exists to save. Validated browser flows are saved as
+Playwright specs in `frontend/e2e/<scenario>/` and rerun with `uv run python
+-m sandbox flows` — rerun or extend a saved flow before re-deriving it click
+by click. The scenario catalog is `docs/sandbox-scenarios.md` (generated —
+never hand-edited); usage is `docs/sandbox.md`; the harness's own
+engineering rules, plus the add-a-scenario and add-a-flow checklists, live
+in `sandbox/AGENTS.md`. When a feature needs a state or flow that doesn't
+exist yet, add it in the same PR as the feature — that is how the catalog
+and flow suite stay useful.
 
 # Configuration architecture
 
@@ -236,9 +239,9 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 # Maintaining these AGENTS.md files
 
 These files are lessons learned about writing good, consistent code in this repo.
-The structure is fixed at three files — this root file for repo-wide design, infra,
-CI, and release rules; `app/AGENTS.md` and `frontend/AGENTS.md` for their areas. No
-nested AGENTS.md files deeper in the tree.
+The structure is fixed at four files — this root file for repo-wide design, infra,
+CI, and release rules; `app/AGENTS.md`, `frontend/AGENTS.md`, and
+`sandbox/AGENTS.md` for their areas. No nested AGENTS.md files deeper in the tree.
 
 **Adding a rule.** When a fix, incident, or review teaches a durable rule, add it to
 the relevant AGENTS.md **in the same PR** — never batched later. A rule earns its

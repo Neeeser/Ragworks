@@ -58,6 +58,38 @@ navigation:
    API is far cheaper than snapshotting a page. Save browser snapshots for
    the UI behavior actually under test.
 
+## Saved flows — validated browser tests you rerun instead of re-exploring
+
+Once a UI flow has been tested manually, it is hardened into a committed
+Playwright spec so the next session reruns it for ~zero tokens instead of
+re-deriving it click by click:
+
+```bash
+uv run python -m sandbox flows              # all scenarios with flows
+uv run python -m sandbox flows evals-ready  # one scenario's flows
+uv run python -m sandbox flows --list       # inventory
+```
+
+Flows live in `frontend/e2e/<scenario>/<flow>.spec.ts` — the directory name
+is the sandbox scenario the spec needs seeded. The runner seeds each
+scenario, serves a **production** frontend build (`next build` + `next
+start`; dev-mode HMR reloads wipe in-flight state under Playwright), runs
+that directory's specs, and reports per-scenario results. Scenarios whose
+provider keys are missing are skipped by name.
+
+Writing a flow:
+
+- Start from the nearest existing spec; the flow's numbered steps live in
+  the comment block at the top.
+- Import the shared helpers: `loadHandoff()` (seeded ids/URLs — never
+  hardcode them), `seededLink()`, `loginViaApi(page)` (skips the sign-in
+  form unless auth is the subject), `gotoSignIn(page)` (waits out hydration
+  before the form is used).
+- Assert deterministic outcomes. Anything an LLM produces (counts, wording)
+  is asserted by shape, not exact value.
+- When manual testing of a new feature ends, harden what you validated into
+  a flow in the same PR — that is how the suite grows.
+
 ## Isolation — what the harness touches
 
 Nothing the harness does can affect dev state. It owns:
@@ -136,16 +168,9 @@ distinct topics so retrieval quality is checkable at a glance (the aurora
 query should return the aurora document). Add new assets there when a
 scenario needs different content, and reuse the existing ones otherwise.
 
-## How it works (for maintainers)
+## Working on the harness itself
 
-- `sandbox/cli.py` applies the sandbox environment (`DATABASE_URL`, storage, config,
-  CORS) **before importing any `app.*` module** — the db engine binds
-  `DATABASE_URL` at import time. Keep app imports inside functions in this
-  package.
-- `sandbox/harness/db.py` reuses `scripts/ensure_postgres.py` for the server and
-  the app's `init_db()` for schema — no parallel schema definition.
-- `sandbox/harness/servers.py` runs uvicorn and `next dev` as detached process
-  groups with pidfiles under `.sandbox/`, so any later session can `down` them.
-- An external Postgres works via `SANDBOX_DATABASE_URL` (+ `DB_MODE=external`),
-  with the same caveat as dev: without ParadeDB's `pg_search`, BM25 silently
-  degrades.
+Engineering rules and the add-a-scenario / add-a-flow checklists live in
+`sandbox/AGENTS.md`. An external Postgres works via `SANDBOX_DATABASE_URL`
+(+ `DB_MODE=external`), with the same caveat as dev: without ParadeDB's
+`pg_search`, BM25 silently degrades.
