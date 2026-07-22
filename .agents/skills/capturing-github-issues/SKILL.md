@@ -17,6 +17,14 @@ Classify the request before drafting:
 
 Edit dictated feedback for readability and concision without replacing its authorship. Preserve first-person language, uncertainty, examples, reasoning, and explicit constraints when material.
 
+## Brainstorm feature requests
+
+When the user is requesting new user-facing behavior, invoke **REQUIRED SUB-SKILL:** `superpowers:brainstorming` before drafting the issue. Use its context exploration, focused clarification questions, multiple-choice options, alternatives, tradeoffs, and design discussion to clarify what the user wants. Continue asking questions until the feature direction is clear enough to capture; do not manufacture ambiguity when the request is already specific.
+
+Stop the brainstorming workflow after the design conversation. Do not write or commit a design document, ask the user to review a spec file, invoke `writing-plans`, or implement the feature. Use the decisions and explicit constraints from the conversation in the issue, without copying the whole brainstorming transcript or rejected alternatives.
+
+Do not invoke brainstorming for a user-facing bug report or maintenance-only technical task such as a version bump or provider migration unless the user asks for design exploration.
+
 ## Ask useful questions
 
 Ask follow-up questions whenever ambiguity or missing context could materially change the issue. There is no fixed limit: ask as many focused questions as needed, in one or more messages, and stop when the issue is specific enough to capture accurately.
@@ -44,7 +52,7 @@ For a user-facing problem:
 <Relevant details supplied by the user or explicitly requested investigation.>
 ```
 
-For a request or technical work item:
+For a feature request, include the decisions from brainstorming in a concise `Design direction` section when they materially shape the request. For other requests or technical work items:
 
 ```markdown
 ## Request
@@ -85,5 +93,6 @@ After creation, return the issue URL and labels applied. If creation or labeling
 | Asking a fixed questionnaire | Generate only questions that resolve meaningful ambiguity |
 | Treating a symptom as a root cause | Preserve the symptom and ask for relevant context |
 | Removing technical detail the user explicitly requested | Keep the requested wording, files, and references |
+| Drafting a feature request before clarifying its design | Invoke `superpowers:brainstorming`, then use the resulting decisions |
 | Running browser or test work without being asked | Draft from the report unless investigation was explicitly requested |
 | Adding a solution or posting malformed or unapproved Markdown | Describe the request, normalize it, show it, and wait |
