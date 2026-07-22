@@ -17,7 +17,7 @@ from sqlmodel import Session
 from app.core.config import get_settings
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import ChunkRepository
+from app.db.repositories import ChunkRepository, DocumentRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import IngestionPipelineSettings
@@ -36,15 +36,21 @@ logger = logging.getLogger(__name__)
 
 
 def run_document_ingestion(document_id: UUID) -> None:
-    """Background-task entry point: ingest one pending document, never raise.
+    """Worker entry point: claim and ingest one pending document, never raise.
 
-    Opens its own `session_scope` — background tasks run after the request
-    (and its session) are gone. Failures are already recorded on the document
-    row by `ingest_document`; this wrapper only keeps the worker quiet.
+    Opens its own `session_scope` — queue workers run outside any request
+    (and its session). The atomic `pending` → `processing` claim is the
+    dedupe gate: a duplicate enqueue of the same document loses the claim
+    and returns without touching it. Failures are already recorded on the
+    document row by `ingest_document`; this wrapper only keeps the worker
+    quiet.
     """
     with session_scope() as session:
+        if not DocumentRepository(session).claim_for_ingestion(document_id):
+            return
+        session.commit()  # make the claim visible to pollers and other workers
         document = session.get(models.Document, document_id)
-        if document is None or document.status != models.DocumentStatus.PENDING:
+        if document is None:
             return
         user = session.get(models.User, document.user_id)
         collection = session.get(models.Collection, document.collection_id)

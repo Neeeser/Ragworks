@@ -22,9 +22,15 @@ database_url = settings.database_url
 # *session* timezone — on a server defaulting to local time (e.g. Homebrew
 # Postgres), rows would be stored hours off from the UTC wall time every
 # reader assumes.
+# Deliberate pool ceiling (SQLAlchemy's default 5+10 was exhaustible by a
+# bulk upload, issue #138): sized for the ingestion queue's worker cap (16)
+# plus request-serving sessions, so background ingestion can never starve
+# foreground requests of connections.
 engine = create_engine(
     database_url,
     pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=25,
     connect_args={"options": "-c TimeZone=UTC"},
 )
 

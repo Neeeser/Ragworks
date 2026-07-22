@@ -43,7 +43,7 @@ from app.services.file_copy import FileCopyService
 from app.services.file_deletion import FileDeletionService
 from app.services.file_search import SEARCH_MODES, FileSearchService
 from app.services.files import FileSystemService, UploadSpec
-from app.services.ingestion import run_document_ingestion
+from app.services.ingestion_queue import enqueue_document_ingestion
 
 router = APIRouter(prefix="/api", tags=["files"])
 
@@ -158,7 +158,7 @@ def upload_file(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     if result.document is not None:
-        background_tasks.add_task(run_document_ingestion, result.document.id)
+        background_tasks.add_task(enqueue_document_ingestion, result.document.id)
     tree_paths = service.read_node(result.file)
     return FileUploadResponse(
         file=tree_paths,
@@ -205,7 +205,7 @@ def copy_file_node(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     for document in result.documents:
-        background_tasks.add_task(run_document_ingestion, document.id)
+        background_tasks.add_task(enqueue_document_ingestion, document.id)
     return FileSystemService(session).read_node(result.root)
 
 
@@ -271,7 +271,7 @@ def ingest_file(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     session.commit()
-    background_tasks.add_task(run_document_ingestion, document.id)
+    background_tasks.add_task(enqueue_document_ingestion, document.id)
     return service.read_node(node)
 
 
