@@ -63,7 +63,7 @@ Use first person when it best preserves the report. Keep the title concise and f
 
 Before showing or posting the draft:
 
-- Use real line breaks, not literal `\\n` text.
+- Use real line breaks, not literal backslash-n text.
 - Strip trailing spaces and tabs from every line.
 - Keep exactly one blank line between paragraphs, headings, and list blocks.
 - Remove leading and trailing blank lines and end the body with one newline.
@@ -71,7 +71,7 @@ Before showing or posting the draft:
 
 ## Labels, duplicates, and approval
 
-When preparing to post, use only existing repository labels. Check for an obvious duplicate when issue-tracker access is available; keep that search out of the body and surface a likely duplicate for the user to decide.
+When preparing to post, use only existing repository labels. If repository labels cannot be checked, say so and do not guess. Check for an obvious duplicate when issue-tracker access is available; keep that search out of the body and say when it could not be performed.
 
 Always show the title, complete body, labels, likely duplicates, and explicitly requested links. Ask for approval before creating. Treat “yes,” “go ahead,” “post it,” and similar replies as authorization to create exactly the approved draft; treat corrections as instructions to revise and show it again. Never create from silence or an ambiguous reply.
 
