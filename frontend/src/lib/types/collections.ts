@@ -197,6 +197,35 @@ export interface CollectionQueryResult {
   pipeline_run_id?: UUID;
 }
 
+/** Mirrors `app/schemas/retrieval.py::FailedNodeRef`. */
+export interface FailedNodeRef {
+  node_id: string;
+  node_name: string;
+  node_type: string;
+}
+
+/**
+ * Structured error body for a failed retrieval query.
+ * Mirrors `app/schemas/retrieval.py::RetrievalFailureDetail`. Arrives on
+ * `ApiError.rawDetail` (the formatted `ApiError.detail` string loses the shape).
+ */
+export interface RetrievalFailureDetail {
+  message: string;
+  code: string;
+  failed_node?: FailedNodeRef | null;
+  pipeline_run_id?: UUID | null;
+}
+
+/** Narrow an `ApiError.rawDetail` to a structured retrieval failure. */
+export function isRetrievalFailure(detail: unknown): detail is RetrievalFailureDetail {
+  return (
+    typeof detail === "object" &&
+    detail !== null &&
+    "code" in detail &&
+    (detail as { code: unknown }).code === "retrieval_pipeline_failed"
+  );
+}
+
 /** Mirrors `app/schemas/retrieval.py::QueryArgumentRead`. */
 export interface CollectionQueryArgument {
   name: string;

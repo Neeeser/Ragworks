@@ -2,6 +2,7 @@ export { API_BASE_URL } from "@/lib/api/client";
 export * from "@/lib/api/admin";
 export * from "@/lib/api/auth";
 export * from "@/lib/api/collections";
+export * from "@/lib/api/diagnostics";
 export * from "@/lib/api/files";
 export * from "@/lib/api/config";
 export * from "@/lib/api/pipelines";

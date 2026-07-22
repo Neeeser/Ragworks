@@ -27,6 +27,10 @@ describe("CollectionSidebar", () => {
       "href",
       `/collections/${collection.id}/search`,
     );
+    expect(screen.getByRole("link", { name: "Diagnostics" })).toHaveAttribute(
+      "href",
+      `/collections/${collection.id}/diagnostics`,
+    );
     expect(screen.getByRole("link", { name: "Visualize" })).toHaveAttribute(
       "href",
       `/collections/${collection.id}/visualize`,

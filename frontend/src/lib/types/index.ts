@@ -1,6 +1,7 @@
 export * from "@/lib/types/common";
 export * from "@/lib/types/admin";
 export * from "@/lib/types/collections";
+export * from "@/lib/types/diagnostics";
 export * from "@/lib/types/files";
 export * from "@/lib/types/chat";
 export * from "@/lib/types/pipelines";

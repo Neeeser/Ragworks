@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react";
 
 import { fetchCollectionQueryArguments, runCollectionQuery } from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
+import {
+  isRetrievalFailure,
+  type CollectionQueryArgument,
+  type CollectionQueryResult,
+  type RetrievalFailureDetail,
+} from "@/lib/types";
 import { useApiQuery } from "@/lib/use-api-query";
-
-import type { CollectionQueryArgument, CollectionQueryResult } from "@/lib/types";
 
 const RECENT_LIMIT = 5;
 
@@ -77,6 +82,8 @@ export type CollectionSearchState = {
   result: CollectionQueryResult | null;
   running: boolean;
   error: string | null;
+  /** Structured, trace-linked detail when the failure was a pipeline error. */
+  failure: RetrievalFailureDetail | null;
   recentQueries: string[];
   run: (query?: string) => Promise<void>;
 };
@@ -96,6 +103,7 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
   const [result, setResult] = useState<CollectionQueryResult | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<RetrievalFailureDetail | null>(null);
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
   const argumentsQuery = useApiQuery(
@@ -157,6 +165,7 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     }
     setRunning(true);
     setError(null);
+    setFailure(null);
     try {
       const declared = argumentsSpec.length > 0;
       const sentArguments: QueryArgumentValues = {};
@@ -189,7 +198,12 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
         // Recents are a convenience; storage being unavailable is fine.
       }
     } catch (err) {
-      setError(getErrorMessage(err, "Query failed."));
+      if (err instanceof ApiError && isRetrievalFailure(err.rawDetail)) {
+        setFailure(err.rawDetail);
+        setError(err.rawDetail.message);
+      } else {
+        setError(getErrorMessage(err, "Query failed."));
+      }
     } finally {
       setRunning(false);
     }
@@ -208,6 +222,7 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     result,
     running,
     error,
+    failure,
     recentQueries,
     run,
   };

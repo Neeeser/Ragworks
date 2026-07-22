@@ -1,6 +1,14 @@
 "use client";
 
-import { ArrowLeft, ArrowUpRight, Files, Gauge, ScatterChart, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Files,
+  Gauge,
+  ScatterChart,
+  Search,
+  ShieldAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -41,6 +49,7 @@ export function CollectionSidebar({ collection }: CollectionSidebarProps) {
     { href: base, label: "Overview", icon: Gauge },
     { href: `${base}/files`, label: "Files", icon: Files, matchPrefix: true },
     { href: `${base}/search`, label: "Search", icon: Search },
+    { href: `${base}/diagnostics`, label: "Diagnostics", icon: ShieldAlert },
     ...(config.features.umap_visualizations === false
       ? []
       : [{ href: `${base}/visualize`, label: "Visualize", icon: ScatterChart }]),

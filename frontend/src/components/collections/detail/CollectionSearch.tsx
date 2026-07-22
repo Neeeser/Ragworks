@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 
 import { QueryArgumentControls } from "@/components/collections/detail/search/QueryArgumentControls";
+import { SearchFailurePanel } from "@/components/collections/detail/search/SearchFailurePanel";
 import { SearchResultCard } from "@/components/collections/detail/search/SearchResultCard";
 import { useCollectionSearch } from "@/components/collections/detail/search/use-collection-search";
 import { Button } from "@/components/ui/button";
@@ -128,11 +129,7 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
           </p>
         )}
 
-        {search.error && (
-          <div className="mt-4 rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
-            {search.error}
-          </div>
-        )}
+        {search.error && <SearchFailurePanel failure={search.failure} message={search.error} />}
       </GlassCard>
 
       {search.result && (
