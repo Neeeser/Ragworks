@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // the sandbox harness owns the reset → seed → serve lifecycle, so run these
 // via `uv run python -m sandbox flows`, never bare `npx playwright test`.
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./flows",
   fullyParallel: false,
   retries: 0,
   workers: 1,

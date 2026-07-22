@@ -70,7 +70,7 @@ uv run python -m sandbox flows evals-ready  # one scenario's flows
 uv run python -m sandbox flows --list       # inventory
 ```
 
-Flows live in `frontend/e2e/<scenario>/<flow>.spec.ts` — the directory name
+Flows live in `frontend/flows/<scenario>/<flow>.spec.ts` — the directory name
 is the sandbox scenario the spec needs seeded. The runner seeds each
 scenario, serves a **production** frontend build (`next build` + `next
 start`; dev-mode HMR reloads wipe in-flight state under Playwright), runs

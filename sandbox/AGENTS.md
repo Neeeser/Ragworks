@@ -1,7 +1,7 @@
 # Sandbox Engineering Practices
 
 Rules for working in `sandbox/` (the seeded-scenario harness) and
-`frontend/e2e/` (the saved browser flows it runs). Repo-wide rules apply here
+`frontend/flows/` (the saved browser flows it runs). Repo-wide rules apply here
 too. User-facing usage lives in `docs/sandbox.md`; this file holds the
 invariants that keep the harness trustworthy.
 
@@ -52,6 +52,31 @@ for, and validated flows that rerun for free.
   page for 30s straight until flows moved off `next dev`. `up` keeps dev
   mode for interactive testing; don't point flows at it.
 
+## Testing a UI feature — the workflow
+
+The order below is a token budget, cheapest step first; skipping ahead pays
+for setup the harness already did:
+
+1. **Check the catalog** (`docs/sandbox-scenarios.md`) for the closest seeded
+   state; check `sandbox flows --list` for a saved flow that already exercises
+   the surface. Rerun or extend an existing flow before deriving clicks by
+   hand.
+2. **`sandbox up <scenario>`**, then go straight in: evaluate the handoff's
+   `browser_login` snippet instead of the sign-in form, navigate via the
+   `open:` deep links instead of the nav, and assert non-visual facts through
+   the API with the handoff JWT instead of page snapshots. Snapshots are for
+   the UI behavior actually under test.
+3. **Missing state?** Add a scenario (below) rather than hand-building it in
+   the browser. **Validated a new flow manually?** Harden it into a spec
+   (below) in the same PR as the feature — that is how the catalog and flow
+   suite stay useful for the next agent.
+4. **Real keys are the point.** A provider-specific feature is only tested
+   when it ran against a real key from `.env.sandbox`. If the key is missing
+   and you fall back to a mock or placeholder, say so to the user *before*
+   reporting results — "passed with a fake key" is not evidence the provider
+   integration works, and presenting it as tested hides exactly the failures
+   these end-to-end runs exist to catch.
+
 ## Adding a scenario
 
 1. Compose existing builders in a new `sandbox/scenarios/<name>.py`; call
@@ -64,9 +89,9 @@ for, and validated flows that rerun for free.
    scenario; verify live with `sandbox up <name>` that the app shows exactly
    what `state` claims.
 
-## Adding a flow (`frontend/e2e/`)
+## Adding a flow (`frontend/flows/`)
 
-1. Specs live at `frontend/e2e/<scenario>/<flow>.spec.ts` — the directory
+1. Specs live at `frontend/flows/<scenario>/<flow>.spec.ts` — the directory
    name is the scenario the spec needs; `sandbox flows` discovers it from
    the path. Start from the nearest existing spec; keep the numbered intent
    steps in the top comment block.
@@ -80,8 +105,6 @@ for, and validated flows that rerun for free.
    assertion on grader-accepted questions was the first flake.
 4. Flow specs are typed and linted by the frontend gate (`npm run verify`)
    but excluded from vitest; run them only via `sandbox flows <scenario>`.
-5. When manual testing validates a new flow, harden it into a spec in the
-   same PR — flows exist so the next agent reruns instead of re-derives.
 
 ## Testing the harness itself
 

@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     docs.set_defaults(func=_cmd_docs)
 
     flows = commands.add_parser(
-        "flows", help="Run saved browser flows (frontend/e2e) against seeded scenarios."
+        "flows", help="Run saved browser flows (frontend/flows) against seeded scenarios."
     )
     flows.add_argument(
         "scenarios",
@@ -228,7 +228,7 @@ def _cmd_list(_: argparse.Namespace) -> None:
 def _cmd_flows(args: argparse.Namespace) -> None:
     """Run saved browser flows scenario by scenario: up → playwright → next.
 
-    Flows live in `frontend/e2e/<scenario>/*.spec.ts`; the directory name is
+    Flows live in `frontend/flows/<scenario>/*.spec.ts`; the directory name is
     the scenario the specs need seeded. Keyed scenarios whose keys are absent
     are skipped by name, mirroring seed preflight.
     """
@@ -238,7 +238,7 @@ def _cmd_flows(args: argparse.Namespace) -> None:
     from sandbox.keys import PROVIDER_ENV_VARS, PreflightError, preflight
     from sandbox.registry import get_scenario
 
-    flows_root = config.REPO_ROOT / "frontend" / "e2e"
+    flows_root = config.REPO_ROOT / "frontend" / "flows"
     available = sorted(
         entry.name
         for entry in flows_root.iterdir()
@@ -253,7 +253,7 @@ def _cmd_flows(args: argparse.Namespace) -> None:
     results: dict[str, str] = {}
     for name in requested:
         if name not in available:
-            raise SystemExit(f"No flows under frontend/e2e/{name}. Available: {available}")
+            raise SystemExit(f"No flows under frontend/flows/{name}. Available: {available}")
         spec = get_scenario(name)
         try:
             preflight(spec.requires)
@@ -267,7 +267,7 @@ def _cmd_flows(args: argparse.Namespace) -> None:
         servers.start_frontend(mode="prod")
         print(f"running flows for '{name}' …")
         outcome = subprocess.run(
-            ["npx", "playwright", "test", f"e2e/{name}"],
+            ["npx", "playwright", "test", f"flows/{name}"],
             cwd=config.REPO_ROOT / "frontend",
             check=False,
         )

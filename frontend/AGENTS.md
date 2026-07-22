@@ -95,6 +95,9 @@ The expected shape, in order:
 6. **Tests** — behavior tests for reducer/hook logic and the key user-visible
    flows, using `src/test/mocks.ts` and `src/test/fixtures/` — never hand-rolled
    mocks.
+7. **Browser verification** — test in a seeded sandbox scenario, never a
+   hand-built state, and harden what you validated into a saved flow
+   (`frontend/flows/<scenario>/`) in the same PR — see `sandbox/AGENTS.md`.
 
 Chat Studio (`components/chat-studio/`) is the reference implementation of this
 shape. Then run the gate (`npm run verify`).

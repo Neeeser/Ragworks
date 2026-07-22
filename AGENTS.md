@@ -12,7 +12,7 @@ replace them:
 
 - Backend (`app/`): @app/AGENTS.md
 - Frontend (`frontend/`): @frontend/AGENTS.md
-- Sandbox harness (`sandbox/` + `frontend/e2e/`): @sandbox/AGENTS.md
+- Sandbox harness (`sandbox/` + `frontend/flows/`): @sandbox/AGENTS.md
 
 # Writing voice — plain, factual, never pitchy
 
@@ -135,19 +135,23 @@ touches startup, config, routing, storage, or anything env-dependent, verify it 
 
 # End-to-end testing — seeded scenarios, never manual setup
 
-Manual end-to-end testing never starts from a blank app: `uv run python -m
+Before any browser testing, read `sandbox/AGENTS.md` — it holds the testing
+workflow. Manual end-to-end testing never starts from a blank app: `uv run python -m
 sandbox up <scenario>` seeds a named application state into an isolated
 sandbox (own DB, storage, ports) and prints the login, a ready JWT, and deep
 links — registering accounts and walking the setup wizard by hand wastes the
 tokens the harness exists to save. Validated browser flows are saved as
-Playwright specs in `frontend/e2e/<scenario>/` and rerun with `uv run python
+Playwright specs in `frontend/flows/<scenario>/` and rerun with `uv run python
 -m sandbox flows` — rerun or extend a saved flow before re-deriving it click
 by click. The scenario catalog is `docs/sandbox-scenarios.md` (generated —
 never hand-edited); usage is `docs/sandbox.md`; the harness's own
 engineering rules, plus the add-a-scenario and add-a-flow checklists, live
 in `sandbox/AGENTS.md`. When a feature needs a state or flow that doesn't
 exist yet, add it in the same PR as the feature — that is how the catalog
-and flow suite stay useful.
+and flow suite stay useful. Sandbox testing runs against real provider keys
+(`.env.sandbox`) on purpose; if a provider-specific feature can only be
+exercised with a mock or placeholder key, tell the user before reporting
+results — a mocked run is not evidence the provider integration works.
 
 # Configuration architecture
 
