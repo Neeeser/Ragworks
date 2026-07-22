@@ -231,6 +231,43 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
     ctx.links.append(("eval dataset", f"/evals/datasets/{dataset.id}"))
 
 
+def repoint_retrieval_embedding(ctx: SeedContext, *, embedding_model: str) -> None:
+    """Bind the collection to a retrieval pipeline using a *different* embedding model.
+
+    Creates the drift the diagnostics feature exists to catch: ingestion indexed
+    with one model, retrieval queries with another (a different name *and*
+    dimension), so the embedding-mismatch diagnostic fires and a real search
+    fails at the retriever with a dimension mismatch — the trace-backed failure
+    path. Goes through `PipelineService` like the pipeline builder would.
+    """
+    from app.db import models
+    from app.pipelines.defaults import build_default_retrieval_pipeline
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    connection = ctx.require_connection()
+    collection = ctx.require_collection()
+    pipeline = PipelineService(ctx.session).create_pipeline(
+        user=user,
+        name="Retrieval (divergent embedding)",
+        description="Retrieval re-pointed at a different embedding model to exercise diagnostics.",
+        kind=models.PipelineKind.RETRIEVAL,
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=connection.id, embedding_model=embedding_model
+        ),
+        change_summary="Divergent embedding model for diagnostics scenario.",
+    )
+    collection.retrieval_pipeline_id = pipeline.id
+    ctx.session.add(collection)
+    ctx.session.commit()
+    ctx.facts.append(
+        f"retrieval re-pointed to embedding model '{embedding_model}' "
+        "(ingestion still indexed with the default) — embedding_model_mismatch diagnostic"
+    )
+    ctx.links.append(("diagnostics", f"/collections/{collection.id}/diagnostics"))
+    ctx.links.append(("search (fails)", f"/collections/{collection.id}/search"))
+
+
 SAMPLE_DOCUMENTS: tuple[str, ...] = (
     "aurora-station.md",
     "tidepool-protocol.md",

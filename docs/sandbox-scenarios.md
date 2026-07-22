@@ -15,6 +15,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `cohere-connected` | Admin user with a working Cohere connection (API key from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `COHERE_API_KEY` |
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
+| `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
@@ -63,6 +64,18 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - pgvector is available as the vector store; no index or collection yet
+
+## `diagnostics-mismatch`
+
+collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
+- retrieval re-pointed at openai/text-embedding-3-large while ingestion indexed with openai/text-embedding-3-small
+- the Diagnostics tab shows an embedding_model_mismatch error and the Overview widget reads inconsistent
+- a search fails at the retriever with a dimension mismatch, linking to its run trace
 
 ## `evals-ready`
 
