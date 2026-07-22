@@ -81,3 +81,10 @@ docs/external-api/
 .superpowers/
 docs/superpowers/
 .playwright-mcp/
+
+# Sandbox scenario harness (docs/sandbox.md)
+.sandbox/
+.env.sandbox
+!.env.sandbox.example
+frontend/test-results/
+frontend/playwright-report/

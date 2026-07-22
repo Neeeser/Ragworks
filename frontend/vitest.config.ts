@@ -12,6 +12,9 @@ export default defineConfig({
     },
   },
   test: {
+    // Sandbox browser flows are Playwright tests run by `python -m sandbox
+    // flows` against a seeded environment — vitest must not collect them.
+    exclude: ["flows/**", "node_modules/**", ".next/**"],
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     restoreMocks: true,

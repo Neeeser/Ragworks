@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -63,8 +63,12 @@ help:
 	@echo "  make coverage-frontend - frontend coverage (vitest)"
 	@echo "  make coverage-report-frontend - frontend coverage, never fails"
 	@echo "  make coverage-open-frontend - open frontend/coverage/index.html"
-	@echo "  make typecheck - run mypy on app/"
+	@echo "  make typecheck - run mypy on app/ and sandbox/"
 	@echo "  make lint      - run ruff + pylint on backend code"
+	@echo "  make sandbox-up    - seed a sandbox scenario + start servers (SCENARIO=collection-ready)"
+	@echo "  make sandbox-down  - stop the sandbox servers"
+	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
+	@echo "  make sandbox-flows - run saved browser flows against seeded scenarios"
 	@echo "  make verify    - typecheck -> lint -> test (the backend gate)"
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
@@ -123,13 +127,29 @@ coverage-open-frontend:
 	@test -f frontend/coverage/index.html && open frontend/coverage/index.html || (echo "No report found. Run: make coverage-frontend" && exit 1)
 
 typecheck: env-backend
-	$(UV) run mypy app
+	$(UV) run mypy app sandbox
 
 lint: env-backend
-	$(UV) run ruff check app tests
+	$(UV) run ruff check app tests sandbox
 	$(UV) run pylint --score=y --fail-under=10 app
 
 verify: typecheck lint test
+
+# Sandbox scenario harness (docs/sandbox.md). The CLI manages its own
+# database (ragworks_sandbox), storage, and server lifecycle under .sandbox/.
+SCENARIO ?= collection-ready
+
+sandbox-up: env
+	$(UV) run python -m sandbox up $(SCENARIO)
+
+sandbox-down: env-backend
+	$(UV) run python -m sandbox down
+
+sandbox-list: env-backend
+	$(UV) run python -m sandbox list
+
+sandbox-flows: env
+	$(UV) run python -m sandbox flows
 
 lint-frontend: env-frontend
 	$(NPM) --prefix frontend run lint
