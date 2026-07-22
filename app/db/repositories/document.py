@@ -8,6 +8,8 @@ from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
+from sqlalchemy import update as sa_update
+from sqlalchemy.engine import CursorResult
 from sqlmodel import col, select
 
 from app.db import models
@@ -91,6 +93,51 @@ class DocumentRepository(Repository):
                 col(models.IngestionEvent.document_id) == document_id,
             )
         )
+
+    def claim_for_ingestion(self, document_id: UUID) -> bool:
+        """Atomically move a `pending` document to `processing`; report success.
+
+        The single-row conditional UPDATE is the ingestion queue's dedupe
+        gate: two workers (or a worker racing a stale enqueue) can both hold
+        the same id, but only one flips the status and proceeds.
+        """
+        result = self.session.execute(
+            sa_update(models.Document)
+            .where(
+                col(models.Document.id) == document_id,
+                col(models.Document.status) == models.DocumentStatus.PENDING,
+            )
+            .values(status=models.DocumentStatus.PROCESSING)
+        )
+        # `Session.execute` is typed as the base `Result`, but a DML statement
+        # always returns a `CursorResult` (which carries `rowcount`).
+        assert isinstance(result, CursorResult)
+        return bool(result.rowcount)
+
+    def requeue_stranded_processing(self) -> int:
+        """Reset every `processing` document back to `pending`; return the count.
+
+        Startup recovery only: a document mid-ingest when the process died is
+        stranded in `processing` with no worker attached — requeueing it is
+        safe because re-ingestion overwrites the same `{document_id}:{order}`
+        chunk ids.
+        """
+        result = self.session.execute(
+            sa_update(models.Document)
+            .where(col(models.Document.status) == models.DocumentStatus.PROCESSING)
+            .values(status=models.DocumentStatus.PENDING, error_message=None)
+        )
+        assert isinstance(result, CursorResult)
+        return int(result.rowcount)
+
+    def pending_ids(self) -> list[UUID]:
+        """Return every `pending` document id, oldest first."""
+        statement = (
+            select(col(models.Document.id))
+            .where(col(models.Document.status) == models.DocumentStatus.PENDING)
+            .order_by(col(models.Document.created_at))
+        )
+        return list(self.session.exec(statement).all())
 
     def count_by_user(self) -> dict[UUID, int]:
         """Return a mapping of user id -> number of documents they own."""

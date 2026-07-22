@@ -90,7 +90,15 @@ class PgvectorStore(VectorStoreBackend):
     # -- data plane ----------------------------------------------------------
 
     def ensure_index(self, spec: IndexSpec) -> None:
-        """Create the index if the catalog doesn't know it yet."""
+        """Create the index if the catalog doesn't know it yet.
+
+        Safe under concurrency: the advisory lock serializes creators of the
+        same index, and the post-lock re-check makes every loser a no-op once
+        the winner's transaction commits.
+        """
+        if self._repo.get_record(spec.name) is not None:
+            return
+        self._repo.acquire_ddl_lock(spec.name)
         if self._repo.get_record(spec.name) is None:
             self.create_index(spec)
 

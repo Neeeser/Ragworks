@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import warnings
 
 import pytest
@@ -206,3 +207,44 @@ def test_low_dimension_index_keeps_full_precision_hnsw(pgvector_session: Session
     definition = _index_definition(pgvector_session, "vec_docs_embedding_idx")
     assert "hnsw" in definition
     assert "halfvec" not in definition
+
+
+def test_concurrent_ensure_index_is_serialized_not_an_integrity_error(
+    pgvector_session: Session,
+) -> None:
+    """Two sessions racing `ensure_index` on a fresh index both succeed.
+
+    Regression for the bulk-upload race (issue #138 follow-on): Postgres's
+    `CREATE TABLE IF NOT EXISTS` is not concurrency-safe, so before the
+    advisory lock the second creator died with an `IntegrityError` on the
+    `pg_type` catalog — mid-ingestion, aborting its whole transaction. Here
+    session A holds an uncommitted create while session B calls
+    `ensure_index`; B must wait out A's commit and no-op instead of raising.
+    """
+    import threading
+
+    spec = IndexSpec(name="race-idx", dimension=3, metric="cosine")
+    store_a = PgvectorStore(pgvector_session)
+    store_a.ensure_index(spec)  # uncommitted: holds the DDL locks
+
+    b_error: list[Exception] = []
+    b_started = threading.Event()
+
+    def _ensure_from_b() -> None:
+        with Session(pgvector_session.get_bind()) as session_b:
+            b_started.set()
+            try:
+                PgvectorStore(session_b).ensure_index(spec)
+                session_b.commit()
+            except Exception as exc:
+                b_error.append(exc)
+
+    worker = threading.Thread(target=_ensure_from_b)
+    worker.start()
+    assert b_started.wait(timeout=5)
+    time.sleep(0.2)  # let B reach the advisory lock and block on it
+    pgvector_session.commit()  # release A's transaction; B may now proceed
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "session B never finished ensure_index"
+    assert b_error == []
+    assert PgvectorStore(pgvector_session).describe_index("race-idx").name == "race-idx"

@@ -34,7 +34,9 @@ from app.db.bootstrap import init_db
 from app.db.engine import session_scope
 from app.providers.registry import close_provider_clients
 from app.services.accounts import ensure_admin_exists
+from app.services.app_config import get_app_config
 from app.services.file_backfill import backfill_file_nodes
+from app.services.ingestion_queue import ingestion_queue
 from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
@@ -80,9 +82,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         backfill_file_nodes(session)
         ensure_admin_exists(session)
     purge_expired_telemetry()
+    ingestion_queue.start(get_app_config().uploads.ingestion_concurrency)
+    ingestion_queue.recover()
     try:
         yield
     finally:
+        ingestion_queue.stop()
         close_provider_clients()
 
 

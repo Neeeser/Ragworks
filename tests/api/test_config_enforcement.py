@@ -59,7 +59,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
 @pytest.fixture(name="no_background_ingestion")
 def _no_background_ingestion(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep TestClient from running real ingestion after the response."""
-    monkeypatch.setattr(files_routes, "run_document_ingestion", lambda document_id: None)
+    monkeypatch.setattr(files_routes, "enqueue_document_ingestion", lambda document_id: None)
 
 
 # --- Enforcement 1: registration flag -----------------------------------

@@ -16,7 +16,7 @@ from app.db.repositories import UserRepository
 @pytest.fixture(autouse=True)
 def _no_background_ingestion(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep TestClient from running real ingestion after upload responses."""
-    monkeypatch.setattr(files_routes, "run_document_ingestion", lambda document_id: None)
+    monkeypatch.setattr(files_routes, "enqueue_document_ingestion", lambda document_id: None)
 
 
 def _create_collection(session: Session, user: models.User) -> models.Collection:

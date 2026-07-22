@@ -86,6 +86,18 @@ class UploadSettings(BaseModel):
             public=True,
         ),
     )
+    ingestion_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        json_schema_extra=_meta(
+            "Ingestion concurrency",
+            "How many documents are ingested at once; further uploads queue "
+            "as pending until a worker is free. Raise it when the embedding "
+            "provider is fast and local (e.g. Ollama on the same machine). "
+            "Applies on the next backend restart.",
+        ),
+    )
     allowed_content_types: list[str] = Field(
         default_factory=lambda: list(DEFAULT_ALLOWED_CONTENT_TYPES),
         json_schema_extra=_meta(

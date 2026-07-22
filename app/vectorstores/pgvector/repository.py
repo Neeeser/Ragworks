@@ -81,6 +81,22 @@ class PgvectorRepository:
 
     # -- DDL ---------------------------------------------------------------
 
+    def acquire_ddl_lock(self, name: str) -> None:
+        """Serialize index DDL for one index name across concurrent sessions.
+
+        `CREATE TABLE IF NOT EXISTS` is not concurrency-safe in Postgres: two
+        sessions creating the same table race on the `pg_type` catalog's
+        unique constraint (this stranded documents during the first bulk
+        upload to a fresh index). The transaction-scoped advisory lock makes
+        one creator win and the others wait until it commits, after which
+        they re-check the catalog and skip creation.
+        """
+        self._session.exec(  # type: ignore[call-overload]
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))").bindparams(
+                key=f"pgvector-index-ddl:{name}"
+            )
+        )
+
     def create_index(self, name: str, dimension: int, metric: str) -> VectorIndexRecord:
         """Create the data table, its indexes, and the catalog row."""
         vector_opclass, halfvec_opclass, _ = _METRIC_OPS[metric]
