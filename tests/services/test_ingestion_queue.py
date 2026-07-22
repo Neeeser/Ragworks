@@ -171,3 +171,37 @@ def test_run_document_ingestion_skips_a_document_it_cannot_claim(
 
     monkeypatch.setattr(ingestion_module, "IngestionService", _explode)
     ingestion_module.run_document_ingestion(document.id)
+
+
+def test_failure_after_claim_never_strands_a_document_in_processing(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure that escapes the ingestion session still lands as FAILED.
+
+    Regression for the stranded-`processing` half of issue #138: when the
+    ingestion session's transaction is poisoned (e.g. an IntegrityError from
+    concurrent index DDL), `ingest_document`'s own failure-recording commit
+    raises too and the exception escapes to the worker wrapper — which must
+    write the FAILED outcome on a fresh session rather than leave the
+    document `processing` forever with no error message.
+    """
+    from app.services import ingestion as ingestion_module
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    document = _create_document(session, user, collection, DocumentStatus.PENDING)
+
+    class _EscapingService:
+        def __init__(self, _session: Session) -> None: ...
+
+        def ingest_document(self, **_kwargs: object) -> None:
+            raise RuntimeError("poisoned transaction escaped")
+
+    monkeypatch.setattr(ingestion_module, "IngestionService", _EscapingService)
+    ingestion_module.run_document_ingestion(document.id)
+
+    with Session(session.get_bind()) as fresh:
+        persisted = fresh.get(models.Document, document.id)
+        assert persisted is not None
+        assert persisted.status == DocumentStatus.FAILED
+        assert persisted.error_message == "poisoned transaction escaped"

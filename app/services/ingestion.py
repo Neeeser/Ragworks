@@ -60,11 +60,35 @@ def run_document_ingestion(document_id: UUID) -> None:
             IngestionService(session).ingest_document(
                 user=user, collection=collection, document=document
             )
-        except Exception:  # pylint: disable=broad-exception-caught
-            # Deliberately broad: the outcome is already persisted as a
-            # FAILED document with an error message; a background task has
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Deliberately broad: the outcome is normally already persisted
+            # as a FAILED document with an error message; a queue worker has
             # no caller left to re-raise to.
             logger.exception("Background ingestion failed for document %s", document_id)
+            _ensure_failure_recorded(document_id, exc)
+
+
+def _ensure_failure_recorded(document_id: UUID, exc: Exception) -> None:
+    """Last-resort FAILED write on a fresh session; never leaves `processing`.
+
+    `ingest_document` records failures on its own session — but when that
+    session's transaction is already aborted (e.g. an `IntegrityError` from
+    concurrent index DDL), its failure-recording commit raises too and the
+    document would stay `processing` forever with no error. A fresh session
+    is immune to the poisoned one, so the honest FAILED outcome always lands.
+    """
+    try:
+        with session_scope() as session:
+            document = session.get(models.Document, document_id)
+            if document is None or document.status != models.DocumentStatus.PROCESSING:
+                return
+            document.status = models.DocumentStatus.FAILED
+            document.error_message = str(exc) or exc.__class__.__name__
+            session.add(document)
+    except Exception:  # pylint: disable=broad-exception-caught
+        # Swallowing here is deliberate: this is the recorder of last resort,
+        # and raising from it would only kill the worker thread.
+        logger.exception("Could not record ingestion failure for document %s", document_id)
 
 
 class IngestionService:  # pylint: disable=too-few-public-methods
