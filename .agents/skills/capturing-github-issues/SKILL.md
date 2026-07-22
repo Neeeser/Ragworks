@@ -1,110 +1,89 @@
 ---
 name: capturing-github-issues
-description: Use when a Ragworks user reports confusing, broken, frustrating, or incomplete setup or product behavior and wants that feedback investigated, drafted, tracked, or opened as a GitHub issue.
+description: Use when a Ragworks user wants to capture a bug, confusing behavior, incomplete setup, feature request, or technical backlog item as a GitHub issue.
 ---
 
 # Capturing GitHub Issues
 
-Turn informal feedback into an actionable Ragworks issue without losing the experience that exposed it or the product direction the user specified. Keep user experience, explicit decisions, repository evidence, and technical hypotheses distinct.
+Turn an informal report into a concise, user-approved GitHub issue. By default, capture what the user experienced or wants changed; do not turn the issue into an investigation report or implementation plan.
 
-## Intake
+## Capture the report
 
-Start from the user's account. Preserve concrete language such as “this felt broken” when it accurately describes the experience; do not sanitize it into a purely technical summary.
+Classify the request before drafting:
 
-Edit dictated feedback for readability, structure, and concision, not for authorship. Remove filler words, repair transcription errors, and organize repeated thoughts, but preserve the user's causal narrative, reasoning, uncertainty, emphasis, examples, and design philosophy. Keep the experience recognizably theirs.
+- **User-facing problem:** Preserve where the user was, what they tried, what happened, why it mattered, and what they expected instead.
+- **Product or feature request:** Capture the requested behavior and the reason or design direction the user gave.
+- **Technical work item:** Preserve technical wording, names, versions, providers, formats, files, and other context the user supplied or requested.
 
-Do not replace a first-person incident with generic product language. When the user explains how an experience led to a design conclusion, retain both the incident and that reasoning chain. Use first person in `User experience` when it is the clearest faithful representation of the report; an issue does not need to sound impersonal to be technically useful.
+Edit dictated feedback for readability and concision without replacing its authorship. Preserve first-person language, uncertainty, examples, reasoning, and explicit constraints when material.
 
-Treat explicit product decisions, design decisions, visual references, constraints, and requested implementation direction as requirements for the issue draft. Preserve named components, locations, interaction patterns, reuse requirements, and other material details. Do not silently omit, generalize, or replace them while translating the report into technical language.
+## Ask useful questions
 
-Challenge a decision when repository evidence reveals a conflict, material risk, or infeasible constraint. State the evidence and ask before changing the direction. Do not recast a deliberate decision as an optional idea merely because another implementation appears more conventional.
+Ask follow-up questions whenever ambiguity or missing context could materially change the issue. There is no fixed limit: ask as many focused questions as needed, in one or more messages, and stop when the issue is specific enough to capture accurately.
 
-If the report already identifies where it happened, what the user expected, and what happened instead, investigate immediately. If a consequential detail is missing, use **REQUIRED SUB-SKILL:** `superpowers:brainstorming`. Ask one focused question at a time about the location, expected result, actual result, setup, recovery path, or impact. Do not ask for details that repository evidence can answer, and do not over-interview an actionable report.
+Prefer multiple-choice questions when the options represent real alternatives. Generate questions from the report and repository reading that helps clarify names, screens, providers, models, configuration relationships, or terminology. Do not use a fixed questionnaire.
 
-## Ground the report
+For ordinary user-facing or feature reports, repository reading improves wording and questions; it is not permission to diagnose, expand scope, or add unsolicited technical evidence. Do not reproduce or verify by default. If the user explicitly asks for browser or Playwright work, tests, logs, reproduction, or other investigation, follow that request and include relevant findings.
 
-Investigate proportionally before drafting:
+Do not ask for details already supplied or invent setup, root causes, impact, acceptance criteria, or solutions. Preserve unknowns or omit them. If repository evidence conflicts with an explicit request, explain the conflict and ask before changing direction.
 
-1. Read the root `AGENTS.md` and the relevant area `AGENTS.md`.
-2. Inspect nearby code, tests, documentation, and recent related history. Do not implement a fix.
-3. Search open and closed GitHub issues for duplicates or closely related work.
-4. Read the repository's current labels and suggest only labels that exist.
-5. Link relevant repository files or documentation with GitHub URLs. Prefer stable commit permalinks when line-level evidence matters.
+## Draft the smallest useful issue
 
-State confirmed facts directly. Mark plausible explanations as hypotheses. Do not promote the user's guess, or your own, into a root cause. A broad refactor belongs in the issue only when repository evidence supports that scope; otherwise describe the required outcome and leave implementation open.
+Show a complete draft before creating anything. Choose the smallest structure that captures the report and omit empty sections.
 
-This evidence rule applies to inferred technical scope, not to explicit owner direction. Preserve the user's requested design direction even when the implementation details remain open.
-
-## Draft on the first substantive response
-
-Present the most sensible complete issue draft as soon as the report is actionable. Do not respond only with a plan to investigate. If genuinely different issue boundaries are plausible, briefly offer the sensible alternatives and recommend one.
-
-Use this shape, omitting only sections that do not apply:
+For a user-facing problem:
 
 ```markdown
-Title: <concise, factual description of the affected behavior>
-Labels: <existing label>, <existing label>
-
-## User experience
-<Where the user was, what they were trying to do, how the behavior felt,
-and the practical impact. Preserve the causal story and reasoning that
-motivated the issue; polish dictated language without replacing its author.>
-
-## Observed behavior
-<What happened, including reproduction or setup context when known.>
+## Problem
+<What the user tried, what happened, and why it matters.>
 
 ## Expected behavior
-<What a user should be able to understand or accomplish instead.>
+<What the user expected or wants instead.>
 
-## Product and design direction
-<The user's explicit product decisions, UI locations, visual references,
-interaction patterns, reuse requirements, and constraints. Preserve material
-details rather than replacing them with a generalized outcome.>
-
-## Technical context
-<Confirmed repository evidence and links. Explicitly identify hypotheses.>
-
-## Proposed scope
-- <Evidence-backed outcome or acceptance criterion>
-- <Another outcome, without prescribing an unsupported implementation>
+## Context
+<Relevant details supplied by the user or explicitly requested investigation.>
 ```
 
-Use Ragworks' plain, factual voice. Avoid marketing language, decorative explanation, and implementation certainty the evidence does not support.
+For a request or technical work item:
 
-Before presenting the draft, perform a fidelity pass against the user's messages:
+```markdown
+## Request
+<What should be changed or added.>
 
-1. Identify the reported incident and causal sequence.
-2. Identify why the user believes it matters, including product or design philosophy.
-3. Identify every concrete example, explicit decision, constraint, and later correction.
-4. Preserve uncertainty and open questions at the same level; do not add implementation specificity or causal certainty the user did not provide.
-5. Confirm that each item remains recognizable in the draft, not merely implied by a generalized requirement.
+## Why
+<Why the user wants it, when supplied.>
 
-If the draft contains the same general requirements but no longer explains what the user experienced or why they reached those conclusions, rewrite it before presenting. If two directions conflict, surface the conflict instead of choosing one silently.
+## Context
+<Explicit technical details, constraints, or references.>
+```
 
-## Approval and creation
+Use first person when it best preserves the report. Keep the title concise and factual. Do not add repository findings, root-cause hypotheses, `Technical context`, `Proposed scope`, or implementation steps unless the user supplied or explicitly requested them. Expected behavior and explicit design direction are requirements, not solutions.
 
-Always show the title, complete body, repository links, and proposed labels before creating an issue. End by recommending that draft and asking for approval to post it.
+## Format Markdown for GitHub
 
-- Treat an affirmative reply such as “yes,” “looks good,” “go ahead,” or “post it” as authorization to create the issue exactly as approved.
-- Treat corrections, questions, or added context as instructions to revise and present the draft again.
-- Treat silence as no authorization. Never create an issue merely because time passed.
-- If approval is ambiguous, ask one short confirmation rather than mutating GitHub.
+Before showing or posting the draft:
 
-After creation, return the issue URL and the labels applied. If creation or labeling partially fails, report the exact state and do not silently retry with altered content.
+- Use real line breaks, not literal backslash-n text.
+- Strip trailing spaces and tabs from every line.
+- Keep exactly one blank line between paragraphs, headings, and list blocks.
+- Remove leading and trailing blank lines and end the body with one newline.
+- Use fenced code only for user-supplied or explicitly requested code, logs, or structured technical detail.
+
+## Labels, duplicates, and approval
+
+When preparing to post, use only existing repository labels. If repository labels cannot be checked, say so and do not guess. Check for an obvious duplicate when issue-tracker access is available; keep that search out of the body and say when it could not be performed.
+
+Always show the title, complete body, labels, likely duplicates, and explicitly requested links. Ask for approval before creating. Treat “yes,” “go ahead,” “post it,” and similar replies as authorization to create exactly the approved draft; treat corrections as instructions to revise and show it again. Never create from silence or an ambiguous reply.
+
+After creation, return the issue URL and labels applied. If creation or labeling partially fails, report the exact state and do not silently retry with altered content.
 
 ## Common mistakes
 
 | Mistake | Correct behavior |
 |---|---|
-| Replacing the complaint with architecture language | Keep a distinct `User experience` section |
-| Replacing a first-person incident with generic policy prose | Preserve the causal story and the user's reasoning |
-| Polishing dictated feedback until its authorship disappears | Edit wording and structure while retaining voice, emphasis, and philosophy |
-| Preserving the outcome but dropping why it matters | Retain the user's reasoning and design philosophy explicitly |
-| Adding details that sound reasonable but were never decided | Preserve the source's uncertainty and leave those details open |
-| Converting explicit design decisions into generic outcomes | Preserve them in `Product and design direction` |
-| Silently substituting a preferred implementation | Explain the conflict and ask before changing direction |
-| Naming an unverified root cause | Separate facts from hypotheses |
-| Expanding immediately into a rewrite | Define outcomes supported by evidence |
-| Copying remembered labels | Check live repository labels |
-| Posting while still clarifying | Revise the draft and obtain approval |
-| Asking a long questionnaire | Ask one consequential question at a time |
+| Turning a complaint into an investigation report | Capture the user’s experience and requested outcome |
+| Asking a fixed questionnaire | Generate only questions that resolve meaningful ambiguity |
+| Treating a symptom as a root cause | Preserve the symptom and ask for relevant context |
+| Removing technical detail the user explicitly requested | Keep the requested wording, files, and references |
+| Running browser or test work without being asked | Draft from the report unless investigation was explicitly requested |
+| Adding a solution or posting malformed or unapproved Markdown | Describe the request, normalize it, show it, and wait |
