@@ -59,6 +59,13 @@ def test_trims_blank_example_queries() -> None:
     assert request.example_queries == ["how hot is the sun"]
 
 
+def test_accepts_more_than_three_example_queries() -> None:
+    """Example queries are uncapped — power users tune with as many as they want."""
+    examples = [f"query {index}" for index in range(8)]
+    request = _request(example_queries=examples)
+    assert request.example_queries == examples
+
+
 def test_accepts_a_positive_partial_mix() -> None:
     """A single positive weight is a usable mix and is preserved verbatim."""
     request = _request(type_mix={EvalQuestionType.SINGLE_FACT: 2.0})

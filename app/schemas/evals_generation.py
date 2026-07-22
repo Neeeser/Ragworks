@@ -39,7 +39,7 @@ class EvalDatasetGenerateRequest(BaseModel):
         default_factory=lambda: dict(DEFAULT_QUESTION_TYPE_MIX)
     )
     audience: str | None = Field(default=None, max_length=2000)
-    example_queries: list[str] = Field(default_factory=list, max_length=3)
+    example_queries: list[str] = Field(default_factory=list)
     seed: int = 0
 
     @field_validator("type_mix")

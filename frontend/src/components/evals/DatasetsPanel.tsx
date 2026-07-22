@@ -73,16 +73,16 @@ export function DatasetsPanel({
 
   return (
     <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Datasets</p>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setGenerateOpen(true)} className="px-5">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Button variant="secondary" onClick={() => setGenerateOpen(true)}>
             Generate from collection
           </Button>
-          <Button variant="secondary" onClick={() => setUploadOpen(true)} className="px-5">
+          <Button variant="secondary" onClick={() => setUploadOpen(true)}>
             Upload dataset
           </Button>
-          <Button variant="secondary" onClick={() => setImportOpen(true)} className="px-5">
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>
             Import benchmark
           </Button>
         </div>

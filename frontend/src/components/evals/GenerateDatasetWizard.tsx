@@ -1,20 +1,27 @@
 "use client";
 
-import { useMemo, useReducer } from "react";
+import { Plus, X } from "lucide-react";
+import { useReducer } from "react";
 
 import {
   buildGeneratePayload,
   COUNT_PRESETS,
   initialGenerateWizardState,
   generateWizardReducer,
-  MAX_EXAMPLE_QUERIES,
   mixIsEmpty,
   resolvedQuestionCount,
   supportsStructuredOutputs,
 } from "@/components/evals/lib/generate-dataset-wizard-reducer";
+import {
+  CHAT_MODEL_SORTS,
+  useModelCatalogFilter,
+} from "@/components/models/model-catalog-filter";
+import { ModelCatalogPicker } from "@/components/models/ModelCatalogPicker";
+import { ModelMetaBadge, ModelOptionButton } from "@/components/models/ModelOptionButton";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
+import { formatContextLength, formatPricePerMillion } from "@/lib/format";
 
 import type {
   CatalogModel,
@@ -49,6 +56,12 @@ const TYPE_LABELS: Record<EvalQuestionType, { label: string; detail: string }> =
   },
 };
 
+/** Split a `${connection_id}::${model_id}` key back into its parts. */
+function splitModelKey(modelKey: string): { connectionId: string; modelName: string } {
+  const [connectionId, ...rest] = modelKey.split("::");
+  return { connectionId: connectionId ?? "", modelName: rest.join("::") };
+}
+
 /**
  * Generates a synthetic eval dataset from a collection: queries with
  * document-level relevance judgments, written and filtered by the selected
@@ -65,16 +78,19 @@ export function GenerateDatasetWizard({
   const [state, dispatch] = useReducer(generateWizardReducer, initialGenerateWizardState);
   const { step, busy, message } = state;
 
-  const modelOptions = useMemo(
-    () =>
-      chatModels
-        .filter((model) => supportsStructuredOutputs(model))
-        .map((model) => ({
-          value: `${model.connection_id}::${model.id}`,
-          label: `${model.connection_label} · ${model.name}`,
-        })),
-    [chatModels],
+  const modelFilter = useModelCatalogFilter({
+    models: chatModels,
+    prefilter: supportsStructuredOutputs,
+    enableProviderFilter: true,
+    sortOptions: CHAT_MODEL_SORTS,
+  });
+  const { connectionId: selectedConnectionId, modelName: selectedModelName } = splitModelKey(
+    state.modelKey,
   );
+  const currentModel =
+    chatModels.find(
+      (model) => model.connection_id === selectedConnectionId && model.id === selectedModelName,
+    ) ?? null;
 
   const stepReady = [
     state.collectionId !== "" && state.name.trim() !== "",
@@ -147,24 +163,57 @@ export function GenerateDatasetWizard({
         </div>
       )}
       {step === 1 && (
-        <div className="space-y-4">
-          <Field
-            label="Generation model"
-            hint="Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed."
-          >
-            <CustomSelect
-              value={state.modelKey}
-              placeholder={
-                modelOptions.length
-                  ? "Select a chat model"
-                  : "No chat models with structured-output support available"
-              }
-              options={modelOptions}
-              onValueChange={(value) => dispatch({ type: "select_model", modelKey: value })}
-              aria-label="Generation model"
-            />
-          </Field>
-        </div>
+        <ModelCatalogPicker
+          models={modelFilter.filteredModels}
+          selectedModelKey={state.modelKey}
+          currentModel={currentModel}
+          headerPlaceholder="Select a chat model"
+          headerSubtitle={
+            currentModel ? `${currentModel.connection_label} · ${currentModel.id}` : null
+          }
+          description="Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed."
+          modelsLoading={false}
+          searchTerm={modelFilter.searchTerm}
+          onSearchChange={modelFilter.setSearchTerm}
+          searchPlaceholder="Search models across providers…"
+          connectionOptions={modelFilter.connectionOptions}
+          connectionFilter={modelFilter.connectionFilter}
+          onConnectionFilterChange={modelFilter.setConnectionFilter}
+          sortOptions={CHAT_MODEL_SORTS}
+          sortValue={modelFilter.sortValue}
+          onSortChange={modelFilter.setSortValue}
+          groupByConnection
+          noun="chat model"
+          emptyLabel="No chat models with structured-output support available."
+          renderModel={(model) => {
+            const modelKey = `${model.connection_id}::${model.id}`;
+            const contextLabel = model.context_length
+              ? formatContextLength(model.context_length)
+              : null;
+            const promptLabel = formatPricePerMillion(model.pricing?.prompt);
+            const completionLabel = formatPricePerMillion(model.pricing?.completion);
+            return (
+              <ModelOptionButton
+                key={modelKey}
+                model={model}
+                selected={state.modelKey === modelKey}
+                onSelect={(chosen) =>
+                  dispatch({
+                    type: "select_model",
+                    modelKey: `${chosen.connection_id}::${chosen.id}`,
+                  })
+                }
+                subtitle={`${model.connection_label} · ${model.id}`}
+              >
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
+                  {contextLabel ? <ModelMetaBadge label="ctx" value={contextLabel} /> : null}
+                  {promptLabel ? <ModelMetaBadge label="in" value={promptLabel} /> : null}
+                  {completionLabel ? <ModelMetaBadge label="out" value={completionLabel} /> : null}
+                </div>
+              </ModelOptionButton>
+            );
+          }}
+        />
       )}
       {step === 2 && (
         <div className="space-y-4">
@@ -187,34 +236,79 @@ export function GenerateDatasetWizard({
               </button>
             ))}
           </div>
-          <Field
-            label="Audience"
-            hint="Optional. Who asks these questions — shapes tone and specificity."
-          >
-            <TextArea
-              rows={2}
-              value={state.audience}
-              onChange={(event) => dispatch({ type: "set_audience", audience: event.target.value })}
-              placeholder="Support engineers triaging customer incidents"
-            />
-          </Field>
-          <Field
-            label="Example queries"
-            hint="Optional. Up to three real queries; generated questions match their style."
-          >
-            <div className="space-y-2">
-              {Array.from({ length: MAX_EXAMPLE_QUERIES }, (_, index) => (
-                <TextInput
-                  key={index}
-                  value={state.exampleQueries[index] ?? ""}
-                  aria-label={`Example query ${index + 1}`}
-                  onChange={(event) =>
-                    dispatch({ type: "set_example_query", index, value: event.target.value })
-                  }
-                />
-              ))}
-            </div>
-          </Field>
+
+          <div className="rounded-2xl border border-hairline bg-surface/40">
+            <button
+              type="button"
+              aria-expanded={state.steeringOpen}
+              onClick={() => dispatch({ type: "toggle_steering" })}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-surface focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="text-sm font-medium text-primary">Steering</span>
+                <span className="rounded-full border border-hairline px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.28em] text-meta">
+                  Optional
+                </span>
+              </span>
+              <span className="font-mono text-[13px] leading-none text-muted">
+                {state.steeringOpen ? "−" : "+"}
+              </span>
+            </button>
+            {state.steeringOpen && (
+              <div className="space-y-4 border-t border-hairline px-4 py-4">
+                <Field label="Audience" hint="Who asks these questions — shapes tone and specificity.">
+                  <TextArea
+                    rows={2}
+                    value={state.audience}
+                    onChange={(event) =>
+                      dispatch({ type: "set_audience", audience: event.target.value })
+                    }
+                    placeholder="Support engineers triaging customer incidents"
+                  />
+                </Field>
+                <Field
+                  label="Example queries"
+                  hint="Real queries whose style the generated questions imitate. Add as many as you like."
+                >
+                  <div className="space-y-2">
+                    {state.exampleQueries.map((value, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <TextInput
+                          className="flex-1"
+                          value={value}
+                          aria-label={`Example query ${index + 1}`}
+                          onChange={(event) =>
+                            dispatch({
+                              type: "set_example_query",
+                              index,
+                              value: event.target.value,
+                            })
+                          }
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Remove example query ${index + 1}`}
+                          onClick={() => dispatch({ type: "remove_example_query", index })}
+                          className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+                        >
+                          <X className="h-4 w-4" aria-hidden />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => dispatch({ type: "add_example_query" })}
+                      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden />
+                      Add example query
+                    </button>
+                  </div>
+                </Field>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"

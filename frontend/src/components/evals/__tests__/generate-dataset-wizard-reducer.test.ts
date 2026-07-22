@@ -70,7 +70,8 @@ describe("generate-dataset wizard reducer", () => {
       { type: "select_model", modelKey: "conn-1::openai/gpt-4o-mini" },
       { type: "set_audience", audience: "  support engineers  " },
       { type: "set_example_query", index: 0, value: " why does upload fail? " },
-      { type: "set_example_query", index: 2, value: "   " },
+      { type: "add_example_query" },
+      { type: "set_example_query", index: 1, value: "   " },
       { type: "set_type_share", questionType: "multi_detail", value: 0 },
       { type: "set_seed", seed: "42" },
     ]);
@@ -86,6 +87,33 @@ describe("generate-dataset wizard reducer", () => {
       example_queries: ["why does upload fail?"],
       seed: 42,
     });
+  });
+
+  it("adds and removes example queries without an upper cap", () => {
+    const withMany = reduce([
+      ...Array.from({ length: 5 }, () => ({ type: "add_example_query" }) as const),
+      { type: "set_example_query", index: 0, value: "a" },
+      { type: "set_example_query", index: 1, value: "b" },
+      { type: "set_example_query", index: 2, value: "c" },
+      { type: "set_example_query", index: 3, value: "d" },
+      { type: "set_example_query", index: 4, value: "e" },
+      { type: "set_example_query", index: 5, value: "f" },
+    ]);
+    // One initial field + five added = six, all kept.
+    expect(buildGeneratePayload(withMany).example_queries).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+    ]);
+
+    const afterRemoval = generateWizardReducer(withMany, {
+      type: "remove_example_query",
+      index: 2,
+    });
+    expect(buildGeneratePayload(afterRemoval).example_queries).toEqual(["a", "b", "d", "e", "f"]);
   });
 
   it("a launch failure clears busy and surfaces the message", () => {

@@ -37,8 +37,6 @@ export const DEFAULT_TYPE_SHARES: Record<EvalQuestionType, number> = {
   multi_detail: 25,
 };
 
-export const MAX_EXAMPLE_QUERIES = 3;
-
 export interface GenerateWizardState {
   step: number;
   name: string;
@@ -49,9 +47,12 @@ export interface GenerateWizardState {
   modelKey: string;
   preset: string;
   countOverride: string;
+  /** The optional steering section (audience + example queries), collapsed by default. */
+  steeringOpen: boolean;
   advancedOpen: boolean;
   typeShares: Record<EvalQuestionType, number>;
   audience: string;
+  /** Real queries whose style generated questions imitate. Any number; blanks are dropped. */
   exampleQueries: string[];
   seed: string;
   busy: boolean;
@@ -66,10 +67,11 @@ export const initialGenerateWizardState: GenerateWizardState = {
   modelKey: "",
   preset: "standard",
   countOverride: "",
+  steeringOpen: false,
   advancedOpen: false,
   typeShares: { ...DEFAULT_TYPE_SHARES },
   audience: "",
-  exampleQueries: ["", "", ""],
+  exampleQueries: [""],
   seed: "0",
   busy: false,
   message: null,
@@ -83,10 +85,13 @@ export type GenerateWizardAction =
   | { type: "select_model"; modelKey: string }
   | { type: "set_preset"; preset: string }
   | { type: "set_count_override"; value: string }
+  | { type: "toggle_steering" }
   | { type: "toggle_advanced" }
   | { type: "set_type_share"; questionType: EvalQuestionType; value: number }
   | { type: "set_audience"; audience: string }
   | { type: "set_example_query"; index: number; value: string }
+  | { type: "add_example_query" }
+  | { type: "remove_example_query"; index: number }
   | { type: "set_seed"; seed: string }
   | { type: "launch_started" }
   | { type: "launch_failed"; message: string };
@@ -115,6 +120,8 @@ export function generateWizardReducer(
       return { ...state, preset: action.preset, countOverride: "" };
     case "set_count_override":
       return { ...state, countOverride: action.value };
+    case "toggle_steering":
+      return { ...state, steeringOpen: !state.steeringOpen };
     case "toggle_advanced":
       return { ...state, advancedOpen: !state.advancedOpen };
     case "set_type_share":
@@ -130,6 +137,13 @@ export function generateWizardReducer(
         exampleQueries: state.exampleQueries.map((entry, index) =>
           index === action.index ? action.value : entry,
         ),
+      };
+    case "add_example_query":
+      return { ...state, exampleQueries: [...state.exampleQueries, ""] };
+    case "remove_example_query":
+      return {
+        ...state,
+        exampleQueries: state.exampleQueries.filter((_, index) => index !== action.index),
       };
     case "set_seed":
       return { ...state, seed: action.seed };
@@ -168,7 +182,7 @@ export function buildGeneratePayload(state: GenerateWizardState): EvalDatasetGen
     num_questions: resolvedQuestionCount(state),
     type_mix: shares,
     audience: state.audience.trim() || null,
-    example_queries: examples.slice(0, MAX_EXAMPLE_QUERIES),
+    example_queries: examples,
     seed: Number(state.seed) || 0,
   };
 }
