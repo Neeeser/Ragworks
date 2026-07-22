@@ -86,3 +86,5 @@ docs/superpowers/
 .sandbox/
 .env.sandbox
 !.env.sandbox.example
+frontend/test-results/
+frontend/playwright-report/

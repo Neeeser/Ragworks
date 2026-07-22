@@ -68,6 +68,7 @@ help:
 	@echo "  make sandbox-up    - seed a sandbox scenario + start servers (SCENARIO=collection-ready)"
 	@echo "  make sandbox-down  - stop the sandbox servers"
 	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
+	@echo "  make sandbox-flows - run saved browser flows against seeded scenarios"
 	@echo "  make verify    - typecheck -> lint -> test (the backend gate)"
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
@@ -146,6 +147,9 @@ sandbox-down: env-backend
 
 sandbox-list: env-backend
 	$(UV) run python -m sandbox list
+
+sandbox-flows: env
+	$(UV) run python -m sandbox flows
 
 lint-frontend: env-frontend
 	$(NPM) --prefix frontend run lint

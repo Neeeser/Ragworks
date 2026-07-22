@@ -63,6 +63,17 @@ def _build_parser() -> argparse.ArgumentParser:
     docs = commands.add_parser("docs", help=f"Regenerate {CATALOG_RELATIVE_PATH}.")
     docs.set_defaults(func=_cmd_docs)
 
+    flows = commands.add_parser(
+        "flows", help="Run saved browser flows (frontend/e2e) against seeded scenarios."
+    )
+    flows.add_argument(
+        "scenarios",
+        nargs="*",
+        help="Scenario names to run flows for (default: every scenario with flows).",
+    )
+    flows.add_argument("--list", action="store_true", help="List flows without running.")
+    flows.set_defaults(func=_cmd_flows)
+
     return parser
 
 
@@ -87,7 +98,9 @@ def _reseed(scenario_name: str) -> dict[str, Any]:
     """Stop servers, reset the sandbox database, seed, and return the handoff."""
     from sandbox.harness import db, servers
 
-    for line in servers.stop_all():
+    # Only the backend restarts on reseed — the frontend is stateless across
+    # scenarios and restarting `next dev` would cold-compile every route.
+    for line in servers.stop_backend():
         print(line)
     db.ensure_server()
     from sandbox.keys import preflight
@@ -210,6 +223,62 @@ def _cmd_list(_: argparse.Namespace) -> None:
             else ""
         )
         print(f"{spec.name}{needs}\n    {spec.description}")
+
+
+def _cmd_flows(args: argparse.Namespace) -> None:
+    """Run saved browser flows scenario by scenario: up → playwright → next.
+
+    Flows live in `frontend/e2e/<scenario>/*.spec.ts`; the directory name is
+    the scenario the specs need seeded. Keyed scenarios whose keys are absent
+    are skipped by name, mirroring seed preflight.
+    """
+    import subprocess
+
+    from sandbox.harness import servers
+    from sandbox.keys import PROVIDER_ENV_VARS, PreflightError, preflight
+    from sandbox.registry import get_scenario
+
+    flows_root = config.REPO_ROOT / "frontend" / "e2e"
+    available = sorted(
+        entry.name
+        for entry in flows_root.iterdir()
+        if entry.is_dir() and any(entry.glob("*.spec.ts"))
+    )
+    if args.list:
+        for name in available:
+            for spec_file in sorted((flows_root / name).glob("*.spec.ts")):
+                print(f"{name}: {spec_file.stem}")
+        return
+    requested = args.scenarios or available
+    results: dict[str, str] = {}
+    for name in requested:
+        if name not in available:
+            raise SystemExit(f"No flows under frontend/e2e/{name}. Available: {available}")
+        spec = get_scenario(name)
+        try:
+            preflight(spec.requires)
+        except PreflightError:
+            missing = ", ".join(PROVIDER_ENV_VARS[p] for p in spec.requires)
+            results[name] = f"skipped (needs {missing})"
+            print(f"skipping {name}: missing provider keys ({missing})")
+            continue
+        _reseed(name)
+        servers.start_backend()
+        servers.start_frontend(mode="prod")
+        print(f"running flows for '{name}' …")
+        outcome = subprocess.run(
+            ["npx", "playwright", "test", f"e2e/{name}"],
+            cwd=config.REPO_ROOT / "frontend",
+            check=False,
+        )
+        results[name] = "passed" if outcome.returncode == 0 else "FAILED"
+    for line in servers.stop_all():
+        print(line)
+    print()
+    for name, result in results.items():
+        print(f"{name}: {result}")
+    if any(result == "FAILED" for result in results.values()):
+        raise SystemExit(1)
 
 
 def _cmd_docs(_: argparse.Namespace) -> None:

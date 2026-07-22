@@ -22,6 +22,7 @@ from sandbox import config
 
 BACKEND_PIDFILE = config.RUNTIME_DIR / "backend.pid"
 FRONTEND_PIDFILE = config.RUNTIME_DIR / "frontend.pid"
+FRONTEND_MODE_FILE = config.RUNTIME_DIR / "frontend.mode"
 BACKEND_LOG = config.LOGS_DIR / "backend.log"
 FRONTEND_LOG = config.LOGS_DIR / "frontend.log"
 
@@ -56,41 +57,78 @@ def start_backend() -> None:
     _wait_http(f"{config.API_BASE_URL}/api/health", timeout=60.0, log=BACKEND_LOG)
 
 
-def start_frontend() -> None:
-    """Launch the Next.js dev server pointed at the sandbox API and wait for it."""
-    node_modules = config.REPO_ROOT / "frontend" / "node_modules"
-    if not node_modules.exists():
+def start_frontend(mode: str = "dev") -> None:
+    """Launch the Next.js frontend pointed at the sandbox API and wait for it.
+
+    Two modes, tracked in a marker file so a running server of the other mode
+    is replaced instead of reused:
+
+    - ``dev``: `next dev`, for interactive testing with hot reload.
+    - ``prod``: `next build` + `next start`, for scripted browser flows —
+      dev-mode HMR/on-demand compilation triggers full-page reload storms
+      under Playwright that wipe in-flight client state (a login redirect
+      repeatedly bounced back to the sign-in page until flows moved to a
+      production build).
+
+    A frontend already running in the requested mode is reused: it is
+    stateless across scenarios — only the backend's data changes.
+    """
+    existing = _read_pid(FRONTEND_PIDFILE)
+    if existing is not None and _alive(existing):
+        if _frontend_mode() == mode:
+            return
+        _stop("frontend", FRONTEND_PIDFILE)
+    frontend_dir = config.REPO_ROOT / "frontend"
+    if not (frontend_dir / "node_modules").exists():
         raise SystemExit("frontend/node_modules missing — run `make env-frontend` first.")
-    _spawn(
-        FRONTEND_PIDFILE,
-        FRONTEND_LOG,
-        [
-            "npm",
-            "--prefix",
-            str(config.REPO_ROOT / "frontend"),
-            "run",
-            "dev",
-            "--",
-            "-p",
-            str(config.FRONTEND_PORT),
-        ],
-        env={**os.environ, "NEXT_PUBLIC_API_BASE_URL": config.API_BASE_URL},
-    )
+    env = {**os.environ, "NEXT_PUBLIC_API_BASE_URL": config.API_BASE_URL}
+    if mode == "prod":
+        # NEXT_PUBLIC_* values are baked at build time, so the build itself
+        # must run under the sandbox environment.
+        print("building production frontend for flows (next build) …")
+        build = subprocess.run(
+            ["npm", "--prefix", str(frontend_dir), "run", "build"],
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if build.returncode != 0:
+            raise SystemExit(f"frontend build failed:\n{build.stdout[-2000:]}")
+        command = ["npm", "--prefix", str(frontend_dir), "run", "start", "--", "-p"]
+    else:
+        command = ["npm", "--prefix", str(frontend_dir), "run", "dev", "--", "-p"]
+    _spawn(FRONTEND_PIDFILE, FRONTEND_LOG, [*command, str(config.FRONTEND_PORT)], env=env)
+    FRONTEND_MODE_FILE.write_text(mode, encoding="utf-8")
     _wait_http(config.FRONTEND_BASE_URL, timeout=180.0, log=FRONTEND_LOG)
+
+
+def _frontend_mode() -> str:
+    try:
+        return FRONTEND_MODE_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "dev"
 
 
 def stop_all() -> list[str]:
     """Stop both servers if running; return a line per action taken."""
-    lines = []
-    for name, pidfile in (("frontend", FRONTEND_PIDFILE), ("backend", BACKEND_PIDFILE)):
-        pid = _read_pid(pidfile)
-        if pid is None or not _alive(pid):
-            pidfile.unlink(missing_ok=True)
-            continue
-        _terminate(pid)
+    return _stop("frontend", FRONTEND_PIDFILE) + _stop("backend", BACKEND_PIDFILE)
+
+
+def stop_backend() -> list[str]:
+    """Stop only the backend — reseeding replaces its database, but the
+    frontend is stateless across scenarios and stays warm."""
+    return _stop("backend", BACKEND_PIDFILE)
+
+
+def _stop(name: str, pidfile: Path) -> list[str]:
+    pid = _read_pid(pidfile)
+    if pid is None or not _alive(pid):
         pidfile.unlink(missing_ok=True)
-        lines.append(f"stopped {name} (pid {pid})")
-    return lines
+        return []
+    _terminate(pid)
+    pidfile.unlink(missing_ok=True)
+    return [f"stopped {name} (pid {pid})"]
 
 
 def statuses() -> list[ServerStatus]:
@@ -151,17 +189,25 @@ def _wait_http(url: str, *, timeout: float, log: Path) -> None:
 
 
 def _terminate(pid: int) -> None:
-    """SIGTERM the process group, escalating to SIGKILL after a grace period."""
-    group = os.getpgid(pid) if _alive(pid) else None
-    if group is None:
-        return
-    os.killpg(group, signal.SIGTERM)
-    deadline = time.monotonic() + 10.0
-    while time.monotonic() < deadline:
-        if not _alive(pid):
+    """SIGTERM the process group, escalating to SIGKILL after a grace period.
+
+    Signal errors are tolerated: the group can die (or its pid be recycled by
+    an unrelated process we may not signal) between the liveness check and
+    the kill — either way there is nothing left of ours to stop.
+    """
+    try:
+        group = os.getpgid(pid) if _alive(pid) else None
+        if group is None:
             return
-        time.sleep(0.2)
-    os.killpg(group, signal.SIGKILL)
+        os.killpg(group, signal.SIGTERM)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if not _alive(pid):
+                return
+            time.sleep(0.2)
+        os.killpg(group, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        return
 
 
 def _read_pid(pidfile: Path) -> int | None:
