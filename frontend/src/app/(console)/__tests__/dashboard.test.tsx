@@ -22,13 +22,17 @@ describe("DashboardPage", () => {
       id: "col-1",
       name: "One",
       description: null,
-      retrieval_pipeline_id: "pipe-1",
+      tools: [
+        { id: "binding-1", pipeline_id: "pipe-1", is_primary: true, enabled: true, position: 0 },
+      ],
     }),
     makeCollection({
       id: "col-2",
       name: "Two",
       description: null,
-      retrieval_pipeline_id: "pipe-2",
+      tools: [
+        { id: "binding-1", pipeline_id: "pipe-2", is_primary: true, enabled: true, position: 0 },
+      ],
     }),
   ];
   const docs: Document[] = [
@@ -145,7 +149,7 @@ describe("DashboardPage", () => {
 
   it("falls back to a generic pipeline label when a collection's retrieval pipeline name is missing", async () => {
     api.fetchCollections.mockResolvedValueOnce([
-      makeCollection({ id: "col-1", name: "One", retrieval_pipeline_id: null }),
+      makeCollection({ id: "col-1", name: "One", tools: [] }),
     ]);
     render(<DashboardPage />);
 

@@ -44,7 +44,7 @@ def _legacy_pipeline(session: Session, user: models.User) -> models.PipelineVers
         user_id=user.id,
         name="Legacy Ingestion",
         description="",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
         is_default=True,
     )

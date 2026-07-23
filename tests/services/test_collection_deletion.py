@@ -272,7 +272,7 @@ def test_delete_rejects_missing_namespace(monkeypatch, session: Session) -> None
     session.commit()
 
     monkeypatch.setattr(
-        "app.services.pipeline_resolution.resolve_ingestion_settings",
+        "app.services.pipeline_resolution.resolve_pipeline_settings",
         lambda *_a, **_k: SimpleNamespace(namespace=None, index_name="index", backend=None),
     )
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)

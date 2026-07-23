@@ -180,10 +180,10 @@ export function CreateCollectionWizard({
         description: form.description,
       };
       if (form.ingestion_pipeline_id) {
-        payload.ingestion_pipeline_id = form.ingestion_pipeline_id;
+        payload.ingest_pipeline_id = form.ingestion_pipeline_id;
       }
       if (form.retrieval_pipeline_id) {
-        payload.retrieval_pipeline_id = form.retrieval_pipeline_id;
+        payload.tool_pipeline_ids = [form.retrieval_pipeline_id];
       }
       if (showAdvanced && usesDefaultPipelines) {
         payload.pipeline_overrides = {

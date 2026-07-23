@@ -184,7 +184,7 @@ def test_pipeline_repositories_and_versions(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     pipeline_repo.add(pipeline)
@@ -222,7 +222,7 @@ def test_pipeline_run_repository_lists_nodes(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -232,7 +232,7 @@ def test_pipeline_run_repository_lists_nodes(session: Session) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.COMPLETED,

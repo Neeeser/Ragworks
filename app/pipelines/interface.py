@@ -15,7 +15,7 @@ column existed.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -36,7 +36,7 @@ from app.pipelines.variables import PipelineInputArgument
 TOOL_OUTPUT_NODE_TYPE = "tool.output"
 
 
-class ToolOutputKind(str, Enum):
+class ToolOutputKind(StrEnum):
     """The result shape a callable pipeline produces."""
 
     CHUNKS = "chunks"

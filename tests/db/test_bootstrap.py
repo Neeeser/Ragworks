@@ -220,7 +220,7 @@ def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
         pipeline = models.Pipeline(
             user_id=user.id,
             name="Warnings",
-            kind=models.PipelineKind.INGESTION,
+            trigger=models.BindingRole.INGEST,
             current_version=1,
         )
         session.add(collection)
@@ -235,7 +235,7 @@ def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
         )
         run = models.PipelineRun(
             pipeline_id=pipeline.id,
-            kind=models.PipelineKind.INGESTION,
+            trigger=models.BindingRole.INGEST,
             user_id=user.id,
             collection_id=collection.id,
             status=models.PipelineRunStatus.RUNNING,

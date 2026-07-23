@@ -102,14 +102,14 @@ def test_search_route_translates_retrieval_value_error(monkeypatch, session: Ses
     user = _create_user(session)
     collection = _create_collection(session, user)
 
-    class _StubRetrievalService:
+    class _StubInvocationService:
         def __init__(self, _session) -> None:
             pass
 
         def query_collection(self, _user, _collection, *, query, top_k, arguments=None):
             raise InvalidInputError("Retrieval pipeline could not be resolved.")
 
-    monkeypatch.setattr(search_routes, "RetrievalService", _StubRetrievalService)
+    monkeypatch.setattr(search_routes, "RetrievalService", _StubInvocationService)
 
     with pytest.raises(HTTPException) as excinfo:
         search_routes.run_collection_query(

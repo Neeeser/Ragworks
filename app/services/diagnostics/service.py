@@ -16,6 +16,7 @@ from sqlmodel import Session
 
 from app.cache import CachePolicy, ValueCache
 from app.db import models
+from app.db.repositories.bindings import CollectionPipelineBindingRepository
 from app.db.repositories.pipeline import PipelineRepository, PipelineRunRepository
 from app.schemas.diagnostics import (
     CollectionDiagnostic,
@@ -130,13 +131,16 @@ class CollectionDiagnosticsService:
         """Cheap cache key that busts on config/binding/ingestion changes."""
         pipelines = PipelineRepository(self.session)
         runs = PipelineRunRepository(self.session)
+        bindings = CollectionPipelineBindingRepository(self.session)
         parts = [str(collection.id)]
-        for pipeline_id in (collection.ingestion_pipeline_id, collection.retrieval_pipeline_id):
-            if pipeline_id is None:
-                parts.append("none")
-                continue
-            pipeline = pipelines.get(pipeline_id)
-            parts.append(f"{pipeline_id}:{pipeline.current_version if pipeline else 0}")
+        for binding in bindings.list_for_collection(collection.id):
+            pipeline = pipelines.get(binding.pipeline_id)
+            parts.append(
+                f"{binding.pipeline_id}:{pipeline.current_version if pipeline else 0}:"
+                f"{binding.is_primary}:{binding.enabled}"
+            )
+        if len(parts) == 1:
+            parts.append("none")
         latest = runs.list_recent_for_collection(
             collection.id, models.BindingRole.INGEST, limit=1
         )

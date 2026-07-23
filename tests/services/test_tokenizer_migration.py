@@ -99,7 +99,7 @@ def test_startup_migration_rewrites_every_stored_version(session: Session) -> No
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Tokenizer migration",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=2,
     )
     session.add(pipeline)

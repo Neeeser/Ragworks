@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session
@@ -17,10 +16,6 @@ from app.db.repositories import (
     PipelineVersionRepository,
     UserRepository,
 )
-from app.pipelines.defaults import (
-    build_default_ingestion_pipeline,
-    build_default_retrieval_pipeline,
-)
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.diff import DefinitionChange, diff_definitions, material_changes
 from app.pipelines.interface import PipelineInterface, derive_interface
@@ -28,12 +23,24 @@ from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.resolution import resolve_static_definition
-from app.pipelines.settings import resolve_definition_backend
 from app.pipelines.validation import PipelineValidationResult
-from app.schemas.enums import IndexBackend, PipelineKind
-from app.services.app_config import get_app_config
+from app.schemas.enums import PipelineKind
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.huggingface_tokenizers import HuggingFaceTokenizerService
+from app.services.pipeline_defaults import (
+    DEFAULT_INGEST_SLUG as DEFAULT_INGEST_SLUG,
+)
+from app.services.pipeline_defaults import (
+    DEFAULT_SEARCH_SLUG as DEFAULT_SEARCH_SLUG,
+)
+from app.services.pipeline_defaults import (
+    DefaultPipelines,
+    ensure_collection_bindings,
+    ensure_default_pipelines,
+)
+from app.services.pipeline_defaults import (
+    backfill_default_pipelines as backfill_default_pipelines,
+)
 from app.services.pipeline_upgrades import (
     upgrade_stored_pipeline_definitions as upgrade_stored_pipeline_definitions,
 )
@@ -41,19 +48,6 @@ from app.services.pipeline_validation import (
     EmbeddingInputLimitResolver,
     validate_pipeline_definition,
 )
-
-#: Template slugs marking a user's scaffolded default pipelines.
-DEFAULT_INGEST_SLUG = "default-ingest"
-DEFAULT_SEARCH_SLUG = "default-search"
-
-
-@dataclass
-class DefaultPipelines:
-    """Container for a user's default ingest and search pipelines."""
-
-    ingestion: models.Pipeline
-    retrieval: models.Pipeline
-
 
 def derived_kind(interface: PipelineInterface) -> PipelineKind | None:
     """Map a derived interface onto the wire's UI-grouping kind.
@@ -311,143 +305,20 @@ class PipelineService:
         self.session.add(pipeline)
         return pipeline
 
-    def ensure_default_pipelines(self, user: models.User) -> DefaultPipelines:
-        """Ensure default ingest/search pipelines on the configured backend.
-
-        A stored default whose vector-store backend no longer matches the
-        deployment's `indexing.default_backend` is demoted (kept, renamed with
-        its backend, still bound by existing collections) and a fresh default
-        is re-scaffolded around the demoted pipeline's own embedder — so new
-        collections always index into the configured backend while old
-        collections keep their data. There are no global default models: a
-        user with no defaults at all (first-run setup never completed) raises
-        `InvalidInputError` pointing at the wizard, which scaffolds with an
-        explicit embedding choice.
-        """
-        configured = IndexBackend(get_app_config().indexing.default_backend)
-        stored_ingestion = self._pipelines.get_by_template_slug(user.id, DEFAULT_INGEST_SLUG)
-        stored_retrieval = self._pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
-        ingestion = self._demote_if_backend_stale(stored_ingestion, configured)
-        retrieval = self._demote_if_backend_stale(stored_retrieval, configured)
-
-        if ingestion is None:
-            embedding = self._embedding_selection_from(stored_ingestion or stored_retrieval)
-            ingestion = self.create_pipeline(
-                user=user,
-                name="Default Ingestion Pipeline",
-                description="Baseline ingestion pipeline for uploads.",
-                definition=build_default_ingestion_pipeline(
-                    embedding_connection_id=embedding[0],
-                    embedding_model=embedding[1],
-                ),
-                change_summary="Initial default ingestion pipeline.",
-                template_slug=DEFAULT_INGEST_SLUG,
-            )
-        if retrieval is None:
-            embedding = self._embedding_selection_from(
-                stored_retrieval or stored_ingestion or ingestion
-            )
-            retrieval = self.create_pipeline(
-                user=user,
-                name="Default Retrieval Pipeline",
-                description="Baseline retrieval pipeline for queries.",
-                definition=build_default_retrieval_pipeline(
-                    embedding_connection_id=embedding[0],
-                    embedding_model=embedding[1],
-                ),
-                change_summary="Initial default retrieval pipeline.",
-                template_slug=DEFAULT_SEARCH_SLUG,
-            )
-        return DefaultPipelines(ingestion=ingestion, retrieval=retrieval)
-
-    def _embedding_selection_from(
-        self, pipeline: models.Pipeline | None
-    ) -> tuple[UUID, str]:
-        """Read `(connection_id, model)` off an existing pipeline's embedder.
-
-        Scaffolding a default needs an embedding choice, and with global
-        default models removed the only legitimate source outside the setup
-        wizard is an existing pipeline (e.g. the default demoted for a
-        backend change).
-        """
-        if pipeline is not None:
-            version = self.get_current_version(pipeline)
-            stored = PipelineDefinition.model_validate(version.definition)
-            definition = resolve_static_definition(stored)
-            for node in definition.nodes:
-                if node.type != EmbedderNode.type:
-                    continue
-                config = EmbedderConfig.model_validate(node.config or {})
-                if config.connection_id and config.model_name:
-                    return config.connection_id, config.model_name
-        raise InvalidInputError(
-            "No default pipelines exist yet. Complete the first-time setup "
-            "wizard (or create a collection with an explicit embedding model) "
-            "before this operation."
-        )
-
-    def _demote_if_backend_stale(
-        self,
-        pipeline: models.Pipeline | None,
-        configured: IndexBackend,
+    def get_by_template_slug(
+        self, user_id: UUID, template_slug: str
     ) -> models.Pipeline | None:
-        """Demote a default pipeline whose backend no longer matches config."""
-        if pipeline is None:
-            return None
-        version = self.get_current_version(pipeline)
-        definition = PipelineDefinition.model_validate(version.definition)
-        backend = resolve_definition_backend(definition, default_registry())
-        if backend is configured:
-            return pipeline
-        pipeline.template_slug = None
-        pipeline.name = f"{pipeline.name} ({backend.value})"
-        self.session.add(pipeline)
-        return None
+        """Return the user's pipeline scaffolded for a template slug."""
+        return self._pipelines.get_by_template_slug(user_id, template_slug)
+
+    def ensure_default_pipelines(self, user: models.User) -> DefaultPipelines:
+        """Ensure the user's default pipelines exist (see pipeline_defaults)."""
+        return ensure_default_pipelines(self, user)
 
     def ensure_collection_bindings(
         self,
         collection: models.Collection,
         defaults: DefaultPipelines,
     ) -> models.Collection:
-        """Bind default pipelines to a collection missing ingest/tool bindings."""
-        existing = self._bindings.list_for_collection(collection.id)
-        has_ingest = any(
-            binding.role == models.BindingRole.INGEST for binding in existing
-        )
-        tools = [binding for binding in existing if binding.role == models.BindingRole.TOOL]
-        if not has_ingest:
-            self._bindings.add(
-                models.CollectionPipelineBinding(
-                    collection_id=collection.id,
-                    pipeline_id=defaults.ingestion.id,
-                    role=models.BindingRole.INGEST,
-                )
-            )
-        if not tools:
-            self._bindings.add(
-                models.CollectionPipelineBinding(
-                    collection_id=collection.id,
-                    pipeline_id=defaults.retrieval.id,
-                    role=models.BindingRole.TOOL,
-                    is_primary=True,
-                )
-            )
-        return collection
-
-
-def backfill_default_pipelines(session: Session) -> None:
-    """Ensure all users and collections have default pipelines bound.
-
-    A user with no defaults on an install with no configured embedding model
-    is skipped, not failed: they haven't completed first-run setup yet, and
-    the wizard scaffolds their defaults with an explicit model when they do.
-    """
-    service = PipelineService(session)
-    collection_repo = CollectionRepository(session)
-    for user in UserRepository(session).list_all():
-        try:
-            defaults = service.ensure_default_pipelines(user)
-        except InvalidInputError:
-            continue
-        for collection in collection_repo.list_for_user(user.id):
-            service.ensure_collection_bindings(collection, defaults)
+        """Bind default pipelines onto an unbound collection (see pipeline_defaults)."""
+        return ensure_collection_bindings(self.session, collection, defaults)

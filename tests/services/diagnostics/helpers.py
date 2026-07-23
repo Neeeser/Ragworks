@@ -17,10 +17,9 @@ from app.pipelines.defaults import (
 )
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import (
-    IngestionPipelineSettings,
-    RetrievalPipelineSettings,
-    resolve_ingestion_settings,
-    resolve_retrieval_settings,
+    PipelineSettings,
+    PipelineSettings,
+    resolve_pipeline_settings,
 )
 from app.services.diagnostics.context import DiagnosticContext
 from app.services.diagnostics.prober import ProbeUnavailable
@@ -50,18 +49,18 @@ def _collection() -> models.Collection:
     return models.Collection(user_id=uuid4(), name="Docs", description="", extra_metadata={})
 
 
-def _base_ingestion() -> IngestionPipelineSettings:
+def _base_ingestion() -> PipelineSettings:
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=CONNECTION_ID, embedding_model=EMBED_MODEL
     )
-    return resolve_ingestion_settings(definition, _collection(), default_registry())
+    return resolve_pipeline_settings(definition, _collection(), default_registry())
 
 
-def _base_retrieval() -> RetrievalPipelineSettings:
+def _base_retrieval() -> PipelineSettings:
     definition = build_default_retrieval_pipeline(
         embedding_connection_id=CONNECTION_ID, embedding_model=EMBED_MODEL
     )
-    return resolve_retrieval_settings(definition, _collection(), default_registry())
+    return resolve_pipeline_settings(definition, _collection(), default_registry())
 
 
 @dataclasses.dataclass
@@ -74,8 +73,8 @@ class _ResolvedStub:
 
 def make_context(
     *,
-    ingestion: IngestionPipelineSettings | None = None,
-    retrieval: RetrievalPipelineSettings | None = None,
+    ingestion: PipelineSettings | None = None,
+    retrieval: PipelineSettings | None = None,
     prober: StubProber | None = None,
     ingestion_validation: object | None = None,
     retrieval_validation: object | None = None,
@@ -115,11 +114,11 @@ def make_context(
     return ctx
 
 
-def base_ingestion_settings() -> IngestionPipelineSettings:
+def base_ingestion_settings() -> PipelineSettings:
     """Resolved default ingestion settings tests tweak with `replace`."""
     return _base_ingestion()
 
 
-def base_retrieval_settings() -> RetrievalPipelineSettings:
+def base_retrieval_settings() -> PipelineSettings:
     """Resolved default retrieval settings tests tweak with `replace`."""
     return _base_retrieval()

@@ -27,7 +27,7 @@ from app.chat.events import (
     ToolResultEvent,
 )
 from app.chat.messages import AssistantMessage, FunctionCall, ProviderMessage, ToolCall
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.tools import ToolInvocationResponse
 
 
 def _format_event(data: object) -> str:
@@ -77,7 +77,14 @@ def test_tool_call_event_is_byte_identical_to_legacy_dict() -> None:
 
 def test_tool_result_event_is_byte_identical_to_legacy_dict() -> None:
     collection_id = str(uuid4())
-    response = CollectionQueryResponse(query="docs", top_k=5, chunks=[], usage={"total_tokens": 3})
+    response = ToolInvocationResponse(
+        kind="chunks",
+        tool_binding_id=uuid4(),
+        query="docs",
+        top_k=5,
+        chunks=[],
+        usage={"total_tokens": 3},
+    )
     legacy = {
         "type": "tool_result",
         "id": "call-1",
@@ -120,7 +127,14 @@ def test_error_event_is_byte_identical_to_legacy_dict() -> None:
 
 def test_full_event_sequence_is_byte_identical() -> None:
     """A token/reasoning/tool_call/tool_result/final/error sequence, end to end."""
-    response = CollectionQueryResponse(query="docs", top_k=3, chunks=[], usage={})
+    response = ToolInvocationResponse(
+        kind="chunks",
+        tool_binding_id=uuid4(),
+        query="docs",
+        top_k=3,
+        chunks=[],
+        usage={},
+    )
     sequence = [
         ({"type": "token", "content": "Hi"}, TokenEvent(content="Hi")),
         (

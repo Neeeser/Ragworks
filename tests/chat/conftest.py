@@ -3,10 +3,10 @@
 These consolidate the per-file `_create_user` / `_create_collection` /
 `_stub_pipeline_helpers` builders that used to be copy-pasted across the chat
 service tests. Provider and pipeline collaborators are patched at their real
-boundaries: `get_settings` / `RetrievalService` live in `app.chat.service`,
-`ProviderResolver` in `app.chat.setup`, while `resolve_ingestion_pipeline` /
-`resolve_retrieval_pipeline` (the consolidated resolver in
-`app.services.pipeline_resolution`) live in `app.chat.setup`.
+boundaries: `get_settings` / `ToolInvocationService` live in
+`app.chat.service`, `ProviderResolver` in `app.chat.setup`, while
+`resolve_ingest_binding` / `resolve_tool_bindings` (the consolidated resolver
+in `app.services.pipeline_resolution`) live in `app.chat.setup`.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel import Session
@@ -21,14 +22,16 @@ from sqlmodel import Session
 from app.chat import model_settings as model_settings_module
 from app.chat import service as service_module
 from app.chat import setup as setup_module
+from app.chat import tool_contexts as tool_contexts_module
 from app.db import models
-from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.interface import PipelineInterface, ToolOutputKind
 from app.pipelines.payloads import TokenizerSpec
-from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.tools import ToolInvocationResponse
+from app.services.tool_projection import build_parameter_schema, tool_description
 
 
 @dataclass
@@ -38,8 +41,8 @@ class StubSettings:
     openrouter_reasoning_effort: str | None = "low"
 
 
-class StubRetrievalService:
-    """Retrieval service returning empty results for any query.
+class StubInvocationService:
+    """Tool invocation service returning empty results for any call.
 
     Records every call's kwargs so tests can assert whether the executor took
     the legacy `top_k` path or the declared-`arguments` path.
@@ -48,16 +51,24 @@ class StubRetrievalService:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def query_collection(
+    def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         _user: models.User,
         _collection: models.Collection,
+        binding_id: UUID,
         query: str,
-        top_k: int = 5,
+        top_k: int | None = None,
         arguments: dict[str, object] | None = None,
-    ) -> CollectionQueryResponse:
+    ) -> ToolInvocationResponse:
         self.calls.append({"query": query, "top_k": top_k, "arguments": arguments})
-        return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
+        return ToolInvocationResponse(
+            kind="chunks",
+            tool_binding_id=binding_id,
+            query=query,
+            top_k=top_k if top_k is not None else 5,
+            chunks=[],
+            usage={},
+        )
 
 
 class StubOpenRouter:
@@ -169,38 +180,58 @@ def make_collection_fixture(session: Session):
     return _make
 
 
-def make_tool_collection_context(
+def _stub_settings(backend: IndexBackend = IndexBackend.PINECONE) -> PipelineSettings:
+    """Minimal resolved settings for stubbed pipeline contexts."""
+    return PipelineSettings(
+        chunk_strategy=models.ChunkStrategy.TOKEN,
+        chunk_size=128,
+        chunk_overlap=8,
+        tokenizer=TokenizerSpec(kind="wordpiece"),
+        embedding_model="embed",
+        backend=backend,
+        index_name="idx",
+        namespace="ns",
+        dimension=128,
+        metric="cosine",
+    )
+
+
+def make_tool_context(
     collection: models.Collection,
     *,
     tool_name: str = "pinecone_query",
     query_arguments: tuple = (),
+) -> setup_module.ToolContext:
+    """Build a minimal ToolContext for direct ToolExecutor tests."""
+    from app.chat.state import ToolContext
+
+    return ToolContext(
+        collection=collection,
+        binding_id=uuid4(),
+        tool_name=tool_name,
+        description=tool_description(
+            PipelineInterface(callable=True, output_kind=ToolOutputKind.CHUNKS),
+            collection,
+        ),
+        parameters=build_parameter_schema(query_arguments),
+        settings=_stub_settings(),
+        query_arguments=query_arguments,
+    )
+
+
+def wrap_tool_contexts(
+    collection: models.Collection,
+    *tools: setup_module.ToolContext,
 ) -> setup_module.ToolCollectionContext:
-    """Build a minimal ToolCollectionContext for direct ToolExecutor tests."""
+    """Wrap ToolContexts in the per-collection shape `ToolExecutor.specs` reads."""
     from app.chat.state import ToolCollectionContext
 
     return ToolCollectionContext(
         collection=collection,
-        tool_name=tool_name,
-        ingestion_settings=IngestionPipelineSettings(
-            chunk_strategy=models.ChunkStrategy.TOKEN,
-            chunk_size=128,
-            chunk_overlap=8,
-            tokenizer=TokenizerSpec(kind="wordpiece"),
-            embedding_model="embed",
-            backend=IndexBackend.PINECONE,
-            index_name="idx",
-            namespace="ns",
-            dimension=128,
-            metric="cosine",
-        ),
-        retrieval_settings=RetrievalPipelineSettings(
-            embedding_model="embed",
-            backend=IndexBackend.PINECONE,
-            index_name="idx",
-            namespace="ns",
-            dimension=128,
-        ),
-        query_arguments=query_arguments,
+        tool_name=tools[0].tool_name if tools else "search",
+        ingestion_settings=_stub_settings(),
+        retrieval_settings=_stub_settings(),
+        tools=tuple(tools),
     )
 
 
@@ -208,7 +239,7 @@ def make_tool_collection_context(
 def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: models.User):
     """Return a factory that patches pipeline resolution in setup.
 
-    Patches `resolve_ingestion_pipeline` / `resolve_retrieval_pipeline` (the
+    Patches `resolve_ingest_binding` / `resolve_primary_tool` (the
     consolidated resolver from `app.services.pipeline_resolution`) as imported
     by `app.chat.setup` -- chat's setup reads `.settings` off both results and
     `.definition` off the retrieval one (for declared query arguments), so the
@@ -224,52 +255,32 @@ def stub_pipeline_settings_fixture(monkeypatch, session: Session, chat_user: mod
         *,
         chat_model: str | None,
         backend: IndexBackend = IndexBackend.PINECONE,
-        query_arguments: list[dict[str, object]] | None = None,
+        query_arguments: tuple = (),
     ) -> None:
         chat_user.last_used_chat_model = chat_model
         session.add(chat_user)
         session.commit()
-        ingestion_settings = IngestionPipelineSettings(
-            chunk_strategy=models.ChunkStrategy.TOKEN,
-            chunk_size=128,
-            chunk_overlap=8,
-            tokenizer=TokenizerSpec(kind="wordpiece"),
-            embedding_model="embed",
-            backend=backend,
-            index_name="idx",
-            namespace="ns",
-            dimension=128,
-            metric="cosine",
+        settings = _stub_settings(backend)
+        interface = PipelineInterface(
+            callable=True,
+            arguments=list(query_arguments),
+            output_kind=ToolOutputKind.CHUNKS,
         )
-        retrieval_settings = RetrievalPipelineSettings(
-            embedding_model="embed",
-            backend=backend,
-            index_name="idx",
-            namespace="ns",
-            dimension=128,
+        monkeypatch.setattr(
+            tool_contexts_module,
+            "resolve_ingest_binding",
+            lambda *_a, **_k: SimpleNamespace(settings=settings),
         )
-        nodes = []
-        if query_arguments is not None:
-            nodes.append(
-                PipelineNodeDefinition(
-                    id="input",
-                    type="retrieval.input",
-                    name="Input",
-                    config={"arguments": query_arguments},
+        monkeypatch.setattr(
+            tool_contexts_module,
+            "resolve_tool_bindings",
+            lambda *_a, **_k: [
+                SimpleNamespace(
+                    binding=SimpleNamespace(id=uuid4(), is_primary=True),
+                    interface=interface,
+                    settings=settings,
                 )
-            )
-        retrieval_definition = PipelineDefinition(nodes=nodes)
-        monkeypatch.setattr(
-            setup_module,
-            "resolve_ingestion_pipeline",
-            lambda *_a, **_k: SimpleNamespace(settings=ingestion_settings),
-        )
-        monkeypatch.setattr(
-            setup_module,
-            "resolve_retrieval_pipeline",
-            lambda *_a, **_k: SimpleNamespace(
-                settings=retrieval_settings, definition=retrieval_definition
-            ),
+            ],
         )
 
     return _stub
@@ -283,14 +294,14 @@ def install_chat_flow_fixture(monkeypatch, stub_pipeline_settings):
         *,
         openrouter: object,
         chat_model: str,
-        retrieval_cls: type = StubRetrievalService,
+        invocation_cls: type = StubInvocationService,
         backend: IndexBackend = IndexBackend.PINECONE,
     ) -> None:
         monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
         monkeypatch.setattr(
             model_settings_module, "ProviderResolver", stub_resolver_class(openrouter)
         )
-        monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
+        monkeypatch.setattr(service_module, "ToolInvocationService", invocation_cls)
         stub_pipeline_settings(chat_model=chat_model, backend=backend)
 
     return _install

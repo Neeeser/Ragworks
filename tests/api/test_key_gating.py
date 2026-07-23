@@ -100,7 +100,7 @@ def test_ingest_and_search_on_pgvector_without_pinecone_connection(
     """End to end on the default (pgvector) pipeline with only an embedding
     connection: upload a document, then query it back."""
     monkeypatch.setattr("app.services.ingestion.ProviderResolver", _StubProviderResolver)
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
     created = keyless_client.post("/api/collections", json={"name": "Docs", "description": ""})
     assert created.status_code == 201

@@ -42,13 +42,13 @@ from app.observability import events as log_events
 from app.providers.registry import close_provider_clients
 from app.services.accounts import ensure_admin_exists
 from app.services.app_config import get_app_config
+from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.file_backfill import backfill_file_nodes
 from app.services.ingestion_queue import ingestion_queue
 from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
 )
-from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.provider_migration import migrate_provider_connections
 from app.services.tokenizer_migration import migrate_tokenizer_nodes
 from app.telemetry import purge_expired as purge_expired_telemetry

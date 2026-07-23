@@ -34,8 +34,8 @@ from app.chat.state import (
     ChatSetup,
     PipelineContext,
     ToolCollectionContext,
-    ToolContext,
 )
+from app.chat.tool_contexts import tool_contexts_for_collections
 from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import (
@@ -47,23 +47,11 @@ from app.providers.registry import resolve_connection
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
-from app.services.pipeline_resolution import (
-    ResolvedPipeline,
-    resolve_ingest_binding,
-    resolve_tool_bindings,
-)
 from app.services.prompts import (
     PromptContext,
-    collection_tool_name,
     get_system_prompt_template,
     render_system_prompt,
     system_prompt_context,
-)
-from app.services.tool_projection import (
-    build_parameter_schema,
-    tool_base_name,
-    tool_description,
-    tool_exposed_name,
 )
 
 
@@ -83,83 +71,6 @@ class ChatSetupBuilder:
         self.chat_repo = chat_repo
         self.collection_repo = collection_repo
         self.reasoning_effort = reasoning_effort
-
-    def _tool_context(
-        self,
-        collection: models.Collection,
-        resolved: ResolvedPipeline,
-        exposed_name: str,
-    ) -> ToolContext:
-        """Project one resolved tool binding onto its chat-facing context."""
-        return ToolContext(
-            collection=collection,
-            binding_id=resolved.binding.id,
-            tool_name=exposed_name,
-            description=tool_description(resolved.interface, collection),
-            parameters=build_parameter_schema(tuple(resolved.interface.arguments)),
-            settings=resolved.settings,
-            query_arguments=tuple(resolved.interface.arguments),
-        )
-
-    def _tool_contexts_for_collections(
-        self, user: models.User, collections: list[models.Collection]
-    ) -> list[ToolCollectionContext]:
-        """Build per-collection contexts with turn-uniquely named tools.
-
-        Every enabled tool binding of every selected collection is exposed;
-        names collide across collections sharing a pipeline (or same-named
-        collections), so the `_2`/`_3` dedup applies across the whole turn.
-        `PipelineResolutionError` subclasses `InvalidInputError`, so it flows
-        through the same `except ServiceError` the routes use for every other
-        chat domain error.
-        """
-        name_counts: dict[str, int] = {}
-        contexts: list[ToolCollectionContext] = []
-        for collection in collections:
-            ingest = resolve_ingest_binding(self.session, user, collection)
-            resolved_tools = resolve_tool_bindings(self.session, user, collection)
-            tools: list[ToolContext] = []
-            for resolved in resolved_tools:
-                base_name = tool_exposed_name(
-                    tool_base_name(resolved.interface), collection.name
-                )
-                occurrence = name_counts.get(base_name, 0) + 1
-                name_counts[base_name] = occurrence
-                exposed = base_name if occurrence == 1 else f"{base_name}_{occurrence}"
-                tools.append(self._tool_context(collection, resolved, exposed))
-            primary = next(
-                (
-                    tool
-                    for tool, resolved in zip(tools, resolved_tools)
-                    if resolved.binding.is_primary
-                ),
-                tools[0] if tools else None,
-            )
-            primary_resolved = next(
-                (resolved for resolved in resolved_tools if resolved.binding.is_primary),
-                resolved_tools[0] if resolved_tools else None,
-            )
-            contexts.append(
-                ToolCollectionContext(
-                    collection=collection,
-                    tool_name=(
-                        primary.tool_name
-                        if primary
-                        else collection_tool_name(collection.name)
-                    ),
-                    ingestion_settings=ingest.settings,
-                    retrieval_settings=(
-                        primary_resolved.settings if primary_resolved else ingest.settings
-                    ),
-                    tools=tuple(tools),
-                    query_arguments=(
-                        tuple(primary_resolved.interface.arguments)
-                        if primary_resolved
-                        else ()
-                    ),
-                )
-            )
-        return contexts
 
     def _resolve_tool_collections(
         self,
@@ -196,7 +107,7 @@ class ChatSetupBuilder:
         if missing:
             raise InvalidInputError("Selected collections are not available.")
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
-        contexts = self._tool_contexts_for_collections(user, ordered)
+        contexts = tool_contexts_for_collections(self.session, user, ordered)
         # A Pinecone key is only required when one of the selected collections'
         # tools actually touches Pinecone (any index target, dense or BM25);
         # pgvector-backed collections need none.

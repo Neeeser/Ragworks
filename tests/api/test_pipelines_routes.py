@@ -9,7 +9,10 @@ from sqlmodel import Session, select
 from app.api.routes import pipelines as pipelines_routes
 from app.db import models
 from app.db.repositories import UserRepository
-from app.pipelines.defaults import build_default_ingestion_pipeline
+from app.pipelines.defaults import (
+    build_default_ingestion_pipeline,
+    build_default_retrieval_pipeline,
+)
 from app.services.pipelines import PipelineService
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
@@ -28,7 +31,6 @@ def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
     pipeline = service.create_pipeline(
         user=user,
         name="Ingestion",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
@@ -49,13 +51,29 @@ def _create_collection(
         user_id=user.id,
         name="Collection",
         description="",
-        ingestion_pipeline_id=ingestion_pipeline_id,
-        retrieval_pipeline_id=retrieval_pipeline_id,
         extra_metadata={},
     )
     session.add(collection)
     session.commit()
     session.refresh(collection)
+    if ingestion_pipeline_id is not None:
+        session.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=ingestion_pipeline_id,
+                role=models.BindingRole.INGEST,
+            )
+        )
+    if retrieval_pipeline_id is not None:
+        session.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=retrieval_pipeline_id,
+                role=models.BindingRole.TOOL,
+                is_primary=True,
+            )
+        )
+    session.commit()
     return collection
 
 
@@ -182,7 +200,6 @@ def test_list_pipelines_filters_by_kind(session: Session) -> None:
     service.create_pipeline(
         user=user,
         name="Ingestion",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
@@ -190,8 +207,7 @@ def test_list_pipelines_filters_by_kind(session: Session) -> None:
     service.create_pipeline(
         user=user,
         name="Retrieval",
-        kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_ingestion_pipeline(
+        definition=build_default_retrieval_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
     )
@@ -317,7 +333,6 @@ def test_create_pipeline_creates_record(session: Session) -> None:
     created = pipelines_routes.create_pipeline(
         pipelines_routes.PipelineCreate(
             name="New Pipeline",
-            kind=models.PipelineKind.INGESTION,
             definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),

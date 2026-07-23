@@ -180,7 +180,7 @@ export const buildTraceGraph = (
   if (!origin) {
     // A solo trace can be either kind — a document's ingestion run also lands
     // here. Label the steps by what actually ran.
-    const isIngestion = retrieval.run.kind === "ingestion";
+    const isIngestion = retrieval.run.trigger === "ingest";
     const stage = buildStage(
       retrieval,
       nodeSpecs,

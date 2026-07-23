@@ -88,7 +88,6 @@ def test_cross_user_pipeline_is_404(client, session: Session) -> None:
     pipeline = PipelineService(session).create_pipeline(
         user=other,
         name="Theirs",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),

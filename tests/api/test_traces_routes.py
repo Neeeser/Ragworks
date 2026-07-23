@@ -32,7 +32,6 @@ def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
     pipeline = service.create_pipeline(
         user=user,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
@@ -52,7 +51,7 @@ def _create_run(
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=pipeline.current_version,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.COMPLETED,
@@ -136,7 +135,7 @@ def test_trace_service_rejects_run_with_missing_pipeline(session: Session) -> No
         pipeline_id=uuid4(),
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.RETRIEVAL,
+        trigger=models.BindingRole.TOOL,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.COMPLETED,

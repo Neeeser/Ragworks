@@ -158,7 +158,6 @@ class TestRunnerEffectiveTopK:
         pipeline = PipelineService(session).create_pipeline(
             user=user,
             name="Args",
-            kind=models.PipelineKind.RETRIEVAL,
             definition=definition,
         )
         session.commit()

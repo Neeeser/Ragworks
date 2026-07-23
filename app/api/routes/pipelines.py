@@ -16,11 +16,11 @@ from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.pipelines import (
     NodeSpecRead,
-    PipelineInterfaceRead,
     PipelineActivateRequest,
     PipelineChangeRead,
     PipelineCreate,
     PipelineDeleteResponse,
+    PipelineInterfaceRead,
     PipelineNodesResponse,
     PipelineRead,
     PipelineUpdate,

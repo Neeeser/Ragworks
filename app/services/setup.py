@@ -34,13 +34,13 @@ from app.providers.base import effective_embedding_input_limit
 from app.providers.registry import build_adapter, get_provider, resolve_connection
 from app.schemas.enums import IndexBackend, ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
+from app.services.collection_tools import CollectionToolService
 from app.services.errors import (
     InvalidInputError,
     NotFoundError,
     ServiceError,
     is_external_provider_error,
 )
-from app.services.collection_tools import CollectionToolService
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
     DEFAULT_SEARCH_SLUG,

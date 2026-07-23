@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.db import models
 from app.pipelines.payloads import TokenizerSpec
-from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.schemas.enums import IndexBackend
 from app.services.prompts import (
     DEFAULT_BASE_PROMPT_TEMPLATE,
@@ -51,7 +51,7 @@ def _build_user(**overrides: Any) -> models.User:
     return models.User(**defaults)
 
 
-def _ingestion_settings(**overrides: Any) -> IngestionPipelineSettings:
+def _ingestion_settings(**overrides: Any) -> PipelineSettings:
     defaults: dict[str, Any] = {
         "chunk_strategy": models.ChunkStrategy.TOKEN,
         "chunk_size": 1024,
@@ -65,10 +65,10 @@ def _ingestion_settings(**overrides: Any) -> IngestionPipelineSettings:
         "metric": "cosine",
     }
     defaults.update(overrides)
-    return IngestionPipelineSettings(**defaults)
+    return PipelineSettings(**defaults)
 
 
-def _retrieval_settings(**overrides: Any) -> RetrievalPipelineSettings:
+def _retrieval_settings(**overrides: Any) -> PipelineSettings:
     defaults: dict[str, Any] = {
         "embedding_model": "text-embed",
         "backend": IndexBackend.PINECONE,
@@ -77,7 +77,7 @@ def _retrieval_settings(**overrides: Any) -> RetrievalPipelineSettings:
         "dimension": 1536,
     }
     defaults.update(overrides)
-    return RetrievalPipelineSettings(**defaults)
+    return PipelineSettings(**defaults)
 
 
 def test_get_system_prompt_template_falls_back_to_default() -> None:

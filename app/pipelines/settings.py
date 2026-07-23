@@ -88,16 +88,18 @@ class PipelineSettings:  # pylint: disable=too-many-instance-attributes
     session-level choices made in the chat UI, not pipeline behavior.
     """
 
-    chunk_strategy: models.ChunkStrategy
-    chunk_size: int
-    chunk_overlap: int
-    tokenizer: TokenizerSpec
-    embedding_model: str
     backend: IndexBackend
     index_name: str
-    namespace: str | None
-    dimension: int | None
-    metric: str
+    chunk_strategy: models.ChunkStrategy = models.ChunkStrategy.TOKEN
+    chunk_size: int = 512
+    chunk_overlap: int = 200
+    tokenizer: TokenizerSpec = field(
+        default_factory=lambda: TokenizerSpec(kind="wordpiece")
+    )
+    embedding_model: str = ""
+    namespace: str | None = None
+    dimension: int | None = None
+    metric: str = "cosine"
     embedding_connection_id: UUID | None = None
     index_targets: tuple[IndexTarget, ...] = field(default=())
 

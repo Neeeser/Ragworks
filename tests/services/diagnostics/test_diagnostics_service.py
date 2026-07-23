@@ -41,7 +41,6 @@ def _collection_with_models(
         user=user,
         name="Ingestion",
         description="",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=connection.id, embedding_model=ingest_model
         ),
@@ -51,7 +50,6 @@ def _collection_with_models(
         user=user,
         name="Retrieval",
         description="",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=connection.id, embedding_model=retrieval_model
         ),
@@ -62,12 +60,26 @@ def _collection_with_models(
         name="Docs",
         description="",
         extra_metadata={},
-        ingestion_pipeline_id=ingestion.id,
-        retrieval_pipeline_id=retrieval.id,
     )
     session.add(collection)
     session.commit()
     session.refresh(collection)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=ingestion.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
+    session.commit()
     return collection
 
 
@@ -105,8 +117,13 @@ def test_signature_busts_on_pipeline_version_change(session: Session):
     service = CollectionDiagnosticsService(session)
     before = service._signature(collection)
 
+    from app.db.repositories import CollectionPipelineBindingRepository
+
+    tool_binding = CollectionPipelineBindingRepository(session).list_for_collection(
+        collection.id, role=models.BindingRole.TOOL
+    )[0]
     pipelines = PipelineService(session)
-    retrieval = pipelines.get_pipeline(collection.retrieval_pipeline_id, user.id)
+    retrieval = pipelines.get_pipeline(tool_binding.pipeline_id, user.id)
     assert retrieval is not None
     pipelines.update_pipeline(
         pipeline=retrieval,

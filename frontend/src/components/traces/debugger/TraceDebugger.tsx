@@ -293,7 +293,7 @@ function LoadedTraceDebugger({
           focusedItemId={focusedItemId}
           focusedItem={focusedItem}
           query={query}
-          ingestionOnly={trace.run.kind === "ingestion" && !graph.combined}
+          ingestionOnly={trace.run.trigger === "ingest" && !graph.combined}
           onOpenArtifact={() => focusedItem && openArtifact(focusedItem)}
           onCompareContext={
             hasAdjacentContext

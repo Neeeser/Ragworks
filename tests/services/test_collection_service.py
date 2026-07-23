@@ -58,6 +58,19 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     return collection
 
 
+def _bound_ids(session: Session, collection: models.Collection) -> dict[str, object]:
+    """Return the collection's bound pipeline ids keyed by role value."""
+    from app.db.repositories import CollectionPipelineBindingRepository
+
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(
+        collection.id
+    )
+    return {
+        models.BindingRole(binding.role).value: binding.pipeline_id
+        for binding in bindings
+    }
+
+
 def test_create_assigns_default_pipelines(session: Session) -> None:
     user = _create_user(session)
 
@@ -65,8 +78,8 @@ def test_create_assigns_default_pipelines(session: Session) -> None:
         user, CollectionCreate(name="Unit Collection", description="Test")
     )
 
-    assert created.ingestion_pipeline_id is not None
-    assert created.retrieval_pipeline_id is not None
+    bound = _bound_ids(session, created)
+    assert set(bound) == {"ingest", "tool"}
 
 
 def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
@@ -93,11 +106,12 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
         ),
     )
 
-    assert created.ingestion_pipeline_id != defaults.ingestion.id
-    assert created.retrieval_pipeline_id != defaults.retrieval.id
+    bound = _bound_ids(session, created)
+    assert bound["ingest"] != defaults.ingestion.id
+    assert bound["tool"] != defaults.retrieval.id
 
-    ingestion_pipeline = pipeline_service.get_pipeline(created.ingestion_pipeline_id, user.id)
-    retrieval_pipeline = pipeline_service.get_pipeline(created.retrieval_pipeline_id, user.id)
+    ingestion_pipeline = pipeline_service.get_pipeline(bound["ingest"], user.id)
+    retrieval_pipeline = pipeline_service.get_pipeline(bound["tool"], user.id)
     assert ingestion_pipeline is not None
     assert retrieval_pipeline is not None
     updated_chunker = next(
@@ -135,8 +149,9 @@ def test_create_with_ingestion_overrides_only(session: Session) -> None:
         ),
     )
 
-    assert created.ingestion_pipeline_id != defaults.ingestion.id
-    assert created.retrieval_pipeline_id == defaults.retrieval.id
+    bound = _bound_ids(session, created)
+    assert bound["ingest"] != defaults.ingestion.id
+    assert bound["tool"] == defaults.retrieval.id
 
 
 def test_create_with_retrieval_overrides_only(session: Session) -> None:
@@ -161,8 +176,9 @@ def test_create_with_retrieval_overrides_only(session: Session) -> None:
         ),
     )
 
-    assert created.retrieval_pipeline_id != defaults.retrieval.id
-    assert created.ingestion_pipeline_id == defaults.ingestion.id
+    bound = _bound_ids(session, created)
+    assert bound["tool"] != defaults.retrieval.id
+    assert bound["ingest"] == defaults.ingestion.id
 
 
 def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
@@ -170,7 +186,6 @@ def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
     retrieval_pipeline = PipelineService(session).create_pipeline(
         user=user,
         name="Retrieval",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
@@ -179,7 +194,7 @@ def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
 
     with pytest.raises(InvalidInputError):
         CollectionService(session).create(
-            user, CollectionCreate(name="Invalid", ingestion_pipeline_id=retrieval_pipeline.id)
+            user, CollectionCreate(name="Invalid", ingest_pipeline_id=retrieval_pipeline.id)
         )
 
 
@@ -197,19 +212,13 @@ def test_update_updates_fields(session: Session) -> None:
     assert updated.extra_metadata["owner"] == "unit"
 
 
-def test_update_assigns_pipeline_ids(session: Session) -> None:
+def test_update_assigns_ingest_pipeline(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     pipeline_service = PipelineService(session)
     ingestion_pipeline = pipeline_service.create_pipeline(
-        user=user, name="Ingestion", kind=models.PipelineKind.INGESTION,
+        user=user, name="Ingestion",
         definition=build_default_ingestion_pipeline(
-            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
-        ),
-    )
-    retrieval_pipeline = pipeline_service.create_pipeline(
-        user=user, name="Retrieval", kind=models.PipelineKind.RETRIEVAL,
-        definition=build_default_retrieval_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
     )
@@ -217,22 +226,18 @@ def test_update_assigns_pipeline_ids(session: Session) -> None:
 
     updated = CollectionService(session).update(
         collection,
-        CollectionUpdate(
-            ingestion_pipeline_id=ingestion_pipeline.id,
-            retrieval_pipeline_id=retrieval_pipeline.id,
-        ),
+        CollectionUpdate(ingest_pipeline_id=ingestion_pipeline.id),
         user,
     )
 
-    assert updated.ingestion_pipeline_id == ingestion_pipeline.id
-    assert updated.retrieval_pipeline_id == retrieval_pipeline.id
+    assert _bound_ids(session, updated)["ingest"] == ingestion_pipeline.id
 
 
 def test_update_rejects_invalid_pipeline_kind(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
     retrieval_pipeline = PipelineService(session).create_pipeline(
-        user=user, name="Retrieval", kind=models.PipelineKind.RETRIEVAL,
+        user=user, name="Retrieval",
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
@@ -242,7 +247,7 @@ def test_update_rejects_invalid_pipeline_kind(session: Session) -> None:
     with pytest.raises(InvalidInputError):
         CollectionService(session).update(
             collection,
-            CollectionUpdate(ingestion_pipeline_id=retrieval_pipeline.id),
+            CollectionUpdate(ingest_pipeline_id=retrieval_pipeline.id),
             user,
         )
 
@@ -268,7 +273,7 @@ def test_prompt_read_rejects_unresolvable_pipeline(monkeypatch, session: Session
                 retrieval=SimpleNamespace(id=uuid4()),
             )
 
-        def ensure_collection_pipelines(self, *_args, **_kwargs):
+        def ensure_collection_bindings(self, *_args, **_kwargs):
             return None
 
         def get_pipeline(self, _pipeline_id, _user_id):
@@ -280,7 +285,7 @@ def test_prompt_read_rejects_unresolvable_pipeline(monkeypatch, session: Session
 
     with pytest.raises(InvalidInputError):
         CollectionService(session).prompt_read(
-            SimpleNamespace(ingestion_pipeline_id=None, retrieval_pipeline_id=None),
+            SimpleNamespace(id=uuid4(), name="Ghost", description=None, extra_metadata={}),
             SimpleNamespace(id=uuid4()),
         )
 

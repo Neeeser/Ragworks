@@ -157,7 +157,7 @@ def test_pinecone_purge_failure_surfaces_as_external_error(
                 ),
             )
 
-    monkeypatch.setattr(deletion_module, "resolve_ingestion_pipeline", lambda *_a: _Resolved())
+    monkeypatch.setattr(deletion_module, "resolve_ingest_binding", lambda *_a: _Resolved())
 
     with pytest.raises(ExternalServiceError, match="pinecone down"):
         FileDeletionService(session).delete(user, collection, upload.file)
