@@ -2,6 +2,7 @@
 
 import { useAdminConfig } from "@/components/admin/hooks/use-admin-config";
 import { ConfigFieldControl } from "@/components/admin/settings/ConfigFieldControl";
+import { DiagnosticsExportCard } from "@/components/admin/settings/DiagnosticsExportCard";
 import { Button } from "@/components/ui/button";
 
 function titleCase(section: string): string {
@@ -86,6 +87,7 @@ export function AdminSettingsPage() {
               </div>
             </section>
           ))}
+          <DiagnosticsExportCard />
         </div>
       )}
 

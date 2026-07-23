@@ -346,6 +346,19 @@ only, for genuinely exceptional situations. Production builds strip the rest and
 lint forbids them — but don't rely on the safety net. Never write a `useEffect`
 whose only job is logging (we shipped one that re-ran on every streamed token).
 
+**Request correlation and error reporting go through `src/lib/observability/`.**
+`apiFetch` already sends an `X-Request-ID` per call and reads the backend's
+returned id onto `ApiError.requestId` (present even on 500s); error surfaces show
+it via `getRequestId(err)` so a user can quote a support reference. The package is
+correlation only — **never add browser analytics, automatic user-action tracking,
+remote error shipping, or request/response payload capture** (the issue that
+created it forbids them). The client error buffer records request IDs and error
+messages, never bodies or tokens; the user diagnostics report
+(`downloadDiagnosticsReport`) and the admin "Download diagnostics" bundle are the
+only ways anything leaves the browser, and only on an explicit click. The header
+name is pinned by `tests/assets/observability_contract.json` (asserted here and
+in pytest) — don't hardcode `"X-Request-ID"` elsewhere.
+
 ## Environment
 
 **Node version is pinned** (`.nvmrc`, `engines` in package.json). Node ≥22.4's

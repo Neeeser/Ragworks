@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { fetchPublicConfig } from "@/lib/api";
+import { installClientErrorCapture } from "@/lib/observability";
 
 import type { PublicConfig } from "@/lib/types";
 
@@ -39,6 +40,12 @@ const ConfigContext = createContext<ConfigContextValue | undefined>(undefined);
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<PublicConfig>(DEFAULT_PUBLIC_CONFIG);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Record uncaught client errors into the observability buffer so a user's
+    // downloaded report reflects them. Idempotent; correlation only.
+    installClientErrorCapture();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

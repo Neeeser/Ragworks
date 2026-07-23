@@ -55,6 +55,19 @@ export function getErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * The backend correlation ID for a failure, if the error carries one. Used to
+ * show a support reference a user can copy into a bug report. Imported lazily
+ * to avoid a circular import with the api-error module.
+ */
+export function getRequestId(err: unknown): string | undefined {
+  if (typeof err === "object" && err !== null && "requestId" in err) {
+    const value = (err as { requestId?: unknown }).requestId;
+    return typeof value === "string" ? value : undefined;
+  }
+  return undefined;
+}
+
 /** True for the DOMException a fetch/stream throws when its AbortController fires. */
 export const isAbortError = (value: unknown): value is DOMException =>
   value instanceof DOMException && value.name === "AbortError";

@@ -71,6 +71,7 @@ const createErrorResponse = (statusText: string, error?: unknown) => ({
   ok: false,
   status: 400,
   statusText,
+  headers: new Headers(),
   json: vi.fn().mockImplementation(async () => {
     if (error instanceof Error) {
       throw error;

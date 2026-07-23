@@ -5,6 +5,7 @@ import type {
   AdminUsageTimeseries,
   AdminUser,
   AdminUserUpdate,
+  DiagnosticsBundle,
 } from "@/lib/types";
 
 export function fetchAdminUsers(token: string): Promise<AdminUser[]> {
@@ -32,4 +33,9 @@ export function fetchAdminUsageTimeseries(
   days: number,
 ): Promise<AdminUsageTimeseries> {
   return apiFetch<AdminUsageTimeseries>(`/api/admin/usage/timeseries?days=${days}`, { token });
+}
+
+/** Fetch the diagnostics bundle (recent redacted backend log records). */
+export function fetchAdminDiagnostics(token: string): Promise<DiagnosticsBundle> {
+  return apiFetch<DiagnosticsBundle>("/api/admin/diagnostics/export", { token });
 }

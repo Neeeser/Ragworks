@@ -46,3 +46,19 @@ export interface AdminUsageTimeseries {
   window_days: number;
   points: AdminUsagePoint[];
 }
+
+/** Mirrors `app/schemas/observability.py::DiagnosticsMetadata`. */
+export interface DiagnosticsMetadata {
+  generated_at: string;
+  debug: boolean;
+  log_level: string | null;
+  record_count: number;
+  buffer_capacity: number;
+  note: string;
+}
+
+/** Mirrors `app/schemas/observability.py::DiagnosticsBundle`. */
+export interface DiagnosticsBundle {
+  metadata: DiagnosticsMetadata;
+  records: Array<Record<string, unknown>>;
+}
