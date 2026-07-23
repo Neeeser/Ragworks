@@ -42,9 +42,9 @@ from app.utils.time import utc_now
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
 
-def _to_schema(collection: models.Collection) -> CollectionRead:
+def _to_schema(session: Session, collection: models.Collection) -> CollectionRead:
     """Convert a collection model into a response schema."""
-    return collection_to_schema(collection)
+    return collection_to_schema(session, collection)
 
 
 def _stats_read(collection_id: UUID, stats: CollectionStats) -> CollectionStatsRead:
@@ -65,7 +65,7 @@ def list_collections(
 ) -> list[CollectionRead]:
     """List collections owned by the current user."""
     repo = CollectionRepository(session)
-    return [_to_schema(col) for col in repo.list_for_user(current_user.id)]
+    return [_to_schema(session, col) for col in repo.list_for_user(current_user.id)]
 
 
 @router.get("/stats", response_model=list[CollectionStatsRead])
@@ -126,7 +126,7 @@ def get_collection(
     session: Session = Depends(get_session),
 ) -> CollectionRead:
     """Return a collection by id."""
-    return _to_schema(get_collection_or_404(collection_id, current_user.id, session))
+    return _to_schema(session, get_collection_or_404(collection_id, current_user.id, session))
 
 
 @router.get("/{collection_id}/prompt", response_model=CollectionPromptRead)
@@ -154,7 +154,7 @@ def create_collection(
         collection = CollectionService(session).create(current_user, payload)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-    return _to_schema(collection)
+    return _to_schema(session, collection)
 
 
 @router.patch("/{collection_id}", response_model=CollectionRead)
@@ -170,7 +170,7 @@ def update_collection(
         collection = CollectionService(session).update(collection, payload, current_user)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-    return _to_schema(collection)
+    return _to_schema(session, collection)
 
 
 @router.patch("/{collection_id}/prompt", response_model=CollectionPromptRead)

@@ -16,15 +16,14 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories.pipeline import PipelineRunRepository
-from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.pipelines.validation import PipelineValidationResult
 from app.services.diagnostics.prober import VectorStoreProber
 from app.services.pipeline_resolution import (
     PipelineResolutionError,
-    ResolvedIngestionPipeline,
-    ResolvedRetrievalPipeline,
-    resolve_ingestion_pipeline,
-    resolve_retrieval_pipeline,
+    ResolvedPipeline,
+    resolve_ingest_binding,
+    resolve_primary_tool,
 )
 from app.services.pipeline_validation import validate_pipeline_definition
 
@@ -44,8 +43,8 @@ class DiagnosticContext:
     user: models.User
     session: Session
     prober: VectorStoreProber
-    ingestion: ResolvedIngestionPipeline | None = None
-    retrieval: ResolvedRetrievalPipeline | None = None
+    ingestion: ResolvedPipeline | None = None
+    retrieval: ResolvedPipeline | None = None
     ingestion_error: str | None = None
     retrieval_error: str | None = None
     ingestion_validation: PipelineValidationResult | None = None
@@ -54,12 +53,12 @@ class DiagnosticContext:
     recent_retrieval_failures: list[models.PipelineRun] = field(default_factory=list)
 
     @property
-    def ingestion_settings(self) -> IngestionPipelineSettings | None:
+    def ingestion_settings(self) -> PipelineSettings | None:
         """Resolved ingestion settings, or None when the side didn't resolve."""
         return self.ingestion.settings if self.ingestion else None
 
     @property
-    def retrieval_settings(self) -> RetrievalPipelineSettings | None:
+    def retrieval_settings(self) -> PipelineSettings | None:
         """Resolved retrieval settings, or None when the side didn't resolve."""
         return self.retrieval.settings if self.retrieval else None
 
@@ -82,14 +81,14 @@ def build_context(
         prober=VectorStoreProber(user, session),
     )
     try:
-        ctx.ingestion = resolve_ingestion_pipeline(session, user, collection, scaffold=False)
+        ctx.ingestion = resolve_ingest_binding(session, user, collection, scaffold=False)
         ctx.ingestion_validation = validate_pipeline_definition(
             session, user, ctx.ingestion.definition
         )
     except PipelineResolutionError as exc:
         ctx.ingestion_error = str(exc)
     try:
-        ctx.retrieval = resolve_retrieval_pipeline(session, user, collection, scaffold=False)
+        ctx.retrieval = resolve_primary_tool(session, user, collection, scaffold=False)
         ctx.retrieval_validation = validate_pipeline_definition(
             session, user, ctx.retrieval.definition
         )
@@ -99,13 +98,13 @@ def build_context(
     runs = PipelineRunRepository(session)
     ctx.recent_ingestion_failures = runs.list_recent_for_collection(
         collection.id,
-        models.PipelineKind.INGESTION,
+        models.BindingRole.INGEST,
         status=models.PipelineRunStatus.FAILED,
         limit=_RECENT_FAILURE_LIMIT,
     )
     ctx.recent_retrieval_failures = runs.list_recent_for_collection(
         collection.id,
-        models.PipelineKind.RETRIEVAL,
+        models.BindingRole.TOOL,
         status=models.PipelineRunStatus.FAILED,
         limit=_RECENT_FAILURE_LIMIT,
     )

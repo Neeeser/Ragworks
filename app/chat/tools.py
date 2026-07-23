@@ -29,66 +29,19 @@ from app.chat.persistence import (
     ToolCallRecord,
     record_message,
 )
-from app.chat.state import RunState, ToolCollectionContext, ToolExecutionContext
+from app.chat.state import (
+    RunState,
+    ToolCollectionContext,
+    ToolContext,
+    ToolExecutionContext,
+)
 from app.chat.tool_calls import ParsedToolCall, ToolResultPayload, parse_tool_call
 from app.db import models
 from app.db.repositories import ChatRepository
-from app.pipelines.variables import PipelineInputArgument, VariableType
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.tools import ToolInvocationResponse
 from app.services.errors import InvalidInputError, InvalidQueryArgumentsError
-from app.services.retrieval import RetrievalService
-
-
-def build_parameter_schema(
-    arguments: tuple[PipelineInputArgument, ...],
-) -> dict[str, object]:
-    """Build a tool's JSON parameter schema from its pipeline's declared arguments.
-
-    A pipeline declaring no arguments keeps the historical contract (`query`
-    plus the built-in 1-10 `top_k`); a declaring pipeline publishes exactly
-    its `expose_to_llm` arguments beside the always-required `query`.
-    """
-    properties: dict[str, object] = {
-        "query": {
-            "type": "string",
-            "description": "Natural language search query.",
-        }
-    }
-    required = ["query"]
-    if not arguments:
-        properties["top_k"] = {
-            "type": "integer",
-            "description": "How many chunks to retrieve (max 10).",
-            "default": 5,
-            "minimum": 1,
-            "maximum": 10,
-        }
-        return {"type": "object", "properties": properties, "required": required}
-    for argument in arguments:
-        if not argument.expose_to_llm or argument.type is VariableType.MODEL:
-            continue
-        properties[argument.name] = _argument_property(argument)
-        if argument.required:
-            required.append(argument.name)
-    return {"type": "object", "properties": properties, "required": required}
-
-
-def _argument_property(argument: PipelineInputArgument) -> dict[str, object]:
-    """Map one declared argument onto its JSON Schema property."""
-    if argument.type is VariableType.ENUM:
-        prop: dict[str, object] = {"type": "string", "enum": list(argument.choices)}
-    else:
-        prop = {"type": argument.type.value}
-    if argument.description:
-        prop["description"] = argument.description
-    if argument.default is not None:
-        prop["default"] = argument.default
-    if argument.minimum is not None:
-        prop["minimum"] = argument.minimum
-    if argument.maximum is not None:
-        prop["maximum"] = argument.maximum
-    return prop
+from app.services.tool_invocation import ToolInvocationService
 
 
 def select_tool_reasoning(
@@ -137,57 +90,47 @@ class ToolExecutor:
         *,
         session: Session,
         chat_repo: ChatRepository,
-        retrieval: RetrievalService,
+        invocation: ToolInvocationService,
     ) -> None:
-        """Store the collaborators the execution path persists and retrieves through."""
+        """Store the collaborators the execution path persists and invokes through."""
         self.session = session
         self.chat_repo = chat_repo
-        self.retrieval = retrieval
+        self.invocation = invocation
 
     @staticmethod
     def specs(
         tool_collections: list[ToolCollectionContext],
-    ) -> tuple[list[dict[str, object]], dict[str, ToolCollectionContext]]:
+    ) -> tuple[list[dict[str, object]], dict[str, ToolContext]]:
         """Return tool schemas and the tool-name -> tool-context map for the request.
 
         Static because spec building is pure (it reads only the resolved tool
-        collections); callers use it during request setup before an executor
-        instance exists. Each tool's parameter schema comes from its
-        pipeline's declared arguments (`build_parameter_schema`).
+        contexts, whose names/descriptions/parameter schemas setup already
+        projected); callers use it during request setup before an executor
+        instance exists.
         """
-        if not tool_collections:
-            return [], {}
         tools: list[dict[str, object]] = []
-        tool_map: dict[str, ToolCollectionContext] = {}
-        for tool_context in tool_collections:
-            tool_name = tool_context.tool_name
-            collection = tool_context.collection
-            tool_map[tool_name] = tool_context
-            description_parts = [f"Search the document collection '{collection.name}'."]
-            description = (collection.description or "").strip()
-            if description:
-                description_parts.append(description)
-            description_parts.append(
-                "Always call this tool before answering questions about documents in this collection."
-            )
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": " ".join(description_parts),
-                        "parameters": build_parameter_schema(tool_context.query_arguments),
-                    },
-                }
-            )
+        tool_map: dict[str, ToolContext] = {}
+        for collection_context in tool_collections:
+            for tool_context in collection_context.tools:
+                tool_map[tool_context.tool_name] = tool_context
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool_context.tool_name,
+                            "description": tool_context.description,
+                            "parameters": tool_context.parameters,
+                        },
+                    }
+                )
         return tools, tool_map
 
     @staticmethod
     def select_context(
         *,
         tool_name: str,
-        tool_map: dict[str, ToolCollectionContext],
-    ) -> ToolCollectionContext:
+        tool_map: dict[str, ToolContext],
+    ) -> ToolContext:
         """Return the tool context a call targets, or raise for an unknown tool."""
         if tool_name in tool_map:
             return tool_map[tool_name]
@@ -200,9 +143,9 @@ class ToolExecutor:
         cls,
         *,
         tool_calls: list[ToolCall],
-        tool_map: dict[str, ToolCollectionContext],
+        tool_map: dict[str, ToolContext],
     ) -> None:
-        """Ensure every requested tool names one of this turn's collections."""
+        """Ensure every requested tool names one of this turn's tools."""
         for tool_call in tool_calls:
             cls.select_context(tool_name=tool_call.function.name, tool_map=tool_map)
 
@@ -224,13 +167,13 @@ class ToolExecutor:
             use_fallback_id=True,
         )
 
-    def _run_retrieval(
+    def _run_tool(
         self,
         user: models.User,
-        tool_context: ToolCollectionContext,
+        tool_context: ToolContext,
         parsed: ParsedToolCall,
-    ) -> tuple[CollectionQueryResponse | None, str | None]:
-        """Run retrieval for one parsed call, returning `(response, tool_error)`.
+    ) -> tuple[ToolInvocationResponse | None, str | None]:
+        """Run one parsed call's tool binding, returning `(response, tool_error)`.
 
         Pipelines with declared arguments get the model's arguments validated
         against the declarations; a violation becomes a tool error the model
@@ -239,9 +182,10 @@ class ToolExecutor:
         """
         if not tool_context.query_arguments:
             return (
-                self.retrieval.query_collection(
+                self.invocation.invoke_binding(
                     user,
                     tool_context.collection,
+                    tool_context.binding_id,
                     parsed.query_text,
                     top_k=parsed.top_k,
                 ),
@@ -254,9 +198,10 @@ class ToolExecutor:
         }
         try:
             return (
-                self.retrieval.query_collection(
+                self.invocation.invoke_binding(
                     user,
                     tool_context.collection,
+                    tool_context.binding_id,
                     parsed.query_text,
                     arguments=supplied,
                 ),
@@ -299,12 +244,10 @@ class ToolExecutor:
                 collection_id=str(collection.id),
                 collection_name=collection.name,
             ).model_dump()
-            retrieval_response, tool_error = self._run_retrieval(
-                context.user, tool_context, parsed
-            )
+            tool_response, tool_error = self._run_tool(context.user, tool_context, parsed)
             response_payload: Any = (
-                jsonable_encoder(retrieval_response)
-                if retrieval_response is not None
+                jsonable_encoder(tool_response)
+                if tool_response is not None
                 else {"error": tool_error}
             )
             tool_result = ToolResultPayload(
@@ -325,7 +268,7 @@ class ToolExecutor:
                 id=parsed.id,
                 name=parsed.name,
                 arguments=parsed.arguments,
-                response=retrieval_response,
+                response=tool_response,
                 error=tool_error,
                 reasoning=reasoning_payload,
                 collection_id=str(collection.id),

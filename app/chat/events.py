@@ -26,7 +26,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.tools import ToolInvocationResponse
 
 
 class TokenEvent(BaseModel):
@@ -67,7 +67,7 @@ class ToolResultEvent(BaseModel):
     id: str | None
     name: str
     arguments: dict[str, Any]
-    response: CollectionQueryResponse | None
+    response: ToolInvocationResponse | None
     error: str | None = None
     reasoning: dict[str, Any] | None = None
     collection_id: str

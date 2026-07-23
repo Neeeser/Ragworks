@@ -16,7 +16,8 @@ from app.schemas.retrieval import (
     CollectionQueryResponse,
 )
 from app.services.errors import ServiceError
-from app.services.retrieval import RetrievalPipelineError, RetrievalService
+from app.services.retrieval import RetrievalService
+from app.services.tool_invocation import RetrievalPipelineError
 
 router = APIRouter(prefix="/api/collections", tags=["search"])
 

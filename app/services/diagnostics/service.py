@@ -138,7 +138,7 @@ class CollectionDiagnosticsService:
             pipeline = pipelines.get(pipeline_id)
             parts.append(f"{pipeline_id}:{pipeline.current_version if pipeline else 0}")
         latest = runs.list_recent_for_collection(
-            collection.id, models.PipelineKind.INGESTION, limit=1
+            collection.id, models.BindingRole.INGEST, limit=1
         )
         parts.append(str(latest[0].id) if latest else "no-ingest")
         return "|".join(parts)

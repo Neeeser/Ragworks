@@ -26,6 +26,7 @@ from app.api.routes import (
     search,
     setup,
     tokenizers,
+    tools,
     traces,
     visualizations,
 )
@@ -47,6 +48,7 @@ from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
 )
+from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.provider_migration import migrate_provider_connections
 from app.services.tokenizer_migration import migrate_tokenizer_nodes
 from app.telemetry import purge_expired as purge_expired_telemetry
@@ -63,6 +65,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info(log_events.DB_BOOTSTRAP_COMPLETED)
     with session_scope() as session:
         migrate_provider_connections(session)
+        migrate_pipeline_bindings(session)
         migrate_tokenizer_nodes(session)
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
@@ -114,6 +117,7 @@ app.include_router(evals.router)
 app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)
+app.include_router(tools.router)
 app.include_router(traces.router)
 app.include_router(tokenizers.router)
 app.include_router(chat.router)

@@ -48,6 +48,6 @@ def setup_bootstrap(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return SetupBootstrapResponse(
-        collection=collection_to_schema(result.collection),
+        collection=collection_to_schema(session, result.collection),
         warnings=[validation_issue_to_schema(issue) for issue in result.warnings],
     )

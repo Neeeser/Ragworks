@@ -65,7 +65,7 @@ class PipelineRunner:
         pipeline: models.Pipeline,
         version: models.PipelineVersion,
         definition: PipelineDefinition,
-        kind: models.PipelineKind,
+        trigger: models.BindingRole,
         user: models.User,
         collection: models.Collection,
         settings: Settings,
@@ -101,7 +101,7 @@ class PipelineRunner:
             pipeline_id=pipeline.id,
             pipeline_version_id=version.id,
             pipeline_version=version.version,
-            kind=kind,
+            trigger=trigger,
             user_id=user.id,
             collection_id=collection.id,
             status=models.PipelineRunStatus.RUNNING,
@@ -128,7 +128,7 @@ class PipelineRunner:
             log_events.PIPELINE_RUN_STARTED,
             pipeline_run_id=str(run.id),
             collection_id=str(collection.id),
-            kind=kind.value,
+            trigger=trigger.value,
         )
         return PipelineRunHandle(run=run, trace=trace, context=context, definition=resolved)
 

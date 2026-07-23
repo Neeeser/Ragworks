@@ -25,6 +25,7 @@ from app.evals.datasets.base import DatasetTriple
 from app.evals.datasets.builtin import download_builtin, get_builtin, list_builtin
 from app.evals.datasets.upload import parse_beir_upload
 from app.evals.metrics.registry import get_metric, list_metrics
+from app.pipelines.interface import ToolOutputKind
 from app.schemas.enums import (
     EvalDatasetSource,
     EvalDatasetStatus,
@@ -237,12 +238,8 @@ class EvalService:
         dataset = self.get_dataset(user, payload.dataset_id)
         if dataset.status != EvalDatasetStatus.READY.value:
             raise InvalidInputError("Eval dataset is not ready to run against.")
-        self._require_pipeline(
-            user, payload.ingestion_pipeline_id, models.PipelineKind.INGESTION
-        )
-        self._require_pipeline(
-            user, payload.retrieval_pipeline_id, models.PipelineKind.RETRIEVAL
-        )
+        self._require_ingest_pipeline(user, payload.ingestion_pipeline_id)
+        self._require_eval_compatible_tool(user, payload.retrieval_pipeline_id)
         for metric_name in payload.config.selected_metrics:
             get_metric(metric_name)  # unknown name -> InvalidInputError before any work
         run = self.runs.add(
@@ -357,11 +354,32 @@ class EvalService:
             text=document.text,
         )
 
-    def _require_pipeline(
-        self, user: models.User, pipeline_id: UUID, kind: models.PipelineKind
+    def _require_ingest_pipeline(
+        self, user: models.User, pipeline_id: UUID
     ) -> models.Pipeline:
-        """Return a user-owned pipeline of the given kind or raise a 400."""
-        pipeline = PipelineService(self.session).get_pipeline(pipeline_id, user.id)
-        if pipeline is None or pipeline.kind != kind:
-            raise InvalidInputError(f"Invalid {kind.value} pipeline selection.")
+        """Return a user-owned document-accepting pipeline or raise a 400."""
+        service = PipelineService(self.session)
+        pipeline = service.get_pipeline(pipeline_id, user.id)
+        if pipeline is None or not service.interface_for(pipeline).accepts_document:
+            raise InvalidInputError("Invalid ingestion pipeline selection.")
+        return pipeline
+
+    def _require_eval_compatible_tool(
+        self, user: models.User, pipeline_id: UUID
+    ) -> models.Pipeline:
+        """Return a user-owned eval-compatible pipeline or raise a 400.
+
+        Evals map a query onto scored chunks, so the pipeline must be
+        callable AND produce a chunk-kind result. Tools with other output
+        shapes are legitimately not evaluable with the current eval design.
+        """
+        service = PipelineService(self.session)
+        pipeline = service.get_pipeline(pipeline_id, user.id)
+        if pipeline is None:
+            raise InvalidInputError("Invalid retrieval pipeline selection.")
+        interface = service.interface_for(pipeline)
+        if not interface.callable or interface.output_kind is not ToolOutputKind.CHUNKS:
+            raise InvalidInputError(
+                "Eval runs require a search tool pipeline that returns chunks."
+            )
         return pipeline

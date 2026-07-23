@@ -30,7 +30,7 @@ from app.schemas.chat import (
     ChatMessageCreate,
 )
 from app.services.errors import ExternalServiceError, is_external_provider_error
-from app.services.retrieval import RetrievalService
+from app.services.tool_invocation import ToolInvocationService
 
 
 class ChatService:
@@ -42,7 +42,7 @@ class ChatService:
         self.settings = get_settings()
         self.chat_repo = ChatRepository(session)
         self.collection_repo = CollectionRepository(session)
-        self.retrieval = RetrievalService(session)
+        self.invocation = ToolInvocationService(session)
         effort_value = (self.settings.openrouter_reasoning_effort or "").strip()
         self.reasoning_effort: str | None = effort_value or None
 
@@ -71,7 +71,7 @@ class ChatService:
             tool_executor=ToolExecutor(
                 session=self.session,
                 chat_repo=self.chat_repo,
-                retrieval=self.retrieval,
+                invocation=self.invocation,
             ),
         )
 

@@ -26,7 +26,7 @@ from app.db.repositories import CollectionPipelineBindingRepository
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.interface import PipelineInterface
 from app.pipelines.registry import NodeRegistry, default_registry
-from app.pipelines.settings import PipelineSettings, resolve_pipeline_settings
+from app.pipelines.settings import IndexTarget, PipelineSettings, resolve_pipeline_settings
 from app.services.errors import InvalidInputError
 from app.services.pipeline_validation import log_pipeline_validation_warnings
 from app.services.pipelines import PipelineService
@@ -183,6 +183,56 @@ def resolve_tool_binding(
     return _load_resolved(
         PipelineService(session), user, collection, binding, registry, context="tool"
     )
+
+
+@dataclass(frozen=True)
+class PurgeTarget:
+    """One (index, namespace) pair a collection's pipelines touch.
+
+    Purge cascades iterate these — the union across EVERY binding, because a
+    tool pipeline with an indexer node writes to indexes the ingest pipeline
+    never touched.
+    """
+
+    target: IndexTarget
+    namespace: str | None
+
+
+def resolve_purge_targets(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    *,
+    registry: NodeRegistry | None = None,
+) -> list[PurgeTarget]:
+    """Return the deduped union of index targets across all bindings.
+
+    The ingest binding must resolve (its failure propagates, as deletion
+    always required); a tool binding that no longer resolves is skipped —
+    an unresolvable graph never ran, and blocking deletion on it would trap
+    the collection.
+    """
+    resolved: list[ResolvedPipeline] = [
+        resolve_ingest_binding(session, user, collection, registry=registry)
+    ]
+    bindings = CollectionPipelineBindingRepository(session)
+    for binding in bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL):
+        try:
+            resolved.append(
+                resolve_tool_binding(session, user, collection, binding.id, registry=registry)
+            )
+        except PipelineResolutionError:
+            continue
+    targets: list[PurgeTarget] = []
+    seen: set[tuple[IndexTarget, str | None]] = set()
+    for item in resolved:
+        for target in item.settings.index_targets:
+            key = (target, item.settings.namespace)
+            if key in seen:
+                continue
+            seen.add(key)
+            targets.append(PurgeTarget(target=target, namespace=item.settings.namespace))
+    return targets
 
 
 def resolve_tool_bindings(

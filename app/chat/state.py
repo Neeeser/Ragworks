@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from uuid import UUID
+
 from app.chat.messages import ProviderMessage, ToolCall
 from app.chat.usage import UsageSummary
 from app.db import models
-from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.pipelines.variables import PipelineInputArgument
 from app.providers.chat.base import ChatProvider
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
@@ -19,23 +21,45 @@ from app.schemas.models import ModelInfo
 class PipelineContext:
     """Resolved pipeline settings for ingestion and retrieval.
 
-    `query_arguments` are the retrieval pipeline's declared input arguments;
-    the LLM-exposed subset becomes the collection tool's parameter schema.
+    `query_arguments` are the primary tool's declared input arguments; the
+    LLM-exposed subset becomes that tool's parameter schema.
     """
 
-    ingestion_settings: IngestionPipelineSettings
-    retrieval_settings: RetrievalPipelineSettings
+    ingestion_settings: PipelineSettings
+    retrieval_settings: PipelineSettings
+    query_arguments: tuple[PipelineInputArgument, ...] = ()
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    """One exposed tool: a collection's tool binding under its turn-unique name.
+
+    `parameters`/`description` are precomputed at setup (the projection is
+    pure), so spec building never re-derives them.
+    """
+
+    collection: models.Collection
+    binding_id: UUID
+    tool_name: str
+    description: str
+    parameters: dict[str, Any]
+    settings: PipelineSettings
     query_arguments: tuple[PipelineInputArgument, ...] = ()
 
 
 @dataclass(frozen=True)
 class ToolCollectionContext:
-    """Resolved tool context for a collection."""
+    """Resolved per-collection context: prompt settings plus its exposed tools.
+
+    `tool_name` is the primary tool's exposed name — the one the system
+    prompt's `{collection.tool_name}` placeholder renders.
+    """
 
     collection: models.Collection
     tool_name: str
-    ingestion_settings: IngestionPipelineSettings
-    retrieval_settings: RetrievalPipelineSettings
+    ingestion_settings: PipelineSettings
+    retrieval_settings: PipelineSettings
+    tools: tuple[ToolContext, ...] = ()
     query_arguments: tuple[PipelineInputArgument, ...] = ()
 
 
@@ -60,7 +84,7 @@ class ChatSetup:
     messages: list[ProviderMessage]
     tools: list[dict[str, Any]]
     tool_collections: list[ToolCollectionContext]
-    tool_collection_map: dict[str, ToolCollectionContext]
+    tool_collection_map: dict[str, ToolContext]
     pipeline: PipelineContext | None
     model: ModelSettings
     provider: ChatProvider
@@ -108,7 +132,7 @@ class ToolExecutionContext:
     messages: list[ProviderMessage]
     run_state: RunState
     shared_tool_reasoning: dict[str, Any] | None
-    tool_collection_map: dict[str, ToolCollectionContext]
+    tool_collection_map: dict[str, ToolContext]
 
 
 @dataclass(frozen=True)

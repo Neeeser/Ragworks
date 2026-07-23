@@ -11,10 +11,12 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import to_http_exception, validation_issue_to_schema
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.interface import PipelineInterface, derive_interface
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.pipelines import (
     NodeSpecRead,
+    PipelineInterfaceRead,
     PipelineActivateRequest,
     PipelineChangeRead,
     PipelineCreate,
@@ -26,7 +28,7 @@ from app.schemas.pipelines import (
     PipelineVersionRead,
 )
 from app.services.errors import ServiceError
-from app.services.pipelines import PipelineService
+from app.services.pipelines import PipelineService, derived_kind
 
 router = APIRouter(prefix="/api/pipelines", tags=["pipelines"])
 
@@ -47,24 +49,32 @@ def _to_pipeline_read(
     pipeline: models.Pipeline,
     definition: PipelineDefinition,
     validation: PipelineValidationResult | None = None,
+    interface: PipelineInterface | None = None,
 ) -> PipelineRead:
     """Convert a pipeline model + its resolved definition into a response schema.
 
     `definition` lives on the pipeline's current `PipelineVersion`, not on
     `models.Pipeline` itself, so the row is dumped to a dict and the definition
-    merged in before validation instead of listed field-by-field.
-
-    `warnings=False` on the dump: `table=True` models skip validation, so
-    enum-typed columns (`kind`) hold the raw DB string and pydantic's
-    serializer would warn on every request despite the value being exactly
-    what `model_validate` below expects -- that validation is the real gate.
+    merged in before validation instead of listed field-by-field. `kind`,
+    `interface`, and `is_default` are derived — nothing about a pipeline's
+    capability is stored on the row.
     """
     data = pipeline.model_dump(warnings=False)
+    resolved_interface = interface or derive_interface(definition)
     issues = [] if validation is None else [
         validation_issue_to_schema(issue) for issue in validation.issues
     ]
     return PipelineRead.model_validate(
-        {**data, "definition": definition, "validation_issues": issues}
+        {
+            **data,
+            "definition": definition,
+            "kind": derived_kind(resolved_interface),
+            "interface": PipelineInterfaceRead.model_validate(
+                resolved_interface.model_dump(exclude={"arguments"})
+            ),
+            "is_default": pipeline.template_slug is not None,
+            "validation_issues": issues,
+        }
     )
 
 
@@ -125,7 +135,6 @@ def create_pipeline(
             user=current_user,
             name=payload.name,
             description=payload.description,
-            kind=payload.kind,
             definition=payload.definition,
             change_summary=payload.change_summary,
         )

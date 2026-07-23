@@ -12,7 +12,7 @@ import json
 import re
 
 from app.db import models
-from app.pipelines.settings import IngestionPipelineSettings, RetrievalPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.utils.time import utc_now
 
 
@@ -39,7 +39,7 @@ def collection_tool_name(collection_name: str) -> str:
     return f"search_{slug or 'collection'}"
 
 
-def _chunk_strategy_label(ingestion_settings: IngestionPipelineSettings | None) -> str | None:
+def _chunk_strategy_label(ingestion_settings: PipelineSettings | None) -> str | None:
     """Return the chunk strategy label for prompt context.
 
     `chunk_strategy` is a `ChunkStrategy` (str) enum member on the settings
@@ -70,8 +70,8 @@ def system_prompt_context(
     collection: models.Collection,
     user: models.User | None,
     *,
-    ingestion_settings: IngestionPipelineSettings | None = None,
-    retrieval_settings: RetrievalPipelineSettings | None = None,
+    ingestion_settings: PipelineSettings | None = None,
+    retrieval_settings: PipelineSettings | None = None,
     tool_name: str | None = None,
 ) -> dict[str, str]:
     """Build the rendering context for system prompt templates."""

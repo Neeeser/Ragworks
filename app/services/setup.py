@@ -19,7 +19,11 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.pgvector_support import pgvector_available
-from app.db.repositories import CollectionRepository, ProviderConnectionRepository
+from app.db.repositories import (
+    CollectionRepository,
+    PipelineRepository,
+    ProviderConnectionRepository,
+)
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
@@ -36,7 +40,12 @@ from app.services.errors import (
     ServiceError,
     is_external_provider_error,
 )
-from app.services.pipelines import PipelineService
+from app.services.collection_tools import CollectionToolService
+from app.services.pipelines import (
+    DEFAULT_INGEST_SLUG,
+    DEFAULT_SEARCH_SLUG,
+    PipelineService,
+)
 from app.telemetry import record
 from app.telemetry.events import CollectionCreated
 from app.vectorstores.base import VectorIndexDescription
@@ -114,11 +123,13 @@ class SetupService:
             user_id=user.id,
             name=payload.collection_name,
             description=None,
-            ingestion_pipeline_id=defaults[models.PipelineKind.INGESTION].id,
-            retrieval_pipeline_id=defaults[models.PipelineKind.RETRIEVAL].id,
             extra_metadata={},
         )
         self._collections.add(collection)
+        self.session.flush()
+        tools = CollectionToolService(self.session)
+        tools.set_ingest_pipeline(user, collection, defaults[DEFAULT_INGEST_SLUG].id)
+        tools.add_tool(user, collection, defaults[DEFAULT_SEARCH_SLUG].id)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -171,12 +182,12 @@ class SetupService:
         payload: SetupBootstrapRequest,
         embedding_input_limit: int | None = None,
     ) -> tuple[
-        dict[models.PipelineKind, models.Pipeline],
+        dict[str, models.Pipeline],
         list[PipelineValidationIssue],
     ]:
         """Create (or refresh) the default pipelines from the wizard's choices."""
-        definitions: dict[models.PipelineKind, PipelineDefinition] = {
-            models.PipelineKind.INGESTION: build_default_ingestion_pipeline(
+        definitions: dict[str, PipelineDefinition] = {
+            DEFAULT_INGEST_SLUG: build_default_ingestion_pipeline(
                 embedding_connection_id=payload.embedding_connection_id,
                 embedding_model=payload.embedding_model,
                 backend=payload.backend,
@@ -185,7 +196,7 @@ class SetupService:
                 chunk_overlap=payload.chunk_overlap,
                 embedding_input_limit=embedding_input_limit,
             ),
-            models.PipelineKind.RETRIEVAL: build_default_retrieval_pipeline(
+            DEFAULT_SEARCH_SLUG: build_default_retrieval_pipeline(
                 embedding_connection_id=payload.embedding_connection_id,
                 embedding_model=payload.embedding_model,
                 backend=payload.backend,
@@ -198,26 +209,18 @@ class SetupService:
             for issue in self._pipelines.validate_definition(user, definition).issues
             if issue.severity == "warning"
         ]
-        installed: dict[models.PipelineKind, models.Pipeline] = {}
-        for kind, definition in definitions.items():
-            existing = next(
-                (
-                    pipeline
-                    for pipeline in self._pipelines.list_pipelines(user.id, kind=kind)
-                    if pipeline.is_default
-                ),
-                None,
-            )
+        installed: dict[str, models.Pipeline] = {}
+        for slug, definition in definitions.items():
+            existing = PipelineRepository(self.session).get_by_template_slug(user.id, slug)
             if existing is None:
-                label = "Ingestion" if kind == models.PipelineKind.INGESTION else "Retrieval"
-                installed[kind] = self._pipelines.create_pipeline(
+                label = "Ingestion" if slug == DEFAULT_INGEST_SLUG else "Retrieval"
+                installed[slug] = self._pipelines.create_pipeline(
                     user=user,
                     name=f"Default {label} Pipeline",
                     description=f"Baseline {label.lower()} pipeline from first-run setup.",
-                    kind=kind,
                     definition=definition,
                     change_summary="First-run setup.",
-                    is_default=True,
+                    template_slug=slug,
                 )
             else:
                 # An identical generated definition is already the desired end
@@ -230,5 +233,5 @@ class SetupService:
                         change_summary="First-run setup re-applied.",
                         actor_id=user.id,
                     )
-                installed[kind] = existing
+                installed[slug] = existing
         return installed, warnings
