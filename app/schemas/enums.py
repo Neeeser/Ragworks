@@ -54,10 +54,29 @@ class ChatRole(str, Enum):
 
 
 class PipelineKind(str, Enum):
-    """Pipeline categories for ingestion and retrieval."""
+    """Derived pipeline categories for wire/UI grouping.
+
+    No longer stored: a pipeline's category is derived from its interface
+    (`accepts_document` -> ingestion, `callable` -> retrieval). The enum
+    remains the wire vocabulary the pipelines list/read endpoints group by.
+    """
 
     INGESTION = "ingestion"
     RETRIEVAL = "retrieval"
+
+
+class BindingRole(str, Enum):
+    """How a collection uses a bound pipeline.
+
+    `INGEST` runs on file ingestion (one per collection, service-enforced);
+    `TOOL` is exposed as a callable tool (many per collection). Values are
+    permanent — future triggers (schedules, sub-pipeline mounts) are new
+    members, never reinterpretations. Pipeline runs record the same
+    vocabulary as their `trigger`.
+    """
+
+    INGEST = "ingest"
+    TOOL = "tool"
 
 
 class PipelineRunStatus(str, Enum):

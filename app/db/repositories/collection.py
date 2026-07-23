@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy import update as sa_update
 from sqlmodel import col, select
 
@@ -133,6 +133,11 @@ class CollectionRepository(Repository):
                 )
             )
         execute(
+            sa_delete(models.CollectionPipelineBinding).where(
+                col(models.CollectionPipelineBinding.collection_id) == collection_id,
+            )
+        )
+        execute(
             sa_delete(models.ChatSessionCollection).where(
                 col(models.ChatSessionCollection.collection_id) == collection_id,
             )
@@ -148,15 +153,10 @@ class CollectionRepository(Repository):
         self.session.delete(collection)
 
     def references_pipeline(self, pipeline_id: UUID) -> bool:
-        """Return True when any collection uses the pipeline for ingestion or retrieval."""
+        """Return True when any collection binds the pipeline (any role)."""
         statement = (
-            select(col(models.Collection.id))
-            .where(
-                or_(
-                    col(models.Collection.ingestion_pipeline_id) == pipeline_id,
-                    col(models.Collection.retrieval_pipeline_id) == pipeline_id,
-                )
-            )
+            select(col(models.CollectionPipelineBinding.id))
+            .where(col(models.CollectionPipelineBinding.pipeline_id) == pipeline_id)
             .limit(1)
         )
         return self.session.exec(statement).first() is not None

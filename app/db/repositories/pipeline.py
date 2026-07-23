@@ -15,16 +15,13 @@ from app.db.repositories.base import Repository, user_scoped
 class PipelineRepository(Repository):
     """Data access helpers for pipelines."""
 
-    def list_for_user(
-        self,
-        user_id: UUID,
-        *,
-        kind: models.PipelineKind | None = None,
-    ) -> list[models.Pipeline]:
-        """List pipelines for a user, optionally filtered by kind."""
+    def list_for_user(self, user_id: UUID) -> list[models.Pipeline]:
+        """List pipelines for a user.
+
+        Kind filtering is interface-derived and lives at the service layer —
+        there is no stored kind column to filter on.
+        """
         statement = select(models.Pipeline).where(models.Pipeline.user_id == user_id)
-        if kind:
-            statement = statement.where(models.Pipeline.kind == kind)
         return list(self.session.exec(statement).all())
 
     def get(
@@ -37,16 +34,15 @@ class PipelineRepository(Repository):
         statement = user_scoped(statement, models.Pipeline, user_id)
         return self.session.exec(statement).first()
 
-    def get_default(
+    def get_by_template_slug(
         self,
         user_id: UUID,
-        kind: models.PipelineKind,
+        template_slug: str,
     ) -> models.Pipeline | None:
-        """Return the default pipeline for a user and kind."""
+        """Return the user's pipeline scaffolded for a template slug."""
         statement = select(models.Pipeline).where(
             col(models.Pipeline.user_id) == user_id,
-            col(models.Pipeline.kind) == kind,
-            col(models.Pipeline.is_default).is_(True),
+            col(models.Pipeline.template_slug) == template_slug,
         )
         return self.session.exec(statement).first()
 
@@ -134,19 +130,19 @@ class PipelineRunRepository(Repository):
     def list_recent_for_collection(
         self,
         collection_id: UUID,
-        kind: models.PipelineKind,
+        trigger: models.BindingRole,
         *,
         status: models.PipelineRunStatus | None = None,
         limit: int = 5,
     ) -> list[models.PipelineRun]:
-        """List a collection's most recent runs of a kind, newest first.
+        """List a collection's most recent runs of a trigger, newest first.
 
         Used by the diagnostics run-failure rules; `status` narrows to (e.g.)
         FAILED runs.
         """
         statement = select(models.PipelineRun).where(
             col(models.PipelineRun.collection_id) == collection_id,
-            col(models.PipelineRun.kind) == kind,
+            col(models.PipelineRun.trigger) == trigger,
         )
         if status is not None:
             statement = statement.where(col(models.PipelineRun.status) == status)
