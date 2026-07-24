@@ -250,6 +250,14 @@ the same PR.
   inline — it was copy-pasted 46 times before we centralized it.
 - **`"use client"` belongs on components/hooks only** — never on plain `lib/`
   modules; it forecloses server-side use for no benefit.
+- **A URL the _user_ must reach is built from `API_BASE_URL`, not the page
+  origin.** The two are the same only in Docker (same-origin `/api/*` proxy); in
+  dev the frontend and backend are different ports, so showing
+  `window.location.origin` hands the user a URL nothing answers on — exactly the
+  bug the MCP endpoint display shipped with until it was seen in a dev sandbox.
+  `mcpEndpointUrl` takes both and prefers the API base. Read the browser origin
+  through `useOrigin()` (`src/lib/use-origin.ts`), which gives React a server
+  snapshot instead of a state-plus-effect hydration dance.
 - **Admin settings render from the config catalog, not per-field forms.**
   `AdminSettingsPage` fetches `GET /api/admin/config` and renders one
   `ConfigFieldControl` per entry, dispatched on `field.kind` — a new backend config

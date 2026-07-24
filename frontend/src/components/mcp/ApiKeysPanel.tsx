@@ -27,8 +27,8 @@ export function ApiKeysPanel() {
     <section className="rounded-3xl border border-hairline bg-surface p-6">
       <h2 className="text-xl font-semibold text-primary">API keys</h2>
       <p className="mt-2 text-sm text-body leading-relaxed">
-        Keys agent harnesses use to reach collections over MCP. Create one from a
-        collection&apos;s MCP card.
+        Keys agent harnesses use to reach collections over MCP. Create one from a collection&apos;s
+        MCP card.
       </p>
 
       {error && <p className="mt-4 text-sm text-data-neg">{error}</p>}

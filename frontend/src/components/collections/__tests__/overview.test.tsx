@@ -13,6 +13,8 @@ import {
 } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+// The overview renders the MCP card, which gates on the public config flag.
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 const api = vi.mocked(apiModule);
 

@@ -6,12 +6,11 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.schemas.app_config import (
-    PUBLIC_CONFIG_KEYS,
     AppConfig,
     ConfigFieldKind,
-    PublicConfig,
     iter_config_fields,
 )
+from app.schemas.app_config_public import PUBLIC_CONFIG_KEYS, PublicConfig
 from app.services.app_config import _ENV_PINNED_SETTINGS_ATTR
 
 

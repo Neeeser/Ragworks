@@ -59,6 +59,6 @@ def describe_entry(entry: FileNodeRead) -> str:
     parts = [entry.path, f"{entry.size_bytes} bytes"]
     if entry.content_type:
         parts.append(entry.content_type)
-    status = entry.ingestion.status if entry.ingestion else "not ingested"
+    status = entry.ingestion.status.value if entry.ingestion else "not ingested"
     parts.append(f"ingestion: {status}")
     return "  ".join(parts)

@@ -80,7 +80,9 @@ describe("ConnectAgentDialog", () => {
     renderDialog(onCreate);
 
     await user.click(screen.getByRole("button", { name: CREATE_KEY }));
-    await waitFor(() => expect(screen.getByRole("tab", { name: "JSON config" })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "JSON config" })).toBeInTheDocument(),
+    );
     await user.click(screen.getByRole("tab", { name: "JSON config" }));
 
     expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument();

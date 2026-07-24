@@ -18,6 +18,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
+| `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
 
 ## `blank`
@@ -96,6 +97,18 @@ After seeding:
 - one admin user (the standard sandbox login)
 - no provider connections, indexes, pipelines, or collections
 - GET /api/setup/status reports nothing ready; the wizard gates the console
+
+## `mcp-connected`
+
+collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready
+- API key "Sandbox agent" scoped to the seeded collection with tools:invoke, files:read, and files:write
+- the key (printed in the handoff as an `mcp key` fact) is the only way to reach the endpoint; it is unrecoverable afterwards
+- pointing any MCP client at the printed endpoint with `Authorization: Bearer <key>` is the remaining action under test
 
 ## `ollama-connected`
 

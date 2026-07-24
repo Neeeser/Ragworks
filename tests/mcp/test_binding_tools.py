@@ -10,6 +10,7 @@ the UI, since that is the promise of routing both through
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -251,3 +252,137 @@ def test_disabled_bindings_are_not_advertised(
     result = body["result"]
     assert isinstance(result, dict)
     assert result["tools"] == []
+
+
+class _StubEmbedder:
+    """Embedder stand-in: every text embeds to the same fixed vector."""
+
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+
+    @property
+    def usage(self) -> dict[str, int] | None:
+        return {"prompt_tokens": 5, "total_tokens": 5}
+
+    def embed_documents(self, chunks: object) -> list[list[float]]:
+        return [[0.1, 0.2, 0.3] for _ in chunks]  # type: ignore[union-attr]
+
+    def embed_query(self, _query: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+
+class _StubProviderResolver:
+    """ProviderResolver stand-in serving `_StubEmbedder` for any connection."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def embedder(
+        self, _connection_id: object, model_name: str, dimensions: object = None
+    ) -> _StubEmbedder:
+        del dimensions
+        return _StubEmbedder(model_name)
+
+
+def test_calling_the_search_tool_returns_chunks_as_text_and_structured_content(
+    mcp_client: TestClient,
+    pgvector_session: Session,
+    mcp_user: models.User,
+    mcp_collection: models.Collection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default search tool's result carries both channels a client may read.
+
+    The text block is what a model without structured-output support sees; the
+    `structuredContent` is what the declared `outputSchema` promises, and it must
+    keep the full chunk text even though the text rendering truncates.
+    """
+    session = pgvector_session
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
+    store = PgvectorStore(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
+    long_text = "Paris is the capital of France. " + ("detail " * 400)
+    store.upsert(
+        "ragworks",
+        f"col-{mcp_collection.id}",
+        [
+            DocumentChunk(
+                document_id="doc-1",
+                chunk_id="chunk-1",
+                text=long_text,
+                order=0,
+                metadata=DocumentMetadata(data={"filename": "france.md"}),
+                embedding=[0.1, 0.2, 0.3],
+            )
+        ],
+    )
+    secret = issue_key(
+        session,
+        mcp_user,
+        capabilities=[ApiKeyCapability.TOOLS_INVOKE],
+        collection_ids=[mcp_collection.id],
+    )
+
+    body = rpc(
+        mcp_client,
+        mcp_collection.id,
+        secret,
+        "tools/call",
+        {"name": "search_field_notes", "arguments": {"query": "capital of France"}},
+    )
+
+    result = body["result"]
+    assert isinstance(result, dict)
+    assert result["isError"] is False
+    text = result["content"][0]["text"]
+    assert "1 result(s) for: capital of France" in text
+    assert "chunk=chunk-1" in text
+    assert text.endswith("…"), "long chunk text is truncated in the text rendering"
+    structured = result["structuredContent"]
+    assert structured["query"] == "capital of France"
+    assert len(structured["chunks"]) == 1
+    chunk = structured["chunks"][0]
+    # Structured content keeps the whole chunk; only the preview is shortened.
+    assert chunk["text"] == long_text
+    assert chunk["metadata"] == {"filename": "france.md"}
+    assert chunk["document_id"] == "doc-1"
+
+
+def test_a_failed_pipeline_run_is_a_tool_error_naming_the_trace(
+    mcp_client: TestClient,
+    session: Session,
+    mcp_user: models.User,
+    mcp_collection: models.Collection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run that dies mid-pipeline must reach the agent as a readable tool
+    error, not a protocol failure it cannot act on."""
+
+    class _ExplodingExecutor:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def execute(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("node blew up")
+
+    monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _ExplodingExecutor)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
+    secret = issue_key(
+        session,
+        mcp_user,
+        capabilities=[ApiKeyCapability.TOOLS_INVOKE],
+        collection_ids=[mcp_collection.id],
+    )
+
+    body = rpc(
+        mcp_client,
+        mcp_collection.id,
+        secret,
+        "tools/call",
+        {"name": "search_field_notes", "arguments": {"query": "anything"}},
+    )
+
+    result = body["result"]
+    assert isinstance(result, dict)
+    assert result["isError"] is True
+    assert "Retrieval failed" in result["content"][0]["text"]

@@ -128,6 +128,7 @@ def _reseed(scenario_name: str) -> dict[str, Any]:
             "email": config.SANDBOX_EMAIL if ctx.user else None,
             "password": config.SANDBOX_PASSWORD if ctx.user else None,
             "token": ctx.token,
+            "api_key": ctx.api_key_secret,
             "browser_login": _browser_login_snippet() if ctx.user else None,
             "links": [
                 {"label": label, "url": f"{config.FRONTEND_BASE_URL}{path}"}
@@ -155,6 +156,8 @@ def _print_handoff(
     if handoff["email"]:
         print(f"login:    {handoff['email']} / {handoff['password']}")
         print(f"token:    {handoff['token']}")
+    if handoff.get("api_key"):
+        print(f"mcp key:  {handoff['api_key']}")
     for link in handoff["links"]:
         print(f"open:     {link['url']}  ({link['label']})")
     for fact in handoff["facts"]:

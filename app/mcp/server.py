@@ -28,6 +28,7 @@ from app.schemas.mcp import (
     McpModel,
     ServerCapabilities,
 )
+from app.services.tool_projection import slugify_tool_name
 
 #: Reported as the server implementation version.
 SERVER_VERSION = "1"
@@ -77,7 +78,11 @@ class McpServer:
             ),
             capabilities=ServerCapabilities(),
             server_info=Implementation(
-                name=f"ragworks-{collection.name}",
+                # Harnesses namespace tool calls by server name
+                # (`mcp__<server>__<tool>`), so it must survive as an
+                # identifier — a raw collection name may hold spaces or
+                # punctuation.
+                name=f"ragworks-{slugify_tool_name(collection.name).replace('_', '-') or 'collection'}",
                 title=f"Ragworks: {collection.name}",
                 version=SERVER_VERSION,
             ),

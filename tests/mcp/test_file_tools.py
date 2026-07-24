@@ -184,6 +184,12 @@ def test_list_files_shows_uploaded_entries_and_read_returns_content(
     assert isinstance(nested_structured, dict)
     assert [entry["name"] for entry in nested_structured["entries"]] == ["day-two.md"]
 
+    # Status renders as its value, not a Python enum repr, in both channels.
+    assert nested_structured["entries"][0]["ingestion_status"] == "pending"
+    nested_text = nested["content"]
+    assert isinstance(nested_text, list)
+    assert "ingestion: pending" in nested_text[0]["text"]
+
     read = _call(
         mcp_client, mcp_collection, write_secret, "read_file", {"path": "notes/day-two.md"}
     )

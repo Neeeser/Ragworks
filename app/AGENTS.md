@@ -418,8 +418,51 @@ frontend form code — only a new `ConfigFieldKind` would.
   `FileSystemService` (Postgres unique indexes treat NULL `parent_id` as distinct,
   so a DB constraint can't cover root siblings).
 - **The `?parent_id` listing + `FileSystemService.resolve_path` are the
-  model-navigation surface** (`ls`/`cd` semantics for future chat tools) — keep
-  their shapes stable; extend rather than fork.
+  model-navigation surface** (`ls`/`cd` semantics for chat and MCP file tools) —
+  keep their shapes stable; extend rather than fork.
+- **File deletion races in-flight ingestion, and deletion must win.** The
+  ingestion worker commits chunk rows from its own session, which can land
+  *between* the chunk purge and the document delete; the document's FK then
+  rejects the delete and the whole request 500s.
+  `FileDeletionService._purge_document_rows` retries inside a savepoint for
+  exactly that window. An agent uploading over MCP and deleting moments later
+  hits it routinely — which is how it was found, after a hermetic test that
+  stubbed ingestion passed.
+
+## Exposing a collection over MCP (`app/mcp/`)
+
+The MCP endpoint (`POST /api/mcp/collections/{id}`, see `docs/mcp.md`) is a
+stateless Streamable HTTP server per collection. Its invariants:
+
+- **The protocol layer is ours, and its spec rules live in one place.**
+  `app/mcp/transport.py` owns every HTTP-level requirement (`Origin` → 403,
+  unsupported `MCP-Protocol-Version` → 400, `Accept`, notification → 202, single
+  JSON responses, no session id) and `app/mcp/gateway.py` owns the request
+  sequence; the route is FastAPI wiring only. Conformance is pinned hermetically
+  in `tests/mcp/test_transport_conformance.py` *and* checked live against real
+  clients (official `mcp` SDK, Inspector CLI, `claude mcp add`) — a self-written
+  server only stays in spec if a real client exercises it.
+- **A tool's capability gate is the registry, not the tool.** Every `McpTool`
+  declares its `ApiKeyCapability` and `tools/registry.build_tools` filters the
+  set per request, so an ungranted capability's tools are absent from
+  `tools/list` *and* unknown to `tools/call`. Checking inside a tool would
+  advertise a tool the caller can only be refused.
+- **Tool identity comes from `to_tool_read`, never a second projection.** Chat
+  and MCP advertise the same names, descriptions, and parameter schemas because
+  they read the same projection; execution goes through
+  `ToolInvocationService`, so an agent call records the same query event and
+  trace as a UI call.
+- **Out-of-scope and non-existent answer identically (404).** A key holder must
+  never be able to enumerate collections it was not granted, so the URL is
+  convenience and the key is the boundary.
+- **Tool execution failures are results with `is_error=True`, not JSON-RPC
+  errors** (including invalid arguments — the 2025-11-25 spec asks for this so
+  the model can self-correct). Only protocol faults (unknown method, unknown
+  tool, malformed body) are JSON-RPC errors.
+- **A tool result is model context: render values, never Python reprs.** An
+  enum interpolated into tool text ships `DocumentStatus.READY` to an agent;
+  read `.value`. DB-loaded enum columns are raw strings, so normalize
+  (`FileNodeKind(node.kind)`) before calling `.value` on them.
 
 ## Hooking into telemetry
 

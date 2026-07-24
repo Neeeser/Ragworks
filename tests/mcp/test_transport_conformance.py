@@ -53,7 +53,10 @@ def test_initialize_returns_negotiated_version_capabilities_and_instructions(
     # is never told to speak a revision it did not ask for.
     assert result["protocolVersion"] == "2025-06-18"
     assert result["capabilities"] == {"tools": {"listChanged": False}}
-    assert result["serverInfo"]["name"] == "ragworks-Field Notes"
+    # Harnesses namespace tool calls by server name, so it must be an
+    # identifier — never the raw collection name with its spaces.
+    assert result["serverInfo"]["name"] == "ragworks-field-notes"
+    assert result["serverInfo"]["title"] == "Ragworks: Field Notes"
     # The collection's own description reaches the agent through `instructions`,
     # which is why no discovery tool is needed.
     assert "Observations from the field." in result["instructions"]

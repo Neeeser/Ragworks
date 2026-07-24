@@ -58,6 +58,8 @@ with Pinecone available as an alternative vector store.
   with pgvector or select Pinecone per pipeline.
 - **Collection-aware chat:** stream multi-turn conversations that can search one
   or more document collections.
+- **MCP access:** serve a collection's tools to any MCP agent harness with a
+  scoped API key ([docs/mcp.md](docs/mcp.md)).
 - **Embedding visualization:** project collection embeddings for interactive
   inspection.
 - **Runtime administration:** manage provider credentials per user and application

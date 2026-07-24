@@ -18,7 +18,8 @@ export function makePublicConfig(overrides: Partial<PublicConfig> = {}): PublicC
     },
     features: {
       umap_visualizations: true,
-      chat_branching: true, mcp_access: true,
+      chat_branching: true,
+      mcp_access: true,
     },
     ...overrides,
   };

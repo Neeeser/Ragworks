@@ -13,9 +13,7 @@ type ApiKeyRowProps = {
   onRevoke: (apiKey: ApiKey) => void;
 };
 
-const CAPABILITY_LABELS = new Map(
-  CAPABILITY_OPTIONS.map((option) => [option.value, option.label]),
-);
+const CAPABILITY_LABELS = new Map(CAPABILITY_OPTIONS.map((option) => [option.value, option.label]));
 
 /** One key's identity, powers, and reach — shared by both key listings. */
 export function ApiKeyRow({ apiKey, busy, onRevoke }: ApiKeyRowProps) {

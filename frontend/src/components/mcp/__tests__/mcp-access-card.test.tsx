@@ -25,10 +25,10 @@ describe("McpAccessCard", () => {
   it("shows the collection's endpoint so it can be pasted into a harness", async () => {
     renderCard();
 
+    // Which origin serves the API is mode-dependent and pinned in
+    // connection.test.ts; the card's own job is rendering the endpoint path.
     await waitFor(() => {
-      expect(
-        screen.getByText(`${window.location.origin}/api/mcp/collections/col-1`),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/\/api\/mcp\/collections\/col-1$/)).toBeInTheDocument();
     });
   });
 

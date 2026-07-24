@@ -11,12 +11,20 @@ const COLLECTION_ENDPOINT = "https://rag.example.com/api/mcp/collections/col-1";
 const SERVER_NAME = "ragworks-notes";
 
 describe("mcpEndpointUrl", () => {
-  it("builds the collection endpoint from the browser origin", () => {
-    expect(mcpEndpointUrl("https://rag.example.com", "col-1")).toBe(COLLECTION_ENDPOINT);
+  it("uses the browser origin when the API is same-origin (the Docker image)", () => {
+    expect(mcpEndpointUrl("https://rag.example.com", "col-1", "")).toBe(COLLECTION_ENDPOINT);
   });
 
-  it("does not double the separator when the origin has a trailing slash", () => {
-    expect(mcpEndpointUrl("http://localhost:7247/", "col-1")).toBe(
+  it("uses the configured API base when it differs from the page (dev mode)", () => {
+    // Dev serves the frontend on :3000 and the API on :8000; the agent must be
+    // pointed at the API, not the page.
+    expect(mcpEndpointUrl("http://localhost:3000", "col-1", "http://localhost:8000")).toBe(
+      "http://localhost:8000/api/mcp/collections/col-1",
+    );
+  });
+
+  it("does not double the separator when the base has a trailing slash", () => {
+    expect(mcpEndpointUrl("http://localhost:7247/", "col-1", "")).toBe(
       "http://localhost:7247/api/mcp/collections/col-1",
     );
   });

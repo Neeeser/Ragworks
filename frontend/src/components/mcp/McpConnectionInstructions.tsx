@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 
-import {
-  claudeCodeCommand,
-  mcpServersJson,
-} from "@/components/mcp/lib/connection";
+import { claudeCodeCommand, mcpServersJson } from "@/components/mcp/lib/connection";
 import { CopyBlock } from "@/components/ui/copy-block";
 import { cn } from "@/lib/utils";
 
@@ -44,8 +41,8 @@ export function McpConnectionInstructions({
     <div className="space-y-4">
       <CopyBlock label="API key" value={secret} inline />
       <p className="text-sm text-body leading-relaxed">
-        This key is shown once. Store it in the agent configuration now; if it is lost,
-        revoke it and issue another.
+        This key is shown once. Store it in the agent configuration now; if it is lost, revoke it
+        and issue another.
       </p>
       <CopyBlock label="Endpoint" value={endpoint} inline />
 

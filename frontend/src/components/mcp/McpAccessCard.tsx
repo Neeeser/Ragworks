@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyBlock } from "@/components/ui/copy-block";
 import { GlassCard } from "@/components/ui/panel";
+import { API_BASE_URL } from "@/lib/api";
 import { useOrigin } from "@/lib/use-origin";
 import { useAppConfig } from "@/providers/config-provider";
 
@@ -46,7 +47,7 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
   );
 
   // Empty until hydration, so the endpoint block is simply absent server-side.
-  const endpoint = origin ? mcpEndpointUrl(origin, collection.id) : "";
+  const endpoint = origin ? mcpEndpointUrl(origin, collection.id, API_BASE_URL) : "";
 
   if (config.features.mcp_access === false) return null;
 
@@ -60,8 +61,8 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
       </div>
 
       <p className="mt-3 text-sm text-body leading-relaxed">
-        Agent harnesses reach this collection&apos;s tools over MCP at this endpoint, using an
-        API key.
+        Agent harnesses reach this collection&apos;s tools over MCP at this endpoint, using an API
+        key.
       </p>
 
       {endpoint && <CopyBlock className="mt-4" label="Endpoint" value={endpoint} inline />}

@@ -35,21 +35,20 @@ export const CAPABILITY_OPTIONS: CapabilityOption[] = [
 /**
  * Build the MCP endpoint URL for a collection.
  *
- * Derived from the browser's own origin rather than a configured base URL: in
- * dev the frontend talks to the backend directly, and in Docker it proxies
- * same-origin `/api/*` — reading `window.location.origin` is the one value
- * that is correct in both modes and is also what the user's agent must reach.
+ * The agent must reach the *API*, and which origin serves it depends on the
+ * runtime mode: in Docker the frontend proxies same-origin `/api/*`
+ * (`apiBaseUrl` is empty, so the browser origin is right), while in dev
+ * `NEXT_PUBLIC_API_BASE_URL` points straight at the backend on another port.
+ * Showing the browser origin unconditionally hands a dev user a URL nothing
+ * answers on.
  */
-export function mcpEndpointUrl(origin: string, collectionId: UUID): string {
-  return `${origin.replace(/\/$/, "")}/api/mcp/collections/${collectionId}`;
+export function mcpEndpointUrl(origin: string, collectionId: UUID, apiBaseUrl: string): string {
+  const base = (apiBaseUrl || origin).replace(/\/$/, "");
+  return `${base}/api/mcp/collections/${collectionId}`;
 }
 
 /** The `claude mcp add` command for an endpoint. */
-export function claudeCodeCommand(
-  serverName: string,
-  endpoint: string,
-  secret: string,
-): string {
+export function claudeCodeCommand(serverName: string, endpoint: string, secret: string): string {
   return [
     `claude mcp add ${serverName} \\`,
     `  --transport http ${endpoint} \\`,
@@ -58,11 +57,7 @@ export function claudeCodeCommand(
 }
 
 /** The generic `mcpServers` JSON block most harnesses accept. */
-export function mcpServersJson(
-  serverName: string,
-  endpoint: string,
-  secret: string,
-): string {
+export function mcpServersJson(serverName: string, endpoint: string, secret: string): string {
   return JSON.stringify(
     {
       mcpServers: {

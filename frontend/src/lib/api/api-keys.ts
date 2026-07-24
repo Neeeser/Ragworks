@@ -1,10 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 
-import type {
-  ApiKeyCreated,
-  ApiKeyCreatePayload,
-  ApiKeyListResponse,
-} from "@/lib/types/api-keys";
+import type { ApiKeyCreated, ApiKeyCreatePayload, ApiKeyListResponse } from "@/lib/types/api-keys";
 import type { UUID } from "@/lib/types/common";
 
 export async function listApiKeys(token: string): Promise<ApiKeyListResponse> {
