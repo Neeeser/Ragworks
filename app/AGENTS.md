@@ -107,6 +107,14 @@ colocate a single file with its consumer.
   (`nodes/embedding.py`) may split an oversized chunk into several re-keyed,
   independently-indexed chunks, so its output list legitimately differs from the
   chunker's — the journey shows that split honestly rather than hiding it.
+- **Only `chunk_size` is bounded by the embedding model's input limit, never
+  `chunk_size + overlap`.** Each emitted chunk spans at most `chunk_size` tokens;
+  overlap is a stride *within* that window (window `chunk_size`, step
+  `chunk_size - overlap`), not extra tokens the embedder ever sees. Comparing the
+  sum against the limit (it lived in the clamp, the chunker validation, and the
+  wizard warning at once) shrank and flagged windows that actually fit, so the
+  size the wizard showed silently differed from the one ingest used. Bound
+  `chunk_size` alone; on shrink, preserve the overlap ratio.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants

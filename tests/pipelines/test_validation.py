@@ -659,8 +659,8 @@ def test_embedding_limit_is_an_error_for_real_tokenizers(
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=connection_id,
         embedding_model="sentence-transformers/all-minilm-l6-v2",
-        chunk_size=300,
-        chunk_overlap=200,
+        chunk_size=500,
+        chunk_overlap=100,
     )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
     chunker.config = {
@@ -696,8 +696,8 @@ def test_embedding_limit_remains_a_warning_for_whitespace_tokenizer() -> None:
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=connection_id,
         embedding_model="sentence-transformers/all-minilm-l6-v2",
-        chunk_size=300,
-        chunk_overlap=200,
+        chunk_size=500,
+        chunk_overlap=100,
     )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
     chunker.config = {**chunker.config, "tokenizer": "whitespace"}
@@ -719,8 +719,8 @@ def test_invalid_huggingface_config_does_not_mask_its_field_issue() -> None:
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=uuid4(),
         embedding_model="sentence-transformers/all-minilm-l6-v2",
-        chunk_size=300,
-        chunk_overlap=200,
+        chunk_size=500,
+        chunk_overlap=100,
     )
     chunker = next(node for node in definition.nodes if node.id == "chunk-document")
     chunker.config = {**chunker.config, "tokenizer": "huggingface"}
