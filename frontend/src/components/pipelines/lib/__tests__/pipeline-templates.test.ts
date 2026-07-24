@@ -14,15 +14,28 @@ const BUILD_OPTIONS = {
 const SEMANTIC = "semantic-keyword";
 const VECTOR_RETRIEVER = "retriever.vector";
 const RERANKER = "reranker.model";
+const RETRIEVAL_INPUT = "retrieval.input";
 
 describe("pipeline templates", () => {
-  it("offers the semantic, reranked, count, and facet starting points", () => {
+  it("offers the semantic, reranked, count, facet, and blank starting points", () => {
     expect(PIPELINE_TEMPLATES.map((template) => template.id)).toEqual([
       "semantic-keyword",
       "reranked",
       "count",
       "facet",
+      "blank",
     ]);
+  });
+
+  it("blank scaffolds a lone query input with no store dependency", () => {
+    const blank = templateById("blank")!;
+    expect(blank.needsStore).toBe(false);
+    expect(blank.needsEmbedding).toBe(false);
+    const definition = blank.build("pgvector", BUILD_OPTIONS);
+    expect(definition.nodes.map((node) => node.type)).toEqual([RETRIEVAL_INPUT]);
+    // No output terminal: an unconnected required port would fail validation,
+    // so the persistable scaffold is input-only.
+    expect(definition.edges).toEqual([]);
   });
 
   it("semantic-keyword scaffolds hybrid retrieval with no reranker", () => {
@@ -65,7 +78,7 @@ describe("pipeline templates", () => {
   it("count scaffolds query → count.bm25 → tool.output over the BM25 sibling index", () => {
     const definition = templateById("count")!.build("pgvector", BUILD_OPTIONS);
     expect(definition.nodes.map((node) => node.type)).toEqual([
-      "retrieval.input",
+      RETRIEVAL_INPUT,
       "count.bm25",
       "tool.output",
     ]);
@@ -79,7 +92,7 @@ describe("pipeline templates", () => {
   it("facet scaffolds a facet.bm25 tool that groups by source", () => {
     const definition = templateById("facet")!.build("pgvector", BUILD_OPTIONS);
     expect(definition.nodes.map((node) => node.type)).toEqual([
-      "retrieval.input",
+      RETRIEVAL_INPUT,
       "facet.bm25",
       "tool.output",
     ]);

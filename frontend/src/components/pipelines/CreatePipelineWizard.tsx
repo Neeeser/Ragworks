@@ -132,6 +132,7 @@ export function CreatePipelineWizard({
   // start from one of the catalog templates.
   const template = templateById(templateId) ?? PIPELINE_TEMPLATES[0];
   const needsEmbedding = isIngestion || template.needsEmbedding;
+  const needsStore = isIngestion || template.needsStore;
 
   const steps: WizardStep[] = useMemo(() => {
     if (isIngestion) {
@@ -145,8 +146,16 @@ export function CreatePipelineWizard({
     const retrievalSteps: WizardStep[] = [
       { id: "template", label: "Template", description: "The kind of tool to build." },
       { id: "basics", label: "Name", description: "What this pipeline is for." },
-      { id: "store", label: "Vector store", description: "Where the data lives." },
     ];
+    // The blank scaffold has no store-bound node, so there's nothing to point
+    // at an index — skip store selection and build it in the editor.
+    if (template.needsStore) {
+      retrievalSteps.push({
+        id: "store",
+        label: "Vector store",
+        description: "Where the data lives.",
+      });
+    }
     if (template.needsEmbedding) {
       retrievalSteps.push({
         id: "model",
@@ -401,6 +410,7 @@ export function CreatePipelineWizard({
           name={name}
           backend={backend}
           indexName={indexName}
+          showStore={needsStore}
           showEmbedding={needsEmbedding}
           selectedModelName={
             selectedModel?.name ??

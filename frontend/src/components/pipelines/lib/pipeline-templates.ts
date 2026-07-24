@@ -39,10 +39,35 @@ export type PipelineTemplate = {
   needsEmbedding: boolean;
   /** The reranked template needs a configured reranking provider. */
   needsReranker: boolean;
+  /**
+   * Whether the template's graph references a vector-store index. The blank
+   * scaffold has no store-bound node, so the wizard skips store selection.
+   */
+  needsStore: boolean;
   /** Backend capability this template's aggregate node requires, if any. */
   requiredCapability: TemplateCapability | null;
   build: (backend: IndexBackend, options: TemplateBuildOptions) => PipelineDefinition;
 };
+
+/**
+ * A bare tool scaffold: just the query-input terminal.
+ *
+ * Only the input is placed, not an output: a tool/retrieval output terminal
+ * has a required inbound port, and the backend rejects a definition with an
+ * unconnected required port — so a two-terminal skeleton can't be persisted.
+ * The lone input is the minimal valid, callable scaffold; the user wires the
+ * rest (retrieval, aggregate, output) in the editor before their first save.
+ */
+/** The query-input terminal's node id, shared by every tool scaffold. */
+const QUERY_INPUT_ID = "query-input";
+
+function buildBlankDefinition(): PipelineDefinition {
+  return {
+    nodes: [{ id: QUERY_INPUT_ID, type: "retrieval.input", name: "Query", config: {} }],
+    edges: [],
+    viewport: {},
+  };
+}
 
 const RERANKER_NODE_TYPE = "reranker.model";
 const RERANK_NODE_ID = "rerank-results";
@@ -105,7 +130,7 @@ function buildAggregateDefinition(
   return {
     nodes: [
       {
-        id: "query-input",
+        id: QUERY_INPUT_ID,
         type: "retrieval.input",
         name: "Query",
         config: { tool_name: identity.toolName, tool_description: identity.toolDescription },
@@ -116,7 +141,7 @@ function buildAggregateDefinition(
     edges: [
       {
         id: "edge-input-aggregate",
-        source: "query-input",
+        source: QUERY_INPUT_ID,
         target: "aggregate",
         source_port: "request",
         target_port: "request",
@@ -141,6 +166,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
       "Dense vector search fused with BM25 keyword matching. Returns ranked chunks — the default search tool.",
     needsEmbedding: true,
     needsReranker: false,
+    needsStore: true,
     requiredCapability: null,
     build: (backend, options) => buildDefaultDefinition("retrieval", backend, options),
   },
@@ -151,6 +177,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
       "Hybrid search that over-fetches candidates and reorders them with a reranking model for higher precision.",
     needsEmbedding: true,
     needsReranker: true,
+    needsStore: true,
     requiredCapability: null,
     build: (backend, options) =>
       withReranker(buildDefaultDefinition("retrieval", backend, options)),
@@ -162,6 +189,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
       "Counts how many documents and chunks lexically match the query. Returns numbers, not ranked chunks.",
     needsEmbedding: false,
     needsReranker: false,
+    needsStore: true,
     requiredCapability: "lexical_count",
     build: (backend, options) =>
       buildAggregateDefinition(
@@ -182,6 +210,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
       "Groups matching chunks by source file, with per-file document and chunk counts. Returns a breakdown.",
     needsEmbedding: false,
     needsReranker: false,
+    needsStore: true,
     requiredCapability: "lexical_facet",
     build: (backend, options) =>
       buildAggregateDefinition(
@@ -194,6 +223,17 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
         backend,
         options,
       ),
+  },
+  {
+    id: "blank",
+    label: "Blank pipeline",
+    description:
+      "Start from just a query input and build the graph yourself. Add retrieval, aggregate, and output nodes in the editor.",
+    needsEmbedding: false,
+    needsReranker: false,
+    needsStore: false,
+    requiredCapability: null,
+    build: () => buildBlankDefinition(),
   },
 ];
 

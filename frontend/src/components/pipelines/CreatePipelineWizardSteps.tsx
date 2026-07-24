@@ -216,6 +216,8 @@ type ReviewStepProps = {
   name: string;
   backend: IndexBackend;
   indexName: string;
+  /** Whether this pipeline points at an index — the blank scaffold doesn't. */
+  showStore: boolean;
   /** Whether this pipeline embeds — count/facet tools don't, so hide the row. */
   showEmbedding: boolean;
   selectedModelName: string | null;
@@ -232,6 +234,7 @@ export function WizardReviewStep({
   name,
   backend,
   indexName,
+  showStore,
   showEmbedding,
   selectedModelName,
   chunkPresetLabel,
@@ -271,12 +274,14 @@ export function WizardReviewStep({
             <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Type</dt>
             <dd className="mt-0.5 text-primary">{typeLabel}</dd>
           </div>
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Vector store</dt>
-            <dd className="mt-0.5 text-primary">
-              {BACKEND_TITLES[backend]} · {indexName || "no index"}
-            </dd>
-          </div>
+          {showStore ? (
+            <div>
+              <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Vector store</dt>
+              <dd className="mt-0.5 text-primary">
+                {BACKEND_TITLES[backend]} · {indexName || "no index"}
+              </dd>
+            </div>
+          ) : null}
           {showEmbedding ? (
             <div>
               <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Embedding model</dt>

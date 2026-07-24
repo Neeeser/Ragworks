@@ -431,6 +431,34 @@ describe("CreatePipelineWizard", () => {
     });
   }, 15000);
 
+  it("skips store and embedding for the blank template, creating an input-only graph", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({ kind: "retrieval", onCreated });
+
+    await user.click(screen.getByRole("radio", { name: /Blank pipeline/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Scratch");
+    // No store step and no embedding step — straight from name to review.
+    await user.click(getNextButton());
+
+    expect(screen.queryByTestId(EMBEDDING_SELECTOR_TEST_ID)).not.toBeInTheDocument();
+    expect(screen.getByText("Blank pipeline")).toBeInTheDocument();
+    // The blank scaffold declares no vector store.
+    expect(screen.queryByText(/no index/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    await waitFor(() => {
+      const definition = api.createPipeline.mock.calls[0][1].definition;
+      expect(definition.nodes.map((node: { type: string }) => node.type)).toEqual([
+        "retrieval.input",
+      ]);
+      expect(definition.edges).toEqual([]);
+      expect(onCreated).toHaveBeenCalled();
+    });
+  }, 15000);
+
   it("blocks the count template on a backend without count support", async () => {
     const user = userEvent.setup();
     renderWizard({
