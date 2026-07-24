@@ -95,7 +95,8 @@ export async function createPipeline(
   token: string,
   payload: {
     name: string;
-    kind: PipelineKind;
+    /** Accepted for wire compatibility; capability is derived from the graph. */
+    kind?: PipelineKind;
     definition: PipelineDefinition;
     description?: string;
     change_summary?: string;

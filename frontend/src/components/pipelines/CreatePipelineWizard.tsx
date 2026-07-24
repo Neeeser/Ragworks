@@ -7,6 +7,7 @@ import { BackendCard } from "@/components/pipelines/BackendCard";
 import {
   BACKEND_TITLES,
   CHUNK_PRESETS,
+  KIND_COPY,
   WizardProcessingStep,
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
@@ -55,24 +56,6 @@ type CreatePipelineWizardProps = {
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
   onOpenIndexManager: () => void;
-};
-
-const KIND_COPY: Record<
-  PipelineKind,
-  { headline: string; explainer: string; namePlaceholder: string }
-> = {
-  ingestion: {
-    headline: "How your documents become searchable",
-    explainer:
-      "When you upload a document, this pipeline parses it, splits it into chunks, turns each chunk into an embedding, and writes them into your vector index.",
-    namePlaceholder: "e.g. Research library ingestion",
-  },
-  retrieval: {
-    headline: "How questions find the right chunks",
-    explainer:
-      "When you search or chat, this pipeline embeds the question and pulls the closest matching chunks out of your vector index.",
-    namePlaceholder: "e.g. Research library retrieval",
-  },
 };
 
 const chunkerDefaults = (nodeSpecs: NodeSpec[]) => {
@@ -228,9 +211,9 @@ export function CreatePipelineWizard({
     setCreating(true);
     setMessage(null);
     try {
+      // No kind is sent: what the pipeline can do is derived from its graph.
       const created = await createPipeline(token, {
         name: name.trim(),
-        kind,
         definition,
         change_summary: "Initial pipeline scaffold.",
       });
@@ -260,7 +243,9 @@ export function CreatePipelineWizard({
   return (
     <WizardShell
       open={open}
-      title={kind === "ingestion" ? "Create an ingestion pipeline" : "Create a retrieval pipeline"}
+      title={
+        kind === "ingestion" ? "Create an ingestion pipeline" : "Create a search tool pipeline"
+      }
       subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}

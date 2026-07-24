@@ -41,11 +41,12 @@ describe("PipelineHeader", () => {
     expect(onCreate).toHaveBeenCalled();
   });
 
-  it("renders retrieval header text", () => {
+  it("renders the tools header text for the retrieval route", () => {
     renderHeader({ kind: "retrieval" });
 
-    expect(screen.getByText("Retrieval pipelines")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "retrieval" })).toHaveAttribute(
+    expect(screen.getByText("Tool pipelines")).toBeInTheDocument();
+    // The route param stays `retrieval` (permanent URL); only the label says tools.
+    expect(screen.getByRole("link", { name: "tools" })).toHaveAttribute(
       "href",
       "/pipelines/retrieval",
     );

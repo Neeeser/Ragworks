@@ -36,7 +36,7 @@ export function PipelineHeader({
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-muted">Pipelines</p>
         <h1 className="text-3xl font-semibold tracking-tight text-primary">
-          {kind === "ingestion" ? "Ingestion pipelines" : "Retrieval pipelines"}
+          {kind === "ingestion" ? "Ingestion pipelines" : "Tool pipelines"}
         </h1>
         <div className="mt-3 flex flex-wrap gap-2">
           {PIPELINE_KINDS.map((value) => (
@@ -50,7 +50,7 @@ export function PipelineHeader({
                   : "text-muted hover:border-strong hover:text-primary",
               )}
             >
-              {value}
+              {value === "retrieval" ? "tools" : value}
             </Link>
           ))}
         </div>
@@ -77,7 +77,7 @@ export function PipelineHeader({
         </Button>
         <Button onClick={onCreatePipeline}>
           <Plus className="h-4 w-4" />
-          {kind === "ingestion" ? "New ingestion pipeline" : "New retrieval pipeline"}
+          {kind === "ingestion" ? "New ingestion pipeline" : "New tool pipeline"}
         </Button>
       </div>
     </div>

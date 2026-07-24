@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { fetchCollectionQueryArguments, runCollectionQuery } from "@/lib/api";
+import { invokeCollectionTool, listCollectionTools, runCollectionQuery } from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 import {
   isRetrievalFailure,
   type CollectionQueryArgument,
-  type CollectionQueryResult,
   type RetrievalFailureDetail,
 } from "@/lib/types";
 import { useApiQuery } from "@/lib/use-api-query";
 
+import type { CollectionTool, ToolInvocationResponse } from "@/lib/types/tools";
+
 const RECENT_LIMIT = 5;
 
 export type QueryArgumentValues = Record<string, number | string | boolean>;
+
+/** The runner's result: an invocation response, or the legacy query shape
+ * (no-tools fallback) widened with a default `chunks` kind. */
+export type SearchRunResult = ToolInvocationResponse;
 
 const recentKey = (collectionId: string) => `ragworks:recent-queries:${collectionId}`;
 const lastResultKey = (collectionId: string) => `ragworks:last-search:${collectionId}`;
@@ -33,8 +38,9 @@ function readRecent(collectionId: string): string[] {
 type StoredSearch = {
   query: string;
   topK: number;
+  toolId?: string;
   argumentValues?: QueryArgumentValues;
-  result: CollectionQueryResult;
+  result: SearchRunResult;
 };
 
 /** The last completed search, kept for this tab so Back from a trace restores it. */
@@ -66,20 +72,34 @@ function writeLastSearch(collectionId: string, stored: StoredSearch): void {
   }
 }
 
+function seededDefaults(tool: CollectionTool | null): QueryArgumentValues {
+  const seeded: QueryArgumentValues = {};
+  for (const argument of tool?.arguments ?? []) {
+    if (argument.default != null) {
+      seeded[argument.name] = argument.default;
+    }
+  }
+  return seeded;
+}
+
 export type CollectionSearchState = {
   query: string;
   setQuery: (query: string) => void;
   topK: number;
   setTopK: (topK: number) => void;
-  /** The retrieval pipeline's declared arguments; empty = legacy top_k control. */
+  /** The collection's tool bindings; the runner targets one of them. */
+  tools: CollectionTool[];
+  selectedTool: CollectionTool | null;
+  setSelectedToolId: (bindingId: string) => void;
+  /** True once the tools listing has loaded — controls render then. */
+  toolsReady: boolean;
+  /** Tools load failure; queries fall back to the legacy query endpoint. */
+  toolsError: string | null;
+  /** The selected tool's declared arguments; empty = legacy top_k control. */
   argumentsSpec: CollectionQueryArgument[];
-  /** True once the declared-arguments spec has loaded — controls render then. */
-  argumentsReady: boolean;
-  /** Spec load failure; queries fall back to the legacy top_k field. */
-  argumentsError: string | null;
   argumentValues: QueryArgumentValues;
   setArgumentValue: (name: string, value: number | string | boolean | undefined) => void;
-  result: CollectionQueryResult | null;
+  result: SearchRunResult | null;
   running: boolean;
   error: string | null;
   /** Structured, trace-linked detail when the failure was a pipeline error. */
@@ -89,46 +109,55 @@ export type CollectionSearchState = {
 };
 
 /**
- * Query composer state: run retrieval, remember recent queries locally, and
- * restore the last result set when the page remounts in the same tab — so
- * navigating into a trace and back never loses the results being inspected.
- * Pipelines that declare input arguments get one value per declaration
- * (seeded from defaults) sent as the request's `arguments` map; pipelines
- * that declare none keep the legacy `top_k` field.
+ * Tool-runner state for the search page: pick one of the collection's tool
+ * bindings (defaulting to the primary search tool), render its declared
+ * argument controls, run it through the invoke endpoint, remember recent
+ * queries locally, and restore the last result set when the page remounts in
+ * the same tab — so navigating into a trace and back never loses the results
+ * being inspected. A collection with no tool bindings (pre-migration or
+ * system-provisioned) falls back to the legacy query endpoint.
  */
+// eslint-disable-next-line complexity -- one state domain: selection + args + run lifecycle
 export function useCollectionSearch(token: string, collectionId: string): CollectionSearchState {
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
+  const [selectedToolId, setSelectedToolIdState] = useState<string | null>(null);
   const [argumentValues, setArgumentValues] = useState<QueryArgumentValues>({});
-  const [result, setResult] = useState<CollectionQueryResult | null>(null);
+  const [seededToolId, setSeededToolId] = useState<string | null>(null);
+  const [result, setResult] = useState<SearchRunResult | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failure, setFailure] = useState<RetrievalFailureDetail | null>(null);
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
-  const argumentsQuery = useApiQuery(
-    () => fetchCollectionQueryArguments(token, collectionId),
+  const toolsQuery = useApiQuery(
+    () => listCollectionTools(token, collectionId),
     [token, collectionId],
   );
-  const argumentsSpec = argumentsQuery.data?.arguments ?? [];
+  const tools = useMemo(() => toolsQuery.data?.tools ?? [], [toolsQuery.data]);
 
-  // Seed defaults for newly-seen declarations during render (guarded: only
-  // when a declared argument has no value yet and a default exists, so this
-  // can't loop). An effect would open a stale window between load and seed.
-  const unseeded = argumentsSpec.filter(
-    (argument) => !(argument.name in argumentValues) && argument.default != null,
-  );
-  if (unseeded.length > 0) {
-    setArgumentValues((previous) => {
-      const next = { ...previous };
-      for (const argument of unseeded) {
-        if (!(argument.name in next) && argument.default != null) {
-          next[argument.name] = argument.default;
-        }
-      }
-      return next;
-    });
+  const selectedTool = useMemo(() => {
+    if (tools.length === 0) return null;
+    return (
+      tools.find((tool) => tool.id === selectedToolId) ??
+      tools.find((tool) => tool.is_primary) ??
+      tools[0]
+    );
+  }, [tools, selectedToolId]);
+
+  const argumentsSpec = useMemo(() => selectedTool?.arguments ?? [], [selectedTool]);
+
+  // Seed defaults whenever the effective tool changes, during render (guarded
+  // by `seededToolId`, so this can't loop). An effect would open a stale
+  // window between selection and seed.
+  if (selectedTool && selectedTool.id !== seededToolId) {
+    setSeededToolId(selectedTool.id);
+    setArgumentValues(seededDefaults(selectedTool));
   }
+
+  const setSelectedToolId = (bindingId: string) => {
+    setSelectedToolIdState(bindingId);
+  };
 
   const setArgumentValue = (name: string, value: number | string | boolean | undefined) => {
     setArgumentValues((previous) => {
@@ -150,6 +179,10 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     if (stored) {
       setQuery(stored.query);
       setTopK(stored.topK);
+      if (stored.toolId) {
+        setSelectedToolIdState(stored.toolId);
+        setSeededToolId(stored.toolId);
+      }
       if (stored.argumentValues) {
         setArgumentValues(stored.argumentValues);
       }
@@ -175,15 +208,28 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
           sentArguments[argument.name] = value;
         }
       }
-      const response = await runCollectionQuery(
-        token,
-        collectionId,
-        declared ? { query: text, arguments: sentArguments } : { query: text, top_k: topK },
-      );
+      let response: SearchRunResult;
+      if (selectedTool) {
+        response = await invokeCollectionTool(
+          token,
+          collectionId,
+          selectedTool.id,
+          declared ? { query: text, arguments: sentArguments } : { query: text, top_k: topK },
+        );
+      } else {
+        // No tool bindings (pre-migration or provisioned collection): the
+        // legacy endpoint resolves/scaffolds the primary tool server-side.
+        const legacy = await runCollectionQuery(token, collectionId, {
+          query: text,
+          top_k: topK,
+        });
+        response = { kind: "chunks", tool_binding_id: "", outputs: {}, ...legacy };
+      }
       setResult(response);
       writeLastSearch(collectionId, {
         query: text,
         topK,
+        toolId: selectedTool?.id,
         argumentValues: declared ? sentArguments : undefined,
         result: response,
       });
@@ -214,9 +260,12 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     setQuery,
     topK,
     setTopK,
+    tools,
+    selectedTool,
+    setSelectedToolId,
+    toolsReady: toolsQuery.data !== null,
+    toolsError: toolsQuery.error,
     argumentsSpec,
-    argumentsReady: argumentsQuery.data !== null,
-    argumentsError: argumentsQuery.error,
     argumentValues,
     setArgumentValue,
     result,

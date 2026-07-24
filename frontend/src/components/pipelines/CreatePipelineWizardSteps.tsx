@@ -22,6 +22,24 @@ export type ChunkPreset = {
   overlap: number;
 };
 
+export const KIND_COPY: Record<
+  PipelineKind,
+  { headline: string; explainer: string; namePlaceholder: string }
+> = {
+  ingestion: {
+    headline: "How your documents become searchable",
+    explainer:
+      "When you upload a document, this pipeline parses it, splits it into chunks, turns each chunk into an embedding, and writes them into your vector index.",
+    namePlaceholder: "e.g. Research library ingestion",
+  },
+  retrieval: {
+    headline: "How questions find the right chunks",
+    explainer:
+      "When you search or chat, this pipeline embeds the question and pulls the closest matching chunks out of your vector index.",
+    namePlaceholder: "e.g. Research library retrieval",
+  },
+};
+
 export const CHUNK_PRESETS: ChunkPreset[] = [
   { id: "fine", label: "Fine", hint: "Short chunks, precise matches", size: 512, overlap: 64 },
   {
