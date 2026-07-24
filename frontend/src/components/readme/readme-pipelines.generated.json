@@ -150,9 +150,7 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {
-              "arguments": [
-                "result_limit"
-              ],
+              "arguments": ["result_limit"],
               "tool_name": "search",
               "tool_description": "Search the collection for relevant document chunks."
             },
@@ -362,11 +360,7 @@
         "properties": {
           "mode": {
             "default": "auto",
-            "enum": [
-              "auto",
-              "pdf",
-              "text"
-            ],
+            "enum": ["auto", "pdf", "text"],
             "title": "Mode",
             "type": "string"
           },
@@ -430,12 +424,7 @@
           "tokenizer": {
             "default": "wordpiece",
             "description": "Counter used to measure chunk_size and overlap. Match the embedding model's own tokenizer \u2014 wordpiece for BERT-family embedders, cl100k for OpenAI-family. whitespace counts words, not tokens, and undercounts by roughly 25%.",
-            "enum": [
-              "wordpiece",
-              "cl100k",
-              "whitespace",
-              "huggingface"
-            ],
+            "enum": ["wordpiece", "cl100k", "whitespace", "huggingface"],
             "title": "Tokenizer",
             "type": "string"
           },
@@ -582,10 +571,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -649,10 +635,7 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ]
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "indexer.bm25",
@@ -682,10 +665,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -724,10 +704,7 @@
         "ensure_index": true
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ]
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "ingestion.output",
@@ -853,10 +830,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -904,10 +878,7 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ]
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "retriever.bm25",
@@ -937,10 +908,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -988,10 +956,7 @@
         "top_k": null
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ]
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "fusion.rrf",
@@ -1128,9 +1093,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "title": "PipelineOutputField",
             "type": "object"
           }
