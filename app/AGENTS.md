@@ -304,7 +304,17 @@ frontend form code — only a new `ConfigFieldKind` would.
   4,096 indexed dims (fp32 HNSW stops at 2,000; above that the HNSW index is built
   over a `halfvec` fp16 cast and queries must use the same cast or the planner
   skips the index — needs pgvector ≥ 0.7.0, checked at create time), Pinecone
-  20,000.
+  20,000. Query-conditioned aggregate planes are capabilities too:
+  `supports_lexical_count`/`supports_lexical_facet` (ParadeDB/pgvector via SQL
+  aggregate over the lex table; Pinecone has neither) gate the count/facet tool
+  nodes and their wizard templates.
+- **A store-bound node's `supported_backends` is capability-*derived*, never
+  hand-listed.** `PipelineNodeBase.supported_backends()` returns `None` for
+  store-agnostic nodes; store-bound overrides read the catalog via
+  `backends_where(lambda c: c.supports_…)` (or pin a single backend for legacy
+  variants). Hand-listing backends there duplicates the capability and drifts the
+  moment a backend is added — the editor's "Only on …" node badge and the tool
+  wizard's template gate both read this derived list.
 - **`get_vector_store` is the single prerequisite gate.** Pinecone without a
   connection, or pgvector while the extension is unavailable, raises
   `InvalidInputError` there (→400). Routes never check vector prerequisites up

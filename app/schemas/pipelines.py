@@ -138,6 +138,9 @@ class NodeSpecRead(BaseModel):
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False
+    #: Vector-store backends this node works with (`None` for store-agnostic
+    #: nodes). The editor uses it to flag a node the selected backend can't run.
+    supported_backends: list[str] | None = None
 
 
 class PipelineNodesResponse(BaseModel):

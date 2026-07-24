@@ -2,8 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PipelineNodeLibrary } from "@/components/pipelines/PipelineNodeLibrary";
-
-import type { NodeSpec } from "@/lib/types";
+import { makeNodeSpec } from "@/test/fixtures";
 
 describe("PipelineNodeLibrary", () => {
   it("renders catalog entries and handles preview/drag", () => {
@@ -11,20 +10,7 @@ describe("PipelineNodeLibrary", () => {
     const catalog = [
       {
         family: "chunker" as const,
-        specs: [
-          {
-            type: "chunker.token",
-            label: "Token Chunker",
-            category: "ingestion",
-            description: "",
-            example: "",
-            input_ports: [],
-            output_ports: [],
-            config_schema: {},
-            default_config: {},
-            hidden: false,
-          } satisfies NodeSpec,
-        ],
+        specs: [makeNodeSpec({ type: "chunker.token", label: "Token Chunker" })],
       },
     ];
 
@@ -40,18 +26,7 @@ describe("PipelineNodeLibrary", () => {
 
   it("disables every reranker add path without a reranking connection", () => {
     const onPreviewNode = vi.fn();
-    const reranker = {
-      type: "reranker.model",
-      label: "Reranker",
-      category: "retrieval",
-      description: "",
-      example: "",
-      input_ports: [],
-      output_ports: [],
-      config_schema: {},
-      default_config: {},
-      hidden: false,
-    } satisfies NodeSpec;
+    const reranker = makeNodeSpec({ type: "reranker.model", label: "Reranker" });
     const catalog = [{ family: "ranking" as const, specs: [reranker] }];
 
     render(
@@ -69,5 +44,46 @@ describe("PipelineNodeLibrary", () => {
     expect(onPreviewNode).not.toHaveBeenCalled();
     expect(screen.getByText("Add a reranking provider to continue")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("flags a backend-restricted node with the backends it works with", () => {
+    const facet = makeNodeSpec({
+      type: "facet.bm25",
+      label: "BM25 Facet",
+      supported_backends: ["pgvector"],
+    });
+    const catalog = [{ family: "retriever" as const, specs: [facet] }];
+
+    render(
+      <PipelineNodeLibrary
+        catalog={catalog}
+        onPreviewNode={vi.fn()}
+        knownBackends={["pgvector", "pinecone"]}
+      />,
+    );
+
+    // The restriction shows as a backend icon whose tooltip names the store.
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Only available on ParadeDB / pgvector");
+    // Restriction is informational, not a hard gate — the node is still draggable.
+    expect(screen.getByRole("button", { name: /BM25 Facet/ })).not.toBeDisabled();
+  });
+
+  it("shows no backend badge for a node that works with every known backend", () => {
+    const retriever = makeNodeSpec({
+      type: "retriever.vector",
+      label: "Retriever",
+      supported_backends: ["pgvector", "pinecone"],
+    });
+    const catalog = [{ family: "retriever" as const, specs: [retriever] }];
+
+    render(
+      <PipelineNodeLibrary
+        catalog={catalog}
+        onPreviewNode={vi.fn()}
+        knownBackends={["pgvector", "pinecone"]}
+      />,
+    );
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

@@ -116,3 +116,57 @@ def lexical_count_support_issue(
         ),
         severity="error",
     )
+
+
+def dimension_mismatch_issue(
+    embedder_dim: int | None,
+    indexer_dim: int | None,
+    ids: tuple[str, str],
+) -> PipelineValidationIssue | None:
+    """Flag an embedder/indexer dimension mismatch or missing configuration.
+
+    `ids` is `(indexer_node_id, embedder_node_id)`.
+    """
+    indexer_id, embedder_id = ids
+    if embedder_dim and indexer_dim and embedder_dim != indexer_dim:
+        return PipelineValidationIssue(
+            message=(
+                f"Indexer node '{indexer_id}' dimension {indexer_dim} does not "
+                f"match embedder '{embedder_id}' dimension {embedder_dim}."
+            ),
+            severity="error",
+        )
+    if embedder_dim and not indexer_dim:
+        return PipelineValidationIssue(
+            message=(
+                f"Indexer node '{indexer_id}' has no dimension configured; ensure it "
+                f"matches embedder '{embedder_id}' dimension {embedder_dim}."
+            ),
+            severity="warning",
+        )
+    if indexer_dim and not embedder_dim:
+        return PipelineValidationIssue(
+            message=(
+                f"Embedder node '{embedder_id}' has no dimension configured; "
+                f"ensure it matches indexer '{indexer_id}' dimension {indexer_dim}."
+            ),
+            severity="warning",
+        )
+    return None
+
+
+def lexical_facet_support_issue(
+    capabilities: VectorStoreCapabilities,
+    backend_label: str,
+    node_id: str,
+) -> PipelineValidationIssue | None:
+    """Flag a facet node targeting a backend that cannot facet lexical matches."""
+    if capabilities.supports_lexical_facet:
+        return None
+    return PipelineValidationIssue(
+        message=(
+            f"Node '{node_id}' requires lexical match faceting, which the "
+            f"{backend_label} backend does not support."
+        ),
+        severity="error",
+    )

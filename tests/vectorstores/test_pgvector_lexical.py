@@ -20,13 +20,18 @@ from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
 
 
-def _text_chunk(chunk_id: str, text: str, document_id: str = "doc-1") -> DocumentChunk:
+def _text_chunk(
+    chunk_id: str,
+    text: str,
+    document_id: str = "doc-1",
+    metadata: dict[str, str] | None = None,
+) -> DocumentChunk:
     return DocumentChunk(
         document_id=document_id,
         chunk_id=chunk_id,
         text=text,
         order=int(chunk_id.split(":")[-1]) if ":" in chunk_id else 0,
-        metadata=DocumentMetadata(data={"source": "test.txt"}),
+        metadata=DocumentMetadata(data=metadata if metadata is not None else {"source": "test.txt"}),
     )
 
 
@@ -200,3 +205,100 @@ class TestLexicalCount:
 
         assert PgvectorStore.capabilities.supports_lexical_count is True
         assert PineconeStore.capabilities.supports_lexical_count is False
+
+
+class TestLexicalFacet:
+    """`lexical_facet` groups BM25 matches by a chunk-metadata field — the
+    facet tool's data plane (#133)."""
+
+    def _seed_aurora_chunks(self, store: PgvectorStore) -> None:
+        _make_sparse_index(store)
+        store.upsert_lexical(
+            "docs-bm25",
+            "ns-1",
+            [
+                _text_chunk(
+                    "a:0", "the aurora shimmered over the station", "doc-a",
+                    metadata={"filename": "alpha.md"},
+                ),
+                _text_chunk(
+                    "a:1", "aurora observations continued at dawn", "doc-a",
+                    metadata={"filename": "alpha.md"},
+                ),
+                _text_chunk(
+                    "b:0", "aurora forecasts for the week", "doc-b",
+                    metadata={"filename": "beta.md"},
+                ),
+                _text_chunk(
+                    "c:0", "tidepool consensus rounds", "doc-c",
+                    metadata={"filename": "gamma.md"},
+                ),
+            ],
+        )
+
+    def test_facets_group_matches_by_metadata_field(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        self._seed_aurora_chunks(store)
+
+        buckets = store.lexical_facet(
+            "docs-bm25", "ns-1", text="aurora", field="filename", top_n=10
+        )
+
+        assert [
+            (bucket.value, bucket.matching_documents, bucket.matching_chunks)
+            for bucket in buckets
+        ] == [("alpha.md", 1, 2), ("beta.md", 1, 1)]
+
+    def test_facet_top_n_caps_buckets(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        self._seed_aurora_chunks(store)
+
+        buckets = store.lexical_facet(
+            "docs-bm25", "ns-1", text="aurora", field="filename", top_n=1
+        )
+
+        assert [bucket.value for bucket in buckets] == ["alpha.md"]
+
+    def test_chunks_missing_the_field_group_under_none(
+        self, pg_search_session: Session
+    ) -> None:
+        store = PgvectorStore(pg_search_session)
+        _make_sparse_index(store)
+        store.upsert_lexical(
+            "docs-bm25",
+            "ns-1",
+            [
+                _text_chunk("a:0", "aurora over the ridge", "doc-a", metadata={}),
+                _text_chunk(
+                    "b:0", "aurora at sea", "doc-b", metadata={"filename": "beta.md"}
+                ),
+            ],
+        )
+
+        buckets = store.lexical_facet(
+            "docs-bm25", "ns-1", text="aurora", field="filename", top_n=10
+        )
+
+        assert [(bucket.value, bucket.matching_chunks) for bucket in buckets] == [
+            ("beta.md", 1),
+            (None, 1),
+        ]
+
+    def test_facet_on_missing_index_raises_not_found(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        with pytest.raises(NotFoundError):
+            store.lexical_facet("no-such-index", "ns", text="anything", field="filename")
+
+    def test_capability_flag_gates_unsupporting_backends(self) -> None:
+        from app.vectorstores.pinecone.store import PineconeStore
+
+        assert PgvectorStore.capabilities.supports_lexical_facet is True
+        assert PineconeStore.capabilities.supports_lexical_facet is False
+
+    def test_default_implementation_raises_domain_error(self) -> None:
+        """A backend without facet support answers a domain 400, not a crash."""
+        from app.vectorstores.pinecone.store import PineconeStore
+
+        store = PineconeStore(object())  # type: ignore[arg-type]  # client never touched
+        with pytest.raises(InvalidInputError, match="facet"):
+            store.lexical_facet("idx", "ns", text="q", field="filename")

@@ -10,7 +10,7 @@ import { PipelineNodeLibrary } from "./PipelineNodeLibrary";
 import { VariablesPanel } from "./VariablesPanel";
 
 import type { NodeFamily } from "./lib/pipeline-theme";
-import type { CatalogModel, NodeSpec, Pipeline, PipelineVariable } from "@/lib/types";
+import type { CatalogModel, IndexBackend, NodeSpec, Pipeline, PipelineVariable } from "@/lib/types";
 
 type SidebarTab = "pipelines" | "variables";
 
@@ -29,6 +29,7 @@ type PipelineSidebarProps = {
   variablesDisabled: boolean;
   hasRerankingProvider: boolean;
   rerankingProviderMessage?: string | null;
+  knownBackends: IndexBackend[];
 };
 
 export function PipelineSidebar({
@@ -46,6 +47,7 @@ export function PipelineSidebar({
   variablesDisabled,
   hasRerankingProvider,
   rerankingProviderMessage,
+  knownBackends,
 }: PipelineSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("pipelines");
 
@@ -75,6 +77,7 @@ export function PipelineSidebar({
             onPreviewNode={onPreviewNode}
             hasRerankingProvider={hasRerankingProvider}
             rerankingProviderMessage={rerankingProviderMessage}
+            knownBackends={knownBackends}
           />
         </div>
       ) : (

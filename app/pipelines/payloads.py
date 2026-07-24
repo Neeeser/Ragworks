@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,6 +16,25 @@ from app.retrieval.models import (
     RetrievalResponse,
 )
 from app.retrieval.parsers.base import DocumentSource
+from app.vectorstores.base import FacetBucket
+
+#: One structured output value: a scalar, or a facet-bucket list (the facet
+#: tool's grouped counts). Widening this union is how a new structured value
+#: shape joins the tool-result plane — `dump_outputs` must stay in lockstep.
+StructuredValue = int | float | str | bool | list[FacetBucket]
+
+
+def dump_outputs(outputs: Mapping[str, StructuredValue]) -> dict[str, object]:
+    """Return a JSON-safe view of structured outputs.
+
+    Scalars pass through; facet buckets dump to plain dicts. Every boundary
+    that leaves the typed payload world (the wire response, the query-event
+    JSON column, trace summary values) goes through this one function.
+    """
+    return {
+        key: [bucket.model_dump() for bucket in value] if isinstance(value, list) else value
+        for key, value in outputs.items()
+    }
 
 
 class TokenizerSpec(BaseModel):
@@ -86,13 +106,13 @@ class QueryEmbeddingPayload(BaseModel):
 
 
 class StructuredValuesPayload(BaseModel):
-    """Named scalar values produced by a structured tool node.
+    """Named structured values produced by a structured tool node.
 
     The `tool.output` terminal merges every inbound values payload into the
     result's `outputs` — for structured tools, these ARE the tool result.
     """
 
-    values: dict[str, int | float | str | bool] = Field(default_factory=dict)
+    values: dict[str, StructuredValue] = Field(default_factory=dict)
     usage: TokenUsage = Field(default_factory=TokenUsage)
 
 
@@ -106,4 +126,4 @@ class RetrievalPayload(BaseModel):
 
     response: RetrievalResponse
     usage: TokenUsage = Field(default_factory=TokenUsage)
-    outputs: dict[str, int | float | str | bool] = Field(default_factory=dict)
+    outputs: dict[str, StructuredValue] = Field(default_factory=dict)

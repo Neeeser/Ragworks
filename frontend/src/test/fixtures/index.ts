@@ -220,6 +220,7 @@ export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
     config_schema: {},
     default_config: {},
     hidden: false,
+    supported_backends: null,
     ...overrides,
   };
 }

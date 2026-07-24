@@ -44,6 +44,10 @@ export interface BackendCapabilities {
   max_upsert_batch: number;
   max_top_k: number;
   requires_api_key: boolean;
+  /** Whether the backend can count lexical matches (the count tool's data plane). */
+  supports_lexical_count: boolean;
+  /** Whether the backend can facet lexical matches (the facet tool's data plane). */
+  supports_lexical_facet: boolean;
 }
 
 export interface BackendInfo {
@@ -214,6 +218,12 @@ export interface NodeSpec {
   config_schema: Record<string, unknown>;
   default_config: Record<string, unknown>;
   hidden: boolean;
+  /**
+   * Vector-store backends this node works with; `null` for store-agnostic
+   * nodes (chunkers, embedders, terminals). The node library renders it so a
+   * user learns a backend-specific node is off-limits before wiring it in.
+   */
+  supported_backends: IndexBackend[] | null;
 }
 
 export interface PipelineValidationResult {

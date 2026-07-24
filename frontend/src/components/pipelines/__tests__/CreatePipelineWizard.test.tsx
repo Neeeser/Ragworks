@@ -28,7 +28,8 @@ const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
-vi.mock("@/components/pipelines/lib/pipeline-scaffold", () => ({
+vi.mock("@/components/pipelines/lib/pipeline-scaffold", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
 }));
 vi.mock("@/components/pipelines/lib/pipeline-utils", () => ({
@@ -190,13 +191,17 @@ describe("CreatePipelineWizard", () => {
 
     renderWizard({ kind: "retrieval", indexes, onClose, onCreated });
 
+    // Template step: the default (semantic + keyword) is preselected.
+    expect(screen.getByRole("radio", { name: /Semantic \+ keyword/ })).toBeChecked();
+    await user.click(getNextButton());
+
     await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(getNextButton());
 
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
 
-    // Embedding step for retrieval pipelines.
+    // Embedding step for semantic retrieval pipelines.
     expect(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID)).toBeInTheDocument();
     await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
     await user.click(getNextButton());
@@ -208,13 +213,13 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
+      // Semantic-keyword template builds via the hybrid retrieval scaffold —
+      // no chunk options (those belong to ingestion).
       expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("retrieval", "pgvector", {
         indexName: "alpha",
         indexDimension: 768,
         embeddingConnectionId: "conn-openrouter-1",
         embeddingModel: "emb-1",
-        chunkSize: 512,
-        chunkOverlap: 200,
         includeBm25: true,
         indexNameMaxLength: 45,
       });
@@ -305,6 +310,7 @@ describe("CreatePipelineWizard", () => {
     });
     const { rerender } = render(<CreatePipelineWizard {...props} />);
 
+    await user.click(getNextButton()); // template step (semantic default)
     await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
@@ -391,6 +397,86 @@ describe("CreatePipelineWizard", () => {
 
     expect(flowPlayerSpy).toHaveBeenLastCalledWith(expect.objectContaining({ autoPlay: false }));
   });
+
+  it("skips the embedding step for the count template and creates without a model", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({
+      kind: "retrieval",
+      indexes: [makeVectorIndex({ name: "alpha", backend: "pgvector" })],
+      onCreated,
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Count matches/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+
+    // No embedding step — count doesn't embed. Straight to review + create.
+    expect(screen.queryByTestId(EMBEDDING_SELECTOR_TEST_ID)).not.toBeInTheDocument();
+    expect(screen.getByText("Count matches")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    await waitFor(() => {
+      const definition = api.createPipeline.mock.calls[0][1].definition;
+      expect(definition.nodes.map((node: { type: string }) => node.type)).toEqual([
+        "retrieval.input",
+        "count.bm25",
+        "tool.output",
+      ]);
+      expect(onCreated).toHaveBeenCalled();
+    });
+  }, 15000);
+
+  it("skips store and embedding for the blank template, creating an input-only graph", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({ kind: "retrieval", onCreated });
+
+    await user.click(screen.getByRole("radio", { name: /Blank pipeline/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Scratch");
+    // No store step and no embedding step — straight from name to review.
+    await user.click(getNextButton());
+
+    expect(screen.queryByTestId(EMBEDDING_SELECTOR_TEST_ID)).not.toBeInTheDocument();
+    expect(screen.getByText("Blank pipeline")).toBeInTheDocument();
+    // The blank scaffold declares no vector store.
+    expect(screen.queryByText(/no index/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    await waitFor(() => {
+      const definition = api.createPipeline.mock.calls[0][1].definition;
+      expect(definition.nodes.map((node: { type: string }) => node.type)).toEqual([
+        "retrieval.input",
+      ]);
+      expect(definition.edges).toEqual([]);
+      expect(onCreated).toHaveBeenCalled();
+    });
+  }, 15000);
+
+  it("blocks the count template on a backend without count support", async () => {
+    const user = userEvent.setup();
+    renderWizard({
+      kind: "retrieval",
+      backends: [makeBackendInfo(), makePineconeBackendInfo()],
+      indexes: [makeVectorIndex({ name: "cloud", backend: "pinecone" })],
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Count matches/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
+    await user.click(getNextButton());
+
+    // Pinecone can't run count — selecting it warns and blocks proceeding.
+    await user.click(screen.getByRole("button", { name: /Pinecone/ }));
+    expect(screen.getByRole("status")).toHaveTextContent(/can't run "Count matches"/);
+    expect(getNextButton()).toBeDisabled();
+  }, 15000);
 });
 
 describe("CreatePipelineWizard backend selection", () => {

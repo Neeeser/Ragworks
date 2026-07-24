@@ -41,7 +41,7 @@ from app.retrieval.models import RetrievalResponse
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
-from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backends_where
 
 if TYPE_CHECKING:
     # Deferred: registry.py imports this module to build the node catalog,
@@ -123,6 +123,13 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         if isinstance(config, VectorRetrieverConfig):
             return config.backend
         raise ValueError(f"Node type '{cls.type}' does not declare a vector-store backend.")
+
+    @classmethod
+    def supported_backends(cls) -> tuple[IndexBackend, ...]:
+        """Pinned nodes support their one backend; unified nodes support all."""
+        if cls.backend is not None:
+            return (cls.backend,)
+        return tuple(CAPABILITIES_BY_BACKEND)
 
     @classmethod
     def validation_issues_for_node(
@@ -292,6 +299,11 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
     input_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
     output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
     config_model = Bm25RetrieverConfig
+
+    @classmethod
+    def supported_backends(cls) -> tuple[IndexBackend, ...]:
+        """Backends that can serve sparse (BM25) indexes."""
+        return backends_where(lambda capabilities: capabilities.supports_lexical)
 
     @classmethod
     def validation_issues_for_node(

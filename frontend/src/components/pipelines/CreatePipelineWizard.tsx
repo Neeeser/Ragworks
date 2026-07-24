@@ -1,28 +1,31 @@
 "use client";
 
-import { FileText, MessageCircleQuestion, Plus } from "lucide-react";
+import { FileText, MessageCircleQuestion } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { BackendCard } from "@/components/pipelines/BackendCard";
 import {
-  BACKEND_TITLES,
   CHUNK_PRESETS,
   KIND_COPY,
   WizardProcessingStep,
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
-import { IndexBackendIcon } from "@/components/pipelines/icons/IndexBackendIcon";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
+  backendSupportsTemplate,
+  PIPELINE_TEMPLATES,
+  templateById,
+  type PipelineTemplate,
+} from "@/components/pipelines/lib/pipeline-templates";
+import {
   sortIndexesByName,
   toFlowEdges,
   toFlowNodes,
 } from "@/components/pipelines/lib/pipeline-utils";
-import { Button } from "@/components/ui/button";
-import { CustomSelect } from "@/components/ui/custom-select";
+import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
+import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createPipeline } from "@/lib/api";
@@ -85,17 +88,7 @@ export function CreatePipelineWizard({
   const { config } = useAppConfig();
   const defaultBackend = config.indexing.default_backend;
   const copy = KIND_COPY[kind];
-  const steps: WizardStep[] = useMemo(
-    () => [
-      { id: "basics", label: "Name", description: "What this pipeline is for." },
-      { id: "store", label: "Vector store", description: "Where the vectors live." },
-      kind === "ingestion"
-        ? { id: "processing", label: "Processing", description: "Chunking and embedding." }
-        : { id: "model", label: "Embedding", description: "The model that embeds queries." },
-      { id: "review", label: "Review", description: "Watch it flow, then create." },
-    ],
-    [kind],
-  );
+  const isIngestion = kind === "ingestion";
 
   const [stepIndex, setStepIndex] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -105,6 +98,7 @@ export function CreatePipelineWizard({
   useEffect(() => {
     if (open) onCatalogVisible?.();
   }, [onCatalogVisible, open]);
+  const [templateId, setTemplateId] = useState(PIPELINE_TEMPLATES[0].id);
   const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
   const [name, setName] = useState("");
   const [indexName, setIndexName] = useState("");
@@ -120,6 +114,7 @@ export function CreatePipelineWizard({
     if (open && !wasOpen.current) {
       setStepIndex(0);
       setMessage(null);
+      setTemplateId(PIPELINE_TEMPLATES[0].id);
       setBackend(defaultBackend);
       setName("");
       setIndexName("");
@@ -133,7 +128,59 @@ export function CreatePipelineWizard({
     wasOpen.current = open;
   }, [open, defaultBackend, defaultChunking]);
 
+  // Ingestion pipelines have no template picker; retrieval (tool) pipelines
+  // start from one of the catalog templates.
+  const template = templateById(templateId) ?? PIPELINE_TEMPLATES[0];
+  const needsEmbedding = isIngestion || template.needsEmbedding;
+  const needsStore = isIngestion || template.needsStore;
+
+  const steps: WizardStep[] = useMemo(() => {
+    if (isIngestion) {
+      return [
+        { id: "basics", label: "Name", description: "What this pipeline is for." },
+        { id: "store", label: "Vector store", description: "Where the vectors live." },
+        { id: "processing", label: "Processing", description: "Chunking and embedding." },
+        { id: "review", label: "Review", description: "Watch it flow, then create." },
+      ];
+    }
+    const retrievalSteps: WizardStep[] = [
+      { id: "template", label: "Template", description: "The kind of tool to build." },
+      { id: "basics", label: "Name", description: "What this pipeline is for." },
+    ];
+    // The blank scaffold has no store-bound node, so there's nothing to point
+    // at an index — skip store selection and build it in the editor.
+    if (template.needsStore) {
+      retrievalSteps.push({
+        id: "store",
+        label: "Vector store",
+        description: "Where the data lives.",
+      });
+    }
+    if (template.needsEmbedding) {
+      retrievalSteps.push({
+        id: "model",
+        label: "Embedding",
+        description: "The model that embeds queries.",
+      });
+    }
+    retrievalSteps.push({
+      id: "review",
+      label: "Review",
+      description: "Watch it flow, then create.",
+    });
+    return retrievalSteps;
+  }, [isIngestion, template]);
+
+  const activeStep = steps[Math.min(stepIndex, steps.length - 1)]?.id ?? "review";
+
   const backendInfo = backends.find((info) => info.backend === backend) ?? null;
+  const templateCompatible =
+    isIngestion || !backendInfo || backendSupportsTemplate(template, backendInfo);
+  const capabilityWarning =
+    !isIngestion && backendInfo && !templateCompatible
+      ? `${backendInfo.label} can't run "${template.label}". Pick a backend that supports it (ParadeDB / pgvector).`
+      : null;
+
   // The wizard picks the dense index; the BM25 sibling is derived from it.
   const backendIndexes = useMemo(
     () =>
@@ -159,32 +206,33 @@ export function CreatePipelineWizard({
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
 
-  const definition = useMemo(
-    () =>
-      buildDefaultDefinition(kind, backend, {
-        indexName: indexName.trim() || undefined,
-        indexDimension: selectedIndex?.dimension ?? undefined,
-        embeddingConnectionId: embeddingConnectionId || undefined,
-        embeddingModel: embeddingModel || undefined,
-        chunkSize,
-        chunkOverlap,
-        // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
-        // omitted when the deployment can't serve sparse indexes.
-        includeBm25: backendInfo?.lexical_available ?? false,
-        indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
-      }),
-    [
-      kind,
-      backend,
-      indexName,
-      selectedIndex,
-      embeddingModel,
-      embeddingConnectionId,
-      chunkSize,
-      chunkOverlap,
-      backendInfo,
-    ],
-  );
+  const definition = useMemo(() => {
+    const options = {
+      indexName: indexName.trim() || undefined,
+      indexDimension: selectedIndex?.dimension ?? undefined,
+      embeddingConnectionId: embeddingConnectionId || undefined,
+      embeddingModel: embeddingModel || undefined,
+      // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
+      // omitted when the deployment can't serve sparse indexes.
+      includeBm25: backendInfo?.lexical_available ?? false,
+      indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
+    };
+    if (isIngestion) {
+      return buildDefaultDefinition("ingestion", backend, { ...options, chunkSize, chunkOverlap });
+    }
+    return template.build(backend, options);
+  }, [
+    isIngestion,
+    template,
+    backend,
+    indexName,
+    selectedIndex,
+    embeddingModel,
+    embeddingConnectionId,
+    chunkSize,
+    chunkOverlap,
+    backendInfo,
+  ]);
 
   const preview = useMemo(() => {
     // Scaffolds carry no positions; the preview is placed by the same
@@ -197,14 +245,25 @@ export function CreatePipelineWizard({
     };
   }, [definition, nodeSpecs]);
 
+  const embeddingReady = Boolean(
+    embeddingModel && embeddingConnectionId && selectedAvailability !== "missing",
+  );
+
   const canProceed = () => {
-    if (stepIndex === 0) return name.trim().length > 0;
-    if (stepIndex === 1) return indexName.trim().length > 0;
-    return Boolean(embeddingModel && embeddingConnectionId && selectedAvailability !== "missing");
+    if (activeStep === "template") return true;
+    if (activeStep === "basics") return name.trim().length > 0;
+    if (activeStep === "store") return indexName.trim().length > 0 && templateCompatible;
+    if (activeStep === "model" || activeStep === "processing") return embeddingReady;
+    // Review: the Create button stays gated on an available embedding model
+    // for pipelines that embed (a background refresh can drop the selection).
+    return !needsEmbedding || embeddingReady;
   };
 
   const handleCreate = async () => {
-    if (!embeddingModel || !embeddingConnectionId || selectedAvailability === "missing") {
+    if (
+      needsEmbedding &&
+      (!embeddingModel || !embeddingConnectionId || selectedAvailability === "missing")
+    ) {
       setMessage("Select an available embedding model before creating the pipeline.");
       return;
     }
@@ -226,6 +285,10 @@ export function CreatePipelineWizard({
     }
   };
 
+  const handleTemplateSelect = (next: PipelineTemplate) => {
+    setTemplateId(next.id);
+  };
+
   const handleBackendSelect = (nextBackend: IndexBackend) => {
     if (nextBackend === backend) return;
     setBackend(nextBackend);
@@ -243,9 +306,7 @@ export function CreatePipelineWizard({
   return (
     <WizardShell
       open={open}
-      title={
-        kind === "ingestion" ? "Create an ingestion pipeline" : "Create a search tool pipeline"
-      }
+      title={isIngestion ? "Create an ingestion pipeline" : "Create a search tool pipeline"}
       subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}
@@ -269,15 +330,21 @@ export function CreatePipelineWizard({
         />
       }
     >
-      {stepIndex === 0 && (
+      {activeStep === "template" && (
+        <WizardTemplateStep selectedId={templateId} onSelect={handleTemplateSelect} />
+      )}
+
+      {activeStep === "basics" && (
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-2xl border border-hairline bg-surface p-4">
-            {kind === "ingestion" ? (
+            {isIngestion ? (
               <FileText className="mt-0.5 h-5 w-5 shrink-0 text-accent-cyan" />
             ) : (
               <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-accent-violet" />
             )}
-            <p className="text-sm leading-relaxed text-body">{copy.explainer}</p>
+            <p className="text-sm leading-relaxed text-body">
+              {isIngestion ? copy.explainer : template.description}
+            </p>
           </div>
           <Field
             label="Pipeline name"
@@ -294,71 +361,21 @@ export function CreatePipelineWizard({
         </div>
       )}
 
-      {stepIndex === 1 && (
-        <div className="space-y-4">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">
-              Vector store
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {backends.map((info) => (
-                <BackendCard
-                  key={info.backend}
-                  info={info}
-                  selected={info.backend === backend}
-                  onSelect={handleBackendSelect}
-                />
-              ))}
-            </div>
-          </div>
-          <Field
-            label={`${BACKEND_TITLES[backend]} index`}
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
-            <CustomSelect
-              value={indexName}
-              onValueChange={handleIndexSelect}
-              placeholder="Select an index"
-              options={[
-                { value: "", label: "Select an index" },
-                ...backendIndexes.map((index) => ({
-                  value: index.name,
-                  label: `${index.name}${
-                    typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
-                  }`,
-                  icon: <IndexBackendIcon backend={index.backend} />,
-                })),
-                {
-                  value: CREATE_SENTINEL,
-                  label: "+ Add new index...",
-                  preventFocusRestore: true,
-                },
-              ]}
-            />
-          </Field>
-          {backendInfo ? (
-            <p className="text-xs text-muted">
-              Up to {backendInfo.capabilities.max_dimension.toLocaleString()} dimensions · metrics:{" "}
-              {backendInfo.capabilities.supported_metrics.join(", ")}
-            </p>
-          ) : null}
-          {backendIndexes.length === 0 ? (
-            <div className="rounded-2xl border border-hairline bg-surface p-4 text-sm text-body">
-              <p>No {BACKEND_TITLES[backend]} indexes yet — create one to continue.</p>
-              <Button
-                variant="secondary"
-                onClick={onOpenIndexManager}
-                className="mt-3 flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Create index
-              </Button>
-            </div>
-          ) : null}
-        </div>
+      {activeStep === "store" && (
+        <WizardStoreStep
+          backends={backends}
+          backend={backend}
+          onBackendSelect={handleBackendSelect}
+          backendIndexes={backendIndexes}
+          indexName={indexName}
+          onIndexSelect={handleIndexSelect}
+          backendInfo={backendInfo}
+          onOpenIndexManager={onOpenIndexManager}
+          capabilityWarning={capabilityWarning}
+        />
       )}
 
-      {stepIndex === 2 && (
+      {(activeStep === "processing" || activeStep === "model") && (
         <WizardProcessingStep
           kind={kind}
           chunkSize={chunkSize}
@@ -386,12 +403,15 @@ export function CreatePipelineWizard({
         />
       )}
 
-      {stepIndex === 3 && (
+      {activeStep === "review" && (
         <WizardReviewStep
           kind={kind}
+          typeLabel={isIngestion ? "Ingestion" : template.label}
           name={name}
           backend={backend}
           indexName={indexName}
+          showStore={needsStore}
+          showEmbedding={needsEmbedding}
           selectedModelName={
             selectedModel?.name ??
             (embeddingModel

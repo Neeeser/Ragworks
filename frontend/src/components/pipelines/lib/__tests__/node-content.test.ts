@@ -20,6 +20,7 @@ describe("node-content", () => {
       config_schema: {},
       default_config: {},
       hidden: false,
+      supported_backends: null,
     };
     const description = resolveNodeDescription(spec);
     const example = resolveNodeExample(spec);
@@ -44,6 +45,7 @@ describe("node-content", () => {
       config_schema: {},
       default_config: {},
       hidden: false,
+      supported_backends: null,
     };
     expect(resolveNodeDescription(spec)).toBe("Custom description");
     expect(resolveNodeExample(spec)).toBeUndefined();
@@ -61,6 +63,7 @@ describe("node-content", () => {
       config_schema: {},
       default_config: {},
       hidden: false,
+      supported_backends: null,
     };
 
     expect(resolveNodeDescription(spec)).toContain("configured provider connection");

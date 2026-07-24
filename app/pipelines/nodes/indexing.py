@@ -21,6 +21,7 @@ from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.nodes.validators import (
     capability_issues,
+    dimension_mismatch_issue,
     lexical_support_issue,
     missing_index_issue,
 )
@@ -33,7 +34,7 @@ from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.vectorstores.base import IndexSpec
-from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backends_where
 
 if TYPE_CHECKING:
     # Deferred: registry.py imports this module to build the node catalog,
@@ -115,43 +116,6 @@ class VectorIndexerConfig(IndexerConfig):
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
 
 
-def _dimension_issue(
-    embedder_dim: int | None,
-    indexer_dim: int | None,
-    ids: tuple[str, str],
-) -> PipelineValidationIssue | None:
-    """Flag an embedder/indexer dimension mismatch or missing configuration.
-
-    `ids` is `(indexer_node_id, embedder_node_id)`.
-    """
-    indexer_id, embedder_id = ids
-    if embedder_dim and indexer_dim and embedder_dim != indexer_dim:
-        return PipelineValidationIssue(
-            message=(
-                f"Indexer node '{indexer_id}' dimension {indexer_dim} does not "
-                f"match embedder '{embedder_id}' dimension {embedder_dim}."
-            ),
-            severity="error",
-        )
-    if embedder_dim and not indexer_dim:
-        return PipelineValidationIssue(
-            message=(
-                f"Indexer node '{indexer_id}' has no dimension configured; ensure it "
-                f"matches embedder '{embedder_id}' dimension {embedder_dim}."
-            ),
-            severity="warning",
-        )
-    if indexer_dim and not embedder_dim:
-        return PipelineValidationIssue(
-            message=(
-                f"Embedder node '{embedder_id}' has no dimension configured; "
-                f"ensure it matches indexer '{indexer_id}' dimension {indexer_dim}."
-            ),
-            severity="warning",
-        )
-    return None
-
-
 class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
     """Shared indexing behavior.
 
@@ -175,6 +139,13 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         if isinstance(config, VectorIndexerConfig):
             return config.backend
         raise ValueError(f"Node type '{cls.type}' does not declare a vector-store backend.")
+
+    @classmethod
+    def supported_backends(cls) -> tuple[IndexBackend, ...]:
+        """Pinned nodes support their one backend; unified nodes support all."""
+        if cls.backend is not None:
+            return (cls.backend,)
+        return tuple(CAPABILITIES_BY_BACKEND)
 
     @classmethod
     def validation_issues_for_node(
@@ -208,7 +179,7 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
             if not source_def or source_def.type != EmbedderNode.type:
                 continue
             embedder_config = EmbedderConfig.model_validate(source_def.config or {})
-            issue = _dimension_issue(
+            issue = dimension_mismatch_issue(
                 embedder_config.dimension,
                 indexer_config.dimension,
                 (node.id, source_def.id),
@@ -324,6 +295,11 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
     input_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
     output_ports = (NodePort(key="indexed", label="Indexed", data_type="indexed_batch"),)
     config_model = Bm25IndexerConfig
+
+    @classmethod
+    def supported_backends(cls) -> tuple[IndexBackend, ...]:
+        """Backends that can serve sparse (BM25) indexes."""
+        return backends_where(lambda capabilities: capabilities.supports_lexical)
 
     @classmethod
     def validation_issues_for_node(

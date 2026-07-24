@@ -1,9 +1,9 @@
-"""End-to-end structured tool invocation: count pipeline → ToolResult.
+"""End-to-end structured tool invocation: count/facet pipelines → ToolResult.
 
-Builds the real count graph (query input → BM25 count → tool output), binds
-it as a collection tool, seeds a live pg_search index, and invokes through
-`ToolInvocationService` — the whole discriminated-result path the search
-page and chat consume.
+Builds the real aggregate graphs (query input → BM25 count/facet → tool
+output), binds them as collection tools, seeds a live pg_search index, and
+invokes through `ToolInvocationService` — the whole discriminated-result
+path the search page and chat consume.
 """
 
 from __future__ import annotations
@@ -67,13 +67,57 @@ def _count_definition(index_name: str) -> PipelineDefinition:
     )
 
 
-def _text_chunk(chunk_id: str, text: str, document_id: str) -> DocumentChunk:
+def _facet_definition(index_name: str) -> PipelineDefinition:
+    return PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(
+                id="query-input",
+                type="retrieval.input",
+                name="Input",
+                config={
+                    "tool_name": "facet_matches",
+                    "tool_description": "Group matching chunks by source file.",
+                },
+            ),
+            PipelineNodeDefinition(
+                id="facet",
+                type="facet.bm25",
+                name="Facet",
+                config={"backend": "pgvector", "index_name": index_name, "namespace": "ns"},
+            ),
+            PipelineNodeDefinition(id="tool-output", type="tool.output", name="Output"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="e1",
+                source="query-input",
+                target="facet",
+                source_port="request",
+                target_port="request",
+            ),
+            PipelineEdgeDefinition(
+                id="e2",
+                source="facet",
+                target="tool-output",
+                source_port="values",
+                target_port="values",
+            ),
+        ],
+    )
+
+
+def _text_chunk(
+    chunk_id: str,
+    text: str,
+    document_id: str,
+    metadata: dict[str, str] | None = None,
+) -> DocumentChunk:
     return DocumentChunk(
         document_id=document_id,
         chunk_id=chunk_id,
         text=text,
         order=0,
-        metadata=DocumentMetadata(data={}),
+        metadata=DocumentMetadata(data=metadata or {}),
     )
 
 
@@ -130,6 +174,63 @@ def test_count_tool_invocation_returns_a_structured_result(
         "matching_documents": 2,
         "matching_chunks": 3,
     }
+
+
+def test_facet_tool_invocation_returns_grouped_buckets(
+    pg_search_session: Session,
+) -> None:
+    """The facet tool answers "which sources mention X" with per-file counts,
+    JSON-safe end to end (wire outputs and the query-event column)."""
+    session = pg_search_session
+    user = models.User(email="facet@example.com", full_name="F", hashed_password="x")
+    UserRepository(session).add(user)
+    session.commit()
+    session.refresh(user)
+    install_default_pipelines(session, user)
+
+    store = PgvectorStore(session)
+    store.create_index(IndexSpec(name="facets-bm25", vector_type="sparse"))
+    store.upsert_lexical(
+        "facets-bm25",
+        "ns",
+        [
+            _text_chunk("a:0", "the aurora shimmered", "doc-a", {"filename": "alpha.md"}),
+            _text_chunk("a:1", "aurora shift notes", "doc-a", {"filename": "alpha.md"}),
+            _text_chunk("b:0", "aurora maintenance window", "doc-b", {"filename": "beta.md"}),
+            _text_chunk("c:0", "tidepool consensus", "doc-c", {"filename": "gamma.md"}),
+        ],
+    )
+
+    collection = models.Collection(
+        user_id=user.id, name="Faceted", description="", extra_metadata={}
+    )
+    session.add(collection)
+    session.commit()
+    session.refresh(collection)
+
+    pipeline = PipelineService(session).create_pipeline(
+        user=user,
+        name="Facet matches",
+        definition=_facet_definition("facets-bm25"),
+    )
+    session.commit()
+    binding = CollectionToolService(session).add_tool(user, collection, pipeline.id)
+    session.commit()
+
+    result = ToolInvocationService(session).invoke_binding(
+        user, collection, binding.id, "aurora"
+    )
+
+    assert result.kind == "structured"
+    assert result.chunks == []
+    assert result.outputs["facet_field"] == "filename"
+    assert result.outputs["facets"] == [
+        {"value": "alpha.md", "matching_documents": 1, "matching_chunks": 2},
+        {"value": "beta.md", "matching_documents": 1, "matching_chunks": 1},
+    ]
+    event = session.get(models.QueryEvent, result.query_event_id)
+    assert event is not None
+    assert event.response_payload["outputs"]["facets"] == result.outputs["facets"]
 
 
 def test_count_tool_before_first_ingest_counts_zero(pg_search_session: Session) -> None:

@@ -14,7 +14,7 @@ from app.pipelines.nodes.chunking import (
     SentenceChunkerNode,
     TokenChunkerNode,
 )
-from app.pipelines.nodes.counting import Bm25CountNode
+from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
 from app.pipelines.nodes.indexing import Bm25IndexerNode, VectorIndexerNode
@@ -90,6 +90,7 @@ def build_default_registry() -> NodeRegistry:
             IngestionOutputNode,
             RetrievalInputNode,
             Bm25CountNode,
+            Bm25FacetNode,
             VectorRetrieverNode,
             Bm25RetrieverNode,
             RRFusionNode,

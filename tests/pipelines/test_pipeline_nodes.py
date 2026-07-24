@@ -129,6 +129,36 @@ def test_pipeline_registry_specs_include_examples() -> None:
             assert "->" in spec.example
 
 
+def test_specs_declare_capability_derived_backend_support() -> None:
+    """Store-bound nodes name the backends they work with, derived from the
+    capability catalog — the editor renders this so a Pinecone user learns
+    a ParadeDB-only node is off-limits before wiring it in."""
+    registry = build_default_registry()
+    by_type = {spec.type: spec for spec in registry.specs()}
+
+    # Nodes with no store identity are backend-agnostic (None, not []).
+    assert by_type["chunker.token"].supported_backends is None
+    assert by_type["embedder.text"].supported_backends is None
+    assert by_type["tool.output"].supported_backends is None
+
+    # Unified store nodes work with every registered backend.
+    assert by_type["indexer.vector"].supported_backends == ["pgvector", "pinecone"]
+    assert by_type["retriever.vector"].supported_backends == ["pgvector", "pinecone"]
+
+    # Sparse (BM25) nodes: both backends serve sparse indexes today.
+    assert by_type["indexer.bm25"].supported_backends == ["pgvector", "pinecone"]
+    assert by_type["retriever.bm25"].supported_backends == ["pgvector", "pinecone"]
+
+    # Aggregate tools ride on SQL aggregation only ParadeDB/pgvector serves;
+    # Pinecone has no query-conditioned count/facet API.
+    assert by_type["count.bm25"].supported_backends == ["pgvector"]
+    assert by_type["facet.bm25"].supported_backends == ["pgvector"]
+
+    # Legacy pinned nodes (hidden) still declare their single backend.
+    assert by_type["retriever.pinecone"].supported_backends == ["pinecone"]
+    assert by_type["retriever.pgvector"].supported_backends == ["pgvector"]
+
+
 def test_chunker_node_runs_and_summarizes(session: Session) -> None:
     user = _build_user()
     collection = _build_collection(user)

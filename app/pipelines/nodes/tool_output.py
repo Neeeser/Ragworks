@@ -14,7 +14,9 @@ from app.pipelines.expressions import ExpressionError, ModelValue, evaluate, par
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.payloads import (
     RetrievalPayload,
+    StructuredValue,
     StructuredValuesPayload,
+    dump_outputs,
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -90,7 +92,7 @@ class ToolOutputNode(PipelineNodeBase[ToolOutputConfig]):
             StructuredValuesPayload.model_validate(item)
             for item in (raw_values if isinstance(raw_values, list) else [raw_values])
         ]
-        merged: dict[str, int | float | str | bool] = {}
+        merged: dict[str, StructuredValue] = {}
         for payload in payloads:
             merged.update(payload.values)
         merged.update(evaluate_output_fields(self.config.outputs, context))
@@ -112,5 +114,5 @@ class ToolOutputNode(PipelineNodeBase[ToolOutputConfig]):
         del inputs
         result = RetrievalPayload.model_validate(outputs.get("result"))
         return NodeTraceSummary(
-            outputs=[NodeTraceValue(label="Outputs", value=dict(result.outputs))]
+            outputs=[NodeTraceValue(label="Outputs", value=dump_outputs(result.outputs))]
         )

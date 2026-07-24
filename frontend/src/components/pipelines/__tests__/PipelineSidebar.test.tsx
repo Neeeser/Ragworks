@@ -59,6 +59,7 @@ describe("PipelineSidebar", () => {
         modelOptions={[]}
         variablesDisabled={false}
         hasRerankingProvider={false}
+        knownBackends={["pgvector", "pinecone"]}
       />,
     );
 

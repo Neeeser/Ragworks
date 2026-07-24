@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { QueryArgumentControls } from "@/components/collections/detail/search/QueryArgumentControls";
 import { SearchFailurePanel } from "@/components/collections/detail/search/SearchFailurePanel";
 import { SearchResultCard } from "@/components/collections/detail/search/SearchResultCard";
+import { StructuredOutputs } from "@/components/collections/detail/search/StructuredOutputs";
 import { useCollectionSearch } from "@/components/collections/detail/search/use-collection-search";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -179,25 +180,8 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
 
           {structured ? (
             // Structured tool results: the declared output fields ARE the
-            // result. Rendered as labeled values; chunk cards don't apply.
-            <dl className="mt-5 space-y-2">
-              {outputs.map(([name, value]) => (
-                <div
-                  key={name}
-                  className="flex flex-wrap items-baseline gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3"
-                >
-                  <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                    {name}
-                  </dt>
-                  <dd className="font-mono text-sm text-primary">
-                    {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                  </dd>
-                </div>
-              ))}
-              {outputs.length === 0 && (
-                <p className="text-sm text-muted">The tool returned no output fields.</p>
-              )}
-            </dl>
+            // result (count scalars, facet-bucket tables); chunk cards don't apply.
+            <StructuredOutputs outputs={outputs} />
           ) : (
             <>
               {outputs.length > 0 ? (

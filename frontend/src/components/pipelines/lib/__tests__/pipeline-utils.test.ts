@@ -191,6 +191,7 @@ describe("pipeline-utils", () => {
         config_schema: { input: { type: "string" } },
         default_config: {},
         hidden: false,
+        supported_backends: null,
       },
     ];
 
@@ -305,6 +306,7 @@ describe("pipeline-utils", () => {
         config_schema: {},
         default_config: {},
         hidden: false,
+        supported_backends: null,
       },
       {
         type: "chunker.token",
@@ -317,6 +319,7 @@ describe("pipeline-utils", () => {
         config_schema: {},
         default_config: {},
         hidden: false,
+        supported_backends: null,
       },
       {
         type: utilityNodeType,
@@ -329,6 +332,7 @@ describe("pipeline-utils", () => {
         config_schema: {},
         default_config: {},
         hidden: false,
+        supported_backends: null,
       },
     ];
 

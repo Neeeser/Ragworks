@@ -12,6 +12,7 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary
+from app.schemas.enums import IndexBackend
 
 if TYPE_CHECKING:
     # Deferred to break the node.py <-> registry.py import cycle: registry.py
@@ -28,6 +29,11 @@ class NodeSpec(BaseModel):
     `hidden` marks node types that stay registered (persisted definitions
     reference type ids permanently) but should not be offered in the editor's
     catalog -- deprecated backend-specific variants and internal nodes.
+
+    `supported_backends` names the vector-store backends a store-bound node
+    works with (`None` for nodes with no store identity at all). Derived from
+    the capability catalog, never hand-listed — the editor renders it so a
+    user learns a backend-specific node is off-limits before wiring it in.
     """
 
     type: str
@@ -40,6 +46,7 @@ class NodeSpec(BaseModel):
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False
+    supported_backends: list[str] | None = None
 
 
 class PipelineValidationIssue(BaseModel):
@@ -111,6 +118,17 @@ class PipelineNodeBase(Generic[ConfigT]):
         return []
 
     @classmethod
+    def supported_backends(cls) -> tuple[IndexBackend, ...] | None:
+        """Return the vector-store backends this node works with.
+
+        `None` (the default) means the node has no store identity at all —
+        chunkers, embedders, fusion, terminals. Store-bound nodes override
+        this by *deriving* from the capability catalog (`backends_where`),
+        never by hand-listing backends.
+        """
+        return None
+
+    @classmethod
     def spec(cls) -> NodeSpec:
         """Return the registry spec for this node type."""
         if not cls.description or not cls.description.strip():
@@ -119,6 +137,7 @@ class PipelineNodeBase(Generic[ConfigT]):
             raise ValueError(f"Node {cls.type} must define an example.")
         schema = cls.config_model.model_json_schema()
         default_config = cls.config_model().model_dump()
+        backends = cls.supported_backends()
         return NodeSpec(
             type=cls.type,
             label=cls.label,
@@ -130,4 +149,7 @@ class PipelineNodeBase(Generic[ConfigT]):
             config_schema=schema,
             default_config=default_config,
             hidden=cls.hidden,
+            supported_backends=(
+                [backend.value for backend in backends] if backends is not None else None
+            ),
         )

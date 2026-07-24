@@ -20,7 +20,7 @@ from app.db import models
 from app.db.repositories import QueryRepository
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.interface import ToolOutputKind
-from app.pipelines.payloads import RetrievalPayload
+from app.pipelines.payloads import RetrievalPayload, dump_outputs
 from app.pipelines.resolution import VariableResolutionError
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
@@ -201,7 +201,7 @@ class ToolInvocationService:
             query=query,
             top_k=top_k,
             chunks=self._map_chunks(payload),
-            outputs=dict(payload.outputs),
+            outputs=dump_outputs(payload.outputs),
             usage=payload.usage.model_dump(),
             query_event_id=event.id,
             pipeline_run_id=handle.run.id,
@@ -279,7 +279,8 @@ class ToolInvocationService:
         if arguments:
             response_payload["arguments"] = dict(arguments)
         if payload.outputs:
-            response_payload["outputs"] = dict(payload.outputs)
+            # JSON column: facet buckets must land as plain dicts, not models.
+            response_payload["outputs"] = dump_outputs(payload.outputs)
         return QueryRepository(self.session).add_event(
             models.QueryEvent(
                 user_id=user.id,

@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 
+import { Tooltip } from "../ui/tooltip";
+
+import { IndexBackendIcon } from "./icons/IndexBackendIcon";
+import { backendSupportLabel, restrictedBackends } from "./lib/backend-support";
 import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 
-import type { NodeSpec } from "@/lib/types";
+import type { IndexBackend, NodeSpec } from "@/lib/types";
 import type { DragEvent } from "react";
 
 type PipelineNodeLibraryProps = {
@@ -13,6 +17,8 @@ type PipelineNodeLibraryProps = {
   onPreviewNode: (spec: NodeSpec) => void;
   hasRerankingProvider?: boolean;
   rerankingProviderMessage?: string | null;
+  /** Backends this deployment knows about; used to flag backend-restricted nodes. */
+  knownBackends?: IndexBackend[];
 };
 
 const NODE_DRAG_TYPE = "application/ragworks-node";
@@ -22,6 +28,7 @@ export function PipelineNodeLibrary({
   onPreviewNode,
   hasRerankingProvider = true,
   rerankingProviderMessage = RERANKER_PROVIDER_REQUIRED,
+  knownBackends = [],
 }: PipelineNodeLibraryProps) {
   const handleDragStart = (event: DragEvent<HTMLButtonElement>, spec: NodeSpec) => {
     if (spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider) {
@@ -47,6 +54,11 @@ export function PipelineNodeLibrary({
               <div className="mt-2 space-y-2">
                 {specs.map((spec) => {
                   const unavailable = spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider;
+                  // Restriction is informational: a store-bound node still
+                  // drags onto the canvas so a user can build a pipeline for
+                  // a backend they haven't selected yet — validation is the
+                  // hard gate. The badge just sets expectations up front.
+                  const restricted = restrictedBackends(spec, knownBackends);
                   return (
                     <div key={spec.type} className="space-y-2">
                       <button
@@ -57,8 +69,30 @@ export function PipelineNodeLibrary({
                         disabled={unavailable}
                         className={`w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-left text-xs text-body ${styles.border} hover:border-strong disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-hairline`}
                       >
-                        <p className="font-semibold">{spec.label}</p>
-                        <p className="text-[10px] text-meta">{spec.type}</p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold">{spec.label}</p>
+                            <p className="text-[10px] text-meta">{spec.type}</p>
+                          </div>
+                          {restricted ? (
+                            // One backend logo per store the node works with;
+                            // a single tooltip carries the "only available on"
+                            // detail so the row stays uncluttered and new
+                            // backends just add another icon.
+                            <Tooltip
+                              content={`Only available on ${backendSupportLabel(restricted)}`}
+                              triggerClassName="mt-0.5 shrink-0 items-center gap-1"
+                            >
+                              {restricted.map((backend) => (
+                                <IndexBackendIcon
+                                  key={backend}
+                                  backend={backend}
+                                  className="h-3.5 w-3.5 shrink-0"
+                                />
+                              ))}
+                            </Tooltip>
+                          ) : null}
+                        </div>
                       </button>
                       {unavailable ? (
                         <p className="text-xs text-muted">

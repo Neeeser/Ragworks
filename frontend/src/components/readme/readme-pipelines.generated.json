@@ -328,7 +328,8 @@
         "type": "object"
       },
       "default_config": {},
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "parser.document",
@@ -376,7 +377,8 @@
         "mode": "auto",
         "encoding": "utf-8"
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "chunker.token",
@@ -449,7 +451,8 @@
         "tokenizer": "wordpiece",
         "hf_model_id": null
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "embedder.text",
@@ -537,7 +540,8 @@
         "model_name": "",
         "dimension": null
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "indexer.vector",
@@ -630,7 +634,8 @@
         "ensure_index": true,
         "backend": "pgvector"
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "indexer.bm25",
@@ -698,7 +703,8 @@
         "namespace": "col-{collection_id}",
         "ensure_index": true
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "ingestion.output",
@@ -731,7 +737,8 @@
         "type": "object"
       },
       "default_config": {},
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "retrieval.input",
@@ -792,7 +799,8 @@
         "tool_name": null,
         "tool_description": null
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "retriever.vector",
@@ -869,7 +877,8 @@
         "top_k": null,
         "backend": "pgvector"
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "retriever.bm25",
@@ -946,7 +955,8 @@
         "namespace": "col-{collection_id}",
         "top_k": null
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": ["pgvector", "pinecone"]
     },
     {
       "type": "fusion.rrf",
@@ -989,7 +999,8 @@
       "default_config": {
         "k": 60
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "limit.results",
@@ -1039,7 +1050,8 @@
       "default_config": {
         "max_results": null
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     },
     {
       "type": "retrieval.output",
@@ -1102,7 +1114,8 @@
       "default_config": {
         "outputs": []
       },
-      "hidden": false
+      "hidden": false,
+      "supported_backends": null
     }
   ]
 }

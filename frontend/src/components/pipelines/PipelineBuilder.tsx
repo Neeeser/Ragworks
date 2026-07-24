@@ -349,6 +349,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           variablesDisabled: !selectedPipeline,
           hasRerankingProvider,
           rerankingProviderMessage,
+          knownBackends: backends.map((info) => info.backend),
         }}
         canvas={{
           canvasKey: `${selectedPipelineId ?? "none"}-v${selectedPipelineVersion}`,

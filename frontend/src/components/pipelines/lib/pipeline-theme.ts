@@ -215,8 +215,8 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   if (prefix === "indexer") return "indexer";
   if (prefix === "parser") return "parser";
   if (prefix === "retriever") return "retriever";
-  // Counting reads an index like a retriever — same semantic stage/color.
-  if (prefix === "count") return "retriever";
+  // Count/facet read an index like a retriever — same semantic stage/color.
+  if (prefix === "count" || prefix === "facet") return "retriever";
   // One ranking family: fusion merges, rerankers reorder, limit cuts —
   // the same semantic stage, so they share a section and stage color.
   if (prefix === "fusion" || prefix === "reranker" || prefix === "limit") return "ranking";

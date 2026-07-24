@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 from app.retrieval.models import DocumentChunk, RetrievalResponse, ScoredChunk
 from app.schemas.enums import IndexBackend
 from app.vectorstores.base import (
+    FacetBucket,
     IndexSpec,
     IndexStats,
     LexicalCountResult,
@@ -83,6 +84,9 @@ class StubVectorStore(VectorStoreBackend):
         )
         self.lexical_count_error: Exception | None = None
         self.lexical_count_calls: list[dict[str, Any]] = []
+        self.lexical_facet_result: list[FacetBucket] = []
+        self.lexical_facet_error: Exception | None = None
+        self.lexical_facet_calls: list[dict[str, Any]] = []
         self.ensure_calls: list[IndexSpec] = []
         self.upsert_calls: list[dict[str, Any]] = []
         self.upsert_lexical_calls: list[dict[str, Any]] = []
@@ -166,6 +170,22 @@ class StubVectorStore(VectorStoreBackend):
         if self.lexical_count_error is not None:
             raise self.lexical_count_error
         return self.lexical_count_result
+
+    def lexical_facet(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        text: str,
+        field: str,
+        top_n: int = 10,
+    ) -> list[FacetBucket]:
+        self.lexical_facet_calls.append(
+            {"index": index, "namespace": namespace, "text": text, "field": field, "top_n": top_n}
+        )
+        if self.lexical_facet_error is not None:
+            raise self.lexical_facet_error
+        return list(self.lexical_facet_result)
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         self.deleted_namespaces.append((index, namespace))

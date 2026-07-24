@@ -59,14 +59,16 @@ class CollectionQueryResponse(BaseModel):
     """Response payload for collection queries.
 
     `outputs` carries the pipeline's declared output expressions, evaluated
-    for this run; empty when the pipeline declares none.
+    for this run; empty when the pipeline declares none. Values are JSON-safe
+    scalars, or lists of facet-bucket dicts when the primary tool is a
+    structured facet pipeline (this endpoint delegates to the primary tool).
     """
 
     query: str
     top_k: int
     chunks: list[RetrievedChunk]
     usage: dict[str, Any]
-    outputs: dict[str, int | float | str | bool] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
     query_event_id: UUID | None = None
     pipeline_run_id: UUID | None = None
 
