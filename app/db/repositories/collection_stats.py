@@ -154,7 +154,7 @@ class CollectionStatsRepository(Repository):
             start,
             clauses=(
                 col(models.PipelineRun.collection_id) == collection_id,
-                col(models.PipelineRun.kind) == models.PipelineKind.INGESTION,
+                col(models.PipelineRun.trigger) == models.BindingRole.INGEST,
                 col(models.PipelineRun.status) == models.PipelineRunStatus.COMPLETED,
                 col(models.PipelineRun.completed_at).is_not(None),
             ),

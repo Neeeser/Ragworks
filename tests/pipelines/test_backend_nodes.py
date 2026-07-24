@@ -16,7 +16,7 @@ from app.pipelines.nodes.indexing import PgvectorIndexerConfig
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
 from app.pipelines.payloads import EmbeddingPayload
 from app.pipelines.registry import default_registry
-from app.pipelines.settings import resolve_ingestion_settings, resolve_retrieval_settings
+from app.pipelines.settings import resolve_pipeline_settings
 from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
 from app.schemas.enums import IndexBackend
 from app.utils.file_storage import FileStorage
@@ -121,11 +121,11 @@ def test_resolved_settings_report_backend() -> None:
     collection = _collection()
     registry = default_registry()
 
-    settings = resolve_ingestion_settings(ingestion, collection, registry)
+    settings = resolve_pipeline_settings(ingestion, collection, registry)
     assert settings.backend is IndexBackend.PGVECTOR
 
     pinecone_node = _node("indexer.pinecone", {"index_name": "pine-idx"})
-    pinecone_settings = resolve_ingestion_settings(
+    pinecone_settings = resolve_pipeline_settings(
         _definition(pinecone_node), collection, registry
     )
     assert pinecone_settings.backend is IndexBackend.PINECONE
@@ -137,7 +137,7 @@ def test_resolved_settings_report_backend() -> None:
         name="Retriever",
         config={"index_name": "docs"},
     )
-    retrieval_settings = resolve_retrieval_settings(
+    retrieval_settings = resolve_pipeline_settings(
         _definition(retriever_node), collection, registry
     )
     assert retrieval_settings.backend is IndexBackend.PGVECTOR

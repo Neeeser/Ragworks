@@ -4,13 +4,22 @@ import type { UUID } from "@/lib/types/common";
 export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
 
+/** Identity-only tool binding embedded in collection reads (`CollectionToolBindingRead`). */
+export interface CollectionToolBinding {
+  id: UUID;
+  pipeline_id: UUID;
+  is_primary: boolean;
+  enabled: boolean;
+  position: number;
+}
+
 export interface Collection {
   id: UUID;
   user_id: UUID;
   name: string;
   description?: string | null;
-  ingestion_pipeline_id?: UUID | null;
-  retrieval_pipeline_id?: UUID | null;
+  ingest_pipeline_id?: UUID | null;
+  tools: CollectionToolBinding[];
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -80,8 +89,9 @@ export interface CollectionCreatePayload {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  ingestion_pipeline_id?: UUID | null;
-  retrieval_pipeline_id?: UUID | null;
+  ingest_pipeline_id?: UUID | null;
+  /** Bound in order; the first becomes the primary search tool. */
+  tool_pipeline_ids?: UUID[] | null;
   pipeline_overrides?: CollectionPipelineOverrides;
 }
 
@@ -89,8 +99,7 @@ export interface CollectionUpdatePayload {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  ingestion_pipeline_id?: UUID | null;
-  retrieval_pipeline_id?: UUID | null;
+  ingest_pipeline_id?: UUID | null;
 }
 
 export interface Document {

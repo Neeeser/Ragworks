@@ -40,6 +40,7 @@ import {
   makeChunkDetail,
   makeChunkVisualization,
   makeCollection,
+  makeCollectionTool,
   makeCollectionStats,
   makeCollectionDiagnostics,
   makeStatsHistory,
@@ -113,6 +114,23 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     updateBasePrompt: vi.fn(async () => makePromptDetails()),
     createCollection: vi.fn(async () => makeCollection()),
     updateCollection: vi.fn(async () => makeCollection()),
+    // collection tools
+    listCollectionTools: vi.fn(async () => ({
+      tools: [],
+      ingest_pipeline_id: null,
+    })),
+    addCollectionTool: vi.fn(async () => makeCollectionTool()),
+    updateCollectionTool: vi.fn(async () => makeCollectionTool()),
+    removeCollectionTool: vi.fn(async () => undefined),
+    invokeCollectionTool: vi.fn(async () => ({
+      kind: "chunks",
+      tool_binding_id: "binding-1",
+      query: "",
+      top_k: 5,
+      chunks: [],
+      outputs: {},
+      usage: {},
+    })),
     deleteCollection: vi.fn(async () => undefined),
     fetchDocuments: vi.fn(async () => []),
     // files

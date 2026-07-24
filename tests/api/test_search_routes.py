@@ -26,7 +26,7 @@ def _declare_result_limit_argument(session: Session, user: models.User) -> None:
     pipeline = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.RETRIEVAL,
+            models.Pipeline.template_slug == "default-search",
         )
     ).one()
     service = PipelineService(session)
@@ -146,7 +146,7 @@ def test_query_failure_returns_structured_detail(
             del dimensions
             return _FailingEmbedder(model_name)
 
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _FailingResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _FailingResolver)
     collection_id = _create_collection(client)
     response = client.post(f"/api/collections/{collection_id}/query", json={"query": "hi"})
 

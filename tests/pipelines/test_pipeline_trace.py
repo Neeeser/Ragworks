@@ -156,7 +156,7 @@ def test_pipeline_trace_records_node_io(session: Session, tmp_path) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -175,7 +175,7 @@ def test_pipeline_trace_records_node_io(session: Session, tmp_path) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=version.id,
         pipeline_version=version.version,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.RUNNING,
@@ -238,7 +238,7 @@ def test_trace_recorder_mark_run_failed_is_idempotent(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -248,7 +248,7 @@ def test_trace_recorder_mark_run_failed_is_idempotent(session: Session) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.FAILED,
@@ -270,7 +270,7 @@ def test_trace_recorder_mark_run_completed_is_idempotent(session: Session) -> No
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -280,7 +280,7 @@ def test_trace_recorder_mark_run_completed_is_idempotent(session: Session) -> No
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.COMPLETED,
@@ -300,7 +300,7 @@ def test_trace_recorder_reassigns_warnings_for_json_persistence(session: Session
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -309,7 +309,7 @@ def test_trace_recorder_reassigns_warnings_for_json_persistence(session: Session
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.RUNNING,
@@ -336,7 +336,7 @@ def test_trace_recorder_mark_run_failed_sets_status(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -346,7 +346,7 @@ def test_trace_recorder_mark_run_failed_sets_status(session: Session) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.RUNNING,
@@ -367,7 +367,7 @@ def test_trace_recorder_fail_node_sets_status(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Trace Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -377,7 +377,7 @@ def test_trace_recorder_fail_node_sets_status(session: Session) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.RUNNING,

@@ -26,6 +26,7 @@ from app.api.routes import (
     search,
     setup,
     tokenizers,
+    tools,
     traces,
     visualizations,
 )
@@ -41,6 +42,7 @@ from app.observability import events as log_events
 from app.providers.registry import close_provider_clients
 from app.services.accounts import ensure_admin_exists
 from app.services.app_config import get_app_config
+from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.file_backfill import backfill_file_nodes
 from app.services.ingestion_queue import ingestion_queue
 from app.services.pipelines import (
@@ -63,6 +65,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info(log_events.DB_BOOTSTRAP_COMPLETED)
     with session_scope() as session:
         migrate_provider_connections(session)
+        migrate_pipeline_bindings(session)
         migrate_tokenizer_nodes(session)
         upgrade_stored_pipeline_definitions(session)
         backfill_default_pipelines(session)
@@ -114,6 +117,7 @@ app.include_router(evals.router)
 app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)
+app.include_router(tools.router)
 app.include_router(traces.router)
 app.include_router(tokenizers.router)
 app.include_router(chat.router)

@@ -116,6 +116,7 @@ def test_setup_bootstrap_returns_the_created_collection(
     assert response.status_code == 201
     body = response.json()["collection"]
     assert body["name"] == "First"
-    assert body["ingestion_pipeline_id"] is not None
-    assert body["retrieval_pipeline_id"] is not None
+    assert body["ingest_pipeline_id"] is not None
+    assert len(body["tools"]) == 1
+    assert body["tools"][0]["is_primary"] is True
     assert response.json()["warnings"]

@@ -29,7 +29,7 @@ export function TraceHeader({ trace, combined, onRefresh }: TraceHeaderProps) {
   const duration = formatDuration(runDurationMs(trace));
   const title = combined
     ? "Document → retrieval"
-    : trace.run.kind === "ingestion"
+    : trace.run.trigger === "ingest"
       ? "Ingestion"
       : "Retrieval";
 

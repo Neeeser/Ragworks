@@ -14,6 +14,7 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import (
+    CollectionPipelineBindingRepository,
     CollectionRepository,
     CollectionStats,
     CollectionStatsRepository,
@@ -102,17 +103,19 @@ class EvalCollectionService:
             raise NotFoundError("Eval collection not found.")
         return collection
 
-    @staticmethod
     def _to_eval_collection(
-        collection: models.Collection, stats: CollectionStats | None, ready: int
+        self, collection: models.Collection, stats: CollectionStats | None, ready: int
     ) -> EvalCollectionRead:
         """Shape one eval collection row for the management page."""
         dataset_ref = collection.extra_metadata.get("eval_dataset_id")
+        ingest = CollectionPipelineBindingRepository(self.session).list_for_collection(
+            collection.id, role=models.BindingRole.INGEST
+        )
         return EvalCollectionRead(
             id=collection.id,
             name=collection.name,
             dataset_id=UUID(dataset_ref) if isinstance(dataset_ref, str) else None,
-            ingestion_pipeline_id=collection.ingestion_pipeline_id,
+            ingestion_pipeline_id=ingest[0].pipeline_id if ingest else None,
             num_documents=stats.document_count if stats else 0,
             num_ready_documents=ready,
             num_chunks=stats.chunk_count if stats else 0,

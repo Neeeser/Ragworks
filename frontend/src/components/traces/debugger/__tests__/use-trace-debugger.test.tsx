@@ -37,7 +37,7 @@ describe("useTraceDebugger", () => {
         document_name: "doc.pdf",
         chunk_id: "chunk-1",
         trace: makeTraceResponse({
-          run: { ...makeTraceResponse().run, id: "run-origin", kind: "ingestion" },
+          run: { ...makeTraceResponse().run, id: "run-origin", trigger: "ingest" },
           node_runs: [makeNodeRunTrace({ id: "nr-origin", node_id: "origin-node" })],
         }),
       },
@@ -56,7 +56,7 @@ describe("useTraceDebugger", () => {
   it("resolves the focused chunk when a document trace targets one", async () => {
     api.fetchDocumentFocusedTrace.mockResolvedValueOnce({
       trace: makeTraceResponse({
-        run: { ...makeTraceResponse().run, kind: "ingestion" },
+        run: { ...makeTraceResponse().run, trigger: "ingest" },
       }),
       focused_item: {
         id: "doc-1:7",
@@ -115,7 +115,7 @@ describe("useTraceDebugger", () => {
         document_name: "doc.pdf",
         chunk_id: "chunk-4",
         trace: makeTraceResponse({
-          run: { ...makeTraceResponse().run, id: "run-origin", kind: "ingestion" },
+          run: { ...makeTraceResponse().run, id: "run-origin", trigger: "ingest" },
         }),
       },
     });

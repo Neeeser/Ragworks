@@ -24,7 +24,7 @@ const nodeSpecs = [
 
 const ingestionTrace = (): PipelineTraceResponse =>
   makeTraceResponse({
-    run: { ...makeTraceResponse().run, id: INGEST_RUN, kind: "ingestion" },
+    run: { ...makeTraceResponse().run, id: INGEST_RUN, trigger: "ingest" },
     definition: {
       nodes: [
         { id: "parse", type: "parser.document", name: "Parser", config: {} },

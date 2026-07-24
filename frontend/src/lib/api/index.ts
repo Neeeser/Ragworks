@@ -11,3 +11,4 @@ export * from "@/lib/api/models";
 export * from "@/lib/api/connections";
 export * from "@/lib/api/setup";
 export * from "@/lib/api/evals";
+export * from "@/lib/api/tools";

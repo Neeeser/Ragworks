@@ -87,6 +87,7 @@ describe("Telemetry cards", () => {
         id: "col-1",
         user_id: "user-1",
         name: "Docs",
+        tools: [],
         created_at: baseTimestamp,
         updated_at: baseTimestamp,
       },
@@ -192,8 +193,16 @@ describe("Telemetry cards", () => {
           name: "Docs",
           created_at: baseTimestamp,
           updated_at: baseTimestamp,
-          ingestion_pipeline_id: null,
-          retrieval_pipeline_id: "retrieval-1",
+          ingest_pipeline_id: null,
+          tools: [
+            {
+              id: "binding-1",
+              pipeline_id: "retrieval-1",
+              is_primary: true,
+              enabled: true,
+              position: 0,
+            },
+          ],
         }}
         collectionCount={2}
         documentCount={10}
@@ -212,8 +221,8 @@ describe("Telemetry cards", () => {
           name: "More",
           created_at: baseTimestamp,
           updated_at: baseTimestamp,
-          ingestion_pipeline_id: "ingestion-1",
-          retrieval_pipeline_id: null,
+          ingest_pipeline_id: "ingestion-1",
+          tools: [],
         }}
         collectionCount={1}
         documentCount={1}

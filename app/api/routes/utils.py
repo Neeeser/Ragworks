@@ -8,8 +8,8 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import CollectionRepository
-from app.schemas.collections import CollectionRead
+from app.db.repositories import CollectionPipelineBindingRepository, CollectionRepository
+from app.schemas.collections import CollectionRead, CollectionToolBindingRead
 from app.schemas.pipelines import PipelineValidationIssueRead
 from app.services.errors import (
     ExternalServiceError,
@@ -18,20 +18,38 @@ from app.services.errors import (
 )
 
 
-def collection_to_schema(collection: models.Collection) -> CollectionRead:
-    """Convert a collection row into its wire schema.
+def collection_to_schema(session: Session, collection: models.Collection) -> CollectionRead:
+    """Convert a collection row (plus its bindings) into its wire schema.
 
     Field-by-field on purpose: the db column `extra_metadata` maps to the
     schema field `metadata`, so `model_validate(from_attributes=...)` cannot
-    build this shape.
+    build this shape. Bindings ride along as identity-only summaries; the
+    full tool projection is the tools endpoint's job.
     """
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(
+        collection.id
+    )
+    ingest = next(
+        (b for b in bindings if b.role == models.BindingRole.INGEST),
+        None,
+    )
     return CollectionRead(
         id=collection.id,
         user_id=collection.user_id,
         name=collection.name,
         description=collection.description,
-        ingestion_pipeline_id=collection.ingestion_pipeline_id,
-        retrieval_pipeline_id=collection.retrieval_pipeline_id,
+        ingest_pipeline_id=ingest.pipeline_id if ingest else None,
+        tools=[
+            CollectionToolBindingRead(
+                id=binding.id,
+                pipeline_id=binding.pipeline_id,
+                is_primary=binding.is_primary,
+                enabled=binding.enabled,
+                position=binding.position,
+            )
+            for binding in bindings
+            if binding.role == models.BindingRole.TOOL
+        ],
         created_at=collection.created_at,
         updated_at=collection.updated_at,
         metadata=collection.extra_metadata,

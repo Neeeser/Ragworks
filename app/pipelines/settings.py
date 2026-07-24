@@ -10,11 +10,18 @@ classes (`chunker.token`, `chunker.sentence`, ...) plus the configurable
 node classes to find whichever chunker variant is present, reading its
 `type`/`strategy` off the class rather than a hardcoded type-id-to-strategy
 table.
+
+There is one resolver for every pipeline shape: which fields are meaningful
+follows from which nodes the graph contains, not from a stored pipeline
+kind. `index_targets` is always the union of every index the graph touches
+-- indexer and retriever side, dense and sparse -- because purge cascades
+iterate targets, and a tool pipeline with an indexer node writes to indexes
+the ingest pipeline never touched.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypeVar
 from uuid import UUID
 
@@ -69,71 +76,47 @@ class IndexTarget:
 
 
 @dataclass(frozen=True)
-class IngestionPipelineSettings:  # pylint: disable=too-many-instance-attributes
-    """Resolved settings for ingestion pipelines.
+class PipelineSettings:  # pylint: disable=too-many-instance-attributes
+    """Resolved settings for a pipeline, whatever its shape.
 
-    `backend`/`index_name`/`dimension`/`metric` describe the dense (semantic)
-    path — the fallback default when the definition has no indexer at all —
-    while `index_targets` lists every index actually present, including the
-    BM25 sibling when a `indexer.bm25` node exists.
+    `backend`/`index_name`/`namespace`/`dimension`/`metric` describe the
+    primary dense identity — the indexer node's when the graph writes, else
+    the retriever node's, else the configured-default fallback legacy
+    definitions rely on. Chunker fields resolve to their built-in defaults
+    when the graph has no chunker (retrieval-shaped pipelines). Chat model
+    and context window deliberately live outside the pipeline — they are
+    session-level choices made in the chat UI, not pipeline behavior.
     """
 
-    chunk_strategy: models.ChunkStrategy
-    chunk_size: int
-    chunk_overlap: int
-    tokenizer: TokenizerSpec
-    embedding_model: str
     backend: IndexBackend
     index_name: str
-    namespace: str | None
-    dimension: int | None
-    metric: str
+    chunk_strategy: models.ChunkStrategy = models.ChunkStrategy.TOKEN
+    chunk_size: int = 512
+    chunk_overlap: int = 200
+    tokenizer: TokenizerSpec = field(
+        default_factory=lambda: TokenizerSpec(kind="wordpiece")
+    )
+    embedding_model: str = ""
+    namespace: str | None = None
+    dimension: int | None = None
+    metric: str = "cosine"
     embedding_connection_id: UUID | None = None
-    index_targets: tuple[IndexTarget, ...] = ()
+    index_targets: tuple[IndexTarget, ...] = field(default=())
 
     def __post_init__(self) -> None:
         """Default the targets to the dense primary so they are never empty."""
-        _default_dense_targets(self)
-
-
-@dataclass(frozen=True)
-class RetrievalPipelineSettings:
-    """Resolved settings for retrieval pipelines.
-
-    Chat model and context window deliberately live outside the pipeline --
-    they are session-level choices made in the chat UI, not retrieval
-    behavior (the old `chat.settings` node was removed for this reason).
-    `index_targets` mirrors the ingestion shape: every index the pipeline
-    queries, dense and sparse.
-    """
-
-    embedding_model: str
-    backend: IndexBackend
-    index_name: str
-    namespace: str | None
-    dimension: int | None
-    embedding_connection_id: UUID | None = None
-    index_targets: tuple[IndexTarget, ...] = ()
-
-    def __post_init__(self) -> None:
-        """Default the targets to the dense primary so they are never empty."""
-        _default_dense_targets(self)
-
-
-def _default_dense_targets(settings: IngestionPipelineSettings | RetrievalPipelineSettings) -> None:
-    """Fill empty `index_targets` with the dense primary (legacy definitions)."""
-    if not settings.index_targets:
-        object.__setattr__(
-            settings,
-            "index_targets",
-            (
-                IndexTarget(
-                    backend=settings.backend,
-                    index_name=settings.index_name,
-                    vector_type="dense",
+        if not self.index_targets:
+            object.__setattr__(
+                self,
+                "index_targets",
+                (
+                    IndexTarget(
+                        backend=self.backend,
+                        index_name=self.index_name,
+                        vector_type="dense",
+                    ),
                 ),
-            ),
-        )
+            )
 
 
 def _resolve_node_config(
@@ -221,43 +204,24 @@ def _resolve_bm25_config(
     return model.model_validate(node.config or {})
 
 
-def _build_index_targets(
-    *,
-    dense: IndexTarget,
-    dense_found: bool,
-    sparse: IndexTarget | None,
-) -> tuple[IndexTarget, ...]:
-    """List the indexes a pipeline actually touches.
-
-    The dense fallback (no indexer/retriever node at all) still counts as a
-    dense target — legacy definitions rely on it — but a pipeline that only
-    carries a BM25 node gets no phantom dense target.
-    """
-    targets: list[IndexTarget] = []
-    if dense_found or sparse is None:
-        targets.append(dense)
-    if sparse is not None:
-        targets.append(sparse)
-    return tuple(targets)
-
-
 def resolve_definition_backend(
     definition: PipelineDefinition,
     registry: NodeRegistry,
-    kind: models.PipelineKind,
 ) -> IndexBackend:
     """Return the vector-store backend a pipeline definition indexes/queries.
 
-    Falls back to the configured default backend when the definition has no
-    indexer/retriever node (same fallback the settings resolvers use).
+    Prefers the indexer node's backend (the graph writes), then the
+    retriever's (it only reads), then the configured default — the same
+    precedence the settings resolver gives the primary identity.
     """
-    base_class: type[BaseIndexerNode] | type[BaseRetrieverNode] = (
-        BaseIndexerNode if kind is models.PipelineKind.INGESTION else BaseRetrieverNode
+    static = resolve_static_definition(definition)
+    backend, _, indexer_found = _resolve_backend_node_config(static, registry, BaseIndexerNode)
+    if indexer_found:
+        return backend
+    retriever_backend, _, retriever_found = _resolve_backend_node_config(
+        static, registry, BaseRetrieverNode
     )
-    backend, _, _ = _resolve_backend_node_config(
-        resolve_static_definition(definition), registry, base_class
-    )
-    return backend
+    return retriever_backend if retriever_found else backend
 
 
 def _sparse_target(
@@ -273,12 +237,36 @@ def _sparse_target(
     return IndexTarget(backend=config.backend, index_name=index_name, vector_type="sparse")
 
 
-def resolve_ingestion_settings(
+def _dense_target(
+    collection: models.Collection,
+    backend: IndexBackend,
+    config: IndexerConfig | RetrieverConfig,
+) -> IndexTarget:
+    """Build the dense index target for an indexer/retriever config."""
+    index_name = (
+        resolve_collection_template(config.index_name, collection) or config.index_name
+    )
+    return IndexTarget(backend=backend, index_name=index_name, vector_type="dense")
+
+
+def _union_targets(*candidates: IndexTarget | None) -> tuple[IndexTarget, ...]:
+    """Dedupe targets by identity, preserving first-seen order."""
+    targets: list[IndexTarget] = []
+    seen: set[IndexTarget] = set()
+    for candidate in candidates:
+        if candidate is None or candidate in seen:
+            continue
+        seen.add(candidate)
+        targets.append(candidate)
+    return tuple(targets)
+
+
+def resolve_pipeline_settings(  # pylint: disable=too-many-locals
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,
-) -> IngestionPipelineSettings:
-    """Resolve ingestion settings from a pipeline definition.
+) -> PipelineSettings:
+    """Resolve settings from any pipeline definition.
 
     Expressions resolve against the static default environment first — the
     taint rule guarantees identity fields never depend on runtime input, so
@@ -287,76 +275,72 @@ def resolve_ingestion_settings(
     definition = resolve_static_definition(definition)
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
-    backend, indexer_model, dense_found = _resolve_backend_node_config(
+    indexer_backend, indexer_model, indexer_found = _resolve_backend_node_config(
         definition, registry, BaseIndexerNode
     )
-    indexer = IndexerConfig.model_validate(indexer_model.model_dump())
-    index_name = (
-        resolve_collection_template(indexer.index_name, collection) or indexer.index_name
+    retriever_backend, retriever_model, retriever_found = _resolve_backend_node_config(
+        definition, registry, BaseRetrieverNode
     )
-    namespace = resolve_collection_template(indexer.namespace, collection)
-    bm25 = _resolve_bm25_config(definition, Bm25IndexerNode.type, Bm25IndexerConfig)
-    return IngestionPipelineSettings(
+    indexer = IndexerConfig.model_validate(indexer_model.model_dump())
+    retriever = RetrieverConfig.model_validate(retriever_model.model_dump())
+
+    if indexer_found or not retriever_found:
+        primary_backend = indexer_backend
+        primary_name = (
+            resolve_collection_template(indexer.index_name, collection) or indexer.index_name
+        )
+        primary_namespace = resolve_collection_template(indexer.namespace, collection)
+        dimension = indexer.dimension if indexer_found else embedder.dimension
+    else:
+        primary_backend = retriever_backend
+        primary_name = (
+            resolve_collection_template(retriever.index_name, collection)
+            or retriever.index_name
+        )
+        primary_namespace = resolve_collection_template(retriever.namespace, collection)
+        dimension = embedder.dimension
+
+    dense_targets: list[IndexTarget | None] = []
+    if indexer_found:
+        dense_targets.append(_dense_target(collection, indexer_backend, indexer))
+    if retriever_found:
+        dense_targets.append(_dense_target(collection, retriever_backend, retriever))
+    if not indexer_found and not retriever_found:
+        # Legacy fallback: no dense node at all still counts as one dense
+        # target on the configured default — unless the graph is sparse-only.
+        dense_targets.append(
+            IndexTarget(backend=primary_backend, index_name=primary_name, vector_type="dense")
+        )
+
+    sparse_ingest = _sparse_target(
+        collection, _resolve_bm25_config(definition, Bm25IndexerNode.type, Bm25IndexerConfig)
+    )
+    sparse_query = _sparse_target(
+        collection, _resolve_bm25_config(definition, Bm25RetrieverNode.type, Bm25RetrieverConfig)
+    )
+    if not indexer_found and not retriever_found and (sparse_ingest or sparse_query):
+        # A sparse-only graph gets no phantom dense target.
+        dense_targets = []
+
+    return PipelineSettings(
         chunk_strategy=chunker.strategy,
         chunk_size=chunker.chunk_size,
         chunk_overlap=chunker.chunk_overlap,
         tokenizer=_resolve_tokenizer_spec(chunker),
         embedding_model=embedder.model_name,
         embedding_connection_id=embedder.connection_id,
-        backend=backend,
-        index_name=index_name,
-        namespace=namespace,
-        dimension=indexer.dimension,
+        backend=primary_backend,
+        index_name=primary_name,
+        namespace=primary_namespace,
+        dimension=dimension,
         metric=indexer.metric,
-        index_targets=_build_index_targets(
-            dense=IndexTarget(backend=backend, index_name=index_name, vector_type="dense"),
-            dense_found=dense_found,
-            sparse=_sparse_target(collection, bm25),
-        ),
-    )
-
-
-def resolve_retrieval_settings(
-    definition: PipelineDefinition,
-    collection: models.Collection,
-    registry: NodeRegistry,
-) -> RetrievalPipelineSettings:
-    """Resolve retrieval settings from a pipeline definition.
-
-    Expressions resolve against the static default environment first (see
-    `resolve_ingestion_settings`).
-    """
-    definition = resolve_static_definition(definition)
-    backend, retriever_model, dense_found = _resolve_backend_node_config(
-        definition, registry, BaseRetrieverNode
-    )
-    retriever = RetrieverConfig.model_validate(retriever_model.model_dump())
-    embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
-    index_name = (
-        resolve_collection_template(retriever.index_name, collection) or retriever.index_name
-    )
-    namespace = resolve_collection_template(retriever.namespace, collection)
-    bm25 = _resolve_bm25_config(definition, Bm25RetrieverNode.type, Bm25RetrieverConfig)
-    return RetrievalPipelineSettings(
-        embedding_model=embedder.model_name,
-        embedding_connection_id=embedder.connection_id,
-        backend=backend,
-        index_name=index_name,
-        namespace=namespace,
-        dimension=embedder.dimension,
-        index_targets=_build_index_targets(
-            dense=IndexTarget(backend=backend, index_name=index_name, vector_type="dense"),
-            dense_found=dense_found,
-            sparse=_sparse_target(collection, bm25),
-        ),
+        index_targets=_union_targets(*dense_targets, sparse_ingest, sparse_query),
     )
 
 
 __all__ = [
     "IndexTarget",
-    "IngestionPipelineSettings",
-    "RetrievalPipelineSettings",
+    "PipelineSettings",
     "resolve_definition_backend",
-    "resolve_ingestion_settings",
-    "resolve_retrieval_settings",
+    "resolve_pipeline_settings",
 ]

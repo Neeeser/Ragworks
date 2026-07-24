@@ -221,7 +221,7 @@ function makeRankingTrace(): PipelineTraceResponse {
 
 function makeOriginIndexTrace(): PipelineTraceResponse {
   return makeTraceResponse({
-    run: { ...makeTraceResponse().run, kind: "ingestion" },
+    run: { ...makeTraceResponse().run, trigger: "ingest" },
     definition: {
       nodes: [
         {
@@ -665,7 +665,7 @@ describe("TraceDebugger", () => {
 
   it("labels a Files-page chunk trace as ingestion-only and opens its artifact", async () => {
     const trace = makeTwoNodeTrace();
-    trace.run = { ...trace.run, kind: "ingestion" };
+    trace.run = { ...trace.run, trigger: "ingest" };
     api.fetchDocumentFocusedTrace.mockResolvedValueOnce({
       trace,
       context_items: [],

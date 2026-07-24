@@ -22,12 +22,12 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.services import ingestion as ingestion_module
-from app.services import retrieval as retrieval_module
+from app.services import tool_invocation as invocation_module
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import (
-    resolve_ingestion_pipeline,
-    resolve_retrieval_pipeline,
+    resolve_ingest_binding,
+    resolve_primary_tool,
 )
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
@@ -105,8 +105,8 @@ def _ingest(
 ) -> models.Document:
     """Upload CONTENT and run the collection's real ingestion pipeline."""
     monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
-    monkeypatch.setattr(retrieval_module, "ProviderResolver", _StubProviderResolver)
-    resolved = resolve_ingestion_pipeline(session, user, collection)
+    monkeypatch.setattr(invocation_module, "ProviderResolver", _StubProviderResolver)
+    resolved = resolve_ingest_binding(session, user, collection)
     definition = resolved.definition
     for node in definition.nodes:
         if node.type == "chunker.token":
@@ -173,13 +173,13 @@ def test_semantic_only_defaults_still_work_without_pg_search(
     collection = _create_collection(session, user)
     _ingest(monkeypatch, session, user, collection)
 
-    resolved = resolve_retrieval_pipeline(session, user, collection)
+    resolved = resolve_primary_tool(session, user, collection)
     node_types = {node.type for node in resolved.definition.nodes}
     assert "retriever.bm25" not in node_types
     assert "fusion.rrf" not in node_types
     assert "indexer.bm25" not in {
         node.type
-        for node in resolve_ingestion_pipeline(session, user, collection).definition.nodes
+        for node in resolve_ingest_binding(session, user, collection).definition.nodes
     }
 
     response = RetrievalService(session).query_collection(
@@ -202,7 +202,6 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
         user=user,
         name="Lexical Ingestion",
         description="BM25-only ingestion.",
-        kind=models.PipelineKind.INGESTION,
         definition=PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(id="in", type="ingestion.input", name="In"),
@@ -246,7 +245,6 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
         user=user,
         name="Lexical Retrieval",
         description="BM25-only retrieval.",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(id="in", type="retrieval.input", name="In"),
@@ -277,15 +275,29 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
         name="Lexical",
         description="",
         extra_metadata={},
-        ingestion_pipeline_id=ingestion.id,
-        retrieval_pipeline_id=retrieval.id,
     )
     session.add(collection)
     session.commit()
     session.refresh(collection)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=ingestion.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
+    session.commit()
 
     monkeypatch.setattr(ingestion_module, "ProviderResolver", _FailIfUsedResolver)
-    monkeypatch.setattr(retrieval_module, "ProviderResolver", _FailIfUsedResolver)
+    monkeypatch.setattr(invocation_module, "ProviderResolver", _FailIfUsedResolver)
     result = FileSystemService(session).register_upload(
         user,
         collection,
@@ -308,7 +320,7 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
     assert "zephyrblade" in response.chunks[0].text
     # The settings resolution reports only the sparse target — deleting this
     # collection must not touch any phantom dense index.
-    resolved = resolve_ingestion_pipeline(session, user, collection)
+    resolved = resolve_ingest_binding(session, user, collection)
     assert [
         (target.vector_type, target.index_name) for target in resolved.settings.index_targets
     ] == [("sparse", "lex-only")]

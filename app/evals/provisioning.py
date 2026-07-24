@@ -25,7 +25,11 @@ from sqlmodel import Session, col, select
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import CollectionRepository, DocumentRepository
+from app.db.repositories import (
+    CollectionPipelineBindingRepository,
+    CollectionRepository,
+    DocumentRepository,
+)
 from app.schemas.enums import CollectionPurpose
 from app.services.errors import InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
@@ -152,8 +156,6 @@ class EvalProvisioner:
             user_id=user.id,
             name=f"Eval: {spec.dataset.name} [{spec.cache_key[:8]}]",
             description=f"Benchmark corpus for eval runs against '{spec.dataset.name}'.",
-            ingestion_pipeline_id=spec.ingestion_pipeline.id,
-            retrieval_pipeline_id=spec.retrieval_pipeline.id,
             system_purpose=CollectionPurpose.EVAL.value,
             extra_metadata={
                 EVAL_CACHE_KEY: spec.cache_key,
@@ -161,6 +163,23 @@ class EvalProvisioner:
             },
         )
         self.collections.add(collection)
+        self.session.flush()
+        bindings = CollectionPipelineBindingRepository(self.session)
+        bindings.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=spec.ingestion_pipeline.id,
+                role=models.BindingRole.INGEST,
+            )
+        )
+        bindings.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=spec.retrieval_pipeline.id,
+                role=models.BindingRole.TOOL,
+                is_primary=True,
+            )
+        )
         self.session.commit()
         self.session.refresh(collection)
 
@@ -199,11 +218,24 @@ class EvalProvisioner:
     def _bind_retrieval(
         self, collection: models.Collection, retrieval_pipeline: models.Pipeline
     ) -> None:
-        """Point the reused eval collection at this run's retrieval pipeline."""
-        if collection.retrieval_pipeline_id == retrieval_pipeline.id:
+        """Point the reused eval collection's primary tool at this run's pipeline."""
+        bindings = CollectionPipelineBindingRepository(self.session)
+        tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+        primary = next((b for b in tools if b.is_primary), tools[0] if tools else None)
+        if primary is not None and primary.pipeline_id == retrieval_pipeline.id:
             return
-        collection.retrieval_pipeline_id = retrieval_pipeline.id
-        self.session.add(collection)
+        if primary is None:
+            bindings.add(
+                models.CollectionPipelineBinding(
+                    collection_id=collection.id,
+                    pipeline_id=retrieval_pipeline.id,
+                    role=models.BindingRole.TOOL,
+                    is_primary=True,
+                )
+            )
+        else:
+            primary.pipeline_id = retrieval_pipeline.id
+            self.session.add(primary)
         self.session.commit()
 
     def _materialize_and_ingest(

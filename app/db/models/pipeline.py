@@ -10,12 +10,19 @@ from sqlalchemy import JSON, Column, Float, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
-from app.schemas.enums import PipelineIOType, PipelineKind, PipelineRunStatus
+from app.schemas.enums import BindingRole, PipelineIOType, PipelineRunStatus
 from app.utils.time import utc_now
 
 
 class Pipeline(SQLModel, TimestampMixin, table=True):
-    """User-defined pipeline for ingestion or retrieval."""
+    """User-defined pipeline graph.
+
+    What a pipeline can do (run on documents, be called as a tool) is derived
+    from its definition's boundary nodes — there is no stored kind.
+    `template_slug` marks pipelines scaffolded as a user's defaults
+    ("default-ingest", "default-search") so scaffolding can find them without
+    a kind column; user-created pipelines carry NULL.
+    """
 
     __tablename__ = "pipelines"
 
@@ -23,13 +30,21 @@ class Pipeline(SQLModel, TimestampMixin, table=True):
     user_id: UUID = Field(foreign_key="users.id", nullable=False, index=True)
     name: str = Field(sa_column=Column(String, nullable=False))
     description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    kind: PipelineKind = Field(sa_column=Column(String, nullable=False, index=True))
     current_version: int = Field(default=1, nullable=False)
-    is_default: bool = Field(default=False, nullable=False)
+    template_slug: str | None = Field(
+        default=None,
+        sa_column=Column(String, nullable=True, index=True),
+    )
 
 
 class PipelineVersion(SQLModel, TimestampMixin, table=True):
-    """Stored pipeline definition revision."""
+    """Stored pipeline definition revision.
+
+    `interface` is the derived `PipelineInterface` summary materialized at
+    save time — a cache, never a source of truth: the definition is immutable
+    per version so the copy cannot drift, and readers re-derive when it is
+    NULL (versions saved before the column existed).
+    """
 
     __tablename__ = "pipeline_versions"
 
@@ -39,6 +54,10 @@ class PipelineVersion(SQLModel, TimestampMixin, table=True):
     definition: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
+    )
+    interface: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
     )
     change_summary: str | None = Field(
         default=None,
@@ -66,7 +85,7 @@ class PipelineRun(SQLModel, TimestampMixin, table=True):
         index=True,
     )
     pipeline_version: int | None = Field(default=None, nullable=True)
-    kind: PipelineKind = Field(sa_column=Column(String, nullable=False, index=True))
+    trigger: BindingRole = Field(sa_column=Column(String, nullable=False, index=True))
     user_id: UUID = Field(foreign_key="users.id", nullable=False, index=True)
     collection_id: UUID = Field(foreign_key="collections.id", nullable=False, index=True)
     status: PipelineRunStatus = Field(

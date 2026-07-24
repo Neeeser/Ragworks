@@ -7,13 +7,18 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db import models
+from app.db.repositories import CollectionPipelineBindingRepository
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
 from app.services.errors import InvalidInputError, NotFoundError
-from app.services.pipelines import PipelineService
+from app.services.pipelines import (
+    DEFAULT_INGEST_SLUG,
+    DEFAULT_SEARCH_SLUG,
+    PipelineService,
+)
 from tests.utils.providers import add_openrouter_connection
 
 EMBED_CONNECTION_ID = uuid4()
@@ -46,23 +51,21 @@ def _create_user(session: Session) -> models.User:
         user=user,
         name="Default Ingestion Pipeline",
         description="Baseline ingestion pipeline for uploads.",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=connection.id, embedding_model="test-embed"
         ),
         change_summary="Test scaffold.",
-        is_default=True,
+        template_slug=DEFAULT_INGEST_SLUG,
     )
     service.create_pipeline(
         user=user,
         name="Default Retrieval Pipeline",
         description="Baseline retrieval pipeline for queries.",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=connection.id, embedding_model="test-embed"
         ),
         change_summary="Test scaffold.",
-        is_default=True,
+        template_slug=DEFAULT_SEARCH_SLUG,
     )
     session.commit()
     return user
@@ -79,14 +82,40 @@ def _create_collection(
         user_id=user.id,
         name="Collection",
         description="",
-        ingestion_pipeline_id=ingestion_pipeline_id,
-        retrieval_pipeline_id=retrieval_pipeline_id,
         extra_metadata={},
     )
     session.add(collection)
     session.commit()
     session.refresh(collection)
+    if ingestion_pipeline_id is not None:
+        session.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=ingestion_pipeline_id,
+                role=models.BindingRole.INGEST,
+            )
+        )
+    if retrieval_pipeline_id is not None:
+        session.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=retrieval_pipeline_id,
+                role=models.BindingRole.TOOL,
+                is_primary=True,
+            )
+        )
+    session.commit()
     return collection
+
+
+def _binding_pipeline_ids(
+    session: Session, collection: models.Collection
+) -> dict[str, UUID]:
+    """Return the collection's bound pipeline ids keyed by role value."""
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(
+        collection.id
+    )
+    return {models.BindingRole(binding.role).value: binding.pipeline_id for binding in bindings}
 
 
 def test_ensure_default_pipelines_creates_versions(session: Session) -> None:
@@ -99,8 +128,8 @@ def test_ensure_default_pipelines_creates_versions(session: Session) -> None:
     pipelines = session.exec(select(models.Pipeline)).all()
     versions = session.exec(select(models.PipelineVersion)).all()
 
-    assert defaults.ingestion.is_default
-    assert defaults.retrieval.is_default
+    assert defaults.ingestion.template_slug == DEFAULT_INGEST_SLUG
+    assert defaults.retrieval.template_slug == DEFAULT_SEARCH_SLUG
     assert len(pipelines) == 2
     assert len(versions) == 2
 
@@ -159,7 +188,6 @@ def test_create_pipeline_rejects_embedding_limit_overflow(
         service.create_pipeline(
             user=user,
             name="Overflowing ingestion",
-            kind=models.PipelineKind.INGESTION,
             definition=definition,
         )
 
@@ -226,7 +254,6 @@ def test_create_pipeline_remains_available_when_model_catalog_is_unreachable(
     ).create_pipeline(
         user=user,
         name="Offline-safe pipeline",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=EMBED_CONNECTION_ID,
             embedding_model="test-embed",
@@ -297,7 +324,6 @@ def test_pipeline_in_use_detects_collection_reference(session: Session) -> None:
     pipeline = service.create_pipeline(
         user=user,
         name="Ingestion",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
                 embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
             ),
@@ -313,7 +339,6 @@ def test_get_current_version_raises_when_missing(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
         current_version=1,
     )
     session.add(pipeline)
@@ -331,7 +356,6 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
     pipeline = service.create_pipeline(
         user=user,
         name="Ingestion",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
                 embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
             ),
@@ -354,20 +378,18 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
     assert len(versions) == 0
 
 
-def test_ensure_collection_pipelines_sets_defaults(session: Session) -> None:
+def test_ensure_collection_bindings_sets_defaults(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
     defaults = service.ensure_default_pipelines(user)
     session.commit()
     collection = _create_collection(session, user)
 
-    service.ensure_collection_pipelines(collection, defaults)
+    service.ensure_collection_bindings(collection, defaults)
     session.commit()
 
-    refreshed = session.get(models.Collection, collection.id)
-    assert refreshed is not None
-    assert refreshed.ingestion_pipeline_id == defaults.ingestion.id
-    assert refreshed.retrieval_pipeline_id == defaults.retrieval.id
+    bound = _binding_pipeline_ids(session, collection)
+    assert bound == {"ingest": defaults.ingestion.id, "tool": defaults.retrieval.id}
 
 
 def test_backfill_default_pipelines_assigns_for_existing_collection(session: Session) -> None:
@@ -379,10 +401,8 @@ def test_backfill_default_pipelines_assigns_for_existing_collection(session: Ses
     backfill_default_pipelines(session)
     session.commit()
 
-    refreshed = session.get(models.Collection, collection.id)
-    assert refreshed is not None
-    assert refreshed.ingestion_pipeline_id is not None
-    assert refreshed.retrieval_pipeline_id is not None
+    bound = _binding_pipeline_ids(session, collection)
+    assert set(bound) == {"ingest", "tool"}
 
 
 class TestDefaultBackendRotation:
@@ -447,11 +467,10 @@ class TestDefaultBackendRotation:
         # The old defaults survive, demoted, and existing collections keep them.
         session.refresh(old.ingestion)
         session.refresh(old.retrieval)
-        assert old.ingestion.is_default is False
-        assert old.retrieval.is_default is False
-        session.refresh(collection)
-        assert collection.ingestion_pipeline_id == old.ingestion.id
-        assert collection.retrieval_pipeline_id == old.retrieval.id
+        assert old.ingestion.template_slug is None
+        assert old.retrieval.template_slug is None
+        bound = _binding_pipeline_ids(session, collection)
+        assert bound == {"ingest": old.ingestion.id, "tool": old.retrieval.id}
 
     def test_matching_defaults_are_left_alone(self, session: Session) -> None:
         user = _create_user(session)

@@ -2,9 +2,11 @@
 
 Owns the behavior the collection routes used to inline -- validating pipeline
 selections, cloning a base pipeline with per-node config overrides, and
-rendering/persisting a collection's system prompt. Resolution and validation
-failures surface as typed domain errors (`app/services/errors.py`); the route
-translates them.
+rendering/persisting a collection's system prompt. Bindings are created
+eagerly at collection creation (a collection is born with its ingest binding
+and primary search tool), so read-only surfaces never need to scaffold.
+Resolution and validation failures surface as typed domain errors
+(`app/services/errors.py`); the route translates them.
 """
 
 from __future__ import annotations
@@ -21,11 +23,9 @@ from app.schemas.collections import (
     CollectionUpdate,
     PipelineNodeOverride,
 )
+from app.services.collection_tools import CollectionToolService
 from app.services.errors import InvalidInputError
-from app.services.pipeline_resolution import (
-    resolve_ingestion_pipeline,
-    resolve_retrieval_pipeline,
-)
+from app.services.pipeline_resolution import resolve_ingest_binding, resolve_primary_tool
 from app.services.pipelines import PipelineService
 from app.services.prompts import (
     apply_prompt_template,
@@ -48,36 +48,36 @@ class CollectionService:
         self.session = session
         self.repo = CollectionRepository(session)
         self.pipelines = PipelineService(session)
+        self.tools = CollectionToolService(session)
 
     def create(self, user: models.User, payload: CollectionCreate) -> models.Collection:
-        """Create a collection, cloning pipelines when overrides are supplied."""
+        """Create a collection with its bindings, cloning pipelines for overrides."""
         defaults = self.pipelines.ensure_default_pipelines(user)
-        ingestion = self._require_pipeline(
-            payload.ingestion_pipeline_id or defaults.ingestion.id,
-            models.PipelineKind.INGESTION,
-            user,
+        ingest = self._require_ingest_pipeline(
+            payload.ingest_pipeline_id or defaults.ingestion.id, user
         )
-        retrieval = self._require_pipeline(
-            payload.retrieval_pipeline_id or defaults.retrieval.id,
-            models.PipelineKind.RETRIEVAL,
-            user,
+        tool_ids = (
+            list(payload.tool_pipeline_ids)
+            if payload.tool_pipeline_ids
+            else [defaults.retrieval.id]
         )
+        tool_pipelines = [self._require_tool_pipeline(tool_id, user) for tool_id in tool_ids]
 
         overrides = payload.pipeline_overrides
         if overrides and overrides.ingestion:
-            ingestion = self._clone_pipeline_with_overrides(
+            ingest = self._clone_pipeline_with_overrides(
                 user=user,
                 name=payload.name,
-                kind=models.PipelineKind.INGESTION,
-                base=ingestion,
+                label="Ingestion",
+                base=ingest,
                 overrides=overrides.ingestion,
             )
-        if overrides and overrides.retrieval:
-            retrieval = self._clone_pipeline_with_overrides(
+        if overrides and overrides.retrieval and tool_pipelines:
+            tool_pipelines[0] = self._clone_pipeline_with_overrides(
                 user=user,
                 name=payload.name,
-                kind=models.PipelineKind.RETRIEVAL,
-                base=retrieval,
+                label="Retrieval",
+                base=tool_pipelines[0],
                 overrides=overrides.retrieval,
             )
 
@@ -86,11 +86,13 @@ class CollectionService:
             user_id=user.id,
             name=payload.name,
             description=payload.description,
-            ingestion_pipeline_id=ingestion.id,
-            retrieval_pipeline_id=retrieval.id,
             extra_metadata=payload.metadata,
         )
         self.repo.add(collection)
+        self.session.flush()
+        self.tools.set_ingest_pipeline(user, collection, ingest.id)
+        for pipeline in tool_pipelines:
+            self.tools.add_tool(user, collection, pipeline.id)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -102,23 +104,15 @@ class CollectionService:
         payload: CollectionUpdate,
         user: models.User,
     ) -> models.Collection:
-        """Apply metadata/pipeline updates to a collection and persist them."""
+        """Apply metadata/ingest-pipeline updates to a collection and persist them."""
         if payload.name is not None:
             collection.name = payload.name
         if payload.description is not None:
             collection.description = payload.description
         if payload.metadata is not None:
             collection.extra_metadata = {**collection.extra_metadata, **payload.metadata}
-        if payload.ingestion_pipeline_id is not None:
-            self._require_pipeline(
-                payload.ingestion_pipeline_id, models.PipelineKind.INGESTION, user
-            )
-            collection.ingestion_pipeline_id = payload.ingestion_pipeline_id
-        if payload.retrieval_pipeline_id is not None:
-            self._require_pipeline(
-                payload.retrieval_pipeline_id, models.PipelineKind.RETRIEVAL, user
-            )
-            collection.retrieval_pipeline_id = payload.retrieval_pipeline_id
+        if payload.ingest_pipeline_id is not None:
+            self.tools.set_ingest_pipeline(user, collection, payload.ingest_pipeline_id)
         self.session.add(collection)
         self.session.commit()
         self.session.refresh(collection)
@@ -130,14 +124,14 @@ class CollectionService:
         user: models.User,
     ) -> CollectionPromptRead:
         """Render the collection's system prompt template and its live context."""
-        resolved_ingestion = resolve_ingestion_pipeline(self.session, user, collection)
-        resolved_retrieval = resolve_retrieval_pipeline(self.session, user, collection)
+        resolved_ingest = resolve_ingest_binding(self.session, user, collection)
+        resolved_tool = resolve_primary_tool(self.session, user, collection)
         template = get_system_prompt_template(collection)
         context = system_prompt_context(
             collection,
             user,
-            ingestion_settings=resolved_ingestion.settings,
-            retrieval_settings=resolved_retrieval.settings,
+            ingestion_settings=resolved_ingest.settings,
+            retrieval_settings=resolved_tool.settings,
             tool_name=collection_tool_name(collection.name),
         )
         return CollectionPromptRead(
@@ -166,16 +160,26 @@ class CollectionService:
         self.session.refresh(collection)
         return self.prompt_read(collection, user)
 
-    def _require_pipeline(
-        self,
-        pipeline_id: UUID,
-        kind: models.PipelineKind,
-        user: models.User,
+    def _require_ingest_pipeline(
+        self, pipeline_id: UUID, user: models.User
     ) -> models.Pipeline:
-        """Return a user-owned pipeline of the given kind or raise a 400."""
+        """Return a user-owned document-accepting pipeline or raise a 400."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
-        if not pipeline or pipeline.kind != kind:
-            raise InvalidInputError(f"Invalid {kind.value} pipeline selection.")
+        if not pipeline:
+            raise InvalidInputError("Invalid ingestion pipeline selection.")
+        if not self.pipelines.interface_for(pipeline).accepts_document:
+            raise InvalidInputError("Invalid ingestion pipeline selection.")
+        return pipeline
+
+    def _require_tool_pipeline(
+        self, pipeline_id: UUID, user: models.User
+    ) -> models.Pipeline:
+        """Return a user-owned callable pipeline or raise a 400."""
+        pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
+        if not pipeline:
+            raise InvalidInputError("Invalid retrieval pipeline selection.")
+        if not self.pipelines.interface_for(pipeline).callable:
+            raise InvalidInputError("Invalid retrieval pipeline selection.")
         return pipeline
 
     def _clone_pipeline_with_overrides(
@@ -183,7 +187,7 @@ class CollectionService:
         *,
         user: models.User,
         name: str,
-        kind: models.PipelineKind,
+        label: str,
         base: models.Pipeline,
         overrides: list[PipelineNodeOverride],
     ) -> models.Pipeline:
@@ -193,12 +197,9 @@ class CollectionService:
         for node in definition.nodes:
             if node.id in override_map:
                 node.config = {**node.config, **override_map[node.id]}
-        label = "Ingestion" if kind == models.PipelineKind.INGESTION else "Retrieval"
         return self.pipelines.create_pipeline(
             user=user,
             name=f"{name} {label} Pipeline",
-            kind=kind,
             definition=definition,
             change_summary=f"Customized {label.lower()} pipeline for collection.",
-            is_default=False,
         )

@@ -193,7 +193,7 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
 
 
 class RetrievalInputConfig(BaseModel):
-    """Configuration for retrieval input nodes.
+    """Configuration for query input nodes.
 
     `arguments` lists the names of input-source variables (declared on
     `PipelineDefinition.variables`) this pipeline accepts from callers — the
@@ -201,9 +201,17 @@ class RetrievalInputConfig(BaseModel):
     schema publishes the `expose_to_llm` ones. The built-in `query` argument
     is implicit and always present. Definition/bounds/default live on the
     variable, never here.
+
+    `tool_name`/`tool_description` are the pipeline's tool identity — the
+    base name and description chat and MCP expose (namespaced per collection
+    at exposure time). Unset, the identity falls back to the generic search
+    projection, which keeps pre-tools pipelines exposing today's
+    `search_<collection>` contract unchanged.
     """
 
     arguments: list[str] = Field(default_factory=list)
+    tool_name: str | None = None
+    tool_description: str | None = None
 
 
 class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):

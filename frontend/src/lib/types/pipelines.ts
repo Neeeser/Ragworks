@@ -151,12 +151,24 @@ export interface PipelineDefinition {
   schema_version?: number;
 }
 
+/** A pipeline's derived interface (`PipelineInterfaceRead`). */
+export interface PipelineInterfaceRead {
+  accepts_document: boolean;
+  callable: boolean;
+  tool_name?: string | null;
+  tool_description?: string | null;
+  output_kind?: "chunks" | "structured" | null;
+  output_fields: string[];
+}
+
 export interface Pipeline {
   id: UUID;
   user_id: UUID;
   name: string;
   description?: string | null;
-  kind: PipelineKind;
+  /** Derived UI grouping (null when the graph is neither shape). */
+  kind: PipelineKind | null;
+  interface?: PipelineInterfaceRead | null;
   current_version: number;
   is_default: boolean;
   created_at: string;

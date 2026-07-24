@@ -51,8 +51,9 @@ export function DashboardCollections({ collections, pipelineNameById }: Dashboar
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {collections.map((collection) => {
-            const ingestion = pipelineNameById.get(collection.ingestion_pipeline_id ?? "");
-            const retrieval = pipelineNameById.get(collection.retrieval_pipeline_id ?? "");
+            const ingestion = pipelineNameById.get(collection.ingest_pipeline_id ?? "");
+            const primaryTool = collection.tools.find((tool) => tool.is_primary);
+            const retrieval = pipelineNameById.get(primaryTool?.pipeline_id ?? "");
             return (
               <Link
                 key={collection.id}

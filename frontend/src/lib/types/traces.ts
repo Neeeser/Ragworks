@@ -1,17 +1,12 @@
 import type { UUID } from "@/lib/types/common";
-import type {
-  PipelineDefinition,
-  PipelineIOType,
-  PipelineKind,
-  PipelineRunStatus,
-} from "@/lib/types/pipelines";
+import type { PipelineDefinition, PipelineIOType, PipelineRunStatus } from "@/lib/types/pipelines";
 
 export interface PipelineRunTrace {
   id: UUID;
   pipeline_id: UUID;
   pipeline_version_id?: UUID | null;
   pipeline_version?: number | null;
-  kind: PipelineKind;
+  trigger: "ingest" | "tool";
   user_id: UUID;
   collection_id: UUID;
   status: PipelineRunStatus;

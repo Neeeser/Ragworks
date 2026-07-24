@@ -180,7 +180,7 @@ def test_stats_history_buckets_growth_and_latency(session: Session) -> None:
     session.add(
         models.PipelineRun(
             pipeline_id=pipeline.id,
-            kind=models.PipelineKind.INGESTION,
+            trigger=models.BindingRole.INGEST,
             user_id=user.id,
             collection_id=collection.id,
             status=models.PipelineRunStatus.COMPLETED,
@@ -193,7 +193,7 @@ def test_stats_history_buckets_growth_and_latency(session: Session) -> None:
     session.add(
         models.PipelineRun(
             pipeline_id=pipeline.id,
-            kind=models.PipelineKind.INGESTION,
+            trigger=models.BindingRole.INGEST,
             user_id=user.id,
             collection_id=collection.id,
             status=models.PipelineRunStatus.RUNNING,

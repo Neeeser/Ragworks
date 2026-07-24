@@ -65,6 +65,7 @@ vi.mock("@/components/collections/list/CreateCollectionWizard", () => ({
               id: "col-2",
               user_id: "user-1",
               name: "New",
+              tools: [],
               created_at: baseTimestamp,
               updated_at: baseTimestamp,
             })

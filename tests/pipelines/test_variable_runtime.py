@@ -158,7 +158,6 @@ class TestRunnerEffectiveTopK:
         pipeline = PipelineService(session).create_pipeline(
             user=user,
             name="Args",
-            kind=models.PipelineKind.RETRIEVAL,
             definition=definition,
         )
         session.commit()
@@ -172,7 +171,7 @@ class TestRunnerEffectiveTopK:
             "pipeline": pipeline,
             "version": version,
             "definition": definition,
-            "kind": models.PipelineKind.RETRIEVAL,
+            "trigger": models.BindingRole.TOOL,
             "user": user,
             "collection": collection,
             "settings": get_settings(),

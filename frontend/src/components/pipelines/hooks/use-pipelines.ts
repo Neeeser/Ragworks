@@ -165,12 +165,10 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
   const pipelineUsage = useMemo(() => {
     const usage = new Set<string>();
     collections.forEach((collection) => {
-      if (collection.ingestion_pipeline_id) {
-        usage.add(collection.ingestion_pipeline_id);
+      if (collection.ingest_pipeline_id) {
+        usage.add(collection.ingest_pipeline_id);
       }
-      if (collection.retrieval_pipeline_id) {
-        usage.add(collection.retrieval_pipeline_id);
-      }
+      collection.tools.forEach((tool) => usage.add(tool.pipeline_id));
     });
     return usage;
   }, [collections]);

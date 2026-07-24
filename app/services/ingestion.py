@@ -22,13 +22,13 @@ from app.observability import events as log_events
 from app.observability import get_logger, request_context
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
-from app.pipelines.settings import IngestionPipelineSettings
+from app.pipelines.settings import PipelineSettings
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.retrieval.models import DocumentChunk
 from app.retrieval.tokenizers.resources import build_token_counter
 from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
-from app.services.pipeline_resolution import ResolvedIngestionPipeline, resolve_ingestion_pipeline
+from app.services.pipeline_resolution import ResolvedPipeline, resolve_ingest_binding
 from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
@@ -131,7 +131,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         (`FileSystemService.ensure_pending_document`); retry reuses the same
         row, so a previous attempt's chunk rows and vectors are cleared first.
         """
-        resolved = resolve_ingestion_pipeline(self.session, user, collection)
+        resolved = resolve_ingest_binding(self.session, user, collection)
         is_retry = document.ingestion_run_id is not None
         self._apply_settings(document, resolved.settings)
         document.status = models.DocumentStatus.PROCESSING
@@ -160,7 +160,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
                 pipeline=resolved.pipeline,
                 version=resolved.service.get_current_version(resolved.pipeline),
                 definition=resolved.definition,
-                kind=models.PipelineKind.INGESTION,
+                trigger=models.BindingRole.INGEST,
                 user=user,
                 collection=collection,
                 settings=self.settings,
@@ -230,7 +230,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             raise
 
     @staticmethod
-    def _apply_settings(document: models.Document, resolved: IngestionPipelineSettings) -> None:
+    def _apply_settings(document: models.Document, resolved: PipelineSettings) -> None:
         """Sync the document's pipeline-derived columns for this attempt."""
         document.chunk_size = resolved.chunk_size
         document.chunk_overlap = resolved.chunk_overlap
@@ -240,7 +240,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
     @staticmethod
     def _purge_previous_vectors(
         vector_stores: VectorStoreProvider,
-        resolved: ResolvedIngestionPipeline,
+        resolved: ResolvedPipeline,
         document: models.Document,
     ) -> None:
         """Best-effort purge of a previous attempt's vectors before re-indexing.
@@ -273,7 +273,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
         document: models.Document,
         collection: models.Collection,
         enriched_chunks: list[DocumentChunk],
-        resolved: IngestionPipelineSettings,
+        resolved: PipelineSettings,
     ) -> list[models.DocumentChunkRecord]:
         """Persist embedded chunks and update document metadata."""
         token_counter = build_token_counter(resolved.tokenizer, self.settings.storage_path)

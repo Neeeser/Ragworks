@@ -21,6 +21,7 @@ from app.schemas.setup import SetupBootstrapRequest
 from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_admin import IndexAdminService
+from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
 from app.services.setup import SetupService
 from tests.utils.providers import add_connection, add_openrouter_connection
 
@@ -157,10 +158,15 @@ def test_bootstrap_creates_default_pipelines_and_first_collection(
         stored = fresh.get(models.Collection, collection.id)
         assert stored is not None
         assert stored.name == "My first collection"
-        kinds = {pipeline.kind for pipeline in pipelines if pipeline.is_default}
-        assert kinds == {models.PipelineKind.INGESTION, models.PipelineKind.RETRIEVAL}
-        assert stored.ingestion_pipeline_id is not None
-        assert stored.retrieval_pipeline_id is not None
+        slugs = {pipeline.template_slug for pipeline in pipelines if pipeline.template_slug}
+        assert slugs == {DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG}
+        bindings = fresh.exec(
+            select(models.CollectionPipelineBinding).where(
+                models.CollectionPipelineBinding.collection_id == stored.id
+            )
+        ).all()
+        roles = sorted(models.BindingRole(binding.role).value for binding in bindings)
+        assert roles == ["ingest", "tool"]
         assert fresh.exec(select(models.PipelineVersion)).first() is not None
 
 
@@ -262,6 +268,8 @@ def test_bootstrap_replaces_existing_default_pipelines(
 
     with Session(session.get_bind()) as fresh:
         defaults = fresh.exec(
-            select(models.Pipeline).where(models.Pipeline.is_default)  # type: ignore[arg-type]
+            select(models.Pipeline).where(
+                models.Pipeline.template_slug.is_not(None)  # type: ignore[union-attr]
+            )
         ).all()
     assert len(defaults) == 2

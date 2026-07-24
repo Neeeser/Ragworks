@@ -6,7 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/panel";
-import { updateCollection } from "@/lib/api";
+import {
+  addCollectionTool,
+  fetchCollection,
+  removeCollectionTool,
+  updateCollection,
+  updateCollectionTool,
+} from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { Collection, Pipeline } from "@/lib/types";
@@ -19,7 +25,7 @@ type PipelinesCardProps = {
   onCollectionUpdated: (collection: Collection) => void;
 };
 
-/** The one place a collection's ingestion/retrieval pipeline bindings live. */
+/** The collection's ingest pipeline and primary search tool bindings. */
 export function PipelinesCard({
   collection,
   ingestionPipelines,
@@ -42,26 +48,59 @@ export function PipelinesCard({
     [retrievalPipelines],
   );
 
+  const primaryTool = useMemo(
+    () => collection.tools.find((tool) => tool.is_primary) ?? collection.tools[0] ?? null,
+    [collection.tools],
+  );
+
   useEffect(() => {
     setBindings({
-      ingestion: collection.ingestion_pipeline_id ?? defaultIngestion?.id ?? "",
-      retrieval: collection.retrieval_pipeline_id ?? defaultRetrieval?.id ?? "",
+      ingestion: collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "",
+      retrieval: primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "",
     });
-  }, [collection, defaultIngestion, defaultRetrieval]);
+  }, [collection, defaultIngestion, defaultRetrieval, primaryTool]);
 
   const dirty =
-    bindings.ingestion !== (collection.ingestion_pipeline_id ?? defaultIngestion?.id ?? "") ||
-    bindings.retrieval !== (collection.retrieval_pipeline_id ?? defaultRetrieval?.id ?? "");
+    bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "") ||
+    bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "");
+
+  const applyPrimaryTool = async (pipelineId: string) => {
+    const existing = collection.tools.find((tool) => tool.pipeline_id === pipelineId);
+    if (existing) {
+      if (!existing.is_primary) {
+        await updateCollectionTool(token, collection.id, existing.id, { is_primary: true });
+      }
+    } else {
+      const created = await addCollectionTool(token, collection.id, {
+        pipeline_id: pipelineId,
+      });
+      if (!created.is_primary) {
+        await updateCollectionTool(token, collection.id, created.id, { is_primary: true });
+      }
+    }
+    // Switching the search pipeline replaces it (the Tools panel is where
+    // multiple tools are curated) — drop the previous primary binding.
+    if (primaryTool && primaryTool.pipeline_id !== pipelineId) {
+      await removeCollectionTool(token, collection.id, primaryTool.id);
+    }
+  };
 
   const handleApply = async () => {
     setSaving(true);
     setMessage(null);
     try {
-      const updated = await updateCollection(token, collection.id, {
-        ingestion_pipeline_id: bindings.ingestion || null,
-        retrieval_pipeline_id: bindings.retrieval || null,
-      });
-      onCollectionUpdated(updated);
+      if (bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "")) {
+        await updateCollection(token, collection.id, {
+          ingest_pipeline_id: bindings.ingestion || null,
+        });
+      }
+      if (
+        bindings.retrieval &&
+        bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "")
+      ) {
+        await applyPrimaryTool(bindings.retrieval);
+      }
+      onCollectionUpdated(await fetchCollection(token, collection.id));
       setMessage("Pipelines updated.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to update pipelines."));
@@ -95,10 +134,10 @@ export function PipelinesCard({
         </div>
         <div>
           <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-            Retrieval
+            Search tool
           </p>
           <PipelineSelect
-            label="Retrieval pipeline"
+            label="Primary search tool pipeline"
             pipelines={retrievalPipelines}
             value={bindings.retrieval}
             onChange={(id) => setBindings((prev) => ({ ...prev, retrieval: id }))}

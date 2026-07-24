@@ -692,7 +692,7 @@ def test_upgrade_stored_pipeline_definitions_rewrites_versions_in_place(
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Legacy",
-        kind=models.PipelineKind.RETRIEVAL,
+        trigger=models.BindingRole.TOOL,
     )
     session.add(pipeline)
     session.flush()

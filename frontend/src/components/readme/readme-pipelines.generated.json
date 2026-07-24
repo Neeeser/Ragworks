@@ -150,7 +150,9 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {
-              "arguments": ["result_limit"]
+              "arguments": ["result_limit"],
+              "tool_name": "search",
+              "tool_description": "Search the collection for relevant document chunks."
             },
             "position": null,
             "ui": {}
@@ -748,7 +750,7 @@
         }
       ],
       "config_schema": {
-        "description": "Configuration for retrieval input nodes.\n\n`arguments` lists the names of input-source variables (declared on\n`PipelineDefinition.variables`) this pipeline accepts from callers \u2014 the\nsearch page renders a control per accepted variable and the chat tool\nschema publishes the `expose_to_llm` ones. The built-in `query` argument\nis implicit and always present. Definition/bounds/default live on the\nvariable, never here.",
+        "description": "Configuration for query input nodes.\n\n`arguments` lists the names of input-source variables (declared on\n`PipelineDefinition.variables`) this pipeline accepts from callers \u2014 the\nsearch page renders a control per accepted variable and the chat tool\nschema publishes the `expose_to_llm` ones. The built-in `query` argument\nis implicit and always present. Definition/bounds/default live on the\nvariable, never here.\n\n`tool_name`/`tool_description` are the pipeline's tool identity \u2014 the\nbase name and description chat and MCP expose (namespaced per collection\nat exposure time). Unset, the identity falls back to the generic search\nprojection, which keeps pre-tools pipelines exposing today's\n`search_<collection>` contract unchanged.",
         "properties": {
           "arguments": {
             "items": {
@@ -756,13 +758,39 @@
             },
             "title": "Arguments",
             "type": "array"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tool Name"
+          },
+          "tool_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tool Description"
           }
         },
         "title": "RetrievalInputConfig",
         "type": "object"
       },
       "default_config": {
-        "arguments": []
+        "arguments": [],
+        "tool_name": null,
+        "tool_description": null
       },
       "hidden": false
     },

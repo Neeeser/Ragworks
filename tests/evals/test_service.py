@@ -79,8 +79,8 @@ def test_delete_dataset_blocked_while_runs_reference_it(session: Session) -> Non
         user,
         EvalRunCreate(
             dataset_id=dataset.id,
-            ingestion_pipeline_id=_pipeline_id(session, user, models.PipelineKind.INGESTION),
-            retrieval_pipeline_id=_pipeline_id(session, user, models.PipelineKind.RETRIEVAL),
+            ingestion_pipeline_id=_pipeline_id(session, user, "default-ingest"),
+            retrieval_pipeline_id=_pipeline_id(session, user, "default-search"),
             config=_config(),
         ),
     )
@@ -98,7 +98,7 @@ def test_create_run_rejects_wrong_pipeline_kind(session: Session) -> None:
     service = EvalService(session)
     user = _user(session, pipelines=True)
     dataset = _upload(service, user)
-    retrieval_id = _pipeline_id(session, user, models.PipelineKind.RETRIEVAL)
+    retrieval_id = _pipeline_id(session, user, "default-search")
     with pytest.raises(InvalidInputError):
         service.create_run(
             user,
@@ -125,8 +125,8 @@ def test_create_run_rejects_unknown_metric_names(session: Session) -> None:
             user,
             EvalRunCreate(
                 dataset_id=dataset.id,
-                ingestion_pipeline_id=_pipeline_id(session, user, models.PipelineKind.INGESTION),
-                retrieval_pipeline_id=_pipeline_id(session, user, models.PipelineKind.RETRIEVAL),
+                ingestion_pipeline_id=_pipeline_id(session, user, "default-ingest"),
+                retrieval_pipeline_id=_pipeline_id(session, user, "default-search"),
                 config=EvalRunConfig(
                     num_queries=1, distractor_pool_size=0, selected_metrics=["recal"]
                 ),
@@ -159,8 +159,8 @@ def test_cancel_only_applies_to_inflight_runs(session: Session) -> None:
         user,
         EvalRunCreate(
             dataset_id=dataset.id,
-            ingestion_pipeline_id=_pipeline_id(session, user, models.PipelineKind.INGESTION),
-            retrieval_pipeline_id=_pipeline_id(session, user, models.PipelineKind.RETRIEVAL),
+            ingestion_pipeline_id=_pipeline_id(session, user, "default-ingest"),
+            retrieval_pipeline_id=_pipeline_id(session, user, "default-search"),
             config=_config(),
         ),
     )
@@ -181,9 +181,10 @@ def test_delete_eval_collection_never_touches_user_collections(session: Session)
         service.delete_eval_collection(user, collection.id)
 
 
-def _pipeline_id(session: Session, user: models.User, kind: models.PipelineKind):
+def _pipeline_id(session: Session, user: models.User, template_slug: str):
     return session.exec(
         select(models.Pipeline).where(
-            models.Pipeline.user_id == user.id, models.Pipeline.kind == kind
+            models.Pipeline.user_id == user.id,
+            models.Pipeline.template_slug == template_slug
         )
     ).one().id

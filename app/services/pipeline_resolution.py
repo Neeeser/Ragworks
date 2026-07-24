@@ -1,145 +1,265 @@
-"""The one place that resolves a collection's ingestion/retrieval pipeline.
+"""The one place that resolves a collection's pipeline bindings.
 
-Every caller that needs a collection's active pipeline definition and its
-resolved settings follows the same sequence: ensure default pipelines exist
-for the user, attach them to the collection if it has none assigned, load the
-pipeline (validating its kind), and resolve its settings against the
-collection. This module is the only place that sequence is written; callers
-(ingestion, retrieval, and the collection routes that render prompts or purge
-a collection's Pinecone namespace) all go through `resolve_ingestion_pipeline`
-/ `resolve_retrieval_pipeline`.
+Every caller that needs a collection's active pipelines follows the same
+sequence: ensure default pipelines exist for the user, bind them to the
+collection if it has no bindings yet, load the bound pipeline, check its
+derived interface fits the binding's role, and resolve its settings against
+the collection. This module is the only place that sequence is written;
+callers (ingestion, tool invocation, chat setup, prompt rendering, purges,
+diagnostics) all go through `resolve_ingest_binding` / `resolve_primary_tool`
+/ `resolve_tool_binding` / `resolve_tool_bindings`.
 
-Resolution failures raise `PipelineResolutionError`, never an HTTP exception --
-this is a service module, so translating to a status code is the caller's job.
-Routes translate it as a 400 (it is an `InvalidInputError`), including chat's
-routes, which now catch `ServiceError` like every other service.
+Resolution failures raise `PipelineResolutionError`, never an HTTP exception —
+this is a service module, so translating to a status code is the caller's job
+(it is an `InvalidInputError`, so routes map it to 400).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlmodel import Session
 
 from app.db import models
+from app.db.repositories import CollectionPipelineBindingRepository
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.interface import PipelineInterface
 from app.pipelines.registry import NodeRegistry, default_registry
-from app.pipelines.settings import (
-    IngestionPipelineSettings,
-    RetrievalPipelineSettings,
-    resolve_ingestion_settings,
-    resolve_retrieval_settings,
-)
+from app.pipelines.settings import IndexTarget, PipelineSettings, resolve_pipeline_settings
 from app.services.errors import InvalidInputError
 from app.services.pipeline_validation import log_pipeline_validation_warnings
 from app.services.pipelines import PipelineService
 
 
 class PipelineResolutionError(InvalidInputError):
-    """Raised when a collection's pipeline cannot be resolved.
+    """Raised when a collection's pipeline binding cannot be resolved.
 
     Subclasses `InvalidInputError` so routes map it to a 400 through the
-    typed taxonomy. It used to also subclass `ValueError` as a transitional
-    bridge for chat's not-yet-migrated `except ValueError` routes; that bridge
-    is gone now that `routes/chat.py` catches `ServiceError` directly.
+    typed taxonomy.
     """
 
 
 @dataclass(frozen=True)
-class ResolvedIngestionPipeline:
-    """A collection's resolved ingestion pipeline, definition, and settings."""
+class ResolvedPipeline:
+    """A resolved binding: its pipeline, definition, settings, and interface."""
 
     service: PipelineService
+    binding: models.CollectionPipelineBinding
     pipeline: models.Pipeline
     definition: PipelineDefinition
-    settings: IngestionPipelineSettings
+    settings: PipelineSettings
+    interface: PipelineInterface
 
 
-@dataclass(frozen=True)
-class ResolvedRetrievalPipeline:
-    """A collection's resolved retrieval pipeline, definition, and settings."""
+def _load_resolved(
+    service: PipelineService,
+    user: models.User,
+    collection: models.Collection,
+    binding: models.CollectionPipelineBinding,
+    registry: NodeRegistry | None,
+    *,
+    context: str,
+) -> ResolvedPipeline:
+    """Load a binding's pipeline and check its interface fits the role."""
+    pipeline = service.get_pipeline(binding.pipeline_id, user.id)
+    if not pipeline:
+        raise PipelineResolutionError(f"{context} pipeline could not be resolved.")
+    definition = service.get_definition(pipeline)
+    interface = service.interface_for(pipeline)
+    if binding.role == models.BindingRole.INGEST and not interface.accepts_document:
+        raise PipelineResolutionError(
+            f"Pipeline '{pipeline.name}' does not accept documents and cannot ingest."
+        )
+    if binding.role == models.BindingRole.TOOL and not interface.callable:
+        raise PipelineResolutionError(
+            f"Pipeline '{pipeline.name}' has no query input and cannot serve as a tool."
+        )
+    log_pipeline_validation_warnings(
+        service.validate_definition(user, definition), context=f"{context} execution"
+    )
+    settings = resolve_pipeline_settings(
+        definition, collection, registry or default_registry()
+    )
+    return ResolvedPipeline(
+        service=service,
+        binding=binding,
+        pipeline=pipeline,
+        definition=definition,
+        settings=settings,
+        interface=interface,
+    )
 
-    service: PipelineService
-    pipeline: models.Pipeline
-    definition: PipelineDefinition
-    settings: RetrievalPipelineSettings
+
+def _scaffold_bindings(
+    service: PipelineService, user: models.User, collection: models.Collection
+) -> None:
+    """Persist default pipelines and bind them onto an unbound collection."""
+    defaults = service.ensure_default_pipelines(user)
+    service.ensure_collection_bindings(collection, defaults)
 
 
-def resolve_ingestion_pipeline(
+def resolve_ingest_binding(
     session: Session,
     user: models.User,
     collection: models.Collection,
     *,
     registry: NodeRegistry | None = None,
     scaffold: bool = True,
-) -> ResolvedIngestionPipeline:
-    """Resolve the collection's ingestion pipeline, definition, and settings.
+) -> ResolvedPipeline:
+    """Resolve the collection's ingest binding.
 
-    `scaffold=True` (default) runs ensure-defaults → attach, which *persists*
-    default pipelines and binds them to the collection — correct for ingestion
-    and retrieval, which are about to run a pipeline. `scaffold=False` is the
-    read-only variant: it never mutates state (no GET endpoint may), so an
-    unbound collection raises `PipelineResolutionError` instead of scaffolding
-    and binding a default. Diagnostics uses `scaffold=False`.
+    `scaffold=True` (default) runs ensure-defaults → bind, which *persists*
+    default pipelines and binds them to the collection — correct for callers
+    about to run a pipeline. `scaffold=False` is the read-only variant: it
+    never mutates state (no GET endpoint may), so an unbound collection
+    raises `PipelineResolutionError` instead of scaffolding. Diagnostics
+    uses `scaffold=False`.
     """
     service = PipelineService(session)
-    if scaffold:
-        defaults = service.ensure_default_pipelines(user)
-        service.ensure_collection_pipelines(collection, defaults)
-        pipeline_id = collection.ingestion_pipeline_id or defaults.ingestion.id
-    elif collection.ingestion_pipeline_id is None:
-        raise PipelineResolutionError("No ingestion pipeline is bound to this collection.")
-    else:
-        pipeline_id = collection.ingestion_pipeline_id
-    pipeline = service.get_pipeline(pipeline_id, user.id)
-    if not pipeline or pipeline.kind != models.PipelineKind.INGESTION:
+    bindings = CollectionPipelineBindingRepository(session)
+    existing = bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST)
+    if not existing:
+        if not scaffold:
+            raise PipelineResolutionError(
+                "No ingestion pipeline is bound to this collection."
+            )
+        _scaffold_bindings(service, user, collection)
+        existing = bindings.list_for_collection(
+            collection.id, role=models.BindingRole.INGEST
+        )
+    if not existing:
         raise PipelineResolutionError("Ingestion pipeline could not be resolved.")
-    definition = service.get_definition(pipeline)
-    log_pipeline_validation_warnings(
-        service.validate_definition(user, definition), context="ingestion execution"
-    )
-    settings = resolve_ingestion_settings(definition, collection, registry or default_registry())
-    return ResolvedIngestionPipeline(
-        service=service,
-        pipeline=pipeline,
-        definition=definition,
-        settings=settings,
+    return _load_resolved(
+        service, user, collection, existing[0], registry, context="ingestion"
     )
 
 
-def resolve_retrieval_pipeline(
+def resolve_primary_tool(
     session: Session,
     user: models.User,
     collection: models.Collection,
     *,
     registry: NodeRegistry | None = None,
     scaffold: bool = True,
-) -> ResolvedRetrievalPipeline:
-    """Resolve the collection's retrieval pipeline, definition, and settings.
+) -> ResolvedPipeline:
+    """Resolve the collection's primary search tool binding.
 
-    See `resolve_ingestion_pipeline` for the `scaffold` contract: `False` is
-    the read-only variant that never persists or binds a default pipeline.
+    See `resolve_ingest_binding` for the `scaffold` contract. The primary is
+    the designated default the search page, files search, and legacy query
+    API run against.
     """
     service = PipelineService(session)
-    if scaffold:
-        defaults = service.ensure_default_pipelines(user)
-        service.ensure_collection_pipelines(collection, defaults)
-        pipeline_id = collection.retrieval_pipeline_id or defaults.retrieval.id
-    elif collection.retrieval_pipeline_id is None:
-        raise PipelineResolutionError("No retrieval pipeline is bound to this collection.")
-    else:
-        pipeline_id = collection.retrieval_pipeline_id
-    pipeline = service.get_pipeline(pipeline_id, user.id)
-    if not pipeline or pipeline.kind != models.PipelineKind.RETRIEVAL:
-        raise PipelineResolutionError("Retrieval pipeline could not be resolved.")
-    definition = service.get_definition(pipeline)
-    log_pipeline_validation_warnings(
-        service.validate_definition(user, definition), context="retrieval execution"
+    bindings = CollectionPipelineBindingRepository(session)
+    tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    if not tools:
+        if not scaffold:
+            raise PipelineResolutionError("No tool pipeline is bound to this collection.")
+        _scaffold_bindings(service, user, collection)
+        tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    primary = next((binding for binding in tools if binding.is_primary), None)
+    if primary is None:
+        primary = tools[0] if tools else None
+    if primary is None:
+        raise PipelineResolutionError("Primary search tool could not be resolved.")
+    return _load_resolved(
+        service, user, collection, primary, registry, context="retrieval"
     )
-    settings = resolve_retrieval_settings(definition, collection, registry or default_registry())
-    return ResolvedRetrievalPipeline(
-        service=service,
-        pipeline=pipeline,
-        definition=definition,
-        settings=settings,
+
+
+def resolve_tool_binding(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    binding_id: UUID,
+    *,
+    registry: NodeRegistry | None = None,
+) -> ResolvedPipeline:
+    """Resolve one specific tool binding of a collection (never scaffolds)."""
+    bindings = CollectionPipelineBindingRepository(session)
+    binding = bindings.get_for_collection(collection.id, binding_id)
+    if binding is None or binding.role != models.BindingRole.TOOL:
+        raise PipelineResolutionError("Tool binding could not be resolved.")
+    return _load_resolved(
+        PipelineService(session), user, collection, binding, registry, context="tool"
     )
+
+
+@dataclass(frozen=True)
+class PurgeTarget:
+    """One (index, namespace) pair a collection's pipelines touch.
+
+    Purge cascades iterate these — the union across EVERY binding, because a
+    tool pipeline with an indexer node writes to indexes the ingest pipeline
+    never touched.
+    """
+
+    target: IndexTarget
+    namespace: str | None
+
+
+def resolve_purge_targets(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    *,
+    registry: NodeRegistry | None = None,
+) -> list[PurgeTarget]:
+    """Return the deduped union of index targets across all bindings.
+
+    The ingest binding must resolve (its failure propagates, as deletion
+    always required); a tool binding that no longer resolves is skipped —
+    an unresolvable graph never ran, and blocking deletion on it would trap
+    the collection.
+    """
+    resolved: list[ResolvedPipeline] = [
+        resolve_ingest_binding(session, user, collection, registry=registry)
+    ]
+    bindings = CollectionPipelineBindingRepository(session)
+    for binding in bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL):
+        try:
+            resolved.append(
+                resolve_tool_binding(session, user, collection, binding.id, registry=registry)
+            )
+        except PipelineResolutionError:
+            continue
+    targets: list[PurgeTarget] = []
+    seen: set[tuple[IndexTarget, str | None]] = set()
+    for item in resolved:
+        for target in item.settings.index_targets:
+            key = (target, item.settings.namespace)
+            if key in seen:
+                continue
+            seen.add(key)
+            targets.append(PurgeTarget(target=target, namespace=item.settings.namespace))
+    return targets
+
+
+def resolve_tool_bindings(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    *,
+    registry: NodeRegistry | None = None,
+    enabled_only: bool = True,
+    scaffold: bool = True,
+) -> list[ResolvedPipeline]:
+    """Resolve the collection's tool bindings in position order.
+
+    Chat setup uses this (enabled bindings only); the tools listing endpoint
+    passes `enabled_only=False` to show disabled bindings too.
+    """
+    service = PipelineService(session)
+    bindings = CollectionPipelineBindingRepository(session)
+    tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    if not tools and scaffold:
+        _scaffold_bindings(service, user, collection)
+        tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    resolved: list[ResolvedPipeline] = []
+    for binding in tools:
+        if enabled_only and not binding.enabled:
+            continue
+        resolved.append(
+            _load_resolved(service, user, collection, binding, registry, context="tool")
+        )
+    return resolved

@@ -94,7 +94,7 @@ describe("CollectionOverview", () => {
   it("updates pipeline bindings and reports success", async () => {
     api.updateCollection.mockResolvedValueOnce(makeCollection({ name: "Updated" }));
     const { props } = renderOverview({
-      collection: makeCollection({ ingestion_pipeline_id: null, retrieval_pipeline_id: null }),
+      collection: makeCollection({ ingest_pipeline_id: null, tools: [] }),
       ingestionPipelines: [
         makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
         makePipeline({ id: "pipe-3", name: "Ingest B", kind: "ingestion" }),
@@ -117,7 +117,7 @@ describe("CollectionOverview", () => {
   it("surfaces pipeline update failures", async () => {
     api.updateCollection.mockRejectedValueOnce(new Error("Update failed"));
     renderOverview({
-      collection: makeCollection({ ingestion_pipeline_id: null, retrieval_pipeline_id: null }),
+      collection: makeCollection({ ingest_pipeline_id: null, tools: [] }),
       ingestionPipelines: [
         makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
         makePipeline({ id: "pipe-3", name: "Ingest B", kind: "ingestion" }),

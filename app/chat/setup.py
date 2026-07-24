@@ -35,6 +35,7 @@ from app.chat.state import (
     PipelineContext,
     ToolCollectionContext,
 )
+from app.chat.tool_contexts import tool_contexts_for_collections
 from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import (
@@ -42,18 +43,12 @@ from app.db.repositories import (
     CollectionRepository,
     ProviderConnectionRepository,
 )
-from app.pipelines.resolution import declared_arguments
 from app.providers.registry import resolve_connection
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
-from app.services.pipeline_resolution import (
-    resolve_ingestion_pipeline,
-    resolve_retrieval_pipeline,
-)
 from app.services.prompts import (
     PromptContext,
-    collection_tool_name,
     get_system_prompt_template,
     render_system_prompt,
     system_prompt_context,
@@ -76,50 +71,6 @@ class ChatSetupBuilder:
         self.chat_repo = chat_repo
         self.collection_repo = collection_repo
         self.reasoning_effort = reasoning_effort
-
-    def _resolve_pipeline_context(
-        self, user: models.User, collection: models.Collection
-    ) -> PipelineContext:
-        """Resolve ingestion and retrieval pipeline settings for a collection.
-
-        `PipelineResolutionError` subclasses `InvalidInputError`, so it flows
-        through the same `except ServiceError` the routes use for every other
-        chat domain error.
-        """
-        ingestion = resolve_ingestion_pipeline(self.session, user, collection)
-        retrieval = resolve_retrieval_pipeline(self.session, user, collection)
-        return PipelineContext(
-            ingestion_settings=ingestion.settings,
-            retrieval_settings=retrieval.settings,
-            query_arguments=tuple(declared_arguments(retrieval.definition)),
-        )
-
-    def _build_tool_collection_context(
-        self, user: models.User, collection: models.Collection, tool_name: str
-    ) -> ToolCollectionContext:
-        """Build tool context for a collection."""
-        pipeline = self._resolve_pipeline_context(user, collection)
-        return ToolCollectionContext(
-            collection=collection,
-            tool_name=tool_name,
-            ingestion_settings=pipeline.ingestion_settings,
-            retrieval_settings=pipeline.retrieval_settings,
-            query_arguments=pipeline.query_arguments,
-        )
-
-    def _tool_contexts_for_collections(
-        self, user: models.User, collections: list[models.Collection]
-    ) -> list[ToolCollectionContext]:
-        """Build uniquely named tool contexts for the selected collections."""
-        name_counts: dict[str, int] = {}
-        contexts: list[ToolCollectionContext] = []
-        for collection in collections:
-            base_name = collection_tool_name(collection.name)
-            occurrence = name_counts.get(base_name, 0) + 1
-            name_counts[base_name] = occurrence
-            tool_name = base_name if occurrence == 1 else f"{base_name}_{occurrence}"
-            contexts.append(self._build_tool_collection_context(user, collection, tool_name))
-        return contexts
 
     def _resolve_tool_collections(
         self,
@@ -156,14 +107,15 @@ class ChatSetupBuilder:
         if missing:
             raise InvalidInputError("Selected collections are not available.")
         ordered = [collection_map[collection_id] for collection_id in collection_ids]
-        contexts = self._tool_contexts_for_collections(user, ordered)
-        # A Pinecone key is only required when one of the selected collections
-        # actually retrieves from Pinecone (any of its index targets, dense or
-        # BM25); pgvector-backed collections need none.
+        contexts = tool_contexts_for_collections(self.session, user, ordered)
+        # A Pinecone key is only required when one of the selected collections'
+        # tools actually touches Pinecone (any index target, dense or BM25);
+        # pgvector-backed collections need none.
         needs_pinecone = any(
             target.backend is IndexBackend.PINECONE
             for context in contexts
-            for target in context.retrieval_settings.index_targets
+            for tool in context.tools
+            for target in tool.settings.index_targets
         )
         if needs_pinecone and not ProviderConnectionRepository(
             self.session

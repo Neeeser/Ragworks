@@ -14,8 +14,20 @@ vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 const api = vi.mocked(apiModule);
 
 const collections: Collection[] = [
-  makeCollection({ id: "col-1", name: "One", retrieval_pipeline_id: "pipe-1" }),
-  makeCollection({ id: "col-2", name: "Two", retrieval_pipeline_id: "pipe-2" }),
+  makeCollection({
+    id: "col-1",
+    name: "One",
+    tools: [
+      { id: "binding-1", pipeline_id: "pipe-1", is_primary: true, enabled: true, position: 0 },
+    ],
+  }),
+  makeCollection({
+    id: "col-2",
+    name: "Two",
+    tools: [
+      { id: "binding-1", pipeline_id: "pipe-2", is_primary: true, enabled: true, position: 0 },
+    ],
+  }),
 ];
 
 const docFor = (collectionId: string): Document =>

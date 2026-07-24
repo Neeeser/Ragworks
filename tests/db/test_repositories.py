@@ -184,7 +184,7 @@ def test_pipeline_repositories_and_versions(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     pipeline_repo.add(pipeline)
@@ -210,7 +210,7 @@ def test_pipeline_repositories_and_versions(session: Session) -> None:
 
     assert pipeline_repo.get(pipeline.id, user_id=user.id) is not None
     assert pipeline_repo.get(pipeline.id, user_id=other.id) is None
-    assert list(pipeline_repo.list_for_user(user.id, kind=models.PipelineKind.INGESTION))
+    assert list(pipeline_repo.list_for_user(user.id))
     assert version_repo.get_by_version(pipeline.id, 2) is not None
     versions = list(version_repo.list_for_pipeline(pipeline.id))
     assert versions[0].version == 2
@@ -222,7 +222,7 @@ def test_pipeline_run_repository_lists_nodes(session: Session) -> None:
     pipeline = models.Pipeline(
         user_id=user.id,
         name="Pipeline",
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         current_version=1,
     )
     session.add(pipeline)
@@ -232,7 +232,7 @@ def test_pipeline_run_repository_lists_nodes(session: Session) -> None:
         pipeline_id=pipeline.id,
         pipeline_version_id=None,
         pipeline_version=1,
-        kind=models.PipelineKind.INGESTION,
+        trigger=models.BindingRole.INGEST,
         user_id=user.id,
         collection_id=collection.id,
         status=models.PipelineRunStatus.COMPLETED,

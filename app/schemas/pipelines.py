@@ -23,11 +23,15 @@ from app.schemas.enums import PipelineKind
 
 
 class PipelineCreate(BaseModel):
-    """Payload for creating a pipeline."""
+    """Payload for creating a pipeline.
+
+    `kind` is accepted for wire compatibility but ignored — what a pipeline
+    can do is derived from its definition's boundary nodes, never stored.
+    """
 
     name: str
-    kind: PipelineKind
     definition: PipelineDefinition
+    kind: PipelineKind | None = None
     description: str | None = None
     change_summary: str | None = None
 
@@ -41,21 +45,39 @@ class PipelineUpdate(BaseModel):
     change_summary: str | None = None
 
 
+class PipelineInterfaceRead(BaseModel):
+    """A pipeline's derived interface, as served to clients.
+
+    Mirrors the engine's `PipelineInterface` (mapped at the route — the
+    engine never defines wire types). `arguments` reuses the query-argument
+    wire shape the search surfaces already render from.
+    """
+
+    accepts_document: bool = False
+    callable: bool = False
+    tool_name: str | None = None
+    tool_description: str | None = None
+    output_kind: Literal["chunks", "structured"] | None = None
+    output_fields: list[str] = Field(default_factory=list)
+
+
 class PipelineRead(DateTimeConfigMixin, BaseModel):
     """Pipeline details returned to clients.
 
     Built at the route via
     `PipelineRead.model_validate({**pipeline.model_dump(), "definition": definition})`
     -- `definition` lives on the pipeline's current `PipelineVersion`, not on
-    `models.Pipeline` itself, so it's the one field that can't come straight
-    off the ORM row.
+    `models.Pipeline` itself. `kind` and `interface` are derived from the
+    definition (there is no stored kind); `is_default` reflects the
+    template_slug that marks scaffolded defaults.
     """
 
     id: UUID
     user_id: UUID
     name: str
     description: str | None
-    kind: PipelineKind
+    kind: PipelineKind | None = None
+    interface: PipelineInterfaceRead | None = None
     current_version: int
     is_default: bool
     created_at: datetime

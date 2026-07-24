@@ -18,7 +18,8 @@ from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
-from app.services.retrieval import RetrievalPipelineError, RetrievalService
+from app.services.retrieval import RetrievalService
+from app.services.tool_invocation import RetrievalPipelineError, ToolInvocationService
 from app.telemetry.events import RetrievalQueryRan
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
@@ -90,7 +91,7 @@ def test_query_collection_happy_path_maps_chunks_and_records_event(
     records a `QueryEvent` carrying the same latency/usage/pipeline-run data
     the response reports."""
     session = pgvector_session
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -144,16 +145,24 @@ def test_query_collection_rejects_missing_pipeline(session: Session) -> None:
     pipeline = PipelineService(session).create_pipeline(
         user=user,
         name="Ingestion",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
     )
     session.commit()
-    collection = _create_collection(session, user, retrieval_pipeline_id=pipeline.id)
+    collection = _create_collection(session, user)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
+    session.commit()
     service = RetrievalService(session)
 
-    with pytest.raises(InvalidInputError, match="Retrieval pipeline could not be resolved"):
+    with pytest.raises(InvalidInputError, match="has no query input"):
         service.query_collection(user, collection, query="hello")
 
 
@@ -164,8 +173,14 @@ def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Se
 
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(user)
-    collection.retrieval_pipeline_id = defaults.retrieval.id
-    session.add(collection)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=defaults.retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
     session.commit()
 
     class _StubExecutor:
@@ -176,7 +191,7 @@ def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Se
             raise RuntimeError("boom")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
     # An internal bug surfaces as a structured RetrievalPipelineError pinned to
     # 500 (not the bare RuntimeError), still carrying the run id for the trace.
@@ -204,8 +219,14 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
 
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(user)
-    collection.retrieval_pipeline_id = defaults.retrieval.id
-    session.add(collection)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=defaults.retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
     session.commit()
 
     class _StubExecutor:
@@ -216,7 +237,7 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
             raise PineconeException("Pinecone is unavailable")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
     with pytest.raises(RetrievalPipelineError) as caught:
         service.query_collection(user, collection, query="hello")
@@ -236,8 +257,14 @@ def test_query_collection_skips_failed_run_update(monkeypatch, session: Session)
 
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(user)
-    collection.retrieval_pipeline_id = defaults.retrieval.id
-    session.add(collection)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=defaults.retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
     session.commit()
 
     class _StubExecutor:
@@ -249,7 +276,7 @@ def test_query_collection_skips_failed_run_update(monkeypatch, session: Session)
             raise RuntimeError("boom")
 
     monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _StubExecutor)
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
     with pytest.raises(RetrievalPipelineError):
         service.query_collection(user, collection, query="hello")
@@ -292,7 +319,7 @@ def test_query_collection_failure_carries_failed_node_and_run(
             del dimensions
             return _FailingEmbedder(model_name)
 
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _FailingResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _FailingResolver)
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -345,7 +372,7 @@ def test_query_collection_db_error_surfaces_as_structured_failure(
             del dimensions
             return _WrongDimEmbedder(model_name)
 
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _WrongDimResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _WrongDimResolver)
     user = _create_user(session)
     collection = _create_collection(session, user)
 
@@ -377,7 +404,7 @@ def test_extract_retrieval_payload_raises_for_missing_result() -> None:
     `IngestionService._extract_indexing_payload`'s test (see test_ingestion.py):
     it's pure data-in/data-out validation, not wiring."""
     with pytest.raises(InvalidInputError, match="retrieval result payload"):
-        RetrievalService._extract_retrieval_payload({"node": {"data": {}}})
+        ToolInvocationService._extract_payload({"node": {"data": {}}})
 
 
 def _declare_pipeline_variables(
@@ -395,7 +422,7 @@ def _declare_pipeline_variables(
     pipeline = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.RETRIEVAL,
+            models.Pipeline.template_slug == "default-search",
         )
     ).one()
     service = PipelineService(session)
@@ -495,7 +522,7 @@ def test_query_arguments_lists_declared_arguments(session: Session) -> None:
 
 
 def test_query_collection_rejects_unknown_argument(monkeypatch, session: Session) -> None:
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
     user = _create_user(session)
     collection = _create_collection(session, user)
     with pytest.raises(InvalidInputError, match="Unknown argument 'nope'"):
@@ -507,7 +534,7 @@ def test_query_collection_rejects_unknown_argument(monkeypatch, session: Session
 
 
 def test_query_collection_rejects_constraint_violation(monkeypatch, session: Session) -> None:
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
     user = _create_user(session)
     collection = _create_collection(session, user)
     _declare_pipeline_variables(
@@ -528,8 +555,8 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
     outputs come back on the response and the recorded QueryEvent."""
     session = pgvector_session
     recorded_events: list[RetrievalQueryRan] = []
-    monkeypatch.setattr("app.services.retrieval.ProviderResolver", _StubProviderResolver)
-    monkeypatch.setattr("app.services.retrieval.record", recorded_events.append)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.record", recorded_events.append)
     user = _create_user(session)
     collection = _create_collection(session, user)
     _declare_pipeline_variables(

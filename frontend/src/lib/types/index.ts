@@ -10,3 +10,4 @@ export * from "@/lib/types/config";
 export * from "@/lib/types/setup";
 export * from "@/lib/types/providers";
 export * from "@/lib/types/evals";
+export * from "@/lib/types/tools";

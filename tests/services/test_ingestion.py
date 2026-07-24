@@ -25,7 +25,7 @@ from app.services import ingestion as ingestion_module
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
-from app.services.pipeline_resolution import resolve_ingestion_pipeline
+from app.services.pipeline_resolution import resolve_ingest_binding
 from app.services.pipelines import PipelineService
 from app.vectorstores.pgvector import PgvectorStore
 from app.vectorstores.registry import VectorStoreProvider
@@ -176,8 +176,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
     pipeline = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.INGESTION,
-            models.Pipeline.is_default.is_(True),
+            models.Pipeline.template_slug == "default-ingest",
         )
     ).one()
     version = session.exec(
@@ -267,7 +266,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
 
         fresh_collection = fresh_session.get(models.Collection, fresh_document.collection_id)
         assert fresh_collection is not None
-        resolved = resolve_ingestion_pipeline(fresh_session, user, fresh_collection)
+        resolved = resolve_ingest_binding(fresh_session, user, fresh_collection)
         IngestionService._purge_previous_vectors(
             VectorStoreProvider(
                 user=user,
@@ -316,8 +315,7 @@ def test_background_ingestion_persists_pipeline_warnings_in_its_own_session(
     pipeline = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.INGESTION,
-            models.Pipeline.is_default.is_(True),
+            models.Pipeline.template_slug == "default-ingest",
         )
     ).one()
     version = session.exec(
@@ -472,11 +470,11 @@ def test_ingest_document_wraps_pinecone_outage_as_external_service_error(
     assert run.status == models.PipelineRunStatus.FAILED
 
 
-def test_resolve_ingestion_pipeline_rejects_missing(session: Session) -> None:
-    """`resolve_ingestion_pipeline` (app/services/pipeline_resolution.py) rejects
+def test_resolve_ingest_binding_rejects_missing(session: Session) -> None:
+    """`resolve_ingest_binding` (app/services/pipeline_resolution.py) rejects
     a collection pointing at a retrieval pipeline instead of an ingestion one.
 
-    This used to be `IngestionService._resolve_ingestion_pipeline`; the check
+    This used to be `IngestionService._resolve_ingest_binding`; the check
     moved to the shared resolver both `IngestionService` and `RetrievalService`
     call through.
     """
@@ -484,16 +482,23 @@ def test_resolve_ingestion_pipeline_rejects_missing(session: Session) -> None:
     pipeline = PipelineService(session).create_pipeline(
         user=user,
         name="Retrieval",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
         ),
     )
     session.commit()
-    collection = _create_collection(session, user, ingestion_pipeline_id=pipeline.id)
+    collection = _create_collection(session, user)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    session.commit()
 
-    with pytest.raises(InvalidInputError, match="Ingestion pipeline could not be resolved"):
-        resolve_ingestion_pipeline(session, user, collection)
+    with pytest.raises(InvalidInputError, match="does not accept documents"):
+        resolve_ingest_binding(session, user, collection)
 
 
 def test_extract_indexing_payload_raises_for_missing_result() -> None:

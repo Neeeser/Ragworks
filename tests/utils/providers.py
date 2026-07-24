@@ -67,7 +67,11 @@ def install_default_pipelines(
         build_default_ingestion_pipeline,
         build_default_retrieval_pipeline,
     )
-    from app.services.pipelines import PipelineService
+    from app.services.pipelines import (
+        DEFAULT_INGEST_SLUG,
+        DEFAULT_SEARCH_SLUG,
+        PipelineService,
+    )
 
     resolved = connection or add_openrouter_connection(session, user)
     service = PipelineService(session)
@@ -75,23 +79,21 @@ def install_default_pipelines(
         user=user,
         name="Default Ingestion Pipeline",
         description="Baseline ingestion pipeline for uploads.",
-        kind=models.PipelineKind.INGESTION,
         definition=build_default_ingestion_pipeline(
             embedding_connection_id=resolved.id, embedding_model=embedding_model
         ),
         change_summary="Test scaffold.",
-        is_default=True,
+        template_slug=DEFAULT_INGEST_SLUG,
     )
     service.create_pipeline(
         user=user,
         name="Default Retrieval Pipeline",
         description="Baseline retrieval pipeline for queries.",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=resolved.id, embedding_model=embedding_model
         ),
         change_summary="Test scaffold.",
-        is_default=True,
+        template_slug=DEFAULT_SEARCH_SLUG,
     )
     session.commit()
     return resolved

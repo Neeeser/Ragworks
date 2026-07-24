@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.base import DateTimeConfigMixin
-from app.schemas.enums import PipelineIOType, PipelineKind, PipelineRunStatus
+from app.schemas.enums import BindingRole, PipelineIOType, PipelineRunStatus
 
 
 class PipelineRunRead(DateTimeConfigMixin, BaseModel):
@@ -26,7 +26,7 @@ class PipelineRunRead(DateTimeConfigMixin, BaseModel):
     pipeline_id: UUID
     pipeline_version_id: UUID | None
     pipeline_version: int | None
-    kind: PipelineKind
+    trigger: BindingRole
     user_id: UUID
     collection_id: UUID
     status: PipelineRunStatus

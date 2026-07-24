@@ -72,7 +72,7 @@ def stubbed_providers_fixture(monkeypatch) -> None:
         "app.services.ingestion.ProviderResolver", _StubProviderResolver
     )
     monkeypatch.setattr(
-        "app.services.retrieval.ProviderResolver", _StubProviderResolver
+        "app.services.tool_invocation.ProviderResolver", _StubProviderResolver
     )
 
 
@@ -93,13 +93,13 @@ def _default_pipelines(session: Session, user: models.User) -> tuple[models.Pipe
     ingestion = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.INGESTION,
+            models.Pipeline.template_slug == "default-ingest",
         )
     ).one()
     retrieval = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
-            models.Pipeline.kind == models.PipelineKind.RETRIEVAL,
+            models.Pipeline.template_slug == "default-search",
         )
     ).one()
     return ingestion, retrieval

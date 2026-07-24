@@ -17,7 +17,7 @@ from app.db import models
 from app.db.repositories import ChunkRepository, DocumentRepository, FileNodeRepository
 from app.schemas.enums import FileNodeKind, IndexBackend
 from app.services.errors import ExternalServiceError, InvalidInputError
-from app.services.pipeline_resolution import resolve_ingestion_pipeline
+from app.services.pipeline_resolution import resolve_purge_targets
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import get_vector_store
 
@@ -84,20 +84,22 @@ class FileDeletionService:
         collection: models.Collection,
         documents: list[models.Document],
     ) -> None:
-        """Delete each document's vectors on every index the pipeline writes."""
-        resolved = resolve_ingestion_pipeline(self.session, user, collection)
-        namespace = resolved.settings.namespace
-        if not namespace:
-            raise InvalidInputError("Ingestion pipeline namespace is not configured.")
-        for target in resolved.settings.index_targets:
-            store = get_vector_store(target.backend, user=user, session=self.session)
+        """Delete each document's vectors on every index any binding writes.
+
+        Iterates the union of targets across the collection's bindings — the
+        same purge contract as collection deletion.
+        """
+        for item in resolve_purge_targets(self.session, user, collection):
+            if item.namespace is None:
+                raise InvalidInputError("Ingestion pipeline namespace is not configured.")
+            store = get_vector_store(item.target.backend, user=user, session=self.session)
             for document in documents:
                 try:
                     store.delete_document_vectors(
-                        target.index_name, namespace, str(document.id)
+                        item.target.index_name, item.namespace, str(document.id)
                     )
                 except Exception as exc:  # pylint: disable=broad-exception-caught
-                    if target.backend is IndexBackend.PINECONE:
+                    if item.target.backend is IndexBackend.PINECONE:
                         raise ExternalServiceError(
                             f"Failed to purge Pinecone vectors: {exc}"
                         ) from exc

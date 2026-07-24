@@ -265,7 +265,11 @@ def build_default_retrieval_pipeline(
             name="Retrieval Input",
             # The definition owns the caller-facing result limit. The external
             # query API's top_k field is translated at the runner boundary.
-            config={"arguments": [DEFAULT_RESULT_LIMIT_VARIABLE.name]},
+            config={
+                "arguments": [DEFAULT_RESULT_LIMIT_VARIABLE.name],
+                "tool_name": "search",
+                "tool_description": "Search the collection for relevant document chunks.",
+            },
         ),
         PipelineNodeDefinition(
             id="embed-query",

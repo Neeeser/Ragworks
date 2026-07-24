@@ -18,17 +18,18 @@ from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.models import ModelInfo
 from app.schemas.openrouter import OpenRouterChatResponse
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.tools import ToolInvocationResponse
 from app.services.errors import InvalidInputError
 from tests.chat.conftest import (
     ModelOnlyOpenRouter,
     SequencedOpenRouter,
+    StubInvocationService,
     StubOpenRouter,
-    StubRetrievalService,
     StubSettings,
-    make_tool_collection_context,
+    make_tool_context,
     stub_resolver_class,
     tool_model_info,
+    wrap_tool_contexts,
 )
 
 
@@ -46,7 +47,12 @@ def test_collection_tool_spec_includes_collection_description(
     collection.description = "Peer-reviewed evaluation results and methods."
 
     tools, _ = ToolExecutor.specs(
-        [make_tool_collection_context(collection, tool_name="search_evaluation_papers")]
+        [
+            wrap_tool_contexts(
+                collection,
+                make_tool_context(collection, tool_name="search_evaluation_papers"),
+            )
+        ]
     )
 
     description = tools[0]["function"]["description"]
@@ -150,24 +156,33 @@ def test_send_message_handles_tool_calls(
     ]
     openrouter = SequencedOpenRouter(model_info=model_info, responses=responses)
 
-    class _TrackingRetrievalService(StubRetrievalService):
+    class _TrackingRetrievalService(StubInvocationService):
         def __init__(self) -> None:
             self.calls: list[dict[str, Any]] = []
 
-        def query_collection(
+        def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             _user: models.User,
             collection: models.Collection,
+            binding_id,
             query: str,
-            top_k: int = 5,
-        ) -> CollectionQueryResponse:
+            top_k: int | None = None,
+            arguments: dict[str, object] | None = None,
+        ) -> ToolInvocationResponse:
             self.calls.append({"collection": collection, "query": query, "top_k": top_k})
-            return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
+            return ToolInvocationResponse(
+                kind="chunks",
+                tool_binding_id=binding_id,
+                query=query,
+                top_k=top_k or 5,
+                chunks=[],
+                usage={},
+            )
 
     retrieval = _TrackingRetrievalService()
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(chat_model_settings_module, "ProviderResolver", stub_resolver_class(openrouter))
-    monkeypatch.setattr(service_module, "RetrievalService", lambda *_a, **_k: retrieval)
+    monkeypatch.setattr(service_module, "ToolInvocationService", lambda *_a, **_k: retrieval)
     stub_pipeline_settings(chat_model="tool-model")
 
     service = ChatService(session)
@@ -270,7 +285,7 @@ def test_normalize_tool_calls_backfills_missing_id_then_executes(
     executor = ToolExecutor(
         session=session,
         chat_repo=ChatRepository(session),
-        retrieval=StubRetrievalService(),
+        invocation=StubInvocationService(),
     )
     run_state = RunState()
     context = ToolExecutionContext(
@@ -280,7 +295,7 @@ def test_normalize_tool_calls_backfills_missing_id_then_executes(
         messages=[],
         run_state=run_state,
         shared_tool_reasoning=None,
-        tool_collection_map={"pinecone_query": make_tool_collection_context(collection)},
+        tool_collection_map={"pinecone_query": make_tool_context(collection)},
     )
 
     # Non-streaming callers drain the iterator without forwarding.
@@ -306,16 +321,25 @@ def test_stream_message_handles_tool_calls_and_final(
 
     retrieval_calls: list[dict[str, Any]] = []
 
-    class _TrackingRetrievalService(StubRetrievalService):
-        def query_collection(
+    class _TrackingRetrievalService(StubInvocationService):
+        def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             _user: models.User,
             collection: models.Collection,
+            binding_id,
             query: str,
-            top_k: int = 5,
-        ) -> CollectionQueryResponse:
+            top_k: int | None = None,
+            arguments: dict[str, object] | None = None,
+        ) -> ToolInvocationResponse:
             retrieval_calls.append({"collection": collection, "query": query, "top_k": top_k})
-            return CollectionQueryResponse(query=query, top_k=top_k, chunks=[], usage={})
+            return ToolInvocationResponse(
+                kind="chunks",
+                tool_binding_id=binding_id,
+                query=query,
+                top_k=top_k or 5,
+                chunks=[],
+                usage={},
+            )
 
     def _make_stream(events, result):
         def _gen():
@@ -372,7 +396,7 @@ def test_stream_message_handles_tool_calls_and_final(
         "ProviderResolver",
         stub_resolver_class(ModelOnlyOpenRouter(model_info)),
     )
-    monkeypatch.setattr(service_module, "RetrievalService", _TrackingRetrievalService)
+    monkeypatch.setattr(service_module, "ToolInvocationService", _TrackingRetrievalService)
     # stream_model_completion lives in the shared run loop, not the service.
     monkeypatch.setattr(chat_run_loop, "stream_model_completion", _stream_model_completion)
     stub_pipeline_settings(chat_model="tool-model")
@@ -522,7 +546,7 @@ def test_send_message_rejects_other_users_session(
         service.send_message(user=other, payload=payload)
 
 
-def _install_streaming_flow(monkeypatch, stub_pipeline_settings, *, stream_factory, retrieval_cls):
+def _install_streaming_flow(monkeypatch, stub_pipeline_settings, *, stream_factory, invocation_cls):
     """Wire a streaming service flow with a fake `stream_model_completion` factory."""
     monkeypatch.setattr(service_module, "get_settings", lambda: StubSettings())
     monkeypatch.setattr(
@@ -530,7 +554,7 @@ def _install_streaming_flow(monkeypatch, stub_pipeline_settings, *, stream_facto
         "ProviderResolver",
         stub_resolver_class(ModelOnlyOpenRouter(tool_model_info())),
     )
-    monkeypatch.setattr(service_module, "RetrievalService", retrieval_cls)
+    monkeypatch.setattr(service_module, "ToolInvocationService", invocation_cls)
     monkeypatch.setattr(chat_run_loop, "stream_model_completion", stream_factory)
     stub_pipeline_settings(chat_model="tool-model")
 
@@ -554,7 +578,7 @@ def test_stream_message_persists_partial_on_client_disconnect(
         monkeypatch,
         stub_pipeline_settings,
         stream_factory=_stream_forever,
-        retrieval_cls=StubRetrievalService,
+        invocation_cls=StubInvocationService,
     )
 
     service = ChatService(session)
@@ -595,7 +619,7 @@ def test_stream_message_persists_partial_and_raises_on_provider_error(
         monkeypatch,
         stub_pipeline_settings,
         stream_factory=_stream_boom,
-        retrieval_cls=StubRetrievalService,
+        invocation_cls=StubInvocationService,
     )
 
     service = ChatService(session)
@@ -643,14 +667,8 @@ def test_stream_message_surfaces_retrieval_failure_without_losing_turn(
 
         return _gen()
 
-    class _BoomRetrieval(StubRetrievalService):
-        def query_collection(
-            self,
-            _user: models.User,
-            _collection: models.Collection,
-            query: str,
-            top_k: int = 5,
-        ) -> CollectionQueryResponse:
+    class _BoomRetrieval(StubInvocationService):
+        def invoke_binding(self, *args: object, **kwargs: object) -> ToolInvocationResponse:
             raise RuntimeError("pinecone down")
 
     collection = make_collection(chat_user)
@@ -658,7 +676,7 @@ def test_stream_message_surfaces_retrieval_failure_without_losing_turn(
         monkeypatch,
         stub_pipeline_settings,
         stream_factory=_stream_tool,
-        retrieval_cls=_BoomRetrieval,
+        invocation_cls=_BoomRetrieval,
     )
 
     service = ChatService(session)

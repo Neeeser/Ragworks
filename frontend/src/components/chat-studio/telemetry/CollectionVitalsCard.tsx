@@ -33,11 +33,13 @@ export const CollectionVitalsCard = ({
       </p>
       <p>
         Ingestion pipeline:{" "}
-        <span className="text-primary">{collection.ingestion_pipeline_id ?? "Default"}</span>
+        <span className="text-primary">{collection.ingest_pipeline_id ?? "Default"}</span>
       </p>
       <p>
-        Retrieval pipeline:{" "}
-        <span className="text-primary">{collection.retrieval_pipeline_id ?? "Default"}</span>
+        Search tool pipeline:{" "}
+        <span className="text-primary">
+          {collection.tools.find((tool) => tool.is_primary)?.pipeline_id ?? "Default"}
+        </span>
       </p>
     </div>
   );

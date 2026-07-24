@@ -15,6 +15,7 @@ from app.services import file_deletion as deletion_module
 from app.services.errors import ExternalServiceError
 from app.services.file_deletion import FileDeletionService
 from app.services.files import FileSystemService, UploadSpec
+from app.services.pipeline_resolution import PurgeTarget
 from tests.utils.providers import install_default_pipelines
 
 
@@ -146,18 +147,18 @@ def test_pinecone_purge_failure_surfaces_as_external_error(
 
     monkeypatch.setattr(deletion_module, "get_vector_store", lambda *_a, **_k: _FailingStore())
 
-    class _Resolved:
-        class settings:
-            namespace = "ns"
-            index_name = "idx"
-            backend = IndexBackend.PINECONE
-            index_targets = (
-                IndexTarget(
-                    backend=IndexBackend.PINECONE, index_name="idx", vector_type="dense"
-                ),
-            )
+    purge_targets = [
+        PurgeTarget(
+            target=IndexTarget(
+                backend=IndexBackend.PINECONE, index_name="idx", vector_type="dense"
+            ),
+            namespace="ns",
+        )
+    ]
 
-    monkeypatch.setattr(deletion_module, "resolve_ingestion_pipeline", lambda *_a: _Resolved())
+    monkeypatch.setattr(
+        deletion_module, "resolve_purge_targets", lambda *_a, **_k: purge_targets
+    )
 
     with pytest.raises(ExternalServiceError, match="pinecone down"):
         FileDeletionService(session).delete(user, collection, upload.file)

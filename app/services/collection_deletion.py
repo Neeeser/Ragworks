@@ -19,7 +19,7 @@ from app.db import models
 from app.db.repositories import CollectionRepository, DocumentRepository, FileNodeRepository
 from app.schemas.enums import IndexBackend
 from app.services.errors import ExternalServiceError, InvalidInputError
-from app.services.pipeline_resolution import resolve_ingestion_pipeline
+from app.services.pipeline_resolution import resolve_purge_targets
 from app.telemetry import record
 from app.telemetry.events import CollectionDeleted
 from app.utils.file_storage import FileStorage
@@ -37,11 +37,19 @@ class CollectionDeletionService:
         self.storage = FileStorage()
 
     def delete(self, user: models.User, collection: models.Collection) -> None:
-        """Purge vectors, files, and rows for a collection, then delete it."""
-        resolved = resolve_ingestion_pipeline(self.session, user, collection)
-        namespace = resolved.settings.namespace
-        if not namespace:
-            raise InvalidInputError("Ingestion pipeline namespace is not configured.")
+        """Purge vectors, files, and rows for a collection, then delete it.
+
+        Vector purge iterates the union of index targets across EVERY binding
+        (ingest and tools) — a tool pipeline with an indexer node writes to
+        indexes the ingest pipeline never touched.
+        """
+        namespaced_targets: list[tuple[IndexBackend, str, str]] = []
+        for item in resolve_purge_targets(self.session, user, collection):
+            if item.namespace is None:
+                raise InvalidInputError("Ingestion pipeline namespace is not configured.")
+            namespaced_targets.append(
+                (item.target.backend, item.target.index_name, item.namespace)
+            )
 
         collection_id = collection.id
         # Only ingests that reached READY ever wrote vectors; a collection with
@@ -52,11 +60,11 @@ class CollectionDeletionService:
             for document in self.documents.list_for_collection(collection.id)
         )
         if has_indexed_documents:
-            for target in resolved.settings.index_targets:
+            for backend, index_name, namespace in namespaced_targets:
                 self._purge_vectors(
                     user,
-                    backend=target.backend,
-                    index_name=target.index_name,
+                    backend=backend,
+                    index_name=index_name,
                     namespace=namespace,
                 )
         self._purge_files(collection)

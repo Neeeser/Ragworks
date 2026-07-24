@@ -17,7 +17,7 @@ from __future__ import annotations
 # (db.models imports them, never the reverse; see app/AGENTS.md).
 from app.db.models.app_setting import AppSetting
 from app.db.models.chat import ChatMessage, ChatSession, ChatSessionCollection
-from app.db.models.collection import Collection
+from app.db.models.collection import Collection, CollectionPipelineBinding
 from app.db.models.document import Document, DocumentChunkRecord
 from app.db.models.evals import (
     EvalDataset,
@@ -42,6 +42,7 @@ from app.db.models.user import AuthSession, TimestampMixin, User
 from app.db.models.vectors import VectorIndexRecord
 from app.db.models.visualization import UmapPointRecord, UmapProjectionRecord
 from app.schemas.enums import (
+    BindingRole,
     ChatMode,
     ChatRole,
     ChunkStrategy,
@@ -55,6 +56,7 @@ from app.schemas.enums import (
 __all__ = [
     "AppSetting",
     "AuthSession",
+    "BindingRole",
     "ChatMessage",
     "ChatMode",
     "ChatRole",
@@ -62,6 +64,7 @@ __all__ = [
     "ChatSessionCollection",
     "ChunkStrategy",
     "Collection",
+    "CollectionPipelineBinding",
     "Document",
     "DocumentChunkRecord",
     "DocumentStatus",

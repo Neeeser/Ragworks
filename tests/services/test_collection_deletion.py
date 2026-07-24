@@ -21,6 +21,8 @@ from app.db.repositories import (
     CollectionRepository,
     UserRepository,
 )
+from app.pipelines.settings import IndexTarget
+from app.schemas.enums import IndexBackend
 from app.services import collection_deletion as deletion_module
 from app.services.app_config import invalidate_app_config_cache
 from app.services.collection_deletion import CollectionDeletionService
@@ -252,7 +254,7 @@ def test_delete_rejects_unresolvable_ingestion_pipeline(monkeypatch, session: Se
                 retrieval=SimpleNamespace(id=uuid4()),
             )
 
-        def ensure_collection_pipelines(self, *_args, **_kwargs):
+        def ensure_collection_bindings(self, *_args, **_kwargs):
             return None
 
         def get_pipeline(self, _pipeline_id, _user_id):
@@ -272,8 +274,19 @@ def test_delete_rejects_missing_namespace(monkeypatch, session: Session) -> None
     session.commit()
 
     monkeypatch.setattr(
-        "app.services.pipeline_resolution.resolve_ingestion_settings",
-        lambda *_a, **_k: SimpleNamespace(namespace=None, index_name="index", backend=None),
+        "app.services.pipeline_resolution.resolve_pipeline_settings",
+        lambda *_a, **_k: SimpleNamespace(
+            namespace=None,
+            index_name="index",
+            backend=None,
+            index_targets=(
+                IndexTarget(
+                    backend=IndexBackend.PGVECTOR,
+                    index_name="index",
+                    vector_type="dense",
+                ),
+            ),
+        ),
     )
     monkeypatch.setattr(deletion_module, "FileStorage", _StubFileStorage)
 

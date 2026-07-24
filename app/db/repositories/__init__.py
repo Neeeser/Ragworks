@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from app.db.repositories.app_setting import AppSettingRepository
 from app.db.repositories.base import Repository
+from app.db.repositories.bindings import CollectionPipelineBindingRepository
 from app.db.repositories.chat import ChatRepository
 from app.db.repositories.collection import CollectionRepository
 from app.db.repositories.collection_stats import (
@@ -39,6 +40,7 @@ __all__ = [
     "AuthSessionRepository",
     "ChatRepository",
     "ChunkRepository",
+    "CollectionPipelineBindingRepository",
     "CollectionRepository",
     "CollectionStats",
     "CollectionStatsRepository",

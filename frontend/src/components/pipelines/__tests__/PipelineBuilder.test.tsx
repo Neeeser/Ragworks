@@ -839,8 +839,10 @@ describe("PipelineBuilder", () => {
     api.fetchCollections.mockResolvedValueOnce([
       makeCollection({
         name: "Collection",
-        ingestion_pipeline_id: "pipe-1",
-        retrieval_pipeline_id: "pipe-1",
+        ingest_pipeline_id: "pipe-1",
+        tools: [
+          { id: "binding-1", pipeline_id: "pipe-1", is_primary: true, enabled: true, position: 0 },
+        ],
       }),
     ]);
 

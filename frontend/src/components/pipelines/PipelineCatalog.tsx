@@ -60,7 +60,7 @@ export function PipelineCatalog({
                     isSelected ? "text-body" : "text-muted group-hover:text-body",
                   )}
                 >
-                  {pipeline.kind} • v{pipeline.current_version}
+                  {pipeline.kind ?? "custom"} • v{pipeline.current_version}
                 </p>
               </button>
               <Tooltip content={isInUse ? "Pipelines in use cannot be deleted." : ""} side="left">

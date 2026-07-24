@@ -20,8 +20,6 @@ class CollectionBase(BaseModel):
 
     name: str
     description: str | None = None
-    ingestion_pipeline_id: UUID | None = None
-    retrieval_pipeline_id: UUID | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -33,26 +31,53 @@ class PipelineNodeOverride(BaseModel):
 
 
 class CollectionPipelineOverrides(BaseModel):
-    """Per-collection pipeline overrides for creation."""
+    """Per-collection pipeline overrides for creation.
+
+    `ingestion` overrides clone the chosen ingest pipeline; `retrieval`
+    overrides clone the primary tool pipeline.
+    """
 
     ingestion: list[PipelineNodeOverride] = Field(default_factory=list)
     retrieval: list[PipelineNodeOverride] = Field(default_factory=list)
 
 
 class CollectionCreate(CollectionBase):
-    """Payload for creating a collection."""
+    """Payload for creating a collection.
 
+    `tool_pipeline_ids` bind in order (the first becomes the primary search
+    tool); omitted, the user's default search pipeline is bound as primary.
+    """
+
+    ingest_pipeline_id: UUID | None = None
+    tool_pipeline_ids: list[UUID] | None = None
     pipeline_overrides: CollectionPipelineOverrides | None = None
 
 
 class CollectionUpdate(BaseModel):
-    """Payload for updating collection fields."""
+    """Payload for updating collection fields.
+
+    Tool bindings change through the collection tools endpoints;
+    `ingest_pipeline_id` rebinds the single ingest pipeline here.
+    """
 
     name: str | None = None
     description: str | None = None
     metadata: dict[str, Any] | None = None
-    ingestion_pipeline_id: UUID | None = None
-    retrieval_pipeline_id: UUID | None = None
+    ingest_pipeline_id: UUID | None = None
+
+
+class CollectionToolBindingRead(BaseModel):
+    """One tool binding as embedded in collection reads (identity only).
+
+    The full LLM-facing projection (name, schema, output kind) is served by
+    `GET /api/collections/{id}/tools`.
+    """
+
+    id: UUID
+    pipeline_id: UUID
+    is_primary: bool
+    enabled: bool
+    position: int
 
 
 class CollectionRead(DateTimeConfigMixin, CollectionBase):
@@ -60,6 +85,8 @@ class CollectionRead(DateTimeConfigMixin, CollectionBase):
 
     id: UUID
     user_id: UUID
+    ingest_pipeline_id: UUID | None = None
+    tools: list[CollectionToolBindingRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -251,14 +251,29 @@ def repoint_retrieval_embedding(ctx: SeedContext, *, embedding_model: str) -> No
         user=user,
         name="Retrieval (divergent embedding)",
         description="Retrieval re-pointed at a different embedding model to exercise diagnostics.",
-        kind=models.PipelineKind.RETRIEVAL,
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=connection.id, embedding_model=embedding_model
         ),
         change_summary="Divergent embedding model for diagnostics scenario.",
     )
-    collection.retrieval_pipeline_id = pipeline.id
-    ctx.session.add(collection)
+    ctx.session.flush()
+    from app.db.repositories import CollectionPipelineBindingRepository
+
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    primary = next((b for b in tools if b.is_primary), tools[0] if tools else None)
+    if primary is None:
+        bindings.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=pipeline.id,
+                role=models.BindingRole.TOOL,
+                is_primary=True,
+            )
+        )
+    else:
+        primary.pipeline_id = pipeline.id
+        ctx.session.add(primary)
     ctx.session.commit()
     ctx.facts.append(
         f"retrieval re-pointed to embedding model '{embedding_model}' "

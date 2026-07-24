@@ -589,6 +589,10 @@ this file in the same PR.
   mutable field default needs `default_factory`.
 - **SQLModel `table=True` models skip validation on construction** — another reason
   schemas and db models stay separate.
+- **Enum-typed columns on DB-loaded rows are raw strings — compare with `==`,
+  never `is`.** `binding.role is BindingRole.INGEST` silently fails on any row
+  the session loaded from Postgres (str-enum equality still holds); identity
+  checks against enum members only work for in-memory constructions.
 - **Sessions have one owner.** Request-scoped sessions come from `get_session`;
   don't open ad-hoc sessions inside services that already received one, and don't
   let a session escape its request (detached-instance errors show up far from

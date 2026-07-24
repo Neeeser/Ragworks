@@ -8,13 +8,14 @@ from sqlmodel import Session, select
 
 from app.chat.messages import FunctionCall, ToolCall
 from app.chat.state import RunState, ToolExecutionContext
-from app.chat.tools import ToolExecutor, build_parameter_schema
+from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.pipelines.variables import PipelineInputArgument, VariableType
 from app.schemas.chat import ChatMessageCreate
 from app.services.errors import InvalidQueryArgumentsError
-from tests.chat.conftest import StubRetrievalService, make_tool_collection_context
+from app.services.tool_projection import build_parameter_schema
+from tests.chat.conftest import StubInvocationService, make_tool_context
 
 TOP_K = PipelineInputArgument(
     name="top_k",
@@ -90,21 +91,21 @@ def _execute(
     *,
     query_arguments: tuple[PipelineInputArgument, ...],
     call_arguments: dict[str, object],
-    retrieval: StubRetrievalService | None = None,
-) -> tuple[list[dict[str, object]], StubRetrievalService]:
+    retrieval: StubInvocationService | None = None,
+) -> tuple[list[dict[str, object]], StubInvocationService]:
     chat_session = models.ChatSession(
         user_id=chat_user.id, title="Args", chat_model="tool-model"
     )
     session.add(chat_session)
     session.commit()
     session.refresh(chat_session)
-    retrieval = retrieval or StubRetrievalService()
+    retrieval = retrieval or StubInvocationService()
     executor = ToolExecutor(
         session=session,
         chat_repo=ChatRepository(session),
-        retrieval=retrieval,  # type: ignore[arg-type]
+        invocation=retrieval,  # type: ignore[arg-type]
     )
-    tool_context = make_tool_collection_context(
+    tool_context = make_tool_context(
         collection, tool_name="search_docs", query_arguments=query_arguments
     )
     context = ToolExecutionContext(
@@ -137,8 +138,10 @@ def test_declared_arguments_flow_into_retrieval(
         query_arguments=(TOP_K,),
         call_arguments={"query": "docs", "top_k": 12},
     )
+    # No explicit top_k on the declared-arguments path: the invocation
+    # service owns the default; the declared argument carries the value.
     assert retrieval.calls == [
-        {"query": "docs", "top_k": 5, "arguments": {"top_k": 12}}
+        {"query": "docs", "top_k": None, "arguments": {"top_k": 12}}
     ]
     result = next(event for event in events if event["type"] == "tool_result")
     assert result["error"] is None
@@ -160,11 +163,11 @@ def test_legacy_pipeline_keeps_clamped_top_k_path(
     assert retrieval.calls == [{"query": "docs", "top_k": 10, "arguments": None}]
 
 
-class _RejectingRetrieval(StubRetrievalService):
+class _RejectingRetrieval(StubInvocationService):
     """Raises the argument-violation error the real service raises."""
 
-    def query_collection(self, *args: object, **kwargs: object):  # type: ignore[override]
-        super().query_collection(*args, **kwargs)  # record the call
+    def invoke_binding(self, *args: object, **kwargs: object):  # type: ignore[override]
+        super().invoke_binding(*args, **kwargs)  # record the call
         raise InvalidQueryArgumentsError("Argument 'top_k': must be at most 20.")
 
 
@@ -210,3 +213,49 @@ def test_unknown_extra_argument_is_forwarded_for_validation(
         call_arguments={"query": "docs", "made_up": True},
     )
     assert retrieval.calls[0]["arguments"] == {"made_up": True}
+
+
+class TestToolReasoningSelection:
+    """Per-call reasoning is attributed to its own call, not the shared blob."""
+
+    def test_call_specific_reasoning_wins_over_shared(self) -> None:
+        from app.chat.tools import select_tool_reasoning
+
+        run_state = RunState()
+        run_state.reasoning_call_segments["call-1"] = {"type": "text", "content": "mine"}
+
+        entry = select_tool_reasoning(
+            call_id="call-1",
+            run_state=run_state,
+            shared_tool_reasoning={"type": "text", "content": "shared"},
+        )
+
+        assert entry == {"type": "text", "content": "mine"}
+        # Non-destructive: the segment stays for the result-side consumption.
+        assert "call-1" in run_state.reasoning_call_segments
+
+    def test_result_payload_wraps_bare_segment_and_consumes_it(self) -> None:
+        from app.chat.tools import build_reasoning_payload
+
+        run_state = RunState()
+        run_state.reasoning_call_segments["call-1"] = {"type": "text", "content": "why"}
+
+        payload = build_reasoning_payload(
+            call_id="call-1",
+            run_state=run_state,
+            shared_tool_reasoning=None,
+        )
+
+        assert payload == {"segments": [{"type": "text", "content": "why"}]}
+        assert "call-1" not in run_state.reasoning_call_segments
+
+    def test_result_payload_falls_back_to_shared_reasoning(self) -> None:
+        from app.chat.tools import build_reasoning_payload
+
+        payload = build_reasoning_payload(
+            call_id="call-2",
+            run_state=RunState(),
+            shared_tool_reasoning={"segments": [{"type": "text", "content": "shared"}]},
+        )
+
+        assert payload == {"segments": [{"type": "text", "content": "shared"}]}

@@ -94,8 +94,10 @@ export function makeCollection(overrides: Partial<Collection> = {}): Collection 
     user_id: USER_ID,
     name: "Alpha",
     description: "Alpha collection",
-    ingestion_pipeline_id: null,
-    retrieval_pipeline_id: "pipe-1",
+    ingest_pipeline_id: null,
+    tools: [
+      { id: "binding-1", pipeline_id: "pipe-1", is_primary: true, enabled: true, position: 0 },
+    ],
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
     ...overrides,
@@ -381,7 +383,7 @@ export function makeTraceResponse(
       id: "run-1",
       pipeline_id: "pipe-1",
       pipeline_version: 1,
-      kind: "retrieval",
+      trigger: "tool",
       user_id: USER_ID,
       collection_id: "col-1",
       status: "completed",
@@ -428,3 +430,5 @@ export {
 } from "@/test/fixtures/providers";
 
 export * from "@/test/fixtures/evals";
+
+export * from "@/test/fixtures/tools";

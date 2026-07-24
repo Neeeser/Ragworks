@@ -8,6 +8,7 @@ import { LatencyCard } from "@/components/collections/detail/overview/LatencyCar
 import { PipelinesCard } from "@/components/collections/detail/overview/PipelinesCard";
 import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
 import { StatTrendCard } from "@/components/collections/detail/overview/StatTrendCard";
+import { ToolsPanel } from "@/components/collections/detail/overview/ToolsPanel";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollectionStatsHistory } from "@/lib/api";
 import { formatDate } from "@/lib/datetime";
@@ -128,6 +129,13 @@ export function CollectionOverview({
         collection={collection}
         ingestionPipelines={ingestionPipelines}
         retrievalPipelines={retrievalPipelines}
+        token={token}
+        onCollectionUpdated={onCollectionUpdated}
+      />
+
+      <ToolsPanel
+        collection={collection}
+        toolPipelines={retrievalPipelines}
         token={token}
         onCollectionUpdated={onCollectionUpdated}
       />
