@@ -74,6 +74,11 @@ class BackendCapabilitiesRead(BaseModel):
     max_upsert_batch: int
     max_top_k: int
     requires_api_key: bool
+    # Aggregate-tool data planes: whether the backend can count / facet
+    # lexical matches (ParadeDB/pgvector can; Pinecone cannot). The tool
+    # wizard reads these to gate count/facet templates per backend.
+    supports_lexical_count: bool = False
+    supports_lexical_facet: bool = False
 
 
 class BackendInfoRead(BaseModel):

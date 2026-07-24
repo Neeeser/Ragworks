@@ -157,3 +157,43 @@ class LexicalRepositoryMixin:
             params={"namespace": namespace, "query": query_text},
         ).one()
         return int(row[0]), int(row[1])
+
+    def facet_lexical(
+        self,
+        record: VectorIndexRecord,
+        namespace: str,
+        *,
+        query_text: str,
+        field: str,
+        top_n: int,
+    ) -> list[tuple[str | None, int, int]]:
+        """Return `(value, matching_documents, matching_chunks)` rows per facet value.
+
+        Same match semantics as `query_lexical`, grouped by a chunk-metadata
+        field (`metadata->>:field`, bound as a parameter). Chunks missing the
+        field group under a `None` value so no match silently disappears.
+        Buckets order by chunk count descending, then value (NULLs last).
+        """
+        table = lexical_table_name(record.name)
+        statement = text(
+            f"""
+            SELECT metadata ->> :field AS value,
+                   COUNT(DISTINCT document_id) AS docs,
+                   COUNT(*) AS chunks
+            FROM {table}
+            WHERE namespace = :namespace AND text ||| :query
+            GROUP BY value
+            ORDER BY chunks DESC, value ASC
+            LIMIT :top_n
+            """
+        )
+        rows = self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params={
+                "namespace": namespace,
+                "query": query_text,
+                "field": field,
+                "top_n": top_n,
+            },
+        ).all()
+        return [(row[0], int(row[1]), int(row[2])) for row in rows]

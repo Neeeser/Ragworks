@@ -35,6 +35,21 @@ class LexicalCountResult(BaseModel):
     matching_chunks: int
 
 
+class FacetBucket(BaseModel):
+    """One facet value's match counts for a lexical query.
+
+    `value` is the chunk-metadata field's value for this bucket; `None`
+    groups the matches whose chunks don't carry the field at all — reported
+    honestly rather than silently dropped.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    value: str | None
+    matching_documents: int
+    matching_chunks: int
+
+
 class VectorStoreCapabilities(BaseModel):
     """A backend's hard limits, declared as data."""
 
@@ -53,6 +68,11 @@ class VectorStoreCapabilities(BaseModel):
     #: matches (the count tool's data plane). pgvector/ParadeDB can (SQL
     #: aggregate over the lex table); Pinecone's sparse indexes cannot.
     supports_lexical_count: bool = False
+    #: Whether the backend can group lexical matches by a metadata field
+    #: (the facet tool's data plane, #133). pgvector/ParadeDB can (SQL GROUP
+    #: BY over the lex table); Pinecone has no query-conditioned aggregation
+    #: API at all (`describe_index_stats` only reports totals per namespace).
+    supports_lexical_facet: bool = False
     requires_api_key: bool
 
     @property
@@ -237,6 +257,26 @@ class VectorStoreBackend(ABC):
         del index, namespace, text
         raise InvalidInputError(
             "This vector-store backend cannot count lexical matches."
+        )
+
+    def lexical_facet(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        text: str,
+        field: str,
+        top_n: int = 10,
+    ) -> list[FacetBucket]:
+        """Group lexically matching chunks by a metadata field's value.
+
+        Returns the `top_n` buckets by matching chunk count. Capability-gated
+        (`capabilities.supports_lexical_facet`): backends without a
+        query-conditioned aggregation plane keep this default.
+        """
+        del index, namespace, text, field, top_n
+        raise InvalidInputError(
+            "This vector-store backend cannot facet lexical matches."
         )
 
     @abstractmethod

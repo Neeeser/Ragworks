@@ -19,6 +19,7 @@ from app.retrieval.models import (
 from app.schemas.enums import IndexBackend
 from app.services.errors import ExternalServiceError, InvalidInputError, NotFoundError
 from app.vectorstores.base import (
+    FacetBucket,
     IndexSpec,
     IndexStats,
     LexicalCountResult,
@@ -39,6 +40,7 @@ PGVECTOR_CAPABILITIES = VectorStoreCapabilities(
     supported_metrics=("cosine", "l2", "dotproduct"),
     supported_vector_types=("dense", "sparse"),
     supports_lexical_count=True,
+    supports_lexical_facet=True,
     requires_api_key=False,
 )
 
@@ -190,6 +192,33 @@ class PgvectorStore(VectorStoreBackend):
                 "may be unavailable on this Postgres server."
             ) from exc
         return LexicalCountResult(matching_documents=documents, matching_chunks=chunks)
+
+    def lexical_facet(
+        self,
+        index: str,
+        namespace: str,
+        *,
+        text: str,
+        field: str,
+        top_n: int = 10,
+    ) -> list[FacetBucket]:
+        """Group BM25-matching chunks by a metadata field's value."""
+        record = self._require_record(index, vector_type="sparse")
+        try:
+            rows = self._repo.facet_lexical(
+                record, namespace, query_text=text, field=field, top_n=top_n
+            )
+        except DBAPIError as exc:
+            # Same classification as `lexical_query`: the BM25 operator comes
+            # from pg_search; a dropped extension is infrastructure, not a bug.
+            raise ExternalServiceError(
+                f"BM25 facet on index '{index}' failed; the pg_search extension "
+                "may be unavailable on this Postgres server."
+            ) from exc
+        return [
+            FacetBucket(value=value, matching_documents=documents, matching_chunks=chunks)
+            for value, documents, chunks in rows
+        ]
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         """Delete a namespace's rows; a missing index means nothing to purge."""

@@ -9,6 +9,7 @@ never constructs a Pinecone client.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlmodel import Session
@@ -24,10 +25,28 @@ from app.vectorstores.base import VectorStoreBackend, VectorStoreCapabilities
 from app.vectorstores.pgvector import PGVECTOR_CAPABILITIES, PgvectorStore
 from app.vectorstores.pinecone import PINECONE_CAPABILITIES, PineconeStore
 
+# pgvector first: the shipped default backend leads everywhere backends are
+# enumerated (backend_statuses, capability-derived node support lists).
 CAPABILITIES_BY_BACKEND: dict[IndexBackend, VectorStoreCapabilities] = {
-    IndexBackend.PINECONE: PINECONE_CAPABILITIES,
     IndexBackend.PGVECTOR: PGVECTOR_CAPABILITIES,
+    IndexBackend.PINECONE: PINECONE_CAPABILITIES,
 }
+
+
+def backends_where(
+    predicate: Callable[[VectorStoreCapabilities], bool],
+) -> tuple[IndexBackend, ...]:
+    """Return the backends whose declared capabilities satisfy a predicate.
+
+    The derivation behind node `supported_backends` lists: a new backend that
+    declares a capability joins every dependent node's support list with no
+    second place to update.
+    """
+    return tuple(
+        backend
+        for backend, capabilities in CAPABILITIES_BY_BACKEND.items()
+        if predicate(capabilities)
+    )
 
 BACKEND_LABELS: dict[IndexBackend, str] = {
     IndexBackend.PINECONE: "Pinecone",
