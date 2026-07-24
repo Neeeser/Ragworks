@@ -12,6 +12,12 @@ export interface SetupStatus {
   setup_complete: boolean;
 }
 
+/** Mirrors `app/schemas/setup.py::RerankerChoice`. */
+export interface RerankerChoice {
+  connection_id: UUID;
+  model_name: string;
+}
+
 /** Mirrors `app/schemas/setup.py::SetupBootstrapRequest`. */
 export interface SetupBootstrapRequest {
   embedding_connection_id: UUID;
@@ -22,6 +28,9 @@ export interface SetupBootstrapRequest {
   collection_name: string;
   chunk_size?: number;
   chunk_overlap?: number;
+  add_count_tool?: boolean;
+  add_facet_tool?: boolean;
+  reranker?: RerankerChoice | null;
 }
 
 /** Mirrors `app/schemas/setup.py::SetupBootstrapResponse`. */

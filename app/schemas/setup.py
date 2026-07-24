@@ -22,6 +22,13 @@ class SetupStatusRead(BaseModel):
     setup_complete: bool
 
 
+class RerankerChoice(BaseModel):
+    """A reranking provider connection + model to add to the search tool."""
+
+    connection_id: UUID
+    model_name: str = Field(min_length=1)
+
+
 class SetupBootstrapRequest(BaseModel):
     """The wizard's confirmed choices, applied in one transaction."""
 
@@ -33,6 +40,12 @@ class SetupBootstrapRequest(BaseModel):
     collection_name: str = Field(min_length=1, max_length=200)
     chunk_size: int = Field(default=512, gt=0)
     chunk_overlap: int = Field(default=200, ge=0)
+    # Optional extra tools scaffolded alongside the default search tool. The
+    # aggregate tools are skipped when the chosen backend can't serve lexical
+    # count/facet (the wizard gates them on backend capability too).
+    add_count_tool: bool = False
+    add_facet_tool: bool = False
+    reranker: RerankerChoice | None = None
 
 
 class SetupBootstrapResponse(BaseModel):

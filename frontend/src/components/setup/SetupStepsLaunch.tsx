@@ -3,14 +3,17 @@
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
+import { effectiveInputLimit } from "@/lib/chunk-defaults";
 import { cn } from "@/lib/utils";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
+import type { CustomSelectOption } from "@/components/ui/custom-select";
 import type { IndexBackend } from "@/lib/types";
 
 const KICKER = "First-run setup";
-const EMBEDDING_INPUT_MARGIN_TOKENS = 16;
 
 export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
   const { backend, indexName, embeddingDimension, embeddingModel } = wizard.state.choices;
@@ -123,15 +126,37 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
 }
 
 export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
-  const { collectionName, chunkSize, chunkOverlap, embeddingModel, indexName, backend } =
-    wizard.state.choices;
+  const {
+    collectionName,
+    chunkSize,
+    chunkOverlap,
+    embeddingModel,
+    indexName,
+    backend,
+    addCountTool,
+    addFacetTool,
+    addReranker,
+    rerankerModel,
+  } = wizard.state.choices;
   const selectedModel = wizard.models?.find((model) => model.id === embeddingModel);
-  const maximum = selectedModel?.max_input_tokens;
-  const chunkSpan = chunkSize + chunkOverlap;
+  // Each chunk spans at most chunk_size tokens (overlap is a stride within the
+  // window), so the model's effective window bounds chunk_size, not the sum.
+  const effectiveLimit = effectiveInputLimit(selectedModel?.max_input_tokens);
   const chunkSizeWarning =
-    typeof maximum === "number" && chunkSpan > Math.max(0, maximum - EMBEDDING_INPUT_MARGIN_TOKENS)
-      ? `Chunk size plus overlap (${chunkSpan.toLocaleString()}) may exceed this model's effective input limit.`
+    effectiveLimit != null && chunkSize > effectiveLimit
+      ? `Chunk size (${chunkSize.toLocaleString()}) exceeds this model's effective input limit of ${effectiveLimit.toLocaleString()} tokens; oversized chunks are split before indexing.`
       : null;
+
+  const chosenBackend = wizard.backends?.find((info) => info.backend === backend);
+  const supportsCount = chosenBackend?.capabilities.supports_lexical_count ?? false;
+  const supportsFacet = chosenBackend?.capabilities.supports_lexical_facet ?? false;
+  const showAggregateTools = supportsCount || supportsFacet;
+
+  const rerankerOptions: CustomSelectOption[] = (wizard.rerankingModels ?? []).map((model) => ({
+    value: `${model.connection_id}::${model.id}`,
+    label: `${model.name} · ${model.connection_label}`,
+  }));
+
   return (
     <SetupStepShell
       stepKey="launch"
@@ -146,7 +171,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           <Button
             size="lg"
             loading={wizard.busy}
-            disabled={!collectionName.trim()}
+            disabled={!collectionName.trim() || (addReranker && !rerankerModel)}
             onClick={() => void wizard.finish()}
           >
             Finish setup
@@ -172,7 +197,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
             type="number"
             min={64}
             value={chunkSize}
-            onChange={(event) => wizard.setChoices({ chunkSize: Number(event.target.value) || 0 })}
+            onChange={(event) => wizard.setChunk({ chunkSize: Number(event.target.value) || 0 })}
           />
         </Field>
         <Field label="Chunk overlap">
@@ -180,13 +205,70 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
             type="number"
             min={0}
             value={chunkOverlap}
-            onChange={(event) =>
-              wizard.setChoices({ chunkOverlap: Number(event.target.value) || 0 })
-            }
+            onChange={(event) => wizard.setChunk({ chunkOverlap: Number(event.target.value) || 0 })}
           />
         </Field>
       </div>
       <SetupNotice message={chunkSizeWarning} tone="warning" />
+
+      {showAggregateTools ? (
+        <fieldset className="space-y-3">
+          <legend className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+            Extra tools
+          </legend>
+          {supportsCount ? (
+            <Checkbox
+              checked={addCountTool}
+              onChange={(checked) => wizard.setChoices({ addCountTool: checked })}
+              label="Add a count tool"
+              description="Lets the assistant count how many documents and chunks match a query."
+            />
+          ) : null}
+          {supportsFacet ? (
+            <Checkbox
+              checked={addFacetTool}
+              onChange={(checked) => wizard.setChoices({ addFacetTool: checked })}
+              label="Add a facet-by-source tool"
+              description="Lets the assistant group matching chunks by source file, with per-file counts."
+            />
+          ) : null}
+        </fieldset>
+      ) : null}
+
+      {wizard.hasRerankingProvider ? (
+        <div className="space-y-3">
+          <Checkbox
+            checked={addReranker}
+            onChange={(checked) => wizard.setChoices({ addReranker: checked })}
+            label="Add a reranker to the search tool"
+            description="Over-fetches candidates and reorders them with a reranking model for higher precision."
+          />
+          {addReranker ? (
+            <Field label="Reranking model">
+              <CustomSelect
+                value={
+                  rerankerModel
+                    ? `${wizard.state.choices.rerankerConnectionId}::${rerankerModel}`
+                    : ""
+                }
+                options={rerankerOptions}
+                placeholder={
+                  wizard.rerankingModelsLoading ? "Loading models…" : "Select a reranking model"
+                }
+                onValueChange={(value) => {
+                  const [connectionId, model] = value.split("::");
+                  wizard.setChoices({
+                    rerankerConnectionId: connectionId,
+                    rerankerModel: model,
+                  });
+                }}
+                aria-label="Reranking model"
+              />
+            </Field>
+          ) : null}
+        </div>
+      ) : null}
+
       <SetupNotice message={wizard.warning} tone="warning" />
       <SetupNotice message={wizard.error} />
     </SetupStepShell>

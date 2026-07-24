@@ -16,6 +16,13 @@ export interface SetupChoices {
   collectionName: string;
   chunkSize: number;
   chunkOverlap: number;
+  /** Opt-in aggregate tools scaffolded alongside the default search tool. */
+  addCountTool: boolean;
+  addFacetTool: boolean;
+  /** Add a reranker to the search tool; requires a reranking connection. */
+  addReranker: boolean;
+  rerankerConnectionId: string | null;
+  rerankerModel: string;
 }
 
 export interface SetupWizardState {
@@ -23,16 +30,25 @@ export interface SetupWizardState {
   /** +1 when advancing, -1 when going back — drives the slide transition. */
   direction: 1 | -1;
   choices: SetupChoices;
+  /**
+   * True once the user has manually edited chunk size or overlap. Model-derived
+   * defaults stop seeding after this, so picking a model never clobbers a value
+   * the user typed.
+   */
+  chunkDirty: boolean;
 }
 
 export type SetupWizardAction =
   | { type: "NEXT" }
   | { type: "BACK" }
-  | { type: "SET_CHOICES"; choices: Partial<SetupChoices> };
+  | { type: "SET_CHOICES"; choices: Partial<SetupChoices> }
+  | { type: "SET_CHUNK"; chunkSize?: number; chunkOverlap?: number }
+  | { type: "SEED_CHUNK_DEFAULTS"; chunkSize: number; chunkOverlap: number };
 
 export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState => ({
   step: "welcome",
   direction: 1,
+  chunkDirty: false,
   choices: {
     embeddingConnectionId: null,
     embeddingModel: "",
@@ -40,8 +56,17 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
     backend,
     indexName: "ragworks",
     collectionName: "My first collection",
+    // Seeded from the selected model's window before the launch step; these are
+    // the unknown-model fallback (see `chunkDefaultsFor`).
     chunkSize: 512,
-    chunkOverlap: 200,
+    chunkOverlap: 102,
+    // Aggregate tools default on (they only render when the backend supports
+    // them); the reranker is opt-in since it needs a reranking connection.
+    addCountTool: true,
+    addFacetTool: true,
+    addReranker: false,
+    rerankerConnectionId: null,
+    rerankerModel: "",
   },
 });
 
@@ -62,6 +87,25 @@ export function setupWizardReducer(
     }
     case "SET_CHOICES":
       return { ...state, choices: { ...state.choices, ...action.choices } };
+    case "SET_CHUNK": {
+      // A manual edit pins the values: model-derived seeding stops from here.
+      const patch: Partial<SetupChoices> = {};
+      if (action.chunkSize !== undefined) patch.chunkSize = action.chunkSize;
+      if (action.chunkOverlap !== undefined) patch.chunkOverlap = action.chunkOverlap;
+      return { ...state, chunkDirty: true, choices: { ...state.choices, ...patch } };
+    }
+    case "SEED_CHUNK_DEFAULTS": {
+      // Model-derived defaults never overwrite a value the user typed.
+      if (state.chunkDirty) return state;
+      return {
+        ...state,
+        choices: {
+          ...state.choices,
+          chunkSize: action.chunkSize,
+          chunkOverlap: action.chunkOverlap,
+        },
+      };
+    }
     default:
       return state;
   }
