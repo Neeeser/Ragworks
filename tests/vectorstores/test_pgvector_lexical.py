@@ -154,3 +154,49 @@ def test_lexical_query_wraps_database_errors_as_external(session: Session) -> No
 
     with pytest.raises(ExternalServiceError):
         store.lexical_query("docs-bm25", "ns", text="q", top_k=5)
+
+
+class TestLexicalCount:
+    """`lexical_count` answers "how many documents/chunks match" without
+    fetching matches — the count tool's data plane."""
+
+    def test_counts_distinct_documents_and_chunks(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        _make_sparse_index(store)
+        store.upsert_lexical(
+            "docs-bm25",
+            "ns-1",
+            [
+                _text_chunk("a:0", "the aurora shimmered over the station", "doc-a"),
+                _text_chunk("a:1", "aurora observations continued at dawn", "doc-a"),
+                _text_chunk("b:0", "aurora forecasts for the week", "doc-b"),
+                _text_chunk("c:0", "tidepool consensus rounds", "doc-c"),
+            ],
+        )
+
+        result = store.lexical_count("docs-bm25", "ns-1", text="aurora")
+
+        assert result.matching_documents == 2
+        assert result.matching_chunks == 3
+
+    def test_count_is_namespace_scoped(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        _make_sparse_index(store)
+        store.upsert_lexical("docs-bm25", "ns-1", [_text_chunk("a:0", "alpha keyword")])
+        store.upsert_lexical("docs-bm25", "ns-2", [_text_chunk("b:0", "alpha keyword", "doc-2")])
+
+        result = store.lexical_count("docs-bm25", "ns-1", text="alpha")
+
+        assert result.matching_documents == 1
+        assert result.matching_chunks == 1
+
+    def test_count_on_missing_index_raises_not_found(self, pg_search_session: Session) -> None:
+        store = PgvectorStore(pg_search_session)
+        with pytest.raises(NotFoundError):
+            store.lexical_count("no-such-index", "ns", text="anything")
+
+    def test_capability_flag_gates_unsupporting_backends(self) -> None:
+        from app.vectorstores.pinecone.store import PineconeStore
+
+        assert PgvectorStore.capabilities.supports_lexical_count is True
+        assert PineconeStore.capabilities.supports_lexical_count is False

@@ -21,6 +21,7 @@ from app.services.errors import ExternalServiceError, InvalidInputError, NotFoun
 from app.vectorstores.base import (
     IndexSpec,
     IndexStats,
+    LexicalCountResult,
     VectorIndexDescription,
     VectorStoreBackend,
     VectorStoreCapabilities,
@@ -37,6 +38,7 @@ PGVECTOR_CAPABILITIES = VectorStoreCapabilities(
     max_dimension=4096,
     supported_metrics=("cosine", "l2", "dotproduct"),
     supported_vector_types=("dense", "sparse"),
+    supports_lexical_count=True,
     requires_api_key=False,
 )
 
@@ -174,6 +176,20 @@ class PgvectorStore(VectorStoreBackend):
         return RetrievalResponse(
             matches=[self._to_scored_chunk(row, record.metric, raw_score=True) for row in rows]
         )
+
+    def lexical_count(self, index: str, namespace: str, *, text: str) -> LexicalCountResult:
+        """Count BM25-matching documents/chunks without fetching matches."""
+        record = self._require_record(index, vector_type="sparse")
+        try:
+            documents, chunks = self._repo.count_lexical(record, namespace, query_text=text)
+        except DBAPIError as exc:
+            # Same classification as `lexical_query`: the BM25 operator comes
+            # from pg_search; a dropped extension is infrastructure, not a bug.
+            raise ExternalServiceError(
+                f"BM25 count on index '{index}' failed; the pg_search extension "
+                "may be unavailable on this Postgres server."
+            ) from exc
+        return LexicalCountResult(matching_documents=documents, matching_chunks=chunks)
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         """Delete a namespace's rows; a missing index means nothing to purge."""

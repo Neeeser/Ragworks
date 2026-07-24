@@ -26,6 +26,15 @@ from app.services.errors import InvalidInputError
 INDEX_NAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
 
+class LexicalCountResult(BaseModel):
+    """How many documents/chunks lexically match a query in one namespace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    matching_documents: int
+    matching_chunks: int
+
+
 class VectorStoreCapabilities(BaseModel):
     """A backend's hard limits, declared as data."""
 
@@ -40,6 +49,10 @@ class VectorStoreCapabilities(BaseModel):
     # vector upserts (Pinecone: 96 records with text vs 1000 with vectors).
     max_lexical_upsert_batch: int = 1000
     max_top_k: int = 10000
+    #: Whether the backend can answer lexical match counts without fetching
+    #: matches (the count tool's data plane). pgvector/ParadeDB can (SQL
+    #: aggregate over the lex table); Pinecone's sparse indexes cannot.
+    supports_lexical_count: bool = False
     requires_api_key: bool
 
     @property
@@ -213,6 +226,18 @@ class VectorStoreBackend(ABC):
         filter: dict[str, Any] | None = None,
     ) -> RetrievalResponse:
         """Return the lexically best-matching chunks for raw query text."""
+
+    def lexical_count(self, index: str, namespace: str, *, text: str) -> LexicalCountResult:
+        """Count lexically matching documents/chunks without fetching them.
+
+        Capability-gated (`capabilities.supports_lexical_count`): backends
+        that cannot count cheaply keep this default, which raises the same
+        domain error the registry's prerequisite gates use.
+        """
+        del index, namespace, text
+        raise InvalidInputError(
+            "This vector-store backend cannot count lexical matches."
+        )
 
     @abstractmethod
     def delete_namespace(self, index: str, namespace: str) -> None:

@@ -16,6 +16,7 @@ from app.schemas.enums import IndexBackend
 from app.vectorstores.base import (
     IndexSpec,
     IndexStats,
+    LexicalCountResult,
     VectorIndexDescription,
     VectorStoreBackend,
     VectorStoreCapabilities,
@@ -77,6 +78,11 @@ class StubVectorStore(VectorStoreBackend):
         self.lexical_matches = lexical_matches or []
         self.query_error: Exception | None = None
         self.lexical_query_error: Exception | None = None
+        self.lexical_count_result: LexicalCountResult = LexicalCountResult(
+            matching_documents=0, matching_chunks=0
+        )
+        self.lexical_count_error: Exception | None = None
+        self.lexical_count_calls: list[dict[str, Any]] = []
         self.ensure_calls: list[IndexSpec] = []
         self.upsert_calls: list[dict[str, Any]] = []
         self.upsert_lexical_calls: list[dict[str, Any]] = []
@@ -154,6 +160,12 @@ class StubVectorStore(VectorStoreBackend):
         if self.lexical_query_error is not None:
             raise self.lexical_query_error
         return RetrievalResponse(matches=list(self.lexical_matches))
+
+    def lexical_count(self, index: str, namespace: str, *, text: str) -> LexicalCountResult:
+        self.lexical_count_calls.append({"index": index, "namespace": namespace, "text": text})
+        if self.lexical_count_error is not None:
+            raise self.lexical_count_error
+        return self.lexical_count_result
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         self.deleted_namespaces.append((index, namespace))
