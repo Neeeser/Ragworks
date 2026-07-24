@@ -344,7 +344,7 @@ describe("ChatTimeline", () => {
 
   it("hides the branch control when the chat_branching feature flag is disabled", () => {
     setMockAppConfig({
-      config: makePublicConfig({ features: { umap_visualizations: true, chat_branching: false } }),
+      config: makePublicConfig({ features: { umap_visualizations: true, chat_branching: false, mcp_access: true } }),
     });
 
     const userMessage = buildMessage("user", "Hi", { id: "u8" });

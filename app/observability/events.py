@@ -40,6 +40,11 @@ PIPELINE_RUN_STARTED = "pipeline.run.started"
 PIPELINE_RUN_COMPLETED = "pipeline.run.completed"
 PIPELINE_RUN_FAILED = "pipeline.run.failed"
 
+# MCP endpoint
+MCP_AUTH_REJECTED = "mcp.auth.rejected"
+MCP_TOOL_CALLED = "mcp.tool.called"
+MCP_TOOL_FAILED = "mcp.tool.failed"
+
 # External dependencies
 PROVIDER_CALL_FAILED = "provider.call.failed"
 VECTORSTORE_CALL_FAILED = "vectorstore.call.failed"

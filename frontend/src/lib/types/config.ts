@@ -22,6 +22,7 @@ export interface PublicIndexingConfig {
 export interface PublicFeatureFlags {
   umap_visualizations: boolean;
   chat_branching: boolean;
+  mcp_access: boolean;
 }
 
 export interface PublicConfig {

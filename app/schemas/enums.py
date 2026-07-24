@@ -131,6 +131,21 @@ class UserRole(str, Enum):
     USER = "user"
 
 
+class ApiKeyCapability(str, Enum):
+    """What an API key is provisioned to do on the MCP endpoint.
+
+    Values are persisted in `api_keys.capabilities` and are permanent — a new
+    capability is a new member, never a reinterpretation of an existing one.
+    Every MCP tool declares the capability it needs, so an unprovisioned
+    capability's tools are absent from `tools/list` and rejected in
+    `tools/call`.
+    """
+
+    TOOLS_INVOKE = "tools:invoke"
+    FILES_READ = "files:read"
+    FILES_WRITE = "files:write"
+
+
 class StatsHistoryRange(str, Enum):
     """Trailing window for collection activity history (bucketed hour/day)."""
 

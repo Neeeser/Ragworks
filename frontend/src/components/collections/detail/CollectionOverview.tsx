@@ -9,6 +9,7 @@ import { PipelinesCard } from "@/components/collections/detail/overview/Pipeline
 import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
 import { StatTrendCard } from "@/components/collections/detail/overview/StatTrendCard";
 import { ToolsPanel } from "@/components/collections/detail/overview/ToolsPanel";
+import { McpAccessCard } from "@/components/mcp/McpAccessCard";
 import { GlassCard } from "@/components/ui/panel";
 import { fetchCollectionStatsHistory } from "@/lib/api";
 import { formatDate } from "@/lib/datetime";
@@ -139,6 +140,8 @@ export function CollectionOverview({
         token={token}
         onCollectionUpdated={onCollectionUpdated}
       />
+
+      <McpAccessCard collection={collection} token={token} />
     </div>
   );
 }

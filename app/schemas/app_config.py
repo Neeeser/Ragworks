@@ -169,6 +169,15 @@ class FeatureFlags(BaseModel):
             public=True,
         ),
     )
+    mcp_access: bool = Field(
+        default=True,
+        json_schema_extra=_meta(
+            "MCP access",
+            "Serve collections as MCP servers to agent harnesses holding an API "
+            "key. Off rejects every MCP request; existing keys stay valid.",
+            public=True,
+        ),
+    )
 
 
 class TelemetrySettings(BaseModel):
@@ -360,6 +369,7 @@ class PublicFeatureFlags(BaseModel):
 
     umap_visualizations: bool
     chat_branching: bool
+    mcp_access: bool
 
 
 class PublicConfig(BaseModel):
@@ -391,5 +401,6 @@ class PublicConfig(BaseModel):
             features=PublicFeatureFlags(
                 umap_visualizations=config.features.umap_visualizations,
                 chat_branching=config.features.chat_branching,
+                mcp_access=config.features.mcp_access,
             ),
         )

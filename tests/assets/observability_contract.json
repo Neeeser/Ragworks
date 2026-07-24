@@ -1,8 +1,16 @@
 {
   "_comment": "Shared observability contract pinned by both pytest and vitest so the backend Python package and the frontend TypeScript package cannot drift. See docs/observability.md.",
   "request_id_header": "X-Request-ID",
-  "core_fields": ["timestamp", "level", "logger", "event"],
-  "context_fields": ["request_id", "user_id"],
+  "core_fields": [
+    "timestamp",
+    "level",
+    "logger",
+    "event"
+  ],
+  "context_fields": [
+    "request_id",
+    "user_id"
+  ],
   "events": [
     "app.startup.completed",
     "app.shutdown.completed",
@@ -20,6 +28,9 @@
     "pipeline.run.started",
     "pipeline.run.completed",
     "pipeline.run.failed",
+    "mcp.auth.rejected",
+    "mcp.tool.called",
+    "mcp.tool.failed",
     "provider.call.failed",
     "vectorstore.call.failed",
     "background.task.failed"

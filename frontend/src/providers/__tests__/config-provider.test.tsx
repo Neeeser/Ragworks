@@ -54,7 +54,7 @@ describe("ConfigProvider", () => {
       resolveFetch(
         makePublicConfig({
           auth: { allow_registration: false },
-          features: { umap_visualizations: false, chat_branching: false },
+          features: { umap_visualizations: false, chat_branching: false, mcp_access: true },
         }),
       );
     });

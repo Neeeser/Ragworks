@@ -2,6 +2,7 @@
 
 import { ConnectionsManager } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
+import { ApiKeysPanel } from "@/components/mcp/ApiKeysPanel";
 import { LoginSessionsPanel } from "@/components/settings/LoginSessionsPanel";
 import { GlassCard } from "@/components/ui/panel";
 import { useAuth } from "@/providers/auth-provider";
@@ -41,6 +42,7 @@ export default function SettingsPage() {
         />
       </GlassCard>
       <LoginSessionsPanel />
+      <ApiKeysPanel />
     </div>
   );
 }

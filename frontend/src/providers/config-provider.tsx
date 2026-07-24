@@ -27,6 +27,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   features: {
     umap_visualizations: true,
     chat_branching: true,
+    mcp_access: true,
   },
 };
 
