@@ -62,7 +62,8 @@ describe("PipelineNodeLibrary", () => {
       />,
     );
 
-    expect(screen.getByText(/Only on ParadeDB \/ pgvector/)).toBeInTheDocument();
+    // The restriction shows as a backend icon whose tooltip names the store.
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Only available on ParadeDB / pgvector");
     // Restriction is informational, not a hard gate — the node is still draggable.
     expect(screen.getByRole("button", { name: /BM25 Facet/ })).not.toBeDisabled();
   });
@@ -83,6 +84,6 @@ describe("PipelineNodeLibrary", () => {
       />,
     );
 
-    expect(screen.queryByText(/Only on/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
