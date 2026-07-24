@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CollectionSearch } from "@/components/collections/detail/CollectionSearch";
 import * as apiModule from "@/lib/api";
-import { makeQueryResult } from "@/test/fixtures";
+import { makeCollectionTool, makeQueryResult } from "@/test/fixtures";
 import { getMockRouter } from "@/test/test-utils";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -179,41 +179,106 @@ describe("CollectionSearch", () => {
     expect(getMockRouter().push).not.toHaveBeenCalled();
   });
 
-  it("renders no retrieval control until the argument spec resolves", async () => {
-    // Rendering the legacy Top K while the spec is in flight briefly
-    // misrepresents a declaring pipeline (and vice versa).
-    api.fetchCollectionQueryArguments.mockImplementationOnce(() => new Promise(() => {}));
+  it("renders no retrieval control until the tools listing resolves", async () => {
+    // Rendering the legacy Top K while the listing is in flight briefly
+    // misrepresents a declaring tool (and vice versa).
+    api.listCollectionTools.mockImplementationOnce(() => new Promise(() => {}));
     render(<CollectionSearch collectionId="col-pending" token="token" />);
     expect(screen.queryByText("Top K")).not.toBeInTheDocument();
     await act(async () => Promise.resolve());
   });
 
-  it("falls back to the legacy control with a notice when the spec fails to load", async () => {
-    api.fetchCollectionQueryArguments.mockRejectedValueOnce(new Error("spec down"));
+  it("falls back to the legacy control with a notice when the tools listing fails", async () => {
+    api.listCollectionTools.mockRejectedValueOnce(new Error("tools down"));
     render(<CollectionSearch collectionId="col-err" token="token" />);
     await waitFor(() => {
-      expect(screen.getByText(/declared arguments/i)).toBeInTheDocument();
+      expect(screen.getByText(/load this collection/i)).toBeInTheDocument();
     });
     expect(screen.getByText("Top K")).toBeInTheDocument();
   });
 
-  it("submits an explicitly selected false value for a required boolean argument", async () => {
-    api.fetchCollectionQueryArguments.mockResolvedValueOnce({
-      arguments: [
-        {
-          name: "include_archived",
-          type: "boolean",
-          description: "",
-          required: true,
-          default: null,
-          minimum: null,
-          maximum: null,
-          choices: [],
-          expose_to_llm: false,
-        },
+  it("offers a tool selector and runs the chosen tool's binding", async () => {
+    api.listCollectionTools.mockResolvedValueOnce({
+      tools: [
+        makeCollectionTool({ id: "b-primary", name: "search_docs", is_primary: true }),
+        makeCollectionTool({
+          id: "b-count",
+          name: "count_docs",
+          is_primary: false,
+          arguments: [],
+        }),
       ],
+      ingest_pipeline_id: null,
     });
-    api.runCollectionQuery.mockResolvedValueOnce(makeQueryResult({ chunks: [] }));
+    api.invokeCollectionTool.mockResolvedValueOnce({
+      kind: "chunks",
+      tool_binding_id: "b-count",
+      outputs: {},
+      ...makeQueryResult({ chunks: [] }),
+    });
+    render(<CollectionSearch collectionId="col-selector" token="token" />);
+
+    const selector = await screen.findByRole("combobox", { name: "Tool to run" });
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole("option", { name: "count_docs" }));
+    await runQuery("how many");
+
+    expect(api.invokeCollectionTool).toHaveBeenCalledWith("token", "col-selector", "b-count", {
+      query: "how many",
+      top_k: 5,
+    });
+  });
+
+  it("renders a structured tool result as labeled output fields", async () => {
+    api.listCollectionTools.mockResolvedValueOnce({
+      tools: [makeCollectionTool({ id: "b-count", name: "count_docs", is_primary: true })],
+      ingest_pipeline_id: null,
+    });
+    api.invokeCollectionTool.mockResolvedValueOnce({
+      kind: "structured",
+      tool_binding_id: "b-count",
+      ...makeQueryResult({ chunks: [] }),
+      outputs: { matching_documents: 42 },
+    });
+    render(<CollectionSearch collectionId="col-structured" token="token" />);
+    await act(async () => Promise.resolve());
+
+    await runQuery("how many mention aurora");
+
+    expect(await screen.findByText("matching_documents")).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.queryByText(/matches/)).not.toBeInTheDocument();
+  });
+
+  it("submits an explicitly selected false value for a required boolean argument", async () => {
+    api.listCollectionTools.mockResolvedValueOnce({
+      tools: [
+        makeCollectionTool({
+          id: "b-primary",
+          is_primary: true,
+          arguments: [
+            {
+              name: "include_archived",
+              type: "boolean",
+              description: "",
+              required: true,
+              default: null,
+              minimum: null,
+              maximum: null,
+              choices: [],
+              expose_to_llm: false,
+            },
+          ],
+        }),
+      ],
+      ingest_pipeline_id: null,
+    });
+    api.invokeCollectionTool.mockResolvedValueOnce({
+      kind: "chunks",
+      tool_binding_id: "b-primary",
+      outputs: {},
+      ...makeQueryResult({ chunks: [] }),
+    });
     render(<CollectionSearch collectionId="col-required-bool" token="token" />);
 
     const booleanControl = await screen.findByRole("combobox", {
@@ -226,7 +291,7 @@ describe("CollectionSearch", () => {
       fireEvent.click(screen.getByRole("button", { name: runQueryLabel }));
     });
 
-    expect(api.runCollectionQuery).toHaveBeenCalledWith("token", "col-required-bool", {
+    expect(api.invokeCollectionTool).toHaveBeenCalledWith("token", "col-required-bool", "b-primary", {
       query: "Find",
       arguments: { include_archived: false },
     });

@@ -139,10 +139,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     applyNodeEdits,
   } = useNodeEditing({ nodes, setNodes });
 
-  const catalogSpecs = useMemo(
-    () => nodeSpecs.filter((spec) => spec.category === kind && !spec.hidden),
-    [nodeSpecs, kind],
-  );
+  // Every non-hidden node is available in every editor — what a pipeline can
+  // do is derived from its graph, so the library never gates by kind (an
+  // indexer inside a tool pipeline is a legitimate build).
+  const catalogSpecs = useMemo(() => nodeSpecs.filter((spec) => !spec.hidden), [nodeSpecs]);
   const catalogByFamily = useMemo(() => buildNodeCatalog(catalogSpecs), [catalogSpecs]);
 
   // `dragDrop` is referenced inside `handleAddNode`'s body below but declared after it;

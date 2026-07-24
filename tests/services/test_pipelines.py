@@ -549,3 +549,25 @@ def test_list_versions_with_changes_describes_each_revision(session: Session) ->
     assert any("chunk_size" in change.summary for change in v2_changes)
     v1_changes = listed[1][1]
     assert [change.kind for change in v1_changes] == ["created"]
+
+
+def test_kind_filtered_listing_keeps_shapeless_pipelines_visible(session: Session) -> None:
+    """A graph that is neither document-accepting nor callable (e.g. a blank
+    or mid-edit pipeline) appears under every kind filter — otherwise it
+    would be unreachable from the kind-paged editor."""
+    from app.pipelines.definition import PipelineDefinition
+
+    user = _create_user(session)
+    service = PipelineService(session)
+    shapeless = service.create_pipeline(
+        user=user,
+        name="Work in progress",
+        definition=PipelineDefinition(nodes=[], edges=[]),
+    )
+    session.commit()
+
+    ingestion_ids = {p.id for p in service.list_pipelines(user.id, kind=models.PipelineKind.INGESTION)}
+    retrieval_ids = {p.id for p in service.list_pipelines(user.id, kind=models.PipelineKind.RETRIEVAL)}
+
+    assert shapeless.id in ingestion_ids
+    assert shapeless.id in retrieval_ids

@@ -228,9 +228,9 @@ export function CreatePipelineWizard({
     setCreating(true);
     setMessage(null);
     try {
+      // No kind is sent: what the pipeline can do is derived from its graph.
       const created = await createPipeline(token, {
         name: name.trim(),
-        kind,
         definition,
         change_summary: "Initial pipeline scaffold.",
       });
@@ -260,7 +260,7 @@ export function CreatePipelineWizard({
   return (
     <WizardShell
       open={open}
-      title={kind === "ingestion" ? "Create an ingestion pipeline" : "Create a retrieval pipeline"}
+      title={kind === "ingestion" ? "Create an ingestion pipeline" : "Create a search tool pipeline"}
       subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}

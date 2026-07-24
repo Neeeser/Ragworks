@@ -135,14 +135,19 @@ class PipelineService:
         *,
         kind: PipelineKind | None = None,
     ) -> list[models.Pipeline]:
-        """Return pipelines for the given user, optionally filtered by derived kind."""
+        """Return pipelines for the given user, optionally filtered by derived kind.
+
+        A shape-less graph (neither document-accepting nor callable — blank
+        or mid-edit) matches every kind filter: the editor is kind-paged, and
+        a pipeline no filter matches would be unreachable from it.
+        """
         pipelines = self._pipelines.list_for_user(user_id)
         if kind is None:
             return pipelines
         return [
             pipeline
             for pipeline in pipelines
-            if derived_kind(self.interface_for(pipeline)) is kind
+            if derived_kind(self.interface_for(pipeline)) in (kind, None)
         ]
 
     def get_pipeline(self, pipeline_id: UUID, user_id: UUID) -> models.Pipeline | None:
