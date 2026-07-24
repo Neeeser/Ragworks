@@ -30,6 +30,11 @@ from app.pipelines.defaults import (
 )
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.tool_defaults import (
+    build_count_tool_pipeline,
+    build_facet_tool_pipeline,
+    with_reranker,
+)
 from app.providers.base import effective_embedding_input_limit
 from app.providers.registry import build_adapter, get_provider, resolve_connection
 from app.schemas.enums import IndexBackend, ProviderKind
@@ -41,6 +46,7 @@ from app.services.errors import (
     ServiceError,
     is_external_provider_error,
 )
+from app.services.pipeline_defaults import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
     DEFAULT_SEARCH_SLUG,
@@ -49,9 +55,30 @@ from app.services.pipelines import (
 from app.telemetry import record
 from app.telemetry.events import CollectionCreated
 from app.vectorstores.base import VectorIndexDescription
-from app.vectorstores.registry import get_vector_store
+from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, get_vector_store
 
 logger = logging.getLogger(__name__)
+
+#: Pipeline entity name + description per scaffolded slug (distinct from the
+#: tool name exposed to the assistant, which lives in the node config).
+_PIPELINE_LABELS: dict[str, tuple[str, str]] = {
+    DEFAULT_INGEST_SLUG: (
+        "Default Ingestion Pipeline",
+        "Baseline ingestion pipeline from first-run setup.",
+    ),
+    DEFAULT_SEARCH_SLUG: (
+        "Default Retrieval Pipeline",
+        "Baseline retrieval pipeline from first-run setup.",
+    ),
+    DEFAULT_COUNT_SLUG: (
+        "Count Matches",
+        "Counts documents and chunks matching a query, from first-run setup.",
+    ),
+    DEFAULT_FACET_SLUG: (
+        "Facet by Source",
+        "Groups matching chunks by source file, from first-run setup.",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -129,7 +156,12 @@ class SetupService:
         self.session.flush()
         tools = CollectionToolService(self.session)
         tools.set_ingest_pipeline(user, collection, defaults[DEFAULT_INGEST_SLUG].id)
+        # Search binds first so it stays the collection's primary tool; the
+        # optional aggregate tools bind after it in a stable order.
         tools.add_tool(user, collection, defaults[DEFAULT_SEARCH_SLUG].id)
+        for slug in (DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG):
+            if slug in defaults:
+                tools.add_tool(user, collection, defaults[slug].id)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -186,6 +218,18 @@ class SetupService:
         list[PipelineValidationIssue],
     ]:
         """Create (or refresh) the default pipelines from the wizard's choices."""
+        search = build_default_retrieval_pipeline(
+            embedding_connection_id=payload.embedding_connection_id,
+            embedding_model=payload.embedding_model,
+            backend=payload.backend,
+            index_name=payload.index_name,
+        )
+        if payload.reranker is not None:
+            search = with_reranker(
+                search,
+                connection_id=payload.reranker.connection_id,
+                model_name=payload.reranker.model_name,
+            )
         definitions: dict[str, PipelineDefinition] = {
             DEFAULT_INGEST_SLUG: build_default_ingestion_pipeline(
                 embedding_connection_id=payload.embedding_connection_id,
@@ -196,13 +240,9 @@ class SetupService:
                 chunk_overlap=payload.chunk_overlap,
                 embedding_input_limit=embedding_input_limit,
             ),
-            DEFAULT_SEARCH_SLUG: build_default_retrieval_pipeline(
-                embedding_connection_id=payload.embedding_connection_id,
-                embedding_model=payload.embedding_model,
-                backend=payload.backend,
-                index_name=payload.index_name,
-            ),
+            DEFAULT_SEARCH_SLUG: search,
         }
+        definitions.update(self._aggregate_tool_definitions(payload))
         warnings = [
             issue
             for definition in definitions.values()
@@ -213,11 +253,11 @@ class SetupService:
         for slug, definition in definitions.items():
             existing = PipelineRepository(self.session).get_by_template_slug(user.id, slug)
             if existing is None:
-                label = "Ingestion" if slug == DEFAULT_INGEST_SLUG else "Retrieval"
+                name, description = _PIPELINE_LABELS[slug]
                 installed[slug] = self._pipelines.create_pipeline(
                     user=user,
-                    name=f"Default {label} Pipeline",
-                    description=f"Baseline {label.lower()} pipeline from first-run setup.",
+                    name=name,
+                    description=description,
                     definition=definition,
                     change_summary="First-run setup.",
                     template_slug=slug,
@@ -235,3 +275,25 @@ class SetupService:
                     )
                 installed[slug] = existing
         return installed, warnings
+
+    def _aggregate_tool_definitions(
+        self, payload: SetupBootstrapRequest
+    ) -> dict[str, PipelineDefinition]:
+        """Build the optional count/facet tool definitions the wizard requested.
+
+        Each is gated on the chosen backend advertising the matching lexical
+        capability, so a flag set against a backend that can't serve it (e.g.
+        Pinecone) is silently skipped rather than scaffolding a broken tool —
+        the wizard gates the checkboxes on the same capability.
+        """
+        capabilities = CAPABILITIES_BY_BACKEND[payload.backend]
+        definitions: dict[str, PipelineDefinition] = {}
+        if payload.add_count_tool and capabilities.supports_lexical_count:
+            definitions[DEFAULT_COUNT_SLUG] = build_count_tool_pipeline(
+                backend=payload.backend, index_name=payload.index_name
+            )
+        if payload.add_facet_tool and capabilities.supports_lexical_facet:
+            definitions[DEFAULT_FACET_SLUG] = build_facet_tool_pipeline(
+                backend=payload.backend, index_name=payload.index_name
+            )
+        return definitions

@@ -17,6 +17,7 @@ import {
   fetchEmbeddingDimension,
   fetchIndexBackends,
 } from "@/lib/api";
+import { chunkDefaultsFor } from "@/lib/chunk-defaults";
 import { getErrorMessage } from "@/lib/errors";
 import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -38,6 +39,10 @@ export interface SetupWizardApi {
   next: () => void;
   back: () => void;
   setChoices: (choices: Partial<SetupChoices>) => void;
+  /** Seed chunk size/overlap from a model's window (until the user edits them). */
+  seedChunkDefaults: (maxInputTokens: number | null | undefined) => void;
+  /** Set chunk size/overlap and pin them against further model-derived seeding. */
+  setChunk: (patch: { chunkSize?: number; chunkOverlap?: number }) => void;
   // Providers step
   connections: ProviderConnection[];
   providerTypes: ProviderTypeInfo[];
@@ -54,6 +59,10 @@ export interface SetupWizardApi {
   modelsError: string | null;
   backends: BackendInfo[] | null;
   suggestedModelId: string | null;
+  /** Reranking is optional: these drive the "add a reranker" checkbox + picker. */
+  hasRerankingProvider: boolean;
+  rerankingModels: CatalogModel[] | null;
+  rerankingModelsLoading: boolean;
   /** Creates (or adopts) the index, then advances. */
   ensureIndex: () => Promise<void>;
   /** Installs pipelines + first collection, then lands on the collection. */
@@ -88,12 +97,19 @@ export function useSetupWizard(): SetupWizardApi {
   );
   const providersReady = coverage.embedding && coverage.chat && coverage.vector_store;
   const hasEmbeddingProvider = coverage.embedding;
+  const hasRerankingProvider = coverage.reranking;
 
   const modelsQuery = useSharedModelCatalog(
     user?.id,
     authToken,
     "embedding",
     Boolean(authToken) && hasEmbeddingProvider,
+  );
+  const rerankingModelsQuery = useSharedModelCatalog(
+    user?.id,
+    authToken,
+    "reranking",
+    Boolean(authToken) && hasRerankingProvider,
   );
   const backendsQuery = useApiQuery(() => fetchIndexBackends(authToken), [authToken], {
     enabled: Boolean(authToken),
@@ -118,6 +134,15 @@ export function useSetupWizard(): SetupWizardApi {
 
   const setChoices = useCallback(
     (choices: Partial<SetupChoices>) => dispatch({ type: "SET_CHOICES", choices }),
+    [],
+  );
+  const seedChunkDefaults = useCallback((maxInputTokens: number | null | undefined) => {
+    const { chunkSize, chunkOverlap } = chunkDefaultsFor(maxInputTokens);
+    dispatch({ type: "SEED_CHUNK_DEFAULTS", chunkSize, chunkOverlap });
+  }, []);
+  const setChunk = useCallback(
+    (patch: { chunkSize?: number; chunkOverlap?: number }) =>
+      dispatch({ type: "SET_CHUNK", ...patch }),
     [],
   );
   const next = useCallback(() => {
@@ -202,6 +227,13 @@ export function useSetupWizard(): SetupWizardApi {
     setError(null);
     setWarning(null);
     try {
+      const reranker =
+        choices.addReranker && choices.rerankerConnectionId && choices.rerankerModel
+          ? {
+              connection_id: choices.rerankerConnectionId,
+              model_name: choices.rerankerModel,
+            }
+          : null;
       const result = await bootstrapSetup(token, {
         embedding_connection_id: choices.embeddingConnectionId,
         embedding_model: choices.embeddingModel,
@@ -211,6 +243,9 @@ export function useSetupWizard(): SetupWizardApi {
         collection_name: choices.collectionName,
         chunk_size: choices.chunkSize,
         chunk_overlap: choices.chunkOverlap,
+        add_count_tool: choices.addCountTool,
+        add_facet_tool: choices.addFacetTool,
+        reranker,
       });
       markComplete();
       if ((result.warnings ?? []).length > 0) {
@@ -238,6 +273,8 @@ export function useSetupWizard(): SetupWizardApi {
     next,
     back,
     setChoices,
+    seedChunkDefaults,
+    setChunk,
     connections,
     providerTypes,
     connectionsLoading,
@@ -252,6 +289,9 @@ export function useSetupWizard(): SetupWizardApi {
     modelsError: modelsQuery.error ?? modelConnectionError,
     backends: backendsQuery.data,
     suggestedModelId,
+    hasRerankingProvider,
+    rerankingModels: rerankingModelsQuery.data?.models ?? null,
+    rerankingModelsLoading: rerankingModelsQuery.loading,
     ensureIndex,
     finish,
     busy,

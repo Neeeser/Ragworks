@@ -74,21 +74,21 @@ def bm25_sibling_index_name(index_name: str, backend: IndexBackend) -> str:
 def _clamp_chunk_window(
     chunk_size: int, chunk_overlap: int, embedding_input_limit: int | None
 ) -> tuple[int, int]:
-    """Fit the default chunk window within a known embedding token budget.
+    """Fit the chunk size within a known embedding token budget.
 
-    Scale both values together so the wizard preserves its requested overlap
-    ratio. Unknown limits leave the wizard's explicit values unchanged.
+    Each emitted chunk spans at most ``chunk_size`` tokens (overlap is a stride
+    within the window, not extra tokens the embedder sees), so the only bound is
+    ``chunk_size <= embedding_input_limit``. A fitting window is left untouched
+    (the size-plus-overlap sum once shrank it); on shrink the ratio is preserved.
     """
-    if embedding_input_limit is None or chunk_size + chunk_overlap <= embedding_input_limit:
+    if embedding_input_limit is None or chunk_size <= embedding_input_limit:
         return chunk_size, chunk_overlap
     if embedding_input_limit <= 1:
         return 1, 0
-    requested_total = chunk_size + chunk_overlap
-    scale = embedding_input_limit / requested_total
-    clamped_size = max(1, int(chunk_size * scale))
-    clamped_overlap = max(0, embedding_input_limit - clamped_size)
-    clamped_overlap = min(clamped_overlap, clamped_size - 1)
-    return clamped_size, clamped_overlap
+    overlap_ratio = chunk_overlap / chunk_size
+    clamped_size = embedding_input_limit
+    clamped_overlap = min(round(clamped_size * overlap_ratio), clamped_size - 1)
+    return clamped_size, max(0, clamped_overlap)
 
 
 # The setup wizard passes the complete explicit scaffold configuration here.

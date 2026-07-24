@@ -21,7 +21,12 @@ from app.schemas.setup import SetupBootstrapRequest
 from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_admin import IndexAdminService
-from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
+from app.services.pipeline_defaults import (
+    DEFAULT_COUNT_SLUG,
+    DEFAULT_FACET_SLUG,
+    DEFAULT_INGEST_SLUG,
+    DEFAULT_SEARCH_SLUG,
+)
 from app.services.setup import SetupService
 from tests.utils.providers import add_connection, add_openrouter_connection
 
@@ -203,7 +208,114 @@ def test_bootstrap_writes_wizard_choices_into_pipelines(
         for node in definition["nodes"]
         if node["id"] == "chunk-document"
     ]
-    assert chunkers[0]["config"] == {"chunk_size": 356, "chunk_overlap": 140}
+    # all-MiniLM's published limit is 512 tokens; effective limit 496 after the
+    # special-token margin. chunk_size 512 > 496 shrinks to 496, preserving the
+    # 200/512 overlap ratio (round(496 * 0.39) = 194) — the size no longer
+    # over-shrinks by also counting overlap against the budget.
+    assert chunkers[0]["config"] == {"chunk_size": 496, "chunk_overlap": 194}
+
+
+def test_bootstrap_adds_count_and_facet_tools_when_requested(
+    pg_search_session: Session,
+) -> None:
+    """The wizard's opt-in aggregate tools are scaffolded and bound as tools.
+
+    Search stays the primary tool; count and facet bind after it. The aggregate
+    tools need a lexical backend, so this runs on the pg_search dev DB.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    _create_pgvector_index(session, user)
+
+    result = SetupService(session).bootstrap(
+        user,
+        _bootstrap_request(connection, add_count_tool=True, add_facet_tool=True),
+    )
+
+    with Session(session.get_bind()) as fresh:
+        pipelines = fresh.exec(select(models.Pipeline)).all()
+        slugs = {pipeline.template_slug for pipeline in pipelines if pipeline.template_slug}
+        assert slugs == {
+            DEFAULT_INGEST_SLUG,
+            DEFAULT_SEARCH_SLUG,
+            DEFAULT_COUNT_SLUG,
+            DEFAULT_FACET_SLUG,
+        }
+        by_slug = {p.template_slug: p.id for p in pipelines if p.template_slug}
+        tool_bindings = fresh.exec(
+            select(models.CollectionPipelineBinding).where(
+                models.CollectionPipelineBinding.collection_id == result.collection.id,
+                models.CollectionPipelineBinding.role == models.BindingRole.TOOL,
+            )
+        ).all()
+        assert len(tool_bindings) == 3
+        primary = [b for b in tool_bindings if b.is_primary]
+        assert len(primary) == 1
+        assert primary[0].pipeline_id == by_slug[DEFAULT_SEARCH_SLUG]
+
+
+def test_bootstrap_skips_aggregate_tools_on_backend_without_lexical_support(
+    session: Session,
+) -> None:
+    """A count/facet flag on a backend that can't serve them is silently skipped.
+
+    Pinecone has neither lexical count nor facet, so the capability gate returns
+    no aggregate definitions even when both flags are set — the wizard hides the
+    checkboxes on such backends for the same reason.
+    """
+    connection = add_openrouter_connection(session, _create_user(session))
+    payload = _bootstrap_request(
+        connection, backend="pinecone", add_count_tool=True, add_facet_tool=True
+    )
+
+    definitions = SetupService(session)._aggregate_tool_definitions(payload)
+
+    assert definitions == {}
+
+
+def test_bootstrap_adds_reranker_to_search_when_requested(
+    pgvector_session: Session,
+) -> None:
+    """A reranker choice splices a reranker into the search tool, widening fetch."""
+    session = pgvector_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    reranker = add_connection(session, user, "cohere", {"api_key": "co-key"}, label="Cohere")
+    _create_pgvector_index(session, user)
+
+    result = SetupService(session).bootstrap(
+        user,
+        _bootstrap_request(
+            connection,
+            reranker={"connection_id": str(reranker.id), "model_name": "rerank-english-v3.0"},
+        ),
+    )
+
+    assert result.warnings == []
+    with Session(session.get_bind()) as fresh:
+        search = fresh.exec(
+            select(models.Pipeline).where(
+                models.Pipeline.template_slug == DEFAULT_SEARCH_SLUG
+            )
+        ).one()
+        versions = fresh.exec(
+            select(models.PipelineVersion).where(
+                models.PipelineVersion.pipeline_id == search.id
+            )
+        ).all()
+    nodes = [node for version in versions for node in version.definition["nodes"]]
+    rerankers = [node for node in nodes if node["type"] == "reranker.model"]
+    assert len(rerankers) == 1
+    assert rerankers[0]["config"] == {
+        "connection_id": str(reranker.id),
+        "model_name": "rerank-english-v3.0",
+    }
+    retrievers = [node for node in nodes if node["type"].startswith("retriever.")]
+    assert retrievers
+    assert all(
+        node["config"]["top_k"] == {"$expr": "result_limit * 3"} for node in retrievers
+    )
 
 
 def test_bootstrap_rejects_missing_index(session: Session) -> None:

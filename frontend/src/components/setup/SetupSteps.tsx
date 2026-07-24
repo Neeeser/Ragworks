@@ -211,13 +211,16 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
               <button
                 type="button"
                 aria-pressed={selected}
-                onClick={() =>
+                onClick={() => {
                   wizard.setChoices({
                     embeddingConnectionId: model.connection_id,
                     embeddingModel: model.id,
                     embeddingDimension: model.dimension ?? null,
-                  })
-                }
+                  });
+                  // Chunk defaults are sized to this model's window (until the
+                  // user edits them on the launch step).
+                  wizard.seedChunkDefaults(model.max_input_tokens);
+                }}
                 className={cn(
                   "w-full rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
                   selected

@@ -35,7 +35,11 @@ const backends = [
     label: "pgvector",
     available: true,
     configured: true,
-    capabilities: { max_dimension: 2000 },
+    capabilities: {
+      max_dimension: 2000,
+      supports_lexical_count: true,
+      supports_lexical_facet: true,
+    },
   },
 ] as unknown as BackendInfo[];
 
@@ -45,6 +49,8 @@ function makeWizard(overrides: Partial<SetupWizardApi> = {}): SetupWizardApi {
     next: vi.fn(),
     back: vi.fn(),
     setChoices: vi.fn(),
+    seedChunkDefaults: vi.fn(),
+    setChunk: vi.fn(),
     connections: [makeConnection()],
     providerTypes: [makeProviderType()],
     connectionsLoading: false,
@@ -57,6 +63,9 @@ function makeWizard(overrides: Partial<SetupWizardApi> = {}): SetupWizardApi {
     modelsError: null,
     backends,
     suggestedModelId: MINILM,
+    hasRerankingProvider: false,
+    rerankingModels: null,
+    rerankingModelsLoading: false,
     ensureIndex: vi.fn(),
     finish: vi.fn(),
     busy: false,
@@ -109,7 +118,35 @@ describe("StepModel", () => {
 });
 
 describe("StepLaunch", () => {
-  it("renders an authoritative-limit finding as an advisory warning", () => {
+  it("warns only when chunk size exceeds the model's effective window", () => {
+    const wizard = makeWizard({
+      models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
+    });
+    wizard.state = {
+      ...wizard.state,
+      step: "launch",
+      choices: {
+        ...wizard.state.choices,
+        embeddingModel: MINILM,
+        collectionName: "First",
+        // 500 > effective 496; overlap does not count toward the window.
+        chunkSize: 500,
+        chunkOverlap: 100,
+      },
+    };
+
+    render(<StepLaunch wizard={wizard} />);
+
+    expect(
+      screen.getByText(
+        "Chunk size (500) exceeds this model's effective input limit of 496 tokens; oversized chunks are split before indexing.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /finish setup/i })).toBeEnabled();
+  });
+
+  it("does not warn when chunk size fits the window even if size plus overlap exceeds it", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
@@ -121,20 +158,60 @@ describe("StepLaunch", () => {
         embeddingModel: MINILM,
         collectionName: "First",
         chunkSize: 400,
-        chunkOverlap: 100,
+        chunkOverlap: 200,
       },
     };
 
     render(<StepLaunch wizard={wizard} />);
 
-    expect(
-      screen.getByText(
-        "Chunk size plus overlap (500) may exceed this model's effective input limit.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
-    expect(screen.queryByText(/whitespace words/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /finish setup/i })).toBeEnabled();
+    expect(screen.queryByText(/exceeds this model's effective input limit/i)).toBeNull();
+  });
+
+  it("offers count and facet tools on a lexical backend, checked by default", async () => {
+    const wizard = makeWizard();
+    wizard.state = { ...wizard.state, step: "launch" };
+
+    render(<StepLaunch wizard={wizard} />);
+
+    const countTool = screen.getByLabelText(/add a count tool/i);
+    expect(countTool).toBeChecked();
+    expect(screen.getByLabelText(/add a facet-by-source tool/i)).toBeChecked();
+
+    // Toggling a default-on tool off records the opt-out.
+    await userEvent.click(countTool);
+    expect(wizard.setChoices).toHaveBeenCalledWith({ addCountTool: false });
+  });
+
+  it("hides the reranker option when no reranking provider is connected", () => {
+    const wizard = makeWizard({ hasRerankingProvider: false });
+    wizard.state = { ...wizard.state, step: "launch" };
+
+    render(<StepLaunch wizard={wizard} />);
+
+    expect(screen.queryByLabelText(/add a reranker/i)).toBeNull();
+  });
+
+  it("gates Finish until a reranking model is chosen when the reranker is enabled", () => {
+    const wizard = makeWizard({
+      hasRerankingProvider: true,
+      rerankingModels: [
+        makeCatalogModel({ id: "rerank-1", connection_id: "conn-cohere", name: "Rerank One" }),
+      ],
+    });
+    wizard.state = {
+      ...wizard.state,
+      step: "launch",
+      choices: {
+        ...wizard.state.choices,
+        collectionName: "First",
+        addReranker: true,
+        rerankerModel: "",
+      },
+    };
+
+    render(<StepLaunch wizard={wizard} />);
+
+    expect(screen.getByRole("button", { name: /finish setup/i })).toBeDisabled();
   });
 });
 

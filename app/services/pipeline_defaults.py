@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 #: Template slugs marking a user's scaffolded default pipelines.
 DEFAULT_INGEST_SLUG = "default-ingest"
 DEFAULT_SEARCH_SLUG = "default-search"
+#: Optional wizard-scaffolded tool pipelines (see `app/pipelines/tool_defaults.py`).
+DEFAULT_COUNT_SLUG = "default-count"
+DEFAULT_FACET_SLUG = "default-facet"
 
 
 @dataclass

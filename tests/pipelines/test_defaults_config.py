@@ -158,7 +158,9 @@ def test_builders_stamp_the_explicit_embedding_choice(session: Session) -> None:
     assert retriever.config["index_name"] == "first-index"
 
 
-def test_ingestion_builder_scales_chunk_window_to_embedding_limit() -> None:
+def test_ingestion_builder_clamps_oversized_chunk_size_to_embedding_limit() -> None:
+    # chunk_size exceeds the limit: shrink to the limit, preserving the
+    # overlap ratio (200/512 ≈ 0.39 → round(496 * 0.39) = 194).
     ingestion = _build_ingestion(
         chunk_size=512,
         chunk_overlap=200,
@@ -166,7 +168,22 @@ def test_ingestion_builder_scales_chunk_window_to_embedding_limit() -> None:
     )
 
     chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
-    assert chunker.config == {"chunk_size": 356, "chunk_overlap": 140}
+    assert chunker.config == {"chunk_size": 496, "chunk_overlap": 194}
+
+
+def test_ingestion_builder_preserves_chunk_window_that_fits_the_limit() -> None:
+    # Regression: a chunk_size within the limit must be left untouched even
+    # when chunk_size + overlap exceeds it — overlap is a stride within the
+    # window, not tokens the embedder sees. Comparing the sum once shrank a
+    # window that fit, so the wizard's shown size differed from ingest's.
+    ingestion = _build_ingestion(
+        chunk_size=200,
+        chunk_overlap=100,
+        embedding_input_limit=250,
+    )
+
+    chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
+    assert chunker.config == {"chunk_size": 200, "chunk_overlap": 100}
 
 
 def test_default_scaffold_omits_bm25_when_pgvector_extension_unavailable(

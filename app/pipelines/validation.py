@@ -322,11 +322,15 @@ class PipelineValidator:
         except ValidationError:
             return None
         chunk_size = getattr(config, "chunk_size", None)
-        chunk_overlap = getattr(config, "chunk_overlap", None)
-        if not isinstance(chunk_size, int) or not isinstance(chunk_overlap, int):
+        if not isinstance(chunk_size, int):
             return None
-        configured_span = chunk_size + chunk_overlap
-        if configured_span <= maximum:
+        # Each emitted chunk spans at most chunk_size tokens — overlap is a
+        # stride within that window, not extra tokens the embedder ever sees —
+        # so only chunk_size is bounded by the model's input limit. Comparing
+        # chunk_size + overlap here once flagged (and clamped) windows that
+        # actually fit, so the wizard's shown size differed from what ingest
+        # used and a valid default tripped an error.
+        if chunk_size <= maximum:
             return None
         tokenizer = config.tokenizer
         is_whitespace = tokenizer == "whitespace"
@@ -339,14 +343,14 @@ class PipelineValidator:
         return PipelineValidationIssue(
             code="embedding_input_limit_exceeded",
             message=(
-                f"Chunk size plus overlap ({configured_span:,}) on node '{chunker.id}' "
+                f"Chunk size ({chunk_size:,}) on node '{chunker.id}' "
                 f"exceeds embedding model '{model}' effective input limit of {maximum:,}. "
                 f"{detail}"
             ),
             severity=severity,
             node_id=chunker.id,
             field="chunk_size",
-            configured_value=configured_span,
+            configured_value=chunk_size,
             model=model,
             allowed_max=maximum,
         )
