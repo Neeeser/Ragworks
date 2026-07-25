@@ -31,14 +31,14 @@ not one clever combined chart.
 
 ```tsx
 <div className="p-3">
-  <div className="font-mono text-instrument uppercase tracking-[0.16em] text-muted">
-    INGEST P50
-  </div>
+  <div className="text-instrument font-medium text-muted">Ingest p50</div>
   <div className="mt-1 font-mono text-[20px] tabular-nums text-primary">
     403<span className="text-num text-muted">ms</span>
   </div>
 </div>
 ```
+
+The label is sentence-case sans (the console voice); only the value is mono.
 
 - The unit is a smaller, muted span **inside** the value — not a separate label, and not
   baked into the number's own type size.
@@ -105,21 +105,20 @@ enforced by `src/lib/__tests__/palette-contract.test.ts`.
 ## 5. Status
 
 `data-pos` / `data-neg` / `data-warn` are **reserved for state** and never reused as a
-series colour. They always ship with a label or icon, never colour alone:
+series colour. They always ship with a label or icon, never colour alone. Status renders
+as a square node dot + label (`StatusDot`), or as a pill (`Chip tone dot`) where the row
+has room:
 
 ```tsx
-<span className="inline-flex items-center gap-1">
-  <span className="h-1.5 w-1.5 rounded-full bg-data-pos" />
-  <span className="font-mono text-instrument uppercase tracking-[0.16em] text-data-pos">
-    READY
-  </span>
-</span>
+<StatusDot tone="pos" label="Ready" />
+<Chip tone="pos" dot>Ready</Chip>
 ```
 
-Status vocabulary matches the backend enums exactly — `READY`, `FAILED`, `PENDING`,
-`PROCESSING`. Render `.value`, never a Python repr: a `DocumentStatus.READY` reaching the UI
-is a backend bug, and DB-loaded enum columns arrive as raw strings so they need normalising
-before `.value`.
+Status vocabulary derives from the backend enums — `READY`, `FAILED`, `PENDING`,
+`PROCESSING` — humanised to sentence case for display (`Ready`), with the raw value kept
+for tests and tooltips. Render `.value`, never a Python repr: a `DocumentStatus.READY`
+reaching the UI is a backend bug, and DB-loaded enum columns arrive as raw strings so
+they need normalising before `.value`.
 
 ---
 
@@ -137,11 +136,11 @@ before `.value`.
 ## Identifiers are not labels
 
 A model id, index name, uuid, or file path is a **literal** — render it verbatim in
-`font-mono`, with no `uppercase` and no tracking.
+`font-mono`, with no case change and no tracking.
 
-`Chip` carries the console's label voice (`uppercase tracking-[0.1em]`), which is right
-for a mode, a version, a stage name, or a status word. Put an identifier through it and
-two things break at once:
+`Chip` carries the console's pill voice (sentence-case sans), which is right for a mode,
+a version, a stage name, or a status word. Put an identifier through any label voice and
+two things break at once (this shipped with the old uppercase chip):
 
 > `anthropic/claude-3.5-haiku` renders as `ANTHROPIC/CLAUDE-3.5-HAIKU` — a string the
 > API would reject — and measured **215px** instead of **172px** in a real browser, so it

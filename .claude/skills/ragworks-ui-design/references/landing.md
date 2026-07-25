@@ -12,12 +12,12 @@ made it look AI-generated.
 
 | | Landing | Console |
 |---|---|---|
-| Radius | `rounded-full` CTAs, `rounded-3xl` panels | 3 / 4 / 6px only |
+| Radius | `rounded-full` CTAs, `rounded-3xl` panels | 4 / 6 / 10px + pills |
 | Spacing | generous, beyond the `p-8` ceiling | scale ceiling `p-8` |
-| Type | fluid display up to `text-7xl` | 9.5 / 12.5 / 13 / 14px |
-| Instrument tracking | `0.28em`–`0.4em` | `0.16em` |
-| Glow / bloom | yes, one per view | none |
-| `GlassCard`, `.glass-panel` | yes | no |
+| Type | fluid display up to `text-7xl` | 11 / 14 / 15 / 17px, sentence case |
+| Label voice | mono uppercase, `0.28em`–`0.4em` | sentence-case sans (mono = data only) |
+| Glow / bloom | yes, one per view, up to 22% | one shell bloom ≤9% + one glowing button |
+| `GlassCard`, `.glass-panel` | yes | no — depth is the lit card, never blur |
 | Entrance | `landing-rise`, 700ms, staggered | 120ms content fade |
 | Atmosphere backdrop | yes | no |
 

@@ -1,12 +1,13 @@
 # Motion — "follows the pointer, never the data"
 
-One sentence carries the whole doctrine:
+Two sentences carry the whole doctrine:
 
 > **Motion responds to what the user did. It never announces what the data did.**
+> **The one exception is the pulse — motion that *is* the data flowing.**
 
-This is the doctrine dense developer tools converge on, and it is why they feel fast.
-A staggered list entrance is a marketing-site pattern; a chart that draws itself in delays
-the moment the number can be read. Animate chrome and interaction. Leave data alone.
+Subtle and snappy: motion you feel but never watch. A staggered list entrance is a
+marketing-site pattern; a chart that draws itself in delays the number. Animate chrome
+and interaction; leave data alone; let live processes pulse.
 
 ---
 
@@ -14,104 +15,97 @@ the moment the number can be read. Animate chrome and interaction. Leave data al
 
 | Trigger | Duration | Easing | What moves |
 |---|---|---|---|
-| Pointer feedback | `duration-80` | `ease-standard` | hover wash, press `translate-y-px`, focus ring |
-| Discrete state | `duration-140` | `ease-standard` | toggle, tab underline, a value that changed while visible |
-| Overlay appears | `duration-120` | `ease-decel` | modal/popover: opacity + `scale(.98→1)` |
-| User moved it | `duration-160` | `ease-decel` | panel slide, rail collapse, drawer, drag settle |
-| Layout reflow | `duration-200` | `ease-decel` | column resize, drag-to-tidy — **ceiling** |
+| Pointer feedback | `duration-80` | `ease-standard` | hover wash, press `scale(.98)` on buttons, focus ring |
+| Overlay/flyout appears | `duration-120` | `ease-decel` | opacity + `scale(.98→1)`, transform-origin at the trigger |
+| Discrete state | `duration-140` | `ease-standard` | toggle, a value that changed while visible |
+| Tab change | `duration-160` | `ease-decel` | the `.trace-wire-x` underline *slides* to the new tab; new content fades up 2px in 120ms |
+| User moved it | `duration-160` | `ease-decel` | panel slide, drawer, drag settle |
+| Layout reflow | `duration-200` | `ease-decel` | column resize — **ceiling** |
 | Route change | `duration-120` | `ease-decel` | one opacity fade on the content region — no travel, no stagger |
 | **Data arriving** | **none** | — | rows, values, charts paint instantly |
+| **The pulse** | process-timed | linear | see §2 |
 
-Five durations. Nothing in the console exceeds 200ms. If you find yourself wanting 400ms,
-the interaction is wrong, not the duration.
+Nothing in the console exceeds 200ms except the pulse, whose duration is the process's
+own. If you want 400ms, the interaction is wrong, not the duration.
 
 ### Hover-opened chrome has three delays, not one
 
-A panel that opens on hover (the rail flyouts, any future hover card) needs *intent* timing
-on top of its animation, or it misfires constantly:
-
 | Moment | Delay | Why |
 |---|---|---|
-| First open | **70ms** | A pointer travelling past a column of triggers would otherwise flash every panel on the way. |
-| Switching, once one is open | **0** | Intent is already declared; a delay here reads as lag. |
-| Leave | **120ms** | Covers the moment the pointer crosses out of the trigger toward the panel. |
+| First open | **70ms** | a pointer travelling past a column of triggers must not flash every panel |
+| Switching, once open | **0** | intent is declared; a delay reads as lag |
+| Leave | **120ms** | covers the pointer crossing from trigger to panel |
 
-Keyboard focus bypasses all three: focus is not ambiguous, so there is nothing to wait for.
-
-And the panel must be reachable without crossing dead space — put the gap *inside* the
-trigger's wrapper (`absolute left-full pl-2`) so travelling to the panel never fires the
-trigger's `pointerleave`.
+Keyboard focus bypasses all three. The gap between trigger and panel lives *inside* the
+trigger's wrapper (`absolute left-full pl-2`) so travel never fires `pointerleave`.
 
 ---
 
-## 2. The exemption, stated precisely
+## 2. The pulse — the licensed exception
 
-**On first paint, data is static.** No fade, no rise, no stagger, no draw-in — on rows,
-cells, values, charts, sparklines, tables, or trace views.
+The pulse is the console's expressive signature (see `console.md` §3), and its licence
+is exact: **it runs only while a real process is producing or moving data**, and stops
+the moment the process does.
 
-The only motion permitted on data is when a value **changes while the user is already
-looking at it**:
+- **Ingestion**: the file's stage strip fills wire-by-wire as stages complete; the
+  status pill narrates the current stage. Driven by real status transitions, never a
+  looping fake.
+- **Streaming / running**: a `.pulse-track` wire (2px, accent at 18%) with a
+  `.pulse-beam` gradient light (violet→cyan) travelling it, ~1.6s linear loop, while
+  tokens stream or a run executes.
+- **Pipeline playback**: the node beam + edge comet in the editor/trace viewer — the
+  same signature at full scale. Their durations come from the run's real step timing via
+  inline `animation-duration`, so the light can never drift from what it depicts. They
+  stay.
 
-- A number that changed: `translate-y-1` → `0` over `duration-140`. The point is to show
-  *which* number moved without a full re-render flash.
-- A row that just arrived (a completed run): one `data-pos/22` background wash decaying
-  over 480ms with `ease-accel`. One wash, then gone.
+Never: a pulse on an idle row, a pulse as a loading spinner substitute, a pulse to make
+a page "feel alive". An idle pulse is a lie, and every false pulse spends the real ones'
+meaning.
+
+---
+
+## 3. Data — static on first paint
+
+No fade, no rise, no stagger, no draw-in — on rows, cells, values, charts, tables, or
+trace views. The only motion permitted on data is when a value **changes while the user
+is already looking at it**:
+
+- A number that changed: `.value-tick` (4px rise, 140ms).
+- A row that just arrived (a completed run): one `.row-arrive` wash decaying over 480ms.
 
 Both are *change* indicators. Neither fires on mount.
 
 ---
 
-## 3. Loading
+## 4. Loading
 
-**Skeleton at the content's final geometry.** Same row height, same column widths, same
-count where known.
+**Skeleton at the content's final geometry** — same row height, same column widths, same
+count where known. The shimmer is **directional** (left→right, the signal direction): a
+translating gradient overlay animated on `transform` only, never `background-position`
+(which repaints the element).
 
-```tsx
-<Skeleton className="h-2 w-32" />   // inside a row that is already 30px tall
-```
-
-`animation: shimmer 1.1s ease-in-out infinite` on opacity only — never on
-`background-position`, which repaints the whole element.
-
-**Never** a spinner centred in a padded panel. That panel is a different size than the
-content that replaces it, so every load ends in a visible jump. The old console did this on
-the dashboard, chat, and collections.
+Never a spinner centred in a padded panel — that panel is a different size than the
+content replacing it, so every load ends in a visible jump.
 
 ---
 
-## 4. Panels slide, they never fade
+## 5. Panels slide, overlays scale-fade
 
 A panel the user opened enters by translating from the edge it lives on
-(`translate-x-full` → `0`, `duration-160 ease-decel`). Direction tells the user where it
-came from and where it will return to. A fade is spatially mute — the panel appears to
-materialise from nowhere and the user loses the spatial model.
-
-The one thing that fades in is an **overlay**, because it has no edge to come from:
-`opacity` + `scale(.98→1)` over `duration-120`.
-
----
-
-## 5. Motion that carries information — the exception the rule protects
-
-The pipeline playback beam and edge comet **stay**. That motion *is* data: it takes its
-duration from the run's real step timing via inline `animation-duration`, so the light can
-never drift from what it depicts. It is the reason the rule is phrased as "never announces
-what the data did" rather than "no motion" — motion is allowed to *be* information.
-
-If you add motion, it must be in one of two categories: a response to the pointer, or a
-depiction of real data. Anything else is decoration.
+(`translate-x-full → 0`, 160ms decel) — direction tells the user where it came from. An
+**overlay** (modal, menu, flyout) has no edge, so it scale-fades: `opacity` +
+`scale(.98→1)` over 120ms, transform-origin at its trigger.
 
 ---
 
 ## 6. Reduced motion
 
 Every animation and transition no-ops under `prefers-reduced-motion: reduce`, including
-infinite CSS accents like a pinging status dot (`motion-reduce:animate-none`).
+the pulse and any infinite accent (`motion-reduce:animate-none`). The static indicators
+(active ring, emphasized edge, status pill text) remain, so no information is lost.
 
-Read the preference with `useSyncExternalStore`, never `useState` + effect — the latter
-trips `react-hooks/set-state-in-effect` and produces a frame of wrong state.
-
-Decorative layers carry `aria-hidden` and `pointer-events-none`.
+Read the preference with `useSyncExternalStore`, never `useState` + effect. Decorative
+layers carry `aria-hidden` and `pointer-events-none`.
 
 ---
 
@@ -119,14 +113,13 @@ Decorative layers carry `aria-hidden` and `pointer-events-none`.
 
 | Removed | Reason |
 |---|---|
-| `chatBubbleFloat 6s infinite alternate` | Every chat message bobbed up and down forever — ambient motion on text being read. |
-| `filter: blur(8px)` on message reveal | The most expensive property to animate, on the app's hottest path. |
-| `scale(.96)` → `scale(1.01)` overshoot | A bounce on arriving text; wrong register for a workbench. |
-| `landing-rise` on dashboard sections | 700ms + 22px travel + stagger, applied to *data*. Correct on the landing page, wrong here. |
-| `.grid-glow` radial bloom | Decorative glow behind panels — the strongest "AI-generated" tell in the old console. |
-| `duration-150/200/300/500` ad hoc | Four unrelated durations chosen per component. Replaced by the table above. |
-| `animate-pulse` on loading cards | Replaced by `Skeleton` at final geometry. |
+| `chatBubbleFloat 6s infinite alternate` | ambient motion on text being read |
+| `filter: blur(8px)` on message reveal | most expensive property, hottest path |
+| `scale(.96) → scale(1.01)` overshoot | bounce; wrong register for a workbench |
+| `landing-rise` on console sections | 700ms + stagger applied to *data* |
+| `.grid-glow` radial bloom per panel | per-panel light; the shell bloom is the only bloom |
+| ad-hoc `duration-150/300/500` | replaced by the table above |
+| `animate-pulse` on loading cards | replaced by `Skeleton` at final geometry |
 
-`landing-rise` and the blooms still exist and are still correct — on the landing page. See
-`landing.md`. Deleting them from `(console)` is not a judgement on them; it's the two
-surfaces having different jobs.
+`landing-rise` and the big blooms remain correct — on the landing page (`landing.md`).
+The two surfaces have different jobs.
