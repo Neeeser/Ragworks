@@ -9,7 +9,11 @@
    is no hydration mismatch and no flash of the wrong theme.
    ===================================================================== */
 
-:root {
+/* Palette: deep-space (default). `dark` and `deep-space` are aliases so
+   preferences stored by earlier builds keep resolving. */
+:root,
+:root[data-theme="dark"],
+:root[data-theme="deep-space"] {
   /* Canvas & chrome */
   --canvas: #05060a;
   --canvas-raised: #0b0d14;
@@ -66,10 +70,22 @@
   --data-neg: #fb7185;
   --data-warn: #fbbf24;
 
+  /* Chart series — deliberately NOT the same family as --accent-*. A colour
+     that reads correctly as a lone status dot can fail as one of two peer
+     series: --accent-cyan (#22d3ee) measures L 0.797 on this canvas, outside
+     the 0.43–0.77 categorical band, so beside violet it out-shines its peer
+     and two equal series stop reading as equal. Every pair here is checked by
+     the dataviz validator; see palette-contract.test.ts. Add --series-3+ only
+     when a chart actually needs it, and validate before committing. */
+  --series-1: #8b5cf6;
+  --series-2: #0ea5b7;
+
   color-scheme: dark;
 }
 
-:root[data-theme="light"] {
+/* Palette: paper (light). `light` is the legacy alias. */
+:root[data-theme="light"],
+:root[data-theme="paper"] {
   --canvas: #f6f7fb;
   --canvas-raised: #ffffff;
   --surface: rgba(15, 23, 42, 0.03);
@@ -118,7 +134,56 @@
   --data-neg: #e11d48;
   --data-warn: #d97706;
 
+  --series-1: #7c3aed;
+  --series-2: #0891b2;
+
   color-scheme: light;
+}
+
+/* The remaining dark palettes override only what differs from the deep-space
+   base above, so a palette is a small readable diff rather than a full copy
+   that silently drifts. Stage/port colours keep fixed MEANING in every
+   palette — a palette may re-step a hue for legibility, never reassign it.
+   Series pairs are validated per surface; see palette-contract.test.ts. */
+
+/* Palette: true-black — OLED, maximum contrast. */
+:root[data-theme="true-black"] {
+  --canvas: #000000;
+  --canvas-raised: #0a0a0a;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-strong: rgba(255, 255, 255, 0.075);
+  --border-hairline: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.34);
+}
+
+/* Palette: graphite — lifted base, lower contrast for long sessions. */
+:root[data-theme="graphite"] {
+  --canvas: #14161c;
+  --canvas-raised: #1c1f27;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --border-hairline: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.26);
+  --text-body: #d3dae4;
+  --text-muted: #9aa5b5;
+}
+
+/* Palette: high-contrast — accessibility. Text is pushed to AAA and structure
+   is made explicit; the series pair stays the validated one, because a
+   brighter pair failed the categorical cohesion band. Contrast belongs in the
+   text and border tokens, not in the data colours. */
+:root[data-theme="high-contrast"] {
+  --canvas: #000000;
+  --canvas-raised: #101010;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-strong: rgba(255, 255, 255, 0.13);
+  --border-hairline: rgba(255, 255, 255, 0.28);
+  --border-strong: rgba(255, 255, 255, 0.6);
+  --text-primary: #ffffff;
+  --text-body: #f1f5f9;
+  --text-muted: #cbd5e1;
+  --text-meta: #a8b4c4;
+  --text-faint: #64748b;
 }
 
 /* The no-flash theme script sets data-theme before body paint, so the
@@ -177,12 +242,47 @@
   --color-data-neg: var(--data-neg);
   --color-data-warn: var(--data-warn);
 
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
   --shadow-glow: 0 10px 30px -10px var(--glow);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* Structural scales. Not `inline`, because these are fixed constants rather
+   than per-palette values — a palette never changes how dense the app is. */
+@theme {
+  /* Space. Redefining Tailwind's base makes the ordinary utilities the scale
+     itself: p-1=4 p-2=8 p-3=12 p-4=16 p-6=24 p-8=32. Only those six steps are
+     legal, and p-8 is the ceiling — that ceiling is what structurally prevents
+     another 10rem hero panel. Deliberately px, not rem: density must not move
+     when the type scale changes. */
+  --spacing: 4px;
+
+  /* Radius — three values. Anything softer reads as a marketing page rather
+     than an instrument. rounded-full survives only on genuinely circular
+     things (status dots, avatars, spinners). */
+  --radius-chip: 3px;
+  --radius-control: 4px;
+  --radius-panel: 6px;
+
+  /* Type — four roles, absolute px so they are immune to the root font-size.
+     A KPI hero value may use text-[20px]; nothing exceeds that in the console. */
+  --text-instrument: 9.5px;
+  --text-ui: 12.5px;
+  --text-num: 13px;
+  --text-head: 14px;
+
+  /* Motion easings. Durations are bare Tailwind numerics (duration-80 … -200);
+     the doctrine is in the ragworks-ui-design skill: motion follows the
+     pointer, never the data. */
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-decel: cubic-bezier(0.2, 0, 0, 1);
+  --ease-accel: cubic-bezier(0.4, 0, 1, 1);
 }
 
 *,
@@ -206,12 +306,12 @@ body {
 }
 
 html {
-  font-size: 14.5px;
+  font-size: 13px;
 }
 
 @media (max-width: 640px) {
   html {
-    font-size: 13.5px;
+    font-size: 12.5px;
   }
 }
 
@@ -223,6 +323,87 @@ html {
   border-radius: 1.25rem;
   box-shadow: var(--elevation-2);
   backdrop-filter: blur(18px);
+}
+
+/* ---------------------------------------------------------------------------
+   Console motion. The doctrine (ragworks-ui-design skill, references/motion.md)
+   is: motion follows the pointer, never the data. Data paints instantly — there
+   is deliberately no entrance animation for rows, values, or charts here. These
+   four are the complete permitted set, and each no-ops under reduced motion.
+   --------------------------------------------------------------------------- */
+
+/* 1. Route change: one opacity fade on the content region. No travel, no
+   stagger, so no individual datum is held up by it. */
+@keyframes consoleEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.console-enter {
+  animation: consoleEnter 120ms var(--ease-decel) both;
+}
+
+/* 2. Loading: skeleton at the content's FINAL geometry, so data landing causes
+   no reflow. Opacity only — animating background-position repaints the element. */
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.skeleton {
+  background: var(--surface-strong);
+  animation: skeletonPulse 1.1s var(--ease-standard) infinite;
+}
+
+/* 3. A value that changed while the user was already looking at it. Never on
+   first paint — this marks a change, it does not announce arrival. */
+@keyframes valueTick {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.value-tick {
+  animation: valueTick 140ms var(--ease-standard) both;
+}
+
+/* 4. A row that just arrived (a completed run): one decaying wash, then gone. */
+@keyframes rowArrive {
+  from {
+    background-color: color-mix(in srgb, var(--data-pos) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.row-arrive {
+  animation: rowArrive 480ms var(--ease-accel) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-enter,
+  .skeleton,
+  .value-tick,
+  .row-arrive {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 .grid-glow {
