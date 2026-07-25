@@ -101,7 +101,7 @@ function TrendTooltip({
       className="pointer-events-none absolute top-0 z-10 rounded-panel border border-hairline bg-canvas-raised px-2 py-1 shadow-elevation-2"
       style={{ left: `${leftPct}%`, transform: `translate(${align}, calc(-100% - 6px))` }}
     >
-      <p className="whitespace-nowrap font-mono text-instrument uppercase tracking-[0.16em] text-muted">
+      <p className="whitespace-nowrap font-mono text-instrument text-muted">
         {bucketLabel(bucket, granularity)}
       </p>
       {series.map((entry) => {
@@ -109,7 +109,7 @@ function TrendTooltip({
         return (
           <p key={entry.id} className="flex items-center gap-2 whitespace-nowrap text-ui text-body">
             <span
-              className="inline-block h-2 w-2 rounded-full"
+              className="inline-block h-2 w-2 rounded-[2px]"
               style={{ background: COLOR_VAR[entry.color] }}
               aria-hidden
             />
@@ -267,7 +267,7 @@ export function TrendChart({
         )}
       </div>
 
-      <div className="mt-1 flex justify-between font-mono text-instrument uppercase tracking-[0.16em] text-meta">
+      <div className="mt-1 flex justify-between font-mono text-instrument text-meta">
         <span>{buckets.length ? bucketLabel(buckets[0], granularity) : ""}</span>
         <span>{buckets.length ? bucketLabel(buckets[buckets.length - 1], granularity) : ""}</span>
       </div>
