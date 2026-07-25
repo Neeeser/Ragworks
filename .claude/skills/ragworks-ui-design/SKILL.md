@@ -144,7 +144,7 @@ In this order — the first three do most of the work:
 | Dropping columns/actions in a redesign | Functionality parity is a hard floor — re-form, don't reduce |
 | An icon-only button with no tooltip | The user has to click it to learn what it does |
 | A `title="…"` attribute for a tooltip | Can't be themed, ignores motion — use `Tooltip` |
-| Native `<select>` in product UI | Popup can't follow the theme — `CustomSelect` |
+| Native `<select>` in product UI | The popup can't follow the theme or carry icons — always `CustomSelect`, the one shared base. A test pinning native-select semantics (`fireEvent.change` on a combobox) is a test to rewrite with `user-event`, never a reason to keep the native control |
 
 ## Quality floor
 
