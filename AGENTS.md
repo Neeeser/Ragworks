@@ -275,7 +275,13 @@ the relevant AGENTS.md **in the same PR** — never batched later. A rule earns 
 place by capturing a non-obvious repo invariant or a proven failure mode; write it
 as a concise imperative plus one line of *why* (the failure it prevents). That
 one-line why is load-bearing, not decoration — a bare imperative is easy to
-rationalize around; "nothing was written and the test still passed" is not. Put the
+rationalize around; "nothing was written and the test still passed" is not. **Write
+the why as a present-tense failure mode, never as repo history**: no "we once
+had…", no counts of deleted copies, no references to removed code — git history
+owns the past, and these files must always point forward (a rule that depends on
+knowing what was removed teaches nothing to an agent arriving cold). When the user
+clarifies a design decision or philosophy, record it here (or in the relevant
+skill) in the same PR. Put the
 rule in the narrowest file where it always applies, and state it once — a child file
 extends the root, it never restates or contradicts it.
 
