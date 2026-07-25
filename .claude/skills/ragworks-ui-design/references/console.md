@@ -15,7 +15,7 @@ one question: **how much of the screen is the data, and how fast can I read it?*
 
 ```
 ┌──┬────────────────────────────────────────┐
-│  │ CrumbBar                        34px   │   ← breadcrumb + system state + actions
+│  │ CrumbBar                        40px   │   ← breadcrumb + system state + actions
 │R ├────────────────────────────────────────┤
 │46│                                        │
 │px │  content — full bleed, no max-width   │
@@ -25,7 +25,8 @@ one question: **how much of the screen is the data, and how fast can I read it?*
 
 - **Rail** — 46px, icon-only, one entry per section, active state is
   `bg-accent-violet/16` + an inset violet ring.
-- **CrumbBar** — 34px. Carries the breadcrumb, live system state, and the page's actions.
+- **CrumbBar** — 40px. Carries the breadcrumb, live system state, and the page's actions.
+  It hosts a real button, so it cannot be shorter than one comfortably fits.
 - **Content** — fills everything else. **No `max-width`, no page padding.**
 
 Measured: this moves content from **61% to 91%** of a 1600×1000 viewport. The old shell
@@ -89,14 +90,57 @@ happen to be adjacent, and they cost double the separation pixels.
 
 ---
 
-## 3. Density in practice
+## 3. Surfaces — a list must be distinguishable from the canvas
+
+A row list on the bare canvas with only hairline separators reads as loose text, not as a set
+of objects. Give the list a **raised surface**: `bg-canvas-raised` with a hairline top and
+bottom, rows separated by hairlines inside it. Vercel does the equivalent with a lighter card
+fill on a near-black page — the point is that the object is a different value from the
+background it sits on.
+
+This is not a licence to bring back gapped floating cards (§2). The list is one raised
+surface; the rows inside it share seams.
+
+## 4. Colour — quiet is not colourless
+
+"Quiet by default, bright on purpose" is half a rule. Applied alone it produces a grey
+spreadsheet, which reads as unfinished rather than restrained. **Every list row and every
+panel should carry at least one piece of meaning-bearing colour**, and there is almost always
+a real one available:
+
+| Where | Colour that means something |
+|---|---|
+| A row for an entity with a state | `StatusDot` — derived health, never invented |
+| A row naming a pipeline, stage, or mode | `Chip` with the matching `stage-*` tone |
+| A count that can be bad | `tone="neg"`/`"warn"` on the `KpiCell` when non-zero |
+| A chart | `--series-*` |
+| The primary action | `bg-accent-violet` |
+| Live/streaming state | `text-accent-cyan` |
+
+Rules that keep it from becoming noise:
+
+- **The colour rides a dot or a mark, not the text.** A `Chip`'s dot is coloured and its label
+  stays in an ink token; a `StatusDot`'s label may take the status colour because it *is* the
+  status. Colouring arbitrary text turns a row into competing highlights and fails for anyone
+  who can't discriminate the hues.
+- **Derive state, never invent it.** A collection has no status column, so its dot comes from
+  counts it actually has: no documents → empty, documents but no chunks → nothing indexed,
+  both → ready. A dot that means nothing is worse than no dot.
+- **One accent per view still holds** for the *saturated filled* accent — the primary button.
+  Status dots and stage chips are not competing with it; they're data.
+
+The failure to watch for: a converted page with no colour anywhere except the primary button.
+That is the "too bland, no highlight colours" report, and it means state that exists in the
+data was not surfaced.
+
+## 5. Density in practice
 
 | Element | Height |
 |---|---|
-| CrumbBar | 34px |
-| Toolbar / section header | 28px |
-| Data row | 30px (`py-2` + `text-ui`) |
-| KPI cell | 44px |
+| CrumbBar | 40px |
+| Toolbar / section header | 32px |
+| Data row | ~40px single-line (`py-3` + `text-ui`), ~60px with a subtitle |
+| KPI cell | 48px |
 | Chart panel plot area | ≥104px |
 
 **Charts get the height; everything else gives it up.** A chart is the only thing on a
@@ -115,7 +159,7 @@ instrument.
 
 ---
 
-## 4. The measure rule
+## 6. The measure rule
 
 > **The panel is full-bleed. The text inside it gets a measure.**
 
@@ -129,7 +173,7 @@ every pixel.
 
 ---
 
-## 5. Empty states
+## 7. Empty states
 
 One line of plain text plus, at most, one action. `p-8` is the only place the ceiling is
 reached.
@@ -148,7 +192,7 @@ card whose entire content was a suggestion to start a chat.
 
 ---
 
-## 6. Text you must not write
+## 8. Text you must not write
 
 The console's failure mode is decorative copy. Delete on sight:
 
@@ -166,7 +210,7 @@ embedder sees"` earns its place. `"Your collections"` above a list of collection
 
 ---
 
-## 7. Loading and error
+## 9. Loading and error
 
 - **Loading is a skeleton at the content's final geometry.** Same row height, same column
   widths. Data landing then causes zero reflow, which is what actually reads as fast.
@@ -177,7 +221,7 @@ embedder sees"` earns its place. `"Your collections"` above a list of collection
 
 ---
 
-## 8. Primitives — use them, never re-roll
+## 10. Primitives — use them, never re-roll
 
 | Need | Component |
 |---|---|
@@ -189,6 +233,9 @@ embedder sees"` earns its place. `"Your collections"` above a list of collection
 | a time-series | `ChartPanel` |
 | a list entity | `DataRow` |
 | selected-item fields | `Inspector` |
+| a labelled fact (pipeline, mode, version) | `Chip` |
+| explaining a truncated or terse value | `Tooltip` — never a `title` attribute |
+| column headers for a row list | `DataRowHeader` |
 | loading placeholder | `Skeleton` |
 | overlay of any kind | `ModalOverlay` |
 | form control | `Field` / `TextInput` / `Select` / `TextArea` + `inputClass` |
@@ -196,13 +243,18 @@ embedder sees"` earns its place. `"Your collections"` above a list of collection
 | confirmation | `ConfirmDialog` |
 | wizard | `WizardShell` + `WizardFooter` |
 
+Row lists get their headers from `DataRowHeader`, which shares `DataRow`'s cell padding, gap
+and `DATA_ROW_ACTIONS_SLOT` width. **Never hand-roll a header row with a guessed spacer** — it
+drifts the moment a row gains an action, and each column's width class must be the element the
+flex row measures (a width on an inner wrapper aligns nothing).
+
 `GlassCard` and `.glass-panel` are **landing-only** now — `backdrop-filter: blur(18px)`
 plus `shadow-elevation-2` on a data panel is both the wrong look and a real compositing
 cost on a page with thirty of them.
 
 ---
 
-## 9. Quality floor
+## 11. Quality floor
 
 Part of "done", not polish:
 

@@ -37,7 +37,11 @@ Console density applied to the landing page makes it look unfinished. **Neither 
    no greetings, no placeholders for absent optional data, no subheads narrating the UI. Keep
    text only where it says something the UI cannot show — a constraint, a consequence, where
    a value came from.
-2. **Quiet by default, bright on purpose.** Saturated colour only where it means something.
+2. **Quiet by default, bright on purpose — but never colourless.** Saturated colour only
+   where it means something, *and* it must be present: every list row and panel should carry
+   at least one piece of meaning-bearing colour (a derived status dot, a stage-toned chip, a
+   red failure count). A screen whose only colour is the primary button reads as unfinished,
+   not restrained. See `console.md` §4.
 3. **Structure is hairline.** Separation is `border-hairline` plus darkness — never shadow.
    In the console, adjacent panels share a **seam**, not a gap.
 4. **Labels are instruments** — `font-mono text-instrument uppercase tracking-[0.16em]`. This
@@ -58,7 +62,7 @@ into", "explore", "at a glance", aphoristic taglines.
 ```
 space     p-1 p-2 p-3 p-4 p-6 p-8              → 4 8 12 16 24 32px  (only these six)
 radius    rounded-chip / -control / -panel      → 3 / 4 / 6px
-type      text-instrument / -ui / -num / -head  → 9.5 / 12.5 / 13 / 14px
+type      text-instrument / -ui / -num / -head  → 11 / 14 / 15 / 17px
 motion    duration-80 / -120 / -140 / -160 / -200 · ease-standard / -decel / -accel
 surface   bg-canvas · bg-canvas-raised · bg-surface · bg-surface-strong
 border    border-hairline · border-strong
@@ -99,6 +103,12 @@ In this order — the first three do most of the work and are the ones skipped:
 | Entrance animation on rows or charts | Delays the data. Animate chrome, not content. |
 | `max-w-6xl` + page padding | Strands ~30% of the viewport; the CrumbBar makes it unnecessary |
 | A value in its own bordered box | Container nesting; five stats became four levels deep once |
+| A converted page with no colour but the button | State that exists in the data wasn't surfaced (`console.md` §3) |
+| Shrinking type to look dense | Dense is "no wasted space", not "small" — it reads as zoomed-out |
+| A hand-rolled list header with a guessed spacer | Drifts from its rows; use `DataRowHeader` |
+| Dropping columns when a card becomes a row | Re-form the information, don't lose it |
+| A `title="…"` attribute for a tooltip | Native tooltips can't be themed and ignore the motion system — use `Tooltip` |
+| A row list directly on the canvas | Reads as loose text; give the list a `bg-canvas-raised` surface (`console.md` §3) |
 
 ## Quality floor
 

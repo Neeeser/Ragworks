@@ -69,7 +69,11 @@ export function DataRow({
 }: DataRowProps) {
   const body = (
     <>
-      {leading ? <span className="shrink-0">{leading}</span> : null}
+      {leading ? (
+        // With a subtitle the row is two lines tall, so a centred dot lands
+        // beside the second line. Pin it to the title's optical centre instead.
+        <span className={cn("shrink-0", subtitle ? "self-start pt-1" : undefined)}>{leading}</span>
+      ) : null}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-ui font-medium text-primary">{title}</span>
         {subtitle ? (

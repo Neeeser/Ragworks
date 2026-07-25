@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { DATA_ROW_ACTIONS_SLOT, DataRow, DataRowHeader } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Tooltip } from "@/components/ui/tooltip";
 import { parseApiDate } from "@/lib/datetime";
 import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 
@@ -15,6 +17,8 @@ import type { Collection, CollectionStats } from "@/lib/types";
 type CollectionsListProps = {
   collections: Collection[];
   statsById: Record<string, CollectionStats | undefined>;
+  /** Pipeline id -> name, so a row can name the pipelines it is bound to. */
+  pipelineNameById: Record<string, string>;
   onDeleteRequest: (collection: Collection) => void;
   onCreateRequest: () => void;
   loading?: boolean;
@@ -35,6 +39,7 @@ const COL = {
 function ColumnHeader() {
   return (
     <DataRowHeader
+      hasLeading
       title="Name"
       columns={[
         <InstrumentLabel key="docs" className={COL.docs}>
@@ -62,7 +67,8 @@ function LoadingRows() {
     <div aria-busy>
       {[0, 1, 2].map((row) => (
         <div key={row} className="flex items-center border-b border-hairline">
-          <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-3">
+            <Skeleton className="h-1.5 w-1.5 rounded-full" />
             <Skeleton className="h-2 max-w-48 flex-1" />
             <Skeleton className={`h-2 ${COL.docs}`} />
             <Skeleton className={`h-2 ${COL.chunks}`} />
@@ -79,6 +85,24 @@ function LoadingRows() {
 }
 
 /**
+ * Health a collection's own counts can honestly support.
+ *
+ * There is no status column on a collection, so this is derived rather than
+ * invented: documents that produced no chunks indexed nothing, which is the
+ * failure a user needs to see from the list.
+ */
+function health(stats: CollectionStats | undefined): {
+  tone: "pos" | "warn" | "neutral";
+  label: string;
+} {
+  const docs = stats?.document_count ?? 0;
+  const chunks = stats?.chunk_count ?? 0;
+  if (docs === 0) return { tone: "neutral", label: "Empty" };
+  if (chunks === 0) return { tone: "warn", label: "No chunks indexed" };
+  return { tone: "pos", label: "Ready" };
+}
+
+/**
  * One row per collection.
  *
  * Previously one 190px card each, carrying a `COLLECTION` eyebrow above every
@@ -90,6 +114,7 @@ function LoadingRows() {
 export function CollectionsList({
   collections,
   statsById,
+  pipelineNameById,
   onDeleteRequest,
   onCreateRequest,
   loading = false,
@@ -117,15 +142,17 @@ export function CollectionsList({
   }
 
   return (
-    <>
+    <div className="border-b border-hairline bg-canvas-raised">
       <ColumnHeader />
       {collections.map((collection) => {
         const stats = statsById[collection.id];
         const description = collection.description?.trim();
+        const state = health(stats);
         return (
           <DataRow
             key={collection.id}
             href={`/collections/${collection.id}`}
+            leading={<StatusDot tone={state.tone} />}
             title={collection.name}
             /* Rendered only when present — an absent optional field gets no
                placeholder standing in for it, so rows without a description stay
@@ -145,24 +172,28 @@ export function CollectionsList({
                   formatLatency(stats.average_latency_ms)
                 )}
               </span>,
-              <span
+              <Tooltip
                 key="updated"
-                className={`font-mono tabular-nums text-meta ${COL.updated}`}
-                title={parseApiDate(collection.updated_at)?.toLocaleString()}
+                content={parseApiDate(collection.updated_at)?.toLocaleString() ?? ""}
+                triggerClassName={`justify-end ${COL.updated}`}
               >
-                {formatTimeAgoCompact(collection.updated_at)}
-              </span>,
-              <span
+                <span className="font-mono tabular-nums text-meta">
+                  {formatTimeAgoCompact(collection.updated_at)}
+                </span>
+              </Tooltip>,
+              <Tooltip
                 key="queried"
-                className={`font-mono tabular-nums text-meta ${COL.queried}`}
-                title={
+                content={
                   stats?.last_used_at
-                    ? parseApiDate(stats.last_used_at)?.toLocaleString()
+                    ? (parseApiDate(stats.last_used_at)?.toLocaleString() ?? "")
                     : "Never queried"
                 }
+                triggerClassName={`justify-end ${COL.queried}`}
               >
-                {stats?.last_used_at ? formatTimeAgoCompact(stats.last_used_at) : "—"}
-              </span>,
+                <span className="font-mono tabular-nums text-meta">
+                  {stats?.last_used_at ? formatTimeAgoCompact(stats.last_used_at) : "—"}
+                </span>
+              </Tooltip>,
             ]}
             actions={
               <>
@@ -188,6 +219,6 @@ export function CollectionsList({
           />
         );
       })}
-    </>
+    </div>
   );
 }

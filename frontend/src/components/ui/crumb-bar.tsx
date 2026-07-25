@@ -37,7 +37,7 @@ export function CrumbBar({ crumbs, state, actions, className }: CrumbBarProps) {
   return (
     <div
       className={cn(
-        "flex h-[34px] shrink-0 items-center gap-2 border-b border-hairline px-3",
+        "flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3",
         className,
       )}
     >
