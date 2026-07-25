@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect, useRef } from "react";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -13,6 +14,13 @@ export type TabItem<T extends string = string> = {
   label: string;
   /** Rendered before the label; decorative, so the label carries the name. */
   icon?: ReactNode;
+  /** The tab exists but cannot be selected in the current state. */
+  disabled?: boolean;
+  /**
+   * Why it cannot be selected, shown as a `Tooltip` on the tab. Without it a
+   * disabled tab is a dead control the user has to guess at.
+   */
+  disabledReason?: string;
 };
 
 type TabListProps<T extends string> = {
@@ -34,6 +42,11 @@ type TabListProps<T extends string> = {
  * Shared tab strip: instrument-styled `role="tablist"` buttons. Panels stay
  * with the caller — render the active panel with `role="tabpanel"` and
  * `aria-labelledby={tabId(id)}`.
+ *
+ * A tab the current state can't offer carries `aria-disabled` rather than the
+ * `disabled` attribute, so it stays focusable and its `disabledReason` tooltip
+ * is reachable by keyboard — a `disabled` button can't take focus, which leaves
+ * a keyboard user with a dead tab and no way to read why.
  */
 export function TabList<T extends string>({
   tabs,
@@ -43,6 +56,7 @@ export function TabList<T extends string>({
   wrap = false,
   className,
 }: TabListProps<T>) {
+  const itemClass = wrap ? "shrink-0" : "min-w-0 flex-1 truncate";
   return (
     <div
       role="tablist"
@@ -55,22 +69,29 @@ export function TabList<T extends string>({
     >
       {tabs.map((tab) => {
         const selected = tab.id === active;
-        return (
+        const reason = tab.disabled ? tab.disabledReason : undefined;
+        const button = (
           <button
             key={tab.id}
             id={tabId(tab.id)}
             role="tab"
             type="button"
             aria-selected={selected}
+            aria-disabled={tab.disabled || undefined}
             tabIndex={selected ? 0 : -1}
-            onClick={() => onSelect(tab.id)}
+            onClick={() => {
+              if (!tab.disabled) onSelect(tab.id);
+            }}
             onKeyDown={(event) => {
               if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
               event.preventDefault();
-              const index = tabs.findIndex((item) => item.id === active);
+              // Indexed from the tab that took the key, not from `active`: a
+              // focused disabled tab is not the selected one, and arrowing on
+              // from it must still step by one.
+              const index = tabs.findIndex((item) => item.id === tab.id);
               const offset = event.key === "ArrowRight" ? 1 : -1;
               const next = tabs[(index + offset + tabs.length) % tabs.length];
-              onSelect(next.id);
+              if (!next.disabled) onSelect(next.id);
               document.getElementById(tabId(next.id))?.focus();
             }}
             className={cn(
@@ -78,9 +99,13 @@ export function TabList<T extends string>({
               // sidebar width — flex items otherwise refuse to shrink below
               // their label and the selected pill escapes the container.
               "rounded-full px-3 py-1.5 text-instrument font-medium transition-colors",
-              wrap ? "shrink-0" : "min-w-0 flex-1 truncate",
+              reason ? "w-full truncate" : itemClass,
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-              selected ? "bg-surface-strong text-primary" : "text-muted hover:text-body",
+              tab.disabled
+                ? "cursor-not-allowed text-faint"
+                : selected
+                  ? "bg-surface-strong text-primary"
+                  : "text-muted hover:text-body",
             )}
           >
             {tab.icon ? (
@@ -92,6 +117,16 @@ export function TabList<T extends string>({
               tab.label
             )}
           </button>
+        );
+
+        // The tooltip's trigger takes the flex role so the strip's geometry is
+        // the same whether or not a tab explains itself.
+        return reason ? (
+          <Tooltip key={tab.id} content={reason} side="bottom" triggerClassName={itemClass}>
+            {button}
+          </Tooltip>
+        ) : (
+          button
         );
       })}
     </div>

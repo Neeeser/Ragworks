@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
-import { Tooltip } from "@/components/ui/tooltip";
+import { TabList } from "@/components/ui/tabs";
 import { deleteIndex } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAppConfig } from "@/providers/config-provider";
@@ -17,6 +17,7 @@ import { CreateIndexForm } from "./CreateIndexForm";
 import { IndexDetailsPanel } from "./IndexDetailsPanel";
 import { IndexListPanel } from "./IndexListPanel";
 
+import type { TabItem } from "@/components/ui/tabs";
 import type {
   BackendInfo,
   CatalogModel,
@@ -80,6 +81,16 @@ export function IndexManagerModal({
   const sortedIndexes = sortIndexesByName(
     indexes.filter((index) => index.backend === activeBackend),
   );
+  const backendTabs: Array<TabItem<IndexBackend>> = backends.map((info) => ({
+    id: info.backend,
+    label: info.backend === "pgvector" ? "pgvector" : "Pinecone",
+    disabled: !(info.available && info.configured),
+    disabledReason: !info.available
+      ? "Unavailable on this deployment."
+      : info.configured
+        ? undefined
+        : "API key required — add it in Settings.",
+  }));
   const selectedIndex = sortedIndexes.find((index) => index.name === selectedName) ?? null;
   const activeBackendInfo = backends.find((info) => info.backend === activeBackend) ?? null;
 
@@ -149,49 +160,20 @@ export function IndexManagerModal({
             </div>
           </div>
 
-          <div
-            role="tablist"
-            aria-label="Vector store backend"
-            className="m-3 flex items-center gap-1 self-start rounded-full border border-hairline bg-surface p-1"
-          >
-            {backends.map((info) => {
-              const usable = info.available && info.configured;
-              const isActive = info.backend === activeBackend;
-              return (
-                <Tooltip
-                  key={info.backend}
-                  content={
-                    usable
-                      ? ""
-                      : !info.available
-                        ? "Unavailable on this deployment."
-                        : "API key required — add it in Settings."
-                  }
-                  side="bottom"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    disabled={!usable}
-                    onClick={() => {
-                      setActiveBackend(info.backend);
-                      setSelectedName(null);
-                      const hasIndexes = indexes.some((index) => index.backend === info.backend);
-                      setViewMode(hasIndexes ? "details" : "create");
-                    }}
-                    className={`rounded-full px-3 py-1.5 text-instrument font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-                      isActive
-                        ? "bg-surface-strong text-primary"
-                        : "text-muted hover:text-body disabled:cursor-not-allowed disabled:opacity-40"
-                    }`}
-                  >
-                    {info.backend === "pgvector" ? "pgvector" : "Pinecone"}
-                  </button>
-                </Tooltip>
+          <TabList<IndexBackend>
+            tabs={backendTabs}
+            active={activeBackend}
+            onSelect={(backend) => {
+              setActiveBackend(backend);
+              setSelectedName(null);
+              setViewMode(
+                indexes.some((index) => index.backend === backend) ? "details" : "create",
               );
-            })}
-          </div>
+            }}
+            label="Vector store backend"
+            wrap
+            className="m-3 self-start"
+          />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             {localError ? (

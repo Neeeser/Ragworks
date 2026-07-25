@@ -1,7 +1,6 @@
 "use client";
 
 import { TabList } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 
 import type { TraceStage } from "@/components/traces/trace-graph";
 import type { TabItem } from "@/components/ui/tabs";
@@ -21,12 +20,11 @@ const STAGE_TABS: Array<TabItem<TraceStage>> = [
   { id: "retrieval", label: "Retrieval" },
 ];
 
+type ScopeTab = "focused" | "full";
+
 /** Floating chrome shares one shape: a pill group lifted off the canvas. */
 const GROUP_CLASS =
   "rounded-full border border-hairline bg-canvas-raised shadow-elevation-2 p-1 gap-1";
-
-const PILL_CLASS =
-  "rounded-full px-3 py-1 text-instrument font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
  * The graph pane's floating controls: which band of an end-to-end trace is on
@@ -43,6 +41,16 @@ export function TraceGraphToolbar({
   showFocusedPath,
   onShowFocusedPath,
 }: TraceGraphToolbarProps) {
+  const scopeTabs: Array<TabItem<ScopeTab>> = [
+    {
+      id: "focused",
+      label: "Focused path",
+      disabled: !focused,
+      disabledReason: focused ? undefined : "Focus a result to dim the canvas to its path.",
+    },
+    { id: "full", label: "Full graph" },
+  ];
+
   return (
     <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
       {combined ? (
@@ -55,31 +63,14 @@ export function TraceGraphToolbar({
           className={GROUP_CLASS}
         />
       ) : null}
-      <div className={cn("flex items-center", GROUP_CLASS)}>
-        <button
-          type="button"
-          aria-pressed={showFocusedPath && focused}
-          onClick={() => onShowFocusedPath(true)}
-          disabled={!focused}
-          className={cn(
-            PILL_CLASS,
-            showFocusedPath && focused ? "bg-surface-strong text-primary" : "text-muted",
-          )}
-        >
-          Focused path
-        </button>
-        <button
-          type="button"
-          aria-pressed={!showFocusedPath}
-          onClick={() => onShowFocusedPath(false)}
-          className={cn(
-            PILL_CLASS,
-            !showFocusedPath ? "bg-surface-strong text-primary" : "text-muted",
-          )}
-        >
-          Full graph
-        </button>
-      </div>
+      <TabList<ScopeTab>
+        tabs={scopeTabs}
+        active={showFocusedPath && focused ? "focused" : "full"}
+        onSelect={(id) => onShowFocusedPath(id === "focused")}
+        label="Graph scope"
+        wrap
+        className={GROUP_CLASS}
+      />
     </div>
   );
 }
