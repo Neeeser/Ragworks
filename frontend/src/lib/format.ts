@@ -79,7 +79,8 @@ export const formatPricePerMillion = (value?: number | string | null): string | 
 
 export const formatLatency = (latency?: number | null): string => {
   if (!latency || Number.isNaN(latency)) {
-    return "n/a";
+    // Em-dash, not "n/a": absent data reads as absent rather than as a value.
+    return "—";
   }
   return `${Math.round(latency)} ms`;
 };

@@ -107,6 +107,8 @@ In this order — the first three do most of the work and are the ones skipped:
 | Shrinking type to look dense | Dense is "no wasted space", not "small" — it reads as zoomed-out |
 | A hand-rolled list header with a guessed spacer | Drifts from its rows; use `DataRowHeader` |
 | Dropping columns when a card becomes a row | Re-form the information, don't lose it |
+| An icon-only button with no hover tooltip | The user has to click it to find out what it does |
+| An icon button going where its row already goes | Duplicate target; delete the button |
 | A `title="…"` attribute for a tooltip | Native tooltips can't be themed and ignore the motion system — use `Tooltip` |
 | A row list directly on the canvas | Reads as loose text; give the list a `bg-canvas-raised` surface (`console.md` §3) |
 

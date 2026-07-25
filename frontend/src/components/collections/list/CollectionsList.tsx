@@ -197,23 +197,31 @@ export function CollectionsList({
             ]}
             actions={
               <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Browse files in ${collection.name}`}
-                  onClick={() => router.push(`/collections/${collection.id}/files`)}
-                >
-                  <Files className="h-3.5 w-3.5" aria-hidden />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Delete ${collection.name}`}
-                  className="hover:text-data-neg"
-                  onClick={() => onDeleteRequest(collection)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </Button>
+                {/* Icon-only, so each carries a hover tooltip as well as an
+                    accessible name — a user must never have to click an icon to
+                    learn what it does. The row itself opens the overview, so this
+                    button's separate destination has to be stated. */}
+                <Tooltip content="Browse files">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Browse files in ${collection.name}`}
+                    onClick={() => router.push(`/collections/${collection.id}/files`)}
+                  >
+                    <Files className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+                <Tooltip content="Delete collection">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete ${collection.name}`}
+                    className="hover:text-data-neg"
+                    onClick={() => onDeleteRequest(collection)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
               </>
             }
           />

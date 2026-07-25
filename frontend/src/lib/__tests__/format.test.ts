@@ -30,7 +30,7 @@ describe("formatLatency", () => {
   });
 
   it("falls back to n/a", () => {
-    expect(formatLatency(null)).toBe("n/a");
+    expect(formatLatency(null)).toBe("—");
   });
 });
 

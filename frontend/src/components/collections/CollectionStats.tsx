@@ -36,7 +36,7 @@ export function buildCollectionStatItems(
     {
       // max(QueryEvent.created_at) — the last time the collection was queried.
       label: "Last queried",
-      value: stats?.last_used_at ? timeAgo(stats.last_used_at) : "n/a",
+      value: stats?.last_used_at ? timeAgo(stats.last_used_at) : "—",
     },
   ];
 }

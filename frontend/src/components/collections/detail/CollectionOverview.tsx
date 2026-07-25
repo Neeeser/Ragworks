@@ -10,11 +10,12 @@ import { RangePicker } from "@/components/collections/detail/overview/RangePicke
 import { StatTrendCard } from "@/components/collections/detail/overview/StatTrendCard";
 import { ToolsPanel } from "@/components/collections/detail/overview/ToolsPanel";
 import { McpAccessCard } from "@/components/mcp/McpAccessCard";
-import { GlassCard } from "@/components/ui/panel";
+import { PageBody } from "@/components/ui/app-shell";
+import { Button } from "@/components/ui/button";
+import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
 import { fetchCollectionStatsHistory } from "@/lib/api";
-import { formatDate } from "@/lib/datetime";
+import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 import { useApiQuery } from "@/lib/use-api-query";
-import { timeAgo } from "@/lib/utils";
 
 import type { Collection, CollectionStats, Pipeline, StatsHistoryRange } from "@/lib/types";
 
@@ -26,15 +27,6 @@ type CollectionOverviewProps = {
   token: string;
   onCollectionUpdated: (collection: Collection) => void;
 };
-
-function MetaEntry({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">{label}</p>
-      <p className="mt-0.5 text-sm text-body">{value}</p>
-    </div>
-  );
-}
 
 export function CollectionOverview({
   collection,
@@ -63,59 +55,54 @@ export function CollectionOverview({
   };
 
   return (
-    <div className="space-y-6">
-      <GlassCard className="rounded-3xl p-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-primary text-balance">
-          {collection.name}
-        </h1>
-        {collection.description?.trim() && (
-          <p className="mt-1 text-sm text-body leading-relaxed text-pretty">
-            {collection.description}
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3 border-t border-hairline pt-4">
-          <MetaEntry label="Created" value={formatDate(collection.created_at)} />
-          <MetaEntry label="Last updated" value={timeAgo(collection.updated_at)} />
-          <MetaEntry
-            label="Last used"
-            value={stats?.last_used_at ? timeAgo(stats.last_used_at) : "Never"}
-          />
-          <button
-            type="button"
-            onClick={copyId}
-            className="ml-auto flex items-center gap-1.5 rounded-full border border-hairline px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-muted transition hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-          >
-            {copied ? (
-              <Check className="h-3 w-3 text-data-pos" aria-hidden />
-            ) : (
-              <Copy className="h-3 w-3" aria-hidden />
-            )}
-            {copied ? "Copied" : "Copy id"}
-          </button>
-        </div>
-      </GlassCard>
+    <PageBody>
+      {/* No title block: the breadcrumb owns the collection's name. The numbers a
+          user opens this page for lead instead. */}
+      <KpiStrip>
+        <KpiCell label="Documents" value={stats?.document_count ?? null} />
+        <KpiCell label="Chunks" value={stats?.chunk_count ?? null} />
+        <KpiCell
+          label="Avg query latency"
+          value={stats?.average_latency_ms == null ? null : formatLatency(stats.average_latency_ms)}
+        />
+        <KpiCell
+          label="Last queried"
+          value={stats?.last_used_at ? formatTimeAgoCompact(stats.last_used_at) : null}
+        />
+        <KpiCell label="Range" value={range.toUpperCase()} />
+      </KpiStrip>
 
-      {history.error && (
-        <GlassCard className="rounded-3xl border border-hairline p-4 text-sm text-body">
-          {history.error}
-        </GlassCard>
-      )}
+      {collection.description?.trim() ? (
+        <p className="max-w-[66ch] border-b border-hairline px-3 py-2 text-ui text-body">
+          {collection.description}
+        </p>
+      ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
         <RangePicker value={range} onChange={setRange} />
+        <Button size="sm" variant="ghost" onClick={copyId}>
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-data-pos" aria-hidden />
+          ) : (
+            <Copy className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {copied ? "Copied" : "Copy id"}
+        </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {history.error && (
+        <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{history.error}</p>
+      )}
+
+      <div className="grid border-b border-hairline md:grid-cols-2 [&>*]:border-hairline [&>*:first-child]:border-r">
         <StatTrendCard
           label="Documents"
-          total={stats?.document_count ?? points[points.length - 1]?.document_total ?? 0}
           buckets={buckets}
           granularity={granularity}
           values={points.map((point) => point.document_total)}
         />
         <StatTrendCard
           label="Chunks"
-          total={stats?.chunk_count ?? points[points.length - 1]?.chunk_total ?? 0}
           buckets={buckets}
           granularity={granularity}
           values={points.map((point) => point.chunk_total)}
@@ -142,6 +129,6 @@ export function CollectionOverview({
       />
 
       <McpAccessCard collection={collection} token={token} />
-    </div>
+    </PageBody>
   );
 }

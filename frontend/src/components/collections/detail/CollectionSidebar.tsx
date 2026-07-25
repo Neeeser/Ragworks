@@ -1,27 +1,20 @@
 "use client";
 
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  Files,
-  Gauge,
-  ScatterChart,
-  Search,
-  ShieldAlert,
-} from "lucide-react";
+import { ArrowUpRight, Files, Gauge, ScatterChart, Search, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { GlassCard } from "@/components/ui/panel";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 import { useAppConfig } from "@/providers/config-provider";
 
 import type { Collection } from "@/lib/types";
 
 const navItemClass =
-  "flex w-full items-center gap-3 rounded-2xl border px-4 py-2.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
-const navItemIdleClass = "border-transparent text-body hover:bg-surface hover:text-primary";
-const navItemActiveClass = "border-accent-violet/40 bg-accent-violet/10 text-primary";
+  "flex w-full items-center gap-2 rounded-control px-2 py-2 text-ui font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset";
+const navItemIdleClass = "text-body hover:bg-surface hover:text-primary";
+const navItemActiveClass =
+  "bg-accent-violet/15 text-primary ring-1 ring-inset ring-accent-violet/30";
 
 type NavItem = {
   href: string;
@@ -56,23 +49,10 @@ export function CollectionSidebar({ collection }: CollectionSidebarProps) {
   ];
 
   return (
-    <GlassCard className="flex flex-col rounded-3xl border border-hairline p-5">
-      <Link
-        href="/collections"
-        className="flex items-center gap-2 text-sm text-muted transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas rounded-lg"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Collections
-      </Link>
-
-      <div className="mt-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Collection</p>
-        <h2 className="mt-1 truncate text-lg font-semibold tracking-tight text-primary">
-          {collection.name}
-        </h2>
-      </div>
-
-      <nav aria-label="Collection" className="mt-6 space-y-1">
+    /* A contextual rail, not a floating card: the collection's sections are
+       navigation, and the breadcrumb above already carries its identity. */
+    <div className="flex w-48 shrink-0 flex-col border-r border-hairline bg-surface p-2">
+      <nav aria-label="Collection" className="space-y-0.5">
         {navItems.map((item) => {
           const isActive = item.matchPrefix
             ? pathname.startsWith(item.href)
@@ -86,7 +66,7 @@ export function CollectionSidebar({ collection }: CollectionSidebarProps) {
               className={cn(navItemClass, isActive ? navItemActiveClass : navItemIdleClass)}
             >
               <Icon
-                className={cn("h-4 w-4", isActive ? "text-accent-violet" : "text-muted")}
+                className={cn("h-3.5 w-3.5", isActive ? "text-accent-violet" : "text-muted")}
                 aria-hidden
               />
               {item.label}
@@ -95,19 +75,16 @@ export function CollectionSidebar({ collection }: CollectionSidebarProps) {
         })}
       </nav>
 
-      <div className="mt-6 border-t border-hairline pt-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Open in</p>
+      <div className="mt-3 border-t border-hairline pt-3">
+        <InstrumentLabel className="px-2">Open in</InstrumentLabel>
         <Link
           href={`/chat?collections=${encodeURIComponent(collection.id)}`}
-          className={cn(
-            navItemClass,
-            "mt-2 justify-between border-hairline bg-surface text-body hover:border-strong hover:text-primary",
-          )}
+          className={cn(navItemClass, navItemIdleClass, "mt-1 justify-between")}
         >
           Chat studio
-          <ArrowUpRight className="h-4 w-4 text-muted" aria-hidden />
+          <ArrowUpRight className="h-3.5 w-3.5 text-muted" aria-hidden />
         </Link>
       </div>
-    </GlassCard>
+    </div>
   );
 }
