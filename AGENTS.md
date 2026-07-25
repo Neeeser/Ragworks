@@ -171,8 +171,8 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   public subset unauthenticated; `GET/PATCH /api/admin/config` (admin-gated)
   serve/edit the full catalog. Never introduce file-based runtime config (a
   config.yaml in a volume) — the DB is the config store. **There are no global
-  default models** — shipped model ids rot as providers deprecate them (a hardcoded
-  default once 502'd every first upload). Model choices are always explicit
+  default models** — shipped model ids rot as providers retire them, so a hardcoded
+  default eventually 502s every first upload. Model choices are always explicit
   `(provider connection, model)` pairs; default-pipeline scaffolding raises a clear
   `InvalidInputError` when no defaults exist yet.
 - **Layer 3 — per-user settings** (provider connections, session preferences) —
@@ -199,7 +199,7 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   changes in the same PR.
 - **Chat parameter keys are matched exact-case** (`app/schemas/chat_parameters.py`):
   `ChatParameters` ignores unknown keys and `ProviderPreferences` normalizes only a
-  small alias set — a deliberate narrowing from an old case-insensitive sanitizer.
+  small alias set — deliberately narrow, so mis-cased keys are dropped, not fixed.
   Send canonical snake_case keys.
 - **Planning artifacts stay ignored.** Never force-add or commit `docs/superpowers/`;
   they are disposable working notes, not maintained project documentation.
@@ -292,7 +292,6 @@ classify each block (keep / condense / correct / remove) before touching it, kee
 every rule plus its one-line why, and never move a rule somewhere with a weaker
 loading trigger than the file it's in. While editing, verify that every referenced
 path still exists and that the files don't contradict each other or the
-Makefile/workflows — stale prose loses to mechanical sources, and this file has
-shipped contradictions before (a bump-command summary that disagreed with the
-release process it sat next to). Prune rules when the architecture or enforcement
-that motivated them changes.
+Makefile/workflows — stale prose loses to mechanical sources, and a summary that
+disagrees with the process it sits next to is worse than no summary. Prune rules
+when the architecture or enforcement that motivated them changes.

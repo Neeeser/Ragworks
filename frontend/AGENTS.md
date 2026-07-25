@@ -1,8 +1,8 @@
 # Frontend Engineering Practices
 
-Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). Most
-rules here exist because we found and fixed the opposite in this codebase — don't
-reintroduce them. The core idea throughout: **small, component-driven, well-named
+Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). Each
+rule encodes a failure mode this codebase is prone to — don't reintroduce one. The
+core idea throughout: **small, component-driven, well-named
 files that one person can hold in their head at once.** Repo-wide rules (verify
 gates, the bug-fix regression-test rule, commit/PR conventions) live in the root
 `AGENTS.md` and apply here too.
@@ -66,9 +66,9 @@ at the first store.
 assume `data.inputs`/`data.outputs` exists.** The index store joining the
 ingestion and retrieval bands is `IndexStoreNodeData` (no port arrays) and sits on
 the index read/write edges. Layout/timing helpers that read `data.inputs.length`
-or `data.outputs.length` must tolerate their absence — an unguarded read crashed
-the whole end-to-end trace (the "no ingestion view from an eval" bug), and it's
-reachable on every hybrid document trace since default pipelines draw a store.
+or `data.outputs.length` must tolerate their absence — an unguarded read crashes
+the whole end-to-end trace, and it's reachable on every hybrid document trace
+since default pipelines draw a store.
 
 **File previews are a matcher list, not an if-ladder.** The Files page resolves a
 preview renderer per file through `components/files/lib/preview.ts`: an ordered list
@@ -80,7 +80,7 @@ download, never a faked preview. Preview bytes are fetched authenticated via
 `fetchFileBlob` → object URL (media elements can't send an Authorization header);
 the content component is keyed by node id so it remounts into its loading state.
 Never nest a `<button>` in a tile/row containing the `IngestionBadge` — its retry X
-is itself a button (invalid HTML; shipped as a hydration error once); use a
+is itself a button (invalid HTML that hydrates unpredictably); use a
 `role="button"` div with keyboard activation like `FileGridView`.
 
 ## Adding a feature end-to-end
@@ -118,8 +118,8 @@ the same PR.
 
 - **File size is a design signal.** Components and hooks stay under ~300 lines; 400
   is the hard lint ceiling (tests exempt). A file approaching the limit has more
-  than one responsibility — split it. (We once had a 3,143-line component with 55
-  `useState` calls; never again.)
+  than one responsibility — split it; a giant component becomes a state grab bag
+  nobody can safely edit.
 - **One responsibility per file.** A component renders; a hook owns one state
   domain; a `*-utils.ts` module holds pure functions. If you can't name the file
   after its single job, it has more than one.
@@ -143,10 +143,9 @@ the same PR.
   holds its pre-drag geometry and submits nothing until drop, so per-edge
   signature matching keeps every unmoved edge on its exact routed path; only
   the dragged node's own wires fall back to the native step path that follows
-  the cursor. Suppressing all routes during drag (the old rule) flipped the
-  whole graph at grab; publishing mid-drag routes flips the wire on frames
-  where the cursor pauses (the original drag-flash bug). Both stay fixed only
-  if no route is ever computed against mid-drag geometry.
+  the cursor. Suppressing all routes during drag flips the whole graph at grab;
+  publishing mid-drag routes flips the wire on frames where the cursor pauses.
+  Both stay fixed only if no route is ever computed against mid-drag geometry.
 - **A route's committed shape must equal the native drag fallback wherever no
   obstacle forces a detour.** `edge-route-refinement.ts` canonicalizes every
   monotone, collision-free route to one midpoint right-angle jog — the same
@@ -186,23 +185,23 @@ the same PR.
   provider rotates the token every 12 minutes, re-running every data effect
   keyed on it — a reload must preserve the user's selection (re-find by id, not
   reset to `[0]`), return previous identities for unchanged content, and not
-  flip `loading`. A fresh `nodeSpecs` identity once re-fired the canvas-seeding
-  effect and silently wiped 12 minutes of unsaved pipeline edits.
+  flip `loading`. A fresh `nodeSpecs` identity re-fires the canvas-seeding
+  effect and silently wipes unsaved pipeline edits.
 - **Worker-backed providers own their full teardown.** On unmount, terminate the
   worker, cancel in-flight and pending work, and make already-queued microtasks
   no-op so tests and route transitions cannot retain stale background work.
 - **When replacing an effect, enumerate every ordering it handled.** A reactive
   effect re-fires when async data arrives; a click handler runs once — converting
   one to the other silently drops the "data resolved after the interaction" path
-  (we shipped a data-loss bug exactly this way). For seed/sync logic, prefer a
+  — a data-loss bug. For seed/sync logic, prefer a
   render-time state adjustment guarded so it fires only when the target is still
   empty _and_ the seed is non-empty (the second guard prevents an infinite
   setState loop).
 - **`overflow-hidden` on a flex-column child needs `shrink-0`.** `overflow: hidden`
   zeroes the item's automatic minimum size, so inside a scrolling flex column the
   panel silently collapses to its borders once a long sibling overflows the column —
-  data-dependent, so it passes every test and short-list manual check (the Provider
-  connections panel vanished only for accounts with many login sessions). Deliberate
+  data-dependent, so it passes every test and short-list manual check and only
+  appears for users with enough rows. Deliberate
   full-height panes (`min-h-0 flex-1`) are the only children allowed to shrink.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
@@ -212,9 +211,8 @@ the same PR.
 
 - **Second copy = extract.** The moment you paste a function, class-string,
   constant, or JSX block into a second file, extract it to the shared layer it
-  belongs to (`lib/`, `components/ui/`, or the feature's `*-utils.ts`). We've
-  removed a 62-line function duplicated verbatim and an input class string copied
-  29 times.
+  belongs to (`lib/`, `components/ui/`, or the feature's `*-utils.ts`) — copies
+  multiply and drift until one of them is a bug.
 - **Derive, don't duplicate types.** When one type is a subset/variant of another,
   derive it (`Extract`/`Omit`/`Pick`) instead of maintaining a parallel interface
   that will drift.
@@ -232,8 +230,8 @@ the same PR.
 ## TypeScript
 
 - **`npm run typecheck` must exit 0 before every commit** (first stage of the
-  gate). This codebase once accumulated 227 unnoticed errors, one of them a shipped
-  runtime crash.
+  gate). Unchecked type errors accumulate silently, and some of them are runtime
+  crashes.
 - **Never suppress:** no `any`, no `@ts-ignore`, no `@ts-expect-error` in source.
   Fix the type. An `as` cast is a last resort for invariants the type system can't
   express — keep it local and comment why.
@@ -257,14 +255,13 @@ the same PR.
 - **Errors are typed.** `apiFetch` throws `ApiError { status, detail }`; use
   `isUnauthorized(err)` for 401s and `getErrorMessage(err, fallback)` to display
   messages. Never write the `err instanceof Error ? err.message : "…"` ternary
-  inline — it was copy-pasted 46 times before we centralized it.
+  inline — it proliferates by copy-paste.
 - **`"use client"` belongs on components/hooks only** — never on plain `lib/`
   modules; it forecloses server-side use for no benefit.
 - **A URL the _user_ must reach is built from `API_BASE_URL`, not the page
   origin.** The two are the same only in Docker (same-origin `/api/*` proxy); in
   dev the frontend and backend are different ports, so showing
-  `window.location.origin` hands the user a URL nothing answers on — exactly the
-  bug the MCP endpoint display shipped with until it was seen in a dev sandbox.
+  `window.location.origin` hands the user a URL nothing answers on.
   `mcpEndpointUrl` takes both and prefers the API base. Read the browser origin
   through `useOrigin()` (`src/lib/use-origin.ts`), which gives React a server
   snapshot instead of a state-plus-effect hydration dance.
@@ -280,10 +277,10 @@ the same PR.
 - **Use `useApiQuery(fn, deps)`** (`src/lib/use-api-query.ts`) for load-on-mount /
   reload-on-change data. It owns the loading/error/cancellation lifecycle. Don't
   hand-roll the `useEffect` + `cancelled` flag + `setLoading/setError/setData`
-  dance — it existed 18 times, and the copies that forgot the guard were race bugs.
+  dance — hand-rolled copies drift, and the ones that forget the guard are race bugs.
 - **Never swallow a fetch error.** Every failure surfaces to the user through the
   component's error channel. A `.catch` that only flips a boolean, or a
-  `try/finally` with no `catch`, is a bug we've had to fix — twice.
+  `try/finally` with no `catch`, silently hides the failure from the user.
 - **Public runtime config comes from `useAppConfig()`**
   (`src/providers/config-provider.tsx`), never a one-off `fetchPublicConfig()` —
   the provider fetches once and keeps `DEFAULT_PUBLIC_CONFIG` (permissive) as the
@@ -295,8 +292,8 @@ the same PR.
 ## UI primitives — use them, don't re-roll them
 
 - **Every overlay is `ModalOverlay`** (`components/ui/modal-overlay.tsx`). Never
-  hand-roll a `fixed inset-0 z-50` div — we had five, each with different
-  Escape/backdrop/focus behavior, half without `role="dialog"`. ModalOverlay owns
+  hand-roll a `fixed inset-0 z-50` div — hand-rolled overlays diverge on
+  Escape/backdrop/focus behavior and drop `role="dialog"`. ModalOverlay owns
   Escape-to-close, backdrop click, focus management, Tab containment, scroll lock,
   and ARIA wiring; dialogs pass `labelledBy`. It portals to `document.body`: an
   ancestor's transform creates a stacking context, and a non-portaled overlay's
@@ -362,7 +359,7 @@ the same PR.
 **No `console.log`/`console.debug` in committed code.** `console.warn`/`console.error`
 only, for genuinely exceptional situations. Production builds strip the rest and
 lint forbids them — but don't rely on the safety net. Never write a `useEffect`
-whose only job is logging (we shipped one that re-ran on every streamed token).
+whose only job is logging (one keyed on stream state re-runs on every token).
 
 **Request correlation and error reporting go through `src/lib/observability/`.**
 `apiFetch` already sends an `X-Request-ID` per call and reads the backend's
@@ -400,14 +397,14 @@ mysteriously, check Node version drift first.
   `@testing-library/user-event` where keyboard/focus semantics matter.
 - **Async state updates resolve inside `await act(async () => …)`.** Resolving a
   promise outside `act` can make an assertion pass vacuously because the re-render
-  never committed — we found a guard test that passed even with the guard deleted
-  for exactly this reason.
+  never committed — a guard test written this way passes even with the guard
+  deleted.
 - **Giant test files mirror giant components.** If a component's test must mock
   every child and capture their props, decompose the component, not the test.
 - **Mocks and fixtures are centralized.** `src/test/mocks.ts` provides
   `mockApi(overrides?)` and `mockAuth(user?)` — never hand-roll a
-  `vi.mock("@/lib/api")` shape in a test file (we deleted 18 divergent copies,
-  several mocking functions with the WRONG argument order, hiding real bugs).
+  `vi.mock("@/lib/api")` shape in a test file — divergent copies drift, and one
+  that mocks the wrong argument order hides real bugs.
   `src/test/fixtures/` provides `make*` builders for every domain object; don't
   re-declare inline literals. When an API signature changes, the factory is the
   single place mocks update.

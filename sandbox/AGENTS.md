@@ -48,8 +48,8 @@ for, and validated flows that rerun for free.
 - **Flows run against a production frontend build** (`next build` +
   `next start`, mode tracked in `.sandbox/frontend.mode`). Dev-mode
   HMR/on-demand compilation emits full-page reloads under Playwright that
-  wipe in-flight client state — a login redirect bounced back to the sign-in
-  page for 30s straight until flows moved off `next dev`. `up` keeps dev
+  wipe in-flight client state — a login redirect can bounce back to the
+  sign-in page indefinitely. `up` keeps dev
   mode for interactive testing; don't point flows at it.
 - **`up`'s dev-mode pages carry Next's own dev-tools indicator in the
   bottom-left corner** — a dark circle with the Next mark, overlapping the
@@ -113,7 +113,7 @@ for setup the harness already did:
    does nothing).
 3. Assert deterministic outcomes; LLM-produced values (counts, wording) are
    asserted by shape (`/\d+ queries/`), never exact value — an exact-count
-   assertion on grader-accepted questions was the first flake.
+   assertion on an LLM-produced number is a guaranteed flake.
 4. Flow specs are typed and linted by the frontend gate (`npm run verify`)
    but excluded from vitest; run them only via `sandbox flows <scenario>`.
 
