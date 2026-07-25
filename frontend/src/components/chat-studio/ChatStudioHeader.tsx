@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -20,7 +19,6 @@ type ChatStudioHeaderProps = {
   currentModelLabel: string;
   streaming: boolean;
   onModelSelect: () => void;
-  onNewChat: () => void;
 };
 
 /**
@@ -40,7 +38,6 @@ export function ChatStudioHeader({
   currentModelLabel,
   streaming,
   onModelSelect,
-  onNewChat,
 }: ChatStudioHeaderProps) {
   const crumbs: Crumb[] = [{ label: "Chat Studio", href: "/chat" }];
   if (sessionTitle) {
@@ -69,14 +66,6 @@ export function ChatStudioHeader({
           </Tooltip>
           {streaming ? <PulseWire label="Streaming response" className="w-16 shrink-0" /> : null}
         </>
-      }
-      actions={
-        // The pane toggles live on the panes themselves (each pane's header
-        // closes it; a closed pane leaves a reopen strip at its edge) — a
-        // control far from what it moves is the one users cannot find.
-        <Button size="sm" variant="secondary" onClick={onNewChat}>
-          New chat
-        </Button>
       }
     />
   );

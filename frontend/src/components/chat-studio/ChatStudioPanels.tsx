@@ -164,6 +164,7 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       onDelete={onDeleteSession}
       deletingSessionId={deletingSessionId}
       onClose={panel.handleHistoryClose}
+      onNewChat={onStartNewChat}
     />
   );
 
@@ -190,7 +191,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       currentModelLabel={currentModelLabel}
       streaming={showStreamingBubble}
       onModelSelect={onTimelineModelSelect}
-      onNewChat={onStartNewChat}
     />
   );
 

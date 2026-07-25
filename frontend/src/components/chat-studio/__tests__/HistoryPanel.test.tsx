@@ -67,6 +67,7 @@ describe("HistoryPanel", () => {
     const onFilterChange = vi.fn();
     const onDelete = vi.fn();
     const onClose = vi.fn();
+    const onNewChat = vi.fn();
 
     render(
       <HistoryPanel
@@ -80,8 +81,12 @@ describe("HistoryPanel", () => {
         onDelete={onDelete}
         deletingSessionId={null}
         onClose={onClose}
+        onNewChat={onNewChat}
       />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    expect(onNewChat).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "2" }));
     expect(screen.getByText("Filters active")).toBeInTheDocument();
@@ -125,6 +130,7 @@ describe("HistoryPanel", () => {
         onDelete={() => undefined}
         deletingSessionId={"session-1"}
         onClose={() => undefined}
+        onNewChat={() => undefined}
       />,
     );
 
@@ -144,6 +150,7 @@ describe("HistoryPanel", () => {
         onDelete={() => undefined}
         deletingSessionId={null}
         onClose={() => undefined}
+        onNewChat={() => undefined}
       />,
     );
 
@@ -179,6 +186,7 @@ describe("HistoryPanel", () => {
         onDelete={() => undefined}
         deletingSessionId={null}
         onClose={() => undefined}
+        onNewChat={() => undefined}
       />,
     );
 
