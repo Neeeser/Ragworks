@@ -4,7 +4,10 @@ import { ConnectionsManager } from "@/components/connections/ConnectionsManager"
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
 import { ApiKeysPanel } from "@/components/mcp/ApiKeysPanel";
 import { LoginSessionsPanel } from "@/components/settings/LoginSessionsPanel";
-import { GlassCard } from "@/components/ui/panel";
+import { PageBody } from "@/components/ui/app-shell";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
 import { useAuth } from "@/providers/auth-provider";
 
 export default function SettingsPage() {
@@ -17,32 +20,31 @@ export default function SettingsPage() {
   const { providerTypes, providerTypesError } = useProviderTypes(authToken, authLoading);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent-violet" aria-hidden />
-          Settings
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary">
-          Provider connections
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          Provider connections for embeddings, chat, reranking, and vector stores.
-        </p>
-      </div>
-
-      <GlassCard className="rounded-3xl p-6">
-        <ConnectionsManager
-          authToken={authToken}
-          connections={connections}
-          providerTypes={providerTypes}
-          loading={connectionsLoading}
-          error={connectionsError ?? providerTypesError}
-          onChanged={reloadConnections}
-        />
-      </GlassCard>
-      <LoginSessionsPanel />
-      <ApiKeysPanel />
-    </div>
+    <>
+      <CrumbBar
+        crumbs={[{ label: "Settings" }]}
+        state={
+          connectionsLoading ? null : (
+            <InstrumentLabel>
+              {`${connections.length} ${connections.length === 1 ? "connection" : "connections"}`}
+            </InstrumentLabel>
+          )
+        }
+      />
+      <PageBody className="flex flex-col gap-3">
+        <Panel className="p-3">
+          <ConnectionsManager
+            authToken={authToken}
+            connections={connections}
+            providerTypes={providerTypes}
+            loading={connectionsLoading}
+            error={connectionsError ?? providerTypesError}
+            onChanged={reloadConnections}
+          />
+        </Panel>
+        <LoginSessionsPanel />
+        <ApiKeysPanel />
+      </PageBody>
+    </>
   );
 }

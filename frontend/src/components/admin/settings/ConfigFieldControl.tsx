@@ -1,10 +1,21 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 
 import type { ConfigFieldRead } from "@/lib/types";
+
+/**
+ * Controls stop well short of the full-bleed card: a text input stretched
+ * across a 1600px viewport is unusable, and the label above it becomes
+ * unreadably far from its value.
+ */
+const FIELD_WIDTH = "max-w-xl";
+
+const CHECKBOX_CLASS =
+  "h-4 w-4 rounded-chip border border-hairline bg-surface accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 function toStringList(value: unknown): string[] {
   return Array.isArray(value)
@@ -49,9 +60,9 @@ export function ConfigFieldControl({
   const locked = field.source === "env-locked";
 
   const labelEnd = locked ? (
-    <span className="rounded-full bg-surface-strong px-2.5 py-1 text-xs font-medium text-muted">
-      Pinned by {field.env_var}
-    </span>
+    // The pin is a fact about where the value comes from, so it wears the
+    // console's pill voice rather than a hand-rolled badge.
+    <Chip dot={false}>{`Pinned by ${field.env_var}`}</Chip>
   ) : field.source === "db" ? (
     <Button size="sm" variant="ghost" loading={resetting} onClick={onReset}>
       Reset to default
@@ -60,10 +71,15 @@ export function ConfigFieldControl({
 
   if (field.kind === "bool") {
     return (
-      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+      <Field
+        label={field.label}
+        hint={field.description}
+        labelEnd={labelEnd}
+        className={FIELD_WIDTH}
+      >
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-strong bg-transparent accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          className={CHECKBOX_CLASS}
           checked={value === true}
           disabled={locked}
           onChange={(event) => onChange(event.target.checked)}
@@ -74,7 +90,12 @@ export function ConfigFieldControl({
 
   if (field.kind === "int") {
     return (
-      <Field label={field.label} hint={numericHint(field)} labelEnd={labelEnd}>
+      <Field
+        label={field.label}
+        hint={numericHint(field)}
+        labelEnd={labelEnd}
+        className={FIELD_WIDTH}
+      >
         <TextInput
           type="number"
           min={field.min_value ?? undefined}
@@ -100,7 +121,12 @@ export function ConfigFieldControl({
   if (field.kind === "select") {
     const options = field.options ?? [];
     return (
-      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+      <Field
+        label={field.label}
+        hint={field.description}
+        labelEnd={labelEnd}
+        className={FIELD_WIDTH}
+      >
         <CustomSelect
           value={typeof value === "string" ? value : ""}
           options={options.map((option) => ({ value: option.value, label: option.label }))}
@@ -116,15 +142,20 @@ export function ConfigFieldControl({
     const options = field.options ?? [];
     const selected = new Set(toStringList(value));
     return (
-      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+      <Field
+        label={field.label}
+        hint={field.description}
+        labelEnd={labelEnd}
+        className={FIELD_WIDTH}
+      >
         <div role="group" aria-label={field.label} className="space-y-2">
           {options.map((option) => {
             const checked = selected.has(option.value);
             return (
-              <label key={option.value} className="flex items-center gap-2 text-sm text-body">
+              <label key={option.value} className="flex items-center gap-2 text-ui text-body">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-strong bg-transparent accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                  className={CHECKBOX_CLASS}
                   checked={checked}
                   disabled={locked}
                   onChange={(event) => {
@@ -148,7 +179,12 @@ export function ConfigFieldControl({
 
   if (field.kind === "string_list") {
     return (
-      <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+      <Field
+        label={field.label}
+        hint={field.description}
+        labelEnd={labelEnd}
+        className={FIELD_WIDTH}
+      >
         <TextArea
           rows={4}
           value={toStringList(value).join("\n")}
@@ -160,7 +196,7 @@ export function ConfigFieldControl({
   }
 
   return (
-    <Field label={field.label} hint={field.description} labelEnd={labelEnd}>
+    <Field label={field.label} hint={field.description} labelEnd={labelEnd} className={FIELD_WIDTH}>
       <TextInput
         type="text"
         value={typeof value === "string" ? value : ""}

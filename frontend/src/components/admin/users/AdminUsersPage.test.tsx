@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,18 +14,23 @@ const ADMIN_EMAIL = "admin@example.com";
 const MEMBER_EMAIL = "member@example.com";
 
 describe("AdminUsersPage", () => {
-  it("renders fetched users with role badges", async () => {
+  it("renders fetched users with role and access state", async () => {
     api.fetchAdminUsers.mockResolvedValueOnce([
       makeAdminUser({ id: "user-1", email: ADMIN_EMAIL, role: "admin" }),
-      makeAdminUser({ id: "user-2", email: MEMBER_EMAIL, role: "user" }),
+      makeAdminUser({ id: "user-2", email: MEMBER_EMAIL, role: "user", is_active: false }),
     ]);
 
     render(<AdminUsersPage />);
 
     expect((await screen.findAllByText(ADMIN_EMAIL)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(MEMBER_EMAIL).length).toBeGreaterThan(0);
-    expect(screen.getByText("admin", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText("user", { selector: "span" })).toBeInTheDocument();
+    // Scoped to the list: "Admin" also names the breadcrumb and a section tab.
+    const list = screen.getByRole("region", { name: "Users" });
+    expect(within(list).getByText("Admin")).toBeInTheDocument();
+    expect(within(list).getByText("User")).toBeInTheDocument();
+    // Access state is derived from is_active, not invented.
+    expect(within(list).getByText("Active")).toBeInTheDocument();
+    expect(within(list).getByText("Deactivated")).toBeInTheDocument();
   });
 
   it("promotes a user to admin after confirming", async () => {

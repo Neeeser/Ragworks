@@ -3,12 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { AdminNav } from "@/components/admin/AdminNav";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ReactNode } from "react";
 
-/** Client-side gate for admin routes; the API is the real enforcement. */
+/**
+ * Client-side gate for admin routes; the API is the real enforcement.
+ *
+ * Chrome-free on purpose: each admin page renders its own `CrumbBar` and the
+ * shared `AdminTabs` strip, so the page owns the top bar's state and actions.
+ */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -22,10 +26,5 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   if (!user || user.role !== "admin") {
     return null;
   }
-  return (
-    <div className="space-y-6">
-      <AdminNav />
-      {children}
-    </div>
-  );
+  return <>{children}</>;
 }
