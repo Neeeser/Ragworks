@@ -146,14 +146,6 @@ export default function CollectionsPage() {
     }
   };
 
-  const pipelineNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const pipeline of [...ingestionPipelines, ...retrievalPipelines]) {
-      map[pipeline.id] = pipeline.name;
-    }
-    return map;
-  }, [ingestionPipelines, retrievalPipelines]);
-
   const totals = useMemo(() => {
     let documents = 0;
     let chunks = 0;
@@ -197,7 +189,6 @@ export default function CollectionsPage() {
         <CollectionsList
           collections={collections}
           statsById={statsById}
-          pipelineNameById={pipelineNameById}
           loading={loading}
           onDeleteRequest={(collection) => setDeleteTarget(collection)}
           onCreateRequest={() => setWizardOpen(true)}

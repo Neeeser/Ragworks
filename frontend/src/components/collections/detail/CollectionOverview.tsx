@@ -13,6 +13,7 @@ import { McpAccessCard } from "@/components/mcp/McpAccessCard";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
+import { PanelGrid } from "@/components/ui/panel";
 import { fetchCollectionStatsHistory } from "@/lib/api";
 import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -94,7 +95,7 @@ export function CollectionOverview({
         <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{history.error}</p>
       )}
 
-      <div className="grid border-b border-hairline md:grid-cols-2 [&>*]:border-hairline [&>*:first-child]:border-r">
+      <PanelGrid columns={2}>
         <StatTrendCard
           label="Documents"
           buckets={buckets}
@@ -107,7 +108,7 @@ export function CollectionOverview({
           granularity={granularity}
           values={points.map((point) => point.chunk_total)}
         />
-      </div>
+      </PanelGrid>
 
       <LatencyCard points={points} granularity={granularity} />
 

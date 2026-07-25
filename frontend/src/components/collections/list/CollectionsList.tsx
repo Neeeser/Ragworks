@@ -18,7 +18,6 @@ type CollectionsListProps = {
   collections: Collection[];
   statsById: Record<string, CollectionStats | undefined>;
   /** Pipeline id -> name, so a row can name the pipelines it is bound to. */
-  pipelineNameById: Record<string, string>;
   onDeleteRequest: (collection: Collection) => void;
   onCreateRequest: () => void;
   loading?: boolean;
@@ -114,7 +113,6 @@ function health(stats: CollectionStats | undefined): {
 export function CollectionsList({
   collections,
   statsById,
-  pipelineNameById,
   onDeleteRequest,
   onCreateRequest,
   loading = false,

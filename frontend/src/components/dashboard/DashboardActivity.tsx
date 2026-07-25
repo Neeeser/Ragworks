@@ -1,114 +1,217 @@
-import { ArrowRight, MessageSquarePlus } from "lucide-react";
-import Link from "next/link";
+import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PanelGrid } from "@/components/ui/panel";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Tooltip } from "@/components/ui/tooltip";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
 
-import { GlassCard } from "@/components/ui/panel";
-import { cn, timeAgo } from "@/lib/utils";
-
+import type { StatusTone } from "@/components/ui/status-dot";
 import type { ChatSession, Document, DocumentStatus } from "@/lib/types";
 
 type DashboardActivityProps = {
-  recentSessions: ChatSession[];
   recentDocuments: Document[];
+  recentSessions: ChatSession[];
+  /** Names the collection each document row belongs to. */
+  collectionNameById: Map<string, string>;
+  loading?: boolean;
 };
 
-const STATUS_TONE: Record<DocumentStatus, string> = {
-  ready: "text-data-pos",
-  failed: "text-data-neg",
-  processing: "text-data-warn",
-  pending: "text-muted",
+/*
+ * Column widths below are shared by each list's header, its rows and its loading
+ * placeholder — one constant per column, so the numbers line up and data landing
+ * causes no reflow.
+ */
+
+/** Wide enough for a thousands-separated count or a "Jul 24" fallback date. */
+const NUMERIC_COL = "w-16 text-right";
+
+const DOC_COL = {
+  /** Fits the longest status word, PROCESSING, beside its dot. */
+  status: "w-28",
+  chunks: NUMERIC_COL,
+  added: NUMERIC_COL,
+};
+
+const CHAT_COL = {
+  /** Fits a lowercase provider/model id of ~34 characters; longer show on hover. */
+  model: "w-56",
+  updated: NUMERIC_COL,
 };
 
 /**
- * Recent activity: the chat sessions and document ingests the user is most likely
- * to return to. Each row is a link back into the flow that produced it.
+ * A document's ingestion state, in the backend's own vocabulary.
+ *
+ * The word is rendered beside the dot rather than instead of it, so the state is
+ * readable without colour discrimination.
  */
-export function DashboardActivity({ recentSessions, recentDocuments }: DashboardActivityProps) {
+const STATUS_TONE: Record<DocumentStatus, StatusTone> = {
+  ready: "pos",
+  failed: "neg",
+  processing: "warn",
+  pending: "neutral",
+};
+
+function IngestionList({
+  documents,
+  collectionNameById,
+  loading,
+}: {
+  documents: Document[];
+  collectionNameById: Map<string, string>;
+  loading: boolean;
+}) {
   return (
-    <section className="grid gap-6 lg:grid-cols-2">
-      <GlassCard className="rounded-3xl p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-primary">Recent chats</h2>
-          {recentSessions.length > 0 ? (
-            <Link
-              href="/chat"
-              className="flex items-center gap-1.5 rounded-full text-sm text-accent-violet transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-            >
-              Open chat studio
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
-          ) : null}
-        </div>
-
-        <div className="mt-6 space-y-2">
-          {recentSessions.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-hairline px-6 py-10 text-center">
-              <p className="text-body">Ask your collections a question to start a session.</p>
-              <Link
-                href="/chat"
-                className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-5 py-2.5 text-sm font-medium text-primary transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-              >
-                <MessageSquarePlus className="h-4 w-4" aria-hidden />
-                Start a chat
-              </Link>
-            </div>
-          ) : (
-            recentSessions.map((session) => (
-              <Link
-                key={session.id}
-                href={`/chat/${session.id}`}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3 transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-primary">
-                    {session.title || "Untitled session"}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
-                    {session.chat_model}
-                  </p>
-                </div>
-                <span className="shrink-0 text-xs text-meta">{timeAgo(session.updated_at)}</span>
-              </Link>
-            ))
-          )}
-        </div>
-      </GlassCard>
-
-      <GlassCard className="rounded-3xl p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-primary">Recent documents</h2>
-        </div>
-
-        <div className="mt-6 space-y-2">
-          {recentDocuments.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-hairline px-6 py-10 text-center text-body">
-              Uploaded sources land here as they finish processing.
-            </p>
-          ) : (
-            recentDocuments.map((doc) => (
-              <Link
-                key={doc.id}
-                href={`/collections/${doc.collection_id}`}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3 transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-primary">{doc.name}</p>
-                  <p className="mt-0.5 text-xs text-meta">
-                    {doc.num_chunks} chunks · {timeAgo(doc.created_at)}
-                  </p>
-                </div>
-                <span
-                  className={cn(
-                    "shrink-0 font-mono text-[10px] uppercase tracking-[0.2em]",
-                    STATUS_TONE[doc.status],
-                  )}
+    // A named region per list: this page carries three peer regions, and a
+    // landmark each is how a screen reader user moves between them without
+    // reading every row.
+    <section aria-label="Recent ingestion" className="bg-canvas-raised">
+      <DataRowHeader
+        title="Recent ingestion"
+        columns={[
+          <InstrumentLabel key="status" className={DOC_COL.status}>
+            Status
+          </InstrumentLabel>,
+          <InstrumentLabel key="chunks" className={DOC_COL.chunks}>
+            Chunks
+          </InstrumentLabel>,
+          <InstrumentLabel key="added" className={DOC_COL.added}>
+            Added
+          </InstrumentLabel>,
+        ]}
+      />
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading recent ingestion"
+          hasSubtitle
+          columnWidths={[DOC_COL.status, DOC_COL.chunks, DOC_COL.added]}
+        />
+      ) : documents.length === 0 ? (
+        <p className="p-3 text-ui text-muted">No documents ingested yet.</p>
+      ) : (
+        documents.map((doc) => {
+          const collectionName = collectionNameById.get(doc.collection_id) ?? doc.collection_id;
+          return (
+            <DataRow
+              key={doc.id}
+              href={`/collections/${doc.collection_id}/files`}
+              title={doc.name}
+              /* The list spans every collection, so a bare filename doesn't say
+                 where the document lives. The owning collection is a second line
+                 rather than a column because a name truncated into ~110px reads
+                 as noise beside the status it was crowding. */
+              subtitle={collectionName}
+              columns={[
+                <StatusDot
+                  key="status"
+                  tone={STATUS_TONE[doc.status]}
+                  label={doc.status.toUpperCase()}
+                  className={DOC_COL.status}
+                />,
+                <span key="chunks" className={`font-mono tabular-nums ${DOC_COL.chunks}`}>
+                  {doc.num_chunks.toLocaleString()}
+                </span>,
+                <Tooltip
+                  key="added"
+                  content={parseApiDate(doc.created_at)?.toLocaleString() ?? ""}
+                  triggerClassName={`justify-end ${DOC_COL.added}`}
                 >
-                  {doc.status}
-                </span>
-              </Link>
-            ))
-          )}
-        </div>
-      </GlassCard>
+                  <span className="font-mono tabular-nums text-meta">
+                    {formatTimeAgoCompact(doc.created_at)}
+                  </span>
+                </Tooltip>,
+              ]}
+            />
+          );
+        })
+      )}
     </section>
+  );
+}
+
+function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boolean }) {
+  return (
+    <section aria-label="Recent chats" className="bg-canvas-raised">
+      <DataRowHeader
+        title="Recent chats"
+        columns={[
+          <InstrumentLabel key="model" className={CHAT_COL.model}>
+            Model
+          </InstrumentLabel>,
+          <InstrumentLabel key="updated" className={CHAT_COL.updated}>
+            Updated
+          </InstrumentLabel>,
+        ]}
+      />
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading recent chats"
+          columnWidths={[CHAT_COL.model, CHAT_COL.updated]}
+        />
+      ) : sessions.length === 0 ? (
+        <p className="p-3 text-ui text-muted">No chat sessions yet.</p>
+      ) : (
+        sessions.map((session) => (
+          <DataRow
+            key={session.id}
+            href={`/chat/${session.id}`}
+            title={session.title || "Untitled session"}
+            columns={[
+              // Verbatim, not a Chip: a model id is a case-sensitive identifier
+              // (`anthropic/claude-3.5-haiku`), and Chip's uppercase label voice
+              // renders it as a value the API would reject. Dropping the chip
+              // also drops a `chat`-toned dot that meant nothing — every row in
+              // this list is a chat — and the tracking that made the id truncate
+              // ~90px earlier than it needed to.
+              <Tooltip key="model" content={session.chat_model} triggerClassName={CHAT_COL.model}>
+                <span className="truncate font-mono text-instrument text-muted">
+                  {session.chat_model}
+                </span>
+              </Tooltip>,
+              <Tooltip
+                key="updated"
+                content={parseApiDate(session.updated_at)?.toLocaleString() ?? ""}
+                triggerClassName={`justify-end ${CHAT_COL.updated}`}
+              >
+                <span className="font-mono tabular-nums text-meta">
+                  {formatTimeAgoCompact(session.updated_at)}
+                </span>
+              </Tooltip>,
+            ]}
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
+/**
+ * The two activity lists a user returns to work through: what was ingested, and
+ * what was asked.
+ *
+ * They share a seam rather than sitting in two gapped cards, so they read as one
+ * instrument with two regions. Both were previously `rounded-3xl` cards holding
+ * rows that each carried their own 16px radius and border; every fact those rows
+ * held is now a column, and no row reserves space for a value it doesn't have.
+ */
+export function DashboardActivity({
+  recentDocuments,
+  recentSessions,
+  collectionNameById,
+  loading = false,
+}: DashboardActivityProps) {
+  return (
+    // `flex-1` so the two regions run to the bottom of the viewport. Sized to
+    // their rows instead, the block floated over ~450px of bare canvas with the
+    // seam stopping in mid-air — which reads as the page having failed to load
+    // something rather than as two panes with little in them.
+    <PanelGrid columns={2} className="min-h-0 flex-1">
+      <IngestionList
+        documents={recentDocuments}
+        collectionNameById={collectionNameById}
+        loading={loading}
+      />
+      <ChatList sessions={recentSessions} loading={loading} />
+    </PanelGrid>
   );
 }
