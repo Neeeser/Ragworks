@@ -88,6 +88,15 @@ Adjacent cards are separate elevated objects — `card-surface`, separated by `g
 *Inside* a card, rows separate with `border-hairline` only. Never a card per row, and
 never a bare row list on the canvas.
 
+### `overflow-hidden` cards in a scroll column need `shrink-0`
+
+`overflow: hidden` zeroes a flex item's automatic minimum size, so a plain
+`overflow-hidden` Panel inside a `flex flex-col` PageBody silently collapses to its 2px
+of borders the moment a long sibling overflows the column — the Provider connections
+panel vanished for exactly one user because *their* login-session list was long enough.
+Pair `overflow-hidden` with `shrink-0` on any card in a scrolling column; only
+deliberate full-height panes (`min-h-0 flex-1`) are allowed to shrink.
+
 ### Pane controls attach to their pane
 
 A collapsible pane is closed from its own header and reopened from a slim strip at the

@@ -99,7 +99,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
         </KpiStrip>
 
         {detail.status === "generating" && (
-          <Panel className="overflow-hidden">
+          <Panel className="shrink-0 overflow-hidden">
             <PulseWire label={`Generating ${detail.name}`} className="w-full" />
             <p className="px-3 py-2 font-mono text-ui tabular-nums text-primary">
               {detail.progress_done}/{detail.progress_total}
@@ -114,7 +114,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
         {detail.status === "ready" && <DatasetQueriesTable datasetId={datasetId} />}
 
-        <Panel className="overflow-hidden">
+        <Panel className="shrink-0 overflow-hidden">
           <PanelHeader title="Ingested corpora" />
 
           {collections.length === 0 ? (

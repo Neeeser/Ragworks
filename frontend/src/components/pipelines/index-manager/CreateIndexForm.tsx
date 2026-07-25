@@ -59,7 +59,7 @@ export function CreateIndexForm({
   const isDense = !form.supportsSparse || form.createForm.vector_type !== "sparse";
 
   return (
-    <Panel className="overflow-hidden">
+    <Panel className="shrink-0 overflow-hidden">
       <div className="flex h-8 flex-wrap items-center justify-between gap-2 border-b border-hairline px-3">
         <InstrumentLabel>Create new index</InstrumentLabel>
         <InstrumentLabel>
