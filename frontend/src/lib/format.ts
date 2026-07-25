@@ -5,6 +5,8 @@
 // on the ProviderRoutingCard version, which is the most defensive of the three (it
 // treats blank/whitespace-only strings as unparseable rather than coercing them to 0).
 
+import { parseApiDate } from "@/lib/datetime";
+
 export const formatPricePerMillion = (value?: number | string | null): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -77,7 +79,8 @@ export const formatPricePerMillion = (value?: number | string | null): string | 
 
 export const formatLatency = (latency?: number | null): string => {
   if (!latency || Number.isNaN(latency)) {
-    return "n/a";
+    // Em-dash, not "n/a": absent data reads as absent rather than as a value.
+    return "—";
   }
   return `${Math.round(latency)} ms`;
 };
@@ -96,4 +99,29 @@ export const formatContextLength = (tokens: number): string => {
     return `${(tokens / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`;
   }
   return `${thousands.toLocaleString()}K`;
+};
+
+/**
+ * Compact relative timestamp for a table column: "now", "5m", "3h", "6d", then
+ * an absolute short date beyond a week ("Jul 24").
+ *
+ * A column is the wrong place for prose. `timeAgo` renders "less than a minute
+ * ago", which is ~22 characters for one datum and forces the column wide enough
+ * to unbalance every row beside it; a list wants the shortest form that is still
+ * unambiguous, with the exact value available on hover via `title`.
+ */
+export const formatTimeAgoCompact = (dateLike?: string | Date | null): string => {
+  if (!dateLike) return "—";
+  const date = typeof dateLike === "string" ? parseApiDate(dateLike) : dateLike;
+  if (!date || Number.isNaN(date.getTime())) return "—";
+
+  const seconds = Math.max(0, (Date.now() - date.getTime()) / 1000);
+  if (seconds < 45) return "now";
+  const minutes = seconds / 60;
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${Math.round(hours)}h`;
+  const days = hours / 24;
+  if (days < 7) return `${Math.round(days)}d`;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 };

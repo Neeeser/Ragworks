@@ -13,7 +13,7 @@ import type {
 } from "react";
 
 export const inputClass =
-  "w-full rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-primary outline-none transition placeholder:text-meta focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30";
+  "w-full rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-primary outline-none transition-colors duration-80 ease-standard placeholder:text-meta focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30";
 
 const DESCRIBED_BY = "aria-describedby" as const;
 

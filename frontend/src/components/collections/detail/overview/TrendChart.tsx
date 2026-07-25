@@ -8,8 +8,12 @@ import { cn } from "@/lib/utils";
 export type TrendSeries = {
   id: string;
   label: string;
-  /** Data hue — semantic accent tokens only. */
-  color: "violet" | "cyan";
+  /**
+   * Chart series slot. These are NOT the UI accent tokens: --accent-cyan measures
+   * L 0.797 on the dark canvas, outside the categorical lightness band, so beside
+   * violet it outshines its peer and two equal series stop reading as equal.
+   */
+  color: "series-1" | "series-2";
   /** One value per bucket; null = no samples in it (renders a gap). */
   values: Array<number | null>;
 };
@@ -34,8 +38,8 @@ const PAD_TOP = 8;
 const PAD_BOTTOM = 4;
 
 const COLOR_VAR: Record<TrendSeries["color"], string> = {
-  violet: "var(--accent-violet)",
-  cyan: "var(--accent-cyan)",
+  "series-1": "var(--series-1)",
+  "series-2": "var(--series-2)",
 };
 
 function bucketLabel(iso: string, granularity: "hour" | "day"): string {
@@ -94,16 +98,16 @@ function TrendTooltip({
   const align = leftPct > 70 ? "-100%" : leftPct < 15 ? "0" : "-50%";
   return (
     <div
-      className="pointer-events-none absolute top-0 z-10 rounded-xl border border-hairline bg-canvas-raised px-3 py-2 shadow-elevation-2"
+      className="pointer-events-none absolute top-0 z-10 rounded-panel border border-hairline bg-canvas-raised px-2 py-1 shadow-elevation-2"
       style={{ left: `${leftPct}%`, transform: `translate(${align}, calc(-100% - 6px))` }}
     >
-      <p className="whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
+      <p className="whitespace-nowrap font-mono text-instrument uppercase tracking-[0.16em] text-muted">
         {bucketLabel(bucket, granularity)}
       </p>
       {series.map((entry) => {
         const value = entry.values[index];
         return (
-          <p key={entry.id} className="flex items-center gap-2 whitespace-nowrap text-xs text-body">
+          <p key={entry.id} className="flex items-center gap-2 whitespace-nowrap text-ui text-body">
             <span
               className="inline-block h-2 w-2 rounded-full"
               style={{ background: COLOR_VAR[entry.color] }}
@@ -263,7 +267,7 @@ export function TrendChart({
         )}
       </div>
 
-      <div className="mt-1 flex justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
+      <div className="mt-1 flex justify-between font-mono text-instrument uppercase tracking-[0.16em] text-meta">
         <span>{buckets.length ? bucketLabel(buckets[0], granularity) : ""}</span>
         <span>{buckets.length ? bucketLabel(buckets[buckets.length - 1], granularity) : ""}</span>
       </div>

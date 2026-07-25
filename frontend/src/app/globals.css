@@ -271,11 +271,18 @@
   --radius-panel: 6px;
 
   /* Type — four roles, absolute px so they are immune to the root font-size.
-     A KPI hero value may use text-[20px]; nothing exceeds that in the console. */
-  --text-instrument: 9.5px;
-  --text-ui: 12.5px;
-  --text-num: 13px;
-  --text-head: 14px;
+     A KPI hero value may use text-[22px]; nothing exceeds that in the console.
+
+     These were first set a step smaller (9.5/12.5/13/14). On a real screen that
+     read as zoomed-out rather than dense: 9.5px labels with 0.16em tracking are
+     genuinely hard to read, and the density bought nothing because a list of ten
+     rows still left most of the viewport empty. Dense means "no wasted space",
+     not "small" — so the scale sits at a comfortable reading size and the space
+     is filled with information instead. */
+  --text-instrument: 11px;
+  --text-ui: 14px;
+  --text-num: 15px;
+  --text-head: 17px;
 
   /* Motion easings. Durations are bare Tailwind numerics (duration-80 … -200);
      the doctrine is in the ragworks-ui-design skill: motion follows the
@@ -306,12 +313,12 @@ body {
 }
 
 html {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 @media (max-width: 640px) {
   html {
-    font-size: 12.5px;
+    font-size: 14px;
   }
 }
 

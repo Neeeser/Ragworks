@@ -53,7 +53,10 @@ export function Tooltip({
           "bg-canvas-raised px-2 py-1 text-left text-ui font-medium leading-snug text-body",
           "shadow-elevation-2",
           "opacity-0 transition duration-120 ease-decel group-hover:opacity-100 group-hover:scale-100",
-          "group-focus-within:opacity-100 group-focus-within:scale-100",
+          // :focus-visible, not :focus-within — a mouse click leaves the trigger
+          // focused, which kept the tooltip pinned open until the next click.
+          // Keyboard focus still reveals it; a click no longer strands it.
+          "group-has-[:focus-visible]:scale-100 group-has-[:focus-visible]:opacity-100",
           "origin-center scale-95",
           sideClasses[side],
           className,

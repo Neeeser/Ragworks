@@ -56,14 +56,20 @@ containers say *brochure*, hairline rectangles say *instrument*.
 
 ## 3. Type
 
-Root is **13px** (`html { font-size: 13px }`). Four roles, and that is the whole scale:
+Root is **15px** (`html { font-size: 15px }`). Four roles, and that is the whole scale:
 
 | Token | Utility | Size | Role |
 |---|---|---|---|
-| `--text-instrument` | `text-instrument` | 9.5px | instrument labels (see below) |
-| `--text-ui` | `text-ui` | 12.5px | body, row text, prose |
-| `--text-num` | `text-num` | 13px | inline numerics |
-| `--text-head` | `text-head` | 14px | section + page headings |
+| `--text-instrument` | `text-instrument` | 11px | instrument labels (see below) |
+| `--text-ui` | `text-ui` | 14px | body, row text, prose |
+| `--text-num` | `text-num` | 15px | inline numerics |
+| `--text-head` | `text-head` | 17px | section + page headings |
+
+**Dense means "no wasted space", not "small".** This scale started a step and a half smaller
+(9.5/12.5/13/14, root 13px) and read as *zoomed out* on a real screen: 9.5px labels at 0.16em
+tracking are genuinely hard to read, and the tightness bought nothing, because a ten-row list
+still left most of the viewport empty. Shrinking type does not create density — removing
+padding, nesting, and decoration does. Do not re-tighten this.
 
 Hero numerics (a KPI value) use `text-[20px]`; that is the only place a one-off size is
 allowed, and it never exceeds 20px.
@@ -92,6 +98,9 @@ font-mono text-instrument uppercase tracking-[0.16em] text-muted
 
 For any label that is not a full sentence: field labels, section kickers, column headers,
 stat captions, status text, breadcrumb segments.
+
+Instrument labels are `whitespace-nowrap` by construction — they are short by design, and a
+wrapped one silently makes a column header taller than the rows beneath it.
 
 **Tracking is `0.16em`, not `0.28em`.** The landing page uses `0.28em`–`0.4em` because
 there are three labels on the whole screen and they are doing display work. In a console

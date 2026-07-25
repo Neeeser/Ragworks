@@ -14,13 +14,7 @@ import { describe, expect, it } from "vitest";
 const CSS = readFileSync("src/app/globals.css", "utf8");
 
 /** Every palette selector that must define a full set of series slots. */
-const PALETTES = [
-  "deep-space",
-  "true-black",
-  "graphite",
-  "paper",
-  "high-contrast",
-] as const;
+const PALETTES = ["deep-space", "true-black", "graphite", "paper", "high-contrast"] as const;
 
 function blockFor(selector: string): string {
   // Palettes are written as one rule per palette; grab from the selector to the
@@ -72,8 +66,8 @@ describe("palette token contract", () => {
     expect(CSS).toMatch(/--radius-chip:\s*3px/);
     expect(CSS).toMatch(/--radius-control:\s*4px/);
     expect(CSS).toMatch(/--radius-panel:\s*6px/);
-    expect(CSS).toMatch(/--text-instrument:\s*9\.5px/);
-    expect(CSS).toMatch(/--text-ui:\s*12\.5px/);
+    expect(CSS).toMatch(/--text-instrument:\s*11px/);
+    expect(CSS).toMatch(/--text-ui:\s*14px/);
     expect(CSS).toMatch(/--ease-standard:/);
     expect(CSS).toMatch(/--ease-decel:/);
     expect(CSS).toMatch(/--ease-accel:/);
