@@ -679,6 +679,41 @@ describe("ChatStudio", () => {
 
       expect(api.deleteChatSession).toHaveBeenCalledWith(AUTH_TOKEN, "session-2");
     });
+
+    it("keeps an unsent streaming toggle when the session list refetches for an unrelated reason", async () => {
+      window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
+      setMockParams({ sessionId: "session-1" });
+
+      render(<ChatStudio />);
+      await openRunSettings();
+
+      expect((mockTelemetryPanelProps as { streamingEnabled?: boolean }).streamingEnabled).toBe(
+        true,
+      );
+
+      act(() => {
+        (mockTelemetryPanelProps as { onStreamingToggle: (v: boolean) => void }).onStreamingToggle(
+          false,
+        );
+      });
+      expect((mockTelemetryPanelProps as { streamingEnabled?: boolean }).streamingEnabled).toBe(
+        false,
+      );
+
+      // Toggling a tool collection replaces the `sessions` array (to mirror the
+      // change into the session's tool_collection_ids) without touching
+      // `stream` — this must not resurrect the persisted (not-yet-sent) value.
+      await act(async () => {
+        (
+          mockTelemetryPanelProps as { onToggleToolCollection: (id: string) => void }
+        ).onToggleToolCollection("col-2");
+        await Promise.resolve();
+      });
+
+      expect((mockTelemetryPanelProps as { streamingEnabled?: boolean }).streamingEnabled).toBe(
+        false,
+      );
+    });
   });
 
   describe("history & run settings", () => {

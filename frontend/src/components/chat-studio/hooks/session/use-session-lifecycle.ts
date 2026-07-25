@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/lib/chat-constants";
 import {
@@ -83,6 +83,11 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     newChatDefaultsRef,
     pendingSessionIdsRef,
   } = params;
+
+  // Tracks which session's run settings were last seeded into local state, so
+  // the sync effect below can tell a real session switch apart from an
+  // unrelated `sessions` array refetch.
+  const syncedSessionIdRef = useRef<string | null>(null);
 
   // Keep the URL in sync with the selected session once it is no longer pending.
   useEffect(() => {
@@ -203,11 +208,23 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelId]);
 
+  // Seeds local run-settings state (tool collections, parameters, provider
+  // form, streaming) from the selected session exactly once per real session
+  // switch. `sessions` stays a dependency only so this can wait for the async
+  // session-list load to resolve the target session; a `syncedSessionId` guard
+  // stops it from re-firing on every *unrelated* `sessions` update (a
+  // collection-tool toggle mirrors into `sessions`, the 12-minute auth-token
+  // rotation refetches the list, …) that would otherwise stomp a locally
+  // toggled-but-not-yet-sent setting back to its last-persisted value.
   useEffect(() => {
     if (!selectedSessionId) {
+      syncedSessionIdRef.current = null;
       return;
     }
     if (pendingSessionIdsRef.current.has(selectedSessionId)) {
+      return;
+    }
+    if (syncedSessionIdRef.current === selectedSessionId) {
       return;
     }
     const session = sessions.find((item) => item.id === selectedSessionId);
@@ -218,6 +235,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     setParameterOverrides(session.parameter_overrides ?? {});
     setProviderForm(createProviderFormFromPreferences(session.provider_preferences));
     setStreamingEnabled(session.stream ?? DEFAULT_STREAMING_ENABLED);
+    syncedSessionIdRef.current = selectedSessionId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, sessions]);
 
