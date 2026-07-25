@@ -7,7 +7,6 @@ import { LoginSessionsPanel } from "@/components/settings/LoginSessionsPanel";
 import { PageBody } from "@/components/ui/app-shell";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Panel } from "@/components/ui/panel";
 import { useAuth } from "@/providers/auth-provider";
 
 export default function SettingsPage() {
@@ -32,16 +31,16 @@ export default function SettingsPage() {
         }
       />
       <PageBody className="flex flex-col gap-3">
-        <Panel className="p-3">
-          <ConnectionsManager
-            authToken={authToken}
-            connections={connections}
-            providerTypes={providerTypes}
-            loading={connectionsLoading}
-            error={connectionsError ?? providerTypesError}
-            onChanged={reloadConnections}
-          />
-        </Panel>
+        {/* ConnectionsManager renders its own Panel — wrapping it again nests
+            a card in a card (the two Wave-4 conversions landed simultaneously). */}
+        <ConnectionsManager
+          authToken={authToken}
+          connections={connections}
+          providerTypes={providerTypes}
+          loading={connectionsLoading}
+          error={connectionsError ?? providerTypesError}
+          onChanged={reloadConnections}
+        />
         <LoginSessionsPanel />
         <ApiKeysPanel />
       </PageBody>
