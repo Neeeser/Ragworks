@@ -141,6 +141,14 @@ colocate a single file with its consumer.
   own dev DB rows), never patched with a second version bump — releases migrate
   release-to-release, and stacked steps for shapes no deployment ever ran are
   permanent startup complexity for nothing.
+- **Startup migration only *adds* columns, so deleting a model field leaves a
+  stale `NOT NULL` column that rejects every later insert.** `create_all` +
+  `apply_missing_columns` never drop anything, and the failure is a runtime
+  `NotNullViolation` on write — invisible to the suite, which builds the schema
+  fresh from the current model. After removing a field, drop the column by hand
+  in every database that already ran the old model (a branch-only table) or ship
+  a real drop step (a released one). Dropping `api_keys.all_collections` was
+  exactly this: green tests, 500 on every key created against an existing DB.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion
