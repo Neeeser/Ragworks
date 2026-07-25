@@ -205,10 +205,12 @@ export function GenerateDatasetWizard({
                 }
                 subtitle={`${model.connection_label} · ${model.id}`}
               >
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-instrument tabular-nums">
-                  {contextLabel ? <ModelMetaBadge label="ctx" value={contextLabel} /> : null}
-                  {promptLabel ? <ModelMetaBadge label="in" value={promptLabel} /> : null}
-                  {completionLabel ? <ModelMetaBadge label="out" value={completionLabel} /> : null}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {contextLabel ? <ModelMetaBadge label="Context" value={contextLabel} /> : null}
+                  {promptLabel ? <ModelMetaBadge label="Prompt" value={promptLabel} /> : null}
+                  {completionLabel ? (
+                    <ModelMetaBadge label="Completion" value={completionLabel} />
+                  ) : null}
                 </div>
               </ModelOptionButton>
             );

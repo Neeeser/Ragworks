@@ -70,24 +70,22 @@ export function ModelOptionButton({
 }
 
 interface ModelMetaBadgeProps {
-  /** Short caption (e.g. "ctx", "in", "out"). Omit for a bare value. */
+  /**
+   * Sentence-case caption naming the measure ("Context", "Prompt",
+   * "Completion") — never an abbreviation. Omit for a bare value.
+   */
   label?: string;
   value: ReactNode;
 }
 
 /**
  * One metadata datum in a model row — a `Readout`: sentence-case sans caption
- * plus a mono, tabular value. `font-sans` is forced on the wrapper because
- * callers group these badges inside a `font-mono` row; the value span carries
- * its own `font-mono`, so only the caption is affected.
+ * plus a mono, tabular value. Callers lay a set of these out in a plain flex
+ * row and add no font of their own; the badge owns both voices.
  */
 export function ModelMetaBadge({ label, value }: ModelMetaBadgeProps) {
   if (!label) {
     return <span className="font-mono text-ui tabular-nums text-primary">{value}</span>;
   }
-  return (
-    <Readout label={label} className="font-sans">
-      {value}
-    </Readout>
-  );
+  return <Readout label={label}>{value}</Readout>;
 }
