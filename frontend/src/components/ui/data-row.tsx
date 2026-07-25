@@ -149,6 +149,8 @@ type DataRowSkeletonProps = {
   rows?: number;
   /** Set when the real rows render a `leading` slot, so the name starts level. */
   hasLeading?: boolean;
+  /** Set when the real rows render a `subtitle`, so the row is two lines tall. */
+  hasSubtitle?: boolean;
   /**
    * One width class per metadata column, in the same order and with the SAME
    * classes as the real row's columns — those classes are what make the
@@ -158,6 +160,26 @@ type DataRowSkeletonProps = {
   /** What is loading. Read by screen readers; never shown. */
   label: string;
 };
+
+/**
+ * A line box the height of one `text-ui` line, holding a thin skeleton bar.
+ *
+ * The invisible character is load-bearing: a bar is 8px tall, but the text it
+ * stands in for occupies a 21px line, so without a real line box the placeholder
+ * row is a third of the height of the row that replaces it and every load ends
+ * in a jump. Taking the height from `text-ui` rather than a pixel constant keeps
+ * it correct when the type scale moves.
+ */
+function SkeletonLine({ barClassName, className }: { barClassName: string; className?: string }) {
+  return (
+    <div className={cn("flex items-center text-ui", className)}>
+      <span aria-hidden className="invisible w-0">
+        &nbsp;
+      </span>
+      <Skeleton className={cn("h-2 flex-1", barClassName)} />
+    </div>
+  );
+}
 
 /**
  * `DataRow` geometry with every value replaced by a `Skeleton` bar.
@@ -174,6 +196,7 @@ type DataRowSkeletonProps = {
 export function DataRowSkeleton({
   rows = 3,
   hasLeading = false,
+  hasSubtitle = false,
   columnWidths = [],
   label,
 }: DataRowSkeletonProps) {
@@ -182,8 +205,13 @@ export function DataRowSkeleton({
       {Array.from({ length: rows }, (_, row) => (
         <div key={row} className="flex items-center border-b border-hairline last:border-b-0">
           <div className={cn(CELLS, "py-3")}>
-            {hasLeading ? <Skeleton className="h-1.5 w-1.5 rounded-full" /> : null}
-            <Skeleton className="h-2 max-w-48 flex-1" />
+            {hasLeading ? (
+              <Skeleton className={cn("h-1.5 w-1.5 rounded-full", hasSubtitle && "self-start")} />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <SkeletonLine barClassName="max-w-48" />
+              {hasSubtitle ? <SkeletonLine barClassName="max-w-28" className="mt-0.5" /> : null}
+            </div>
             {columnWidths.map((width, column) => (
               <Skeleton key={`${width}-${column}`} className={cn("h-2", width)} />
             ))}

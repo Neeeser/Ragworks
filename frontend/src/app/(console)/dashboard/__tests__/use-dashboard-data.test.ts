@@ -102,13 +102,39 @@ describe("useDashboardData", () => {
   });
 
   it("surfaces a top-level error when the initial collections fetch fails", async () => {
-    api.fetchCollections.mockRejectedValueOnce(new Error("Load failed"));
+    api.fetchCollections.mockRejectedValueOnce(
+      Object.assign(new Error("Load failed"), { requestId: "req-7" }),
+    );
 
     const { result } = renderHook(() => useDashboardData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.error).toBe("Load failed");
+    expect(result.current.error).toEqual({ message: "Load failed", requestId: "req-7" });
+  });
+
+  it("orders failed ingestions worst-offender first", async () => {
+    api.fetchCollections.mockResolvedValue(collections);
+    api.fetchDocuments.mockImplementation((_token: string, collectionId: string) =>
+      Promise.resolve(
+        collectionId === "col-1"
+          ? [makeDocument({ id: "a", collection_id: "col-1", status: "failed" })]
+          : [
+              makeDocument({ id: "b", collection_id: "col-2", status: "failed" }),
+              makeDocument({ id: "c", collection_id: "col-2", status: "failed" }),
+              makeDocument({ id: "d", collection_id: "col-2", status: "ready" }),
+            ],
+      ),
+    );
+
+    const { result } = renderHook(() => useDashboardData());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.failures).toEqual([
+      { collectionId: "col-2", name: "Two", failed: 2 },
+      { collectionId: "col-1", name: "One", failed: 1 },
+    ]);
   });
 
   it("does nothing when there is no auth token", () => {

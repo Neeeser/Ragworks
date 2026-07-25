@@ -17,6 +17,7 @@ const LOAD_FAILED = "Load failed";
 const CHUNKS_KPI = "Chunks indexed";
 const FIRST_DOC = "onboarding.md";
 const COL_TWO = "col-2";
+const FAILED_REGION = "Failed ingestion";
 
 /** A KPI cell's whole text, so the label and its value are asserted together. */
 const kpi = (label: string) => screen.getByText(label).parentElement?.textContent ?? "";
@@ -99,17 +100,29 @@ describe("DashboardPage", () => {
     );
     render(<DashboardPage />);
 
-    const callout = await waitFor(() => screen.getByRole("region", { name: "Failed ingestion" }));
+    const callout = await waitFor(() => screen.getByRole("region", { name: FAILED_REGION }));
     const row = within(callout).getByText("Contracts").closest("a");
     expect(row).toHaveAttribute("href", "/collections/col-2/files");
-    expect(row).toHaveTextContent("2");
+    expect(row).toHaveTextContent("2 documents did not ingest in Contracts");
+  });
+
+  it("counts a single failure in the singular", async () => {
+    api.fetchDocuments.mockImplementation(async (_token: string, collectionId: string) =>
+      collectionId === COL_TWO
+        ? [makeDocument({ id: "doc-2", collection_id: COL_TWO, status: "failed", num_chunks: 0 })]
+        : [],
+    );
+    render(<DashboardPage />);
+
+    const callout = await waitFor(() => screen.getByRole("region", { name: FAILED_REGION }));
+    expect(callout).toHaveTextContent("1 document did not ingest in Contracts");
   });
 
   it("omits the failure callout entirely when nothing failed", async () => {
     render(<DashboardPage />);
 
     await waitFor(() => expect(screen.getByText(CHUNKS_KPI)).toBeInTheDocument());
-    expect(screen.queryByRole("region", { name: "Failed ingestion" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: FAILED_REGION })).not.toBeInTheDocument();
   });
 
   it("reports invalid provider configs as workspace state in the breadcrumb", async () => {
@@ -180,6 +193,15 @@ describe("DashboardPage", () => {
     await waitFor(() => expect(screen.getByText(LOAD_FAILED)).toBeInTheDocument());
     // Zeroes after a failed load would read as a real, empty workspace.
     expect(screen.queryByText(CHUNKS_KPI)).not.toBeInTheDocument();
+  });
+
+  it("shows the request id beside the error so a user can quote it", async () => {
+    const failure = Object.assign(new Error(LOAD_FAILED), { requestId: "req-42" });
+    api.fetchCollections.mockRejectedValueOnce(failure);
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText(LOAD_FAILED)).toBeInTheDocument());
+    expect(screen.getByText("Request req-42")).toBeInTheDocument();
   });
 
   it("falls back to a generic message when the failure carries no message", async () => {

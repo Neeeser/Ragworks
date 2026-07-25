@@ -84,10 +84,22 @@ export default function DashboardPage() {
 
       <PageBody>
         {error ? (
-          <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{error}</p>
+          <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
+            {error.message}
+            {/* The backend returns a request id on every response, including
+                500s — quoting it is how a user's report becomes traceable. */}
+            {error.requestId ? (
+              <span className="ml-2 font-mono text-instrument text-meta">
+                Request {error.requestId}
+              </span>
+            ) : null}
+          </p>
         ) : emptyWorkspace ? (
           <div className="p-8 text-center">
             <p className="text-ui text-muted">No collections yet.</p>
+            {/* /collections owns the create wizard (it needs the pipeline and
+                node-spec catalogs), so the action goes there rather than this
+                page loading that chain for a workspace that has nothing. */}
             <Button size="sm" className="mt-3" onClick={() => router.push("/collections")}>
               Create collection
             </Button>

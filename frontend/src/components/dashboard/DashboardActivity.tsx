@@ -18,22 +18,25 @@ type DashboardActivityProps = {
   loading?: boolean;
 };
 
-/**
- * Column widths shared by each list's header, rows and loading placeholder, so
- * the numbers line up in a column and data landing causes no reflow.
+/*
+ * Column widths below are shared by each list's header, its rows and its loading
+ * placeholder — one constant per column, so the numbers line up and data landing
+ * causes no reflow.
  */
+
 /** Wide enough for a thousands-separated count or a "Jul 24" fallback date. */
 const NUMERIC_COL = "w-16 text-right";
 
 const DOC_COL = {
-  collection: "w-28",
+  /** Fits the longest status word, PROCESSING, beside its dot. */
   status: "w-28",
   chunks: NUMERIC_COL,
   added: NUMERIC_COL,
 };
 
 const CHAT_COL = {
-  model: "w-40",
+  /** Fits a provider/model id up to ~30 characters; longer ones show on hover. */
+  model: "w-60",
   updated: NUMERIC_COL,
 };
 
@@ -60,15 +63,13 @@ function IngestionList({
   loading: boolean;
 }) {
   return (
-    // A named region per list: three peer lists share this page, and a landmark
-    // each is how a screen reader user moves between them without reading rows.
+    // A named region per list: this page carries three peer regions, and a
+    // landmark each is how a screen reader user moves between them without
+    // reading every row.
     <section aria-label="Recent ingestion" className="bg-canvas-raised">
       <DataRowHeader
         title="Recent ingestion"
         columns={[
-          <InstrumentLabel key="collection" className={DOC_COL.collection}>
-            Collection
-          </InstrumentLabel>,
           <InstrumentLabel key="status" className={DOC_COL.status}>
             Status
           </InstrumentLabel>,
@@ -83,7 +84,8 @@ function IngestionList({
       {loading ? (
         <DataRowSkeleton
           label="Loading recent ingestion"
-          columnWidths={[DOC_COL.collection, DOC_COL.status, DOC_COL.chunks, DOC_COL.added]}
+          hasSubtitle
+          columnWidths={[DOC_COL.status, DOC_COL.chunks, DOC_COL.added]}
         />
       ) : documents.length === 0 ? (
         <p className="p-3 text-ui text-muted">No documents ingested yet.</p>
@@ -95,14 +97,12 @@ function IngestionList({
               key={doc.id}
               href={`/collections/${doc.collection_id}/files`}
               title={doc.name}
+              /* The list spans every collection, so a bare filename doesn't say
+                 where the document lives. The owning collection is a second line
+                 rather than a column because a name truncated into ~110px reads
+                 as noise beside the status it was crowding. */
+              subtitle={collectionName}
               columns={[
-                <Tooltip
-                  key="collection"
-                  content={collectionName}
-                  triggerClassName={DOC_COL.collection}
-                >
-                  <span className="truncate text-ui text-meta">{collectionName}</span>
-                </Tooltip>,
                 <StatusDot
                   key="status"
                   tone={STATUS_TONE[doc.status]}
@@ -185,9 +185,9 @@ function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boo
  * what was asked.
  *
  * They share a seam rather than sitting in two gapped cards, so they read as one
- * instrument with two regions. Both were previously card grids whose rows each
- * carried their own 16px border and rounded fill; the columns here hold the same
- * facts on one line each.
+ * instrument with two regions. Both were previously `rounded-3xl` cards holding
+ * rows that each carried their own 16px radius and border; every fact those rows
+ * held is now a column, and no row reserves space for a value it doesn't have.
  */
 export function DashboardActivity({
   recentDocuments,

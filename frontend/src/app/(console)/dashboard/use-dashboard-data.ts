@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchCollections, fetchDocuments, listChatSessions, listConnections } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
+import { getErrorMessage, getRequestId } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ChatSession, Collection, Document, ProviderConnection } from "@/lib/types";
@@ -31,9 +31,15 @@ export type ConnectionHealth = {
   invalid: number;
 };
 
+/** A failure the user can quote: the message plus the request it came from. */
+export type DashboardError = {
+  message: string;
+  requestId?: string;
+};
+
 type UseDashboardDataResult = {
   loading: boolean;
-  error: string | null;
+  error: DashboardError | null;
   collections: Collection[];
   sessions: ChatSession[];
   stats: DashboardStats;
@@ -64,7 +70,7 @@ export function useDashboardData(): UseDashboardDataResult {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [connections, setConnections] = useState<ProviderConnection[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DashboardError | null>(null);
 
   useEffect(() => {
     const authToken = token ?? "";
@@ -116,7 +122,10 @@ export function useDashboardData(): UseDashboardDataResult {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(getErrorMessage(err, "Unable to load data."));
+          setError({
+            message: getErrorMessage(err, "Unable to load data."),
+            requestId: getRequestId(err),
+          });
         }
       } finally {
         if (!cancelled) {
