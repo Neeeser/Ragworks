@@ -101,6 +101,27 @@ export const formatContextLength = (tokens: number): string => {
   return `${thousands.toLocaleString()}K`;
 };
 
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+
+/**
+ * A byte count in the largest unit that keeps it under four significant
+ * characters, e.g. `512 B`, `2.0 KB`, `15 MB`.
+ *
+ * Shared rather than per-feature because a hand-rolled `/1024` drifts on the
+ * details that matter in a column — which unit it stops at, and how many
+ * fraction digits it keeps — and a size column whose rows disagree on either is
+ * unreadable. It lived in the files feature until the design language named this
+ * module as the one place bytes are formatted.
+ */
+export const formatBytes = (size: number): string => {
+  if (size <= 0) {
+    return "0 B";
+  }
+  const exponent = Math.min(Math.floor(Math.log(size) / Math.log(1024)), BYTE_UNITS.length - 1);
+  const value = size / 1024 ** exponent;
+  return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${BYTE_UNITS[exponent]}`;
+};
+
 /**
  * Compact relative timestamp for a table column: "now", "5m", "3h", "6d", then
  * an absolute short date beyond a week ("Jul 24").

@@ -1,13 +1,22 @@
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 
-/** Semantic states. `neutral` is for "not applicable", never for a real state. */
-export type StatusTone = "pos" | "neg" | "warn" | "neutral";
+/**
+ * Semantic states.
+ *
+ * - `pos`/`neg`/`warn` — a settled outcome
+ * - `active` — work in flight (queued, running, streaming). Cyan is the
+ *   console's live-state colour, and the distinction from `warn` is real: a
+ *   file being ingested is not a file that needs attention.
+ * - `neutral` — "not applicable", never a real state
+ */
+export type StatusTone = "pos" | "neg" | "warn" | "active" | "neutral";
 
 const DOT: Record<StatusTone, string> = {
   pos: "bg-data-pos",
   neg: "bg-data-neg",
   warn: "bg-data-warn",
+  active: "bg-accent-cyan",
   neutral: "bg-stage-neutral",
 };
 
@@ -15,6 +24,7 @@ const TEXT: Record<StatusTone, string> = {
   pos: "text-data-pos",
   neg: "text-data-neg",
   warn: "text-data-warn",
+  active: "text-accent-cyan",
   neutral: "text-meta",
 };
 
