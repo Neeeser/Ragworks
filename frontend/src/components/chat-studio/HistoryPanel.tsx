@@ -207,8 +207,12 @@ const HistoryPanelComponent = ({
               <div
                 key={session.id}
                 className={cn(
+                  // The hover wash sits on the CONTAINER so the delete action
+                  // is inside the highlighted shape — a highlight that stops
+                  // short of the row's own actions reads as a broken box.
                   "group flex items-start gap-1 border-b border-hairline last:border-b-0",
-                  isSelected && "bg-accent-violet/12",
+                  "transition-colors duration-80 ease-standard",
+                  isSelected ? "bg-accent-violet/12" : "hover:bg-surface-strong",
                 )}
               >
                 <button
@@ -217,9 +221,9 @@ const HistoryPanelComponent = ({
                   aria-current={isSelected ? "true" : undefined}
                   className={cn(
                     "min-w-0 flex-1 px-3 py-2 text-left",
-                    "transition-colors duration-80 ease-standard focus-visible:outline-none",
+                    "focus-visible:outline-none",
                     "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
-                    isSelected ? "text-primary" : "hover:bg-surface-strong",
+                    isSelected && "text-primary",
                   )}
                 >
                   <p

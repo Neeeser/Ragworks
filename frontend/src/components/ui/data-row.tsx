@@ -86,12 +86,16 @@ export function DataRow({
   );
 
   const interactive =
-    "rounded-control py-3 transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset";
+    "rounded-control py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset";
 
   return (
     <div
       className={cn(
-        "flex items-center border-b border-hairline last:border-b-0",
+        // The hover wash lives on the container, not the activatable body, so
+        // the actions slot sits INSIDE the highlighted shape — a highlight
+        // that stops short of the row's own buttons reads as a broken box.
+        "flex items-center border-b border-hairline transition-colors duration-80 ease-standard last:border-b-0",
+        (href || onSelect) && "hover:bg-surface",
         selected && "bg-accent-violet/10",
         className,
       )}

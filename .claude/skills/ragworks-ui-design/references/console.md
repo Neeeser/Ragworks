@@ -300,13 +300,20 @@ where a value came from.
 | loading placeholder | `Skeleton` |
 | overlay of any kind | `ModalOverlay` |
 | form control | `Field` / `TextInput` / `Select` / `TextArea` + `inputClass` |
-| dropdown selection | `CustomSelect` — never a native `<select>` |
+| dropdown selection | `CustomSelect`, always — the one shared base (themeable popup, icon-capable options); never a native `<select>`, and never keep one because a test pinned its semantics |
+| a composer's send/confirm beside an input | icon-only `Button` sized to the input's height, `Tooltip` naming the action + its keyboard chord (platform-aware: ⌘↵ / Ctrl+↵) |
 | confirmation | `ConfirmDialog` |
 | wizard | `WizardShell` + `WizardFooter` |
 
 `DataRowHeader` shares `DataRow`'s cell padding, gap and actions-slot width — never
 hand-roll a header row with a guessed spacer; each column's width class must be on the
 element the flex row measures.
+
+**A row's hover wash lives on the row CONTAINER, not the activatable body.** The actions
+slot (delete, retry, ⋯) must sit inside the highlighted shape — a highlight that stops
+short of the row's own buttons reads as a broken box. `DataRow` does this; a hand-rolled
+row (a session list, a sidebar row) puts `hover:bg-*` on the wrapper `group` div and
+keeps only the focus ring on the inner button/link.
 
 `GlassCard` and `.glass-panel` are **landing-only** — blur on a data card is the wrong
 look and a real compositing cost.
