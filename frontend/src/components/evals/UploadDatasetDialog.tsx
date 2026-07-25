@@ -5,8 +5,8 @@ import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 
 import type { EvalDatasetUploadPayload } from "@/lib/types";
 
@@ -84,21 +84,23 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
 
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-xl rounded-3xl border border-hairline bg-canvas-raised/95 p-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Datasets</p>
-        <h2 id={titleId} className="mt-2 text-xl font-semibold text-primary">
-          Upload a dataset
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Standard BEIR format: a corpus, queries, and relevance judgments.{" "}
-          <Link
-            href="/evals/datasets/format"
-            className="text-accent-cyan underline-offset-4 hover:underline"
-          >
-            File formats and examples
-          </Link>
-        </p>
-        <div className="mt-5 space-y-4">
+      <div className="card-surface w-full max-w-xl bg-canvas-raised shadow-elevation-2">
+        <div className="border-b border-hairline px-4 py-3">
+          <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
+            Upload a dataset
+          </h2>
+          <p className="mt-1 max-w-[66ch] text-ui text-muted">
+            Standard BEIR format: a corpus, queries, and relevance judgments.{" "}
+            <Link
+              href="/evals/datasets/format"
+              className="rounded-control text-accent-cyan underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              File formats and examples
+            </Link>
+          </p>
+        </div>
+
+        <div className="space-y-4 px-4 py-3">
           <Field label="Name">
             <TextInput
               value={name}
@@ -108,13 +110,13 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
           </Field>
           {FILE_PARTS.map((part) => (
             <Field key={part.key} label={part.label} hint={part.hint}>
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm transition hover:border-strong">
-                <span className={fileNames[part.key] ? "text-body" : "text-muted"}>
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control border border-hairline bg-surface px-3 py-2 transition-colors duration-80 ease-standard hover:border-strong focus-within:border-accent-violet focus-within:ring-2 focus-within:ring-accent-violet/30">
+                <span
+                  className={`truncate text-ui ${fileNames[part.key] ? "text-body" : "text-meta"}`}
+                >
                   {fileNames[part.key] || "Choose file"}
                 </span>
-                <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                  Browse
-                </span>
+                <InstrumentLabel>Browse</InstrumentLabel>
                 <input
                   type="file"
                   accept={part.accept}
@@ -125,15 +127,16 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
             </Field>
           ))}
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy} className="px-5">
+
+        <div className="flex justify-end gap-2 border-t border-hairline px-4 py-3">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!ready} loading={busy} className="px-5">
+          <Button onClick={handleSubmit} disabled={!ready} loading={busy}>
             Upload
           </Button>
         </div>
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }

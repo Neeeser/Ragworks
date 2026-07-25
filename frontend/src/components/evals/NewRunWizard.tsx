@@ -243,18 +243,20 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
                 role="radio"
                 aria-checked={preset === entry.key}
                 onClick={() => dispatch({ type: "set_preset", preset: entry.key })}
-                className={`rounded-2xl border p-4 text-left transition focus-visible:ring-2 focus-visible:ring-accent-violet ${
+                className={cn(
+                  "rounded-panel border p-3 text-left transition-colors duration-80 ease-standard",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                   preset === entry.key
-                    ? "border-accent-violet bg-surface-strong"
-                    : "border-hairline bg-surface hover:border-strong"
-                }`}
+                    ? "border-accent-violet bg-accent-violet/10"
+                    : "border-hairline bg-surface hover:border-strong",
+                )}
               >
-                <p className="font-medium text-primary">{entry.label}</p>
-                <p className="mt-1 text-xs text-muted">{entry.detail}</p>
+                <p className="text-ui font-medium text-primary">{entry.label}</p>
+                <p className="mt-1 text-instrument text-muted">{entry.detail}</p>
               </button>
             ))}
           </div>
-          <p className="text-xs text-muted">
+          <p className="max-w-[66ch] text-instrument text-muted">
             Sampled queries always keep every document judged relevant to them in the corpus;
             distractors set how much irrelevant material competes.
           </p>
@@ -272,7 +274,8 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
                     aria-pressed={selected}
                     onClick={() => dispatch({ type: "toggle_k", k })}
                     className={cn(
-                      "rounded-full border px-3.5 py-1.5 font-mono text-xs transition",
+                      "rounded-full border px-3 py-1 font-mono text-instrument tabular-nums",
+                      "transition-colors duration-80 ease-standard focus-visible:outline-none",
                       "focus-visible:ring-2 focus-visible:ring-accent-violet",
                       selected
                         ? "border-accent-violet/60 bg-accent-violet/15 text-primary"
@@ -286,7 +289,7 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
             </div>
           </Field>
           {truncated.length > 0 && (
-            <p className="text-sm text-data-warn" role="alert">
+            <p className="max-w-[66ch] text-ui text-data-warn" role="alert">
               {depthCap.label
                 ? `${depthCap.label} caps results at ${depthCap.depth}, so `
                 : `The pipeline returns at most ${depthCap.depth} results, so `}
@@ -296,7 +299,7 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
           )}
           <button
             type="button"
-            className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+            className="rounded-control text-instrument font-medium text-muted transition-colors duration-80 ease-standard hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
             aria-expanded={advancedOpen}
             onClick={() => dispatch({ type: "toggle_advanced" })}
           >

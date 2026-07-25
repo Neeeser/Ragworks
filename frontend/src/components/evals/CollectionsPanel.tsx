@@ -1,12 +1,17 @@
 "use client";
 
-import { Database, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { corpusHealth } from "@/components/evals/lib/status";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { GlassCard } from "@/components/ui/panel";
-import { formatDateTime } from "@/lib/datetime";
+import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Tooltip } from "@/components/ui/tooltip";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
 
 import type { EvalCollection, EvalDataset, Pipeline } from "@/lib/types";
 
@@ -18,6 +23,44 @@ interface CollectionsPanelProps {
   onDelete: (collectionId: string) => Promise<boolean>;
 }
 
+/** Column widths shared by the header, the rows, and the loading placeholder. */
+const COL = {
+  docs: "w-16 text-right",
+  chunks: "w-20 text-right",
+  status: "w-24",
+  updated: "w-14 text-right",
+};
+
+function ColumnHeader() {
+  return (
+    <DataRowHeader
+      hasLeading
+      title="Collection"
+      columns={[
+        <InstrumentLabel key="docs" className={COL.docs}>
+          Docs
+        </InstrumentLabel>,
+        <InstrumentLabel key="chunks" className={COL.chunks}>
+          Chunks
+        </InstrumentLabel>,
+        <InstrumentLabel key="status" className={COL.status}>
+          Status
+        </InstrumentLabel>,
+        <InstrumentLabel key="updated" className={COL.updated}>
+          Updated
+        </InstrumentLabel>,
+      ]}
+    />
+  );
+}
+
+/**
+ * The benchmark corpora runs ingested into, one per (dataset, ingestion
+ * pipeline) pair.
+ *
+ * The header keeps one line of prose because it states a consequence the rows
+ * cannot: pruning is safe for past results but costs the next run a re-ingest.
+ */
 export function CollectionsPanel({
   collections,
   datasets,
@@ -31,62 +74,87 @@ export function CollectionsPanel({
   const pipelineNames = new Map(pipelines.map((pipeline) => [pipeline.id, pipeline.name]));
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-        Benchmark collections
-      </p>
-      <p className="mt-2 text-sm leading-relaxed text-body">
-        Ingested benchmark corpora, keyed by dataset and ingestion pipeline. Runs that share an
-        ingestion pipeline reuse the same collection; deleting one frees its vectors and files, and
-        the next run re-ingests.
-      </p>
-      {collections.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">
-          {loading ? "Loading…" : "Nothing provisioned yet."}
+    <section aria-label="Benchmark collections" className="card-surface">
+      <div className="border-b border-hairline px-3 py-2">
+        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">
+          Benchmark collections
+        </h2>
+        <p className="mt-1 max-w-[66ch] text-instrument text-muted">
+          Runs sharing an ingestion pipeline reuse one collection. Pruning frees its vectors and
+          files; past results are kept and the next run re-ingests.
+        </p>
+      </div>
+
+      <ColumnHeader />
+
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading benchmark collections"
+          hasLeading
+          hasSubtitle
+          columnWidths={[COL.docs, COL.chunks, COL.status, COL.updated]}
+        />
+      ) : collections.length === 0 ? (
+        <p className="p-8 text-center text-ui text-muted">
+          Nothing provisioned yet. The first run against a dataset builds one.
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {collections.map((collection) => {
-            const dataset =
-              (collection.dataset_id && datasetNames.get(collection.dataset_id)) || null;
-            const pipeline =
-              (collection.ingestion_pipeline_id &&
-                pipelineNames.get(collection.ingestion_pipeline_id)) ||
-              null;
-            return (
-              <li key={collection.id} className="rounded-2xl border border-hairline bg-canvas p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                      <Database className="h-3.5 w-3.5 text-accent-violet" aria-hidden />
-                      {dataset ?? "Benchmark corpus"}
-                    </div>
-                    <p className="mt-1.5 truncate font-medium text-primary">{collection.name}</p>
-                    {pipeline && (
-                      <p className="mt-1 text-sm text-body">
-                        Ingested with <span className="text-primary">{pipeline}</span>
-                      </p>
-                    )}
-                    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                      <Stat label="docs" value={collection.num_documents.toLocaleString()} />
-                      <Stat label="chunks" value={collection.num_chunks.toLocaleString()} />
-                      <Stat label="updated" value={formatDateTime(collection.updated_at)} />
-                    </dl>
-                  </div>
+        collections.map((collection) => {
+          const dataset =
+            (collection.dataset_id && datasetNames.get(collection.dataset_id)) || null;
+          const pipeline =
+            (collection.ingestion_pipeline_id &&
+              pipelineNames.get(collection.ingestion_pipeline_id)) ||
+            null;
+          const state = corpusHealth(collection.num_documents, collection.num_chunks);
+          const provenance = [dataset, pipeline].filter(Boolean).join(" · ");
+          return (
+            <DataRow
+              key={collection.id}
+              leading={<StatusDot tone={state.tone} />}
+              title={collection.name}
+              subtitle={provenance || undefined}
+              columns={[
+                <span key="docs" className={`font-mono tabular-nums ${COL.docs}`}>
+                  {collection.num_documents.toLocaleString()}
+                </span>,
+                <span key="chunks" className={`font-mono tabular-nums ${COL.chunks}`}>
+                  {collection.num_chunks.toLocaleString()}
+                </span>,
+                <StatusDot
+                  key="status"
+                  tone={state.tone}
+                  label={state.label}
+                  className={COL.status}
+                />,
+                <Tooltip
+                  key="updated"
+                  content={parseApiDate(collection.updated_at)?.toLocaleString() ?? ""}
+                  triggerClassName={`justify-end ${COL.updated}`}
+                >
+                  <span className="font-mono tabular-nums text-instrument text-meta">
+                    {formatTimeAgoCompact(collection.updated_at)}
+                  </span>
+                </Tooltip>,
+              ]}
+              actions={
+                <Tooltip content="Prune collection" side="left">
                   <Button
-                    variant="secondary"
-                    className="shrink-0 px-4"
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Prune ${collection.name}`}
+                    className="hover:text-data-neg"
                     onClick={() => setPendingDelete(collection)}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" aria-hidden />
-                    Prune
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
                   </Button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                </Tooltip>
+              }
+            />
+          );
+        })
       )}
+
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Prune benchmark collection"
@@ -103,15 +171,6 @@ export function CollectionsPanel({
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </GlassCard>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-meta">{label}</dt>
-      <dd className="font-mono text-[11px] text-body">{value}</dd>
-    </div>
+    </section>
   );
 }

@@ -1,18 +1,22 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { Fragment, useState } from "react";
 
+import { documentStatus } from "@/components/evals/lib/status";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 import { fetchEvalDatasetDocument } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
-import { cn, truncate } from "@/lib/utils";
+import { truncate } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { EvalCollectionDocument, EvalCollectionDocumentsPage } from "@/lib/types";
+import type { EvalCollectionDocumentsPage } from "@/lib/types";
 
 interface DatasetDocumentsTableProps {
   datasetId: string;
@@ -25,13 +29,6 @@ interface DatasetDocumentsTableProps {
   pageSize: number;
   onOffset: (offset: number) => void;
 }
-
-const STATUS_TONE: Record<EvalCollectionDocument["status"], string> = {
-  pending: "text-muted",
-  processing: "text-accent-violet",
-  ready: "text-data-pos",
-  failed: "text-data-neg",
-};
 
 /**
  * The selected eval collection's documents: ingestion outcome per corpus
@@ -54,83 +51,104 @@ export function DatasetDocumentsTable({
   const items = page?.items ?? [];
 
   return (
-    <div className="mt-4">
-      <TextInput
-        value={search}
-        onChange={(event) => onSearch(event.target.value)}
-        placeholder="Search by document id or title"
-        aria-label="Search documents"
-      />
-      {error && <p className="mt-3 text-sm text-data-neg">{error}</p>}
-      {!error && items.length === 0 && (
-        <p className="mt-4 text-sm text-muted">
-          {loading ? "Loading documents…" : "No documents match."}
-        </p>
+    <div className="flex min-w-0 flex-col">
+      <div className="border-b border-hairline p-2">
+        <TextInput
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Search by document id or title"
+          aria-label="Search documents"
+        />
+      </div>
+
+      {error && <p className="p-3 text-ui text-data-neg">{error}</p>}
+
+      {!error && items.length === 0 && loading && (
+        <div aria-busy>
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex items-center gap-3 border-b border-hairline px-3 py-3">
+              <Skeleton className="h-3.5 w-3.5" />
+              <Skeleton className="h-2 max-w-48 flex-1" />
+              <Skeleton className="h-2 w-24" />
+              <Skeleton className="h-2 w-12" />
+            </div>
+          ))}
+          <span className="sr-only">Loading documents</span>
+        </div>
       )}
+
+      {!error && items.length === 0 && !loading && (
+        <p className="p-8 text-center text-ui text-muted">No documents match.</p>
+      )}
+
       {items.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        // Wide content scrolls inside its own region; the page never does.
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-hairline font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                <th className="w-8 py-2 pr-2 font-normal">
+              <tr className="border-b border-hairline">
+                <th scope="col" className="w-8 py-2 pl-3 pr-1">
                   <span className="sr-only">Expand</span>
                 </th>
-                <th className="py-2 pr-4 font-normal">Document</th>
-                <th className="py-2 pr-4 font-normal">Status</th>
-                <th className="py-2 pr-4 font-normal">Chunks</th>
-                <th className="py-2 font-normal">Trace</th>
+                <th scope="col" className="py-2 pr-3">
+                  <InstrumentLabel>Document</InstrumentLabel>
+                </th>
+                <th scope="col" className="w-28 py-2 pr-3">
+                  <InstrumentLabel>Status</InstrumentLabel>
+                </th>
+                <th scope="col" className="w-16 py-2 pr-3 text-right">
+                  <InstrumentLabel>Chunks</InstrumentLabel>
+                </th>
+                <th scope="col" className="w-20 py-2 pr-3 text-right">
+                  <InstrumentLabel>Trace</InstrumentLabel>
+                </th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => {
                 const expanded = expandedId === item.document_id;
+                const state = documentStatus(item.status);
                 return (
                   <Fragment key={item.document_id}>
                     <tr className="border-b border-hairline align-top last:border-b-0">
-                      <td className="py-3 pr-2">
-                        <button
-                          type="button"
+                      <td className="py-2 pl-3 pr-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           aria-expanded={expanded}
                           aria-label={`${expanded ? "Collapse" : "Expand"} document ${item.external_doc_id}`}
-                          className="rounded-full p-1 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
                           onClick={() => setExpandedId(expanded ? null : item.document_id)}
                         >
                           {expanded ? (
-                            <ChevronDown className="h-4 w-4" aria-hidden />
+                            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
                           ) : (
-                            <ChevronRight className="h-4 w-4" aria-hidden />
+                            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
                           )}
-                        </button>
+                        </Button>
                       </td>
-                      <td className="max-w-md py-3 pr-4">
-                        <p className="truncate text-body">
+                      <td className="max-w-md py-3 pr-3">
+                        <p className="truncate text-ui text-body">
                           {item.title ? truncate(item.title, 90) : item.external_doc_id}
                         </p>
-                        <p className="mt-0.5 font-mono text-[11px] text-meta">
+                        {/* The corpus id is a literal the dataset ships — mono,
+                            verbatim, no case change. */}
+                        <p className="mt-0.5 truncate font-mono text-instrument text-meta">
                           {item.external_doc_id}
                         </p>
                         {item.status === "failed" && item.error_message && (
-                          <p className="mt-1 text-xs text-data-neg">{item.error_message}</p>
+                          <p className="mt-1 text-instrument text-data-neg">{item.error_message}</p>
                         )}
                       </td>
-                      <td className="py-3 pr-4">
-                        <span
-                          className={cn(
-                            "font-mono text-[11px] uppercase tracking-[0.28em]",
-                            STATUS_TONE[item.status],
-                          )}
-                        >
-                          {item.status}
-                        </span>
+                      <td className="py-3 pr-3">
+                        <StatusDot tone={state.tone} label={state.label} />
                       </td>
-                      <td className="py-3 pr-4 font-mono text-xs text-body">{item.num_chunks}</td>
-                      <td className="py-3">
-                        <Link
-                          href={`/traces/documents/${item.document_id}`}
-                          className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent-cyan underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-accent-violet"
-                        >
+                      <td className="py-3 pr-3 text-right font-mono text-ui tabular-nums text-body">
+                        {item.num_chunks.toLocaleString()}
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <ButtonLink href={`/traces/documents/${item.document_id}`} variant="ghost">
                           Open
-                        </Link>
+                        </ButtonLink>
                       </td>
                     </tr>
                     {expanded && (
@@ -151,6 +169,7 @@ export function DatasetDocumentsTable({
           </table>
         </div>
       )}
+
       <Pager total={total} offset={offset} pageSize={pageSize} onOffset={onOffset} />
     </div>
   );
@@ -166,16 +185,23 @@ function DocumentText({ datasetId, externalDocId }: { datasetId: string; externa
   );
   if (document.error) {
     return (
-      <p className="px-4 py-3 text-sm text-data-neg">
+      <p className="border-t border-hairline bg-surface px-3 py-2 text-ui text-data-neg">
         {getErrorMessage(document.error, "Could not load the document text")}
       </p>
     );
   }
   if (!document.data) {
-    return <p className="px-4 py-3 text-sm text-muted">Loading text…</p>;
+    return (
+      <div className="space-y-2 border-t border-hairline bg-surface px-3 py-3" aria-busy>
+        <Skeleton className="h-2 w-full" />
+        <Skeleton className="h-2 w-5/6" />
+        <Skeleton className="h-2 w-4/6" />
+        <span className="sr-only">Loading document text</span>
+      </div>
+    );
   }
   return (
-    <pre className="m-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-hairline bg-canvas p-3 font-mono text-[11px] leading-relaxed text-body">
+    <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-hairline bg-surface px-3 py-3 font-mono text-instrument leading-relaxed text-body">
       {document.data.text}
     </pre>
   );
@@ -198,22 +224,22 @@ function Pager({
   const start = offset + 1;
   const end = Math.min(offset + pageSize, total);
   return (
-    <div className="mt-3 flex items-center justify-between gap-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+    <div className="flex items-center justify-between gap-3 border-t border-hairline px-3 py-2">
+      <InstrumentLabel className="font-mono tabular-nums">
         {start}–{end} of {total.toLocaleString()}
-      </p>
+      </InstrumentLabel>
       <div className="flex gap-2">
         <Button
+          size="sm"
           variant="secondary"
-          className="px-4"
           disabled={offset === 0}
           onClick={() => onOffset(Math.max(0, offset - pageSize))}
         >
           Previous
         </Button>
         <Button
+          size="sm"
           variant="secondary"
-          className="px-4"
           disabled={end >= total}
           onClick={() => onOffset(offset + pageSize)}
         >

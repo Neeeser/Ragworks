@@ -1,16 +1,21 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { GenerateDatasetWizard } from "@/components/evals/GenerateDatasetWizard";
 import { ImportBenchmarkDialog } from "@/components/evals/ImportBenchmarkDialog";
+import { datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
 import { UploadDatasetDialog } from "@/components/evals/UploadDatasetDialog";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
+import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { GlassCard } from "@/components/ui/panel";
-import { cn } from "@/lib/utils";
+import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PulseWire } from "@/components/ui/pulse-wire";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import type {
   BuiltinDatasetInfo,
@@ -20,6 +25,7 @@ import type {
   EvalDatasetGeneratePayload,
   EvalDatasetUploadPayload,
 } from "@/lib/types";
+import type { ReactNode } from "react";
 
 interface DatasetsPanelProps {
   datasets: EvalDataset[];
@@ -33,21 +39,59 @@ interface DatasetsPanelProps {
   onDelete: (datasetId: string) => Promise<boolean>;
 }
 
-const IN_FLIGHT_TONE = "bg-accent-violet";
-
-const STATUS_TONE: Record<EvalDataset["status"], string> = {
-  pending: IN_FLIGHT_TONE,
-  downloading: IN_FLIGHT_TONE,
-  generating: IN_FLIGHT_TONE,
-  ready: "bg-data-pos",
-  failed: "bg-data-neg",
+/** Column widths shared by the header, the rows, and the loading placeholder. */
+const COL = {
+  queries: "w-16 text-right",
+  docs: "w-16 text-right",
+  source: "hidden w-20 lg:block",
+  status: "w-24",
 };
 
-const SOURCE_LABEL: Record<EvalDataset["source"], string> = {
-  builtin_benchmark: "benchmark",
-  custom_upload: "upload",
-  synthetic: "synthetic",
-};
+function ColumnHeader() {
+  return (
+    <DataRowHeader
+      hasLeading
+      title="Dataset"
+      columns={[
+        <InstrumentLabel key="queries" className={COL.queries}>
+          Queries
+        </InstrumentLabel>,
+        <InstrumentLabel key="docs" className={COL.docs}>
+          Docs
+        </InstrumentLabel>,
+        <InstrumentLabel key="source" className={COL.source}>
+          Source
+        </InstrumentLabel>,
+        <InstrumentLabel key="status" className={COL.status}>
+          Status
+        </InstrumentLabel>,
+      ]}
+    />
+  );
+}
+
+/**
+ * A dataset's second line: the failure that stopped it, the count of questions
+ * a generator has accepted so far, its description, or nothing at all. Never a
+ * placeholder — a row with nothing to add stays one line tall.
+ */
+function datasetSubtitle(dataset: EvalDataset): ReactNode {
+  if (dataset.status === "failed" && dataset.error_message) {
+    return <span className="text-data-neg">{dataset.error_message}</span>;
+  }
+  if (dataset.status === "generating") {
+    return (
+      <span className="flex items-center gap-3">
+        <span className="font-mono tabular-nums text-instrument">
+          {dataset.progress_done} of {dataset.progress_total} questions accepted
+        </span>
+        {/* Licensed: the generator is producing questions right now. */}
+        <PulseWire label={`Generating ${dataset.name}`} className="w-20" />
+      </span>
+    );
+  }
+  return dataset.description?.trim() || undefined;
+}
 
 export function DatasetsPanel({
   datasets,
@@ -72,92 +116,97 @@ export function DatasetsPanel({
   const domainByKey = new Map(benchmarks.map((benchmark) => [benchmark.key, benchmark.domain]));
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Datasets</p>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Button variant="secondary" onClick={() => setGenerateOpen(true)}>
+    <section aria-label="Datasets" className="card-surface">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-3 py-2">
+        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">Datasets</h2>
+        <div className="flex flex-wrap items-center gap-1">
+          <Button size="sm" variant="secondary" onClick={() => setGenerateOpen(true)}>
             Generate from collection
           </Button>
-          <Button variant="secondary" onClick={() => setUploadOpen(true)}>
+          <Button size="sm" variant="secondary" onClick={() => setUploadOpen(true)}>
             Upload dataset
           </Button>
-          <Button variant="secondary" onClick={() => setImportOpen(true)}>
+          <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
             Import benchmark
           </Button>
         </div>
       </div>
-      {datasets.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">
-          {loading ? (
-            "Loading datasets…"
-          ) : (
-            <>
-              No datasets. Import a vetted benchmark or upload your own in BEIR format
-              (corpus.jsonl, queries.jsonl, qrels TSV) —{" "}
-              <Link
-                href="/evals/datasets/format"
-                className="text-accent-cyan underline-offset-4 hover:underline"
-              >
-                file formats and examples
-              </Link>
-              .
-            </>
-          )}
-        </p>
+
+      <ColumnHeader />
+
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading datasets"
+          hasLeading
+          columnWidths={[COL.queries, COL.docs, COL.source, COL.status]}
+        />
+      ) : datasets.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="mx-auto max-w-[66ch] text-ui text-muted">
+            No datasets yet. Import a vetted benchmark, generate one from a collection, or upload
+            your own corpus, queries, and relevance judgments in BEIR format.
+          </p>
+          <ButtonLink href="/evals/datasets/format" className="mt-3">
+            Dataset format
+          </ButtonLink>
+        </div>
       ) : (
-        <ul className="mt-4 divide-y divide-[color:var(--border-hairline)]">
-          {datasets.map((dataset) => (
-            <li key={dataset.id} className="flex items-center justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <Link
-                    href={`/evals/datasets/${dataset.id}`}
-                    className="truncate font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-accent-violet"
-                  >
-                    {dataset.name}
-                  </Link>
-                  {dataset.source_ref && domainByKey.has(dataset.source_ref) && (
-                    <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent-cyan">
-                      {domainByKey.get(dataset.source_ref)}
-                    </p>
-                  )}
-                </div>
-                {dataset.description && (
-                  <p className="mt-1 truncate text-sm text-body">{dataset.description}</p>
-                )}
-                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                  {dataset.status === "generating"
-                    ? `${dataset.progress_done} of ${dataset.progress_total} questions accepted`
-                    : `${dataset.num_queries.toLocaleString()} queries · ` +
-                      `${dataset.num_corpus_docs.toLocaleString()} docs · ` +
-                      SOURCE_LABEL[dataset.source]}
-                </p>
-                {dataset.status === "failed" && dataset.error_message && (
-                  <p className="mt-1 text-xs text-data-neg">{dataset.error_message}</p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                  <span
-                    aria-hidden
-                    className={cn("h-1.5 w-1.5 rounded-full", STATUS_TONE[dataset.status])}
-                  />
-                  {dataset.status}
+        datasets.map((dataset) => {
+          const state = datasetStatus(dataset.status);
+          const domain = dataset.source_ref ? domainByKey.get(dataset.source_ref) : undefined;
+          return (
+            <DataRow
+              key={dataset.id}
+              href={`/evals/datasets/${dataset.id}`}
+              leading={<StatusDot tone={state.tone} />}
+              title={
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">{dataset.name}</span>
+                  {/* A benchmark's subject area — a fact with no state, so the
+                      chip is neutral and carries no dot. */}
+                  {domain ? (
+                    <Chip tone="neutral" dot={false}>
+                      {domain}
+                    </Chip>
+                  ) : null}
                 </span>
-                <button
-                  type="button"
-                  aria-label={`Delete dataset ${dataset.name}`}
-                  className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
-                  onClick={() => setPendingDelete(dataset)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              }
+              subtitle={datasetSubtitle(dataset)}
+              columns={[
+                <span key="queries" className={`font-mono tabular-nums ${COL.queries}`}>
+                  {dataset.num_queries.toLocaleString()}
+                </span>,
+                <span key="docs" className={`font-mono tabular-nums ${COL.docs}`}>
+                  {dataset.num_corpus_docs.toLocaleString()}
+                </span>,
+                <span key="source" className={`truncate text-instrument text-muted ${COL.source}`}>
+                  {SOURCE_LABEL[dataset.source]}
+                </span>,
+                <StatusDot
+                  key="status"
+                  tone={state.tone}
+                  label={state.label}
+                  className={COL.status}
+                />,
+              ]}
+              actions={
+                <Tooltip content="Delete dataset" side="left">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete dataset ${dataset.name}`}
+                    className="hover:text-data-neg"
+                    onClick={() => setPendingDelete(dataset)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+              }
+            />
+          );
+        })
       )}
+
       <ImportBenchmarkDialog
         open={importOpen}
         benchmarks={benchmarks}
@@ -196,6 +245,6 @@ export function DatasetsPanel({
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </GlassCard>
+    </section>
   );
 }

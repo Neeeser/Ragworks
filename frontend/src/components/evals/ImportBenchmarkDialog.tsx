@@ -3,8 +3,8 @@
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 
 import type { BuiltinDatasetInfo } from "@/lib/types";
 
@@ -35,54 +35,64 @@ export function ImportBenchmarkDialog({
 
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-2xl rounded-3xl border border-hairline bg-canvas-raised/95 p-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Benchmarks</p>
-        <h2 id={titleId} className="mt-2 text-xl font-semibold text-primary">
-          Import a vetted benchmark
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          The corpus, queries, and relevance judgments download in the background.
-        </p>
-        <ul className="mt-5 space-y-3">
+      <div className="card-surface flex max-h-[80vh] w-full max-w-2xl flex-col bg-canvas-raised shadow-elevation-2">
+        <div className="shrink-0 border-b border-hairline px-4 py-3">
+          <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
+            Import a vetted benchmark
+          </h2>
+          <p className="mt-1 max-w-[66ch] text-ui text-muted">
+            The corpus, queries, and relevance judgments download in the background.
+          </p>
+        </div>
+
+        {/* Rows inside the dialog card, not a card per benchmark: page → card →
+            row is the container ceiling. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {benchmarks.map((benchmark) => {
             const imported = importedKeys.has(benchmark.key);
             return (
-              <li
+              <div
                 key={benchmark.key}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface p-4"
+                className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3 last:border-b-0"
               >
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <p className="font-medium text-primary">{benchmark.name}</p>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent-cyan">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-ui font-medium text-primary">{benchmark.name}</p>
+                    {/* The subject area — a fact with no state. */}
+                    <Chip tone="neutral" dot={false}>
                       {benchmark.domain}
-                    </p>
+                    </Chip>
                   </div>
-                  <p className="mt-1 text-sm leading-relaxed text-body">{benchmark.measures}</p>
-                  <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                  <p className="mt-1 max-w-[66ch] text-ui text-body">{benchmark.measures}</p>
+                  <p className="mt-1 font-mono text-instrument tabular-nums text-muted">
                     {benchmark.num_queries.toLocaleString()} queries ·{" "}
                     {benchmark.num_corpus_docs.toLocaleString()} docs
                   </p>
                 </div>
                 <Button
+                  size="sm"
                   variant="secondary"
-                  className="shrink-0 px-5"
+                  className="shrink-0"
                   disabled={imported || busyKey !== null}
                   loading={busyKey === benchmark.key}
                   onClick={() => handleImport(benchmark.key)}
                 >
                   {imported ? "Imported" : "Import"}
                 </Button>
-              </li>
+              </div>
             );
           })}
-        </ul>
-        <div className="mt-6 flex justify-end">
-          <Button variant="ghost" onClick={onClose} className="px-5">
+          {benchmarks.length === 0 && (
+            <p className="p-8 text-center text-ui text-muted">No benchmarks available.</p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 justify-end border-t border-hairline px-4 py-3">
+          <Button variant="ghost" onClick={onClose}>
             Close
           </Button>
         </div>
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }
