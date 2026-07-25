@@ -37,7 +37,7 @@ function ChunkSkeleton() {
     <div aria-busy>
       {[0, 1, 2].map((row) => (
         <div key={row} className="flex items-center gap-3 border-b border-hairline px-3 py-2">
-          <Skeleton className="h-1.5 w-1.5 rounded-full" />
+          <Skeleton className="h-1.5 w-1.5 rounded-[2px]" />
           <Skeleton className="h-2 w-16" />
           <Skeleton className="h-2 flex-1" />
         </div>
@@ -136,9 +136,12 @@ export function FileRowDetails({ ingestion, token }: FileRowDetailsProps) {
               {sortedChunks.map((chunk) => (
                 <details key={chunk.id} className="group border-b border-hairline last:border-b-0">
                   <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2 transition-colors duration-80 ease-standard hover:bg-surface-strong [&::-webkit-details-marker]:hidden">
+                    {/* A square node dot in the chunk stage's colour — the
+                        console's status marks are mini pipeline nodes, never
+                        circles. */}
                     <span
                       aria-hidden
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk"
+                      className="h-1.5 w-1.5 shrink-0 rounded-[2px] bg-stage-chunk"
                     />
                     <InstrumentLabel className="shrink-0 tabular-nums">
                       {`Chunk ${String(chunk.chunk_index).padStart(2, "0")}`}

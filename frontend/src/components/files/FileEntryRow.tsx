@@ -8,6 +8,7 @@ import { COL, NUMERIC_CELL } from "@/components/files/lib/file-columns";
 import { fileStatus } from "@/components/files/lib/file-status";
 import { Button } from "@/components/ui/button";
 import { DataRow } from "@/components/ui/data-row";
+import { PulseWire } from "@/components/ui/pulse-wire";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip } from "@/components/ui/tooltip";
 import { parseApiDate } from "@/lib/datetime";
@@ -19,13 +20,29 @@ import type { FileStatus } from "@/components/files/lib/file-status";
 import type { FileNode } from "@/lib/types";
 import type { MouseEvent, ReactNode } from "react";
 
-function statusCell(status: FileStatus | null): ReactNode {
+/**
+ * The derived ingestion state, plus the pulse while a pipeline is actually
+ * moving this file's data.
+ *
+ * The wire runs only on `live` states, and the tree polls for exactly as long
+ * as one of them exists — so the light stops when the work does. Anything
+ * settled (ready, failed, never eligible) gets the dot and the word alone.
+ */
+function statusCell(node: FileNode, status: FileStatus | null): ReactNode {
   if (!status) {
     return <span key="status" className={COL.status} />;
   }
   return (
-    <Tooltip key="status" content={status.detail} side="bottom" triggerClassName={COL.status}>
+    <Tooltip
+      key="status"
+      content={status.detail}
+      side="bottom"
+      triggerClassName={cn(COL.status, "items-center gap-2")}
+    >
       <StatusDot tone={status.tone} label={status.label} />
+      {status.live ? (
+        <PulseWire label={`Ingesting ${node.name}`} className="min-w-0 flex-1" />
+      ) : null}
     </Tooltip>
   );
 }
@@ -86,7 +103,7 @@ function rowColumns(node: FileNode): ReactNode[] {
   const ingestion = node.ingestion;
   const ready = ingestion !== null && ingestion !== undefined && ingestion.status === "ready";
   return [
-    statusCell(fileStatus(node)),
+    statusCell(node, fileStatus(node)),
     typeCell(node),
     sizeCell(node),
     numericCell(COL.chunks, ready ? ingestion.num_chunks : null, "chunks"),

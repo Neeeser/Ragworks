@@ -14,6 +14,12 @@ export interface FileStatus {
   detail: string;
   /** Whether asking the API to ingest this file again is meaningful. */
   retryable: boolean;
+  /**
+   * Whether a pipeline is moving this file's data right now — the pulse's
+   * licence. The tree polls while any file is in this state, so a pulsing row
+   * is depicting work that is genuinely in flight, not decorating an idle one.
+   */
+  live: boolean;
 }
 
 function chunkPhrase(count: number): string {
@@ -47,6 +53,7 @@ export function fileStatus(node: FileNode): FileStatus | null {
       detail:
         "No document record — the ingestion pipeline does not accept this content type. Ingest it anyway to see the parser's own result.",
       retryable: true,
+      live: false,
     };
   }
   switch (ingestion.status) {
@@ -61,12 +68,14 @@ export function fileStatus(node: FileNode): FileStatus | null {
                 : `${ingestion.warnings.length} warnings`
             }.`,
             retryable: false,
+            live: false,
           }
         : {
             tone: "pos",
             label: "Ready",
             detail: `Indexed as ${chunkPhrase(ingestion.num_chunks)}.`,
             retryable: false,
+            live: false,
           };
     case "pending":
       return {
@@ -74,6 +83,7 @@ export function fileStatus(node: FileNode): FileStatus | null {
         label: "Pending",
         detail: "Queued for ingestion.",
         retryable: false,
+        live: true,
       };
     case "processing":
       return {
@@ -81,6 +91,7 @@ export function fileStatus(node: FileNode): FileStatus | null {
         label: "Processing",
         detail: "Being parsed, chunked, and indexed now.",
         retryable: false,
+        live: true,
       };
     case "failed":
       return {
@@ -88,6 +99,7 @@ export function fileStatus(node: FileNode): FileStatus | null {
         label: "Failed",
         detail: ingestion.error_message ?? "Ingestion failed.",
         retryable: true,
+        live: false,
       };
   }
 }

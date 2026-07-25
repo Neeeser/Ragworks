@@ -28,6 +28,7 @@ import { RenameDialog } from "@/components/files/RenameDialog";
 import { UploadTray } from "@/components/files/UploadTray";
 import { PageBody } from "@/components/ui/app-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Panel } from "@/components/ui/panel";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { FileMenuTarget } from "@/components/files/FileContextMenu";
@@ -90,7 +91,7 @@ function DropTarget({ folderName }: { folderName: string }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-accent-violet bg-accent-violet/10"
+      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-panel border-2 border-dashed border-accent-violet bg-accent-violet/10"
     >
       <p className="rounded-control border border-hairline bg-canvas-raised px-3 py-1.5 text-ui font-medium text-primary">
         Drop to upload into {folderName}
@@ -104,8 +105,11 @@ function DropTarget({ folderName }: { folderName: string }) {
  * over one fetched tree, list/grid views, drag-and-drop uploads and rearranging,
  * right-click actions, and a docked preview pane.
  *
- * The tree and the preview each own their scroll, so reading a file's bytes never
- * moves the row you selected it from.
+ * The whole browser is one card — toolbar, entries, and preview share a single
+ * elevated surface, separated by hairlines rather than by their own backgrounds,
+ * because they are one object and not three stacked ones. The tree and the
+ * preview each own their scroll, so reading a file's bytes never moves the row
+ * you selected it from.
  */
 export function FilesBrowser({
   token,
@@ -225,7 +229,7 @@ export function FilesBrowser({
 
   return (
     <PageBody className="flex flex-col">
-      <div {...drag.handlers} className="relative flex min-h-0 flex-1 flex-col">
+      <Panel {...drag.handlers} className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <FilesToolbar
           token={token}
           collectionId={collectionId}
@@ -247,13 +251,13 @@ export function FilesBrowser({
         />
 
         <div className="flex min-h-0 flex-1">
-          {/* The raised surface is the scroll region itself, so a folder with
-              three files still reads as a pane rather than as a list floating
-              over bare canvas. Named, because the page has two panes and a
-              screen reader user needs to move between them. */}
+          {/* Entries sit directly on the card's own material — a background of
+              their own would nest a second surface inside the card. Named,
+              because the page has two panes and a screen reader user needs to
+              move between them. */}
           <section
             aria-label="Folder contents"
-            className="min-w-0 flex-1 overflow-y-auto bg-canvas-raised"
+            className="min-w-0 flex-1 overflow-y-auto"
             onContextMenu={(event) => {
               event.preventDefault();
               openMenu(null, event);
@@ -300,7 +304,7 @@ export function FilesBrowser({
         </div>
 
         {drag.dragActive && <DropTarget folderName={folder ? folder.name : collectionName} />}
-      </div>
+      </Panel>
 
       <input
         ref={fileInputRef}

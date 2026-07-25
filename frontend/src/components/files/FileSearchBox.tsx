@@ -221,7 +221,9 @@ export function FileSearchBox({
             className={cn(inputClass, "py-1 pl-7 pr-2")}
           />
         </div>
-        <Tooltip content="Choose which modes to search">
+        {/* Opens downward: the box lives in the browser card's top row, which
+            clips its own overflow. */}
+        <Tooltip content="Choose which modes to search" side="bottom">
           <button
             type="button"
             onClick={() => setFiltersOpen((value) => !value)}

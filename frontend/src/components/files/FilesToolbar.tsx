@@ -102,7 +102,9 @@ export function FilesToolbar({
         aria-label="Folder path"
         className="flex min-w-0 flex-1 items-center gap-0.5 font-mono text-ui"
       >
-        <Tooltip content="Collection root">
+        {/* Toolbar tooltips open downward: this row is the card's top edge, and
+            the card clips its own overflow, so a tooltip above it is cut off. */}
+        <Tooltip content="Collection root" side="bottom">
           <PathSegment
             current={breadcrumb.length === 0}
             dropping={dnd.dropKey === ROOT_PARENT}
@@ -146,7 +148,7 @@ export function FilesToolbar({
         className="flex shrink-0 overflow-hidden rounded-control border border-hairline"
       >
         {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
-          <Tooltip key={mode} content={label}>
+          <Tooltip key={mode} content={label} side="bottom">
             <button
               type="button"
               onClick={() => onViewModeChange(mode)}
@@ -170,7 +172,8 @@ export function FilesToolbar({
         <FolderPlus className="h-3.5 w-3.5" aria-hidden />
         New folder
       </Button>
-      <Button size="sm" onClick={onPickFiles} loading={uploading} className="shrink-0">
+      {/* The page's one primary action, so it is the only thing here that glows. */}
+      <Button size="sm" glow onClick={onPickFiles} loading={uploading} className="shrink-0">
         <UploadCloud className="h-3.5 w-3.5" aria-hidden />
         Upload
       </Button>

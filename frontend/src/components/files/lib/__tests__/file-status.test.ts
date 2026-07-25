@@ -26,6 +26,7 @@ describe("fileStatus", () => {
       label: "Ready",
       detail: "Indexed as 1 chunk.",
       retryable: false,
+      live: false,
     });
     expect(fileStatus(makeFileNode())?.detail).toBe("Indexed as 4 chunks.");
   });
@@ -50,6 +51,19 @@ describe("fileStatus", () => {
     ).toMatchObject({ tone: "active", label: "Processing" });
   });
 
+  it("licenses the pulse on in-flight ingestion only", () => {
+    // The pulse depicts data actually moving, so every settled state — indexed,
+    // failed, or never eligible — must leave it off.
+    const liveFor = (status: FileIngestion["status"]) =>
+      fileStatus(makeFileNode({ ingestion: { ...readyIngestion, status } }))?.live;
+
+    expect(liveFor("pending")).toBe(true);
+    expect(liveFor("processing")).toBe(true);
+    expect(liveFor("ready")).toBe(false);
+    expect(liveFor("failed")).toBe(false);
+    expect(fileStatus(makeFileNode({ ingestion: null }))?.live).toBe(false);
+  });
+
   it("surfaces the failure's own message and offers a retry", () => {
     expect(
       fileStatus(
@@ -57,6 +71,12 @@ describe("fileStatus", () => {
           ingestion: { ...readyIngestion, status: "failed", error_message: "parser exploded" },
         }),
       ),
-    ).toEqual({ tone: "neg", label: "Failed", detail: "parser exploded", retryable: true });
+    ).toEqual({
+      tone: "neg",
+      label: "Failed",
+      detail: "parser exploded",
+      retryable: true,
+      live: false,
+    });
   });
 });
