@@ -28,6 +28,12 @@ interface ConnectionsManagerProps {
   loading: boolean;
   error: string | null;
   onChanged: () => void;
+  /**
+   * Panel heading. Settings passes "Provider connections" so the panel is
+   * findable among its titled siblings; the setup wizard omits it because the
+   * step's own copy already names the task.
+   */
+  title?: string;
 }
 
 /** A loading row at the real row's geometry, so landing data reflows nothing. */
@@ -57,6 +63,7 @@ export function ConnectionsManager({
   loading,
   error,
   onChanged,
+  title,
 }: ConnectionsManagerProps) {
   const { user } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
@@ -96,9 +103,14 @@ export function ConnectionsManager({
     <>
       <Panel className="overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
-          <span className="text-instrument text-meta">
-            <span className="font-mono tabular-nums">{connections.length}</span> configured
-          </span>
+          <div className="flex min-w-0 items-center gap-3">
+            {title ? (
+              <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">{title}</h2>
+            ) : null}
+            <span className="text-instrument text-meta">
+              <span className="font-mono tabular-nums">{connections.length}</span> configured
+            </span>
+          </div>
           <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Add provider

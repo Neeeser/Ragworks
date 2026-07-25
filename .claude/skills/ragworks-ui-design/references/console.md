@@ -259,6 +259,12 @@ Delete on sight:
 Keep text that tells the user something the UI cannot show: a constraint, a consequence,
 where a value came from.
 
+**The counter-rule: on a page of stacked peer panels, every panel carries an `h2` naming
+its domain.** A panel whose only header is a count and an action (`3 configured · Add
+provider`) is unfindable among titled siblings — the settings provider-connections panel
+shipped that way and users reported the feature as missing. A section title is not an
+eyebrow: it is the one piece of text that says what the panel IS.
+
 ---
 
 ## 9. Loading and error
