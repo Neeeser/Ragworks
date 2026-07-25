@@ -73,7 +73,13 @@ export function SearchResults({ result, onTrace }: SearchResultsProps) {
               chunk={chunk}
               rank={index + 1}
               topScore={topScore}
-              onTrace={() => onTrace((chunk.chunk_id ?? chunk.id) as string)}
+              onTrace={
+                // Without a query event there is no trace to open; the row
+                // hides the action rather than rendering a dead button.
+                result.query_event_id
+                  ? () => onTrace((chunk.chunk_id ?? chunk.id) as string)
+                  : undefined
+              }
             />
           ))}
         </ul>

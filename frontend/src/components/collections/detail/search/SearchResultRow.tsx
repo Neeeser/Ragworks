@@ -50,7 +50,9 @@ type SearchResultRowProps = {
   chunk: QueryChunk;
   rank: number;
   topScore: number;
-  onTrace: () => void;
+  /** Absent when the run recorded no query event — a button that opens
+   * nothing is worse than no button. */
+  onTrace?: () => void;
 };
 
 /**
@@ -125,9 +127,11 @@ export function SearchResultRow({ chunk, rank, topScore, onTrace }: SearchResult
       </div>
 
       {/* A sibling of the expand button, never nested inside it. */}
-      <Button variant="ghost" size="sm" className="shrink-0" onClick={onTrace}>
-        Trace result
-      </Button>
+      {onTrace ? (
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={onTrace}>
+          Trace result
+        </Button>
+      ) : null}
     </li>
   );
 }

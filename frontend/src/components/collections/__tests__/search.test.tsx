@@ -181,7 +181,9 @@ describe("CollectionSearch", () => {
       expect(screen.getByText("Alpha")).toBeInTheDocument();
     });
     expect(screen.queryByText(viewTraceLabel)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: traceResultLabel }));
+    // The per-result action disappears too — a rendered button whose click
+    // opens nothing is the bug, not a state to pin.
+    expect(screen.queryByRole("button", { name: traceResultLabel })).not.toBeInTheDocument();
     expect(getMockRouter().push).not.toHaveBeenCalled();
   });
 
