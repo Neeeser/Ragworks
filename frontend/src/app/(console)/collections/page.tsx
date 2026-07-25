@@ -1,15 +1,15 @@
 "use client";
 
-import { PlusCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { CollectionsList } from "@/components/collections/list/CollectionsList";
 import { CreateCollectionWizard } from "@/components/collections/list/CreateCollectionWizard";
+import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Loader } from "@/components/ui/loader";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Notification } from "@/components/ui/notification";
-import { GlassCard } from "@/components/ui/panel";
 import {
   deleteCollection,
   fetchCollectionStats,
@@ -146,48 +146,54 @@ export default function CollectionsPage() {
     }
   };
 
+  const totals = useMemo(() => {
+    let documents = 0;
+    let chunks = 0;
+    for (const collection of collections) {
+      const stats = statsById[collection.id];
+      documents += stats?.document_count ?? 0;
+      chunks += stats?.chunk_count ?? 0;
+    }
+    return { documents, chunks };
+  }, [collections, statsById]);
+
   return (
-    <div className="relative space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-muted">
-            Collections
-          </p>
-          <h1 className="text-3xl font-semibold text-primary">Document collections</h1>
-        </div>
-        <Button
-          variant="secondary"
-          className="flex items-center gap-2"
-          onClick={() => setWizardOpen(true)}
-        >
-          <PlusCircle className="h-4 w-4" />
-          Create collection
-        </Button>
-      </div>
+    <>
+      <CrumbBar
+        crumbs={[{ label: "Collections" }]}
+        state={
+          loading ? null : (
+            <InstrumentLabel>
+              {`${collections.length} ${collections.length === 1 ? "collection" : "collections"} · ${totals.documents.toLocaleString()} docs · ${totals.chunks.toLocaleString()} chunks`}
+            </InstrumentLabel>
+          )
+        }
+        actions={
+          <Button size="sm" onClick={() => setWizardOpen(true)}>
+            New collection
+          </Button>
+        }
+      />
 
-      {deleteNotice && (
-        <div className="absolute left-1/2 top-4 z-20 w-[min(520px,90%)] -translate-x-1/2">
-          <Notification message={deleteNotice} onDismiss={() => setDeleteNotice(null)} />
-        </div>
-      )}
+      <PageBody className="relative">
+        {deleteNotice && (
+          <div className="absolute left-1/2 top-3 z-20 w-[min(520px,90%)] -translate-x-1/2">
+            <Notification message={deleteNotice} onDismiss={() => setDeleteNotice(null)} />
+          </div>
+        )}
 
-      {message && (
-        <GlassCard className="rounded-3xl border border-hairline p-4 text-sm text-body">
-          {message}
-        </GlassCard>
-      )}
+        {message && (
+          <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{message}</p>
+        )}
 
-      {loading ? (
-        <GlassCard className="flex items-center justify-center rounded-3xl p-10">
-          <Loader className="h-6 w-6" />
-        </GlassCard>
-      ) : (
         <CollectionsList
           collections={collections}
           statsById={statsById}
+          loading={loading}
           onDeleteRequest={(collection) => setDeleteTarget(collection)}
+          onCreateRequest={() => setWizardOpen(true)}
         />
-      )}
+      </PageBody>
 
       <CreateCollectionWizard
         open={wizardOpen}
@@ -209,6 +215,6 @@ export default function CollectionsPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </>
   );
 }

@@ -72,8 +72,8 @@ describe("palette token contract", () => {
     expect(CSS).toMatch(/--radius-chip:\s*3px/);
     expect(CSS).toMatch(/--radius-control:\s*4px/);
     expect(CSS).toMatch(/--radius-panel:\s*6px/);
-    expect(CSS).toMatch(/--text-instrument:\s*9\.5px/);
-    expect(CSS).toMatch(/--text-ui:\s*12\.5px/);
+    expect(CSS).toMatch(/--text-instrument:\s*10\.5px/);
+    expect(CSS).toMatch(/--text-ui:\s*13\.5px/);
     expect(CSS).toMatch(/--ease-standard:/);
     expect(CSS).toMatch(/--ease-decel:/);
     expect(CSS).toMatch(/--ease-accel:/);

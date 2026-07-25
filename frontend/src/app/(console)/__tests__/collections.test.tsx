@@ -159,9 +159,9 @@ describe("collections pages", () => {
       expect(screen.getByTestId(COLLECTION_COUNT_TESTID)).toHaveTextContent("1");
     });
 
-    fireEvent.click(screen.getByText("Create collection"));
+    fireEvent.click(screen.getByRole("button", { name: "New collection" }));
     fireEvent.click(screen.getByText("Close wizard"));
-    fireEvent.click(screen.getByText("Create collection"));
+    fireEvent.click(screen.getByRole("button", { name: "New collection" }));
     fireEvent.click(screen.getByText("Create now"));
     expect(screen.getByText("Collection created.")).toBeInTheDocument();
 

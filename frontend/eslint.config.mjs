@@ -88,6 +88,10 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // The sandbox harness builds into its own dist dir (see next.config.ts's
+    // distDir override); without this, lint reports thousands of problems in
+    // generated output.
+    ".next-sandbox/**",
     "out/**",
     "build/**",
     "coverage/**",

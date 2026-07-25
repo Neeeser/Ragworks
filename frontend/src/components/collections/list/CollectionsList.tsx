@@ -1,14 +1,14 @@
 "use client";
 
-import { Files, FolderKanban, Trash2 } from "lucide-react";
+import { Files, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import {
-  buildCollectionStatItems,
-  CollectionStatCard,
-} from "@/components/collections/CollectionStats";
-import { GlassCard } from "@/components/ui/panel";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { DATA_ROW_ACTIONS_SLOT, DataRow, DataRowHeader } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
 
 import type { Collection, CollectionStats } from "@/lib/types";
 
@@ -16,108 +16,150 @@ type CollectionsListProps = {
   collections: Collection[];
   statsById: Record<string, CollectionStats | undefined>;
   onDeleteRequest: (collection: Collection) => void;
+  onCreateRequest: () => void;
+  loading?: boolean;
 };
 
-const focusRingClass =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+/**
+ * Column widths shared by the header and every row, so numbers line up in a
+ * readable column instead of each row measuring its own content.
+ */
+const COL = {
+  docs: "w-16 text-right",
+  chunks: "w-20 text-right",
+  updated: "w-20 text-right",
+};
 
-export function CollectionsList({ collections, statsById, onDeleteRequest }: CollectionsListProps) {
+function ColumnHeader() {
+  return (
+    <DataRowHeader
+      title="Name"
+      columns={[
+        <InstrumentLabel key="docs" className={COL.docs}>
+          Docs
+        </InstrumentLabel>,
+        <InstrumentLabel key="chunks" className={COL.chunks}>
+          Chunks
+        </InstrumentLabel>,
+        <InstrumentLabel key="updated" className={COL.updated}>
+          Updated
+        </InstrumentLabel>,
+      ]}
+    />
+  );
+}
+
+function LoadingRows() {
+  return (
+    <div aria-busy>
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center border-b border-hairline">
+          <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2">
+            <Skeleton className="h-2 max-w-48 flex-1" />
+            <Skeleton className={`h-2 ${COL.docs}`} />
+            <Skeleton className={`h-2 ${COL.chunks}`} />
+            <Skeleton className={`h-2 ${COL.updated}`} />
+          </div>
+          <span className={DATA_ROW_ACTIONS_SLOT} aria-hidden />
+        </div>
+      ))}
+      <span className="sr-only">Loading collections</span>
+    </div>
+  );
+}
+
+/**
+ * One row per collection.
+ *
+ * Previously one 190px card each, carrying a `COLLECTION` eyebrow above every
+ * entry in a list of collections, a "No description yet." placeholder, and five
+ * stats in five nested sub-cards — four levels of container for five numbers.
+ * Average latency and last-used moved to the collection's own page, where they
+ * belong: this page's job is to list collections.
+ */
+export function CollectionsList({
+  collections,
+  statsById,
+  onDeleteRequest,
+  onCreateRequest,
+  loading = false,
+}: CollectionsListProps) {
   const router = useRouter();
+
+  if (loading) {
+    return (
+      <>
+        <ColumnHeader />
+        <LoadingRows />
+      </>
+    );
+  }
 
   if (collections.length === 0) {
     return (
-      <GlassCard className="rounded-3xl border border-hairline p-6 text-sm text-body">
-        No collections yet. Create one to start indexing documents.
-      </GlassCard>
+      <div className="p-8 text-center">
+        <p className="text-ui text-muted">No collections yet.</p>
+        <Button size="sm" className="mt-3" onClick={onCreateRequest}>
+          Create collection
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <>
+      <ColumnHeader />
       {collections.map((collection) => {
         const stats = statsById[collection.id];
-        const statItems = buildCollectionStatItems(collection, stats);
+        const description = collection.description?.trim();
         return (
-          <div
+          <DataRow
             key={collection.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => router.push(`/collections/${collection.id}`)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                router.push(`/collections/${collection.id}`);
-              }
-            }}
-            className={cn(
-              "group rounded-3xl border border-hairline bg-surface p-5 text-left transition",
-              "hover:border-strong hover:bg-surface-strong",
-              focusRingClass,
-            )}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.35em] text-muted">
-                  <FolderKanban className="h-3.5 w-3.5 text-accent-violet" />
-                  Collection
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-primary">{collection.name}</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    {collection.description?.trim() || "No description yet."}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    router.push(`/collections/${collection.id}/files`);
-                  }}
-                  className={cn(
-                    "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm",
-                    "border-hairline text-body transition hover:border-strong hover:text-primary",
-                    focusRingClass,
-                  )}
+            href={`/collections/${collection.id}`}
+            title={collection.name}
+            /* Rendered only when present — an absent optional field gets no
+               placeholder standing in for it, so rows without a description stay
+               single-line rather than reserving space for nothing. */
+            subtitle={description || undefined}
+            columns={[
+              <span key="docs" className={`font-mono tabular-nums ${COL.docs}`}>
+                {stats?.document_count?.toLocaleString() ?? "—"}
+              </span>,
+              <span key="chunks" className={`font-mono tabular-nums ${COL.chunks}`}>
+                {stats?.chunk_count?.toLocaleString() ?? "—"}
+              </span>,
+              <span
+                key="updated"
+                className={`font-mono tabular-nums text-meta ${COL.updated}`}
+                title={parseApiDate(collection.updated_at)?.toLocaleString()}
+              >
+                {formatTimeAgoCompact(collection.updated_at)}
+              </span>,
+            ]}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
                   aria-label={`Browse files in ${collection.name}`}
+                  onClick={() => router.push(`/collections/${collection.id}/files`)}
                 >
-                  <Files className="h-4 w-4" aria-hidden />
-                  Files
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDeleteRequest(collection);
-                  }}
-                  className={cn(
-                    "inline-flex h-10 w-10 items-center justify-center rounded-full border",
-                    "border-hairline text-muted transition hover:border-data-neg/60 hover:text-data-neg",
-                    focusRingClass,
-                  )}
+                  <Files className="h-3.5 w-3.5" aria-hidden />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
                   aria-label={`Delete ${collection.name}`}
+                  className="hover:text-data-neg"
+                  onClick={() => onDeleteRequest(collection)}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {statItems.map((item) => (
-                <div
-                  key={`${collection.id}-${item.label}`}
-                  className="rounded-2xl border border-hairline bg-surface px-3 py-3 text-sm"
-                >
-                  <CollectionStatCard
-                    item={item}
-                    valueClassName="mt-2 text-base font-semibold text-primary"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </Button>
+              </>
+            }
+          />
         );
       })}
-    </div>
+    </>
   );
 }
