@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -45,6 +46,11 @@ type KpiCellProps = {
   tone?: "default" | "pos" | "neg" | "warn";
   /** Makes the number double as navigation. */
   href?: string;
+  /**
+   * What the value means when the label alone can't say (how it's computed,
+   * what it covers). Wraps the whole cell so the strip's seams stay intact.
+   */
+  tooltip?: string;
   loading?: boolean;
 };
 
@@ -61,6 +67,7 @@ export function KpiCell({
   unit,
   tone = "default",
   href,
+  tooltip,
   loading = false,
 }: KpiCellProps) {
   const display = value === null || value === undefined ? null : value;
@@ -84,15 +91,24 @@ export function KpiCell({
     </>
   );
 
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="block p-3 transition-colors duration-80 ease-standard hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
-      >
-        {body}
-      </Link>
-    );
-  }
-  return <div className="p-3">{body}</div>;
+  const cell = href ? (
+    <Link
+      href={href}
+      className="block p-3 transition-colors duration-80 ease-standard hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
+    >
+      {body}
+    </Link>
+  ) : (
+    <div className="p-3">{body}</div>
+  );
+
+  if (!tooltip) return cell;
+  // The trigger wraps the whole cell (block, so it fills its strip column and
+  // keeps the seam on itself); focus events from an inner link bubble, so a
+  // keyboard user still gets the description.
+  return (
+    <Tooltip content={tooltip} triggerElement="div" triggerClassName="block">
+      {cell}
+    </Tooltip>
+  );
 }
