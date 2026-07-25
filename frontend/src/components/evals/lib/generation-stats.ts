@@ -21,9 +21,3 @@ export function readGenerationCoverage(dataset: EvalDataset): GenerationCoverage
   if (typeof covered !== "number" || typeof total !== "number" || total <= 0) return null;
   return { documentsCovered: covered, documentsTotal: total };
 }
-
-/** "27 of 50 source documents (54%)" — the coverage sentence fragment. */
-export function coverageLabel(coverage: GenerationCoverage): string {
-  const percent = Math.round((coverage.documentsCovered / coverage.documentsTotal) * 100);
-  return `${coverage.documentsCovered.toLocaleString()} of ${coverage.documentsTotal.toLocaleString()} source documents (${percent}%)`;
-}
