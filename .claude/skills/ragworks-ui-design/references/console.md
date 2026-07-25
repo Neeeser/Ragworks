@@ -157,6 +157,10 @@ never appears where no real pipeline is bound.
 | Pulse | live processes only |
 | Node-dot glow | pos/live states only |
 
+The glow budget counts what is *on screen at once*: when an empty state repeats the top
+bar's primary action, the empty state's button is plain primary — the top bar keeps the
+view's one glow (a page whose top bar has no button may glow its empty state instead).
+
 ---
 
 ## 4. Colour — quiet is not colourless

@@ -134,7 +134,9 @@ export function CollectionsList({
     return (
       <Panel className="p-8 text-center">
         <p className="text-ui text-muted">No collections yet.</p>
-        <Button size="sm" glow className="mt-3" onClick={onCreateRequest}>
+        {/* Plain primary: the top bar's New collection already carries this
+            view's one glow, and an empty list shows both buttons at once. */}
+        <Button size="sm" className="mt-3" onClick={onCreateRequest}>
           Create collection
         </Button>
       </Panel>
