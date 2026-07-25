@@ -2,7 +2,6 @@
 
 import { ADMIN_CRUMB, AdminTabs } from "@/components/admin/AdminTabs";
 import { useAdminUsage, USAGE_WINDOWS } from "@/components/admin/hooks/use-admin-usage";
-import { TrendChart } from "@/components/collections/detail/overview/TrendChart";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
@@ -12,6 +11,7 @@ import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
 import { Panel, PanelGrid } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { TrendChart } from "@/components/ui/trend-chart";
 import { parseApiDate } from "@/lib/datetime";
 import { formatTimeAgoCompact } from "@/lib/format";
 

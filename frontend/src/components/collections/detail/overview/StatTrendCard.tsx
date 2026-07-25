@@ -1,8 +1,8 @@
 "use client";
 
-import { TrendChart } from "@/components/collections/detail/overview/TrendChart";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
+import { TrendChart } from "@/components/ui/trend-chart";
 
 type StatTrendCardProps = {
   label: string;
