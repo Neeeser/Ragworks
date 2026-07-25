@@ -22,7 +22,6 @@ describe("collections list and sidebar", () => {
       <CollectionsList
         collections={[]}
         statsById={{}}
-        pipelineNameById={{}}
         onDeleteRequest={() => {}}
         onCreateRequest={onCreateRequest}
       />,
@@ -39,7 +38,6 @@ describe("collections list and sidebar", () => {
         collections={[]}
         statsById={{}}
         loading
-        pipelineNameById={{}}
         onDeleteRequest={() => {}}
         onCreateRequest={() => {}}
       />,
@@ -63,7 +61,6 @@ describe("collections list and sidebar", () => {
       <CollectionsList
         collections={[collection]}
         statsById={{ [collection.id]: stats }}
-        pipelineNameById={{}}
         onDeleteRequest={onDeleteRequest}
         onCreateRequest={() => {}}
       />,
@@ -97,7 +94,6 @@ describe("collections list and sidebar", () => {
       <CollectionsList
         collections={[collectionA, collectionB]}
         statsById={{ [collectionB.id]: stats }}
-        pipelineNameById={{}}
         onDeleteRequest={() => undefined}
         onCreateRequest={() => {}}
       />,

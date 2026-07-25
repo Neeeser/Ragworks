@@ -117,7 +117,6 @@ export type CollectionSearchState = {
  * being inspected. A collection with no tool bindings (pre-migration or
  * system-provisioned) falls back to the legacy query endpoint.
  */
-// eslint-disable-next-line complexity -- one state domain: selection + args + run lifecycle
 export function useCollectionSearch(token: string, collectionId: string): CollectionSearchState {
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);

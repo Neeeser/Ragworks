@@ -82,7 +82,9 @@ export default function DashboardPage() {
         state={connectionHealth ? <ConnectionState health={connectionHealth} /> : null}
       />
 
-      <PageBody>
+      {/* A column, so the activity panes can take the remaining height rather
+          than ending mid-viewport. */}
+      <PageBody className="flex flex-col">
         {error ? (
           <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
             {error.message}
@@ -105,7 +107,7 @@ export default function DashboardPage() {
             </Button>
           </div>
         ) : (
-          <>
+          <div className="flex min-h-0 flex-1 flex-col">
             <DashboardSummary
               collectionCount={collections.length}
               docCount={stats.docCount}
@@ -120,7 +122,7 @@ export default function DashboardPage() {
               collectionNameById={collectionNameById}
               loading={loading}
             />
-          </>
+          </div>
         )}
       </PageBody>
     </>

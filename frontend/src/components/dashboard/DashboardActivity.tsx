@@ -1,4 +1,3 @@
-import { Chip } from "@/components/ui/chip";
 import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { PanelGrid } from "@/components/ui/panel";
@@ -35,8 +34,8 @@ const DOC_COL = {
 };
 
 const CHAT_COL = {
-  /** Fits a provider/model id up to ~30 characters; longer ones show on hover. */
-  model: "w-60",
+  /** Fits a lowercase provider/model id of ~34 characters; longer show on hover. */
+  model: "w-56",
   updated: NUMERIC_COL,
 };
 
@@ -158,10 +157,16 @@ function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boo
             href={`/chat/${session.id}`}
             title={session.title || "Untitled session"}
             columns={[
-              // Model ids are long and routinely truncated in a column, so the
-              // full id stays available on hover rather than being lost.
+              // Verbatim, not a Chip: a model id is a case-sensitive identifier
+              // (`anthropic/claude-3.5-haiku`), and Chip's uppercase label voice
+              // renders it as a value the API would reject. Dropping the chip
+              // also drops a `chat`-toned dot that meant nothing — every row in
+              // this list is a chat — and the tracking that made the id truncate
+              // ~90px earlier than it needed to.
               <Tooltip key="model" content={session.chat_model} triggerClassName={CHAT_COL.model}>
-                <Chip tone="chat">{session.chat_model}</Chip>
+                <span className="truncate font-mono text-instrument text-muted">
+                  {session.chat_model}
+                </span>
               </Tooltip>,
               <Tooltip
                 key="updated"
@@ -196,7 +201,11 @@ export function DashboardActivity({
   loading = false,
 }: DashboardActivityProps) {
   return (
-    <PanelGrid columns={2}>
+    // `flex-1` so the two regions run to the bottom of the viewport. Sized to
+    // their rows instead, the block floated over ~450px of bare canvas with the
+    // seam stopping in mid-air — which reads as the page having failed to load
+    // something rather than as two panes with little in them.
+    <PanelGrid columns={2} className="min-h-0 flex-1">
       <IngestionList
         documents={recentDocuments}
         collectionNameById={collectionNameById}
