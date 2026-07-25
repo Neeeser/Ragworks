@@ -11,7 +11,7 @@ import { datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
 import { PageBody } from "@/components/ui/app-shell";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -88,12 +88,12 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
           <KpiCell label="Corpus docs" value={detail.num_corpus_docs} />
           <KpiCell label="Queries" value={detail.num_queries} />
           <KpiCell label="Source" value={SOURCE_LABEL[detail.source]} />
-          {/* Synthetic datasets only: how much of the source collection the
-              generated queries actually reach. Absent elsewhere, so it renders
-              an em-dash rather than a misleading zero. */}
+          {/* Synthetic datasets only. Absent elsewhere, so it renders an
+              em-dash rather than a misleading zero. */}
           <KpiCell
             label="Source docs covered"
             value={coverage ? `${coverage.documentsCovered}/${coverage.documentsTotal}` : null}
+            tooltip="How many of the source collection's documents the generated queries reach"
           />
           <KpiCell label="Ingested corpora" value={collections.length} />
         </KpiStrip>
@@ -115,11 +115,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
         {detail.status === "ready" && <DatasetQueriesTable datasetId={datasetId} />}
 
         <Panel className="overflow-hidden">
-          <div className="border-b border-hairline px-3 py-2">
-            <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">
-              Ingested corpora
-            </h2>
-          </div>
+          <PanelHeader title="Ingested corpora" />
 
           {collections.length === 0 ? (
             collectionsLoading ? (

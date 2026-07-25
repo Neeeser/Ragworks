@@ -11,7 +11,7 @@ import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges"
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { deleteConnection } from "@/lib/api";
@@ -102,20 +102,32 @@ export function ConnectionsManager({
   return (
     <>
       <Panel className="overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
-          <div className="flex min-w-0 items-center gap-3">
-            {title ? (
-              <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">{title}</h2>
-            ) : null}
+        {title ? (
+          <PanelHeader
+            title={title}
+            end={
+              <div className="flex items-center gap-3">
+                <span className="text-instrument text-meta">
+                  <span className="font-mono tabular-nums">{connections.length}</span> configured
+                </span>
+                <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add provider
+                </Button>
+              </div>
+            }
+          />
+        ) : (
+          <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
             <span className="text-instrument text-meta">
               <span className="font-mono tabular-nums">{connections.length}</span> configured
             </span>
+            <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add provider
+            </Button>
           </div>
-          <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            Add provider
-          </Button>
-        </div>
+        )}
 
         {error ? <p className="px-3 py-2 text-ui text-data-neg">{error}</p> : null}
         {actionError ? <p className="px-3 py-2 text-ui text-data-neg">{actionError}</p> : null}

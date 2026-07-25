@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
 
 import type { UsageBreakdown } from "@/lib/types";
@@ -48,12 +49,11 @@ export const UsageCard = ({ usage, contextWindow, contextConsumed, onExport }: U
             {usageDescription}
           </span>
         </div>
-        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-strong">
-          <div
-            className="h-full rounded-full bg-accent-violet"
-            style={{ width: `${contextUtilization}%` }}
-          />
-        </div>
+        <Meter
+          value={contextUtilization / 100}
+          fillClassName="bg-accent-violet"
+          className="mt-1 w-full"
+        />
       </div>
 
       <div>

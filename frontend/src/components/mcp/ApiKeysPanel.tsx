@@ -12,6 +12,7 @@ import { useApiKeys } from "@/components/mcp/hooks/use-api-keys";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PanelHeader } from "@/components/ui/panel";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ApiKey } from "@/lib/types/api-keys";
@@ -36,15 +37,11 @@ export function ApiKeysPanel() {
 
   return (
     <section aria-labelledby="api-keys-heading" className="card-surface">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-3 py-2">
-        <h2
-          id="api-keys-heading"
-          className="text-head font-semibold tracking-[-0.01em] text-primary"
-        >
-          API keys
-        </h2>
-        <InstrumentLabel>Issued from a collection&apos;s MCP card</InstrumentLabel>
-      </div>
+      <PanelHeader
+        id="api-keys-heading"
+        title="API keys"
+        end={<InstrumentLabel>Issued from a collection&apos;s MCP card</InstrumentLabel>}
+      />
 
       {error && (
         <p role="alert" className="border-b border-hairline p-3 text-ui text-data-neg">

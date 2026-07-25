@@ -14,11 +14,14 @@ import { Home, LocateFixed, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { useCssTokens } from "@/lib/use-css-tokens";
 import { cn } from "@/lib/utils";
 
+import { cssColorToRgba } from "./lib/plot-colors";
 import { buildInitialViewState, computeGridStep, computeMinimumSpacing } from "./lib/umap-geometry";
 import { ensureCanvasContextLimits } from "./luma-patches";
 
+import type { Rgba } from "./lib/plot-colors";
 import type { GridLine } from "./lib/umap-geometry";
 import type { UmapPoint } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
@@ -37,13 +40,17 @@ const GRID_MARGIN_MULTIPLIER = 0.2;
 const MIN_POINT_RADIUS_PX = 4;
 const MAX_POINT_RADIUS_PX = 10;
 
-// Plotting colours are RGBA arrays because deck.gl takes numeric channels, and a
-// palette token can only be resolved by reading computed style — which this
-// codebase forbids. They stay literals, named here so the plot's own palette
-// lives in one place instead of inside the layer definitions.
-const GRID_LINE_RGBA: [number, number, number, number] = [148, 163, 184, 90];
-const POINT_RGBA: [number, number, number, number] = [129, 140, 248, 200];
-const SELECTED_POINT_RGBA: [number, number, number, number] = [248, 113, 113, 220];
+// deck.gl takes numeric channels, so the plot resolves its palette tokens to
+// RGBA through useCssTokens (the sanctioned computed-style bridge, shared with
+// ReactFlow's dot grid) and re-reads them on every palette change. The
+// literals remain only as the deterministic first-paint fallback, before the
+// mount effect resolves the real values.
+const PLOT_TOKENS = ["--border-hairline", "--series-1", "--data-neg"] as const;
+const GRID_LINE_RGBA: Rgba = [148, 163, 184, 90];
+const POINT_RGBA: Rgba = [129, 140, 248, 200];
+const SELECTED_POINT_RGBA: Rgba = [248, 113, 113, 220];
+const POINT_ALPHA = 200;
+const SELECTED_POINT_ALPHA = 220;
 
 // The deck.gl tooltip is rendered by the library into its own element, so its
 // look travels as inline style; `var()` keeps it correct in every palette.
@@ -64,6 +71,13 @@ export function UmapCanvas({
   onSelectPoint,
 }: UmapCanvasProps) {
   ensureCanvasContextLimits();
+  const [hairline, series1, dataNeg] = useCssTokens(PLOT_TOKENS);
+  const gridColor = useMemo(() => cssColorToRgba(hairline) ?? GRID_LINE_RGBA, [hairline]);
+  const pointColor = useMemo(() => cssColorToRgba(series1, POINT_ALPHA) ?? POINT_RGBA, [series1]);
+  const selectedColor = useMemo(
+    () => cssColorToRgba(dataNeg, SELECTED_POINT_ALPHA) ?? SELECTED_POINT_RGBA,
+    [dataNeg],
+  );
   const initialViewState = useMemo(() => buildInitialViewState(points), [points]);
   const [viewState, setViewState] = useState<OrthographicViewState>(initialViewState);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -201,7 +215,7 @@ export function UmapCanvas({
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getSourcePosition: (line) => line.source,
         getTargetPosition: (line) => line.target,
-        getColor: GRID_LINE_RGBA,
+        getColor: gridColor,
         getWidth: 1,
         widthUnits: "pixels",
         // `depthTest: false` (old WebGL-style parameter) is now expressed as an
@@ -219,9 +233,9 @@ export function UmapCanvas({
         radiusMaxPixels: MAX_POINT_RADIUS_PX,
         getPosition: (point) => [point.x, point.y],
         getRadius: () => baseRadius,
-        getFillColor: (point) => (point.id === selectedPointId ? SELECTED_POINT_RGBA : POINT_RGBA),
+        getFillColor: (point) => (point.id === selectedPointId ? selectedColor : pointColor),
         updateTriggers: {
-          getFillColor: selectedPointId,
+          getFillColor: [selectedPointId, selectedColor, pointColor],
           getRadius: baseRadius,
         },
         onClick: (info: PickingInfo<UmapPoint>) => {
@@ -231,7 +245,16 @@ export function UmapCanvas({
         },
       }),
     ];
-  }, [baseRadius, gridLines, onSelectPoint, points, selectedPointId]);
+  }, [
+    baseRadius,
+    gridColor,
+    gridLines,
+    onSelectPoint,
+    pointColor,
+    points,
+    selectedColor,
+    selectedPointId,
+  ]);
 
   const controls: Array<{
     icon: LucideIcon;

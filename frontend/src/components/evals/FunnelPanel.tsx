@@ -2,7 +2,8 @@
 
 import { formatPercent } from "@/components/evals/lib/metrics";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Panel } from "@/components/ui/panel";
+import { Meter } from "@/components/ui/meter";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { StatusDot } from "@/components/ui/status-dot";
 
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -33,11 +34,7 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
   }
   return (
     <Panel>
-      <div className="border-b border-hairline px-3 py-2">
-        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">
-          Gold retention by node
-        </h2>
-      </div>
+      <PanelHeader title="Gold retention by node" />
 
       <ul className="space-y-3 p-3">
         {funnel.stages.map((stage) => (
@@ -58,16 +55,12 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
                 </span>
               </p>
             </div>
-            <div
-              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-strong"
-              role="img"
-              aria-label={`${stage.label}: ${formatPercent(stage.retention)} of gold documents retained`}
-            >
-              <div
-                className="h-full rounded-full bg-series-1"
-                style={{ width: `${Math.max(0, Math.min(1, stage.retention)) * 100}%` }}
-              />
-            </div>
+            <Meter
+              value={stage.retention}
+              label={`${stage.label} retention`}
+              valueText={`${formatPercent(stage.retention)} of gold documents retained`}
+              className="mt-1.5"
+            />
           </li>
         ))}
       </ul>

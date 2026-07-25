@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 /**
  * The console card: the `.card-surface` material — soft vertical gradient,
@@ -14,6 +14,41 @@ import type { HTMLAttributes } from "react";
  */
 export function Panel({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("card-surface", className)} {...props} />;
+}
+
+type PanelHeaderProps = {
+  /** The panel's name. The one piece of text that says what the panel IS. */
+  title: ReactNode;
+  /** Heading id, for a `<section aria-labelledby>` wrapper. */
+  id?: string;
+  /** Right-aligned slot: a count, an InstrumentLabel fact, or the action. */
+  end?: ReactNode;
+  /** Heading level — h2 in a page section, h3 inside a titled region. */
+  as?: "h2" | "h3";
+  className?: string;
+};
+
+/**
+ * A panel's titled header row: heading at the left, an optional fact or
+ * action at the right, hairline below. One primitive because the row was
+ * hand-rolled a dozen times and each copy drifted a little (items-baseline
+ * here, gap-2 there) — and because on a page of stacked peer panels every
+ * panel must carry a heading to be findable at all.
+ */
+export function PanelHeader({ title, id, end, as: Heading = "h2", className }: PanelHeaderProps) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-3 py-2",
+        className,
+      )}
+    >
+      <Heading id={id} className="text-head font-semibold tracking-[-0.01em] text-primary">
+        {title}
+      </Heading>
+      {end}
+    </div>
+  );
 }
 
 /** Column counts a single row of seamed panels supports. */

@@ -8,6 +8,7 @@ import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function titleCase(section: string): string {
@@ -114,14 +115,7 @@ export function AdminSettingsPage() {
                 aria-labelledby={`config-section-${section}`}
                 className="card-surface"
               >
-                <div className="border-b border-hairline px-3 py-2">
-                  <h2
-                    id={`config-section-${section}`}
-                    className="text-head font-semibold tracking-[-0.01em] text-primary"
-                  >
-                    {titleCase(section)}
-                  </h2>
-                </div>
+                <PanelHeader id={`config-section-${section}`} title={titleCase(section)} />
                 {fields.map((field) => (
                   <div key={field.key} className="border-b border-hairline p-3 last:border-b-0">
                     <ConfigFieldControl

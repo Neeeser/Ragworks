@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TextArea } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { getErrorMessage } from "@/lib/errors";
@@ -46,12 +46,14 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
 
   return (
     <Panel>
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hairline px-3 py-2">
-        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">Queries</h2>
-        <span className="font-mono text-instrument tabular-nums text-meta">
-          {total.toLocaleString()} total
-        </span>
-      </div>
+      <PanelHeader
+        title="Queries"
+        end={
+          <span className="font-mono text-instrument tabular-nums text-meta">
+            {total.toLocaleString()} total
+          </span>
+        }
+      />
 
       {actionError && (
         <p role="alert" className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
