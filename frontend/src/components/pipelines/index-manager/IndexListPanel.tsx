@@ -31,7 +31,7 @@ export function IndexListPanel({
 }: IndexListPanelProps) {
   return (
     <div className="space-y-2">
-      <Panel className="overflow-hidden">
+      <Panel className="shrink-0 overflow-hidden">
         <div className="flex h-8 items-center border-b border-hairline px-3">
           <InstrumentLabel>Indexes</InstrumentLabel>
         </div>

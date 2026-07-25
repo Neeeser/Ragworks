@@ -101,7 +101,10 @@ export function ConnectionsManager({
 
   return (
     <>
-      <Panel className="overflow-hidden">
+      {/* shrink-0 because overflow-hidden zeroes a flex item's automatic
+          minimum size: inside PageBody's flex column, a long sibling (many
+          login sessions) collapsed this panel to its 2px of borders. */}
+      <Panel className="shrink-0 overflow-hidden">
         {title ? (
           <PanelHeader
             title={title}

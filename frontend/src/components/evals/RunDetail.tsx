@@ -155,7 +155,7 @@ function ProgressCard({ detail }: { detail: EvalRun }) {
       ? Math.round((detail.progress_done / detail.progress_total) * 100)
       : 0;
   return (
-    <Panel className="overflow-hidden">
+    <Panel className="shrink-0 overflow-hidden">
       <PulseWire label={phase} className="w-full" />
       <div className="flex items-baseline justify-between gap-3 px-3 pb-2 pt-2">
         <InstrumentLabel>{phase}</InstrumentLabel>

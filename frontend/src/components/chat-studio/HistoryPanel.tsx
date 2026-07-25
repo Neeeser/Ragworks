@@ -24,6 +24,7 @@ interface HistoryPanelProps {
   onDelete: (sessionId: string) => void;
   deletingSessionId: string | null;
   onClose: () => void;
+  onNewChat: () => void;
 }
 
 type FilterOptionProps = {
@@ -71,6 +72,7 @@ const HistoryPanelComponent = ({
   onDelete,
   deletingSessionId,
   onClose,
+  onNewChat,
 }: HistoryPanelProps) => {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
@@ -134,6 +136,16 @@ const HistoryPanelComponent = ({
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3">
         <InstrumentLabel>Chats</InstrumentLabel>
         <span className="font-mono text-instrument tabular-nums text-meta">{sessions.length}</span>
+        {/* The pane's primary action sits with the list it acts on — it was in
+            the CrumbBar's far corner before, the one place users didn't look. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onNewChat}
+          className="ml-1 whitespace-nowrap"
+        >
+          New chat
+        </Button>
         <div className="relative ml-auto" ref={filterRef}>
           <Button
             size="sm"

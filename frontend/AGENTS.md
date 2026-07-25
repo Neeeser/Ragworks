@@ -194,6 +194,12 @@ the same PR.
   render-time state adjustment guarded so it fires only when the target is still
   empty _and_ the seed is non-empty (the second guard prevents an infinite
   setState loop).
+- **`overflow-hidden` on a flex-column child needs `shrink-0`.** `overflow: hidden`
+  zeroes the item's automatic minimum size, so inside a scrolling flex column the
+  panel silently collapses to its borders once a long sibling overflows the column —
+  data-dependent, so it passes every test and short-list manual check (the Provider
+  connections panel vanished only for accounts with many login sessions). Deliberate
+  full-height panes (`min-h-0 flex-1`) are the only children allowed to shrink.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
   Dead code costs every future reader.
