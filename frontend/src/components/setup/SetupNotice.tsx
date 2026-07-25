@@ -15,7 +15,7 @@ export function SetupNotice({
     <p
       role="alert"
       className={cn(
-        "rounded-2xl border px-4 py-3 text-sm",
+        "max-w-[66ch] rounded-control border px-3 py-2 text-ui",
         tone === "warning"
           ? "border-data-warn/40 bg-data-warn/10 text-data-warn"
           : "border-data-neg/40 bg-data-neg/10 text-data-neg",

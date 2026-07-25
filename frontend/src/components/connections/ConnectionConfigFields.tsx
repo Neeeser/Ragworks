@@ -48,12 +48,12 @@ export function ConnectionConfigFields({
                       [field.name]: !current[field.name],
                     }))
                   }
-                  className="rounded-full p-1.5 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+                  className="rounded-control p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
                 >
                   {revealed[field.name] ? (
-                    <EyeOff className="h-4 w-4" aria-hidden />
+                    <EyeOff className="h-3.5 w-3.5" aria-hidden />
                   ) : (
-                    <Eye className="h-4 w-4" aria-hidden />
+                    <Eye className="h-3.5 w-3.5" aria-hidden />
                   )}
                 </button>
               ) : undefined

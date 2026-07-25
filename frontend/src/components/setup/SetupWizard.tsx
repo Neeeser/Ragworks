@@ -31,18 +31,20 @@ export function SetupWizard() {
     <div className="relative flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center overflow-hidden">
       <SetupFlowBackdrop step={wizard.state.step} />
       <div className="relative z-10 flex w-full max-w-xl flex-col px-4">
-        <nav aria-label="Setup progress" className="mb-6 flex items-center gap-2">
+        {/* Progress as a node path: square node dots, the current one stretched
+            into a wire segment — the console's own mark, not a pill row. */}
+        <nav aria-label="Setup progress" className="mb-3 flex items-center gap-1">
           {SETUP_STEPS.map((step, index) => (
             <span
               key={step}
               aria-hidden
               className={cn(
-                "h-1.5 rounded-full transition-all duration-300",
+                "h-1.5 rounded-[2px] transition-all duration-160 ease-decel motion-reduce:transition-none",
                 index === activeIndex
-                  ? "w-8 bg-accent-violet"
+                  ? "w-6 bg-accent-violet shadow-[0_0_8px] shadow-accent-violet/50"
                   : index < activeIndex
-                    ? "w-3 bg-accent-violet/50"
-                    : "w-3 bg-surface-strong",
+                    ? "w-1.5 bg-accent-violet/50"
+                    : "w-1.5 bg-surface-strong",
               )}
             />
           ))}

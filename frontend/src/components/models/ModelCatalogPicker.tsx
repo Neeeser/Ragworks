@@ -1,9 +1,13 @@
 "use client";
 
-import { Loader, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { groupModelsByConnection } from "@/components/models/model-catalog-filter";
 import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Loader } from "@/components/ui/loader";
+import { cn } from "@/lib/utils";
 
 import type { ConnectionOption, ModelSortDef } from "@/components/models/model-catalog-filter";
 import type { CatalogModel } from "@/lib/types";
@@ -64,31 +68,49 @@ interface ModelCatalogPickerProps {
   maxVisible?: number;
 }
 
-const controlSelectClass =
-  "w-full rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body outline-none focus:border-accent-violet";
+// Native selects, deliberately, and only until a shared migration lands: the
+// chat picker's tests drive these two controls through the `combobox`/`option`
+// roles and `fireEvent.change`, which a `CustomSelect` (a Radix button + portal
+// listbox) does not expose. Product dropdowns are `CustomSelect` everywhere
+// else; the native popup here still cannot follow the product theme.
+const controlSelectClass = inputClass;
 
 function PickerHeader({
-  title,
+  currentModel,
+  selectedModelKey,
+  placeholder,
   subtitle,
   accessory,
   loading,
 }: {
-  title: string;
+  currentModel?: CatalogModel | null;
+  selectedModelKey: string;
+  placeholder: string;
   subtitle?: ReactNode;
   accessory?: ReactNode;
   loading: boolean;
 }) {
+  // With no catalog entry the key itself is all we can show, and a model key is
+  // an identifier — mono, verbatim.
+  const title = currentModel ? (
+    currentModel.name
+  ) : selectedModelKey ? (
+    <span className="font-mono">{selectedModelKey}</span>
+  ) : (
+    <span className="text-muted">{placeholder}</span>
+  );
+
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-sm text-body">{title}</p>
-        {subtitle ? <p className="break-all text-[11px] text-meta">{subtitle}</p> : null}
+        <p className="truncate text-ui font-medium text-primary">{title}</p>
+        {subtitle ? <p className="break-all text-instrument text-meta">{subtitle}</p> : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2 text-right">
+      <div className="flex shrink-0 items-center gap-2">
         {accessory}
         {loading ? (
-          <span className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.2em] text-body">
-            <Loader className="h-3.5 w-3.5" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 text-instrument text-muted">
+            <Loader className="h-3 w-3" />
             Syncing
           </span>
         ) : null}
@@ -107,7 +129,7 @@ function ProviderFilterSelect({
   onChange: (connectionId: string) => void;
 }) {
   return (
-    <div className="min-w-[160px] flex-1">
+    <div className="min-w-40 flex-1">
       <select
         aria-label="Filter models by provider"
         className={controlSelectClass}
@@ -135,7 +157,7 @@ function SortSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="min-w-[160px]">
+    <div className="min-w-40">
       <select
         aria-label="Sort models"
         className={controlSelectClass}
@@ -208,24 +230,24 @@ function SelectionStates({
   return (
     <>
       {modelsError && onRetry ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-data-neg/40 bg-data-neg/10 px-3 py-2">
-          <p className="text-sm text-data-neg">{modelsError}</p>
+        <div className="flex items-center justify-between gap-3 rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2">
+          <p className="text-ui text-data-neg">{modelsError}</p>
           <Button type="button" size="sm" variant="ghost" onClick={onRetry}>
             Retry
           </Button>
         </div>
       ) : null}
-      {modelsError && !onRetry ? <p className="text-sm text-data-neg">{modelsError}</p> : null}
+      {modelsError && !onRetry ? <p className="text-ui text-data-neg">{modelsError}</p> : null}
       {unavailable ? (
-        <div className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-3 py-2">
-          <p className="text-sm font-semibold text-primary">Unavailable</p>
-          <p className="break-all text-[11px] text-meta">
+        <div className="rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2">
+          <p className="text-ui font-medium text-data-warn">Unavailable</p>
+          <p className="break-all font-mono text-instrument text-meta">
             {unavailable.connectionLabel
               ? `${unavailable.connectionLabel} · ${unavailable.key}`
               : unavailable.key}
           </p>
           {unavailable.message ? (
-            <p className="mt-1 text-xs text-body">{unavailable.message}</p>
+            <p className="mt-1 max-w-[66ch] text-instrument text-muted">{unavailable.message}</p>
           ) : null}
         </div>
       ) : null}
@@ -254,11 +276,11 @@ function ModelList({
 }) {
   const hiddenCount = models.length - visibleModels.length;
   if (modelsLoading && models.length === 0) {
-    return <p className="text-sm text-muted">Loading {noun}s…</p>;
+    return <p className="text-ui text-muted">Loading {noun}s…</p>;
   }
   if (visibleModels.length === 0) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-ui text-muted">
         {searchTerm ? `No models match "${searchTerm}".` : emptyLabel}
       </p>
     );
@@ -268,18 +290,19 @@ function ModelList({
       {groupByConnection
         ? groupModelsByConnection(visibleModels).map((group) => (
             <div key={group.connectionId} className="space-y-2">
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-                <span className="text-body">{group.connectionLabel}</span>
-                <span className="rounded-full border border-hairline px-2 py-0.5">
-                  {group.providerType}
-                </span>
+              <div className="flex items-baseline gap-2">
+                <InstrumentLabel className="text-body">{group.connectionLabel}</InstrumentLabel>
+                {/* A provider type is a backend literal (`openrouter`), not a label. */}
+                <span className="font-mono text-instrument text-meta">{group.providerType}</span>
               </div>
               {group.models.map((model) => renderModel(model))}
             </div>
           ))
         : visibleModels.map((model) => renderModel(model))}
       {hiddenCount > 0 ? (
-        <p className="text-xs text-muted">
+        // Counts stay inside the sentence rather than in mono spans: this is
+        // prose, not a column, and the copy reads as one string.
+        <p className="text-instrument text-meta">
           Showing {visibleModels.length} of {models.length} models. Search to narrow the list.
         </p>
       ) : null}
@@ -294,6 +317,10 @@ function ModelList({
  * — the caller owns filter state (via `useModelCatalogFilter` or its own catalog
  * hook) and renders each row through `renderModel`, so chat, embedding,
  * reranking, and eval generation share one look and one set of states.
+ *
+ * The picker brings no card of its own: it renders inside whatever surface its
+ * caller owns (chat's `bg-surface` run-settings pane, a pipeline node drawer, a
+ * wizard step), so every fill and wash here has to read on `bg-surface`.
  */
 export function ModelCatalogPicker({
   models,
@@ -329,23 +356,27 @@ export function ModelCatalogPicker({
   return (
     <div className="space-y-3">
       <PickerHeader
-        title={currentModel?.name || selectedModelKey || headerPlaceholder}
+        currentModel={currentModel}
+        selectedModelKey={selectedModelKey}
+        placeholder={headerPlaceholder}
         subtitle={headerSubtitle}
         accessory={headerAccessory}
         loading={modelsLoading}
       />
 
-      {description ? <p className="text-xs text-muted">{description}</p> : null}
+      {description ? (
+        <p className="max-w-[66ch] text-instrument text-muted">{description}</p>
+      ) : null}
 
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-meta"
+          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-meta"
           aria-hidden
         />
         <input
           type="search"
           aria-label={searchAriaLabel}
-          className="w-full rounded-2xl border border-hairline bg-surface py-2 pl-9 pr-3 text-sm text-primary outline-none placeholder:text-meta focus:border-accent-violet"
+          className={cn(inputClass, "pl-9")}
           placeholder={searchPlaceholder}
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
@@ -364,7 +395,7 @@ export function ModelCatalogPicker({
 
       <SelectionStates modelsError={modelsError} onRetry={onRetry} unavailable={unavailable} />
 
-      <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
         <ModelList
           models={models}
           visibleModels={visibleModels}
