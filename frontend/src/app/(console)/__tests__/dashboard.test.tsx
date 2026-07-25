@@ -1,219 +1,213 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DashboardPage from "@/app/(console)/dashboard/page";
 import * as apiModule from "@/lib/api";
-import { makeChatSession, makeCollection, makeDocument, makePipeline } from "@/test/fixtures";
+import { makeChatSession, makeCollection, makeConnection, makeDocument } from "@/test/fixtures";
 import { resetMockAuth, setMockAuth } from "@/test/mocks";
 
-import type { Collection, Document, Pipeline } from "@/lib/types";
+import type { Collection } from "@/lib/types";
 
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const api = vi.mocked(apiModule);
 
-const COLLECTIONS_HEADING = "Your collections";
 const LOAD_FAILED = "Load failed";
+const CHUNKS_KPI = "Chunks indexed";
+const FIRST_DOC = "onboarding.md";
+const COL_TWO = "col-2";
+
+/** A KPI cell's whole text, so the label and its value are asserted together. */
+const kpi = (label: string) => screen.getByText(label).parentElement?.textContent ?? "";
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+};
 
 describe("DashboardPage", () => {
   const collections: Collection[] = [
-    makeCollection({
-      id: "col-1",
-      name: "One",
-      description: null,
-      tools: [
-        { id: "binding-1", pipeline_id: "pipe-1", is_primary: true, enabled: true, position: 0 },
-      ],
-    }),
-    makeCollection({
-      id: "col-2",
-      name: "Two",
-      description: null,
-      tools: [
-        { id: "binding-1", pipeline_id: "pipe-2", is_primary: true, enabled: true, position: 0 },
-      ],
-    }),
-  ];
-  const docs: Document[] = [
-    makeDocument({
-      id: "doc-1",
-      name: "Doc",
-      content_type: "text/plain",
-      num_chunks: 2,
-      num_tokens: 50,
-      chunk_size: 250,
-      chunk_overlap: 0,
-      ingestion_run_id: null,
-    }),
-  ];
-  const pipelines: Pipeline[] = [
-    makePipeline({
-      id: "pipe-1",
-      is_default: true,
-      definition: {
-        nodes: [
-          { id: "node-1", type: "chat.settings", name: "Settings", config: { context_window: 64 } },
-        ],
-        edges: [],
-      },
-    }),
-  ];
-  const sessions = [
-    makeChatSession({ id: "session-1", title: "Session", tool_collection_ids: [] }),
+    makeCollection({ id: "col-1", name: "Handbook", description: null }),
+    makeCollection({ id: COL_TWO, name: "Contracts", description: null }),
   ];
 
   beforeEach(() => {
     resetMockAuth();
     api.fetchCollections.mockResolvedValue(collections);
-    api.fetchPipelines.mockResolvedValue(pipelines);
-    api.fetchDocuments.mockResolvedValue(docs);
-    api.listChatSessions.mockResolvedValue(sessions);
+    api.listConnections.mockResolvedValue([makeConnection()]);
+    api.fetchDocuments.mockImplementation(async (_token: string, collectionId: string) =>
+      collectionId === "col-1"
+        ? [makeDocument({ id: "doc-1", name: FIRST_DOC, num_chunks: 7 })]
+        : [makeDocument({ id: "doc-2", collection_id: COL_TWO, name: "msa.pdf", num_chunks: 3 })],
+    );
+    api.listChatSessions.mockResolvedValue([
+      makeChatSession({ id: "session-1", title: "Retrieval spike", chat_model: "gpt-4o-mini" }),
+    ]);
   });
 
-  const createDeferred = <T,>() => {
-    let resolve!: (value: T) => void;
-    const promise = new Promise<T>((res) => {
-      resolve = res;
-    });
-    return { promise, resolve };
-  };
-
-  it("renders the loading state, not dashboard content, when the token is missing", () => {
-    setMockAuth({ token: null, user: null });
-    const { container } = render(<DashboardPage />);
-    // The Loader spinner exposes no role/text; span presence is the only handle.
-    expect(container.querySelector("span")).toBeInTheDocument();
-    // Loaded content (the collections section) must not be present while loading.
-    expect(screen.queryByText(COLLECTIONS_HEADING)).not.toBeInTheDocument();
-  });
-
-  it("greets the user and surfaces their collections; a document fetch error degrades gracefully", async () => {
-    api.fetchDocuments.mockRejectedValueOnce(new Error("Doc fail"));
+  it("aggregates the workspace into the KPI strip", async () => {
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText(COLLECTIONS_HEADING)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(CHUNKS_KPI)).toBeInTheDocument());
+    expect(kpi("Collections")).toContain("2");
+    expect(kpi("Documents")).toContain("2");
+    expect(kpi(CHUNKS_KPI)).toContain("10");
+    expect(kpi("Chat sessions")).toContain("1");
+  });
+
+  it("shows skeleton rows at the list's geometry, not loaded rows, while fetching", () => {
+    setMockAuth({ token: null, user: null });
+    render(<DashboardPage />);
+
+    expect(screen.getByText("Loading recent ingestion")).toBeInTheDocument();
+    expect(screen.getByText("Loading recent chats")).toBeInTheDocument();
+    expect(screen.queryByText(FIRST_DOC)).not.toBeInTheDocument();
+  });
+
+  it("names each recent document's collection, status, chunk count and age", async () => {
+    render(<DashboardPage />);
+
+    const list = await waitFor(() => screen.getByRole("region", { name: "Recent ingestion" }));
+    const row = within(list).getByText(FIRST_DOC).closest("a");
+    expect(row).toHaveAttribute("href", "/collections/col-1/files");
+    expect(row).toHaveTextContent("Handbook");
+    expect(row).toHaveTextContent("READY");
+    expect(row).toHaveTextContent("7");
+  });
+
+  it("links each recent chat to its session and names the model that answered", async () => {
+    render(<DashboardPage />);
+
+    const list = await waitFor(() => screen.getByRole("region", { name: "Recent chats" }));
+    const row = within(list).getByText("Retrieval spike").closest("a");
+    expect(row).toHaveAttribute("href", "/chat/session-1");
+    expect(row).toHaveTextContent("gpt-4o-mini");
+  });
+
+  it("calls out failed ingestion per collection and links to the offending files", async () => {
+    api.fetchDocuments.mockImplementation(async (_token: string, collectionId: string) =>
+      collectionId === COL_TWO
+        ? [
+            makeDocument({ id: "doc-2", collection_id: COL_TWO, status: "failed", num_chunks: 0 }),
+            makeDocument({ id: "doc-3", collection_id: COL_TWO, status: "failed", num_chunks: 0 }),
+          ]
+        : [],
+    );
+    render(<DashboardPage />);
+
+    const callout = await waitFor(() => screen.getByRole("region", { name: "Failed ingestion" }));
+    const row = within(callout).getByText("Contracts").closest("a");
+    expect(row).toHaveAttribute("href", "/collections/col-2/files");
+    expect(row).toHaveTextContent("2");
+  });
+
+  it("omits the failure callout entirely when nothing failed", async () => {
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText(CHUNKS_KPI)).toBeInTheDocument());
+    expect(screen.queryByRole("region", { name: "Failed ingestion" })).not.toBeInTheDocument();
+  });
+
+  it("reports invalid provider configs as workspace state in the breadcrumb", async () => {
+    api.listConnections.mockResolvedValueOnce([
+      makeConnection({ id: "conn-1" }),
+      makeConnection({ id: "conn-2", config_valid: false }),
+    ]);
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText("1 of 2 invalid")).toBeInTheDocument());
+  });
+
+  it("reports a workspace with no provider connections", async () => {
+    api.listConnections.mockResolvedValueOnce([]);
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText("No connections")).toBeInTheDocument());
+  });
+
+  it("renders no breadcrumb state when the connection list is unavailable", async () => {
+    api.listConnections.mockRejectedValueOnce(new Error("Connections down"));
+    render(<DashboardPage />);
+
+    // The page still loads: an unreachable connection list is not the overview's
+    // content, so it must degrade to no state rather than a misleading zero.
+    await waitFor(() => expect(screen.getByText(CHUNKS_KPI)).toBeInTheDocument());
+    expect(screen.queryByText("No connections")).not.toBeInTheDocument();
+    expect(screen.queryByText(/connections?$/)).not.toBeInTheDocument();
+  });
+
+  it("survives a document fetch error and still counts the collections that loaded", async () => {
+    api.fetchDocuments.mockImplementation(async (_token: string, collectionId: string) => {
+      if (collectionId === "col-1") throw new Error("Doc fail");
+      return [makeDocument({ id: "doc-2", collection_id: COL_TWO, num_chunks: 3 })];
     });
-    // Welcoming greeting, not a telemetry header.
-    expect(screen.getByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
-    // The user's collections are the primary content.
-    expect(screen.getByText("One")).toBeInTheDocument();
-    expect(screen.getByText("Two")).toBeInTheDocument();
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText(CHUNKS_KPI)).toBeInTheDocument());
+    expect(kpi("Collections")).toContain("2");
+    expect(kpi(CHUNKS_KPI)).toContain("3");
   });
 
   it("survives a chat-session fetch error and shows the recent-chats empty state", async () => {
     api.listChatSessions.mockRejectedValueOnce(new Error("Session fail"));
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Recent chats")).toBeInTheDocument();
-    });
-    expect(
-      screen.getByText("Ask your collections a question to start a session."),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("No chat sessions yet.")).toBeInTheDocument());
+    // The ingestion list is unaffected — the sources degrade independently.
+    expect(screen.getByText(FIRST_DOC)).toBeInTheDocument();
   });
 
-  it("renders welcoming empty states when there is no data", async () => {
+  it("offers one line and one action for an empty workspace", async () => {
     api.fetchCollections.mockResolvedValueOnce([]);
-    api.fetchPipelines.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    api.fetchDocuments.mockResolvedValueOnce([]);
     api.listChatSessions.mockResolvedValueOnce([]);
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("No collections yet.")).toBeInTheDocument();
-    });
-    expect(
-      screen.getByText("Uploaded sources land here as they finish processing."),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("No collections yet.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Create collection" })).toBeInTheDocument();
+    // No aggregates and no empty lists beside a workspace that has nothing.
+    expect(screen.queryByText(CHUNKS_KPI)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Recent ingestion" })).not.toBeInTheDocument();
   });
 
-  it("shows error state on load failure", async () => {
+  it("replaces the aggregates with the error when the collection list fails", async () => {
     api.fetchCollections.mockRejectedValueOnce(new Error(LOAD_FAILED));
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText(LOAD_FAILED)).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByText(LOAD_FAILED)).toBeInTheDocument());
+    // Zeroes after a failed load would read as a real, empty workspace.
+    expect(screen.queryByText(CHUNKS_KPI)).not.toBeInTheDocument();
   });
 
-  it("shows error state on load failure without error objects", async () => {
+  it("falls back to a generic message when the failure carries no message", async () => {
     api.fetchCollections.mockRejectedValueOnce("Load failed");
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Unable to load data.")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByText("Unable to load data.")).toBeInTheDocument());
   });
 
-  it("falls back to a generic pipeline label when a collection's retrieval pipeline name is missing", async () => {
-    api.fetchCollections.mockResolvedValueOnce([
-      makeCollection({ id: "col-1", name: "One", tools: [] }),
-    ]);
-    render(<DashboardPage />);
+  it("keeps the loaded values on screen while a token rotation refetches", async () => {
+    const { rerender } = render(<DashboardPage />);
+    await waitFor(() => expect(screen.getByText(FIRST_DOC)).toBeInTheDocument());
 
-    await waitFor(() => {
-      expect(screen.getByText(COLLECTIONS_HEADING)).toBeInTheDocument();
-    });
-    expect(screen.getAllByText("Retrieval").length).toBeGreaterThan(0);
-  });
+    // The auth provider rotates the token every 12 minutes, re-running every
+    // data effect. The values the page already holds are still correct, so the
+    // refetch must not replace them with placeholders.
+    const pending = createDeferred<Collection[]>();
+    api.fetchCollections.mockReturnValueOnce(pending.promise);
+    setMockAuth({ token: "rotated-token" });
+    rerender(<DashboardPage />);
 
-  it("avoids state updates after unmount", async () => {
-    const collectionsDeferred = createDeferred<Collection[]>();
-    const ingestionDeferred = createDeferred<Pipeline[]>();
-    const retrievalDeferred = createDeferred<Pipeline[]>();
-
-    api.fetchCollections.mockReturnValueOnce(collectionsDeferred.promise);
-    api.fetchPipelines
-      .mockReturnValueOnce(ingestionDeferred.promise)
-      .mockReturnValueOnce(retrievalDeferred.promise);
-
-    const { unmount } = render(<DashboardPage />);
-    unmount();
+    expect(screen.queryByText("Loading recent ingestion")).not.toBeInTheDocument();
+    expect(screen.getByText(FIRST_DOC)).toBeInTheDocument();
+    expect(kpi(CHUNKS_KPI)).toContain("10");
 
     await act(async () => {
-      collectionsDeferred.resolve(collections);
-      ingestionDeferred.resolve([]);
-      retrievalDeferred.resolve([]);
-      await Promise.all([
-        collectionsDeferred.promise,
-        ingestionDeferred.promise,
-        retrievalDeferred.promise,
-      ]);
-    });
-  });
-
-  it("avoids state updates after unmount during document loads", async () => {
-    const collectionsDeferred = createDeferred<Collection[]>();
-    const ingestionDeferred = createDeferred<Pipeline[]>();
-    const retrievalDeferred = createDeferred<Pipeline[]>();
-    const documentsDeferred = createDeferred<Document[]>();
-
-    api.fetchCollections.mockReturnValueOnce(collectionsDeferred.promise);
-    api.fetchPipelines
-      .mockReturnValueOnce(ingestionDeferred.promise)
-      .mockReturnValueOnce(retrievalDeferred.promise);
-    api.fetchDocuments.mockReturnValueOnce(documentsDeferred.promise);
-
-    const { unmount } = render(<DashboardPage />);
-
-    await act(async () => {
-      collectionsDeferred.resolve(collections.slice(0, 1));
-      ingestionDeferred.resolve([]);
-      retrievalDeferred.resolve([]);
-      await Promise.all([
-        collectionsDeferred.promise,
-        ingestionDeferred.promise,
-        retrievalDeferred.promise,
-      ]);
-    });
-
-    unmount();
-
-    await act(async () => {
-      documentsDeferred.resolve([]);
-      await documentsDeferred.promise;
+      pending.resolve(collections);
+      await pending.promise;
     });
   });
 });
