@@ -79,7 +79,7 @@ export function ConnectAgentDialog({
 
   return (
     <ModalOverlay open={open} onClose={close} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-xl rounded-3xl p-6">
+      <GlassCard className="w-full max-w-2xl rounded-3xl p-6">
         <h2 id={titleId} className="text-xl font-semibold tracking-tight text-primary">
           {created ? "Connect your agent" : "Create an MCP key"}
         </h2>
@@ -132,24 +132,39 @@ export function ConnectAgentDialog({
             </fieldset>
 
             <fieldset>
-              <legend className={labelClass}>Reaches</legend>
+              <legend className={labelClass}>Reach</legend>
+              <p className="mt-2 text-xs text-muted leading-relaxed">
+                This endpoint only ever serves {collection.name}. Reach decides which other
+                collections&apos; endpoints the same key may be used on.
+              </p>
               <div className="mt-2 space-y-2">
                 {[
-                  { all: false, label: collection.name },
-                  { all: true, label: "Every collection, including ones created later" },
+                  {
+                    all: false,
+                    label: collection.name,
+                    description: "This collection's endpoint only.",
+                  },
+                  {
+                    all: true,
+                    label: "Every collection",
+                    description: "Also every collection created later.",
+                  },
                 ].map((option) => (
                   <label
                     key={String(option.all)}
-                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-hairline bg-surface p-3 text-sm text-primary transition hover:border-strong"
+                    className="flex cursor-pointer items-start gap-3 rounded-2xl border border-hairline bg-surface p-3 transition hover:border-strong"
                   >
                     <input
                       type="radio"
                       name="scope"
-                      className="h-4 w-4 accent-accent-violet"
+                      className="mt-1 h-4 w-4 accent-accent-violet"
                       checked={allCollections === option.all}
                       onChange={() => setAllCollections(option.all)}
                     />
-                    {option.label}
+                    <span>
+                      <span className="block text-sm text-primary">{option.label}</span>
+                      <span className="block text-xs text-muted">{option.description}</span>
+                    </span>
                   </label>
                 ))}
               </div>

@@ -22,7 +22,7 @@ export function ApiKeyRow({ apiKey, busy, onRevoke }: ApiKeyRowProps) {
     .map((capability) => CAPABILITY_LABELS.get(capability) ?? capability)
     .join(" · ");
   const reach = apiKey.all_collections
-    ? "All collections"
+    ? "Every collection"
     : `${apiKey.collection_ids.length} collection${apiKey.collection_ids.length === 1 ? "" : "s"}`;
 
   return (

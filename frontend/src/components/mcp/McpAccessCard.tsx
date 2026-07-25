@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { ApiKeyRow } from "@/components/mcp/ApiKeyRow";
 import { ConnectAgentDialog } from "@/components/mcp/ConnectAgentDialog";
+import { HarnessMarkRow } from "@/components/mcp/HarnessMark";
 import { useApiKeys } from "@/components/mcp/hooks/use-api-keys";
 import { mcpEndpointUrl } from "@/components/mcp/lib/connection";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,10 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
   return (
     <GlassCard className="rounded-3xl p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">MCP</p>
+        <div className="flex items-center gap-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">MCP</p>
+          <HarnessMarkRow />
+        </div>
         <Button type="button" onClick={() => setDialogOpen(true)}>
           Connect an agent
         </Button>

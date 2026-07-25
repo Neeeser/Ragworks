@@ -45,8 +45,10 @@ test("a scoped MCP key created in the UI serves exactly its granted tools", asyn
   const secret = ((await secretBlock.textContent()) ?? "").trim();
   await expect(page.getByText(/shown once/)).toBeVisible();
   await expect(page.getByText(/claude mcp add ragworks-/)).toBeVisible();
-  await page.getByRole("tab", { name: "JSON config" }).click();
+  await page.getByRole("tab", { name: "Cursor" }).click();
   await expect(page.getByText(/"mcpServers"/)).toBeVisible();
+  await page.getByRole("tab", { name: "Any client" }).click();
+  await expect(page.getByText(/curl -X POST/)).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
 
   // The key reaches the endpoint, and lists only the granted capability's

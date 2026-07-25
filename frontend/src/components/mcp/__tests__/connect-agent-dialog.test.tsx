@@ -74,18 +74,33 @@ describe("ConnectAgentDialog", () => {
     expect(screen.getByText(/shown once/)).toBeInTheDocument();
   });
 
-  it("offers the generic JSON configuration for other harnesses", async () => {
+  it("gives each harness its own configuration shape", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn(async () => ({ key: makeApiKey(), secret: SECRET }));
     renderDialog(onCreate);
 
     await user.click(screen.getByRole("button", { name: CREATE_KEY }));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "JSON config" })).toBeInTheDocument(),
-    );
-    await user.click(screen.getByRole("tab", { name: "JSON config" }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Cursor" })).toBeInTheDocument());
 
+    await user.click(screen.getByRole("tab", { name: "Cursor" }));
     expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument();
+
+    // VS Code keys servers differently; the generic block silently does nothing
+    // there, so the tab must not just relabel the same snippet.
+    await user.click(screen.getByRole("tab", { name: "VS Code" }));
+    expect(screen.getByText(/"servers"/)).toBeInTheDocument();
+    expect(screen.queryByText(/"mcpServers"/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "OpenAI" }));
+    expect(screen.getByText(/"server_url"/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Codex" }));
+    expect(screen.getByText(/\[mcp_servers\.ragworks-field-notes\]/)).toBeInTheDocument();
+
+    // Nothing is Ragworks-specific beyond the URL and the header, and an
+    // unlisted client needs to see exactly that.
+    await user.click(screen.getByRole("tab", { name: "Any client" }));
+    expect(screen.getByText(/curl -X POST/)).toBeInTheDocument();
   });
 
   it("cannot create a key with no capabilities", async () => {

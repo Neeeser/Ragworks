@@ -13,9 +13,9 @@ Context Protocol.
 
 A collection's Overview page has an **MCP** card showing its endpoint and the
 keys that reach it. **Connect an agent** issues a key and shows the connection
-details once — the `claude mcp add` command and the generic `mcpServers` JSON
-block, both with the key filled in. Account-wide key management (what exists,
-when each was last used, revocation) is in **Settings → API keys**.
+details once, with the key filled in, for Claude Code, Codex, Cursor, VS Code,
+the OpenAI Responses API, and any other client. Account-wide key management (what
+exists, when each was last used, revocation) is in **Settings → API keys**.
 
 ```
 claude mcp add ragworks-handbook \
@@ -35,12 +35,44 @@ claude mcp add ragworks-handbook \
 }
 ```
 
-The endpoint is one path per collection, so a harness's server entry *is* the
-collection: `serverInfo.name` is the collection's slug and `initialize`'s
-`instructions` carry the collection's description, which is how an agent knows
-what corpus it is talking to without a discovery call. One key can reach several
-collections, so adding five collections means five server entries and — if you
-want — one key.
+Two clients want a different shape and fail quietly when given the block above:
+VS Code keys its servers under `servers` rather than `mcpServers`, and Codex
+reads TOML (`~/.codex/config.toml`), where an entry with a `url` is an HTTP
+server:
+
+```toml
+[mcp_servers.ragworks-handbook]
+url = "https://ragworks.example.com/api/mcp/collections/<collection-id>"
+http_headers = { Authorization = "Bearer rw_…" }
+```
+
+(`codex mcp add` takes a token only as `--bearer-token-env-var`, so a key pasted
+literally goes in the file.)
+
+Nothing here is Ragworks-specific past the URL and the header, so a client with
+no published snippet needs no adapter — the dialog's **Any client** tab is the
+same request as a runnable `curl`, useful for checking the connection before
+wiring a client to it.
+
+## Why the endpoint and the key are scoped separately
+
+The **endpoint** decides *what an agent sees*. One path per collection, and the
+server built for it only ever exposes that collection: `serverInfo.name` is the
+collection's slug and `initialize`'s `instructions` carry its description, so a
+harness's server entry *is* the collection and an agent knows what corpus it is
+talking to without a discovery call.
+
+The **key** decides *which endpoints a secret may be used on*. It is a
+credential, not a router: a key reaching every collection, used against
+collection A's URL, still gets exactly collection A's tools. It never merges
+collections and never widens a tool list.
+
+They are separate because most harnesses store one credential per server entry.
+Were reach fixed to one collection, connecting five collections would mean five
+server entries *and* five secrets to rotate; with a wider key it is five entries
+and one secret. That is the only thing the choice changes — pick the collection
+itself when a key should die with it, and every collection when one agent is
+meant to follow the workspace as it grows.
 
 ## Keys and scope
 
