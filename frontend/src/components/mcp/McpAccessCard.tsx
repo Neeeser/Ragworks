@@ -60,25 +60,27 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
         </Button>
       </div>
 
-      <p className="mt-3 text-sm text-body leading-relaxed">
+      <p className="mt-3 max-w-[66ch] text-ui text-muted">
         Agent harnesses reach this collection&apos;s tools over MCP at this endpoint, using an API
         key.
       </p>
 
       {endpoint && <CopyBlock className="mt-4" label="Endpoint" value={endpoint} inline />}
 
-      {error && <p className="mt-4 text-sm text-data-neg">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-ui text-data-neg">
+          {error}
+        </p>
+      )}
 
       {!loading && scopedKeys.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No key reaches this collection yet.</p>
+        <p className="mt-4 text-ui text-muted">No key reaches this collection yet.</p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <div className="mt-3 border-t border-hairline">
           {scopedKeys.map((key) => (
-            <li key={key.id}>
-              <ApiKeyRow apiKey={key} busy={busy} onRevoke={setPendingRevoke} />
-            </li>
+            <ApiKeyRow key={key.id} apiKey={key} busy={busy} onRevoke={setPendingRevoke} />
           ))}
-        </ul>
+        </div>
       )}
 
       <ConnectAgentDialog
