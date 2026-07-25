@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef } from "react";
 
 import { inputClass } from "@/components/ui/field";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { AriaAttributes, ReactNode } from "react";
@@ -92,9 +93,9 @@ export const CustomSelect = forwardRef<HTMLButtonElement, CustomSelectProps>(fun
             triggerRef.current?.focus();
           }}
           className={cn(
+            popoverSurfaceClass,
             "relative z-[70] max-h-[min(20rem,var(--radix-select-content-available-height))]",
-            "min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl",
-            "border border-hairline bg-canvas-raised p-1 shadow-elevation-2",
+            "min-w-[var(--radix-select-trigger-width)] overflow-hidden p-1",
           )}
         >
           <SelectPrimitive.ScrollUpButton className={scrollButtonClass}>

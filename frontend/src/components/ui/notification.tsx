@@ -3,7 +3,7 @@
 import { Bell, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { Panel } from "@/components/ui/panel";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -46,9 +46,10 @@ export function Notification({
   }, [autoDismissMs, handleDismiss, onDismiss]);
 
   return (
-    <Panel
+    <div
       className={cn(
-        "flex items-center gap-4 rounded-full border border-hairline bg-canvas-raised/95 px-4 py-3 text-body shadow-elevation-2 backdrop-blur",
+        popoverSurfaceClass,
+        "flex items-center gap-4 px-4 py-3 text-body",
         "transition-all duration-200",
         closing ? "opacity-0 -translate-y-1" : "opacity-100 translate-y-0",
         className,
@@ -74,6 +75,6 @@ export function Notification({
           </button>
         ) : null}
       </div>
-    </Panel>
+    </div>
   );
 }

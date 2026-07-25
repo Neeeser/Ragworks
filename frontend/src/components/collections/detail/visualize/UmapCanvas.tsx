@@ -297,7 +297,9 @@ export function UmapCanvas({
           plot's interior so the card's clipped overflow never cuts them. */}
       {/* No `overflow-hidden` here: it would clip the controls' own tooltips.
           The end buttons carry the cluster's corners instead. */}
-      <div className={cn(popoverSurfaceClass, "absolute bottom-3 left-3 z-10 flex flex-col text-body")}>
+      <div
+        className={cn(popoverSurfaceClass, "absolute bottom-3 left-3 z-10 flex flex-col text-body")}
+      >
         {controls.map(({ icon: Icon, label, onClick, disabled }, position) => (
           <Tooltip key={label} content={label} side="right">
             <button

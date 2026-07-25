@@ -88,7 +88,10 @@ function SearchResultsDropdown({
   return (
     <div
       id={listId}
-      className={cn(popoverSurfaceClass, "absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-y-auto p-1")}
+      className={cn(
+        popoverSurfaceClass,
+        "absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-y-auto p-1",
+      )}
     >
       {results.folders.length > 0 && (
         <>

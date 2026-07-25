@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Loader } from "@/components/ui/loader";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createCollection } from "@/lib/api";
@@ -236,10 +237,7 @@ export function CreateCollectionWizard({
     >
       {stepIndex === 0 && (
         <div className="space-y-4">
-          <Field
-            label="Collection name"
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
+          <Field label="Collection name">
             <TextInput
               type="text"
               placeholder="Research vault"
@@ -248,10 +246,7 @@ export function CreateCollectionWizard({
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
             />
           </Field>
-          <Field
-            label="Description"
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
+          <Field label="Description">
             <TextArea
               placeholder="Summarize what this collection is for."
               className="h-24"
@@ -266,10 +261,7 @@ export function CreateCollectionWizard({
 
       {stepIndex === 1 && (
         <div className="space-y-4">
-          <Field
-            label="Ingestion pipeline"
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
+          <Field label="Ingestion pipeline">
             <Select
               value={form.ingestion_pipeline_id}
               onChange={(event) =>
@@ -287,10 +279,7 @@ export function CreateCollectionWizard({
               ))}
             </Select>
           </Field>
-          <Field
-            label="Retrieval pipeline"
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
+          <Field label="Retrieval pipeline">
             <Select
               value={form.retrieval_pipeline_id}
               onChange={(event) =>
@@ -367,42 +356,34 @@ export function CreateCollectionWizard({
       {stepIndex === 3 && (
         <div className="space-y-4">
           <div className="rounded-panel border border-hairline bg-surface p-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Summary</p>
+            <InstrumentLabel>Summary</InstrumentLabel>
             <div className="mt-3 space-y-3 text-ui text-body">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">Name</p>
+                <InstrumentLabel>Name</InstrumentLabel>
                 <p className="text-head font-semibold text-primary">{form.name || "Untitled"}</p>
               </div>
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                  Description
-                </p>
+                <InstrumentLabel>Description</InstrumentLabel>
                 <p className="text-ui text-body">
                   {form.description || "No description provided."}
                 </p>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                    Ingestion pipeline
-                  </p>
+                  <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
                   <p className="text-ui text-primary">
                     {pipelineNameById.get(form.ingestion_pipeline_id) || "Default"}
                   </p>
                 </div>
                 <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                    Retrieval pipeline
-                  </p>
+                  <InstrumentLabel>Retrieval pipeline</InstrumentLabel>
                   <p className="text-ui text-primary">
                     {pipelineNameById.get(form.retrieval_pipeline_id) || "Default"}
                   </p>
                 </div>
               </div>
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-                  Advanced defaults
-                </p>
+                <InstrumentLabel>Advanced defaults</InstrumentLabel>
                 <p className="text-ui text-body">
                   {showAdvanced && usesDefaultPipelines ? "Enabled" : "Not configured"}
                 </p>

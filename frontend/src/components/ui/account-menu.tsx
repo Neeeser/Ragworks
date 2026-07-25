@@ -87,7 +87,10 @@ export function AccountMenu({ user }: { user: User }) {
           // Deliberately not role="menu": that role promises arrow-key
           // navigation between menuitems, which this does not implement, and it
           // would also strip the implicit link/button roles from the items.
-          className={cn(popoverSurfaceClass, "absolute bottom-0 left-full z-30 ml-2 w-48 overflow-hidden py-1")}
+          className={cn(
+            popoverSurfaceClass,
+            "absolute bottom-0 left-full z-30 ml-2 w-48 overflow-hidden py-1",
+          )}
         >
           <Tooltip content={user.email} side="right" triggerClassName="w-full">
             <p className="truncate px-2 py-1 text-ui text-meta">{user.email}</p>

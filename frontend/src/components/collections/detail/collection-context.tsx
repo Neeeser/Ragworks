@@ -81,7 +81,7 @@ export function CollectionProvider({ collectionId, children }: CollectionProvide
 
   if (!token || (query.loading && !query.data)) {
     return (
-      <Panel className="flex items-center justify-center rounded-3xl p-10">
+      <Panel className="flex items-center justify-center p-8">
         <Loader className="h-6 w-6" />
       </Panel>
     );
@@ -89,9 +89,7 @@ export function CollectionProvider({ collectionId, children }: CollectionProvide
 
   if (query.error || !value) {
     return (
-      <Panel className="rounded-3xl border border-hairline p-6 text-sm text-body">
-        {query.error ?? "Collection not available."}
-      </Panel>
+      <Panel className="p-4 text-ui text-body">{query.error ?? "Collection not available."}</Panel>
     );
   }
 
