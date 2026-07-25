@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { PanelHeader } from "@/components/ui/panel";
 import { fetchAdminDiagnostics } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
@@ -43,14 +44,7 @@ export function DiagnosticsExportCard() {
 
   return (
     <section aria-labelledby="config-section-diagnostics" className="card-surface">
-      <div className="border-b border-hairline px-3 py-2">
-        <h2
-          id="config-section-diagnostics"
-          className="text-head font-semibold tracking-[-0.01em] text-primary"
-        >
-          Diagnostics
-        </h2>
-      </div>
+      <PanelHeader id="config-section-diagnostics" title="Diagnostics" />
       <div className="p-3">
         <p className="max-w-[66ch] text-ui text-muted">
           Recent backend log records from this server process, redacted of secrets and user content.

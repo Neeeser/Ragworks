@@ -13,6 +13,7 @@ import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PanelHeader } from "@/components/ui/panel";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -117,20 +118,22 @@ export function DatasetsPanel({
 
   return (
     <section aria-label="Datasets" className="card-surface">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-3 py-2">
-        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">Datasets</h2>
-        <div className="flex flex-wrap items-center gap-1">
-          <Button size="sm" variant="secondary" onClick={() => setGenerateOpen(true)}>
-            Generate from collection
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setUploadOpen(true)}>
-            Upload dataset
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
-            Import benchmark
-          </Button>
-        </div>
-      </div>
+      <PanelHeader
+        title="Datasets"
+        end={
+          <div className="flex flex-wrap items-center gap-1">
+            <Button size="sm" variant="secondary" onClick={() => setGenerateOpen(true)}>
+              Generate from collection
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setUploadOpen(true)}>
+              Upload dataset
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
+              Import benchmark
+            </Button>
+          </div>
+        }
+      />
 
       <ColumnHeader />
 

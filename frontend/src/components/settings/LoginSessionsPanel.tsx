@@ -8,6 +8,7 @@ import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { DataRow } from "@/components/ui/data-row";
 import { Field } from "@/components/ui/field";
+import { PanelHeader } from "@/components/ui/panel";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   listAuthSessions,
@@ -80,17 +81,15 @@ export function LoginSessionsPanel() {
 
   return (
     <section aria-labelledby="login-sessions-heading" className="card-surface">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-3 py-2">
-        <h2
-          id="login-sessions-heading"
-          className="text-head font-semibold tracking-[-0.01em] text-primary"
-        >
-          Login sessions
-        </h2>
-        <Button size="sm" variant="secondary" type="button" onClick={() => void revokeAll()}>
-          Sign out everywhere
-        </Button>
-      </div>
+      <PanelHeader
+        id="login-sessions-heading"
+        title="Login sessions"
+        end={
+          <Button size="sm" variant="secondary" type="button" onClick={() => void revokeAll()}>
+            Sign out everywhere
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-end gap-2 border-b border-hairline p-3">
         <Field label="Remembered login duration" className="w-44">

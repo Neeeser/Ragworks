@@ -9,7 +9,7 @@ import { QueryDrilldown } from "@/components/evals/QueryDrilldown";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { truncate } from "@/lib/utils";
 
 import type { EvalMetricInfo, EvalRunItem, FunnelStage } from "@/lib/types";
@@ -39,12 +39,14 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
 
   return (
     <Panel>
-      <div className="flex items-baseline justify-between gap-3 border-b border-hairline px-3 py-2">
-        <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">Queries</h2>
-        <span className="font-mono text-instrument tabular-nums text-meta">
-          {items.length.toLocaleString()} evaluated
-        </span>
-      </div>
+      <PanelHeader
+        title="Queries"
+        end={
+          <span className="font-mono text-instrument tabular-nums text-meta">
+            {items.length.toLocaleString()} evaluated
+          </span>
+        }
+      />
 
       {/* The table scrolls inside the card rather than the page. */}
       <div className="overflow-x-auto">

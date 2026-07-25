@@ -3,7 +3,7 @@
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { palettesForMode } from "@/lib/palettes";
 import { useTheme } from "@/providers/theme-provider";
@@ -48,15 +48,11 @@ export function AppearancePanel() {
 
   return (
     <Panel>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-3 py-2">
-        <h2
-          id="appearance-heading"
-          className="text-head font-semibold tracking-[-0.01em] text-primary"
-        >
-          Appearance
-        </h2>
-        <InstrumentLabel>Stored in this browser</InstrumentLabel>
-      </div>
+      <PanelHeader
+        id="appearance-heading"
+        title="Appearance"
+        end={<InstrumentLabel>Stored in this browser</InstrumentLabel>}
+      />
       <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-2">
           <span className="block text-instrument font-medium text-muted">Mode</span>
