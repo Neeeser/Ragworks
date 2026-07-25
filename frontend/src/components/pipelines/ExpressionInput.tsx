@@ -205,7 +205,7 @@ export function ExpressionInput({
           onKeyDown={handleKeyDown}
           className={cn(
             inputClass,
-            "font-mono text-[13px]",
+            "font-mono text-ui",
             addon != null && "min-w-0 flex-1 rounded-r-none",
           )}
         />
@@ -222,10 +222,13 @@ export function ExpressionInput({
         />
       ) : null}
       {feedback.kind === "error" ? (
-        <p className="text-xs text-data-neg">{feedback.message}</p>
-      ) : feedback.kind === "ok" ? (
-        <p className="font-mono text-xs text-meta">= {feedback.preview}</p>
-      ) : null}
+        <p className="max-w-[66ch] text-ui text-data-neg">{feedback.message}</p>
+      ) : (
+        // The live value is a computed number/string — mono, tabular.
+        feedback.kind === "ok" && (
+          <p className="font-mono text-instrument tabular-nums text-meta">= {feedback.preview}</p>
+        )
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 import type { ParameterInputKind } from "@/lib/types";
@@ -38,22 +39,25 @@ export function ParameterFieldCard({
   children,
 }: ParameterFieldCardProps) {
   return (
-    <div className="space-y-3 rounded-2xl border border-hairline bg-surface p-3">
+    <div className="space-y-2 rounded-control border border-hairline bg-surface p-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <label htmlFor={controlId} className="text-sm font-semibold text-primary">
+            <label htmlFor={controlId} className="text-ui font-medium text-primary">
               {label}
             </label>
-            {overrideActive && <span className="h-2 w-2 rounded-full bg-data-pos" />}
+            {/* A square node dot, like every other state marker in the console. */}
+            {overrideActive && (
+              <span aria-hidden className="h-1.5 w-1.5 rounded-[2px] bg-data-pos" />
+            )}
           </div>
-          {description ? <p className="text-xs text-muted">{description}</p> : null}
-          {helper ? <p className="text-[11px] text-meta">{helper}</p> : null}
+          {description ? <p className="max-w-[66ch] text-ui text-muted">{description}</p> : null}
+          {helper ? <p className="text-instrument text-meta">{helper}</p> : null}
         </div>
         {actionLabel && onAction ? (
           <button
             type="button"
-            className="text-xs text-muted transition hover:text-primary disabled:opacity-40"
+            className="shrink-0 rounded-control px-1 text-ui text-muted transition-colors duration-80 ease-standard hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet disabled:opacity-40"
             disabled={actionDisabled}
             onClick={onAction}
           >
@@ -63,7 +67,7 @@ export function ParameterFieldCard({
       </div>
       {children}
       {error ? (
-        <p id={errorId} className="text-xs text-data-neg">
+        <p id={errorId} className="text-ui text-data-neg">
           {error}
         </p>
       ) : null}
@@ -90,8 +94,14 @@ type ParameterInputProps = {
   onChange: (value: string | boolean) => void;
 };
 
-const inputClasses =
-  "w-full rounded-2xl border border-hairline bg-surface-strong px-4 py-3 text-sm text-primary outline-none focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30 disabled:cursor-not-allowed disabled:opacity-60";
+// The one canonical control recipe — a second hand-written copy is how the
+// config drawer's fields drifted out of step with every other input in the
+// app. The stronger fill is the only deviation: these controls sit inside a
+// `bg-surface` field card, where the default fill would vanish into it.
+const inputClasses = cn(
+  inputClass,
+  "bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60",
+);
 
 export function ParameterInput({
   input,
@@ -131,13 +141,13 @@ export function ParameterInput({
 
   if (input === "boolean") {
     return (
-      <label className="flex items-center gap-3 text-sm text-body">
+      <label className="flex items-center gap-2 text-ui text-body">
         <input
           id={id}
           aria-invalid={ariaInvalid || undefined}
           aria-describedby={ariaDescribedBy}
           type="checkbox"
-          className="h-4 w-4 rounded border-strong bg-transparent accent-[var(--accent-violet)]"
+          className="h-4 w-4 rounded-chip border-strong bg-transparent accent-[var(--accent-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
           checked={value === true}
           disabled={disabled}
           onChange={(event) => onChange(event.target.checked)}

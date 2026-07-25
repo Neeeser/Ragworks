@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+import { Tooltip } from "@/components/ui/tooltip";
 import { expressionSource } from "@/lib/expressions";
 import { cn } from "@/lib/utils";
 
@@ -40,20 +41,27 @@ type FxToggleProps = {
 /** The expression-mode toggle, attached to the control it switches. */
 function FxToggle({ active, joined, onClick }: FxToggleProps) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label="Toggle expression mode"
-      title={active ? "Switch back to a literal value" : "Write an expression"}
-      onClick={onClick}
-      className={cn(
-        "shrink-0 border border-hairline bg-surface-strong px-3 font-mono text-xs transition focus-visible:ring-2 focus-visible:ring-accent-violet",
-        joined ? "rounded-r-2xl border-l-0" : "rounded-2xl px-2.5 py-1.5",
-        active ? "text-accent-violet" : "text-muted hover:text-primary",
-      )}
+    // `side="left"`: the toggle sits on the control's right edge inside a
+    // drawer that clips its own overflow, so a centred tooltip is cut in half.
+    <Tooltip
+      content={active ? "Switch back to a literal value" : "Write an expression"}
+      side="left"
+      triggerClassName="shrink-0"
     >
-      ƒx
-    </button>
+      <button
+        type="button"
+        aria-pressed={active}
+        aria-label="Toggle expression mode"
+        onClick={onClick}
+        className={cn(
+          "shrink-0 border border-hairline bg-surface-strong px-3 font-mono text-ui transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+          joined ? "h-full rounded-r-control border-l-0" : "rounded-control px-2.5 py-1.5",
+          active ? "text-accent-violet" : "text-muted hover:text-primary",
+        )}
+      >
+        ƒx
+      </button>
+    </Tooltip>
   );
 }
 

@@ -299,7 +299,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     : [];
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <>
       <PipelineModals
         ref={modalsRef}
         kind={kind}
@@ -329,6 +329,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onOpenSave={handleOpenSave}
         onOpenHistory={() => setHistoryOpen(true)}
         hasPipeline={Boolean(selectedPipeline)}
+        pipelineName={selectedPipeline?.name}
+        pipelineVersion={selectedPipeline?.current_version}
       />
 
       <PipelineBuilderWorkspace
@@ -431,6 +433,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onConfirm={() => void tokenizerConsent.confirm()}
         onCancel={tokenizerConsent.cancel}
       />
-    </div>
+    </>
   );
 }

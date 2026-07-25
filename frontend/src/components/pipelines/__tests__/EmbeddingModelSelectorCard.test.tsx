@@ -163,14 +163,18 @@ describe("EmbeddingModelSelectorCard", () => {
     );
 
     expect(screen.getByText(`${longDescription.slice(0, 157)}...`)).toBeInTheDocument();
-    expect(screen.getAllByText(/Prompt \$/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Completion \$/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Prompt\s+free/)).toBeInTheDocument();
-    expect(screen.getByText(/Prompt\s+e/)).toBeInTheDocument();
+    // Each price is a labelled readout: a sentence-case label beside a mono value.
+    expect(screen.getAllByText("Prompt").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Completion").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^\$/).length).toBeGreaterThan(0);
+    // Unparseable prices pass through verbatim rather than reading as $0.
+    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("e")).toBeInTheDocument();
 
     // currentModelInfo is now derived internally from models + selectedModelKey.
     expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
-    expect(screen.getByText("768")).toBeInTheDocument();
+    // Once on the model's own row, once in the header summary for the selection.
+    expect(screen.getAllByText("768")).toHaveLength(2);
   });
 
   it("renders non-numeric pricing fallbacks", () => {
@@ -194,7 +198,8 @@ describe("EmbeddingModelSelectorCard", () => {
       />,
     );
 
-    expect(screen.getByText(/Prompt\s+free/)).toBeInTheDocument();
+    expect(screen.getByText("Prompt")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
   });
 
   it("keeps a disappeared exact selection visible and requires a replacement", () => {

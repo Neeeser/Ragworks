@@ -1,10 +1,9 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
-
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
 import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
@@ -27,15 +26,15 @@ export const KIND_COPY: Record<
   { headline: string; explainer: string; namePlaceholder: string }
 > = {
   ingestion: {
-    headline: "How your documents become searchable",
+    headline: "New ingestion pipeline",
     explainer:
-      "When you upload a document, this pipeline parses it, splits it into chunks, turns each chunk into an embedding, and writes them into your vector index.",
+      "Runs on upload: parses the document, splits it into chunks, embeds each chunk, and writes them into the vector index.",
     namePlaceholder: "e.g. Research library ingestion",
   },
   retrieval: {
-    headline: "How questions find the right chunks",
+    headline: "New tool pipeline",
     explainer:
-      "When you search or chat, this pipeline embeds the question and pulls the closest matching chunks out of your vector index.",
+      "Runs on search and chat: embeds the question and reads the closest matching chunks out of the vector index.",
     namePlaceholder: "e.g. Research library retrieval",
   },
 };
@@ -108,16 +107,16 @@ export function WizardProcessingStep({
     selectedModel.dimension !== selectedIndex.dimension;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {kind === "ingestion" ? (
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Chunking</p>
-          <p className="mt-1 text-xs text-meta">
+          <InstrumentLabel>Chunking</InstrumentLabel>
+          <p className="mt-0.5 max-w-[66ch] text-ui text-muted">
             Documents are split into chunks before embedding; chunk size trades precision for
             context.
           </p>
           <div
-            className="mt-3 grid gap-2 sm:grid-cols-3"
+            className="mt-2 grid gap-2 sm:grid-cols-3"
             role="radiogroup"
             aria-label="Chunking preset"
           >
@@ -131,15 +130,16 @@ export function WizardProcessingStep({
                   aria-checked={active}
                   onClick={() => onChunkChange(preset.size, preset.overlap)}
                   className={cn(
-                    "rounded-2xl border p-3 text-left transition",
+                    "rounded-control border p-3 text-left transition-colors duration-80 ease-standard",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                     active
                       ? "border-accent-violet/70 bg-accent-violet/10"
                       : "border-hairline bg-surface hover:border-strong",
                   )}
                 >
-                  <p className="text-sm font-semibold text-primary">{preset.label}</p>
-                  <p className="mt-0.5 text-[11px] leading-4 text-muted">{preset.hint}</p>
-                  <p className="mt-1.5 text-[10px] text-meta">
+                  <p className="text-ui font-medium text-primary">{preset.label}</p>
+                  <p className="mt-0.5 text-instrument leading-4 text-muted">{preset.hint}</p>
+                  <p className="mt-1 font-mono text-instrument tabular-nums text-meta">
                     {preset.size} words · {preset.overlap} overlap
                   </p>
                 </button>
@@ -150,16 +150,17 @@ export function WizardProcessingStep({
             type="button"
             onClick={onToggleAdvancedChunking}
             aria-expanded={showAdvancedChunking}
-            className="mt-3 text-xs text-muted underline-offset-2 hover:text-primary hover:underline"
+            className="mt-2 rounded-control text-ui text-muted underline-offset-2 transition-colors duration-80 ease-standard hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
           >
             {showAdvancedChunking ? "Hide advanced chunking" : "Advanced chunking"}
           </button>
           {showAdvancedChunking ? (
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <Field label="Chunk size (words)">
                 <TextInput
                   type="number"
                   min={64}
+                  className="font-mono tabular-nums"
                   value={chunkSize}
                   onChange={(event) => onChunkChange(Number(event.target.value) || 0, chunkOverlap)}
                 />
@@ -168,6 +169,7 @@ export function WizardProcessingStep({
                 <TextInput
                   type="number"
                   min={0}
+                  className="font-mono tabular-nums"
                   value={chunkOverlap}
                   onChange={(event) => onChunkChange(chunkSize, Number(event.target.value) || 0)}
                 />
@@ -177,15 +179,13 @@ export function WizardProcessingStep({
         </div>
       ) : null}
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">
-          Embedding model
-        </p>
-        <p className="mt-1 text-xs text-meta">
+        <InstrumentLabel>Embedding model</InstrumentLabel>
+        <p className="mt-0.5 max-w-[66ch] text-ui text-muted">
           {kind === "ingestion"
-            ? "Turns each chunk into a vector. Leave the default unless you know you need a specific model."
+            ? "Turns each chunk into a vector."
             : "Must be the same model your ingestion pipeline used, so queries land in the same vector space."}
         </p>
-        <div className="mt-3">
+        <div className="mt-2">
           <EmbeddingModelSelectorCard
             models={embeddingModels}
             selectedModelKey={embeddingModel}
@@ -198,7 +198,7 @@ export function WizardProcessingStep({
           />
         </div>
         {dimensionMismatch ? (
-          <p className="mt-2 rounded-2xl border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-xs text-data-warn">
+          <p className="mt-2 max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
             {selectedModel?.name ?? "This model"} produces {selectedModel?.dimension}-dimension
             vectors but the index &quot;{indexName}&quot; stores {selectedIndex?.dimension}. Pick a
             matching model or index.
@@ -245,60 +245,68 @@ export function WizardReviewStep({
   const prefersReducedMotion = usePrefersReducedMotion();
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-hidden rounded-2xl border border-hairline bg-canvas-raised/70">
-        <div className="flex items-center gap-2 border-b border-hairline px-4 py-2">
-          <Sparkles className="h-3.5 w-3.5 text-accent-cyan" />
-          <p className="text-[10px] uppercase tracking-[0.3em] text-muted">
-            Your pipeline, in motion
-          </p>
-        </div>
-        <div className="h-56">
-          <FlowPlayer
-            nodes={preview.nodes}
-            edges={preview.edges}
-            steps={preview.steps}
-            autoPlay={!prefersReducedMotion}
-            compact
-            fitViewPadding={0.18}
-          />
-        </div>
+    <div className="space-y-3">
+      {/* The graph is the review: it shows every node the scaffold will create,
+          which no summary line can. It carries no caption of its own. */}
+      <div className="h-56 overflow-hidden rounded-control border border-hairline">
+        <FlowPlayer
+          nodes={preview.nodes}
+          edges={preview.edges}
+          steps={preview.steps}
+          autoPlay={!prefersReducedMotion}
+          compact
+          fitViewPadding={0.18}
+        />
       </div>
-      <div className="rounded-2xl border border-hairline bg-surface p-4 text-sm text-body">
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Name</dt>
-            <dd className="mt-0.5 font-semibold text-primary">{name || "Untitled"}</dd>
+      <dl className="grid gap-3 rounded-control border border-hairline bg-surface p-3 sm:grid-cols-2">
+        <div className="min-w-0">
+          <dt>
+            <InstrumentLabel>Name</InstrumentLabel>
+          </dt>
+          <dd className="mt-0.5 truncate text-ui font-medium text-primary">{name || "Untitled"}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt>
+            <InstrumentLabel>Type</InstrumentLabel>
+          </dt>
+          <dd className="mt-0.5 truncate text-ui text-primary">{typeLabel}</dd>
+        </div>
+        {showStore ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Vector store</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">
+              {BACKEND_TITLES[backend]} ·{" "}
+              <span className="font-mono">{indexName || "no index"}</span>
+            </dd>
           </div>
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Type</dt>
-            <dd className="mt-0.5 text-primary">{typeLabel}</dd>
+        ) : null}
+        {showEmbedding ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Embedding model</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">
+              {selectedModelName ?? "Workspace default"}
+            </dd>
           </div>
-          {showStore ? (
-            <div>
-              <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Vector store</dt>
-              <dd className="mt-0.5 text-primary">
-                {BACKEND_TITLES[backend]} · {indexName || "no index"}
-              </dd>
-            </div>
-          ) : null}
-          {showEmbedding ? (
-            <div>
-              <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Embedding model</dt>
-              <dd className="mt-0.5 text-primary">{selectedModelName ?? "Workspace default"}</dd>
-            </div>
-          ) : null}
-          {kind === "ingestion" ? (
-            <div>
-              <dt className="text-[10px] uppercase tracking-[0.3em] text-meta">Chunking</dt>
-              <dd className="mt-0.5 text-primary">
-                {chunkPresetLabel ? `${chunkPresetLabel} · ` : "Custom · "}
-                {chunkSize}/{chunkOverlap} words
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
+        ) : null}
+        {kind === "ingestion" ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Chunking</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">
+              {chunkPresetLabel ? `${chunkPresetLabel} · ` : "Custom · "}
+              <span className="font-mono tabular-nums">
+                {chunkSize}/{chunkOverlap}
+              </span>{" "}
+              words
+            </dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }

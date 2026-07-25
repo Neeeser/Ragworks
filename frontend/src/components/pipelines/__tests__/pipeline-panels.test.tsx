@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { PipelineNotice } from "@/components/pipelines/PipelineNotice";
 import { RevisionHistoryDialog } from "@/components/pipelines/RevisionHistoryDialog";
 import { SaveVersionDialog } from "@/components/pipelines/SaveVersionDialog";
 import { makePipelineVersion } from "@/test/fixtures";
@@ -17,11 +16,6 @@ const pendingChanges: PendingChange[] = [
 ];
 
 describe("pipeline panels", () => {
-  it("renders pipeline notices", () => {
-    render(<PipelineNotice message="Hello" />);
-    expect(screen.getByText("Hello")).toBeInTheDocument();
-  });
-
   it("lists pending changes and saves through the dialog", () => {
     const onChangeSummary = vi.fn();
     const onSave = vi.fn();
@@ -117,7 +111,8 @@ describe("pipeline panels", () => {
     );
 
     expect(screen.getByText("v1")).toBeInTheDocument();
-    expect(screen.getByText("No summary provided.")).toBeInTheDocument();
+    // A revision with no summary gets no placeholder standing in for one.
+    expect(screen.queryByText("No summary provided.")).not.toBeInTheDocument();
     expect(screen.getByText("Initial version")).toBeInTheDocument();
     expect(screen.getByText("Chunker: chunk_size 1024 → 512")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Active" })).toBeDisabled();

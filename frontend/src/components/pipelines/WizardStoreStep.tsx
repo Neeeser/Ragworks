@@ -9,6 +9,7 @@ import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import type { BackendInfo, IndexBackend, VectorIndex } from "@/lib/types";
 
@@ -38,10 +39,10 @@ export function WizardStoreStep({
   capabilityWarning,
 }: WizardStoreStepProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Vector store</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <InstrumentLabel>Vector store</InstrumentLabel>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {backends.map((info) => (
             <BackendCard
               key={info.backend}
@@ -55,15 +56,12 @@ export function WizardStoreStep({
       {capabilityWarning ? (
         <p
           role="status"
-          className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-xs text-data-warn"
+          className="max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
         >
           {capabilityWarning}
         </p>
       ) : null}
-      <Field
-        label={`${BACKEND_TITLES[backend]} index`}
-        labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-      >
+      <Field label={`${BACKEND_TITLES[backend]} index`}>
         <CustomSelect
           value={indexName}
           onValueChange={onIndexSelect}
@@ -86,20 +84,22 @@ export function WizardStoreStep({
         />
       </Field>
       {backendInfo ? (
-        <p className="text-xs text-muted">
-          Up to {backendInfo.capabilities.max_dimension.toLocaleString()} dimensions · metrics:{" "}
-          {backendInfo.capabilities.supported_metrics.join(", ")}
+        <p className="text-instrument text-meta">
+          Up to{" "}
+          <span className="font-mono tabular-nums">
+            {backendInfo.capabilities.max_dimension.toLocaleString()}
+          </span>{" "}
+          dimensions · metrics:{" "}
+          <span className="font-mono">{backendInfo.capabilities.supported_metrics.join(", ")}</span>
         </p>
       ) : null}
       {backendIndexes.length === 0 ? (
-        <div className="rounded-2xl border border-hairline bg-surface p-4 text-sm text-body">
-          <p>No {BACKEND_TITLES[backend]} indexes yet — create one to continue.</p>
-          <Button
-            variant="secondary"
-            onClick={onOpenIndexManager}
-            className="mt-3 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
+        <div className="p-8 text-center">
+          <p className="text-ui text-muted">
+            No {BACKEND_TITLES[backend]} indexes yet — create one to continue.
+          </p>
+          <Button size="sm" variant="secondary" className="mt-3" onClick={onOpenIndexManager}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
             Create index
           </Button>
         </div>

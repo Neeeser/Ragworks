@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import { ExpressionInput } from "./ExpressionInput";
 import { RESERVED_VARIABLE_NAMES, VARIABLE_NAME_PATTERN, inputVariables } from "./lib/variable-env";
@@ -24,8 +25,6 @@ export function outputsFromConfig(config: Record<string, unknown>): PipelineOutp
   const raw = config.outputs;
   return Array.isArray(raw) ? (raw as PipelineOutputField[]) : [];
 }
-
-const sectionLabel = "font-mono text-[10px] uppercase tracking-[0.28em] text-muted";
 
 function argumentNameProblem(name: string, taken: Set<string>): string | null {
   if (!name) return "Name is required.";
@@ -69,31 +68,31 @@ export function ArgumentsPicker({
   };
 
   return (
-    <div className="space-y-3">
-      <p className={sectionLabel}>Arguments</p>
-      <p className="text-xs text-body">
+    <div className="space-y-2">
+      <InstrumentLabel className="text-body">Arguments</InstrumentLabel>
+      <p className="max-w-[66ch] text-ui text-muted">
         Which input variables callers can supply per query. Define them (type, default, bounds,
-        model exposure) on the Variables tab. `query` is built in.
+        model exposure) on the Variables tab. <code className="font-mono">query</code> is built in.
       </p>
       {inputs.length === 0 ? (
-        <p className="rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body">
+        <p className="p-8 text-center text-ui text-muted">
           No input variables declared — add one on the Variables tab with source “Input”.
         </p>
       ) : (
         <ul className="space-y-1">
           {inputs.map((variable) => (
             <li key={variable.name}>
-              <label className="flex items-center justify-between gap-2 rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body">
-                <span className="flex items-center gap-2">
+              <label className="flex items-center justify-between gap-2 rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-body">
+                <span className="flex min-w-0 items-center gap-2">
                   <input
                     type="checkbox"
                     checked={acceptedNames.includes(variable.name)}
                     disabled={disabled}
                     onChange={(event) => toggle(variable.name, event.target.checked)}
                   />
-                  <span className="font-mono text-[13px]">{variable.name}</span>
+                  <span className="truncate font-mono text-ui">{variable.name}</span>
                 </span>
-                <span className="font-mono text-[11px] text-meta">
+                <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
                   {variable.type}
                   {variable.value == null ? " · required" : ` · ${String(variable.value)}`}
                 </span>
@@ -105,7 +104,7 @@ export function ArgumentsPicker({
       {stale.map((name) => (
         <div
           key={name}
-          className="flex items-center justify-between gap-2 rounded-2xl border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-xs text-data-neg"
+          className="flex items-center justify-between gap-2 rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
         >
           <span>
             <span className="font-mono">{name}</span> is not a declared input variable.
@@ -143,22 +142,25 @@ export function OutputsEditor({ outputs, onChange, env, disabled }: OutputsEdito
   };
 
   return (
-    <div className="space-y-3">
-      <p className={sectionLabel}>Outputs</p>
-      <p className="text-xs text-body">
+    <div className="space-y-2">
+      <InstrumentLabel className="text-body">Outputs</InstrumentLabel>
+      <p className="max-w-[66ch] text-ui text-muted">
         Evaluated when the run finishes and returned beside the results.
       </p>
       {outputs.map((output, index) => {
         const taken = new Set(outputs.filter((_, i) => i !== index).map((entry) => entry.name));
         const problem = argumentNameProblem(output.name, taken);
         return (
-          <div key={index} className="space-y-3 rounded-2xl border border-hairline bg-surface p-3">
+          <div
+            key={index}
+            className="space-y-2 rounded-control border border-hairline bg-surface p-3"
+          >
             <div className="flex items-end gap-2">
               <Field label="Name" error={problem} className="flex-1">
                 <TextInput
                   value={output.name}
                   disabled={disabled}
-                  className="font-mono text-[13px]"
+                  className="font-mono text-ui"
                   onChange={(event) => update(index, { name: event.target.value })}
                 />
               </Field>

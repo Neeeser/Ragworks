@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
-import { GlassCard } from "@/components/ui/panel";
+import { Tooltip } from "@/components/ui/tooltip";
 import { deleteIndex } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAppConfig } from "@/providers/config-provider";
@@ -126,37 +126,24 @@ export function IndexManagerModal({
         labelledBy={titleId}
         backdropClassName="bg-canvas/80 px-4 py-8"
       >
-        <GlassCard className="relative flex w-full max-w-6xl max-h-[calc(100vh-4rem)] flex-col rounded-[2.5rem] bg-canvas-raised/95 p-6 text-primary">
+        <div className="card-surface relative flex max-h-[calc(100vh-4rem)] w-full max-w-6xl flex-col overflow-hidden bg-canvas-raised text-primary shadow-elevation-2">
           {notificationMessage ? (
             <Notification
               message={notificationMessage}
               onDismiss={() => setNotificationMessage(null)}
-              className="absolute right-6 top-6 z-10"
+              className="absolute right-3 top-3 z-10"
             />
           ) : null}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-muted">
-                Manage indexes
-              </p>
-              <h2 id={titleId} className="mt-2 text-2xl font-semibold tracking-tight">
-                Vector index manager
-              </h2>
-              <p className="text-sm text-muted">
-                Create, review, and delete indexes on any configured vector store.
-              </p>
-            </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline p-3">
+            <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
+              Vector index manager
+            </h2>
             <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={onRefresh}
-                disabled={loading}
-                className="inline-flex items-center gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
+              <Button size="sm" variant="secondary" onClick={onRefresh} disabled={loading}>
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
                 Refresh
               </Button>
-              <Button variant="ghost" onClick={onClose}>
+              <Button size="sm" variant="ghost" onClick={onClose}>
                 Close
               </Button>
             </div>
@@ -165,56 +152,60 @@ export function IndexManagerModal({
           <div
             role="tablist"
             aria-label="Vector store backend"
-            className="mt-4 flex items-center gap-1 rounded-full border border-hairline bg-surface p-1 text-sm self-start"
+            className="m-3 flex items-center gap-1 self-start rounded-full border border-hairline bg-surface p-1"
           >
             {backends.map((info) => {
               const usable = info.available && info.configured;
               const isActive = info.backend === activeBackend;
               return (
-                <button
+                <Tooltip
                   key={info.backend}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  disabled={!usable}
-                  title={
+                  content={
                     usable
-                      ? undefined
+                      ? ""
                       : !info.available
                         ? "Unavailable on this deployment."
                         : "API key required — add it in Settings."
                   }
-                  onClick={() => {
-                    setActiveBackend(info.backend);
-                    setSelectedName(null);
-                    const hasIndexes = indexes.some((index) => index.backend === info.backend);
-                    setViewMode(hasIndexes ? "details" : "create");
-                  }}
-                  className={`rounded-full px-4 py-1.5 transition ${
-                    isActive
-                      ? "bg-accent-violet/30 text-primary"
-                      : "text-muted hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                  }`}
+                  side="bottom"
                 >
-                  {info.backend === "pgvector" ? "pgvector" : "Pinecone"}
-                </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    disabled={!usable}
+                    onClick={() => {
+                      setActiveBackend(info.backend);
+                      setSelectedName(null);
+                      const hasIndexes = indexes.some((index) => index.backend === info.backend);
+                      setViewMode(hasIndexes ? "details" : "create");
+                    }}
+                    className={`rounded-full px-3 py-1.5 text-instrument font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+                      isActive
+                        ? "bg-surface-strong text-primary"
+                        : "text-muted hover:text-body disabled:cursor-not-allowed disabled:opacity-40"
+                    }`}
+                  >
+                    {info.backend === "pgvector" ? "pgvector" : "Pinecone"}
+                  </button>
+                </Tooltip>
               );
             })}
           </div>
 
-          <div className="mt-4 flex-1 overflow-y-auto pr-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             {localError ? (
-              <div className="mt-4 rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
+              <p role="alert" className="mb-3 max-w-[66ch] text-ui text-data-neg">
                 {localError}
-              </div>
+              </p>
             ) : null}
             {error ? (
-              <div className="mt-4 rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
+              <p role="alert" className="mb-3 max-w-[66ch] text-ui text-data-neg">
                 {error}
-              </div>
+              </p>
             ) : null}
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-[280px_1fr]">
+            <div className="grid gap-3 lg:grid-cols-[280px_1fr]">
               <IndexListPanel
                 indexes={sortedIndexes}
                 loading={loading}
@@ -230,7 +221,7 @@ export function IndexManagerModal({
                 }}
               />
 
-              <div className="space-y-6">
+              <div className="min-w-0 space-y-3">
                 {viewMode === "details" ? (
                   <IndexDetailsPanel index={selectedIndex} onDelete={setDeleteTarget} />
                 ) : activeBackendInfo ? (
@@ -256,7 +247,7 @@ export function IndexManagerModal({
               </div>
             </div>
           </div>
-        </GlassCard>
+        </div>
       </ModalOverlay>
       <ConfirmDialog
         open={deleteTarget !== null}

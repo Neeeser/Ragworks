@@ -18,8 +18,10 @@ export default function PipelinesPage() {
     router.replace(`/pipelines/${nextKind}`);
   }, [router]);
 
+  // A redirect shim, not a load: the kind route paints the editor's own
+  // skeleton, so this frame stays a single line rather than a fake layout.
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted">
+    <div className="flex h-full items-center justify-center text-ui text-muted">
       Loading pipelines…
     </div>
   );

@@ -143,38 +143,40 @@ function DrawerContent({
     >
       <div
         className={cn(
-          "drawer-slide-in ml-auto flex h-full w-full max-w-[480px] flex-col border-l bg-canvas-raised/95 backdrop-blur",
+          // Depth here is the lit surface plus its family-coloured edge — no
+          // blur: a data surface behind glass is the wrong material and a real
+          // compositing cost on a panel this tall.
+          "drawer-slide-in ml-auto flex h-full w-full max-w-[480px] flex-col border-l bg-canvas-raised shadow-elevation-2",
           familyStyles.border,
         )}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-hairline px-6 pb-4 pt-5">
+        <div className="flex items-start justify-between gap-3 border-b border-hairline p-3">
           <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                "font-mono text-[10px] uppercase tracking-[0.28em]",
-                familyStyles.badge,
-              )}
-            >
+            <p className={cn("text-instrument font-medium", familyStyles.badge)}>
               {getNodeFamilyLabel(family)}
             </p>
             {isPreview ? (
-              <h2 id={labelId} className="mt-1 truncate text-lg font-semibold text-primary">
+              <h2
+                id={labelId}
+                className="mt-0.5 truncate text-head font-semibold tracking-[-0.01em] text-primary"
+              >
                 {node.data.label}
               </h2>
             ) : (
               <input
                 id={labelId}
                 aria-label="Node label"
-                className="mt-1 w-full rounded-xl border border-transparent bg-transparent text-lg font-semibold text-primary outline-none transition hover:border-hairline focus:border-accent-violet"
+                className="mt-0.5 w-full rounded-control border border-transparent bg-transparent px-1 py-0.5 text-head font-semibold tracking-[-0.01em] text-primary outline-none transition-colors duration-80 ease-standard hover:border-hairline focus:border-accent-violet"
                 value={draftLabel}
                 onChange={(event) => setDraftLabel(event.target.value)}
               />
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             {!isPreview ? (
               <Button
                 size="sm"
+                glow
                 onClick={handleSave}
                 disabled={!dirty || embeddingSelectionMissing || rerankingSelectionMissing}
               >
@@ -185,14 +187,14 @@ function DrawerContent({
               type="button"
               aria-label="Close node editor"
               onClick={requestClose}
-              className="rounded-full p-1.5 text-muted transition hover:bg-surface hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+              className="rounded-control p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           <NodeDescription node={node} />
           <NodeConfigSections
             node={draftNode}
@@ -206,17 +208,17 @@ function DrawerContent({
         </div>
 
         {isPreview ? (
-          <div className="border-t border-hairline px-6 py-4">
-            <Button className="w-full" onClick={onAddToCanvas} disabled={rerankerUnavailable}>
-              <Plus className="h-4 w-4" />
+          <div className="border-t border-hairline p-3">
+            <Button glow className="w-full" onClick={onAddToCanvas} disabled={rerankerUnavailable}>
+              <Plus className="h-4 w-4" aria-hidden />
               Add to canvas
             </Button>
             {rerankerUnavailable ? (
-              <p className="mt-2 text-xs text-muted">
+              <p className="mt-2 max-w-[66ch] text-ui text-muted">
                 {providerUnavailableMessage(catalogProps.rerankingProviderMessage)}{" "}
                 <Link
                   href="/settings"
-                  className="text-accent-cyan underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                  className="rounded-control text-accent-cyan underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
                 >
                   Settings
                 </Link>

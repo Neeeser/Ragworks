@@ -45,7 +45,7 @@ export function ChunkerTokenizerFields({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-hairline bg-surface p-3">
+    <div className="space-y-2 rounded-control border border-hairline bg-surface p-3">
       <Field label="Tokenizer" error={tokenizerIssue?.message}>
         <CustomSelect
           value={tokenizer}

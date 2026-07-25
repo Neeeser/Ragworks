@@ -140,7 +140,7 @@ export function CreatePipelineWizard({
         { id: "basics", label: "Name", description: "What this pipeline is for." },
         { id: "store", label: "Vector store", description: "Where the vectors live." },
         { id: "processing", label: "Processing", description: "Chunking and embedding." },
-        { id: "review", label: "Review", description: "Watch it flow, then create." },
+        { id: "review", label: "Review", description: "The graph this pipeline will run." },
       ];
     }
     const retrievalSteps: WizardStep[] = [
@@ -166,7 +166,7 @@ export function CreatePipelineWizard({
     retrievalSteps.push({
       id: "review",
       label: "Review",
-      description: "Watch it flow, then create.",
+      description: "The graph this pipeline will run.",
     });
     return retrievalSteps;
   }, [isIngestion, template]);
@@ -306,7 +306,7 @@ export function CreatePipelineWizard({
   return (
     <WizardShell
       open={open}
-      title={isIngestion ? "Create an ingestion pipeline" : "Create a search tool pipeline"}
+      title="Create pipeline"
       subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}
@@ -335,21 +335,21 @@ export function CreatePipelineWizard({
       )}
 
       {activeStep === "basics" && (
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-2xl border border-hairline bg-surface p-4">
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 rounded-control border border-hairline bg-surface p-3">
             {isIngestion ? (
-              <FileText className="mt-0.5 h-5 w-5 shrink-0 text-accent-cyan" />
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-accent-cyan" aria-hidden />
             ) : (
-              <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-accent-violet" />
+              <MessageCircleQuestion
+                className="mt-0.5 h-4 w-4 shrink-0 text-accent-violet"
+                aria-hidden
+              />
             )}
-            <p className="text-sm leading-relaxed text-body">
+            <p className="max-w-[66ch] text-ui leading-relaxed text-body">
               {isIngestion ? copy.explainer : template.description}
             </p>
           </div>
-          <Field
-            label="Pipeline name"
-            labelClassName="font-mono text-[11px] uppercase tracking-[0.3em] text-muted"
-          >
+          <Field label="Pipeline name">
             <TextInput
               type="text"
               placeholder={copy.namePlaceholder}

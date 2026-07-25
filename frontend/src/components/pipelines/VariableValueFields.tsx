@@ -29,7 +29,7 @@ export function InputVariableFields({ variable, disabled, onPatch }: PatchProps)
           onChange={(event) => onPatch({ description: event.target.value })}
         />
       </Field>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <Field label="Default" hint="Empty = callers must supply it.">
           <InputDefaultControl variable={variable} disabled={disabled} onPatch={onPatch} />
         </Field>
@@ -52,7 +52,7 @@ export function InputVariableFields({ variable, disabled, onPatch }: PatchProps)
           </>
         ) : null}
       </div>
-      <label className="flex items-center gap-2 text-xs text-body">
+      <label className="flex items-center gap-2 text-ui text-body">
         <input
           type="checkbox"
           checked={variable.expose_to_llm ?? false}
@@ -140,7 +140,7 @@ function NumberOrEmptyInput({
       type="number"
       value={value == null ? "" : String(value)}
       disabled={disabled}
-      className="font-mono text-[13px]"
+      className="font-mono text-ui"
       onChange={(event) => {
         const raw = event.target.value;
         if (raw === "") {
@@ -193,7 +193,7 @@ export function ConstantValueField({ variable, disabled, onPatch }: PatchProps) 
         step={variable.type === "integer" ? 1 : undefined}
         value={variable.value == null ? "" : String(variable.value)}
         disabled={disabled}
-        className={numeric ? "font-mono text-[13px]" : undefined}
+        className={numeric ? "font-mono text-ui" : undefined}
         onChange={(event) => {
           if (!numeric) {
             onPatch({ value: event.target.value });

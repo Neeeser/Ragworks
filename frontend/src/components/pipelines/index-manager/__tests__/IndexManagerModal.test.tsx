@@ -83,7 +83,8 @@ describe("IndexManagerModal", () => {
       />,
     );
 
-    expect(screen.getByText("Loading indexes...")).toBeInTheDocument();
+    // Loading is a skeleton at the list's final geometry, named for screen readers.
+    expect(screen.getByText("Loading indexes")).toBeInTheDocument();
   });
 
   it("shows details and handles deletion flow", async () => {

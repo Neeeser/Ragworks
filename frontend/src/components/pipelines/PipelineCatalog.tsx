@@ -1,9 +1,14 @@
 "use client";
 
-import { Layers, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { DataRow } from "@/components/ui/data-row";
+import { StageStrip } from "@/components/ui/stage-strip";
 import { Tooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+
+import { pipelineStages } from "./lib/pipeline-stages";
 
 import type { Pipeline } from "@/lib/types";
 
@@ -15,6 +20,13 @@ type PipelineCatalogProps = {
   pipelineUsage: Set<string>;
 };
 
+/**
+ * The pipelines in this kind, one row each inside the rail.
+ *
+ * The stage strip is derived from the saved definition, so it shows what the
+ * graph actually does (parse → chunk → embed → index) rather than a label that
+ * could drift from it; the version is a number, so it is mono.
+ */
 export function PipelineCatalog({
   pipelines,
   selectedPipelineId,
@@ -22,68 +34,59 @@ export function PipelineCatalog({
   onDelete,
   pipelineUsage,
 }: PipelineCatalogProps) {
+  if (pipelines.length === 0) {
+    return <p className="p-8 text-center text-ui text-muted">No pipelines in this kind yet.</p>;
+  }
+
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-        <Layers className="h-4 w-4 text-accent-violet" />
-        Pipeline catalog
-      </div>
-      <div className="mt-4 space-y-3">
-        {pipelines.length === 0 && (
-          <p className="text-sm text-muted">No pipelines yet. Create one above.</p>
-        )}
-        {pipelines.map((pipeline) => {
-          const isSelected = selectedPipelineId === pipeline.id;
-          const isInUse = pipelineUsage.has(pipeline.id);
-          return (
-            <div
-              key={pipeline.id}
-              className={cn(
-                "group flex items-center gap-2 rounded-2xl border px-2 py-2 text-sm transition",
-                isSelected
-                  ? "border-accent-violet bg-accent-violet/10 text-primary"
-                  : "border-hairline bg-surface text-body hover:border-strong",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => onSelect(pipeline)}
-                className={cn(
-                  "flex-1 rounded-xl px-2 py-1 text-left",
-                  isSelected ? "text-primary" : "text-body group-hover:text-primary",
-                )}
+      {pipelines.map((pipeline) => {
+        const isInUse = pipelineUsage.has(pipeline.id);
+        const stages = pipelineStages(pipeline.definition);
+        return (
+          <DataRow
+            key={pipeline.id}
+            selected={selectedPipelineId === pipeline.id}
+            onSelect={() => onSelect(pipeline)}
+            title={
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{pipeline.name}</span>
+                {pipeline.is_default ? (
+                  <Chip tone="accent" dot={false}>
+                    Default
+                  </Chip>
+                ) : null}
+              </span>
+            }
+            subtitle={stages.length > 0 ? <StageStrip stages={stages} /> : undefined}
+            columns={[
+              <span
+                key="version"
+                className="w-8 shrink-0 text-right font-mono text-instrument tabular-nums text-meta"
               >
-                <p className="font-semibold">{pipeline.name}</p>
-                <p
-                  className={cn(
-                    "text-xs",
-                    isSelected ? "text-body" : "text-muted group-hover:text-body",
-                  )}
-                >
-                  {pipeline.kind ?? "custom"} • v{pipeline.current_version}
-                </p>
-              </button>
-              <Tooltip content={isInUse ? "Pipelines in use cannot be deleted." : ""} side="left">
-                <button
-                  type="button"
+                v{pipeline.current_version}
+              </span>,
+            ]}
+            actions={
+              <Tooltip
+                content={isInUse ? "Pipelines in use cannot be deleted." : "Delete pipeline"}
+                side="left"
+              >
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => onDelete(pipeline)}
                   disabled={isInUse}
                   aria-label={`Delete ${pipeline.name}`}
-                  className={cn(
-                    "inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border text-muted transition",
-                    isSelected
-                      ? "border-strong hover:border-data-neg/60 hover:text-data-neg"
-                      : "border-hairline hover:border-data-neg/60 hover:text-data-neg",
-                    isInUse && "cursor-not-allowed border-hairline text-faint",
-                  )}
+                  className="hover:text-data-neg"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </Button>
               </Tooltip>
-            </div>
-          );
-        })}
-      </div>
+            }
+          />
+        );
+      })}
     </div>
   );
 }

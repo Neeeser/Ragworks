@@ -3,6 +3,8 @@
 import { useModelCatalogFilter } from "@/components/models/model-catalog-filter";
 import { ModelCatalogPicker } from "@/components/models/ModelCatalogPicker";
 import { ModelOptionButton } from "@/components/models/ModelOptionButton";
+import { Chip } from "@/components/ui/chip";
+import { Readout } from "@/components/ui/readout";
 
 import type { ModelAvailability } from "@/lib/model-catalog-cache";
 import type { CatalogModel, ProviderType } from "@/lib/types";
@@ -104,19 +106,14 @@ export function RerankingModelSelectorCard({
               </>
             }
           >
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               {inputLimit ? (
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                  {inputLimit.toLocaleString()} tokens
-                </span>
+                <Readout label="Max input">{inputLimit.toLocaleString()}</Readout>
               ) : null}
               {model.input_modalities.map((modality) => (
-                <span
-                  key={modality}
-                  className="rounded-full border border-hairline px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-meta"
-                >
+                <Chip key={modality} dot={false}>
                   {modalityLabel(modality)}
-                </span>
+                </Chip>
               ))}
             </div>
           </ModelOptionButton>

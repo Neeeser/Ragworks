@@ -41,7 +41,7 @@ describe("VariablesPanel", () => {
   it("shows an input variable with its badge and accepted-by reference", async () => {
     renderPanel([TOP_K]);
     expect(screen.getByText("top_k")).toBeInTheDocument();
-    expect(screen.getByText("input")).toBeInTheDocument();
+    expect(screen.getByText("Input")).toBeInTheDocument();
     await userEvent.click(screen.getByText("top_k"));
     expect(screen.getByText(/Used by the retrieval input node/)).toBeInTheDocument();
   });

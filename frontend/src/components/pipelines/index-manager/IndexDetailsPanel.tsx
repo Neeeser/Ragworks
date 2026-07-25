@@ -2,6 +2,12 @@
 
 import { Trash2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
+import { Readout } from "@/components/ui/readout";
+import { Tooltip } from "@/components/ui/tooltip";
+
 import type { VectorIndex } from "@/lib/types";
 
 type IndexDetailsPanelProps = {
@@ -13,57 +19,47 @@ type IndexDetailsPanelProps = {
  * the delete-confirmation flow (owned by the parent IndexManagerModal). */
 export function IndexDetailsPanel({ index, onDelete }: IndexDetailsPanelProps) {
   return (
-    <div className="rounded-3xl border border-hairline bg-surface p-5">
-      <div className="flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Index details</p>
-        <button
-          type="button"
-          className="rounded-full border border-hairline p-2 text-muted transition hover:border-data-neg/60 hover:text-data-neg disabled:opacity-40"
-          onClick={() => index && onDelete(index.name)}
-          disabled={!index}
-          aria-label="Delete index"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+    <Panel className="overflow-hidden">
+      <div className="flex h-8 items-center justify-between gap-2 border-b border-hairline pl-3 pr-1">
+        <InstrumentLabel>Index details</InstrumentLabel>
+        <Tooltip content="Delete index" side="left">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="hover:text-data-neg"
+            onClick={() => index && onDelete(index.name)}
+            disabled={!index}
+            aria-label="Delete index"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
       </div>
       {index ? (
-        <div className="mt-4 grid gap-4 text-sm text-body md:grid-cols-2">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Name</p>
-            <p className="text-base font-semibold text-primary">{index.name}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Status</p>
-            <p className="text-sm text-body">
-              {(index.status as { state?: string } | null)?.state ?? "Unknown"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Backend</p>
-            <p className="text-sm text-body">
-              {index.backend === "pgvector" ? "pgvector (PostgreSQL)" : "Pinecone"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Vector type</p>
-            <p className="text-sm text-body">{index.vector_type ?? "dense"}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Dimension</p>
-            <p className="text-sm text-body">{index.dimension ?? "n/a"}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Metric</p>
-            <p className="text-sm text-body">{index.metric ?? "cosine"}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-meta">Host</p>
-            <p className="text-xs text-body break-all">{index.host ?? "Not available"}</p>
-          </div>
+        // One instrument readout rather than seven bordered cells: a set of
+        // small facts about one selected thing is a row, not a grid of boxes.
+        <div className="flex flex-wrap gap-x-4 gap-y-1 p-3">
+          <Readout label="Name">{index.name}</Readout>
+          <Readout label="Status">
+            {(index.status as { state?: string } | null)?.state ?? "Unknown"}
+          </Readout>
+          <Readout label="Backend">
+            {index.backend === "pgvector" ? "pgvector" : "Pinecone"}
+          </Readout>
+          <Readout label="Vector type">{index.vector_type ?? "dense"}</Readout>
+          <Readout label="Dimension">
+            {index.dimension ?? <span className="text-muted">—</span>}
+          </Readout>
+          <Readout label="Metric">{index.metric ?? "cosine"}</Readout>
+          {index.host ? (
+            <Readout label="Host" className="w-full">
+              {index.host}
+            </Readout>
+          ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">Select an index to see details.</p>
+        <p className="p-8 text-center text-ui text-muted">Select an index to see its details.</p>
       )}
-    </div>
+    </Panel>
   );
 }
