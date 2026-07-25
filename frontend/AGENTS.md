@@ -7,6 +7,10 @@ files that one person can hold in their head at once.** Repo-wide rules (verify
 gates, the bug-fix regression-test rule, commit/PR conventions) live in the root
 `AGENTS.md` and apply here too.
 
+**Any UI work loads the `ragworks-ui-design` skill first** — it is the design system
+(tokens, composition, motion, data display), and it is where design decisions the user
+clarifies get recorded so every screen keeps making the same ones.
+
 ## The gate
 
 **`npm run verify` (typecheck → lint → tests) must pass before every commit.** All

@@ -92,8 +92,8 @@ never a bare row list on the canvas.
 
 `overflow: hidden` zeroes a flex item's automatic minimum size, so a plain
 `overflow-hidden` Panel inside a `flex flex-col` PageBody silently collapses to its 2px
-of borders the moment a long sibling overflows the column — the Provider connections
-panel vanished for exactly one user because *their* login-session list was long enough.
+of borders the moment a long sibling overflows the column — data-dependent, so it passes
+every short-list check and only appears for users with enough rows.
 Pair `overflow-hidden` with `shrink-0` on any card in a scrolling column; only
 deliberate full-height panes (`min-h-0 flex-1`) are allowed to shrink.
 
@@ -270,9 +270,8 @@ where a value came from.
 
 **The counter-rule: on a page of stacked peer panels, every panel carries an `h2` naming
 its domain.** A panel whose only header is a count and an action (`3 configured · Add
-provider`) is unfindable among titled siblings — the settings provider-connections panel
-shipped that way and users reported the feature as missing. A section title is not an
-eyebrow: it is the one piece of text that says what the panel IS.
+provider`) is unfindable among titled siblings — users read the feature as missing. A
+section title is not an eyebrow: it is the one piece of text that says what the panel IS.
 
 ---
 
@@ -301,7 +300,7 @@ eyebrow: it is the one piece of text that says what the panel IS.
 | section tabs with the sliding wire | `Tabs` |
 | an elevated card | `Panel` (renders `card-surface`) |
 | a KPI row | `KpiStrip` (one card, cells inside) |
-| a time-series | `ChartPanel` |
+| a time-series | `TrendChart` inside a `Panel` |
 | a list entity | `DataRow` inside a `Panel` |
 | column headers for a row list | `DataRowHeader` |
 | status (node dot + optional label) | `StatusDot` |
@@ -309,7 +308,7 @@ eyebrow: it is the one piece of text that says what the panel IS.
 | a link wearing button chrome | `ButtonLink` — never a hand-rolled anchor class string |
 | a bound pipeline as metadata | `StageStrip` |
 | live-process indicator | `PulseWire` / the ingestion stage pulse |
-| selected-item fields | `Inspector` |
+| selected-item fields | a docked inspector pane (`bg-surface` secondary pane in the card) |
 | explaining a truncated or terse value | `Tooltip` — never a `title` attribute |
 | hover/focus preview panel | `RailFlyout` + `useFlyoutIntent` |
 | loading placeholder | `Skeleton` |
@@ -375,8 +374,8 @@ Part of "done", not polish:
 - No horizontal page scroll; wide content scrolls in its own `overflow-x-auto`.
 - Both structural modes verified (dark + light).
 - `prefers-reduced-motion` honoured — see `motion.md`.
-- Never nest a `<button>` inside a clickable row (`role="button"` div pattern —
-  `FileGridView`).
+- Never nest a `<button>` inside a clickable row — invalid HTML that hydrates
+  unpredictably; use the `role="button"` div pattern (`FileGridView`).
 - **A hover-opened panel is reachable by keyboard or it doesn't ship.** Focus opens it,
   Escape closes it and restores focus — focus first, close second, one React batch, or
   Escape reopens what it dismissed (verify by pressing Escape from a control *inside*

@@ -1,15 +1,17 @@
 ---
 name: ragworks-ui-design
 description: >-
-  Use when building, restyling, or reviewing UI in the Ragworks `frontend/` — pages,
-  panels, forms, rows, tables, charts, empty states, modals — or when asked to "match the
-  design", "restyle", "modernize the UI", "make it denser", or "bring this in line". Also
-  when touching colors, typography, spacing, radii, shadows, animation, themes, or
-  palettes; when a screen feels generic, template-like, or too spread out; and when adding
-  any chart, KPI, or status indicator.
+  Use for any UI work in the Ragworks `frontend/` — building, changing, or reviewing
+  pages, panels, forms, rows, tables, charts, empty states, or modals; touching colors,
+  typography, spacing, radii, shadows, animation, themes, or palettes; or adding any
+  chart, KPI, or status indicator. This skill is the Ragworks design system — load it
+  before frontend work so every screen makes the same design decisions.
 ---
 
 # Ragworks UI Design
+
+This skill is the single source of truth for Ragworks' visual language. Essentially all
+frontend work in this repo is design work, so load it whenever you touch `frontend/` UI.
 
 Ragworks has **two UI surfaces with different jobs**, sharing one token system. Deciding
 which surface you're in is the first move, because the rules genuinely conflict.
@@ -103,9 +105,10 @@ charts    --series-1 … --series-6      (never --accent-* as a series)
 stages    stage-parse/chunk/embed/index/retrieve/chat/rerank/router/neutral
 ```
 
-## Restyling an existing screen
+## Bringing a screen in line
 
-In this order — the first three do most of the work:
+When a screen drifts from the language (or a new one is being shaped), work in this
+order — the first three do most of the work:
 
 1. **Delete text.** Eyebrows restating the list, greetings, `"No description yet."`-style
    placeholders, subheads narrating the UI. A third of the work is subtraction.
@@ -151,13 +154,21 @@ In this order — the first three do most of the work:
 `focus-visible:ring-2 ring-accent-violet ring-offset-canvas` everywhere · `aria-label` on
 icon-only buttons · reduced motion no-ops all animation (`useSyncExternalStore`, not
 `useState`+effect) · both structural modes verified (dark + light) · no horizontal page
-scroll · never nest a `<button>` in a clickable row (invalid HTML; shipped as a hydration
-error here once).
+scroll · never nest a `<button>` in a clickable row (invalid HTML that hydrates
+unpredictably — use the `role="button"` div pattern).
 
 Finish with `npm run verify` in `frontend/` plus `make format-check-frontend`, then a
 keyboard and reduced-motion pass, and screenshots in both modes from a seeded sandbox.
 
 ## Editing this skill
+
+**When the user clarifies a design decision, philosophy, or direction — in review
+feedback, a conversation, or by overturning a rule here — record it in this skill in the
+same change.** This skill is how future agents inherit those decisions; a clarification
+that only lives in a conversation is lost. Write rules in the present tense about the
+current codebase; never document removed patterns, deprecations, or the history of a
+change (git history owns that), and never reference files or components that no longer
+exist.
 
 `.claude/skills/ragworks-ui-design/` and `.agents/skills/ragworks-ui-design/` must stay
 byte-identical — a divergence means half the agents in this repo follow a stale language.

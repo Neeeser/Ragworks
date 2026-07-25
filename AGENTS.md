@@ -240,6 +240,29 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 - `make bump-patch|bump-minor|bump-major|bump-rc`: open a release PR (see Releases —
   these never push to `main` or create tags themselves)
 
+# Maintaining skills (`.claude/skills/` + `.agents/skills/`)
+
+Skills are reusable reference guides agents load before matching work —
+`ragworks-ui-design` is the design system every frontend change follows. Rules for
+writing and updating them (they follow Anthropic's and OpenAI's skill-authoring
+guidance):
+
+- **A skill documents the present, never the past.** No removed patterns, deprecations,
+  migration steps, or "why we deleted X" — git history owns that, and stale narrative
+  teaches future agents about code that no longer exists. Every file, component, or
+  command a skill names must exist in the repo right now; verify references when editing.
+- **The `description` frontmatter states when to load the skill**, in the language of a
+  real task, not a summary of its contents or of a one-time effort — an agent decides
+  from the description alone whether to read further.
+- **SKILL.md is an overview pointing at reference files one level deep**; keep it
+  concise and put heavy detail in `references/`.
+- **When the user clarifies a design decision, philosophy, or direction, update the
+  relevant skill in the same PR** — that is how future agents inherit decisions made in
+  conversation.
+- **`.claude/skills/<name>/` and `.agents/skills/<name>/` stay byte-identical.** Author
+  in `.claude/`, copy over, and diff-verify (each skill's own editing section carries the
+  commands).
+
 # Maintaining these AGENTS.md files
 
 These files are lessons learned about writing good, consistent code in this repo.

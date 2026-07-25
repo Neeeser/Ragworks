@@ -7,8 +7,8 @@ the other. They share only the token system and the copy voice.
 The landing page's job is to make a developer understand what Ragworks is and decide to run
 it. Generosity, atmosphere, and one confident entrance are correct here. The console's job
 is to get out of the way of someone debugging at 2am. Applying console density to the
-landing page makes it look unfinished; applying landing atmosphere to the console is what
-made it look AI-generated.
+landing page makes it look unfinished; applying landing atmosphere to the console makes it
+read as a generic marketing dashboard.
 
 | | Landing | Console |
 |---|---|---|
