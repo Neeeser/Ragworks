@@ -23,7 +23,7 @@ which surface you're in is the first move, because the rules genuinely conflict.
 | Read | `references/console.md` | `references/landing.md` |
 | Radius | 4 / 6 / 10px + pills | `rounded-full` CTAs, `rounded-3xl` panels |
 | Blooms | exactly one, shell-owned, ~9% accent | yes, one per view, up to 22% |
-| Backdrop blur | none | none — glass is retired product-wide |
+| Backdrop blur | none | none |
 | Entrance | 120ms content fade | `landing-rise`, 700ms, staggered |
 | Label voice | sentence case, sans | mono uppercase, `0.28em`–`0.4em` tracking |
 
