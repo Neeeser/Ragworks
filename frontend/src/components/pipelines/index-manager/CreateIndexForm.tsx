@@ -8,10 +8,17 @@ import { Chip } from "@/components/ui/chip";
 import { Field, Select, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
+import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { BackendInfo, CatalogModel, ModelCatalogResponse } from "@/lib/types";
+
+const DIMENSION_MODES: Array<SegmentedOption<"manual" | "model">> = [
+  { id: "manual", label: "Manual" },
+  { id: "model", label: "From model" },
+];
 
 type CreateIndexFormProps = {
   token: string;
@@ -124,30 +131,12 @@ export function CreateIndexForm({
                     .
                   </p>
                 </div>
-                <div className="flex items-center gap-1 rounded-full border border-hairline bg-surface p-1">
-                  <button
-                    type="button"
-                    onClick={() => form.handleDimensionModeChange("manual")}
-                    className={`rounded-full px-3 py-1 text-instrument font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-                      form.useModelDimension
-                        ? "text-muted hover:text-body"
-                        : "bg-surface-strong text-primary"
-                    }`}
-                  >
-                    Manual
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => form.handleDimensionModeChange("model")}
-                    className={`rounded-full px-3 py-1 text-instrument font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-                      form.useModelDimension
-                        ? "bg-surface-strong text-primary"
-                        : "text-muted hover:text-body"
-                    }`}
-                  >
-                    From model
-                  </button>
-                </div>
+                <SegmentedControl
+                  aria-label="Dimension source"
+                  options={DIMENSION_MODES}
+                  value={form.useModelDimension ? "model" : "manual"}
+                  onChange={form.handleDimensionModeChange}
+                />
               </div>
               {form.useModelDimension ? (
                 <div className="mt-2 max-h-[60vh] overflow-y-auto rounded-control border border-hairline bg-surface p-2">

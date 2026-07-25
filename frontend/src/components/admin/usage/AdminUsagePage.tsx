@@ -3,19 +3,27 @@
 import { ADMIN_CRUMB, AdminTabs } from "@/components/admin/AdminTabs";
 import { useAdminUsage, USAGE_WINDOWS } from "@/components/admin/hooks/use-admin-usage";
 import { PageBody } from "@/components/ui/app-shell";
-import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
 import { Panel, PanelGrid } from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { TrendChart } from "@/components/ui/trend-chart";
 import { parseApiDate } from "@/lib/datetime";
 import { formatTimeAgoCompact } from "@/lib/format";
 
+import type { UsageWindow } from "@/components/admin/hooks/use-admin-usage";
+import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { AdminUsagePoint, AdminUserUsage } from "@/lib/types";
+
+/** The window strip's ids are the day counts as strings — segment ids are text. */
+const WINDOW_OPTIONS: Array<SegmentedOption<`${UsageWindow}`>> = USAGE_WINDOWS.map((days) => ({
+  id: `${days}`,
+  label: `${days}d`,
+}));
 
 const NUMBER_FORMAT = new Intl.NumberFormat("en-US");
 
@@ -226,19 +234,12 @@ export function AdminUsagePage() {
         crumbs={[ADMIN_CRUMB, { label: "Usage" }]}
         state={<InstrumentLabel>Local telemetry; nothing leaves this deployment</InstrumentLabel>}
         actions={
-          <div className="flex items-center gap-1" role="group" aria-label="Window">
-            {USAGE_WINDOWS.map((days) => (
-              <Button
-                key={days}
-                size="sm"
-                variant={windowDays === days ? "primary" : "ghost"}
-                aria-pressed={windowDays === days}
-                onClick={() => setWindowDays(days)}
-              >
-                {days}d
-              </Button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label="Window"
+            options={WINDOW_OPTIONS}
+            value={`${windowDays}`}
+            onChange={(id) => setWindowDays(Number(id) as UsageWindow)}
+          />
         }
       />
       <AdminTabs />

@@ -8,11 +8,13 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Markdown } from "@/components/ui/markdown";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Readout } from "@/components/ui/readout";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip } from "@/components/ui/tooltip";
 import { parseApiDate } from "@/lib/datetime";
 import { formatTimeAgoCompact } from "@/lib/format";
-import { cn, prettyJson } from "@/lib/utils";
+import { prettyJson } from "@/lib/utils";
 
+import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { ChunkDetail } from "@/lib/types";
 
 type RenderMode = "text" | "markdown";
@@ -24,9 +26,9 @@ type ChunkPreviewOverlayProps = {
   defaultRenderMode?: RenderMode;
 };
 
-const RENDER_MODES: Array<{ mode: RenderMode; label: string }> = [
-  { mode: "text", label: "Plain" },
-  { mode: "markdown", label: "Markdown" },
+const RENDER_MODES: Array<SegmentedOption<RenderMode>> = [
+  { id: "text", label: "Plain" },
+  { id: "markdown", label: "Markdown" },
 ];
 
 /**
@@ -111,29 +113,13 @@ export function ChunkPreviewOverlay({
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 items-center gap-2 px-3 pt-2">
               <InstrumentLabel>Chunk text</InstrumentLabel>
-              <div
-                role="group"
+              <SegmentedControl
                 aria-label="Render mode"
-                className="ml-auto flex shrink-0 overflow-hidden rounded-control border border-hairline"
-              >
-                {RENDER_MODES.map(({ mode, label }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setRenderMode(mode)}
-                    aria-pressed={renderMode === mode}
-                    className={cn(
-                      "flex h-7 items-center px-2 text-ui transition-colors duration-80 ease-standard",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
-                      renderMode === mode
-                        ? "bg-accent-violet/15 text-accent-violet"
-                        : "text-muted hover:bg-surface hover:text-primary",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+                className="ml-auto"
+                options={RENDER_MODES}
+                value={renderMode}
+                onChange={setRenderMode}
+              />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {renderMode === "markdown" ? (

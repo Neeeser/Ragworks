@@ -4,15 +4,16 @@ import { useMemo, useState } from "react";
 
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TrendChart } from "@/components/ui/trend-chart";
 import { formatLatency } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
+import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { CollectionStatsHistoryPoint, LatencyBucket } from "@/lib/types";
 
 type LatencyMetric = "avg_ms" | "p50_ms" | "p95_ms" | "max_ms";
 
-const METRICS: Array<{ id: LatencyMetric; label: string }> = [
+const METRICS: Array<SegmentedOption<LatencyMetric>> = [
   { id: "avg_ms", label: "avg" },
   { id: "p50_ms", label: "p50" },
   { id: "p95_ms", label: "p95" },
@@ -130,28 +131,12 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
 
       {expanded && (
         <div className="mt-4 space-y-4 border-t border-hairline pt-4">
-          <div
-            role="group"
+          <SegmentedControl
             aria-label="Latency metric"
-            className="inline-flex rounded-full border border-hairline p-0.5"
-          >
-            {METRICS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setMetric(entry.id)}
-                aria-pressed={metric === entry.id}
-                className={cn(
-                  "rounded-control px-2 py-1 text-instrument font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-                  metric === entry.id
-                    ? "bg-accent-violet/15 text-primary"
-                    : "text-muted hover:text-primary",
-                )}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
+            options={METRICS}
+            value={metric}
+            onChange={setMetric}
+          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             {(
