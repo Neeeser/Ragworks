@@ -39,7 +39,9 @@ export function Button({
             "bg-accent-violet text-white [background-image:linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0)_55%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:brightness-110",
           secondary:
             "border border-hairline bg-surface text-primary hover:border-strong hover:bg-surface-strong",
-          ghost: "text-muted hover:bg-surface hover:text-primary",
+          // surface-strong, not surface: ghost buttons sit on bg-surface side
+          // panes where a bg-surface hover wash is invisible.
+          ghost: "text-muted hover:bg-surface-strong hover:text-primary",
         }[variant],
         // One combined arbitrary shadow: tailwind-merge treats it and the
         // primary variant's inset shadow as conflicting box-shadows, so the
