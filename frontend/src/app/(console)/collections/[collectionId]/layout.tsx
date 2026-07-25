@@ -1,17 +1,21 @@
 "use client";
 
+import { ArrowUpRight } from "lucide-react";
+import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 
 import {
   CollectionProvider,
   useCollection,
 } from "@/components/collections/detail/collection-context";
-import { CollectionSidebar } from "@/components/collections/detail/CollectionSidebar";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { SectionTabs } from "@/components/ui/tabs";
 import { formatTimeAgoCompact } from "@/lib/format";
+import { useAppConfig } from "@/providers/config-provider";
 
 import type { Crumb } from "@/components/ui/crumb-bar";
+import type { SectionTab } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
 
 /** The sub-route's own name, for the last breadcrumb segment. */
@@ -24,6 +28,7 @@ function sectionLabel(pathname: string, base: string): string | null {
 function CollectionShell({ children }: { children: ReactNode }) {
   const { collection } = useCollection();
   const pathname = usePathname();
+  const { config } = useAppConfig();
   const base = `/collections/${collection.id}`;
   const section = sectionLabel(pathname ?? "", base);
 
@@ -33,11 +38,21 @@ function CollectionShell({ children }: { children: ReactNode }) {
     ...(section ? [{ label: section }] : []),
   ];
 
+  const tabs: SectionTab[] = [
+    { href: base, label: "Overview", exact: true },
+    { href: `${base}/files`, label: "Files" },
+    { href: `${base}/search`, label: "Search" },
+    { href: `${base}/diagnostics`, label: "Diagnostics" },
+    ...(config.features.umap_visualizations === false
+      ? []
+      : [{ href: `${base}/visualize`, label: "Visualize" }]),
+  ];
+
   return (
     <>
-      {/* The breadcrumb owns the collection's identity, so nothing below repeats
-          it — the sidebar used to print the name directly beside the page's own
-          <h1> saying the same thing. */}
+      {/* The breadcrumb path owns the collection's identity, so nothing below
+          repeats it. Sections are tabs, not a second sidebar — two sidebars
+          fight for the same edge. */}
       <CrumbBar
         crumbs={crumbs}
         state={
@@ -45,11 +60,18 @@ function CollectionShell({ children }: { children: ReactNode }) {
             {`Updated ${formatTimeAgoCompact(collection.updated_at)}`}
           </InstrumentLabel>
         }
+        actions={
+          <Link
+            href={`/chat?collections=${encodeURIComponent(collection.id)}`}
+            className="flex items-center gap-1 rounded-control border border-hairline bg-surface px-2 py-1 text-ui text-body transition-colors duration-80 ease-standard hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+          >
+            Open in Chat studio
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted" aria-hidden />
+          </Link>
+        }
       />
-      <div className="flex min-h-0 flex-1">
-        <CollectionSidebar collection={collection} />
-        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
-      </div>
+      <SectionTabs tabs={tabs} />
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col">{children}</div>
     </>
   );
 }

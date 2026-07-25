@@ -169,7 +169,7 @@ export default function CollectionsPage() {
           )
         }
         actions={
-          <Button size="sm" onClick={() => setWizardOpen(true)}>
+          <Button size="sm" glow onClick={() => setWizardOpen(true)}>
             New collection
           </Button>
         }
@@ -182,9 +182,7 @@ export default function CollectionsPage() {
           </div>
         )}
 
-        {message && (
-          <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{message}</p>
-        )}
+        {message && <p className="mb-3 text-ui text-data-neg">{message}</p>}
 
         <CollectionsList
           collections={collections}

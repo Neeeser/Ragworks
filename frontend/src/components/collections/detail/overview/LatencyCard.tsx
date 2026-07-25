@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { TrendChart } from "@/components/collections/detail/overview/TrendChart";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
 import { formatLatency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +84,7 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
   const hasSamples = ingestion.requests > 0 || retrieval.requests > 0;
 
   return (
-    <div className="p-3">
+    <Panel className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <InstrumentLabel className="text-body">Latency</InstrumentLabel>
@@ -108,7 +109,7 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
           type="button"
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
-          className="rounded-control border border-hairline px-2 py-1 font-mono text-instrument uppercase tracking-[0.16em] text-muted transition hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          className="rounded-control border border-hairline px-2 py-1 text-instrument font-medium text-muted transition hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
         >
           {expanded ? "Hide details" : "Details"}
         </button>
@@ -141,7 +142,7 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
                 onClick={() => setMetric(entry.id)}
                 aria-pressed={metric === entry.id}
                 className={cn(
-                  "rounded-control px-2 py-1 font-mono text-instrument uppercase tracking-[0.16em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+                  "rounded-control px-2 py-1 text-instrument font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
                   metric === entry.id
                     ? "bg-accent-violet/15 text-primary"
                     : "text-muted hover:text-primary",
@@ -159,10 +160,8 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
                 { label: "Retrieval", summary: retrieval },
               ] as const
             ).map(({ label, summary }) => (
-              <div key={label} className="rounded-2xl border border-hairline bg-surface p-4">
-                <p className="font-mono text-instrument uppercase tracking-[0.16em] text-muted">
-                  {label}
-                </p>
+              <div key={label} className="rounded-panel border border-hairline bg-surface p-4">
+                <p className="text-instrument font-medium text-muted">{label}</p>
                 <dl className="mt-2 space-y-1 text-sm">
                   <div className="flex justify-between gap-4">
                     <dt className="text-muted">Runs in window</dt>
@@ -182,6 +181,6 @@ export function LatencyCard({ points, granularity }: LatencyCardProps) {
           </div>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

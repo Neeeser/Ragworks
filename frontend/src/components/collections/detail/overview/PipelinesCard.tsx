@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import {
   addCollectionTool,
   fetchCollection,
@@ -110,21 +110,19 @@ export function PipelinesCard({
   };
 
   return (
-    <GlassCard className="rounded-3xl p-5">
+    <Panel className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Pipelines</p>
+        <h2 className="text-ui font-medium text-primary">Pipelines</h2>
         <Link
           href="/pipelines"
-          className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas rounded-lg"
+          className="rounded-control text-instrument font-medium text-muted transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
         >
           Edit pipelines
         </Link>
       </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div>
-          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-            Ingestion
-          </p>
+          <p className="mb-1.5 text-instrument font-medium text-muted">Ingestion</p>
           <PipelineSelect
             label="Ingestion pipeline"
             pipelines={ingestionPipelines}
@@ -133,9 +131,7 @@ export function PipelinesCard({
           />
         </div>
         <div>
-          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-            Search tool
-          </p>
+          <p className="mb-1.5 text-instrument font-medium text-muted">Search tool</p>
           <PipelineSelect
             label="Primary search tool pipeline"
             pipelines={retrievalPipelines}
@@ -145,15 +141,15 @@ export function PipelinesCard({
         </div>
       </div>
       {(dirty || message) && (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           {dirty && (
-            <Button onClick={handleApply} loading={saving}>
+            <Button size="sm" onClick={handleApply} loading={saving}>
               Apply
             </Button>
           )}
-          {message && <p className="text-sm text-body">{message}</p>}
+          {message && <p className="text-ui text-body">{message}</p>}
         </div>
       )}
-    </GlassCard>
+    </Panel>
   );
 }

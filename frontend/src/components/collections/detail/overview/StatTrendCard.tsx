@@ -2,6 +2,7 @@
 
 import { TrendChart } from "@/components/collections/detail/overview/TrendChart";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
 
 type StatTrendCardProps = {
   label: string;
@@ -16,7 +17,7 @@ type StatTrendCardProps = {
  */
 export function StatTrendCard({ label, buckets, granularity, values }: StatTrendCardProps) {
   return (
-    <div className="p-3">
+    <Panel className="p-3">
       {/* No total here: the KPI strip above carries the current value, and the
           chart's last point is that same number. Printing it twice on one screen
           is the redundancy the composition rule exists to prevent. */}
@@ -29,6 +30,6 @@ export function StatTrendCard({ label, buckets, granularity, values }: StatTrend
         series={[{ id: label, label, color: "series-1", values }]}
         formatValue={(value) => value.toLocaleString()}
       />
-    </div>
+    </Panel>
   );
 }

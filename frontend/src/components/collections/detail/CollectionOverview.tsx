@@ -56,7 +56,7 @@ export function CollectionOverview({
   };
 
   return (
-    <PageBody>
+    <PageBody className="space-y-3">
       {/* No title block: the breadcrumb owns the collection's name. The numbers a
           user opens this page for lead instead. */}
       <KpiStrip>
@@ -74,12 +74,10 @@ export function CollectionOverview({
       </KpiStrip>
 
       {collection.description?.trim() ? (
-        <p className="max-w-[66ch] border-b border-hairline px-3 py-2 text-ui text-body">
-          {collection.description}
-        </p>
+        <p className="max-w-[66ch] text-ui text-body">{collection.description}</p>
       ) : null}
 
-      <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
         <RangePicker value={range} onChange={setRange} />
         <Button size="sm" variant="ghost" onClick={copyId}>
           {copied ? (
@@ -91,9 +89,7 @@ export function CollectionOverview({
         </Button>
       </div>
 
-      {history.error && (
-        <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">{history.error}</p>
-      )}
+      {history.error && <p className="text-ui text-data-neg">{history.error}</p>}
 
       <PanelGrid columns={2}>
         <StatTrendCard

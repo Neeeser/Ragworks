@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { useCollectionDiagnostics } from "@/components/collections/detail/diagnostics/use-collection-diagnostics";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { CONSISTENT_STYLE, severityStyle } from "@/lib/diagnostics-severity";
 import { cn } from "@/lib/utils";
 
@@ -42,33 +42,27 @@ export function DiagnosticsCard({ collectionId, token }: DiagnosticsCardProps) {
       : `${pluralize(errorCount, "error")}, ${pluralize(warningCount, "warning")}`;
 
   return (
-    <GlassCard className="rounded-3xl p-5">
-      <div className="flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Diagnostics</p>
-        <Link
-          href={`/collections/${collectionId}/diagnostics`}
-          className="text-xs text-muted underline-offset-2 transition hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet rounded"
-        >
-          View diagnostics
-        </Link>
+    <Panel className="flex items-center gap-3 p-3">
+      <span
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-full",
+          pill.chipClass,
+        )}
+      >
+        <PillIcon className="h-4 w-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-ui font-medium text-primary">
+          {consistent ? "Configuration consistent" : "Issues found"}
+        </p>
+        <p className="text-instrument text-muted">{detail}</p>
       </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <span
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-full",
-            pill.chipClass,
-          )}
-        >
-          <PillIcon className="h-4 w-4" aria-hidden />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-primary">
-            {consistent ? "Configuration consistent" : "Issues found"}
-          </p>
-          <p className="text-xs text-muted">{detail}</p>
-        </div>
-      </div>
-    </GlassCard>
+      <Link
+        href={`/collections/${collectionId}/diagnostics`}
+        className="shrink-0 rounded-control text-instrument font-medium text-muted transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+      >
+        View diagnostics
+      </Link>
+    </Panel>
   );
 }

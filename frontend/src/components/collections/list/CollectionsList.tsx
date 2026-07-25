@@ -4,8 +4,10 @@ import { Files, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { DATA_ROW_ACTIONS_SLOT, DataRow, DataRowHeader } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -67,7 +69,7 @@ function LoadingRows() {
       {[0, 1, 2].map((row) => (
         <div key={row} className="flex items-center border-b border-hairline">
           <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-3">
-            <Skeleton className="h-1.5 w-1.5 rounded-full" />
+            <Skeleton className="h-[7px] w-[7px] rounded-[2px]" />
             <Skeleton className="h-2 max-w-48 flex-1" />
             <Skeleton className={`h-2 ${COL.docs}`} />
             <Skeleton className={`h-2 ${COL.chunks}`} />
@@ -121,26 +123,26 @@ export function CollectionsList({
 
   if (loading) {
     return (
-      <>
+      <Panel>
         <ColumnHeader />
         <LoadingRows />
-      </>
+      </Panel>
     );
   }
 
   if (collections.length === 0) {
     return (
-      <div className="p-8 text-center">
+      <Panel className="p-8 text-center">
         <p className="text-ui text-muted">No collections yet.</p>
-        <Button size="sm" className="mt-3" onClick={onCreateRequest}>
+        <Button size="sm" glow className="mt-3" onClick={onCreateRequest}>
           Create collection
         </Button>
-      </div>
+      </Panel>
     );
   }
 
   return (
-    <div className="border-b border-hairline bg-canvas-raised">
+    <Panel>
       <ColumnHeader />
       {collections.map((collection) => {
         const stats = statsById[collection.id];
@@ -151,7 +153,16 @@ export function CollectionsList({
             key={collection.id}
             href={`/collections/${collection.id}`}
             leading={<StatusDot tone={state.tone} />}
-            title={collection.name}
+            title={
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{collection.name}</span>
+                {/* The dot carries the health; the pill names it, so the state
+                    is readable without colour discrimination. */}
+                <Chip tone={state.tone === "neutral" ? "neutral" : state.tone} dot={false}>
+                  {state.label}
+                </Chip>
+              </span>
+            }
             /* Rendered only when present — an absent optional field gets no
                placeholder standing in for it, so rows without a description stay
                single-line rather than reserving space for nothing. */
@@ -225,6 +236,6 @@ export function CollectionsList({
           />
         );
       })}
-    </div>
+    </Panel>
   );
 }
