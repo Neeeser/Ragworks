@@ -14,17 +14,19 @@ type KpiStripProps = {
 };
 
 /**
- * A row of glance values, separated by seams rather than gaps.
+ * A row of glance values: ONE card, cells separated by hairlines inside it.
  *
  * These are the values a user reads in a fraction of a second — they stay
  * compact on purpose so the vertical space goes to the charts, which are the
- * things on a console page that get read rather than glanced at.
+ * things on a console page that get read rather than glanced at. KPI cells
+ * belong on the *owner's* page (a collection's Overview), never as an
+ * aggregate strip above an entity list.
  */
 export function KpiStrip({ children, className }: KpiStripProps) {
   return (
     <div
       className={cn(
-        "grid auto-cols-fr grid-flow-col border-b border-hairline bg-surface",
+        "card-surface grid auto-cols-fr grid-flow-col",
         "[&>*]:border-r [&>*]:border-hairline [&>*:last-child]:border-r-0",
         className,
       )}

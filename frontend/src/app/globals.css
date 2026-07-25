@@ -14,13 +14,22 @@
 :root,
 :root[data-theme="dark"],
 :root[data-theme="deep-space"] {
-  /* Canvas & chrome */
-  --canvas: #05060a;
-  --canvas-raised: #0b0d14;
-  --surface: rgba(255, 255, 255, 0.05);
-  --surface-strong: rgba(255, 255, 255, 0.08);
-  --border-hairline: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.3);
+  /* Canvas & chrome. The dark palettes carry an accent cast in these values —
+     that cast is the only place "lit by the brand" lives, so components stay
+     palette-blind and a future accent swap keeps the whole look. */
+  --canvas: #0a0910;
+  --canvas-raised: #14121d;
+  --surface: rgba(167, 139, 250, 0.055);
+  --surface-strong: rgba(167, 139, 250, 0.1);
+  --border-hairline: rgba(167, 139, 250, 0.13);
+  --border-strong: rgba(167, 139, 250, 0.34);
+
+  /* Card material — the console's depth device (.card-surface). Opaque so
+     stacked content never bleeds through; lighter at the top like a plate
+     under a light source. */
+  --panel-from: #171420;
+  --panel-to: #110f18;
+  --panel-highlight: rgba(255, 255, 255, 0.055);
 
   /* Text ramp */
   --text-primary: #ffffff;
@@ -38,9 +47,10 @@
   --grad-to: #67e8f9;
   --glow: rgba(139, 92, 246, 0.3);
 
-  /* Elevation — glow in dark, shadow in light. */
-  --elevation-1: 0 0 0 rgba(0, 0, 0, 0);
-  --elevation-2: 0 0 40px var(--glow);
+  /* Elevation — real soft shadows now (cards are objects), accent halo kept
+     for the one glowing primary action per view (shadow-glow). */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --elevation-2: 0 8px 28px rgba(0, 0, 0, 0.5);
 
   /* Data-viz — pipeline stage / port colors. Meaning is fixed; the hex
      shifts per theme for legibility. Never reassign a stage's semantics. */
@@ -86,12 +96,16 @@
 /* Palette: paper (light). `light` is the legacy alias. */
 :root[data-theme="light"],
 :root[data-theme="paper"] {
-  --canvas: #f6f7fb;
+  --canvas: #f5f4f9;
   --canvas-raised: #ffffff;
   --surface: rgba(15, 23, 42, 0.03);
   --surface-strong: rgba(15, 23, 42, 0.06);
-  --border-hairline: rgba(15, 23, 42, 0.1);
-  --border-strong: rgba(15, 23, 42, 0.22);
+  --border-hairline: rgba(76, 55, 122, 0.12);
+  --border-strong: rgba(76, 55, 122, 0.26);
+
+  --panel-from: #ffffff;
+  --panel-to: #fbfaff;
+  --panel-highlight: rgba(255, 255, 255, 0.9);
 
   --text-primary: #0f172a;
   --text-body: #334155;
@@ -107,8 +121,8 @@
   --grad-to: #0891b2;
   --glow: rgba(124, 58, 237, 0.18);
 
-  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --elevation-2: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --elevation-1: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --elevation-2: 0 8px 24px rgba(15, 23, 42, 0.12);
 
   --stage-parse: #0284c7;
   --stage-chunk: #0d9488;
@@ -146,24 +160,30 @@
    palette — a palette may re-step a hue for legibility, never reassign it.
    Series pairs are validated per surface; see palette-contract.test.ts. */
 
-/* Palette: true-black — OLED, maximum contrast. */
+/* Palette: true-black — OLED, maximum contrast. Cast nearly neutral. */
 :root[data-theme="true-black"] {
   --canvas: #000000;
-  --canvas-raised: #0a0a0a;
-  --surface: rgba(255, 255, 255, 0.045);
-  --surface-strong: rgba(255, 255, 255, 0.075);
-  --border-hairline: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.34);
+  --canvas-raised: #0a0a0d;
+  --surface: rgba(196, 181, 253, 0.045);
+  --surface-strong: rgba(196, 181, 253, 0.08);
+  --border-hairline: rgba(196, 181, 253, 0.13);
+  --border-strong: rgba(196, 181, 253, 0.36);
+  --panel-from: #0e0d13;
+  --panel-to: #08080b;
+  --panel-highlight: rgba(255, 255, 255, 0.06);
 }
 
 /* Palette: graphite — lifted base, lower contrast for long sessions. */
 :root[data-theme="graphite"] {
-  --canvas: #14161c;
-  --canvas-raised: #1c1f27;
+  --canvas: #15161d;
+  --canvas-raised: #1d1f28;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-strong: rgba(255, 255, 255, 0.07);
   --border-hairline: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.26);
+  --panel-from: #1e2029;
+  --panel-to: #191b23;
+  --panel-highlight: rgba(255, 255, 255, 0.05);
   --text-body: #d3dae4;
   --text-muted: #9aa5b5;
 }
@@ -179,6 +199,9 @@
   --surface-strong: rgba(255, 255, 255, 0.13);
   --border-hairline: rgba(255, 255, 255, 0.28);
   --border-strong: rgba(255, 255, 255, 0.6);
+  --panel-from: #121212;
+  --panel-to: #0c0c0c;
+  --panel-highlight: rgba(255, 255, 255, 0.09);
   --text-primary: #ffffff;
   --text-body: #f1f5f9;
   --text-muted: #cbd5e1;
@@ -263,12 +286,12 @@
      when the type scale changes. */
   --spacing: 4px;
 
-  /* Radius — three values. Anything softer reads as a marketing page rather
-     than an instrument. rounded-full survives only on genuinely circular
-     things (status dots, avatars, spinners). */
-  --radius-chip: 3px;
-  --radius-control: 4px;
-  --radius-panel: 6px;
+  /* Radius — three values plus rounded-full for pills. 10px is where
+     "product" ends and "brochure" begins; rounded-2xl/3xl stay banned in the
+     console. Status dots are square node dots (rounded-[2px]), not circles. */
+  --radius-chip: 4px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
 
   /* Type — four roles, absolute px so they are immune to the root font-size.
      A KPI hero value may use text-[22px]; nothing exceeds that in the console.
@@ -322,14 +345,64 @@ html {
   }
 }
 
-/* Canonical glass card surface (used by GlassCard and a few bespoke panels):
-   token-driven fill + hairline border + themed elevation. */
+/* Canonical glass card surface — LANDING ONLY (GlassCard and the auth pages).
+   Console depth is .card-surface below; blur never ships in (console). */
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--border-hairline);
   border-radius: 1.25rem;
   box-shadow: var(--elevation-2);
   backdrop-filter: blur(18px);
+}
+
+/* ---------------------------------------------------------------------------
+   Console materials — the soft-depth workbench (ragworks-ui-design skill).
+   --------------------------------------------------------------------------- */
+
+/* The card: lighter at the top, 1px inner top highlight, hairline border,
+   soft real shadow. Depth without blur. */
+.card-surface {
+  background: linear-gradient(180deg, var(--panel-from), var(--panel-to));
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--elevation-1);
+}
+
+/* The console's single ambient bloom. AppShell renders it once; no page adds
+   another. color-mix on the accent tokens keeps it correct in every palette. */
+.console-bloom {
+  position: relative;
+}
+
+.console-bloom::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      640px 420px at -4% -10%,
+      color-mix(in srgb, var(--accent-violet) 9%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      480px 320px at 104% 108%,
+      color-mix(in srgb, var(--accent-cyan) 4%, transparent),
+      transparent 62%
+    );
+}
+
+/* The trace wire — the "you are here" mark. Active sidebar item edge
+   (vertical) and active tab underline (horizontal). Nothing else. */
+.trace-wire {
+  background: linear-gradient(180deg, var(--accent-violet), var(--accent-cyan));
+}
+
+.trace-wire-x {
+  background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan));
 }
 
 /* ---------------------------------------------------------------------------
@@ -355,20 +428,33 @@ html {
 }
 
 /* 2. Loading: skeleton at the content's FINAL geometry, so data landing causes
-   no reflow. Opacity only — animating background-position repaints the element. */
-@keyframes skeletonPulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.85;
+   no reflow. The shimmer is directional (left→right — the signal direction)
+   and rides `transform` only, which stays on the compositor. */
+@keyframes skeletonSweep {
+  to {
+    transform: translateX(200%);
   }
 }
 
 .skeleton {
+  position: relative;
+  overflow: hidden;
   background: var(--surface-strong);
-  animation: skeletonPulse 1.1s var(--ease-standard) infinite;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 60%;
+  transform: translateX(-110%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent-violet) 12%, transparent),
+    transparent
+  );
+  animation: skeletonSweep 1.4s var(--ease-standard) infinite;
 }
 
 /* 3. A value that changed while the user was already looking at it. Never on
@@ -402,47 +488,71 @@ html {
   animation: rowArrive 480ms var(--ease-accel) both;
 }
 
-/* 5. A flyout the pointer asked for: it travels out of the rail it came from.
-   Chrome, not data — the list inside paints the moment it resolves. */
+/* 5. Overlay chrome the user asked for (flyouts, menus): a 120ms scale-fade
+   with its origin at the trigger. Chrome, not data — the list inside paints
+   the moment it resolves. */
 @keyframes consoleFlyoutIn {
   from {
     opacity: 0;
-    transform: translateX(-4px);
+    transform: translateX(-2px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 .console-flyout {
+  transform-origin: left center;
   animation: consoleFlyoutIn 120ms var(--ease-decel) both;
+}
+
+/* 6. The pulse — the licensed expressive motion, ONLY while data is actually
+   flowing (streaming response, running query/eval). A travelling accent beam
+   on a 2px wire. Idle things never pulse. */
+@keyframes pulseBeam {
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.pulse-track {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent-violet) 18%, transparent);
+}
+
+.pulse-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: 2px;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-violet) 40%,
+    var(--accent-cyan) 60%,
+    transparent
+  );
+  animation: pulseBeam 1.6s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .console-enter,
   .console-flyout,
-  .skeleton,
+  .skeleton::after,
+  .pulse-track::after,
   .value-tick,
   .row-arrive {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-}
-
-.grid-glow {
-  position: relative;
-}
-
-.grid-glow::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(circle, var(--glow), transparent 60%);
-  opacity: 0.65;
-  z-index: -1;
 }
 
 @keyframes liveStreamTailFade {

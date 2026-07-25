@@ -63,9 +63,9 @@ describe("palette token contract", () => {
 
   it("pins the structural scales", () => {
     expect(CSS).toMatch(/--spacing:\s*4px/);
-    expect(CSS).toMatch(/--radius-chip:\s*3px/);
-    expect(CSS).toMatch(/--radius-control:\s*4px/);
-    expect(CSS).toMatch(/--radius-panel:\s*6px/);
+    expect(CSS).toMatch(/--radius-chip:\s*4px/);
+    expect(CSS).toMatch(/--radius-control:\s*6px/);
+    expect(CSS).toMatch(/--radius-panel:\s*10px/);
     expect(CSS).toMatch(/--text-instrument:\s*11px/);
     expect(CSS).toMatch(/--text-ui:\s*14px/);
     expect(CSS).toMatch(/--ease-standard:/);

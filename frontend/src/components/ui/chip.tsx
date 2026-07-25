@@ -46,12 +46,29 @@ type ChipProps = {
   className?: string;
 };
 
+/** Tinted pill fill + label ink per tone. The fill is quiet; the dot is bright. */
+const FILL: Record<ChipTone, string> = {
+  neutral: "bg-surface text-muted",
+  accent: "bg-accent-violet/12 text-accent-violet",
+  parse: "bg-stage-parse/12 text-stage-parse",
+  chunk: "bg-stage-chunk/12 text-stage-chunk",
+  embed: "bg-stage-embed/12 text-stage-embed",
+  index: "bg-stage-index/12 text-stage-index",
+  retrieve: "bg-stage-retrieve/12 text-stage-retrieve",
+  chat: "bg-stage-chat/12 text-stage-chat",
+  pos: "bg-data-pos/12 text-data-pos",
+  warn: "bg-data-warn/12 text-data-warn",
+  neg: "bg-data-neg/12 text-data-neg",
+};
+
 /**
- * A compact labelled fact: a pipeline name, a mode, a version, a status.
+ * A compact labelled fact as a pill: a pipeline name, a mode, a version, a
+ * status. Sentence-case sans — never an identifier (a model id or index name
+ * renders verbatim in `font-mono`, outside any label voice).
  *
- * The dot carries the colour and the text stays in an ink token, so the chip is
- * readable without colour discrimination and a row full of chips doesn't turn
- * into a row of competing highlights.
+ * The square node dot carries the brightest colour and the label sits on a
+ * quiet tinted fill, so a row full of chips doesn't turn into competing
+ * highlights and the state stays readable without colour discrimination.
  */
 export function Chip({ children, tone = "neutral", dot = true, className }: ChipProps) {
   return (
@@ -60,13 +77,14 @@ export function Chip({ children, tone = "neutral", dot = true, className }: Chip
     // `Tooltip` when it needs explaining.
     <span
       className={cn(
-        "inline-flex max-w-full items-center gap-1 rounded-chip border border-hairline px-1.5 py-0.5",
-        "font-mono text-instrument uppercase tracking-[0.1em] text-muted",
+        "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5",
+        "text-instrument font-medium",
+        FILL[tone],
         className,
       )}
     >
       {dot ? (
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[tone])} aria-hidden />
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px]", DOT[tone])} aria-hidden />
       ) : null}
       <span className="truncate">{children}</span>
     </span>
