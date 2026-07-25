@@ -2,6 +2,7 @@
 
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TextInput } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import type { QueryArgumentValues } from "./use-collection-search";
 import type { CollectionQueryArgument } from "@/lib/types";
@@ -12,7 +13,12 @@ type QueryArgumentControlsProps = {
   onChange: (name: string, value: number | string | boolean | undefined) => void;
 };
 
-const labelClass = "font-mono text-[11px] uppercase tracking-[0.28em] text-muted";
+/**
+ * An argument's name is the key the tool's schema declares and the API accepts
+ * verbatim, so it renders as a mono literal rather than through the console's
+ * sentence-case label voice.
+ */
+export const ARGUMENT_NAME_CLASS = "shrink-0 font-mono text-instrument text-muted";
 
 /**
  * One typed control per declared pipeline argument, rendered inline beside
@@ -26,14 +32,19 @@ export function QueryArgumentControls({
   return (
     <>
       {argumentsSpec.map((argument) => (
-        <label
-          key={argument.name}
-          className="flex items-center gap-2 text-sm text-body"
-          title={argument.description || undefined}
-        >
-          <span className={labelClass}>{argument.name.replace(/_/g, " ")}</span>
-          <ArgumentControl argument={argument} value={values[argument.name]} onChange={onChange} />
-        </label>
+        // The description explains a control that cannot explain itself, so it
+        // goes through `Tooltip` — a `title` attribute cannot be themed and
+        // ignores the motion system.
+        <Tooltip key={argument.name} content={argument.description ?? ""} side="bottom">
+          <span className="flex items-center gap-2">
+            <span className={ARGUMENT_NAME_CLASS}>{argument.name}</span>
+            <ArgumentControl
+              argument={argument}
+              value={values[argument.name]}
+              onChange={onChange}
+            />
+          </span>
+        </Tooltip>
       ))}
     </>
   );
@@ -55,7 +66,7 @@ function ArgumentControl({
         aria-label={ariaLabel}
         value={value === true ? "true" : value === false ? "false" : ""}
         placeholder="—"
-        className="w-28 px-3 py-1.5"
+        className="w-28 px-2 py-1"
         options={[
           { value: "", label: "No value" },
           { value: "true", label: "true" },
@@ -71,7 +82,7 @@ function ArgumentControl({
         aria-label={ariaLabel}
         value={typeof value === "string" ? value : ""}
         placeholder="—"
-        className="w-36 px-3 py-1.5"
+        className="w-36 px-2 py-1"
         options={argument.choices.map((choice) => ({ value: choice, label: choice }))}
         onValueChange={(next) => onChange(argument.name, next)}
       />
@@ -86,7 +97,7 @@ function ArgumentControl({
         max={argument.maximum ?? undefined}
         step={argument.type === "integer" ? 1 : undefined}
         value={typeof value === "number" ? value : ""}
-        className="w-20 px-3 py-1.5 text-center"
+        className="w-20 px-2 py-1 text-center font-mono tabular-nums"
         onChange={(event) => {
           const raw = event.target.value;
           if (raw === "") {
@@ -104,7 +115,7 @@ function ArgumentControl({
     <TextInput
       aria-label={ariaLabel}
       value={typeof value === "string" ? value : ""}
-      className="w-40 px-3 py-1.5"
+      className="w-40 px-2 py-1"
       onChange={(event) => onChange(argument.name, event.target.value)}
     />
   );

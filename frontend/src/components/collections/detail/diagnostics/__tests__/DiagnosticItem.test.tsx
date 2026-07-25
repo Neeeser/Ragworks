@@ -1,32 +1,51 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { DiagnosticItem } from "@/components/collections/detail/diagnostics/DiagnosticItem";
 import { makeDiagnostic } from "@/test/fixtures";
-import { getMockRouter } from "@/test/test-utils";
 
 describe("DiagnosticItem", () => {
-  it("renders title, summary, and paired observations", () => {
+  it("renders severity, code, confidence, title, summary, and paired observations", () => {
     render(<DiagnosticItem diagnostic={makeDiagnostic()} />);
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("embedding_model_mismatch")).toBeInTheDocument();
+    expect(screen.getByText("Confirmed")).toBeInTheDocument();
     expect(screen.getByText("Embedding models differ")).toBeInTheDocument();
-    expect(screen.getByText(/ingest: model-a/)).toBeInTheDocument();
-    expect(screen.getByText(/query: model-b/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Ingestion and retrieval use different embedding models."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ingest")).toBeInTheDocument();
+    expect(screen.getByText("model-a")).toBeInTheDocument();
+    expect(screen.getByText("query")).toBeInTheDocument();
+    expect(screen.getByText("model-b")).toBeInTheDocument();
   });
 
-  it("navigates to the action route when the action button is clicked", async () => {
+  it("renders a single-value observation with its label", () => {
+    const diagnostic = makeDiagnostic({
+      observations: [{ label: "Indexed chunks", value: "0" }],
+    });
+    render(<DiagnosticItem diagnostic={diagnostic} />);
+    expect(screen.getByText("Indexed chunks")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("links the action to its route", () => {
     render(<DiagnosticItem diagnostic={makeDiagnostic()} />);
-    await userEvent.click(screen.getByRole("button", { name: /Edit retrieval pipeline/ }));
-    expect(getMockRouter().push).toHaveBeenCalledWith("/pipelines/retrieval");
+    expect(screen.getByRole("link", { name: /Edit retrieval pipeline/ })).toHaveAttribute(
+      "href",
+      "/pipelines/retrieval",
+    );
   });
 
-  it("renders trace links and navigates on click", async () => {
+  it("links every related route the finding carries", () => {
     const diagnostic = makeDiagnostic({
       action: null,
       links: [{ label: "Run abc", route: "/traces/runs/abc", kind: "trace" }],
     });
     render(<DiagnosticItem diagnostic={diagnostic} />);
-    await userEvent.click(screen.getByRole("button", { name: /Run abc/ }));
-    expect(getMockRouter().push).toHaveBeenCalledWith("/traces/runs/abc");
+    expect(screen.getByRole("link", { name: /Run abc/ })).toHaveAttribute(
+      "href",
+      "/traces/runs/abc",
+    );
   });
 });

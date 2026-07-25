@@ -135,16 +135,11 @@ export function isRunActive(status: EvalRunStatus): boolean {
   return ACTIVE_RUN_STATUSES.includes(status);
 }
 
-/** Semantic dot tone per run status (tokens only, no raw colors). */
-export function runStatusTone(status: EvalRunStatus): string {
-  switch (status) {
-    case "completed":
-      return "bg-data-pos";
-    case "failed":
-      return "bg-data-neg";
-    case "cancelled":
-      return "bg-stage-neutral";
-    default:
-      return "bg-accent-violet";
+/** The k cutoffs present across a set of metric groups, ascending. */
+export function metricCutoffs(groups: MetricGroup[]): number[] {
+  const cutoffs = new Set<number>();
+  for (const group of groups) {
+    for (const entry of group.values) cutoffs.add(entry.k);
   }
+  return [...cutoffs].sort((a, b) => a - b);
 }

@@ -1,144 +1,113 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
-
-import { FileIcon } from "@/components/files/FileIcon";
-import { FileRowDetails } from "@/components/files/FileRowDetails";
-import { IngestionBadge } from "@/components/files/IngestionBadge";
-import { formatBytes } from "@/components/files/lib/tree";
-import { formatDate } from "@/lib/datetime";
-import { cn } from "@/lib/utils";
+import { FileEntryRow } from "@/components/files/FileEntryRow";
+import { COL, COLUMN_WIDTHS } from "@/components/files/lib/file-columns";
+import { DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
+
+/**
+ * Sticky, because the pane it sits in scrolls: a column header that scrolls away
+ * leaves a long tree as six unlabelled columns of numbers.
+ */
+function ColumnHeader() {
+  return (
+    <div className="sticky top-0 z-10 bg-canvas-raised">
+      <DataRowHeader
+        title="Name"
+        columns={[
+          <InstrumentLabel key="status" className={COL.status}>
+            Status
+          </InstrumentLabel>,
+          <InstrumentLabel key="type" className={COL.type}>
+            Type
+          </InstrumentLabel>,
+          <InstrumentLabel key="size" className={COL.size}>
+            Size
+          </InstrumentLabel>,
+          <InstrumentLabel key="chunks" className={COL.chunks}>
+            Chunks
+          </InstrumentLabel>,
+          <InstrumentLabel key="tokens" className={COL.tokens}>
+            Tokens
+          </InstrumentLabel>,
+          <InstrumentLabel key="updated" className={COL.updated}>
+            Modified
+          </InstrumentLabel>,
+        ]}
+      />
+    </div>
+  );
+}
 
 type FileListViewProps = {
   entries: FileNode[];
   token: string;
   selectedId: string | null;
   expandedIds: Set<string>;
+  loading: boolean;
   onToggleExpand: (node: FileNode) => void;
   onOpenFolder: (folder: FileNode) => void;
   onSelectFile: (file: FileNode) => void;
   onRetry: (file: FileNode) => void;
   onContextMenu: (node: FileNode, event: MouseEvent) => void;
   dnd: FileDnd;
-  animationKey: string;
+  /** Rendered in place of rows when the folder is empty. */
+  emptyState: ReactNode;
 };
 
-/** Finder-style rows; a chevron on ingested files expands chunk details. */
+/**
+ * One row per entry, with the facts a tree view is read for on the same line:
+ * derived ingestion state, content type, size, indexed chunks and tokens, and
+ * when the node last changed.
+ *
+ * The header renders in every state — loading, empty, and populated — so the
+ * columns never appear or disappear under the user, and the skeleton stands at
+ * the rows' final geometry rather than as a spinner of a different size.
+ */
 export function FileListView({
   entries,
   token,
   selectedId,
   expandedIds,
+  loading,
   onToggleExpand,
   onOpenFolder,
   onSelectFile,
   onRetry,
   onContextMenu,
   dnd,
-  animationKey,
+  emptyState,
 }: FileListViewProps) {
   return (
-    <div key={animationKey} className="overflow-hidden rounded-3xl border border-hairline">
-      <div className="hidden items-center gap-3 border-b border-hairline bg-surface px-4 py-2 sm:flex">
-        <span className="w-9" />
-        <span className="flex-1 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          Name
-        </span>
-        <span className="w-8" />
-        <span className="w-20 text-right font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          Size
-        </span>
-        <span className="hidden w-20 text-right font-mono text-[11px] uppercase tracking-[0.28em] text-muted md:block">
-          Chunks
-        </span>
-        <span className="hidden w-28 text-right font-mono text-[11px] uppercase tracking-[0.28em] text-muted lg:block">
-          Modified
-        </span>
-      </div>
-      <ul>
-        {entries.map((node, position) => {
-          const expanded = expandedIds.has(node.id);
-          const expandable = node.kind === "file" && Boolean(node.ingestion);
-          return (
-            <li
+    <>
+      <ColumnHeader />
+      {loading ? (
+        <DataRowSkeleton rows={6} columnWidths={COLUMN_WIDTHS} label="Loading files" />
+      ) : entries.length === 0 ? (
+        emptyState
+      ) : (
+        <ul>
+          {entries.map((node) => (
+            <FileEntryRow
               key={node.id}
-              className="files-rise border-b border-hairline last:border-b-0"
-              style={{ animationDelay: `${Math.min(position, 20) * 18}ms` }}
-            >
-              <div
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onContextMenu(node, event);
-                }}
-                {...dnd.dragProps(node)}
-                {...(node.kind === "folder" ? dnd.dropProps(node.id) : {})}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 transition",
-                  node.id === selectedId ? "bg-accent-violet/10" : "hover:bg-surface",
-                  dnd.draggingId === node.id && "opacity-40",
-                  dnd.dropKey === node.id && "bg-accent-violet/15",
-                )}
-              >
-                {expandable ? (
-                  <button
-                    type="button"
-                    onClick={() => onToggleExpand(node)}
-                    aria-expanded={expanded}
-                    aria-label={`${expanded ? "Collapse" : "Expand"} ${node.name} details`}
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hairline",
-                      "text-body transition hover:border-strong focus-visible:outline-none",
-                      "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-                      expanded && "border-accent-violet text-accent-violet",
-                    )}
-                  >
-                    {expanded ? (
-                      <ChevronDown className="h-4 w-4" aria-hidden />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" aria-hidden />
-                    )}
-                  </button>
-                ) : (
-                  <span className="w-9 shrink-0" />
-                )}
-                <button
-                  type="button"
-                  onClick={() => (node.kind === "folder" ? onOpenFolder(node) : onSelectFile(node))}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none",
-                    "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-                  )}
-                >
-                  <FileIcon node={node} className="h-4.5 w-4.5 shrink-0" />
-                  <span className="truncate text-sm text-primary" title={node.name}>
-                    {node.name}
-                  </span>
-                </button>
-                <span className="flex w-8 justify-center">
-                  <IngestionBadge node={node} onRetry={onRetry} />
-                </span>
-                <span className="w-20 text-right text-xs text-muted">
-                  {node.kind === "folder" ? "—" : formatBytes(node.size_bytes)}
-                </span>
-                <span className="hidden w-20 text-right text-xs text-muted md:block">
-                  {node.ingestion?.status === "ready" ? node.ingestion.num_chunks : "—"}
-                </span>
-                <span className="hidden w-28 text-right text-xs text-muted lg:block">
-                  {formatDate(node.updated_at)}
-                </span>
-              </div>
-              {expanded && node.ingestion && (
-                <FileRowDetails node={node} ingestion={node.ingestion} token={token} />
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+              node={node}
+              token={token}
+              selected={node.id === selectedId}
+              expanded={expandedIds.has(node.id)}
+              dnd={dnd}
+              onToggleExpand={onToggleExpand}
+              onOpenFolder={onOpenFolder}
+              onSelectFile={onSelectFile}
+              onRetry={onRetry}
+              onContextMenu={onContextMenu}
+            />
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

@@ -2,21 +2,25 @@
 
 import { useMemo, useState } from "react";
 
-import { formatDuration } from "@/components/traces/debugger/format";
+import { formatDuration, runStatusLabel, runStatusTone } from "@/components/traces/debugger/format";
 import { PortInspector } from "@/components/traces/debugger/PortInspector";
 import { NodeExplanation } from "@/components/traces/explanations/NodeExplanation";
 import { mergeTraceItems, traceItemsFromRecords } from "@/components/traces/lib/artifacts";
-import { cn } from "@/lib/utils";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
+import { StatusDot } from "@/components/ui/status-dot";
+import { TabList } from "@/components/ui/tabs";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { JourneyStep } from "@/components/traces/lib/journey";
 import type { TraceStep } from "@/components/traces/trace-graph";
+import type { TabItem } from "@/components/ui/tabs";
 import type { TraceFocusedItem } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 type EvidenceTab = "explanation" | "data" | "configuration" | "raw";
 
-const TABS: Array<{ id: EvidenceTab; label: string }> = [
+const TABS: Array<TabItem<EvidenceTab>> = [
   { id: "explanation", label: "Explanation" },
   { id: "data", label: "Node data" },
   { id: "configuration", label: "Configuration" },
@@ -35,7 +39,7 @@ type NodeEvidencePanelProps = {
 };
 
 const JsonBlock = ({ value }: { value: unknown }) => (
-  <pre className="overflow-auto whitespace-pre-wrap break-words rounded-xl border border-hairline bg-canvas p-4 font-mono text-[11px] leading-relaxed text-body">
+  <pre className="overflow-auto whitespace-pre-wrap break-words rounded-panel border border-hairline bg-canvas p-3 font-mono text-instrument leading-relaxed text-body">
     {JSON.stringify(value, null, 2)}
   </pre>
 );
@@ -66,59 +70,33 @@ export function NodeEvidencePanel({
   );
 
   return (
-    <section aria-label="Node evidence" className="flex h-full min-h-0 flex-col bg-canvas-raised">
-      <header className="shrink-0 border-b border-hairline px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-primary">
+    <section aria-label="Node evidence" className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 border-b border-hairline px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="min-w-0 flex-1 truncate text-head font-semibold tracking-[-0.01em] text-primary">
             {run?.node_name ?? node?.data.label ?? step?.nodeId ?? "Node evidence"}
           </h2>
           {run ? (
-            <span
-              className={cn(
-                "rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em]",
-                failed ? "border-data-neg/50 text-data-neg" : "border-hairline text-muted",
-              )}
-            >
-              {run.status}
-            </span>
+            <StatusDot tone={runStatusTone(run.status)} label={runStatusLabel(run.status)} />
           ) : null}
-          {duration ? <span className="font-mono text-[10px] text-meta">{duration}</span> : null}
-          {step ? (
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-meta">
-              {step.stageLabel}
-            </span>
-          ) : null}
+          {duration ? <Readout label="Duration">{duration}</Readout> : null}
+          {step ? <InstrumentLabel className="text-meta">{step.stageLabel}</InstrumentLabel> : null}
         </div>
-        <div
-          className="mt-3 flex gap-1 overflow-x-auto"
-          role="tablist"
-          aria-label="Node evidence views"
-        >
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
-              className={cn(
-                "shrink-0 rounded-full px-3 py-1.5 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                tab === item.id
-                  ? "bg-surface-strong text-primary"
-                  : "text-muted hover:bg-surface hover:text-primary",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <TabList
+          tabs={TABS}
+          active={tab}
+          onSelect={setTab}
+          label="Node evidence views"
+          wrap
+          className="mt-2 justify-start"
+        />
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5" role="tabpanel">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3" role="tabpanel">
         {failed && run?.error_message ? (
-          <div className="mb-4 rounded-xl border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-sm text-data-neg">
+          <p className="mb-3 max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg">
             {run.error_message}
-          </div>
+          </p>
         ) : null}
 
         {tab === "explanation" && step && node ? (

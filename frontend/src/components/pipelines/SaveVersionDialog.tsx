@@ -3,8 +3,8 @@
 import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
+import { TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 
 import { changeKindDot } from "./lib/change-kind";
 
@@ -43,59 +43,62 @@ export function SaveVersionDialog({
   const titleId = useId();
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-lg rounded-[2rem] border border-hairline bg-canvas-raised/95 p-6">
-        <p id={titleId} className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+      <div className="card-surface w-full max-w-lg bg-canvas-raised p-4 shadow-elevation-2">
+        <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
           Save version
-        </p>
+        </h2>
         {validationMessage ? (
           <div
             role="alert"
             aria-live="assertive"
-            className="mt-4 rounded-2xl border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-sm text-data-neg"
+            className="mt-3 rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
           >
-            <p>{validationMessage}</p>
+            <p className="max-w-[66ch]">{validationMessage}</p>
             {validationIssues.some((issue) => issue.field) ? (
-              <ul aria-label="Validation issues" className="mt-2 space-y-1 text-xs">
+              <ul aria-label="Validation issues" className="mt-2 space-y-1">
                 {validationIssues
                   .filter((issue) => issue.field)
                   .map((issue) => (
                     <li key={`${issue.node_id ?? "pipeline"}-${issue.field}-${issue.message}`}>
-                      {issue.field}: {issue.message}
+                      {/* The field key is an identifier; the message is prose. */}
+                      <span className="font-mono">{issue.field}</span>: {issue.message}
                     </li>
                   ))}
               </ul>
             ) : null}
           </div>
         ) : null}
-        <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto rounded-2xl border border-hairline bg-surface px-3 py-2">
+        <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-control border border-hairline bg-surface px-3 py-2">
           {pendingChanges.map((change) => (
             <li
               key={`${change.kind}-${change.summary}`}
-              className="flex items-start gap-2 text-xs text-body"
+              className="flex items-start gap-2 text-ui text-body"
             >
+              {/* A square node dot, coloured by what the change did. */}
               <span
-                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${changeKindDot(change.kind)}`}
+                aria-hidden
+                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-[2px] ${changeKindDot(change.kind)}`}
               />
               <span>{change.summary}</span>
             </li>
           ))}
         </ul>
-        <input
-          className="mt-3 w-full rounded-2xl border border-hairline bg-surface px-3 py-2 text-sm text-primary outline-none focus:border-accent-violet"
+        <TextInput
+          className="mt-2"
           placeholder="Describe this revision (optional)"
           aria-label="Revision summary"
           value={changeSummary}
           onChange={(event) => onChangeSummary(event.target.value)}
         />
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={onSave} loading={saving}>
+          <Button glow onClick={onSave} loading={saving}>
             Save new revision
           </Button>
         </div>
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }

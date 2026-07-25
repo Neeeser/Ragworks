@@ -1,16 +1,19 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { formatMetric, headlineAggregate, isRunActive } from "@/components/evals/lib/metrics";
-import { RunStatusBadge } from "@/components/evals/RunStatusBadge";
+import { runStatus } from "@/components/evals/lib/status";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { GlassCard } from "@/components/ui/panel";
+import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PulseWire } from "@/components/ui/pulse-wire";
+import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatDateTime } from "@/lib/datetime";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
 
 import type { EvalDataset, EvalMetricInfo, EvalRunCoverage, EvalRunSummary } from "@/lib/types";
 
@@ -21,6 +24,52 @@ interface RunsPanelProps {
   loading: boolean;
   onNewRun: () => void;
   onDeleteRun: (runId: string) => Promise<boolean>;
+}
+
+/**
+ * Column widths shared by the header, every row, and the loading placeholder.
+ *
+ * The three narrowest-value columns fold away below `xl`: a row list drops
+ * columns before it drops rows, and the run's own page carries the full record.
+ */
+const COL = {
+  dataset: "hidden w-40 xl:block",
+  status: "w-28",
+  progress: "hidden w-16 text-right lg:block",
+  // Sized to the widest real rendering ("docs 100% queries 100%") — one step
+  // narrower and the cell's flex items shrink, their text wraps at the inner
+  // space, and that one row turns two lines tall.
+  coverage: "hidden w-40 text-right lg:block",
+  score: "w-28 text-right",
+  started: "w-14 text-right",
+};
+
+function ColumnHeader() {
+  return (
+    <DataRowHeader
+      title="Run"
+      columns={[
+        <InstrumentLabel key="dataset" className={COL.dataset}>
+          Dataset
+        </InstrumentLabel>,
+        <InstrumentLabel key="status" className={COL.status}>
+          Status
+        </InstrumentLabel>,
+        <InstrumentLabel key="progress" className={COL.progress}>
+          Done
+        </InstrumentLabel>,
+        <InstrumentLabel key="coverage" className={COL.coverage}>
+          Coverage
+        </InstrumentLabel>,
+        <InstrumentLabel key="score" className={COL.score}>
+          Score
+        </InstrumentLabel>,
+        <InstrumentLabel key="started" className={COL.started}>
+          Started
+        </InstrumentLabel>,
+      ]}
+    />
+  );
 }
 
 export function RunsPanel({
@@ -35,76 +84,98 @@ export function RunsPanel({
   const datasetNames = new Map(datasets.map((dataset) => [dataset.id, dataset.name]));
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <div className="flex items-center justify-between gap-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Runs</p>
-        <Button onClick={onNewRun} className="px-5">
-          New run
-        </Button>
-      </div>
-      {runs.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">
-          {loading ? "Loading runs…" : "No eval runs yet. Import a dataset and start one."}
-        </p>
-      ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-hairline font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                <th className="py-2 pr-4 font-normal">Run</th>
-                <th className="py-2 pr-4 font-normal">Dataset</th>
-                <th className="py-2 pr-4 font-normal">Status</th>
-                <th className="py-2 pr-4 font-normal">Progress</th>
-                <th className="py-2 pr-4 font-normal">Coverage</th>
-                <th className="py-2 pr-4 font-normal">Score</th>
-                <th className="py-2 pr-4 font-normal">Started</th>
-                <th className="py-2 font-normal">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <tr key={run.id} className="border-b border-hairline last:border-b-0">
-                  <td className="py-3 pr-4">
-                    <Link
-                      href={`/evals/runs/${run.id}`}
-                      className="font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-accent-violet"
-                    >
-                      {run.name || `Run ${run.id.slice(0, 8)}`}
-                    </Link>
-                  </td>
-                  <td className="py-3 pr-4 text-body">{datasetNames.get(run.dataset_id) ?? "—"}</td>
-                  <td className="py-3 pr-4">
-                    <RunStatusBadge status={run.status} />
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-body">
-                    {run.progress_total > 0 ? `${run.progress_done}/${run.progress_total}` : "—"}
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-body">
-                    <CoverageCell coverage={run.coverage ?? null} />
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-body">
-                    <HeadlineCell aggregates={run.aggregate_metrics} catalog={metricCatalog} />
-                  </td>
-                  <td className="py-3 pr-4 text-xs text-muted">{formatDateTime(run.created_at)}</td>
-                  <td className="py-3 text-right">
-                    {!isRunActive(run.status) && (
-                      <button
-                        type="button"
-                        aria-label={`Delete run ${run.name || run.id.slice(0, 8)}`}
-                        className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
-                        onClick={() => setPendingDelete(run)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    // A landmark per region: this page carries three peer lists, and a named
+    // section each is how a screen reader user moves between them.
+    <section aria-label="Runs" className="card-surface">
+      <ColumnHeader />
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading runs"
+          columnWidths={[
+            COL.dataset,
+            COL.status,
+            COL.progress,
+            COL.coverage,
+            COL.score,
+            COL.started,
+          ]}
+        />
+      ) : runs.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="mx-auto max-w-[66ch] text-ui text-muted">
+            No eval runs yet. A run replays a dataset&apos;s queries through an ingestion and
+            retrieval pipeline pair and scores what came back against its relevance judgments.
+          </p>
+          <Button size="sm" className="mt-3" onClick={onNewRun}>
+            New run
+          </Button>
         </div>
+      ) : (
+        runs.map((run) => {
+          const state = runStatus(run.status);
+          const name = run.name || `Run ${run.id.slice(0, 8)}`;
+          return (
+            <DataRow
+              key={run.id}
+              href={`/evals/runs/${run.id}`}
+              title={name}
+              /* The pulse is the row's only motion, and it runs only while the
+                 run is actually producing results — it unmounts the moment the
+                 status settles. */
+              subtitle={state.live ? <PulseWire label={`${name} in progress`} /> : undefined}
+              columns={[
+                <span key="dataset" className={`truncate text-ui text-muted ${COL.dataset}`}>
+                  {datasetNames.get(run.dataset_id) ?? "—"}
+                </span>,
+                <StatusDot
+                  key="status"
+                  tone={state.tone}
+                  label={state.label}
+                  className={COL.status}
+                />,
+                <span
+                  key="progress"
+                  className={`font-mono tabular-nums text-instrument ${COL.progress}`}
+                >
+                  {run.progress_total > 0 ? `${run.progress_done}/${run.progress_total}` : "—"}
+                </span>,
+                <span key="coverage" className={COL.coverage}>
+                  <CoverageCell coverage={run.coverage ?? null} />
+                </span>,
+                <span key="score" className={`font-mono tabular-nums ${COL.score}`}>
+                  <HeadlineCell aggregates={run.aggregate_metrics} catalog={metricCatalog} />
+                </span>,
+                <Tooltip
+                  key="started"
+                  content={parseApiDate(run.created_at)?.toLocaleString() ?? ""}
+                  triggerClassName={`justify-end ${COL.started}`}
+                >
+                  <span className="font-mono tabular-nums text-instrument text-meta">
+                    {formatTimeAgoCompact(run.created_at)}
+                  </span>
+                </Tooltip>,
+              ]}
+              actions={
+                /* An in-flight run is cancelled from its own page, not deleted
+                   from under itself, so the action is absent rather than
+                   disabled. */
+                isRunActive(run.status) ? null : (
+                  <Tooltip content="Delete run" side="left">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Delete run ${name}`}
+                      className="hover:text-data-neg"
+                      onClick={() => setPendingDelete(run)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </Tooltip>
+                )
+              }
+            />
+          );
+        })
       )}
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -118,31 +189,24 @@ export function RunsPanel({
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </GlassCard>
+    </section>
   );
 }
 
 /** Share of the dataset the run covered: corpus ingested and queries evaluated. */
 function CoverageCell({ coverage }: { coverage: EvalRunCoverage | null }) {
-  if (!coverage) return <>—</>;
+  if (!coverage) return <span className="font-mono tabular-nums text-instrument">—</span>;
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center justify-end gap-2 whitespace-nowrap font-mono tabular-nums text-instrument">
       <Tooltip
         content={`${coverage.corpus_ingested.toLocaleString()} of ${coverage.corpus_total.toLocaleString()} corpus documents ingested`}
       >
-        <span className="cursor-default">
-          docs {percent(coverage.corpus_ingested, coverage.corpus_total)}
-        </span>
+        <span>docs {percent(coverage.corpus_ingested, coverage.corpus_total)}</span>
       </Tooltip>
-      <span aria-hidden className="text-meta">
-        ·
-      </span>
       <Tooltip
         content={`${coverage.queries_done.toLocaleString()} of ${coverage.queries_total.toLocaleString()} dataset queries evaluated`}
       >
-        <span className="cursor-default">
-          queries {percent(coverage.queries_done, coverage.queries_total)}
-        </span>
+        <span>queries {percent(coverage.queries_done, coverage.queries_total)}</span>
       </Tooltip>
     </span>
   );
@@ -162,11 +226,12 @@ function HeadlineCell({
   catalog: EvalMetricInfo[];
 }) {
   const headline = headlineAggregate(aggregates, catalog);
-  if (!headline) return <>—</>;
+  if (!headline) return <span className="text-muted">—</span>;
   return (
     <>
       {formatMetric(headline.value)}
-      <span className="ml-1.5 text-meta">
+      {/* The metric's identity, not a number — it names which score this is. */}
+      <span className="ml-1.5 text-instrument text-meta">
         {headline.name}@{headline.k}
       </span>
     </>

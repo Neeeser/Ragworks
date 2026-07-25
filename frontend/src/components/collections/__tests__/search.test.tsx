@@ -63,7 +63,7 @@ describe("CollectionSearch", () => {
     });
     // The source document name comes from chunk metadata.
     expect(screen.getByText("guide.pdf")).toBeInTheDocument();
-    expect(screen.getByText("Final score 0.700")).toBeInTheDocument();
+    expect(screen.getByText("0.700")).toBeInTheDocument();
 
     // Expand/collapse the full chunk text.
     const expand = screen.getAllByRole("button", { name: /Chunk text/ })[0];
@@ -100,7 +100,11 @@ describe("CollectionSearch", () => {
     // Every match the pipeline returned is shown; truncation belongs to the
     // pipeline's Result Limit node, not a client-side slider.
     expect(screen.getByText("Weak")).toBeInTheDocument();
-    expect(screen.getByText(/2 matches/)).toBeInTheDocument();
+    // The count is mono with its unit as a muted span inside it, so the match
+    // is on the whole cell's text rather than a single text node.
+    expect(
+      screen.getByText((_text, element) => element?.textContent === "2 matches"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 
@@ -140,13 +144,15 @@ describe("CollectionSearch", () => {
     fireEvent.change(screen.getByLabelText(queryInputLabel), { target: { value: "next query" } });
     fireEvent.click(screen.getByRole("button", { name: runQueryLabel }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Running query…");
+    // The pulse is the running indicator, and it names the process it depicts.
+    expect(screen.getByRole("status", { name: "Running query" })).toBeInTheDocument();
     expect(screen.getByText(previousResultText)).toBeInTheDocument();
 
     await act(async () => {
       finishQuery?.(makeQueryResult({ chunks: [] }));
     });
-    expect(screen.queryByText("Running query…")).not.toBeInTheDocument();
+    // It stops the moment the query does — an idle pulse would be a lie.
+    expect(screen.queryByRole("status", { name: "Running query" })).not.toBeInTheDocument();
   });
 
   it("surfaces query failures, with a fallback for non-error rejections", async () => {
@@ -175,7 +181,9 @@ describe("CollectionSearch", () => {
       expect(screen.getByText("Alpha")).toBeInTheDocument();
     });
     expect(screen.queryByText(viewTraceLabel)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: traceResultLabel }));
+    // The per-result action disappears too — a rendered button whose click
+    // opens nothing is the bug, not a state to pin.
+    expect(screen.queryByRole("button", { name: traceResultLabel })).not.toBeInTheDocument();
     expect(getMockRouter().push).not.toHaveBeenCalled();
   });
 
@@ -184,7 +192,7 @@ describe("CollectionSearch", () => {
     // misrepresents a declaring tool (and vice versa).
     api.listCollectionTools.mockImplementationOnce(() => new Promise(() => {}));
     render(<CollectionSearch collectionId="col-pending" token="token" />);
-    expect(screen.queryByText("Top K")).not.toBeInTheDocument();
+    expect(screen.queryByText("top_k")).not.toBeInTheDocument();
     await act(async () => Promise.resolve());
   });
 
@@ -194,7 +202,7 @@ describe("CollectionSearch", () => {
     await waitFor(() => {
       expect(screen.getByText(/load this collection/i)).toBeInTheDocument();
     });
-    expect(screen.getByText("Top K")).toBeInTheDocument();
+    expect(screen.getByText("top_k")).toBeInTheDocument();
   });
 
   it("offers a tool selector and runs the chosen tool's binding", async () => {

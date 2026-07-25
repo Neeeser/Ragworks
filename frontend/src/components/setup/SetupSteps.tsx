@@ -1,15 +1,17 @@
 "use client";
 
-import { Check } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ConnectionsManager } from "@/components/connections/ConnectionsManager";
+import { ModelOptionButton } from "@/components/models/ModelOptionButton";
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { Field, TextInput } from "@/components/ui/field";
+import { Readout } from "@/components/ui/readout";
+import { StatusDot } from "@/components/ui/status-dot";
 import { modelAvailability } from "@/lib/model-catalog-cache";
-import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
@@ -23,21 +25,17 @@ export function StepWelcome({ wizard }: { wizard: SetupWizardApi }) {
       stepKey="welcome"
       direction={wizard.state.direction}
       kicker={KICKER}
-      title={
+      title="Set up your workspace"
+      footer={
         <>
-          Set up your{" "}
-          <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
-            workspace
-          </span>
+          <span />
+          <Button size="lg" glow onClick={wizard.next}>
+            Start
+          </Button>
         </>
       }
-      footer={
-        <Button size="lg" onClick={wizard.next}>
-          Start
-        </Button>
-      }
     >
-      <p className="text-body leading-relaxed">
+      <p className="max-w-[66ch] text-ui text-body">
         Four choices: your providers, an embedding model, a vector index, and your first collection.
       </p>
     </SetupStepShell>
@@ -63,37 +61,27 @@ export function StepProviders({ wizard }: { wizard: SetupWizardApi }) {
           <Button variant="ghost" onClick={wizard.back}>
             Back
           </Button>
-          <Button size="lg" disabled={!wizard.providersReady} onClick={wizard.next}>
+          <Button size="lg" glow disabled={!wizard.providersReady} onClick={wizard.next}>
             Continue
           </Button>
         </>
       }
     >
-      <p className="text-body leading-relaxed">
+      <p className="max-w-[66ch] text-ui text-body">
         Connect at least one provider for each capability below. OpenRouter covers embeddings and
         chat with one API key; an Ollama server adds local models; pgvector ships built in as the
         vector database.
       </p>
-      <ul className="space-y-1.5" aria-label="Required capabilities">
+      <ul className="space-y-1" aria-label="Required capabilities">
         {COVERAGE_ROWS.map((row) => {
           const covered = wizard.coverage[row.kind];
           return (
-            <li key={row.kind} className="flex items-center gap-2 text-sm">
-              <span
-                aria-hidden
-                className={cn(
-                  "flex h-4 w-4 items-center justify-center rounded-full border",
-                  covered
-                    ? "border-accent-cyan/60 bg-accent-cyan/15 text-accent-cyan"
-                    : "border-hairline text-transparent",
-                )}
-              >
-                <Check className="h-3 w-3" />
-              </span>
-              <span className={covered ? "text-body" : "text-muted"}>
+            <li key={row.kind} className="flex items-baseline gap-2">
+              <StatusDot tone={covered ? "pos" : "neutral"} className="translate-y-[-1px]" />
+              <span className={covered ? "text-ui text-body" : "text-ui text-muted"}>
                 {row.label}
-                <span className="ml-1.5 text-xs text-meta">— {row.hint}</span>
               </span>
+              <span className="text-instrument text-meta">{row.hint}</span>
             </li>
           );
         })}
@@ -169,6 +157,7 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
           </Button>
           <Button
             size="lg"
+            glow
             disabled={!embeddingModel || selectionAvailability === "missing"}
             onClick={wizard.next}
           >
@@ -177,7 +166,7 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
         </>
       }
     >
-      <p className="text-body leading-relaxed">
+      <p className="max-w-[66ch] text-ui text-body">
         Every document and query is embedded with this model, and your index&apos;s dimension is
         locked to it — so this choice comes first.
       </p>
@@ -188,13 +177,13 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
           placeholder="all-MiniLM, bge, embedding…"
         />
       </Field>
-      {wizard.modelsLoading ? <p className="text-sm text-muted">Loading the catalog…</p> : null}
+      {wizard.modelsLoading ? <p className="text-ui text-muted">Loading the catalog…</p> : null}
       <SetupNotice message={wizard.modelsError} />
       <SetupNotice message={unavailableMessage} />
       {unavailableMessage ? (
-        <div className="rounded-2xl border border-data-warn/40 bg-data-warn/10 px-4 py-3">
-          <p className="text-sm font-medium text-primary">Unavailable</p>
-          <p className="text-[11px] text-meta break-all">
+        <div className="rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2">
+          <p className="text-ui font-medium text-data-warn">Unavailable</p>
+          <p className="break-all font-mono text-instrument text-meta">
             {selectedConnectionLabel} · {embeddingModel}
           </p>
         </div>
@@ -208,10 +197,15 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
             pgvectorCap != null && model.dimension != null && model.dimension > pgvectorCap;
           return (
             <li key={`${model.connection_id}::${model.id}`}>
-              <button
-                type="button"
-                aria-pressed={selected}
-                onClick={() => {
+              <ModelOptionButton
+                model={model}
+                selected={selected}
+                subtitle={
+                  <>
+                    {model.connection_label} · <span className="font-mono">{model.id}</span>
+                  </>
+                }
+                onSelect={() => {
                   wizard.setChoices({
                     embeddingConnectionId: model.connection_id,
                     embeddingModel: model.id,
@@ -221,43 +215,25 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
                   // user edits them on the launch step).
                   wizard.seedChunkDefaults(model.max_input_tokens);
                 }}
-                className={cn(
-                  "w-full rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-                  selected
-                    ? "border-accent-violet bg-accent-violet/10"
-                    : "border-hairline bg-surface hover:border-strong",
-                )}
               >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-primary">{model.name}</span>
-                  <span className="flex items-center gap-2">
-                    {model.id === suggestedModelId ? (
-                      <span className="rounded-full bg-accent-cyan/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-accent-cyan">
-                        Suggested
-                      </span>
-                    ) : null}
-                    {model.dimension != null ? (
-                      <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                        {model.dimension.toLocaleString()}d
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-                <span className="mt-1 block truncate text-xs text-meta">
-                  {model.connection_label} · {model.id}
-                </span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {model.id === suggestedModelId ? <Chip tone="accent">Suggested</Chip> : null}
+                  {model.dimension != null ? (
+                    <Readout label="Dimension">{model.dimension.toLocaleString()}</Readout>
+                  ) : null}
+                </div>
                 {oversized ? (
-                  <span className="mt-1 block text-xs text-data-neg">
+                  <p className="mt-1 text-instrument text-data-neg">
                     Over pgvector&apos;s {pgvectorCap.toLocaleString()}-dimension index limit —
                     requires Pinecone.
-                  </span>
+                  </p>
                 ) : null}
-              </button>
+              </ModelOptionButton>
             </li>
           );
         })}
         {!wizard.modelsLoading && filtered.length === 0 ? (
-          <li className="text-sm text-muted">No models match that search.</li>
+          <li className="text-ui text-muted">No models match that search.</li>
         ) : null}
       </ul>
     </SetupStepShell>

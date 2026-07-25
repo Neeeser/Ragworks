@@ -1,166 +1,170 @@
 ---
 name: ragworks-ui-design
 description: >-
-  The Ragworks frontend visual design language — the "deep-space observability" look
-  established by the landing page (near-black canvas, violet→cyan trace-color accents,
-  hairline structure, monospace instrument labels, restrained motion, and the product's
-  own pipeline used as ambient atmosphere). Use this skill WHENEVER building or restyling
-  any UI in the Ragworks `frontend/` — new pages, components, panels, forms, empty states,
-  modals, dashboards — or when asked to "match the landing page," "apply the new design,"
-  "make it look like the front page," "restyle," "modernize the UI," "bring this in line,"
-  or to touch colors, typography, buttons, spacing, or animation anywhere in the app. When
-  in doubt about any visual choice in this project, consult this skill rather than
-  inventing a new style — consistency with this system is the goal.
+  Use when building, restyling, or reviewing UI in the Ragworks `frontend/` — pages,
+  panels, forms, rows, tables, charts, empty states, modals — or when asked to "match the
+  design", "restyle", "modernize the UI", "make it denser", or "bring this in line". Also
+  when touching colors, typography, spacing, radii, shadows, animation, themes, or
+  palettes; when a screen feels generic, template-like, or too spread out; and when adding
+  any chart, KPI, or status indicator.
 ---
 
 # Ragworks UI Design
 
-Ragworks is an observability tool for RAG pipelines. Its UI should feel like the
-**instrument panel of a precise machine floating in deep space**: a near-black canvas,
-faint light in the product's own violet→cyan trace colors, hairline structure, monospace
-telemetry labels, and the pipeline itself treated as the hero. Color is spent
-deliberately; everything quiet stays quiet so the signal reads.
+Ragworks has **two UI surfaces with different jobs**, sharing one token system. Deciding
+which surface you're in is the first move, because the rules genuinely conflict.
 
-This skill is the working playbook. For the full rationale, the complete token set, and
-the motion/atmosphere techniques, read:
+| | **Console** — `app/(console)/` | **Landing** — `components/landing/`, `app/auth/` |
+|---|---|---|
+| Job | a dense, inviting workbench for building RAG pipelines | explain the tool, earn a `docker compose up` |
+| Feel | soft-depth product UI, lit by the accent | atmospheric deep space |
+| Read | `references/console.md` | `references/landing.md` |
+| Radius | 4 / 6 / 10px + pills | `rounded-full` CTAs, `rounded-3xl` panels |
+| Blooms | exactly one, shell-owned, ~9% accent | yes, one per view, up to 22% |
+| `GlassCard`, blur | none | yes, one per view |
+| Entrance | 120ms content fade | `landing-rise`, 700ms, staggered |
+| Label voice | sentence case, sans | mono uppercase, `0.28em`–`0.4em` tracking |
 
-- `references/tokens.md` — the design-token system (**read this first**): the raw→token
-  cheat sheet, the data-viz tokens, and the light/dark theming rules. Colors are semantic
-  tokens now, not hardcoded classes.
-- `references/design-language.md` — the detailed spec (the *why* + every token).
-- `references/component-recipes.md` — copy-paste-ready snippets for each element.
+The console language is **soft-depth workbench**: elevated cards on an accent-cast canvas,
+sentence-case type with real weight hierarchy, mono reserved for data, and three signature
+marks rooted in the product — the trace wire, node dots, and the pulse. It is dense
+(full-bleed, no wasted space) *and* it looks like a product, not a wireframe and not a
+Grafana clone. Landing atmosphere still doesn't leak in (no glass, no giant gradients);
+console density still doesn't leak out.
 
-Reference implementation: `frontend/src/components/landing/`. Shared primitives:
-`components/ui/button.tsx`, `components/ui/field.tsx`, `components/ui/panel.tsx`.
+## Reference files
 
-## The principles
+- `references/tokens.md` — **read first.** Color, materials, space, radius, type, motion,
+  chart series, palettes, plus a grep that catches skipped tokens.
+- `references/console.md` — shell, composition, signature marks, density, empty states.
+- `references/motion.md` — the motion doctrine. Read before adding any animation.
+- `references/data-display.md` — numbers, KPIs, charts, series colours, status.
+- `references/landing.md` — the marketing surface.
+- `references/component-recipes.md` — copy-paste snippets.
 
-1. **Text is sparing — let the design speak.** This is the one contributors most often get
-   wrong. Every word must earn its place. Do **not** add eyebrows, subheads, captions,
-   feature lists, or label strips that restate what a visual (a running pipeline, a form, a
-   chart) already communicates. If a screen reads clearly without a line of copy, cut the
-   copy. A sign-in form needs a heading and fields — not a subhead explaining what a
-   workspace is, and not a decorative pipeline-stage strip. Prefer silence to filler; the
-   visuals and the interaction carry the meaning.
-2. **Quiet by default, bright on purpose.** Near-black base, soft-white text. Saturated
-   color appears only where it *means* something — the accent gradient on one word, a
-   violet primary button, a real pipeline's stage colors. If five things glow, nothing reads.
-3. **Structure is hairline.** Separation is `border-white/10` + subtle `bg-white/5`, not
-   heavy panels or drop shadows. The darkness does the work.
-4. **Labels are instruments.** Any label that *does* earn its place and isn't a full
-   sentence (a field label, a real section kicker, a stat caption, a table header, a status)
-   is monospace, uppercase, and letter-spaced. This styles the labels you keep — it is not a
-   licence to add more.
-5. **The subject is the decoration.** Where a screen can show the product working (a
-   pipeline, trace, or flow), that *is* the visual interest — reuse the real component at
-   low opacity. Never invent abstract decorative shapes, and never substitute a text strip
-   for a visual.
-6. **Motion is orchestrated, not sprinkled.** One entrance or one ambient loop, always
-   honoring `prefers-reduced-motion`. Extra motion is the fastest way to look generated.
+## Core principles
 
-## Copy voice (the words, not just the amount)
+1. **Dense, never cramped.** Full-bleed content, no `max-width`, no page title blocks, no
+   space reserved for absent data — but type stays at reading size and cards get real
+   padding. Density is "no wasted space", not "small".
+2. **The accent is a system, not a color.** Every branded device reads
+   `--accent-violet`/`--accent-cyan` (and stage/status tokens) — never a hardcoded hue.
+   Users switch palettes; the identity must survive every one of them.
+3. **Light is budgeted.** One shell bloom. One glowing primary action per view. The trace
+   wire only on active markers. The pulse only on live processes. Stack more light and it
+   reads salesy; strip it all and it reads like a wireframe. The budget is the look.
+4. **Depth without blur.** Cards are lit surfaces: soft vertical gradient, 1px inset top
+   highlight, hairline border, `shadow-elevation-1`. No backdrop-filter in the console.
+5. **Sentence case speaks, mono measures.** Labels, headers, and titles are sentence-case
+   sans with weight hierarchy. Numbers, IDs, paths, and content types are
+   `font-mono tabular-nums`. Uppercase-tracked labels are landing-only.
+6. **The signature marks are product truths** — the breadcrumb is a node path because
+   drill-down *is* a path; status dots are square because they're mini pipeline nodes;
+   things pulse only when data is actually flowing. Never invent decoration beyond them.
+7. **Motion follows the pointer, never the data** — except the pulse, which *is* data.
+   Data paints instantly.
+8. **Text is sparing.** No eyebrows restating lists, no greetings, no placeholders for
+   absent data, no subheads narrating the UI. Keep text only where it says something the
+   UI cannot show.
+9. **Form follows data type** — cards for state and time-series, rows for entities.
+10. **Functionality parity is a hard floor.** A restyle never drops information, actions,
+    or states a page had. Re-form them; never delete them.
+11. **Desktop-first, mobile-respected.** The console is built for power users on desktop
+    — density decisions are made at ≥1280px and never watered down for phones. But every
+    page must still *work* below `lg`: panes collapse or become overlays, toolbars wrap,
+    tables scroll in their own `overflow-x-auto`, touch targets stay ≥32px. Where a
+    desktop affordance can't translate (hover flyouts, drag-drop), the click/tap path
+    must exist anyway — which the keyboard rules already require.
 
-Principle 1 governs how *much* text; this governs the *register* of what remains.
-Ragworks is a serious open-source workbench for RAG developers — copy is written
-like engineering documentation, never like a product pitch. Generated-feeling
-marketing copy is the fastest way for a screen to read as fake:
+## Copy voice
 
-- **State facts, don't sell.** "Provider connections for embeddings, chat, and
-  vector stores." — not "models from every connection are available side by side."
-- **Never narrate the UI.** "Pick a collection to dive into documents, search, and
-  pipeline settings" restates what the list in front of the user already is. If the
-  design makes it obvious, the fix is deleting the sentence (or making the design
-  more obvious), not rewording it.
-- **Banned register:** aphoristic taglines ("Every RAG signal, surfaced."),
-  marketing adjectives and verbs (seamless, powerful, effortless, unlock, elevate,
-  supercharge, "dive into", "explore", "at a glance", "side by side").
-- **Helpful text stays.** A tooltip or one factual line that tells the user
-  something the UI doesn't show (a constraint, a consequence, where a value comes
-  from) is good design language — keep it, plainly worded.
+Engineering documentation, not a pitch. State facts; never narrate the UI. Sentence case,
+plain verbs. **Banned:** seamless, powerful, effortless, unlock, elevate, supercharge,
+"dive into", "explore", "at a glance", aphoristic taglines.
 
-## Token quick-reference
-
-Color is a **semantic token**, never a hardcoded class — this is how light/dark (and any
-future palette) swap without touching components. Full cheat sheet + theming rules in
-`tokens.md`; the essentials:
-
-- **Base:** `bg-canvas`. **Raised/floating:** `bg-canvas-raised`. **Surfaces:** `bg-surface`,
-  stronger `bg-surface-strong`. **Borders:** `border-hairline`, hover `border-strong`.
-- **Text:** `text-primary` → `text-body` → `text-muted` (labels) → `text-meta` →
-  `text-faint` (separators).
-- **Accents (sparingly):** `text-/bg-accent-violet` (primary), `text-/bg-accent-cyan`
-  (retrieval/live). **Accent gradient** (one element per view):
-  `from-grad-from via-grad-via to-grad-to`. Hover a filled accent with `hover:brightness-110`.
-- **Pipeline stage colors (semantic, shared with the editor/trace viewer — never
-  reassign):** `stage-parse/chunk/embed/index/retrieve/chat` tokens. For nodes/ports/edges
-  go through `pipelines/lib/pipeline-theme.ts`, never inline hex.
-- **Type:** Geist Sans (display/body) + Geist Mono (labels) — already loaded, **add no
-  fonts**. Headlines `font-semibold tracking-tight` + `text-balance`; body `text-body
-  leading-relaxed text-pretty`.
-- **Radii:** `rounded-full` (buttons/badges), `rounded-2xl` (inputs), `rounded-3xl`
-  (cards). **Elevation = token:** `shadow-glow` (primary button), `shadow-elevation-2`
-  (floating) — glow on dark, soft shadow on light. Never hand-write an rgba shadow.
-- **Both themes are the contract.** Verify every screen in light *and* dark (toggle the
-  `ThemeToggle` or set `document.documentElement.dataset.theme`). A raw color class is the
-  bug that breaks light mode — see `tokens.md`.
-
-## The instrument label (memorize this)
+## Quick reference
 
 ```
-font-mono text-[11px] uppercase tracking-[0.28em] text-muted
+space     p-1 p-2 p-3 p-4 p-6 p-8              → 4 8 12 16 24 32px  (only these six)
+radius    rounded-chip / -control / -panel      → 4 / 6 / 10px · rounded-full for pills
+type      text-instrument / -ui / -num / -head  → 11 / 14 / 15 / 17px
+titles    text-head font-semibold tracking-[-0.01em]   (sentence case)
+labels    text-instrument font-medium text-muted        (sentence case, sans)
+numbers   font-mono tabular-nums, always
+motion    duration-80 / -120 / -140 / -160 / -200 · ease-standard / -decel / -accel
+surface   bg-canvas · bg-canvas-raised · bg-surface · bg-surface-strong
+card      Panel — gradient fill + inset highlight + hairline + shadow-elevation-1
+border    border-hairline · border-strong
+text      text-primary → text-body → text-muted → text-meta → text-faint
+accent    bg-accent-violet · text-accent-cyan · data-pos / -neg / -warn
+wire      .trace-wire — violet→cyan gradient, active markers only
+pulse     .pulse-track/.pulse-beam — live processes only
+charts    --series-1 … --series-6      (never --accent-* as a series)
+stages    stage-parse/chunk/embed/index/retrieve/chat/rerank/router/neutral
 ```
 
-Tracking scales with prominence (`0.28em` dense → `0.4em` hero eyebrow); size stays small.
-Pair with a small stage/status dot. Turning sentence-case gray labels into these does most
-of the work of matching the look.
+## Restyling an existing screen
 
-## Building UI
+In this order — the first three do most of the work:
 
-- **Real buttons →** `Button` (`components/ui/button.tsx`). **Link-CTAs →** the primary /
-  secondary recipes in `component-recipes.md`.
-- **Forms →** `Field`/`TextInput`/`Select`/`TextArea` and the exported `inputClass`. Never
-  hand-roll the input class string.
-- **Cards →** `GlassCard` or `rounded-3xl border border-hairline bg-surface`.
-- **Atmosphere & entrance →** blooms, the `landing-rise` stagger, and the reduced-motion
-  hook are in `component-recipes.md`. Spend **one** accent per view.
-- **A living backdrop →** render the real product component (`FlowPlayer`) faint, looping,
-  non-interactive, masked — never fake data, never real user data. See the pipeline-backdrop
-  recipe. It's the same component the trace viewer uses; keep it that way.
+1. **Delete text.** Eyebrows restating the list, greetings, `"No description yet."`-style
+   placeholders, subheads narrating the UI. A third of the work is subtraction.
+2. **Remove the page's own chrome.** No page title block (the top bar's breadcrumb path
+   owns identity), no `max-w-*`. Real state and actions go in the top bar.
+3. **Re-form content by data type.** Entities → rows inside one `Panel`; per-entity stats
+   → columns on the entity's row, never a global KPI strip; a thing's own stats → KPI
+   cells on *its* page. Two container levels max: page → card → row.
+4. **Normalise to tokens**, then run the grep in `tokens.md`.
+5. **Swap to primitives**, deleting bespoke styles.
+6. **Surface the signature marks** — breadcrumb path, square status dots, stage-strip
+   metadata where a pipeline is bound, pulse on anything genuinely running.
+7. **Fix loading/error** — `Skeleton` at final geometry with directional shimmer.
+8. **Motion pass** — pointer/state motion per the table; no entrance on data; reduced
+   motion no-ops everything.
 
-## Restyling an existing screen (do in this order)
+## Common mistakes
 
-1. **Cut text first.** Remove subheads/captions/feature-lists/label-strips that restate what
-   the UI already shows (principle 1). This is the highest-value step and the easiest to skip.
-2. Rewrite the labels you *keep* in the instrument voice.
-3. Normalize color to the **tokens** (`bg-canvas`, the `text-primary→faint` ramp,
-   `border-hairline`) — replace every raw `bg-white/N` / `text-slate-N` / `bg-[#…]`; delete
-   stray accents that carry no meaning. This is what makes light mode work (`tokens.md`).
-4. Swap to shared primitives + the button/input recipes; delete bespoke styles.
-5. At most one deliberate accent, and only if it adds meaning — usually a single gradient
-   word. Do not add a decorative stage-dot strip or any label row that just names things the
-   screen isn't about.
-6. Add a restrained entrance if the screen has a clear first-paint hierarchy; skip it on
-   dense dashboards where it would be noise.
-7. A subject backdrop only where it fits (landing/empty/overview). Working screens want calm.
+| Mistake | Why it's wrong |
+|---|---|
+| `rounded-2xl`/`3xl` on a console card | 10px (`rounded-panel`) is the ceiling; softer reads brochure |
+| backdrop-blur on a console surface | Depth here is the lit gradient + highlight, never glass |
+| A second bloom, or a per-page bloom | The shell owns the only bloom; stacking light is the salesy failure |
+| Hardcoding violet (`#8b5cf6`, `bg-violet-500`) | Breaks every non-violet palette; use `--accent-*` tokens |
+| Uppercase-tracked mono labels in the console | That's the landing voice; console labels are sentence-case sans |
+| Proportional digits in a number column | Ragged columns; live values jitter — `font-mono tabular-nums` |
+| A global KPI strip above an entity list | Stats belong to each entity's row, or to the entity's own page |
+| Round status dots | Status dots are square node dots (`rounded-[2px]`) — a signature |
+| The pulse on something idle | Pulse = data flowing now; an idle pulse is a lie and dilutes the mark |
+| The trace wire as a general divider | It marks "where you are" (active nav/tab) — nothing else |
+| Entrance animation on rows or charts | Delays the data; animate chrome, not content |
+| A dual-axis chart | Two y-scales make crossings meaningless; two cards |
+| `--accent-cyan` as chart series 2 | Fails the categorical lightness band; use `--series-2` |
+| A spinner centred in a padded panel | Skeleton at final geometry, or every load ends in a jump |
+| `max-w-6xl` + page padding | Strands ~30% of the viewport |
+| Dropping columns/actions in a redesign | Functionality parity is a hard floor — re-form, don't reduce |
+| An icon-only button with no tooltip | The user has to click it to learn what it does |
+| A `title="…"` attribute for a tooltip | Can't be themed, ignores motion — use `Tooltip` |
+| Native `<select>` in product UI | The popup can't follow the theme or carry icons — always `CustomSelect`, the one shared base. A test pinning native-select semantics (`fireEvent.change` on a combobox) is a test to rewrite with `user-event`, never a reason to keep the native control |
 
-## Quality floor (part of "done")
+## Quality floor
 
-- `focus-visible:ring-2 ring-accent-violet` + `ring-offset-canvas` on every interactive
-  element; `aria-label` on icon-only buttons.
-- Entrances/loops no-op under `prefers-reduced-motion` (read it via `useSyncExternalStore`,
-  not `useState`+effect). This includes infinite CSS accents like a pinging status dot —
-  gate them with `motion-reduce:animate-none`. Decorative layers get `aria-hidden` +
-  `pointer-events-none`.
-- Fluid type, wrapping strips, no horizontal page scroll; `overflow-hidden` around animated
-  layers. Body text is `text-body`, not `text-meta`. Verify light **and** dark.
-- Sentence-case copy, plain verbs, no marketing adjectives — it's an open-source tool.
-- Finish with `npm run verify` (from `frontend/`) and a keyboard-focus + reduced-motion pass.
+`focus-visible:ring-2 ring-accent-violet ring-offset-canvas` everywhere · `aria-label` on
+icon-only buttons · reduced motion no-ops all animation (`useSyncExternalStore`, not
+`useState`+effect) · both structural modes verified (dark + light) · no horizontal page
+scroll · never nest a `<button>` in a clickable row (invalid HTML; shipped as a hydration
+error here once).
 
-## Anti-patterns
+Finish with `npm run verify` in `frontend/` plus `make format-check-frontend`, then a
+keyboard and reduced-motion pass, and screenshots in both modes from a seeded sandbox.
 
-Decorative text — a subhead that narrates an adjacent visual, or a label/stage strip that
-restates what the screen already shows · sentence-case gray labels where an instrument label
-belongs · more than one glowing element per viewport · hand-rolled overlays/buttons/input
-strings instead of the primitives · heavy shadows or bright 1px borders for elevation ·
-abstract decorative blobs instead of the real product · autoplaying motion that ignores
-reduced motion · adding fonts or new accent hues.
+## Editing this skill
+
+`.claude/skills/ragworks-ui-design/` and `.agents/skills/ragworks-ui-design/` must stay
+byte-identical — a divergence means half the agents in this repo follow a stale language.
+Author in `.claude/`, then:
+
+```bash
+rm -rf .agents/skills/ragworks-ui-design
+cp -R .claude/skills/ragworks-ui-design .agents/skills/ragworks-ui-design
+diff -r .claude/skills/ragworks-ui-design .agents/skills/ragworks-ui-design && echo "in sync"
+```

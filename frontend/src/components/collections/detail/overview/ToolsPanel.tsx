@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import {
   addCollectionTool,
   fetchCollection,
@@ -65,9 +65,9 @@ export function ToolsPanel({
   };
 
   return (
-    <GlassCard className="rounded-3xl p-5">
+    <Panel className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Tools</p>
+        <p className="text-ui font-medium text-primary">Tools</p>
         <p className="text-xs text-muted">
           Tools the model can call when this collection is loaded in chat.
         </p>
@@ -135,9 +135,7 @@ export function ToolsPanel({
       {unboundPipelines.length > 0 && (
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="min-w-56">
-            <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Add tool
-            </p>
+            <p className="mb-1.5 text-instrument font-medium text-muted">Add tool</p>
             <PipelineSelect
               label="Pipeline to bind as a tool"
               pipelines={unboundPipelines}
@@ -152,6 +150,6 @@ export function ToolsPanel({
       )}
 
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-    </GlassCard>
+    </Panel>
   );
 }

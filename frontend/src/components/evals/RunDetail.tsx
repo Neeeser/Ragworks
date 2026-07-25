@@ -1,121 +1,187 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
-
 import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
+import { runPhaseLabel, runStatus } from "@/components/evals/lib/status";
 import { MetricCards } from "@/components/evals/MetricCards";
-import { RunStatusBadge } from "@/components/evals/RunStatusBadge";
+import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/panel";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
+import { Panel } from "@/components/ui/panel";
+import { PulseWire } from "@/components/ui/pulse-wire";
+import { Readout } from "@/components/ui/readout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 
 import type { EvalRun } from "@/lib/types";
 
+/**
+ * One eval run: how it was configured, what it scored, where in the pipeline
+ * the gold documents were lost, and the per-query record behind both.
+ */
 export function RunDetail({ runId }: { runId: string }) {
-  const { run, items, metricCatalog, dataset, pipelines, active, cancel, actionError } =
-    useRunDetail(runId);
+  const state = useRunDetail(runId);
 
-  if (run.error) {
-    return <p className="text-sm text-data-neg">{run.error}</p>;
+  if (state.run.error) {
+    return <RunPlaceholder error={state.run.error} />;
   }
-  if (!run.data) {
-    return <p className="text-sm text-muted">Loading run…</p>;
+  if (!state.run.data) {
+    return <RunPlaceholder error={null} />;
   }
-  const detail = run.data;
-  const pipelineName = (id: string) =>
-    (pipelines.data ?? []).find((pipeline) => pipeline.id === id)?.name ?? null;
+  return <RunView detail={state.run.data} {...state} />;
+}
+
+type RunViewProps = ReturnType<typeof useRunDetail> & { detail: EvalRun };
+
+/** The resolved run: identity and cancel in the top bar, its record below. */
+function RunView({
+  detail,
+  items,
+  metricCatalog,
+  dataset,
+  pipelines,
+  active,
+  cancel,
+  actionError,
+}: RunViewProps) {
+  const status = runStatus(detail.status);
+  const name = detail.name || `Run ${detail.id.slice(0, 8)}`;
+  const pipelineNames = new Map((pipelines.data ?? []).map((entry) => [entry.id, entry.name]));
+  const catalog = metricCatalog.data ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            href="/evals"
-            className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Evals
-          </Link>
-          <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight text-primary">
-            {detail.name || `Run ${detail.id.slice(0, 8)}`}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <RunStatusBadge status={detail.status} />
-            <RunFacts
-              detail={detail}
-              datasetName={dataset.data?.name ?? null}
-              ingestionName={pipelineName(detail.ingestion_pipeline_id)}
-              retrievalName={pipelineName(detail.retrieval_pipeline_id)}
-            />
-          </div>
-        </div>
-        {active && (
-          <Button variant="secondary" onClick={cancel} className="px-5">
-            Cancel run
-          </Button>
-        )}
-      </div>
+    <>
+      <CrumbBar
+        crumbs={[{ label: "Evals", href: "/evals" }, { label: name }]}
+        state={<StatusDot tone={status.tone} label={status.label} />}
+        actions={
+          active ? (
+            <Button size="sm" variant="secondary" onClick={cancel}>
+              Cancel run
+            </Button>
+          ) : null
+        }
+      />
 
-      {actionError && <p className="text-sm text-data-neg">{actionError}</p>}
-      {detail.error_message && <p className="text-sm text-data-neg">{detail.error_message}</p>}
+      <PageBody className="flex flex-col gap-3">
+        <RunFacts
+          detail={detail}
+          datasetName={dataset.data?.name ?? null}
+          ingestionName={pipelineNames.get(detail.ingestion_pipeline_id) ?? null}
+          retrievalName={pipelineNames.get(detail.retrieval_pipeline_id) ?? null}
+        />
+
+        <RunAlerts detail={detail} actionError={actionError} />
+
+        {active && <ProgressCard detail={detail} />}
+
+        <MetricCards aggregates={detail.aggregate_metrics} catalog={catalog} />
+        <FunnelPanel funnel={detail.funnel} />
+        <ItemsTable
+          items={items.data?.items ?? []}
+          documentTitles={items.data?.document_titles ?? {}}
+          stages={detail.funnel.stages}
+          kValues={detail.config.k_values}
+          catalog={catalog}
+        />
+      </PageBody>
+    </>
+  );
+}
+
+/**
+ * Everything that went wrong, rendered in place: a failed action, the run's own
+ * terminal error, and the count of queries that never produced a score — which
+ * is what makes the aggregates above a mean over fewer queries than requested.
+ */
+function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: string | null }) {
+  return (
+    <>
+      {actionError && <p className="max-w-[66ch] text-ui text-data-neg">{actionError}</p>}
+      {detail.error_message && (
+        <p className="max-w-[66ch] text-ui text-data-neg">{detail.error_message}</p>
+      )}
       {detail.failed_count > 0 && (
-        <p className="text-sm text-data-neg">
+        <p className="max-w-[66ch] text-ui text-data-neg">
           {detail.failed_count} of {detail.config.num_queries} queries failed to evaluate;
           aggregates are means over the remaining queries only.
         </p>
       )}
-
-      {active && <ProgressCard detail={detail} />}
-
-      <MetricCards aggregates={detail.aggregate_metrics} catalog={metricCatalog.data ?? []} />
-      <FunnelPanel funnel={detail.funnel} />
-      <ItemsTable
-        items={items.data?.items ?? []}
-        documentTitles={items.data?.document_titles ?? {}}
-        stages={detail.funnel.stages}
-        kValues={detail.config.k_values}
-        catalog={metricCatalog.data ?? []}
-      />
-    </div>
+    </>
   );
 }
 
-/** Live progress while the run provisions, ingests, or evaluates. */
+/**
+ * The page before its run resolves: the failure in place, or a skeleton at the
+ * run page's final geometry so the data lands without reflow.
+ */
+function RunPlaceholder({ error }: { error: string | null }) {
+  return (
+    <>
+      <CrumbBar crumbs={[{ label: "Evals", href: "/evals" }, { label: "Run" }]} />
+      <PageBody className="flex flex-col gap-3">
+        {error ? (
+          <p className="max-w-[66ch] text-ui text-data-neg">{error}</p>
+        ) : (
+          <>
+            <Panel className="flex flex-wrap gap-x-4 gap-y-1 p-3" aria-busy>
+              {[0, 1, 2, 3, 4].map((cell) => (
+                <Skeleton key={cell} className="h-3 w-28" />
+              ))}
+              <span className="sr-only">Loading run</span>
+            </Panel>
+            <Panel className="h-28" />
+            <Panel className="h-40" />
+          </>
+        )}
+      </PageBody>
+    </>
+  );
+}
+
+/**
+ * Live progress while the run provisions, ingests, or evaluates.
+ *
+ * Two live devices, each doing a different job: the pulse says data is moving
+ * *now*, the determinate bar says how far. Both unmount when the run settles.
+ */
 function ProgressCard({ detail }: { detail: EvalRun }) {
+  const phase = runPhaseLabel(detail.status);
   const percent =
     detail.progress_total > 0
       ? Math.round((detail.progress_done / detail.progress_total) * 100)
       : 0;
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-5">
-      <div className="flex items-baseline justify-between gap-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          {detail.status === "running" ? "Evaluating queries" : "Preparing corpus"}
-        </p>
-        <p className="font-mono text-xs text-primary">
+    <Panel className="overflow-hidden">
+      <PulseWire label={phase} className="w-full" />
+      <div className="flex items-baseline justify-between gap-3 px-3 pb-2 pt-2">
+        <InstrumentLabel>{phase}</InstrumentLabel>
+        <span className="font-mono text-ui tabular-nums text-primary">
           {detail.progress_done}/{detail.progress_total}
-        </p>
+        </span>
       </div>
-      <div
-        className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-strong"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={detail.progress_total}
-        aria-valuenow={detail.progress_done}
-        aria-label="Run progress"
-      >
-        <div
-          className="h-full rounded-full bg-accent-violet transition-[width] duration-500"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </GlassCard>
+      <Meter
+        value={percent / 100}
+        label="Run progress"
+        valueNow={detail.progress_done}
+        valueMax={detail.progress_total}
+        animate
+        fillClassName="bg-accent-violet"
+        className="mx-3 mb-3"
+      />
+    </Panel>
   );
 }
 
-/** The run's configuration as instrument-labeled facts under the title. */
+/**
+ * The run's configuration as one readout strip.
+ *
+ * A `Readout` row rather than a grid of cells: eight small facts about one
+ * thing, where bordered boxes would be four container levels for eight values.
+ */
 function RunFacts({
   detail,
   datasetName,
@@ -128,22 +194,21 @@ function RunFacts({
   retrievalName: string | null;
 }) {
   const facts: Array<[string, string]> = [];
-  if (datasetName) facts.push(["dataset", datasetName]);
-  if (ingestionName) facts.push(["ingestion", ingestionName]);
-  if (retrievalName) facts.push(["retrieval", retrievalName]);
-  facts.push(["queries", String(detail.config.num_queries)]);
-  facts.push(["distractors", String(detail.config.distractor_pool_size)]);
-  facts.push(["seed", String(detail.config.seed)]);
-  facts.push(["parallel", String(detail.config.concurrency)]);
+  if (datasetName) facts.push(["Dataset", datasetName]);
+  if (ingestionName) facts.push(["Ingestion", ingestionName]);
+  if (retrievalName) facts.push(["Retrieval", retrievalName]);
+  facts.push(["Queries", detail.config.num_queries.toLocaleString()]);
+  facts.push(["Distractors", detail.config.distractor_pool_size.toLocaleString()]);
+  facts.push(["Seed", String(detail.config.seed)]);
+  facts.push(["Parallel", String(detail.config.concurrency)]);
   facts.push(["k", detail.config.k_values.join("/")]);
   return (
-    <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+    <Panel className="flex flex-wrap items-baseline gap-x-4 gap-y-1 p-3">
       {facts.map(([label, value]) => (
-        <div key={label} className="flex items-baseline gap-1.5">
-          <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-meta">{label}</dt>
-          <dd className="font-mono text-[11px] text-body">{value}</dd>
-        </div>
+        <Readout key={label} label={label}>
+          {value}
+        </Readout>
       ))}
-    </dl>
+    </Panel>
   );
 }

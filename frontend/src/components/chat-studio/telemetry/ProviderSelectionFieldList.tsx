@@ -1,6 +1,8 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
+
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 interface ProviderSelectionFieldListProps {
   label: string;
@@ -12,6 +14,10 @@ interface ProviderSelectionFieldListProps {
   onMove: (slug: string, delta: number) => void;
 }
 
+const iconButtonClass =
+  "rounded-control p-0.5 text-muted transition-colors duration-80 ease-standard hover:text-primary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet";
+
+/** One selection list (order / allow-only / ignore) as removable slug pills. */
 export const ProviderSelectionFieldList = ({
   label,
   fieldKey,
@@ -22,49 +28,53 @@ export const ProviderSelectionFieldList = ({
   onMove,
 }: ProviderSelectionFieldListProps) => {
   return (
-    <div className="space-y-2" key={fieldKey}>
+    <div className="space-y-1" key={fieldKey}>
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">{label}</span>
-        {values.length === 0 && <span className="text-xs text-meta">· none selected</span>}
+        <InstrumentLabel>{label}</InstrumentLabel>
+        {values.length === 0 && <span className="text-instrument text-meta">None selected</span>}
       </div>
       {values.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1">
           {values.map((slug, index) => (
             <div
               key={`${fieldKey}-${slug}`}
-              className="flex items-center gap-1 rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs text-primary"
+              className="flex items-center gap-1 rounded-full bg-surface px-2 py-0.5"
             >
-              {showIndex && <span className="text-[10px] text-muted">#{index + 1}</span>}
-              <span className="font-mono text-[11px]">{slug}</span>
+              {showIndex && (
+                <span className="font-mono text-instrument tabular-nums text-meta">
+                  {index + 1}
+                </span>
+              )}
+              <span className="font-mono text-instrument text-primary">{slug}</span>
               {allowReorder && values.length > 1 && (
-                <div className="flex items-center gap-1 text-muted">
+                <>
                   <button
                     type="button"
-                    className="hover:text-primary disabled:opacity-30"
+                    className={iconButtonClass}
                     onClick={() => onMove(slug, -1)}
                     disabled={index === 0}
                     aria-label={`Move ${slug} earlier`}
                   >
-                    <ArrowUp className="h-3 w-3" />
+                    <ArrowUp className="h-3 w-3" aria-hidden />
                   </button>
                   <button
                     type="button"
-                    className="hover:text-primary disabled:opacity-30"
+                    className={iconButtonClass}
                     onClick={() => onMove(slug, 1)}
                     disabled={index === values.length - 1}
                     aria-label={`Move ${slug} later`}
                   >
-                    <ArrowDown className="h-3 w-3" />
+                    <ArrowDown className="h-3 w-3" aria-hidden />
                   </button>
-                </div>
+                </>
               )}
               <button
                 type="button"
-                className="text-muted hover:text-primary"
+                className={iconButtonClass}
                 onClick={() => onRemove(slug)}
                 aria-label={`Remove ${slug}`}
               >
-                &times;
+                <X className="h-3 w-3" aria-hidden />
               </button>
             </div>
           ))}

@@ -4,12 +4,16 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 
 import { AddConnectionDialog } from "@/components/connections/AddConnectionDialog";
-import { ConnectionCard } from "@/components/connections/ConnectionCard";
+import { ConnectionRow } from "@/components/connections/ConnectionRow";
 import { EditConnectionDialog } from "@/components/connections/EditConnectionDialog";
 import { ProviderIcon } from "@/components/connections/ProviderIcon";
 import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Panel, PanelHeader } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/status-dot";
 import { deleteConnection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { invalidateModelCatalogs } from "@/lib/model-catalog-cache";
@@ -24,12 +28,31 @@ interface ConnectionsManagerProps {
   loading: boolean;
   error: string | null;
   onChanged: () => void;
+  /**
+   * Panel heading. Settings passes "Provider connections" so the panel is
+   * findable among its titled siblings; the setup wizard omits it because the
+   * step's own copy already names the task.
+   */
+  title?: string;
+}
+
+/** A loading row at the real row's geometry, so landing data reflows nothing. */
+function ConnectionSkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 border-b border-hairline px-3 py-2 last:border-b-0">
+      <Skeleton className="h-[7px] w-[7px] rounded-[2px]" />
+      <Skeleton className="h-4 w-4" />
+      <Skeleton className="h-3 max-w-48 flex-1" />
+      <Skeleton className="h-4 w-20" />
+      <Skeleton className="h-4 w-16" />
+    </div>
+  );
 }
 
 /**
  * The generic provider-connections surface shared by Settings and the setup
- * wizard: configured connections (plus built-in providers like pgvector),
- * and the data-driven add flow. Deleting is a ConfirmDialog — downstream
+ * wizard: configured connections and built-in providers as rows in one card,
+ * plus the data-driven add flow. Deleting is a ConfirmDialog — downstream
  * pipelines/sessions referencing a removed connection fail lazily with a
  * clear error, so the confirmation copy says so.
  */
@@ -40,6 +63,7 @@ export function ConnectionsManager({
   loading,
   error,
   onChanged,
+  title,
 }: ConnectionsManagerProps) {
   const { user } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
@@ -49,6 +73,12 @@ export function ConnectionsManager({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const builtins = providerTypes.filter((type) => type.builtin);
+  const showSkeleton = loading && connections.length === 0;
+  const isEmpty = !loading && connections.length === 0 && builtins.length === 0;
+
+  const providerLabelFor = (providerType: string) =>
+    providerTypes.find((type) => type.provider_type === providerType)?.label ?? providerType;
+
   const handleChanged = () => {
     if (user?.id) invalidateModelCatalogs(user.id, authToken);
     onChanged();
@@ -70,60 +100,85 @@ export function ConnectionsManager({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted">
-          Provider connections
-        </p>
-        <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          Add provider
-        </Button>
-      </div>
-      {error && <p className="text-sm text-data-neg">{error}</p>}
-      {actionError && <p className="text-sm text-data-neg">{actionError}</p>}
-      {loading && connections.length === 0 ? (
-        <p className="text-sm text-muted">Loading connections…</p>
-      ) : (
-        <div className="@container">
-          <div className="grid gap-3 @2xl:grid-cols-2">
-            {connections.map((connection) => (
-              <ConnectionCard
-                key={connection.id}
-                connection={connection}
-                authToken={authToken}
-                onEdit={setEditing}
-                onRemove={setPendingRemoval}
-                removing={removingId === connection.id}
-              />
-            ))}
-            {builtins.map((type) => (
-              <div
-                key={type.provider_type}
-                className="rounded-2xl border border-dashed border-hairline bg-surface/60 p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-hairline bg-canvas-raised text-primary">
-                      <ProviderIcon providerType={type.provider_type} className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-primary">{type.label}</p>
-                      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
-                        Built-in · {type.available ? "available" : "unavailable"}
-                      </p>
-                    </div>
-                  </div>
-                  <ProviderKindBadges kinds={type.kinds} />
-                </div>
+    <>
+      <Panel className="overflow-hidden">
+        {title ? (
+          <PanelHeader
+            title={title}
+            end={
+              <div className="flex items-center gap-3">
+                <span className="text-instrument text-meta">
+                  <span className="font-mono tabular-nums">{connections.length}</span> configured
+                </span>
+                <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add provider
+                </Button>
               </div>
-            ))}
-            {connections.length === 0 && builtins.length === 0 && !loading && (
-              <p className="text-sm text-muted">No providers connected yet.</p>
-            )}
+            }
+          />
+        ) : (
+          <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
+            <span className="text-instrument text-meta">
+              <span className="font-mono tabular-nums">{connections.length}</span> configured
+            </span>
+            <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add provider
+            </Button>
           </div>
-        </div>
-      )}
+        )}
+
+        {error ? <p className="px-3 py-2 text-ui text-data-neg">{error}</p> : null}
+        {actionError ? <p className="px-3 py-2 text-ui text-data-neg">{actionError}</p> : null}
+
+        {showSkeleton ? (
+          <>
+            <ConnectionSkeletonRow />
+            <ConnectionSkeletonRow />
+          </>
+        ) : null}
+
+        {connections.map((connection) => (
+          <ConnectionRow
+            key={connection.id}
+            connection={connection}
+            providerLabel={providerLabelFor(connection.provider_type)}
+            authToken={authToken}
+            onEdit={setEditing}
+            onRemove={setPendingRemoval}
+            removing={removingId === connection.id}
+          />
+        ))}
+
+        {builtins.map((type) => (
+          <div
+            key={type.provider_type}
+            className="flex flex-col gap-2 border-b border-hairline px-3 py-2 last:border-b-0 lg:flex-row lg:items-center lg:gap-3"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <StatusDot tone={type.available ? "pos" : "neg"} />
+              <ProviderIcon
+                providerType={type.provider_type}
+                className="h-4 w-4 shrink-0 text-muted"
+              />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate text-ui font-medium text-primary">{type.label}</span>
+                <Chip dot={false}>Built in</Chip>
+                {type.available ? null : <Chip tone="neg">Unavailable</Chip>}
+              </div>
+            </div>
+            <ProviderKindBadges kinds={type.kinds} />
+          </div>
+        ))}
+
+        {isEmpty ? (
+          <div className="p-8 text-center">
+            <p className="text-ui text-muted">No providers connected yet.</p>
+          </div>
+        ) : null}
+      </Panel>
+
       {editing && (
         <EditConnectionDialog
           connection={editing}
@@ -154,7 +209,7 @@ export function ConnectionsManager({
         onConfirm={handleRemove}
         onCancel={() => setPendingRemoval(null)}
       />
-    </div>
+    </>
   );
 }
 

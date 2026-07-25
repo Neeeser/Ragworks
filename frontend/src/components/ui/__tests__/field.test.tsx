@@ -3,6 +3,7 @@ import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 
 import { Field, Select, TextArea, TextInput, inputClass } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
 describe("Field", () => {
   it("associates the label with the control via htmlFor/id", () => {
@@ -73,10 +74,12 @@ describe("Field", () => {
     expect(inputRef.current).toBeInstanceOf(HTMLInputElement);
     expect(selectRef.current).toBeInstanceOf(HTMLSelectElement);
     expect(textAreaRef.current).toBeInstanceOf(HTMLTextAreaElement);
+    // Assert the controls share the exported constant, not one of its literal
+    // classes — pinning a class name here makes a token change look like a
+    // behaviour regression, which is what happened when the radius scale landed.
     for (const el of [inputRef.current, selectRef.current, textAreaRef.current]) {
-      expect(el?.className).toContain("rounded-2xl");
+      expect(el?.className).toBe(cn(inputClass));
     }
-    expect(inputClass).toContain("rounded-2xl");
   });
 
   it("renders labelEnd content outside the label element", () => {

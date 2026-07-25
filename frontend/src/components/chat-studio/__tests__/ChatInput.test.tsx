@@ -80,6 +80,31 @@ describe("ChatInput", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Stopping..." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stopping" })).toBeInTheDocument();
+  });
+
+  it("sends on Cmd/Ctrl+Enter and names the shortcut in the tooltip", () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    render(
+      <ChatInput
+        draft="Ship it"
+        setDraft={vi.fn()}
+        sending={false}
+        isStopping={false}
+        onSend={onSend}
+        onStop={onStop}
+        inputRef={React.createRef()}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", ctrlKey: true });
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    // Plain Enter inserts a newline; only the modifier chord sends.
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/Send turn — (⌘↵|Ctrl\+↵)/);
   });
 });

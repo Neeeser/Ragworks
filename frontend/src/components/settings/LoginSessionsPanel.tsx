@@ -1,25 +1,40 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Field, Select } from "@/components/ui/field";
+import { Chip } from "@/components/ui/chip";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { DataRow } from "@/components/ui/data-row";
+import { Field } from "@/components/ui/field";
+import { PanelHeader } from "@/components/ui/panel";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   listAuthSessions,
   revokeAllAuthSessions,
   revokeAuthSession,
   updateUserSettings,
 } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { AuthSession } from "@/lib/types";
 
-const labelClass = "font-mono text-[11px] uppercase tracking-[0.28em] text-muted";
+type RememberDays = 30 | 90 | 180;
+
+const DURATIONS: RememberDays[] = [30, 90, 180];
+
+/** Wide enough for an IPv6 literal before it truncates. */
+const IP_COL = "w-44 text-right";
+const CURRENT_COL = "w-20";
 
 export function LoginSessionsPanel() {
   const { user, token, signOut, refreshProfile } = useAuth();
-  const [days, setDays] = useState<30 | 90 | 180>(user?.remember_session_days ?? 30);
+  const [days, setDays] = useState<RememberDays>(user?.remember_session_days ?? 30);
   const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (token)
@@ -31,73 +46,113 @@ export function LoginSessionsPanel() {
   if (!token) return null;
 
   const saveDuration = async () => {
-    await updateUserSettings(token, { remember_session_days: days });
-    await refreshProfile();
+    setError(null);
+    setSaving(true);
+    try {
+      await updateUserSettings(token, { remember_session_days: days });
+      await refreshProfile();
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not save the login duration."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const revoke = async (item: AuthSession) => {
-    await revokeAuthSession(token, item.id);
-    setSessions((current) => current.filter((session) => session.id !== item.id));
-    if (item.current) await signOut();
+    setError(null);
+    try {
+      await revokeAuthSession(token, item.id);
+      setSessions((current) => current.filter((session) => session.id !== item.id));
+      if (item.current) await signOut();
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not revoke the session."));
+    }
   };
 
   const revokeAll = async () => {
-    await revokeAllAuthSessions(token);
-    await signOut();
+    setError(null);
+    try {
+      await revokeAllAuthSessions(token);
+      await signOut();
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not sign out everywhere."));
+    }
   };
 
   return (
-    <section className="rounded-3xl border border-hairline bg-surface p-6">
-      <h2 className="text-xl font-semibold text-primary">Login sessions</h2>
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <Field label="Remembered login duration" labelClassName={labelClass} className="flex-1">
-          <Select
-            value={days}
-            onChange={(event) => setDays(Number(event.target.value) as 30 | 90 | 180)}
-          >
-            <option value={30}>30 days</option>
-            <option value={90}>90 days</option>
-            <option value={180}>180 days</option>
-          </Select>
+    <section aria-labelledby="login-sessions-heading" className="card-surface">
+      <PanelHeader
+        id="login-sessions-heading"
+        title="Login sessions"
+        end={
+          <Button size="sm" variant="secondary" type="button" onClick={() => void revokeAll()}>
+            Sign out everywhere
+          </Button>
+        }
+      />
+
+      <div className="flex flex-wrap items-end gap-2 border-b border-hairline p-3">
+        <Field label="Remembered login duration" className="w-44">
+          <CustomSelect
+            value={String(days)}
+            options={DURATIONS.map((value) => ({ value: String(value), label: `${value} days` }))}
+            placeholder="Select a duration"
+            onValueChange={(value) => setDays(Number(value) as RememberDays)}
+          />
         </Field>
-        <Button type="button" onClick={() => void saveDuration()}>
+        <Button
+          size="sm"
+          variant="secondary"
+          type="button"
+          loading={saving}
+          onClick={() => void saveDuration()}
+        >
           Save login duration
         </Button>
       </div>
 
-      <div className="mt-6 space-y-3">
-        {sessions.map((item) => {
+      {error && (
+        <p role="alert" className="border-b border-hairline p-3 text-ui text-data-neg">
+          {error}
+        </p>
+      )}
+
+      {sessions.length === 0 ? (
+        <p className="p-8 text-center text-ui text-muted">No active login sessions.</p>
+      ) : (
+        sessions.map((item) => {
           const name = item.user_agent || "Unknown browser";
           return (
-            <div
+            <DataRow
               key={item.id}
-              className="flex flex-col gap-3 rounded-2xl border border-hairline bg-surface-strong p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="text-sm text-primary">
-                  {name}
-                  {item.current ? " · Current" : ""}
-                </p>
-                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
-                  {item.ip_address || "Unknown IP"}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                type="button"
-                aria-label={`Revoke ${name}`}
-                onClick={() => void revoke(item)}
-              >
-                Revoke
-              </Button>
-            </div>
+              title={name}
+              columns={[
+                <span key="current" className={CURRENT_COL}>
+                  {item.current ? <Chip tone="pos">Current</Chip> : null}
+                </span>,
+                // An IP is a literal, so it renders verbatim in mono — and an
+                // absent one is an em-dash, not the words "Unknown IP".
+                <span key="ip" className={`truncate font-mono text-instrument text-meta ${IP_COL}`}>
+                  {item.ip_address || "—"}
+                </span>,
+              ]}
+              actions={
+                <Tooltip content={`Revoke ${name}`} side="left">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    type="button"
+                    aria-label={`Revoke ${name}`}
+                    onClick={() => void revoke(item)}
+                  >
+                    <LogOut className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+              }
+            />
           );
-        })}
-      </div>
-
-      <Button className="mt-6" variant="secondary" type="button" onClick={() => void revokeAll()}>
-        Sign out everywhere
-      </Button>
+        })
+      )}
     </section>
   );
 }

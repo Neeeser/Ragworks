@@ -13,7 +13,7 @@ import type {
 } from "react";
 
 export const inputClass =
-  "w-full rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-primary outline-none transition placeholder:text-meta focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30";
+  "w-full rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-primary outline-none transition-colors duration-80 ease-standard placeholder:text-meta focus:border-accent-violet focus:ring-2 focus:ring-accent-violet/30";
 
 const DESCRIBED_BY = "aria-describedby" as const;
 
@@ -54,7 +54,11 @@ export function Field({
   });
 
   const labelElement = (
-    <label htmlFor={controlId} className={cn("block text-sm text-body", labelClassName)}>
+    // The console label voice — sentence-case sans, medium, muted.
+    <label
+      htmlFor={controlId}
+      className={cn("block text-instrument font-medium text-muted", labelClassName)}
+    >
       {label}
     </label>
   );
@@ -71,7 +75,10 @@ export function Field({
       )}
       {control}
       {description ? (
-        <p id={descriptionId} className={cn("text-xs", error ? "text-data-neg" : "text-muted")}>
+        <p
+          id={descriptionId}
+          className={cn("text-instrument", error ? "text-data-neg" : "text-muted")}
+        >
           {description}
         </p>
       ) : null}

@@ -1,13 +1,15 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { Fragment, useState } from "react";
 
 import { goldHitCount } from "@/components/evals/lib/journey";
 import { formatMetric, itemMetricNames } from "@/components/evals/lib/metrics";
 import { QueryDrilldown } from "@/components/evals/QueryDrilldown";
-import { GlassCard } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { truncate } from "@/lib/utils";
 
 import type { EvalMetricInfo, EvalRunItem, FunnelStage } from "@/lib/types";
@@ -36,70 +38,98 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
   const labels = new Map((catalog ?? []).map((metric) => [metric.name, metric.label]));
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Queries</p>
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-left text-sm">
+    <Panel>
+      <PanelHeader
+        title="Queries"
+        end={
+          <span className="font-mono text-instrument tabular-nums text-meta">
+            {items.length.toLocaleString()} evaluated
+          </span>
+        }
+      />
+
+      {/* The table scrolls inside the card rather than the page. */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-hairline font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              <th className="w-8 py-2 pr-2 font-normal">
+            <tr className="border-b border-hairline">
+              <th scope="col" className="w-8 py-2 pl-3 pr-1">
                 <span className="sr-only">Expand</span>
               </th>
-              <th className="py-2 pr-4 font-normal">Query</th>
-              <th className="py-2 pr-4 font-normal">Gold found</th>
-              <th className="py-2 pr-4 font-normal">Returned</th>
+              <th scope="col" className="py-2 pr-3">
+                <InstrumentLabel>Query</InstrumentLabel>
+              </th>
+              <th scope="col" className="w-24 py-2 pr-3 text-right">
+                <InstrumentLabel>Gold found</InstrumentLabel>
+              </th>
+              <th scope="col" className="w-20 py-2 pr-3 text-right">
+                <InstrumentLabel>Returned</InstrumentLabel>
+              </th>
               {metricNames.map((name) => (
-                <th key={name} className="py-2 pr-4 font-normal">
-                  {metricColumnHeader(name, labels.get(name), headlineK)}
+                <th key={name} scope="col" className="w-24 py-2 pr-3 text-right">
+                  <InstrumentLabel>
+                    {metricColumnHeader(name, labels.get(name), headlineK)}
+                  </InstrumentLabel>
                 </th>
               ))}
-              <th className="py-2 font-normal">Trace</th>
+              <th scope="col" className="w-20 py-2 pr-3 text-right">
+                <InstrumentLabel>Trace</InstrumentLabel>
+              </th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
               const expanded = expandedId === item.id;
               const hits = goldHitCount(item);
+              const partial = hits < item.gold_doc_ids.length;
               return (
                 <Fragment key={item.id}>
                   <tr className="border-b border-hairline align-top last:border-b-0">
-                    <td className="py-3 pr-2">
-                      <button
-                        type="button"
+                    <td className="py-2 pl-3 pr-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         aria-expanded={expanded}
                         aria-label={`${expanded ? "Collapse" : "Expand"} query ${item.query_external_id}`}
-                        className="rounded-full p-1 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
                         onClick={() => setExpandedId(expanded ? null : item.id)}
                       >
                         {expanded ? (
-                          <ChevronDown className="h-4 w-4" aria-hidden />
+                          <ChevronDown className="h-3.5 w-3.5" aria-hidden />
                         ) : (
-                          <ChevronRight className="h-4 w-4" aria-hidden />
+                          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
                         )}
-                      </button>
+                      </Button>
                     </td>
-                    <td className="max-w-md py-3 pr-4 text-body">
+                    <td className="max-w-md py-3 pr-3 text-ui text-body">
                       {truncate(item.query_text, 120)}
                       {item.failed && (
-                        <p className="mt-1 text-xs text-data-neg">
+                        <p className="mt-1 text-instrument text-data-neg">
                           {item.error_message || "Query failed"}
                         </p>
                       )}
                     </td>
-                    <td className="py-3 pr-4 font-mono text-xs">
-                      <span
-                        className={hits < item.gold_doc_ids.length ? "text-data-warn" : "text-body"}
-                      >
+                    <td className="py-3 pr-3 text-right font-mono text-ui tabular-nums">
+                      {/* A count that can be bad takes the tone when it is. */}
+                      <span className={partial ? "text-data-warn" : "text-body"}>
                         {hits}/{item.gold_doc_ids.length}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 font-mono text-xs text-body">{item.result_count}</td>
+                    <td className="py-3 pr-3 text-right font-mono text-ui tabular-nums text-body">
+                      {item.result_count}
+                    </td>
                     {metricNames.map((name) => (
-                      <td key={name} className="py-3 pr-4 font-mono text-xs text-primary">
-                        {item.failed ? "—" : formatMetric(item.metrics[`${name}@${headlineK}`])}
+                      <td
+                        key={name}
+                        className="py-3 pr-3 text-right font-mono text-ui tabular-nums text-primary"
+                      >
+                        {item.failed ? (
+                          <span className="text-muted">—</span>
+                        ) : (
+                          formatMetric(item.metrics[`${name}@${headlineK}`])
+                        )}
                       </td>
                     ))}
-                    <td className="py-3">
+                    <td className="py-2 pr-3 text-right">
                       <TraceLink item={item} />
                     </td>
                   </tr>
@@ -120,7 +150,7 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
           </tbody>
         </table>
       </div>
-    </GlassCard>
+    </Panel>
   );
 }
 
@@ -137,14 +167,11 @@ function TraceLink({ item }: { item: EvalRunItem }) {
       ? `/traces/runs/${item.pipeline_run_id}`
       : null;
   if (!href) {
-    return <span className="text-meta">—</span>;
+    return <span className="text-ui text-meta">—</span>;
   }
   return (
-    <Link
-      href={href}
-      className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent-cyan underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-accent-violet"
-    >
+    <ButtonLink href={href} variant="ghost">
       Open
-    </Link>
+    </ButtonLink>
   );
 }

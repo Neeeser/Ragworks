@@ -64,7 +64,6 @@ describe("HistoryPanel", () => {
 
   it("handles filtering and selection actions", () => {
     const onSelect = vi.fn();
-    const onNewChat = vi.fn();
     const onFilterChange = vi.fn();
     const onDelete = vi.fn();
     const onClose = vi.fn();
@@ -75,7 +74,6 @@ describe("HistoryPanel", () => {
         sessions={sessions}
         selectedSessionId={"session-1"}
         onSelect={onSelect}
-        onNewChat={onNewChat}
         filterCollectionIds={["col-1"]}
         filterIncludeUnassigned
         onFilterChange={onFilterChange}
@@ -103,9 +101,6 @@ describe("HistoryPanel", () => {
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
-    expect(onNewChat).toHaveBeenCalled();
-
     fireEvent.click(screen.getByRole("button", { name: /Delete Chat 9:15 PM/ }));
     expect(onDelete).toHaveBeenCalledWith("session-1");
 
@@ -124,7 +119,6 @@ describe("HistoryPanel", () => {
         sessions={[]}
         selectedSessionId={null}
         onSelect={() => undefined}
-        onNewChat={() => undefined}
         filterCollectionIds={[]}
         filterIncludeUnassigned={false}
         onFilterChange={() => undefined}
@@ -144,7 +138,6 @@ describe("HistoryPanel", () => {
         sessions={sessions}
         selectedSessionId={null}
         onSelect={() => undefined}
-        onNewChat={() => undefined}
         filterCollectionIds={[]}
         filterIncludeUnassigned={false}
         onFilterChange={() => undefined}
@@ -180,7 +173,6 @@ describe("HistoryPanel", () => {
         sessions={sessionsWithNull}
         selectedSessionId={null}
         onSelect={() => undefined}
-        onNewChat={() => undefined}
         filterCollectionIds={["missing-col"]}
         filterIncludeUnassigned={false}
         onFilterChange={() => undefined}

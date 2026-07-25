@@ -1,5 +1,6 @@
 import { ArrowRight, FileText } from "lucide-react";
 
+import { EffectNote, Lede } from "@/components/traces/explanations/prose";
 import { ResultList } from "@/components/traces/explanations/ResultList";
 import {
   embeddingSummary,
@@ -12,10 +13,10 @@ import { fullTextFromRecords } from "@/components/traces/lib/artifacts";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
 import { isRecord } from "@/components/traces/values/shape-guards";
 import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
-
-const labelClass = "font-mono text-[10px] uppercase tracking-[0.2em] text-meta";
 
 function SourceCard({
   path,
@@ -25,10 +26,10 @@ function SourceCard({
   contentType: string | null | undefined;
 }) {
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-4">
-      <p className={labelClass}>Input file</p>
-      <p className="mt-2 break-all font-mono text-xs text-primary">{path}</p>
-      <p className="mt-2 font-mono text-[10px] text-muted">
+    <div className="rounded-panel border border-hairline bg-surface p-3">
+      <InstrumentLabel>Input file</InstrumentLabel>
+      <p className="mt-1 break-all font-mono text-ui text-primary">{path}</p>
+      <p className="mt-1 font-mono text-instrument text-muted">
         {contentType ?? "Unknown content type"}
       </p>
     </div>
@@ -39,10 +40,8 @@ export function IngestionInputExplanation({ step }: NodeExplanationProps) {
   const source = sourceSummary(step, "outputs");
   if (!source) return null;
   return (
-    <div className="max-w-3xl space-y-4">
-      <p className="text-sm leading-relaxed text-body">
-        The ingestion run started with this stored file path and content type.
-      </p>
+    <div className="max-w-3xl space-y-3">
+      <Lede>The ingestion run started with this stored file path and content type.</Lede>
       <SourceCard path={source.path} contentType={source.content_type} />
     </div>
   );
@@ -58,21 +57,21 @@ export function ParserExplanation({ step, contextItems, onOpenArtifact }: NodeEx
     source.path.split("/").filter(Boolean).at(-1) ??
     "Parsed document";
   return (
-    <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-body">
-        The parser read the source file and normalized it to text for chunking.
-      </p>
+    <div className="space-y-3">
+      <Lede>The parser read the source file and normalized it to text for chunking.</Lede>
       <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.2fr)]">
         <SourceCard path={source.path} contentType={source.content_type} />
         <div className="hidden items-center justify-center lg:flex">
-          <ArrowRight className="h-5 w-5 text-accent-cyan" aria-hidden />
+          <ArrowRight className="h-4 w-4 text-accent-cyan" aria-hidden />
         </div>
-        <div className="rounded-xl border border-accent-cyan/25 bg-accent-cyan/5 p-4">
+        <div className="rounded-panel border border-accent-cyan/25 bg-accent-cyan/5 p-3">
           <div className="flex items-baseline gap-2">
-            <p className={labelClass}>Parsed to text</p>
-            <span className="font-mono text-[10px] text-meta">{text.length} characters</span>
+            <InstrumentLabel>Parsed to text</InstrumentLabel>
+            <Readout label="Characters" className="ml-auto">
+              {text.length}
+            </Readout>
           </div>
-          <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-body">
+          <p className="mt-2 line-clamp-4 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
             {text.preview}
           </p>
           {fullText && onOpenArtifact ? (
@@ -89,7 +88,6 @@ export function ParserExplanation({ step, contextItems, onOpenArtifact }: NodeEx
                     filename: `${sourceName} · Parsed text`,
                   })
                 }
-                className="gap-1.5"
               >
                 <FileText className="h-3.5 w-3.5" aria-hidden />
                 Open parsed text
@@ -108,19 +106,16 @@ export function ChunkerExplanation(props: NodeExplanationProps) {
   const size = props.node.data.config.chunk_size;
   const overlap = props.node.data.config.chunk_overlap;
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-body">
-        <span>Split parsed text into {chunks.items.length} ordered chunks.</span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Lede>Split parsed text into {chunks.items.length} ordered chunks.</Lede>
         {typeof size === "number" ? (
-          <span className="rounded-full border border-hairline bg-surface px-2 py-1 font-mono text-[10px] text-muted">
-            {size} tokens
-          </span>
+          <Readout label="Chunk size">
+            {size}
+            <span className="text-muted"> tokens</span>
+          </Readout>
         ) : null}
-        {typeof overlap === "number" ? (
-          <span className="rounded-full border border-hairline bg-surface px-2 py-1 font-mono text-[10px] text-muted">
-            {overlap} overlap
-          </span>
-        ) : null}
+        {typeof overlap === "number" ? <Readout label="Overlap">{overlap}</Readout> : null}
       </div>
       <ResultList
         title="Chunk order"
@@ -146,32 +141,25 @@ export function EmbedderExplanation(props: NodeExplanationProps) {
   const count = embedding && "count" in embedding ? embedding.count : 1;
   const model = props.node.data.config.model_name;
   return (
-    <div className="max-w-3xl space-y-4">
-      <p className="text-sm leading-relaxed text-body">
+    <div className="max-w-3xl space-y-3">
+      <Lede>
         {query
           ? "Converted the query text into one vector for semantic retrieval."
           : `Converted ${count} chunks into vectors for semantic indexing.`}
-      </p>
+      </Lede>
       {query ? (
-        <div className="rounded-xl border border-hairline bg-surface p-4">
-          <p className={labelClass}>Query</p>
-          <p className="mt-2 text-sm text-primary">{query.full ?? query.preview}</p>
+        <div className="rounded-panel border border-hairline bg-surface p-3">
+          <InstrumentLabel>Query</InstrumentLabel>
+          <p className="mt-1 max-w-[66ch] text-ui text-primary">{query.full ?? query.preview}</p>
         </div>
       ) : null}
-      <dl className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <dt className={labelClass}>Vectors</dt>
-          <dd className="mt-1 text-lg font-semibold text-primary">{count}</dd>
-        </div>
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <dt className={labelClass}>Dimensions</dt>
-          <dd className="mt-1 text-lg font-semibold text-primary">{dimension ?? "—"}</dd>
-        </div>
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <dt className={labelClass}>Model</dt>
-          <dd className="mt-1 truncate font-mono text-xs text-primary">{String(model ?? "—")}</dd>
-        </div>
-      </dl>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <Readout label="Vectors">{count}</Readout>
+        <Readout label="Dimensions">{dimension ?? "—"}</Readout>
+        <Readout label="Model" className="min-w-0">
+          {String(model ?? "—")}
+        </Readout>
+      </div>
     </div>
   );
 }
@@ -182,11 +170,11 @@ export function IndexerExplanation(props: NodeExplanationProps) {
   const backend = isRecord(indexed) && typeof indexed.backend === "string" ? indexed.backend : null;
   const indexName = props.node.data.config.index_name;
   return (
-    <div className="max-w-3xl space-y-4">
-      <p className="text-sm leading-relaxed text-body">
+    <div className="max-w-3xl space-y-3">
+      <Lede>
         Stored {count ?? "the"} chunks in this index without changing their document order.
-      </p>
-      <dl className="grid gap-3 sm:grid-cols-3">
+      </Lede>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
         {(
           [
             ["Index", indexName],
@@ -194,17 +182,12 @@ export function IndexerExplanation(props: NodeExplanationProps) {
             ["Chunks", count],
           ] as Array<[string, unknown]>
         ).map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-hairline bg-surface p-3">
-            <dt className={labelClass}>{label}</dt>
-            <dd className="mt-1 truncate font-mono text-xs text-primary">{String(value ?? "—")}</dd>
-          </div>
+          <Readout key={label} label={label} className="min-w-0">
+            {String(value ?? "—")}
+          </Readout>
         ))}
-      </dl>
-      {props.itemEffect ? (
-        <p className="rounded-xl border border-accent-cyan/30 bg-accent-cyan/5 p-3 text-sm text-primary">
-          {journeySentence(props.itemEffect)}
-        </p>
-      ) : null}
+      </div>
+      {props.itemEffect ? <EffectNote>{journeySentence(props.itemEffect)}</EffectNote> : null}
     </div>
   );
 }
@@ -213,24 +196,22 @@ export function IngestionOutputExplanation(props: NodeExplanationProps) {
   const branches = itemLists(props.step, "inputs");
   const result = itemLists(props.step, "outputs")[0]?.list;
   return (
-    <div className="max-w-3xl space-y-4">
-      <p className="text-sm leading-relaxed text-body">
-        Combined {branches.length} indexing branches into the persisted ingestion result.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="max-w-3xl space-y-3">
+      <Lede>Combined {branches.length} indexing branches into the persisted ingestion result.</Lede>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
         {branches.map((branch, index) => (
-          <div key={branch.label} className="rounded-xl border border-hairline bg-surface p-3">
-            <p className={labelClass}>{props.inputSources[index] ?? `Branch ${index + 1}`}</p>
-            <p className="mt-1 text-sm font-medium text-primary">
-              {branch.list.items.length} chunks
-            </p>
-          </div>
+          <Readout
+            key={branch.label}
+            label={props.inputSources[index] ?? `Branch ${index + 1}`}
+            className="min-w-0"
+          >
+            {branch.list.items.length}
+            <span className="text-muted"> chunks</span>
+          </Readout>
         ))}
       </div>
       {result && props.itemEffect ? (
-        <p className="rounded-xl border border-accent-cyan/30 bg-accent-cyan/5 p-3 text-sm text-primary">
-          {journeySentence(props.itemEffect)}
-        </p>
+        <EffectNote>{journeySentence(props.itemEffect)}</EffectNote>
       ) : null}
     </div>
   );

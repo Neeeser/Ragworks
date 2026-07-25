@@ -43,7 +43,38 @@ describe("PipelineCatalog", () => {
       />,
     );
 
-    expect(screen.getByText(/No pipelines yet/)).toBeInTheDocument();
+    expect(screen.getByText(/No pipelines in this kind yet/)).toBeInTheDocument();
+  });
+
+  it("names the default pipeline and shows what each graph does", () => {
+    render(
+      <PipelineCatalog
+        pipelines={[
+          {
+            ...pipelines[0],
+            is_default: true,
+            definition: {
+              nodes: [
+                { id: "n1", type: "parser.document", name: "Parse", config: {} },
+                { id: "n2", type: "chunker.token", name: "Chunk", config: {} },
+              ],
+              edges: [],
+            },
+          },
+          pipelines[1],
+        ]}
+        selectedPipelineId={undefined}
+        onSelect={() => undefined}
+        onDelete={() => undefined}
+        pipelineUsage={new Set()}
+      />,
+    );
+
+    expect(screen.getByText("Default")).toBeInTheDocument();
+    expect(screen.getByText("v2")).toBeInTheDocument();
+    // Only the pipeline with a real graph gets a stage strip.
+    expect(document.querySelectorAll(".bg-stage-parse")).toHaveLength(1);
+    expect(document.querySelectorAll(".bg-stage-chunk")).toHaveLength(1);
   });
 
   it("handles selection and deletion", () => {
@@ -70,6 +101,10 @@ describe("PipelineCatalog", () => {
 
     const inUseDelete = screen.getByRole("button", { name: "Delete Pipeline Two" });
     expect(inUseDelete).toBeDisabled();
-    expect(screen.getByRole("tooltip")).toHaveTextContent(/cannot be deleted/);
+    // Every icon-only action explains itself; the in-use one says why it can't run.
+    expect(screen.getAllByRole("tooltip").map((node) => node.textContent)).toEqual([
+      "Delete pipeline",
+      "Pipelines in use cannot be deleted.",
+    ]);
   });
 });

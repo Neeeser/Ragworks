@@ -1,12 +1,17 @@
 "use client";
 
-import { Loader, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { useProviderRoutingForm } from "@/components/chat-studio/hooks/settings/use-provider-routing-form";
 import { ProviderEndpointCard } from "@/components/chat-studio/telemetry/ProviderEndpointCard";
 import { ProviderMaxPriceSection } from "@/components/chat-studio/telemetry/ProviderMaxPriceSection";
 import { ProviderSelectionFieldList } from "@/components/chat-studio/telemetry/ProviderSelectionFieldList";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import type { ProviderFormState } from "@/components/chat-studio/lib/types";
@@ -24,6 +29,18 @@ const QUANTIZATION_OPTIONS = [
   "unknown",
 ] as const;
 
+const SORT_OPTIONS = [
+  { value: "balance", label: "Load balance (default)" },
+  { value: "throughput", label: "Throughput (Nitro)" },
+  { value: "price", label: "Price (Floor)" },
+  { value: "latency", label: "Latency" },
+];
+
+const DATA_COLLECTION_OPTIONS = [
+  { value: "allow", label: "Allow (default)" },
+  { value: "deny", label: "Deny (no collection)" },
+];
+
 interface ProviderRoutingCardProps {
   providerForm: ProviderFormState;
   setProviderForm: (updater: (prev: ProviderFormState) => ProviderFormState) => void;
@@ -37,6 +54,11 @@ interface ProviderRoutingCardProps {
   resetProviderPreferences: () => void;
 }
 
+/**
+ * OpenRouter provider routing for the selected model: the strategy, the
+ * endpoint catalog it applies to, and the data guardrails a request must
+ * satisfy before it is routed anywhere.
+ */
 export const ProviderRoutingCard = ({
   providerForm,
   setProviderForm,
@@ -49,8 +71,6 @@ export const ProviderRoutingCard = ({
   providerRuleCount,
   resetProviderPreferences,
 }: ProviderRoutingCardProps) => {
-  const inputClasses =
-    "w-full rounded-2xl border border-hairline bg-surface px-4 py-2.5 text-sm text-primary outline-none focus:border-accent-violet";
   const endpoints = providerDirectory?.endpoints ?? [];
   const normalizedSearch = providerSearchTerm.trim().toLowerCase();
   const filteredEndpoints =
@@ -74,90 +94,63 @@ export const ProviderRoutingCard = ({
     useProviderRoutingForm(setProviderForm);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Routing strategy
-            </p>
-            <p className="text-sm text-body">
-              Nitro/Floor shortcuts map to these settings. Use the catalog below to build a custom
-              provider order.
-            </p>
-          </div>
+    <div className="space-y-3">
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-ui text-body">
+            Nitro and Floor are shortcuts for these settings; the catalog below builds a custom
+            order.
+          </p>
           {providerRuleCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full border border-hairline px-3 text-xs text-body"
-              onClick={resetProviderPreferences}
-            >
+            <Button variant="ghost" size="sm" onClick={resetProviderPreferences}>
               Reset rules
             </Button>
           )}
         </div>
-        <label className="flex flex-col gap-1.5 text-sm text-body">
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-            Sort providers
-          </span>
-          <select
-            className={inputClasses}
-            value={providerForm.sort}
-            onChange={(event) =>
+        <Field label="Sort providers">
+          <CustomSelect
+            aria-label="Sort providers"
+            value={providerForm.sort || "balance"}
+            options={SORT_OPTIONS}
+            placeholder="Load balance (default)"
+            onValueChange={(value) =>
               setProviderForm((prev) => ({
                 ...prev,
-                sort: event.target.value as ProviderFormState["sort"],
+                sort: (value === "balance" ? "" : value) as ProviderFormState["sort"],
               }))
             }
-          >
-            <option value="">Load balance (default)</option>
-            <option value="throughput">Throughput (Nitro)</option>
-            <option value="price">Price (Floor)</option>
-            <option value="latency">Latency</option>
-          </select>
-        </label>
-        <div className="rounded-2xl border border-hairline bg-surface p-3">
-          <label className="flex items-center justify-between gap-3 text-sm text-body">
-            <span className="font-medium text-primary">Allow fallbacks</span>
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-strong bg-transparent"
-              checked={providerForm.allowFallbacks}
-              onChange={(event) =>
-                setProviderForm((prev) => ({ ...prev, allowFallbacks: event.target.checked }))
-              }
-            />
-          </label>
-          <p className="mt-1 text-xs text-muted">
-            Disable this to fail fast if your preferred providers are unavailable.
-          </p>
-        </div>
+          />
+        </Field>
+        <Checkbox
+          checked={providerForm.allowFallbacks}
+          onChange={(checked) => setProviderForm((prev) => ({ ...prev, allowFallbacks: checked }))}
+          label="Allow fallbacks"
+          description="With it off, a turn fails rather than routing past your preferred providers."
+        />
       </div>
 
-      <div className="space-y-4 border-t border-hairline pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Provider catalog
-            </p>
-            <p className="text-sm text-body">
-              {providerModelSlug
-                ? `Pulled from OpenRouter for ${providerModelSlug}.`
-                : "Provider routing applies to OpenRouter models only — select one to browse endpoints."}
-            </p>
-          </div>
+      <div className="space-y-3 border-t border-hairline pt-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-ui text-body">
+            {providerModelSlug
+              ? `Endpoints OpenRouter publishes for ${providerModelSlug}.`
+              : "Provider routing applies to OpenRouter models only."}
+          </p>
           {providerDirectory && (
-            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
-              {providerDirectory.endpoints.length} endpoints
+            <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
+              {providerDirectory.endpoints.length}
             </span>
           )}
         </div>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-meta" />
-          <input
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-meta"
+          />
+          <TextInput
             type="search"
-            className={cn(inputClasses, "pl-9 disabled:cursor-not-allowed disabled:opacity-60")}
+            aria-label="Search providers"
+            className={cn("pl-7 disabled:cursor-not-allowed disabled:opacity-60")}
             placeholder="Search provider slug, vendor, or tag"
             value={providerSearchTerm}
             onChange={(event) => onProviderSearchChange(event.target.value)}
@@ -166,24 +159,24 @@ export const ProviderRoutingCard = ({
         </div>
         <div>
           {providerDirectoryLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted">
-              <Loader className="h-4 w-4" />
-              <span>Loading endpoints…</span>
+            <div className="space-y-2" aria-busy>
+              {[0, 1, 2].map((row) => (
+                <Skeleton key={row} className="h-14 w-full" />
+              ))}
+              <span className="sr-only">Loading endpoints…</span>
             </div>
           ) : providerDirectoryError ? (
-            <div className="rounded-xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
-              {providerDirectoryError}
-            </div>
+            <p className="text-ui text-data-neg">{providerDirectoryError}</p>
           ) : !providerModelSlug ? (
-            <p className="text-sm text-muted">Pick a model to inspect its provider list.</p>
+            <p className="text-ui text-muted">Pick a model to inspect its provider list.</p>
           ) : visibleEndpoints.length === 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-ui text-muted">
               {normalizedSearch
                 ? "No providers match your search."
                 : "No endpoints published for this model yet."}
             </p>
           ) : (
-            <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-96 divide-y divide-hairline overflow-y-auto">
               {visibleEndpoints.map((endpoint, index) => (
                 <ProviderEndpointCard
                   key={`${endpoint.name}-${endpoint.provider_name ?? "unknown"}-${endpoint.tag ?? "default"}-${index}`}
@@ -198,10 +191,7 @@ export const ProviderRoutingCard = ({
         </div>
       </div>
 
-      <div className="space-y-4 border-t border-hairline pt-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          Selections & filters
-        </p>
+      <div className="space-y-3 border-t border-hairline pt-3">
         <ProviderSelectionFieldList
           label="Order priority"
           fieldKey="order"
@@ -212,7 +202,7 @@ export const ProviderRoutingCard = ({
           onMove={moveProviderOrderEntry}
         />
         {providerForm.order.length > 0 && (
-          <p className="text-[11px] text-meta">
+          <p className="text-instrument text-meta">
             Requests follow this order before falling back to the OpenRouter defaults.
           </p>
         )}
@@ -230,11 +220,9 @@ export const ProviderRoutingCard = ({
           onRemove={(slug) => toggleProviderField("ignore", slug)}
           onMove={moveProviderOrderEntry}
         />
-        <div className="space-y-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-            Quantizations
-          </span>
-          <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <InstrumentLabel>Quantizations</InstrumentLabel>
+          <div className="grid grid-cols-3 gap-1">
             {QUANTIZATION_OPTIONS.map((option) => {
               const active = providerForm.quantizations.includes(option);
               return (
@@ -243,10 +231,11 @@ export const ProviderRoutingCard = ({
                   type="button"
                   aria-pressed={active}
                   className={cn(
-                    "rounded-xl border py-1.5 text-center font-mono text-[11px] uppercase tracking-[0.12em] transition",
+                    "rounded-control py-1 text-center font-mono text-instrument transition-colors duration-80 ease-standard",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
                     active
-                      ? "border-accent-cyan bg-accent-cyan/15 text-accent-cyan"
-                      : "border-hairline bg-surface-strong text-body hover:border-strong hover:text-primary",
+                      ? "bg-accent-cyan/15 text-accent-cyan"
+                      : "bg-surface text-body hover:bg-surface-strong hover:text-primary",
                   )}
                   onClick={() => toggleQuantization(option)}
                 >
@@ -255,99 +244,57 @@ export const ProviderRoutingCard = ({
               );
             })}
           </div>
-          {providerForm.quantizations.length === 0 ? (
-            <p className="text-xs text-meta">Load balance across all quantization levels.</p>
-          ) : (
-            <p className="text-xs text-meta">
-              {providerForm.quantizations.length} selected • filters apply to open-weight endpoints.
+          {providerForm.quantizations.length > 0 && (
+            <p className="text-instrument text-meta">
+              {providerForm.quantizations.length} selected · applies to open-weight endpoints.
             </p>
           )}
         </div>
       </div>
 
-      <div className="space-y-3 border-t border-hairline pt-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          Data guardrails
-        </p>
-        <div className="space-y-2">
-          <div className="rounded-2xl border border-hairline bg-surface p-3">
-            <label className="flex items-center justify-between gap-3 text-sm text-body">
-              <span className="font-medium text-primary">Require parameters</span>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-strong bg-transparent"
-                checked={providerForm.requireParameters}
-                onChange={(event) =>
-                  setProviderForm((prev) => ({ ...prev, requireParameters: event.target.checked }))
-                }
-              />
-            </label>
-            <p className="mt-1 text-xs text-muted">
-              Only route to providers that support every parameter in your request.
-            </p>
-          </div>
-          <label className="flex flex-col gap-1.5 text-sm text-body">
-            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-              Data collection
-            </span>
-            <select
-              className={inputClasses}
-              value={providerForm.dataCollection}
-              onChange={(event) =>
-                setProviderForm((prev) => ({
-                  ...prev,
-                  dataCollection: event.target.value === "deny" ? "deny" : "allow",
-                }))
-              }
-            >
-              <option value="allow">Allow (default)</option>
-              <option value="deny">Deny (no collection)</option>
-            </select>
-          </label>
-          <div className="rounded-2xl border border-hairline bg-surface p-3">
-            <label className="flex items-center justify-between gap-3 text-sm text-body">
-              <span className="font-medium text-primary">Zero data retention</span>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-strong bg-transparent"
-                checked={providerForm.zdr}
-                onChange={(event) =>
-                  setProviderForm((prev) => ({ ...prev, zdr: event.target.checked }))
-                }
-              />
-            </label>
-            <p className="mt-1 text-xs text-muted">Only send requests to ZDR endpoints.</p>
-          </div>
-          <div className="rounded-2xl border border-hairline bg-surface p-3">
-            <label className="flex items-center justify-between gap-3 text-sm text-body">
-              <span className="font-medium text-primary">Distillable text only</span>
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-strong bg-transparent"
-                checked={providerForm.enforceDistillableText}
-                onChange={(event) =>
-                  setProviderForm((prev) => ({
-                    ...prev,
-                    enforceDistillableText: event.target.checked,
-                  }))
-                }
-              />
-            </label>
-            <p className="mt-1 text-xs text-muted">
-              Restrict routing to models that permit text distillation.
-            </p>
-          </div>
-        </div>
+      <div className="space-y-3 border-t border-hairline pt-3">
+        <Checkbox
+          checked={providerForm.requireParameters}
+          onChange={(checked) =>
+            setProviderForm((prev) => ({ ...prev, requireParameters: checked }))
+          }
+          label="Require parameters"
+          description="Only route to providers that support every parameter in the request."
+        />
+        <Field label="Data collection">
+          <CustomSelect
+            aria-label="Data collection"
+            value={providerForm.dataCollection}
+            options={DATA_COLLECTION_OPTIONS}
+            placeholder="Allow (default)"
+            onValueChange={(value) =>
+              setProviderForm((prev) => ({
+                ...prev,
+                dataCollection: value === "deny" ? "deny" : "allow",
+              }))
+            }
+          />
+        </Field>
+        <Checkbox
+          checked={providerForm.zdr}
+          onChange={(checked) => setProviderForm((prev) => ({ ...prev, zdr: checked }))}
+          label="Zero data retention"
+          description="Only send requests to ZDR endpoints."
+        />
+        <Checkbox
+          checked={providerForm.enforceDistillableText}
+          onChange={(checked) =>
+            setProviderForm((prev) => ({ ...prev, enforceDistillableText: checked }))
+          }
+          label="Distillable text only"
+          description="Restrict routing to models that permit text distillation."
+        />
       </div>
 
-      <ProviderMaxPriceSection
-        providerForm={providerForm}
-        setProviderForm={setProviderForm}
-        inputClasses={inputClasses}
-      />
+      <ProviderMaxPriceSection providerForm={providerForm} setProviderForm={setProviderForm} />
 
-      <p className="text-xs text-meta">
-        Need a refresher? Read the{" "}
+      <p className="text-instrument text-meta">
+        The{" "}
         <a
           href="https://openrouter.ai/docs/features/provider-routing"
           target="_blank"
@@ -356,7 +303,7 @@ export const ProviderRoutingCard = ({
         >
           provider routing guide
         </a>{" "}
-        for tips on building multi-provider policies.
+        documents how these rules combine.
       </p>
     </div>
   );

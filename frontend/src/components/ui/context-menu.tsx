@@ -107,7 +107,10 @@ export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
       aria-label="Context menu"
       onKeyDown={onKeyDown}
       onContextMenu={(event) => event.preventDefault()}
-      className="fixed z-50 min-w-52 rounded-2xl border border-hairline bg-canvas-raised p-1.5 shadow-elevation-2"
+      // No entrance animation: the menu measures itself in a layout effect to
+      // clamp to the viewport, and a scale-fade would have it measuring a
+      // mid-animation box.
+      className="fixed z-50 min-w-52 rounded-panel border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
       style={{ left: position.x, top: position.y, visibility: "hidden" }}
     >
       {items.map((item, index) =>
@@ -122,21 +125,28 @@ export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
               item.onSelect();
             }}
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-xl px-3 py-1.5 text-left text-sm transition",
+              "flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui",
+              "transition-colors duration-80 ease-standard",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
               item.danger ? "text-data-neg hover:bg-data-neg/10" : "text-body hover:bg-surface",
               item.disabled && "cursor-default opacity-40 hover:bg-transparent",
             )}
           >
-            {item.icon && <item.icon className="h-4 w-4 shrink-0 text-muted" aria-hidden />}
+            {item.icon && <item.icon className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />}
             <span className="flex-1">{item.label}</span>
-            {item.hint && <span className="max-w-32 truncate text-xs text-meta">{item.hint}</span>}
+            {/* The hint names the held node, which is a filename — a literal,
+                so it renders verbatim in mono. */}
+            {item.hint && (
+              <span className="max-w-32 truncate font-mono text-instrument text-meta">
+                {item.hint}
+              </span>
+            )}
           </button>
         ) : (
           <div
             key={`separator-${index}`}
             role="separator"
-            className="my-1.5 border-t border-hairline"
+            className="my-1 border-t border-hairline"
           />
         ),
       )}

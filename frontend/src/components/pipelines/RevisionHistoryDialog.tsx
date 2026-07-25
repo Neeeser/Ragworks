@@ -3,8 +3,8 @@
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 
 import { changeKindDot } from "./lib/change-kind";
 
@@ -39,13 +39,21 @@ function RevisionEntry({
   const hiddenCount = changes.length - visible.length;
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface px-4 py-3">
+    <div className="border-b border-hairline px-3 py-2 last:border-b-0">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-xs text-primary">v{version.version}</p>
-          <p className="truncate text-xs text-muted" title={version.change_summary ?? undefined}>
-            {version.change_summary || "No summary provided."}
-          </p>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-ui tabular-nums text-primary">v{version.version}</span>
+            {isCurrent ? (
+              <Chip tone="pos" dot={false}>
+                Active
+              </Chip>
+            ) : null}
+          </span>
+          {/* Rendered only when present: an absent summary gets no placeholder. */}
+          {version.change_summary ? (
+            <p className="truncate text-ui text-muted">{version.change_summary}</p>
+          ) : null}
         </div>
         <Button
           size="sm"
@@ -57,14 +65,15 @@ function RevisionEntry({
         </Button>
       </div>
       {changes.length > 0 ? (
-        <ul className="mt-2 space-y-1 border-t border-hairline pt-2">
+        <ul className="mt-1 space-y-1">
           {visible.map((change) => (
             <li
               key={`${change.kind}-${change.summary}`}
-              className="flex items-start gap-2 text-[11px] text-muted"
+              className="flex items-start gap-2 text-instrument text-muted"
             >
               <span
-                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${changeKindDot(change.kind)}`}
+                aria-hidden
+                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-[2px] ${changeKindDot(change.kind)}`}
               />
               <span>{change.summary}</span>
             </li>
@@ -74,7 +83,7 @@ function RevisionEntry({
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => !prev)}
-                className="text-[11px] text-meta underline-offset-2 hover:text-body hover:underline"
+                className="rounded-control text-instrument text-meta underline-offset-2 transition-colors duration-80 ease-standard hover:text-body hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
               >
                 {expanded ? "Show less" : `Show ${hiddenCount} more`}
               </button>
@@ -98,12 +107,17 @@ export function RevisionHistoryDialog({
   const titleId = useId();
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <GlassCard className="flex max-h-[80vh] w-full max-w-xl flex-col rounded-[2rem] border border-hairline bg-canvas-raised/95 p-6">
-        <p id={titleId} className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+      <div className="card-surface flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden bg-canvas-raised shadow-elevation-2">
+        <h2
+          id={titleId}
+          className="shrink-0 border-b border-hairline p-3 text-head font-semibold tracking-[-0.01em] text-primary"
+        >
           Revision history
-        </p>
-        <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-sm">
-          {versions.length === 0 ? <p className="text-sm text-muted">No revisions yet.</p> : null}
+        </h2>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {versions.length === 0 ? (
+            <p className="p-8 text-center text-ui text-muted">No revisions yet.</p>
+          ) : null}
           {versions.map((version) => (
             <RevisionEntry
               key={version.id}
@@ -114,7 +128,7 @@ export function RevisionHistoryDialog({
             />
           ))}
         </div>
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }

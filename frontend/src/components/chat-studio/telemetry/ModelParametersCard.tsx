@@ -1,6 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
+import { Readout } from "@/components/ui/readout";
 
 import type {
   ModelParameterKey,
@@ -47,22 +49,22 @@ export const ModelParametersCard = ({
   const selectedModelLabel = currentModelInfo?.id || "the selected model";
 
   if (modelsError) {
-    return <p className="text-sm text-data-neg">{modelsError}</p>;
+    return <p className="text-ui text-data-neg">{modelsError}</p>;
   }
   if (modelsLoading && !currentModelInfo) {
-    return <p className="text-sm text-muted">Loading model catalog…</p>;
+    return <p className="text-ui text-muted">Loading model catalog…</p>;
   }
   if (!currentModelInfo) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-ui text-muted">
         Unable to find provider metadata for{" "}
-        <span className="text-primary">{selectedModelLabel}</span>.
+        <span className="font-mono text-primary">{selectedModelLabel}</span>.
       </p>
     );
   }
   if (visibleParameterDefinitions.length === 0) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-ui text-muted">
         This model does not expose any of the common sampling parameters.
       </p>
     );
@@ -116,25 +118,19 @@ export const ModelParametersCard = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-hairline bg-surface p-3 text-sm text-body">
-        <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-meta">Model</p>
-        <p className="text-primary">{currentModelInfo.name}</p>
-        <p className="text-[11px] text-meta break-all">{currentModelInfo.id}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
-          <span>{visibleParameterDefinitions.length} controls</span>
-          {activeParameterCount > 0 && (
-            <button
-              type="button"
-              onClick={resetAllParameters}
-              className="text-body underline-offset-4 hover:underline"
-            >
-              Reset overrides
-            </button>
-          )}
-        </div>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-hairline pb-2">
+        <Readout label="Model" className="min-w-0">
+          {currentModelInfo.id}
+        </Readout>
+        <Readout label="Controls">{visibleParameterDefinitions.length}</Readout>
+        {activeParameterCount > 0 && (
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={resetAllParameters}>
+            Reset overrides
+          </Button>
+        )}
       </div>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {visibleParameterDefinitions.map((definition) => renderParameterControl(definition))}
       </div>
     </div>

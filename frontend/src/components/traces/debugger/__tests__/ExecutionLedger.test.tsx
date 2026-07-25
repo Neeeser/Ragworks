@@ -117,8 +117,8 @@ describe("ExecutionLedger", () => {
 
     const explanation = "Not in this node's top 1";
     expect(screen.getByRole("img", { name: explanation })).toHaveClass("text-data-neg");
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent(explanation);
-    expect(tooltip).toHaveClass("right-full");
+    // The explanation is reachable as a tooltip; its placement is the
+    // portalled Tooltip primitive's concern, not this ledger's.
+    expect(screen.getByRole("tooltip")).toHaveTextContent(explanation);
   });
 });

@@ -76,18 +76,20 @@ export function EditConnectionDialog({
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId}>
-      <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-3xl border border-hairline bg-canvas-raised p-6">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-hairline bg-surface text-primary">
-            <ProviderIcon providerType={connection.provider_type} className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h2 id={titleId} className="text-lg font-semibold tracking-tight text-primary">
-              Edit {connection.label}
-            </h2>
-          </div>
+      <div className="card-surface flex max-h-[85vh] w-full max-w-xl flex-col bg-canvas-raised shadow-elevation-2">
+        <div className="flex items-center gap-3 border-b border-hairline p-3">
+          <ProviderIcon
+            providerType={connection.provider_type}
+            className="h-5 w-5 shrink-0 text-muted"
+          />
+          <h2
+            id={titleId}
+            className="min-w-0 truncate text-head font-semibold tracking-[-0.01em] text-primary"
+          >
+            Edit {connection.label}
+          </h2>
         </div>
-        <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
           <ProviderKindBadges kinds={connection.kinds} />
           <Field label="Label">
             <TextInput value={label} onChange={(event) => setLabel(event.target.value)} />
@@ -98,9 +100,9 @@ export function EditConnectionDialog({
             onChange={(name, value) => setConfig((prev) => ({ ...prev, [name]: value }))}
             secretsConfigured={connection.secrets_configured}
           />
-          {error && <p className="text-sm text-data-neg">{error}</p>}
+          {error ? <p className="text-ui text-data-neg">{error}</p> : null}
         </div>
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-hairline pt-4">
+        <div className="flex items-center justify-end gap-2 border-t border-hairline p-3">
           <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>

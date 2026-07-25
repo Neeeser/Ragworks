@@ -6,7 +6,6 @@ import {
   canDropInto,
   childrenOfFolder,
   folderHref,
-  formatBytes,
   isProcessing,
   resolveFolder,
 } from "@/components/files/lib/tree";
@@ -78,16 +77,6 @@ describe("isProcessing", () => {
       ),
     ).toBe(true);
     expect(isProcessing(makeFileNode({ ingestion: null }))).toBe(false);
-  });
-});
-
-describe("formatBytes", () => {
-  it("scales through units", () => {
-    expect(formatBytes(0)).toBe("0 B");
-    expect(formatBytes(512)).toBe("512 B");
-    expect(formatBytes(2048)).toBe("2.0 KB");
-    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
-    expect(formatBytes(15 * 1024 * 1024)).toBe("15 MB");
   });
 });
 

@@ -2,13 +2,19 @@
 
 import { X } from "lucide-react";
 import { useId, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Markdown } from "@/components/ui/markdown";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { prettyJson, timeAgo } from "@/lib/utils";
+import { Readout } from "@/components/ui/readout";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Tooltip } from "@/components/ui/tooltip";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
+import { prettyJson } from "@/lib/utils";
 
+import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { ChunkDetail } from "@/lib/types";
 
 type RenderMode = "text" | "markdown";
@@ -20,6 +26,18 @@ type ChunkPreviewOverlayProps = {
   defaultRenderMode?: RenderMode;
 };
 
+const RENDER_MODES: Array<SegmentedOption<RenderMode>> = [
+  { id: "text", label: "Plain" },
+  { id: "markdown", label: "Markdown" },
+];
+
+/**
+ * The selected chunk at full size: the exact text a retriever would return,
+ * rendered plain or as markdown, beside the record it came from.
+ *
+ * The docked pane truncates for density; this is where the whole value is read,
+ * so it gets the height and the text gets a measure.
+ */
 export function ChunkPreviewOverlay({
   isOpen,
   onClose,
@@ -52,105 +70,73 @@ export function ChunkPreviewOverlay({
     : "_No chunk content available._";
 
   const { document, chunk } = detail;
+  const indexedAt = parseApiDate(chunk.created_at);
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId} backdropClassName="bg-canvas/80">
-      <div className="flex h-[85vh] w-full max-w-5xl flex-col rounded-3xl border border-hairline bg-canvas-raised p-6 text-primary shadow-elevation-2">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-meta">
-              Chunk preview
-            </p>
-            <h2 id={titleId} className="mt-2 text-2xl font-semibold text-primary">
+      <div className="card-surface flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden bg-canvas-raised shadow-elevation-2">
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-hairline px-3">
+          {/* The dialog clips its own overflow for its rounded corners, so
+              tooltips on its top row open downward. */}
+          <Tooltip content={document.name} side="bottom" triggerClassName="min-w-0">
+            <h2
+              id={titleId}
+              className="truncate text-head font-semibold tracking-[-0.01em] text-primary"
+            >
               {document.name}
             </h2>
-            <p className="text-sm text-muted">
-              Chunk #{chunk.chunk_index + 1} · {chunk.chunk_strategy} · {chunk.chunk_size} tokens
-            </p>
-          </div>
+          </Tooltip>
           <Button
             variant="ghost"
             size="sm"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline p-0 text-body"
+            className="ml-auto"
             onClick={onClose}
             aria-label="Close preview"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" aria-hidden />
           </Button>
         </div>
 
-        <div className="mt-5 grid flex-1 gap-6 overflow-hidden lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="flex flex-col gap-3 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-primary">Chunk text</p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRenderMode("text")}
-                  className={`rounded-full px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-                    renderMode === "text"
-                      ? "bg-accent-violet/20 text-accent-violet"
-                      : "bg-surface text-body hover:bg-surface-strong"
-                  }`}
-                >
-                  Plain
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRenderMode("markdown")}
-                  className={`rounded-full px-3 py-1 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-                    renderMode === "markdown"
-                      ? "bg-accent-violet/20 text-accent-violet"
-                      : "bg-surface text-body hover:bg-surface-strong"
-                  }`}
-                >
-                  Markdown
-                </button>
-              </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-hairline px-3 py-2">
+          <Readout label="Chunk">{`#${chunk.chunk_index + 1}`}</Readout>
+          <Readout label="Strategy">{chunk.chunk_strategy}</Readout>
+          <Readout label="Size">
+            {chunk.chunk_size.toLocaleString()}
+            <span className="text-muted"> tokens</span>
+          </Readout>
+          <Tooltip content={indexedAt?.toLocaleString() ?? ""} side="bottom">
+            <Readout label="Indexed">{formatTimeAgoCompact(chunk.created_at)}</Readout>
+          </Tooltip>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-2 px-3 pt-2">
+              <InstrumentLabel>Chunk text</InstrumentLabel>
+              <SegmentedControl
+                aria-label="Render mode"
+                className="ml-auto"
+                options={RENDER_MODES}
+                value={renderMode}
+                onChange={setRenderMode}
+              />
             </div>
-            <div className="flex-1 overflow-auto rounded-2xl border border-hairline bg-canvas p-4 text-sm text-body">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {renderMode === "markdown" ? (
-                <div className="prose prose-invert max-w-none text-sm">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownSource}</ReactMarkdown>
-                </div>
+                <Markdown className="max-w-[66ch]">{markdownSource}</Markdown>
               ) : (
-                <p className="whitespace-pre-wrap">{chunk.text || ""}</p>
+                <p className="max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
+                  {chunk.text || ""}
+                </p>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 overflow-hidden">
-            <div className="rounded-2xl border border-hairline bg-canvas p-4 text-xs text-body">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">Details</p>
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span>Document</span>
-                  <span className="text-right text-primary">{document.name}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Indexed</span>
-                  <span className="text-right text-primary">{timeAgo(chunk.created_at)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Chunk</span>
-                  <span className="text-right text-primary">#{chunk.chunk_index + 1}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Strategy</span>
-                  <span className="text-right text-primary">{chunk.chunk_strategy}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Size</span>
-                  <span className="text-right text-primary">{chunk.chunk_size} tokens</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 overflow-hidden rounded-2xl border border-hairline bg-canvas p-4 text-xs text-body">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">Metadata</p>
-              <pre className="mt-3 max-h-full overflow-auto whitespace-pre-wrap rounded-2xl border border-hairline bg-canvas-raised p-3 text-[11px] text-body">
-                {prettyJson(chunk.metadata)}
-              </pre>
-            </div>
+          <div className="min-h-0 shrink-0 overflow-y-auto border-t border-hairline p-3 lg:w-[280px] lg:border-l lg:border-t-0">
+            <InstrumentLabel>Metadata</InstrumentLabel>
+            <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
+              {prettyJson(chunk.metadata)}
+            </pre>
           </div>
         </div>
       </div>

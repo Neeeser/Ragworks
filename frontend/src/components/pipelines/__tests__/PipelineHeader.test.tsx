@@ -6,6 +6,11 @@ import { PipelineHeader } from "@/components/pipelines/PipelineHeader";
 import type { ComponentProps } from "react";
 
 const SAVE_VERSION = "Save version";
+const NEW_PIPELINE = "New pipeline";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/pipelines/ingestion",
+}));
 
 const renderHeader = (overrides: Partial<ComponentProps<typeof PipelineHeader>> = {}) =>
   render(
@@ -17,39 +22,43 @@ const renderHeader = (overrides: Partial<ComponentProps<typeof PipelineHeader>> 
       onOpenSave={() => undefined}
       onOpenHistory={() => undefined}
       hasPipeline
+      pipelineName="Docs ingest"
+      pipelineVersion={4}
       {...overrides}
     />,
   );
 
 describe("PipelineHeader", () => {
-  it("renders ingestion header and actions", () => {
+  it("names the kind in the crumb path and its route tabs", () => {
     const onCreate = vi.fn();
     const onManage = vi.fn();
 
     renderHeader({ onCreatePipeline: onCreate, onManageIndexes: onManage });
 
-    expect(screen.getByText("Ingestion pipelines")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "ingestion" })).toHaveAttribute(
+    // The breadcrumb path owns the page's identity; no title block repeats it.
+    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Pipelines");
+    expect(screen.getByRole("link", { name: "Ingestion" })).toHaveAttribute(
       "href",
       "/pipelines/ingestion",
+    );
+    // The route param stays `retrieval` (permanent URL); only the label says Tools.
+    expect(screen.getByRole("link", { name: "Tools" })).toHaveAttribute(
+      "href",
+      "/pipelines/retrieval",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Manage indexes" }));
     expect(onManage).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /New ingestion pipeline/ }));
+    fireEvent.click(screen.getByRole("button", { name: NEW_PIPELINE }));
     expect(onCreate).toHaveBeenCalled();
   });
 
-  it("renders the tools header text for the retrieval route", () => {
-    renderHeader({ kind: "retrieval" });
+  it("shows the open pipeline's name and revision as live state", () => {
+    renderHeader();
 
-    expect(screen.getByText("Tool pipelines")).toBeInTheDocument();
-    // The route param stays `retrieval` (permanent URL); only the label says tools.
-    expect(screen.getByRole("link", { name: "tools" })).toHaveAttribute(
-      "href",
-      "/pipelines/retrieval",
-    );
+    expect(screen.getByText("Docs ingest")).toBeInTheDocument();
+    expect(screen.getByText("v4")).toBeInTheDocument();
   });
 
   it("disables saving while clean and shows the unsaved pill once dirty", () => {
@@ -73,6 +82,8 @@ describe("PipelineHeader", () => {
         onOpenSave={onOpenSave}
         onOpenHistory={onOpenHistory}
         hasPipeline
+        pipelineName="Docs ingest"
+        pipelineVersion={4}
       />,
     );
 
@@ -86,5 +97,7 @@ describe("PipelineHeader", () => {
 
     expect(screen.queryByRole("button", { name: SAVE_VERSION })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
+    // Creating one stays reachable — it is the only thing left to do.
+    expect(screen.getByRole("button", { name: NEW_PIPELINE })).toBeInTheDocument();
   });
 });

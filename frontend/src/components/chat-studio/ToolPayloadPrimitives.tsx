@@ -3,6 +3,8 @@
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
 const stringifyData = (value: unknown): string => {
@@ -42,6 +44,7 @@ const formatKeyLabel = (key: string): string => {
     .join(" ");
 };
 
+/** A raw payload, verbatim, scrolling inside its own box. */
 export const JsonBlock = ({
   data,
   className,
@@ -54,7 +57,7 @@ export const JsonBlock = ({
   <pre
     style={{ maxHeight }}
     className={cn(
-      "overflow-auto whitespace-pre-wrap break-words rounded-2xl bg-surface p-3 text-xs text-body",
+      "overflow-auto whitespace-pre-wrap break-words rounded-control border border-hairline bg-surface-strong p-2 font-mono text-instrument text-body",
       className,
     )}
   >
@@ -71,14 +74,10 @@ export const ToolValue = ({ value }: ToolValueProps) => {
     return <span className="text-muted">N/A</span>;
   }
   if (typeof value === "string") {
-    return <span className="font-medium text-primary">{value}</span>;
+    return <span className="text-ui text-primary">{value}</span>;
   }
   if (typeof value === "number" || typeof value === "boolean") {
-    return (
-      <code className="rounded bg-surface-strong px-1 py-0.5 text-xs text-accent-cyan">
-        {String(value)}
-      </code>
-    );
+    return <span className="font-mono text-ui tabular-nums text-primary">{String(value)}</span>;
   }
   if (Array.isArray(value)) {
     const primitiveItems = value.every(
@@ -91,7 +90,7 @@ export const ToolValue = ({ value }: ToolValueProps) => {
     );
     if (primitiveItems) {
       return (
-        <ul className="list-disc space-y-1 pl-5 text-body">
+        <ul className="list-disc space-y-1 pl-4 text-ui text-body">
           {value.map((item, index) => (
             <li key={`tool-value-${index}`}>{String(item ?? "N/A")}</li>
           ))}
@@ -103,7 +102,7 @@ export const ToolValue = ({ value }: ToolValueProps) => {
   if (typeof value === "object") {
     return <JsonBlock data={value} />;
   }
-  return <span className="text-primary">{String(value)}</span>;
+  return <span className="text-ui text-primary">{String(value)}</span>;
 };
 
 interface ToolKeyValueGridProps {
@@ -127,17 +126,17 @@ export const ToolKeyValueGrid = ({
   });
 
   if (entries.length === 0) {
-    return <p className="text-xs text-muted">{emptyLabel}</p>;
+    return <p className="text-ui text-muted">{emptyLabel}</p>;
   }
 
   return (
-    <dl className="grid gap-3 text-left sm:grid-cols-2">
+    <dl className="grid gap-x-4 gap-y-2 text-left sm:grid-cols-2">
       {entries.map(([key, value]) => (
-        <div key={key} className="rounded-2xl border border-hairline bg-surface p-3">
-          <dt className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted">
-            {formatKeyLabel(key)}
+        <div key={key} className="min-w-0">
+          <dt>
+            <InstrumentLabel>{formatKeyLabel(key)}</InstrumentLabel>
           </dt>
-          <dd className="mt-1 text-sm">
+          <dd className="mt-0.5 min-w-0 break-words">
             <ToolValue value={value} />
           </dd>
         </div>
@@ -154,6 +153,7 @@ interface ToolPayloadSectionProps {
   defaultOpen?: boolean;
 }
 
+/** One labelled block of a tool call's payload, optionally collapsed. */
 export const ToolPayloadSection = ({
   title,
   description,
@@ -163,31 +163,38 @@ export const ToolPayloadSection = ({
 }: ToolPayloadSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
 
+  const header = (
+    <>
+      <InstrumentLabel className="text-body">{title}</InstrumentLabel>
+      {description && <p className="text-instrument text-meta">{description}</p>}
+    </>
+  );
+
   if (!collapsible) {
     return (
-      <section className="space-y-2 rounded-2xl border border-hairline bg-surface p-4">
-        <header>
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted">{title}</p>
-          {description && <p className="text-xs text-muted">{description}</p>}
-        </header>
+      <section className="space-y-2 border-t border-hairline pt-3 first:border-t-0 first:pt-0">
+        <header>{header}</header>
         {children}
       </section>
     );
   }
 
   return (
-    <section className="space-y-2 rounded-2xl border border-hairline bg-surface p-4">
+    <section className="space-y-2 border-t border-hairline pt-3 first:border-t-0 first:pt-0">
       <button
         type="button"
-        className="flex w-full items-center justify-between text-left"
+        className="flex w-full items-start justify-between gap-2 rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
       >
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted">{title}</p>
-          {description && <p className="text-xs text-muted">{description}</p>}
-        </div>
-        <ChevronDown className={cn("h-4 w-4 text-body transition", open ? "rotate-180" : "")} />
+        <span className="min-w-0">{header}</span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-140 ease-standard",
+            open && "rotate-180",
+          )}
+        />
       </button>
       {open && <div>{children}</div>}
     </section>
@@ -199,6 +206,7 @@ interface ToolChunkListProps {
   onSelectChunk?: (chunkId: string) => void;
 }
 
+/** The chunks a retrieval tool returned, each with the record it came from. */
 export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => {
   const normalized = chunks
     .map((chunk) =>
@@ -207,11 +215,11 @@ export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => 
     .filter(Boolean) as Record<string, unknown>[];
 
   if (normalized.length === 0) {
-    return <p className="text-xs text-muted">No chunk data returned.</p>;
+    return <p className="text-ui text-muted">No chunk data returned.</p>;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="divide-y divide-hairline">
       {normalized.map((chunk, index) => {
         const chunkId = (chunk.chunk_id as string) || (chunk.id as string) || `chunk-${index + 1}`;
         const documentId = (chunk.document_id as string) ?? chunk.documentId;
@@ -229,57 +237,39 @@ export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => 
             : null;
 
         return (
-          <article
-            key={`${chunkId}-${index}`}
-            className="rounded-2xl border border-hairline bg-surface p-4"
-          >
-            <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.3em] text-muted">
-              <span>Chunk {index + 1}</span>
+          <article key={`${chunkId}-${index}`} className="space-y-2 py-2 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Readout label="Chunk">{index + 1}</Readout>
               {Number.isFinite(score) && (
-                <span className="font-mono text-accent-cyan">Score {Number(score).toFixed(3)}</span>
+                <Readout label="Score">{Number(score).toFixed(3)}</Readout>
+              )}
+              {onSelectChunk && chunkId && (
+                <button
+                  type="button"
+                  onClick={() => onSelectChunk(chunkId)}
+                  className="ml-auto rounded-control px-1.5 py-0.5 text-instrument font-medium text-accent-cyan transition-colors duration-80 ease-standard hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                >
+                  Trace chunk
+                </button>
               )}
             </div>
-            {onSelectChunk && chunkId && (
-              <button
-                type="button"
-                onClick={() => onSelectChunk(chunkId)}
-                className="mt-2 rounded-full border border-accent-cyan/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.3em] text-accent-cyan hover:border-accent-cyan/80"
-              >
-                Trace chunk
-              </button>
+            {textValue && (
+              <p className="max-w-[66ch] text-ui leading-relaxed text-body">
+                {truncateText(textValue)}
+              </p>
             )}
-            {textValue && <p className="mt-2 text-sm text-body">{truncateText(textValue)}</p>}
-            <dl className="mt-3 grid gap-3 text-xs text-body sm:grid-cols-2">
-              {documentId && (
-                <div>
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">
-                    Document
-                  </dt>
-                  <dd className="font-mono text-body">{documentId}</dd>
-                </div>
-              )}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {documentId && <Readout label="Document">{documentId}</Readout>}
               {chunkId && (
-                <div>
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">
-                    Chunk ID
-                  </dt>
-                  <dd className="font-mono text-body break-all">{chunkId}</dd>
-                </div>
+                <Readout label="Chunk id" className="min-w-0">
+                  {chunkId}
+                </Readout>
               )}
-              {Number.isFinite(order) && (
-                <div>
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">
-                    Order
-                  </dt>
-                  <dd className="font-mono text-body">{order}</dd>
-                </div>
-              )}
-            </dl>
+              {Number.isFinite(order) && <Readout label="Order">{order}</Readout>}
+            </div>
             {metadata && Object.keys(metadata).length > 0 && (
-              <div className="mt-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-meta">
-                  Metadata
-                </p>
+              <div>
+                <InstrumentLabel>Metadata</InstrumentLabel>
                 <JsonBlock data={metadata} maxHeight={180} className="mt-1" />
               </div>
             )}

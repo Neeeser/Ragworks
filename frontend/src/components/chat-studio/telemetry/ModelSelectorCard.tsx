@@ -66,7 +66,7 @@ export const ModelSelectorCard = ({
         currentModelInfo ? `${currentModelInfo.connection_label} · ${currentModelInfo.id}` : null
       }
       headerAccessory={
-        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
+        <span className="font-mono text-instrument tabular-nums text-meta">
           {toolReadyModels.length} ready
         </span>
       }
@@ -104,10 +104,12 @@ export const ModelSelectorCard = ({
             selected={selectedModelKey === modelKey}
             onSelect={onSelectModel}
           >
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
-              {contextLabel ? <ModelMetaBadge label="ctx" value={contextLabel} /> : null}
-              {promptLabel ? <ModelMetaBadge label="in" value={promptLabel} /> : null}
-              {completionLabel ? <ModelMetaBadge label="out" value={completionLabel} /> : null}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              {contextLabel ? <ModelMetaBadge label="Context" value={contextLabel} /> : null}
+              {promptLabel ? <ModelMetaBadge label="Prompt" value={promptLabel} /> : null}
+              {completionLabel ? (
+                <ModelMetaBadge label="Completion" value={completionLabel} />
+              ) : null}
             </div>
           </ModelOptionButton>
         );

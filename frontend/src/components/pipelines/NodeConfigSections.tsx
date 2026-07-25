@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { CustomSelect } from "@/components/ui/custom-select";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ParameterFieldCard } from "@/components/ui/parameter-controls";
 import { expressionSource } from "@/lib/expressions";
 import { useAppConfig } from "@/providers/config-provider";
@@ -195,7 +196,7 @@ export function NodeConfigSections({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <NodeModelSelectors
         nodeType={nodeType}
         config={config}
@@ -233,9 +234,7 @@ export function NodeConfigSections({
       ) : null}
       {isVectorNode && backendSelectable ? (
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted">
-            Vector store
-          </p>
+          <InstrumentLabel>Vector store</InstrumentLabel>
           <div
             className="mt-2 grid grid-cols-2 gap-2"
             role="radiogroup"
@@ -251,16 +250,18 @@ export function NodeConfigSections({
                   aria-checked={active}
                   disabled={isPreview}
                   onClick={() => handleBackendChange(option.value)}
-                  className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs transition focus-visible:ring-2 focus-visible:ring-accent-violet ${
+                  className={`flex items-center gap-2 rounded-control border px-2 py-2 text-left transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet ${
                     active
                       ? "border-accent-violet/70 bg-accent-violet/10 text-primary"
                       : "border-hairline bg-surface text-body hover:border-strong"
                   }`}
                 >
                   <IndexBackendIcon backend={option.value} />
-                  <span>
-                    <span className="block font-semibold">{option.label}</span>
-                    <span className="block text-[10px] text-meta">{option.hint}</span>
+                  <span className="min-w-0">
+                    {/* The backend name is a literal (`pgvector`), so it stays
+                        verbatim; the hint beside it is a label. */}
+                    <span className="block truncate font-mono text-ui">{option.label}</span>
+                    <span className="block truncate text-instrument text-meta">{option.hint}</span>
                   </span>
                 </button>
               );
@@ -349,12 +350,15 @@ export function NodeConfigSections({
           ))}
         </div>
       ) : !isEmbedder && !isReranker && !isVectorNode && !isRetrievalInput && !isRetrievalOutput ? (
-        <p className="rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body">
+        <p className="p-8 text-center text-ui text-muted">
           This node has no configurable settings.
         </p>
       ) : null}
       {validationErrors.length > 0 ? (
-        <div className="rounded-2xl border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-xs text-data-neg">
+        <div
+          role="alert"
+          className="space-y-1 rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
+        >
           {validationErrors.map((error) => (
             <p key={error}>{error}</p>
           ))}

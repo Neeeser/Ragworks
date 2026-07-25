@@ -26,7 +26,7 @@ export function buildCollectionStatItems(
       value: stats?.chunk_count?.toLocaleString() ?? "0",
     },
     {
-      label: "Avg latency",
+      label: "Avg query latency",
       value: formatLatency(stats?.average_latency_ms),
     },
     {
@@ -34,8 +34,9 @@ export function buildCollectionStatItems(
       value: timeAgo(collection.updated_at),
     },
     {
-      label: "Last used",
-      value: stats?.last_used_at ? timeAgo(stats.last_used_at) : "n/a",
+      // max(QueryEvent.created_at) — the last time the collection was queried.
+      label: "Last queried",
+      value: stats?.last_used_at ? timeAgo(stats.last_used_at) : "—",
     },
   ];
 }

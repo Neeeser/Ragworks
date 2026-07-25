@@ -4,6 +4,8 @@ import { Handle, Position } from "@xyflow/react";
 import { Database } from "lucide-react";
 
 import { getPortTypeClasses } from "@/components/pipelines/lib/pipeline-theme";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { Node, NodeProps } from "@xyflow/react";
@@ -43,16 +45,15 @@ export function IndexStoreNode({ data }: NodeProps<Node<IndexStoreNodeData>>) {
         className={cn("!h-3 !w-3 !rounded-full !border-2 !border-canvas", portClasses.handle)}
       />
       <div className="flex items-center gap-2 text-stage-index">
-        <Database className="h-4 w-4" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-stage-index">
-          Shared index
-        </span>
+        <Database className="h-4 w-4" aria-hidden />
+        <InstrumentLabel className="text-stage-index">Shared index</InstrumentLabel>
       </div>
-      <p className="mt-1 truncate text-sm font-semibold text-primary" title={data.indexName}>
-        {data.indexName}
-      </p>
+      {/* The index name is an identifier — verbatim mono, never a label voice. */}
+      <Tooltip content={data.indexName} triggerClassName="mt-1 w-full min-w-0">
+        <span className="w-full truncate font-mono text-ui text-primary">{data.indexName}</span>
+      </Tooltip>
       {data.backend ? (
-        <p className="text-[10px] text-muted">{BACKEND_LABELS[data.backend] ?? data.backend}</p>
+        <p className="text-instrument text-muted">{BACKEND_LABELS[data.backend] ?? data.backend}</p>
       ) : null}
       <Handle
         type="source"

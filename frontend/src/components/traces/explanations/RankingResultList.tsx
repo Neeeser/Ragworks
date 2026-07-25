@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatTracePreview } from "@/components/traces/explanations/summary-data";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
 import type { RankingEvidence, RankingSourceEvidence, TraceFocusedItem } from "@/lib/types";
@@ -57,18 +60,19 @@ function ContributionRow({
 }: ContributionRowProps) {
   const negative = (source.contribution ?? 0) < 0;
   const barWidth = signed ? share / 2 : share;
-  const barTone = index % 2 === 0 ? "bg-accent-cyan" : "bg-accent-violet";
+  // Contribution bars are chart marks, so they read chart series tokens.
+  const barTone = index % 2 === 0 ? "bg-series-1" : "bg-series-2";
   return (
     <div className="grid gap-2 sm:grid-cols-[minmax(8rem,0.7fr)_minmax(10rem,1fr)] sm:items-center">
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="truncate text-xs font-medium text-primary">{label}</span>
+          <span className="truncate text-ui font-medium text-primary">{label}</span>
           {source.rank !== null && source.rank !== undefined ? (
-            <span className="font-mono text-[10px] text-meta">#{source.rank}</span>
+            <span className="font-mono text-instrument tabular-nums text-meta">#{source.rank}</span>
           ) : null}
         </div>
         {source.score !== null && source.score !== undefined ? (
-          <p className="mt-0.5 font-mono text-[10px] text-muted">
+          <p className="mt-0.5 font-mono text-instrument tabular-nums text-muted">
             {source.score_label ?? scoreLabel} · {scoreText(source.score)}
             {source.weight !== null && source.weight !== undefined
               ? ` · weight ${scoreText(source.weight)}`
@@ -102,13 +106,13 @@ function ContributionRow({
               }
             />
           </div>
-          <p className="mt-1 text-right font-mono text-[10px] text-meta">
+          <p className="mt-1 text-right font-mono text-instrument tabular-nums text-meta">
             {source.contribution > 0 ? "+" : ""}
             {scoreText(source.contribution)}
           </p>
         </div>
       ) : (
-        <p className="font-mono text-[10px] text-meta">Contribution not recorded</p>
+        <p className="text-instrument text-meta">Contribution not recorded</p>
       )}
     </div>
   );
@@ -142,15 +146,17 @@ export function RankingResultList({
   }, [focusedItemId]);
 
   return (
-    <section className="min-w-0 rounded-xl border border-hairline bg-surface p-3">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-primary">{title}</h3>
-        <span className="font-mono text-[10px] text-meta">{evidence.results.length} results</span>
+    <section className="min-w-0 rounded-panel border border-hairline bg-surface p-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-ui font-medium text-primary">{title}</h3>
+        <Readout label="Results">{evidence.results.length}</Readout>
         {evidence.formula ? (
-          <span className="ml-auto font-mono text-[10px] text-meta">{evidence.formula}</span>
+          <span className="ml-auto font-mono text-instrument tabular-nums text-meta">
+            {evidence.formula}
+          </span>
         ) : null}
       </div>
-      <ol aria-label={title} className="mt-3 space-y-2">
+      <ol aria-label={title} className="mt-2 space-y-2">
         {evidence.results.map((result) => {
           const context = contextById.get(result.id);
           const preview = context?.text ?? previews.get(result.id);
@@ -164,7 +170,7 @@ export function RankingResultList({
               ref={result.id === focusedItemId ? focusedRef : undefined}
               aria-current={result.id === focusedItemId ? "true" : undefined}
               className={cn(
-                "relative overflow-hidden rounded-xl border bg-canvas",
+                "relative overflow-hidden rounded-panel border bg-canvas",
                 result.id === focusedItemId
                   ? "border-accent-cyan/60"
                   : selected
@@ -180,23 +186,23 @@ export function RankingResultList({
                 className="grid w-full grid-cols-[3.25rem_1fr] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
               >
                 <span className="flex flex-col items-center justify-center border-r border-hairline bg-surface px-2 py-3">
-                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-meta">
-                    Rank
+                  <InstrumentLabel className="text-meta">Rank</InstrumentLabel>
+                  <span className="mt-1 font-mono text-[20px] tabular-nums text-primary">
+                    {result.rank}
                   </span>
-                  <span className="mt-1 text-xl font-semibold text-primary">{result.rank}</span>
                 </span>
-                <span className="min-w-0 px-3 py-3">
+                <span className="min-w-0 px-3 py-2">
                   <span className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate pr-16 text-xs font-medium text-primary">
+                    <span className="min-w-0 flex-1 truncate pr-24 text-ui font-medium text-primary">
                       {title}
                     </span>
                     {result.score !== null && result.score !== undefined ? (
-                      <span className="font-mono text-[10px] text-accent-cyan">
+                      <span className="font-mono text-instrument tabular-nums text-accent-cyan">
                         {scoreText(result.score)}
                       </span>
                     ) : null}
                   </span>
-                  <span className="mt-1.5 block line-clamp-2 text-xs leading-relaxed text-body">
+                  <span className="mt-1 block line-clamp-2 text-ui leading-relaxed text-body">
                     {preview
                       ? formatTracePreview(preview)
                       : "Text preview was not recorded for this result."}
@@ -204,18 +210,13 @@ export function RankingResultList({
                   {result.sources.length ? (
                     <span className="mt-2 flex flex-wrap items-center gap-1.5">
                       {result.sources.map((source) => (
-                        <span
-                          key={source.source_index}
-                          className="rounded-full border border-hairline px-2 py-0.5 font-mono text-[9px] text-muted"
-                        >
+                        <Chip key={source.source_index} tone="retrieve" dot={false}>
                           {sourceLabels[source.source_index] ?? `Source ${source.source_index + 1}`}
                           {source.rank ? ` #${source.rank}` : ""}
-                        </span>
+                        </Chip>
                       ))}
                       <ArrowRight className="h-3 w-3 text-meta" aria-hidden />
-                      <span className="font-mono text-[9px] text-accent-violet">
-                        fused #{result.rank}
-                      </span>
+                      <Chip tone="accent" dot={false}>{`Fused #${result.rank}`}</Chip>
                     </span>
                   ) : null}
                 </span>
@@ -229,14 +230,14 @@ export function RankingResultList({
                     setInspectedId(result.id);
                     onFocusItem(result.id);
                   }}
-                  className="absolute right-2 top-2 h-7 gap-1 px-2 text-[10px]"
+                  className="absolute right-1 top-1 text-instrument"
                 >
                   <LocateFixed className="h-3 w-3" aria-hidden />
                   Trace result
                 </Button>
               ) : null}
               {selected ? (
-                <div className="border-t border-hairline bg-surface/50 px-3 py-3 sm:pl-[4.25rem]">
+                <div className="border-t border-hairline bg-surface px-3 py-3 sm:pl-[4.25rem]">
                   <div className="space-y-3">
                     {result.sources.map((source, index) => (
                       <ContributionRow
@@ -252,14 +253,9 @@ export function RankingResultList({
                       />
                     ))}
                   </div>
-                  <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-hairline pt-3">
+                  <div className="mt-3 flex flex-wrap justify-end gap-1 border-t border-hairline pt-3">
                     {context && onOpenArtifact ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => onOpenArtifact(context)}
-                        className="gap-1.5"
-                      >
+                      <Button variant="secondary" size="sm" onClick={() => onOpenArtifact(context)}>
                         <FileText className="h-3.5 w-3.5" aria-hidden />
                         Open chunk
                       </Button>

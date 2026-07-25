@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React, { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -300,10 +301,6 @@ describe("ProviderRoutingCard", () => {
     expect(screen.getAllByText("Unknown provider").length).toBeGreaterThan(0);
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByRole("combobox", { name: /Sort providers/ }), {
-      target: { value: "price" },
-    });
-
     fireEvent.click(screen.getByLabelText("Allow fallbacks"));
 
     const orderButtons = screen.getAllByRole("button", { name: /Add to order/ });
@@ -332,12 +329,6 @@ describe("ProviderRoutingCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "INT4" }));
 
     fireEvent.click(screen.getByLabelText("Require parameters"));
-    fireEvent.change(screen.getByRole("combobox", { name: /Data collection/ }), {
-      target: { value: "deny" },
-    });
-    fireEvent.change(screen.getByRole("combobox", { name: /Data collection/ }), {
-      target: { value: "allow" },
-    });
     fireEvent.click(screen.getByLabelText("Zero data retention"));
     fireEvent.click(screen.getByLabelText("Distillable text only"));
 
@@ -352,6 +343,31 @@ describe("ProviderRoutingCard", () => {
 
     expect(screen.getByText(/provider routing guide/)).toBeInTheDocument();
   }, 10000);
+
+  it("routes the sort strategy and data-collection policy through their pickers", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        providerDirectory={directory}
+        providerDirectoryLoading={false}
+        providerDirectoryError={null}
+        providerModelSlug={OPENAI_GPT4}
+        providerRuleCount={0}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Sort providers" }));
+    await user.click(screen.getByRole("option", { name: "Price (Floor)" }));
+    expect(screen.getByRole("combobox", { name: "Sort providers" })).toHaveTextContent(
+      "Price (Floor)",
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Data collection" }));
+    await user.click(screen.getByRole("option", { name: "Deny (no collection)" }));
+    expect(screen.getByRole("combobox", { name: "Data collection" })).toHaveTextContent(
+      "Deny (no collection)",
+    );
+  }, 15000);
 
   it("renders provider pricing fallbacks", () => {
     render(

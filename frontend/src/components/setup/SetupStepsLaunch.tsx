@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { effectiveInputLimit } from "@/lib/chunk-defaults";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
           </Button>
           <Button
             size="lg"
+            glow
             loading={wizard.busy}
             disabled={!indexName.trim() || overCap || needsPineconeConnection}
             onClick={() => void wizard.ensureIndex()}
@@ -51,12 +53,14 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
         </>
       }
     >
-      <p className="text-body leading-relaxed">
-        Embeddings from <span className="text-primary">{embeddingModel}</span> are stored here
+      <p className="max-w-[66ch] text-ui text-body">
+        Embeddings from <span className="font-mono text-primary">{embeddingModel}</span> are stored
+        here
         {embeddingDimension != null ? (
           <>
             {" "}
-            at <span className="font-mono text-primary">
+            at{" "}
+            <span className="font-mono tabular-nums text-primary">
               {embeddingDimension.toLocaleString()}
             </span>{" "}
             dimensions
@@ -83,23 +87,27 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
               disabled={disabled}
               onClick={() => wizard.setChoices({ backend: info.backend as IndexBackend })}
               className={cn(
-                "rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
+                "rounded-control border px-3 py-2 text-left transition-colors duration-80 ease-standard",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
                 selected
-                  ? "border-accent-violet bg-accent-violet/10"
-                  : "border-hairline bg-surface hover:border-strong",
-                disabled && "cursor-not-allowed opacity-50",
+                  ? "border-accent-violet/40 bg-accent-violet/12 ring-1 ring-inset ring-accent-violet/30"
+                  : "border-hairline bg-surface hover:border-strong hover:bg-surface-strong",
+                disabled && "cursor-not-allowed opacity-60",
               )}
             >
-              <span className="text-sm font-medium text-primary">{info.label}</span>
-              <span className="mt-1 block text-xs text-meta">
+              <span className="text-ui font-medium text-primary">{info.label}</span>
+              <span className="mt-1 block text-instrument text-meta">
                 {info.backend === "pgvector"
                   ? "Built into the shipped Postgres — no account needed."
                   : "Managed vector database — needs a Pinecone connection."}
               </span>
               {tooBig ? (
-                <span className="mt-1 block text-xs text-data-neg">
-                  Max {info.capabilities.max_dimension.toLocaleString()} indexed dimensions — too
-                  small for this model.
+                <span className="mt-1 block text-instrument text-data-neg">
+                  Max{" "}
+                  <span className="font-mono tabular-nums">
+                    {info.capabilities.max_dimension.toLocaleString()}
+                  </span>{" "}
+                  indexed dimensions — too small for this model.
                 </span>
               ) : null}
             </button>
@@ -170,6 +178,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           </Button>
           <Button
             size="lg"
+            glow
             loading={wizard.busy}
             disabled={!collectionName.trim() || (addReranker && !rerankerModel)}
             onClick={() => void wizard.finish()}
@@ -179,9 +188,9 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
         </>
       }
     >
-      <p className="text-body leading-relaxed">
+      <p className="max-w-[66ch] text-ui text-body">
         This installs default ingestion and retrieval pipelines around{" "}
-        <span className="text-primary">{embeddingModel}</span> and{" "}
+        <span className="font-mono text-primary">{embeddingModel}</span> and{" "}
         <span className="font-mono text-primary">{indexName}</span> ({backend}), then drops you on
         the collection ready to upload.
       </p>
@@ -191,7 +200,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           onChange={(event) => wizard.setChoices({ collectionName: event.target.value })}
         />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Chunk size (tokens)">
           <TextInput
             type="number"
@@ -212,9 +221,9 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
       <SetupNotice message={chunkSizeWarning} tone="warning" />
 
       {showAggregateTools ? (
-        <fieldset className="space-y-3">
-          <legend className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-            Extra tools
+        <fieldset className="space-y-2">
+          <legend>
+            <InstrumentLabel>Extra tools</InstrumentLabel>
           </legend>
           {supportsCount ? (
             <Checkbox
@@ -236,7 +245,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
       ) : null}
 
       {wizard.hasRerankingProvider ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <Checkbox
             checked={addReranker}
             onChange={(checked) => wizard.setChoices({ addReranker: checked })}

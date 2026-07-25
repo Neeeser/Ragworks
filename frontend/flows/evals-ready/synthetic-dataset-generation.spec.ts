@@ -36,10 +36,12 @@ test("generating a synthetic dataset from the seeded collection", async ({ page 
   await page.getByRole("textbox", { name: "Questions", exact: true }).fill("4");
   await page.getByRole("button", { name: "Generate 4 questions" }).click();
 
-  // The row appears immediately in its "generating" state; ready is signaled
-  // by the meta line. The accepted-question count is model-dependent (the
-  // grader can reject candidates), so assert shape, not the exact number.
-  await expect(page.getByText(/\d+ queries · 3 docs · synthetic/)).toBeVisible({
-    timeout: 240_000,
-  });
+  // The row appears immediately in its "Generating" state and settles to
+  // "Ready" when the grader finishes. The accepted-question count is
+  // model-dependent (candidates get rejected), so assert the row's settled
+  // status rather than an exact number.
+  const datasets = page.getByRole("region", { name: "Datasets" });
+  const row = datasets.getByRole("link", { name: /eval set/ });
+  await expect(row).toContainText("Ready", { timeout: 240_000 });
+  await expect(row).toContainText("Synthetic");
 });

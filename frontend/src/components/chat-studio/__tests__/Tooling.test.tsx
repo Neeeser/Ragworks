@@ -116,8 +116,8 @@ describe("Tooling", () => {
       />,
     );
 
-    expect(screen.getByText(/Chunk 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Score 0.500/)).toBeInTheDocument();
+    expect(screen.getAllByText("Chunk").length).toBeGreaterThan(0);
+    expect(screen.getByText("0.500")).toBeInTheDocument();
     expect(screen.getByText("doc-1")).toBeInTheDocument();
     expect(screen.getByText(/…$/)).toBeInTheDocument();
     expect(screen.queryByText("123")).not.toBeInTheDocument();
@@ -137,7 +137,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="vector_search"
-        variantClass=""
         args={{ query: "hello" }}
         response={{
           query_event_id: "q1",
@@ -160,7 +159,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="Search My first collection"
-        variantClass=""
         args={{ query: "evaluation results" }}
         response={{ chunks: [] }}
         rawPayload={{
@@ -186,7 +184,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="vector_search"
-        variantClass=""
         args={{ query: "hello" }}
         response={{
           query_event_id: "q1",
@@ -207,7 +204,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="meta"
-        variantClass=""
         args={{ query: " " }}
         response={{ query: "From response" }}
         rawPayload={{}}
@@ -221,7 +217,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="chunk"
-        variantClass=""
         args={{}}
         response={{ chunks: [{ text: "Chunk preview text" }] }}
         rawPayload={{}}
@@ -232,9 +227,7 @@ describe("Tooling", () => {
   });
 
   it("falls back to default tool summaries", () => {
-    render(
-      <ToolCallBubble label="fallback" variantClass="" args={{}} response={{}} rawPayload={{}} />,
-    );
+    render(<ToolCallBubble label="fallback" args={{}} response={{}} rawPayload={{}} />);
 
     expect(screen.getByText("View tool output")).toBeInTheDocument();
   });
@@ -243,7 +236,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="pipeline"
-        variantClass=""
         args={{}}
         response={{ pipeline_run_id: "run-1", chunks: [{ id: "c1", text: "chunk" }] }}
         rawPayload={{}}
@@ -263,7 +255,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="simple"
-        variantClass=""
         args={{}}
         response={{ foo: "bar" }}
         rawPayload={{}}
@@ -281,7 +272,6 @@ describe("Tooling", () => {
     render(
       <ToolCallBubble
         label="trace"
-        variantClass=""
         args={{}}
         response={{ chunks: [{ id: "c1", text: "chunk" }] }}
         rawPayload={{}}

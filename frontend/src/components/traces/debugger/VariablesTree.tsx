@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { containsChunkId } from "@/components/traces/trace-payload-utils";
 import { TraceValueView } from "@/components/traces/values/TraceValueView";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 
 import type { PipelineNodeIOTrace, PipelineNodeSummaryValue } from "@/lib/types";
@@ -39,7 +40,7 @@ function VariableRow({
       data-testid={`variable-row-${label}`}
       data-highlighted={highlighted || undefined}
       className={cn(
-        "rounded-xl border border-hairline bg-surface",
+        "rounded-panel border border-hairline bg-surface",
         highlighted && "border-accent-cyan/70 bg-accent-cyan/10",
       )}
     >
@@ -47,22 +48,19 @@ function VariableRow({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+        className="flex w-full items-center gap-2 rounded-panel px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
       >
         <ChevronRight
           aria-hidden
-          className={cn("h-3.5 w-3.5 shrink-0 text-meta transition", open && "rotate-90")}
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-meta transition-transform duration-140 ease-standard",
+            open && "rotate-90",
+          )}
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          {label}
-        </span>
-        {meta && (
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-            {meta}
-          </span>
-        )}
+        <InstrumentLabel className="min-w-0 flex-1 truncate">{label}</InstrumentLabel>
+        {meta && <span className="shrink-0 font-mono text-instrument text-meta">{meta}</span>}
       </button>
-      {open && <div className="border-t border-hairline px-3 py-3">{children}</div>}
+      {open && <div className="border-t border-hairline px-3 py-2">{children}</div>}
     </div>
   );
 }
@@ -99,11 +97,11 @@ export function VariablesTree({
 
   return (
     <div className="min-w-0 space-y-2">
-      <p className={cn("font-mono text-[11px] uppercase tracking-[0.28em]", TONE_TITLE[tone])}>
-        {title}
+      <p>
+        <InstrumentLabel className={TONE_TITLE[tone]}>{title}</InstrumentLabel>
       </p>
       {visibleSummaryItems.length === 0 && ioRecords.length === 0 ? (
-        <p className="text-xs text-muted">{emptySummaryLabel}</p>
+        <p className="text-ui text-muted">{emptySummaryLabel}</p>
       ) : (
         <>
           {visibleSummaryItems.map(({ item, index }) => (

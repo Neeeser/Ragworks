@@ -1,10 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import React from "react";
 import { describe, expect, it } from "vitest";
 
 import {
   coerceRecord,
-  markdownComponents,
   normalizeReasoningSegments,
   parsePriceInput,
   safeParseJSON,
@@ -170,53 +167,5 @@ describe("chat-utils", () => {
     ]);
     expect(mergesWithNonStringPrevInContext).toHaveLength(1);
     expect(mergesWithNonStringPrevInContext[0].text).toBe("Next");
-  });
-
-  it("renders markdown components", () => {
-    const InlineCode = markdownComponents.code as React.FC<{
-      inline?: boolean;
-      className?: string;
-      children: React.ReactNode;
-    }>;
-    const Link = markdownComponents.a as React.FC<{ href?: string; children: React.ReactNode }>;
-    const Pre = markdownComponents.pre as React.FC<{ children: React.ReactNode }>;
-    const Blockquote = markdownComponents.blockquote as React.FC<{ children: React.ReactNode }>;
-    const Strong = markdownComponents.strong as React.FC<{ children: React.ReactNode }>;
-    const Paragraph = markdownComponents.p as React.FC<{ children: React.ReactNode }>;
-    const ListItem = markdownComponents.li as React.FC<{ children: React.ReactNode }>;
-    const UnorderedList = markdownComponents.ul as React.FC<{ children: React.ReactNode }>;
-    const OrderedList = markdownComponents.ol as React.FC<{ children: React.ReactNode }>;
-
-    render(
-      <div>
-        <InlineCode inline className="inline-code">
-          inline
-        </InlineCode>
-        <InlineCode inline={false} className="block-code">
-          block
-        </InlineCode>
-        <Link href="https://example.com">Link</Link>
-        <Pre>preformatted</Pre>
-        <Blockquote>Quote</Blockquote>
-        <Strong>Strong</Strong>
-        <Paragraph>Paragraph</Paragraph>
-        <UnorderedList>
-          <ListItem>Item</ListItem>
-        </UnorderedList>
-        <OrderedList>
-          <ListItem>Item 2</ListItem>
-        </OrderedList>
-      </div>,
-    );
-
-    expect(screen.getByText("inline")).toHaveClass("inline-code");
-    expect(screen.getByText("block")).toHaveClass("block-code");
-    expect(screen.getByText("Link")).toHaveAttribute("href", "https://example.com");
-    expect(screen.getByText("preformatted")).toBeInTheDocument();
-    expect(screen.getByText("Quote")).toBeInTheDocument();
-    expect(screen.getByText("Strong")).toBeInTheDocument();
-    expect(screen.getByText("Paragraph")).toBeInTheDocument();
-    expect(screen.getByText("Item")).toBeInTheDocument();
-    expect(screen.getByText("Item 2")).toBeInTheDocument();
   });
 });

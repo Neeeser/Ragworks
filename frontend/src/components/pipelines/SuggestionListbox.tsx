@@ -67,7 +67,7 @@ export function SuggestionListbox({
       role="listbox"
       aria-label="Expression suggestions"
       style={{ top: rect.top, left: rect.left, minWidth: rect.width }}
-      className="fixed z-[70] max-h-64 overflow-y-auto rounded-2xl border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
+      className="fixed z-[70] max-h-64 overflow-y-auto rounded-panel border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
     >
       {suggestions.map((suggestion, index) => (
         <li
@@ -82,17 +82,17 @@ export function SuggestionListbox({
           }}
           onMouseEnter={() => onActiveIndexChange(index)}
           className={cn(
-            "flex cursor-pointer items-baseline justify-between gap-4 rounded-xl px-3 py-1.5",
+            "flex cursor-pointer items-baseline justify-between gap-4 rounded-control px-2 py-1.5",
             index === activeIndex ? "bg-surface-strong" : undefined,
           )}
         >
           <span className="flex items-baseline gap-2">
-            <span className="font-mono text-[13px] text-body">
+            <span className="font-mono text-ui text-body">
               {suggestion.kind === "function" ? suggestion.detail : suggestion.name}
             </span>
             <span
               className={cn(
-                "font-mono text-[10px] uppercase tracking-[0.2em]",
+                "text-instrument font-medium",
                 suggestion.badge === "input" ? "text-accent-cyan" : "text-meta",
               )}
             >
@@ -100,7 +100,7 @@ export function SuggestionListbox({
             </span>
           </span>
           {suggestion.kind === "function" ? null : (
-            <span className="font-mono text-[11px] text-meta">
+            <span className="font-mono text-instrument tabular-nums text-meta">
               {suggestion.preview != null
                 ? `${suggestion.detail} = ${suggestion.preview}`
                 : suggestion.detail}

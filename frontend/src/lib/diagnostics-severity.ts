@@ -47,6 +47,11 @@ export function severityStyle(severity: DiagnosticSeverity): SeverityStyle {
   return STYLES[severity];
 }
 
+/** The console pill tone for a severity — shared so every surface agrees. */
+export function severityTone(severity: DiagnosticSeverity): "neg" | "warn" | "neutral" {
+  return severity === "error" ? "neg" : severity === "warning" ? "warn" : "neutral";
+}
+
 /** The clean/consistent state reuses the positive (green) token. */
 export const CONSISTENT_STYLE: SeverityStyle = {
   icon: Check,

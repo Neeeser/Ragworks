@@ -16,12 +16,12 @@ const BACKEND_PRESENTATION: Record<
   pgvector: {
     title: "pgvector",
     tagline: "Built-in · PostgreSQL",
-    icon: <PostgresIcon className="h-9 w-9" />,
+    icon: <PostgresIcon className="h-7 w-7" />,
   },
   pinecone: {
     title: "Pinecone",
     tagline: "Managed cloud service",
-    icon: <PineconeIcon className="h-9 w-9 text-primary" />,
+    icon: <PineconeIcon className="h-7 w-7 text-primary" />,
   },
 };
 
@@ -50,23 +50,30 @@ export function BackendCard({ info, selected, onSelect }: BackendCardProps) {
       disabled={disabled}
       onClick={() => onSelect(info.backend)}
       className={cn(
-        "relative flex w-full items-center gap-4 rounded-3xl border p-4 text-left transition",
+        "relative flex w-full items-center gap-3 rounded-control border p-3 text-left transition-colors duration-80 ease-standard",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
         selected
           ? "border-accent-violet bg-accent-violet/10 text-primary"
           : "border-hairline bg-surface text-body hover:border-strong",
         disabled && "cursor-not-allowed opacity-50 hover:border-hairline",
       )}
     >
-      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-hairline bg-surface">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control border border-hairline bg-surface">
         {presentation.icon}
       </span>
       <span className="min-w-0">
-        <span className="flex items-center gap-2 text-base font-semibold">
+        {/* A backend name is a literal the API accepts verbatim. */}
+        <span className="flex items-center gap-2 font-mono text-ui text-primary">
           {presentation.title}
-          {selected ? <Check aria-hidden className="h-4 w-4 text-accent-violet" /> : null}
+          {selected ? <Check aria-hidden className="h-3.5 w-3.5 text-accent-violet" /> : null}
         </span>
-        <span className="mt-0.5 block text-xs text-muted">{presentation.tagline}</span>
-        <span className="mt-1 block text-xs text-muted">
+        <span className="mt-0.5 block text-instrument text-muted">{presentation.tagline}</span>
+        <span
+          className={cn(
+            "mt-0.5 block text-instrument",
+            disabledReason ? "text-data-warn" : "text-meta",
+          )}
+        >
           {disabledReason ??
             (info.capabilities.requires_api_key ? "Uses your API key" : "No account needed")}
         </span>

@@ -35,7 +35,8 @@ describe("RerankingModelSelectorCard", () => {
     );
 
     expect(screen.getByText("Production Cohere · Cohere")).toBeInTheDocument();
-    expect(screen.getByText("4,096 tokens")).toBeInTheDocument();
+    expect(screen.getByText("Max input")).toBeInTheDocument();
+    expect(screen.getByText("4,096")).toBeInTheDocument();
     expect(screen.getByText("Text")).toBeInTheDocument();
     expect(screen.getByText("Image")).toBeInTheDocument();
     expect(screen.queryByText("Rerank")).not.toBeInTheDocument();

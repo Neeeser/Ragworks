@@ -16,11 +16,36 @@ const NODE_TYPE = "node.type";
 const NODE_EMPTY_TYPE = "node.empty";
 
 describe("collections list and sidebar", () => {
-  it("shows empty list message", () => {
-    render(<CollectionsList collections={[]} statsById={{}} onDeleteRequest={() => {}} />);
-    expect(
-      screen.getByText("No collections yet. Create one to start indexing documents."),
-    ).toBeInTheDocument();
+  it("offers creation from the empty state", () => {
+    const onCreateRequest = vi.fn();
+    render(
+      <CollectionsList
+        collections={[]}
+        statsById={{}}
+        onDeleteRequest={() => {}}
+        onCreateRequest={onCreateRequest}
+      />,
+    );
+    expect(screen.getByText("No collections yet.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create collection" }));
+    expect(onCreateRequest).toHaveBeenCalled();
+  });
+
+  it("shows a skeleton at row geometry while loading", () => {
+    render(
+      <CollectionsList
+        collections={[]}
+        statsById={{}}
+        loading
+        onDeleteRequest={() => {}}
+        onCreateRequest={() => {}}
+      />,
+    );
+    // The loading state must not render the empty state — they mean different
+    // things, and showing "No collections yet." mid-load reads as data loss.
+    expect(screen.getByText("Loading collections")).toBeInTheDocument();
+    expect(screen.queryByText("No collections yet.")).not.toBeInTheDocument();
   });
 
   it("renders collections and handles navigation and delete", () => {
@@ -37,19 +62,22 @@ describe("collections list and sidebar", () => {
         collections={[collection]}
         statsById={{ [collection.id]: stats }}
         onDeleteRequest={onDeleteRequest}
+        onCreateRequest={() => {}}
       />,
     );
 
-    const card = screen.getAllByRole("button", { name: /Collection/ })[0];
-    fireEvent.click(card);
-    expect(getMockRouter().push).toHaveBeenCalledWith("/collections/col-1");
+    // The row navigates as a real link now, so it is keyboard-activatable and
+    // middle-clickable without a synthetic key handler.
+    expect(screen.getByRole("link", { name: /Collection/ })).toHaveAttribute(
+      "href",
+      "/collections/col-1",
+    );
 
-    fireEvent.keyDown(card, { key: "Enter" });
-    fireEvent.keyDown(card, { key: " " });
+    fireEvent.click(screen.getByLabelText("Browse files in Collection"));
+    expect(getMockRouter().push).toHaveBeenCalledWith("/collections/col-1/files");
 
     fireEvent.click(screen.getByLabelText("Delete Collection"));
     expect(onDeleteRequest).toHaveBeenCalledWith(collection);
-    expect(screen.getAllByText("n/a").length).toBeGreaterThan(0);
   });
 
   it("renders latency and default stats when missing", () => {
@@ -67,10 +95,17 @@ describe("collections list and sidebar", () => {
         collections={[collectionA, collectionB]}
         statsById={{ [collectionB.id]: stats }}
         onDeleteRequest={() => undefined}
+        onCreateRequest={() => {}}
       />,
     );
 
-    expect(screen.getByText("120 ms")).toBeInTheDocument();
+    // A collection with no stats row shows an em-dash, never a misleading 0.
+    const rows = screen.getAllByRole("link");
+    expect(rows[0]).toHaveTextContent("Alpha");
+    expect(rows[0]).toHaveTextContent("—");
+    expect(rows[1]).toHaveTextContent("Beta");
+    expect(rows[1]).toHaveTextContent("2");
+    expect(rows[1]).toHaveTextContent("4");
   });
 });
 

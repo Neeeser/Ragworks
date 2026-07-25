@@ -1,19 +1,35 @@
 "use client";
 
+import { ADMIN_CRUMB, AdminTabs } from "@/components/admin/AdminTabs";
 import { useAdminUsage, USAGE_WINDOWS } from "@/components/admin/hooks/use-admin-usage";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import { GlassCard } from "@/components/ui/panel";
-import { cn } from "@/lib/utils";
+import { PageBody } from "@/components/ui/app-shell";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
+import { Panel, PanelGrid } from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
+import { TrendChart } from "@/components/ui/trend-chart";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
 
-const tokenFormat = new Intl.NumberFormat("en-US");
+import type { UsageWindow } from "@/components/admin/hooks/use-admin-usage";
+import type { SegmentedOption } from "@/components/ui/segmented-control";
+import type { AdminUsagePoint, AdminUserUsage } from "@/lib/types";
 
+/** The window strip's ids are the day counts as strings — segment ids are text. */
+const WINDOW_OPTIONS: Array<SegmentedOption<`${UsageWindow}`>> = USAGE_WINDOWS.map((days) => ({
+  id: `${days}`,
+  label: `${days}d`,
+}));
+
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US");
+
+/** Cost carries more decimals under a dollar, where 2dp rounds to nothing. */
 function formatCost(cost: number): string {
   return `$${cost.toFixed(cost >= 1 ? 2 : 4)}`;
-}
-
-function formatDay(iso: string): string {
-  return iso.slice(0, 10);
 }
 
 /** "chat.turn_completed" -> "Chat · turn completed" — readable without a
@@ -25,139 +41,233 @@ function prettyEventType(eventType: string): string {
   return action ? `${domainLabel} · ${action}` : domainLabel;
 }
 
+/** Wide enough for a thousands-separated count. */
+const NUMERIC_COL = "w-20 text-right";
+
+const EVENT_COL = { count: NUMERIC_COL };
+const USER_COL = {
+  turns: NUMERIC_COL,
+  tokens: "w-24 text-right",
+  cost: NUMERIC_COL,
+  active: "w-16 text-right",
+};
+
+/**
+ * The window's two per-day measures. Tokens and turns are different scales, so
+ * they get a panel each — a shared axis would make their crossings meaningless.
+ */
+const CHARTS = [
+  {
+    label: "Tokens per day",
+    color: "series-1",
+    read: (point: AdminUsagePoint) => point.total_tokens,
+  },
+  { label: "Chat turns per day", color: "series-2", read: (point) => point.turns },
+] as const satisfies ReadonlyArray<{
+  label: string;
+  color: "series-1" | "series-2";
+  read: (point: AdminUsagePoint) => number;
+}>;
+
+/** The chart's plot area, at its final 104px height while the data loads. */
+const CHART_PLOT = "h-[104px] w-full";
+
+function UsageCharts({ points, loading }: { points: AdminUsagePoint[]; loading: boolean }) {
+  if (points.length === 0) {
+    return loading ? (
+      <PanelGrid columns={2}>
+        {CHARTS.map((chart) => (
+          <Panel key={chart.label} className="p-3">
+            <InstrumentLabel className="mb-2 block">{chart.label}</InstrumentLabel>
+            <Skeleton className={CHART_PLOT} />
+          </Panel>
+        ))}
+      </PanelGrid>
+    ) : (
+      <Panel className="p-8 text-center">
+        <p className="text-ui text-muted">No chat activity in this window yet.</p>
+      </Panel>
+    );
+  }
+
+  const buckets = points.map((point) => point.day);
+  return (
+    <PanelGrid columns={2}>
+      {CHARTS.map((chart) => (
+        <Panel key={chart.label} className="p-3">
+          <InstrumentLabel className="mb-2 block">{chart.label}</InstrumentLabel>
+          <TrendChart
+            buckets={buckets}
+            granularity="day"
+            height={104}
+            area
+            series={[
+              {
+                id: chart.label,
+                label: chart.label,
+                color: chart.color,
+                values: points.map(chart.read),
+              },
+            ]}
+            formatValue={(value) => NUMBER_FORMAT.format(value)}
+          />
+        </Panel>
+      ))}
+    </PanelGrid>
+  );
+}
+
+/** Every event type recorded in the window — generic, never a per-event registry. */
+function TelemetryEventsPanel({
+  eventCounts,
+  loading,
+}: {
+  eventCounts: Array<[string, number]>;
+  loading: boolean;
+}) {
+  return (
+    <section aria-label="Telemetry events" className="card-surface">
+      <DataRowHeader
+        title="Telemetry events"
+        columns={[
+          <InstrumentLabel key="count" className={EVENT_COL.count}>
+            Count
+          </InstrumentLabel>,
+        ]}
+      />
+      {loading ? (
+        <DataRowSkeleton label="Loading telemetry events" columnWidths={[EVENT_COL.count]} />
+      ) : eventCounts.length === 0 ? (
+        <p className="p-8 text-center text-ui text-muted">No events recorded yet.</p>
+      ) : (
+        eventCounts.map(([eventType, count]) => (
+          <DataRow
+            key={eventType}
+            title={prettyEventType(eventType)}
+            columns={[
+              <span key="count" className={`font-mono tabular-nums ${EVENT_COL.count}`}>
+                {NUMBER_FORMAT.format(count)}
+              </span>,
+            ]}
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
+/** The same window broken down per account. */
+function UsageByUserPanel({ users, loading }: { users: AdminUserUsage[]; loading: boolean }) {
+  return (
+    <section aria-label="Usage by user" className="card-surface">
+      <DataRowHeader
+        title="User"
+        columns={[
+          <InstrumentLabel key="turns" className={USER_COL.turns}>
+            Turns
+          </InstrumentLabel>,
+          <InstrumentLabel key="tokens" className={USER_COL.tokens}>
+            Tokens
+          </InstrumentLabel>,
+          <InstrumentLabel key="cost" className={USER_COL.cost}>
+            Cost
+          </InstrumentLabel>,
+          <InstrumentLabel key="active" className={USER_COL.active}>
+            Active
+          </InstrumentLabel>,
+        ]}
+      />
+      {loading ? (
+        <DataRowSkeleton
+          label="Loading usage by user"
+          columnWidths={[USER_COL.turns, USER_COL.tokens, USER_COL.cost, USER_COL.active]}
+        />
+      ) : users.length === 0 ? (
+        <p className="p-8 text-center text-ui text-muted">No chat activity in this window yet.</p>
+      ) : (
+        users.map((row) => (
+          <DataRow
+            key={row.user_id}
+            title={row.email}
+            columns={[
+              <span key="turns" className={`font-mono tabular-nums ${USER_COL.turns}`}>
+                {NUMBER_FORMAT.format(row.turns)}
+              </span>,
+              <span key="tokens" className={`font-mono tabular-nums ${USER_COL.tokens}`}>
+                {NUMBER_FORMAT.format(row.total_tokens)}
+              </span>,
+              <span key="cost" className={`font-mono tabular-nums ${USER_COL.cost}`}>
+                {formatCost(row.cost)}
+              </span>,
+              <Tooltip
+                key="active"
+                content={parseApiDate(row.last_active).toLocaleString()}
+                triggerClassName={`justify-end ${USER_COL.active}`}
+              >
+                <span className="font-mono tabular-nums text-meta">
+                  {formatTimeAgoCompact(row.last_active)}
+                </span>
+              </Tooltip>,
+            ]}
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
+/**
+ * The deployment's chat usage over a chosen window: the four current values,
+ * the two per-day measures, every recorded telemetry event type, and the
+ * per-user breakdown.
+ */
 export function AdminUsagePage() {
   const { windowDays, setWindowDays, summary, points, loading, error } = useAdminUsage();
 
-  const maxTokens = Math.max(1, ...points.map((point) => point.total_tokens));
   const eventCounts = Object.entries(summary?.event_counts ?? {}).sort((a, b) => b[1] - a[1]);
+  const users = summary?.users ?? [];
+  const pending = loading && !summary;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary">Usage</h1>
-          <p className="text-sm text-muted">
-            Chat activity recorded by local telemetry. Nothing leaves this deployment.
-          </p>
-        </div>
-        <div className="flex gap-2" role="group" aria-label="Window">
-          {USAGE_WINDOWS.map((days) => (
-            <Button
-              key={days}
-              size="sm"
-              variant={windowDays === days ? "primary" : "ghost"}
-              aria-pressed={windowDays === days}
-              onClick={() => setWindowDays(days)}
-            >
-              {days}d
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-2xl border border-data-neg/30 bg-data-neg/10 px-4 py-3 text-sm text-data-neg"
-        >
-          {error}
-        </p>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: "Chat turns", value: summary ? tokenFormat.format(summary.total_turns) : "—" },
-          {
-            label: "Tokens",
-            value: summary ? tokenFormat.format(summary.total_tokens) : "—",
-          },
-          { label: "Cost", value: summary ? formatCost(summary.total_cost) : "—" },
-          {
-            label: "Active users",
-            value: summary ? tokenFormat.format(summary.active_users) : "—",
-          },
-        ].map((card) => (
-          <GlassCard key={card.label} className="px-5 py-4">
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              {card.label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-primary">{card.value}</p>
-          </GlassCard>
-        ))}
-      </div>
-
-      <GlassCard className="px-5 py-4">
-        <h2 className="text-sm font-medium text-primary">Tokens per day</h2>
-        {points.length === 0 ? (
-          <p className="py-6 text-sm text-muted">
-            {loading ? "Loading…" : "No chat activity in this window yet."}
-          </p>
-        ) : (
-          <div className="mt-4 flex h-32 items-end gap-1" aria-hidden="true">
-            {points.map((point) => (
-              <div
-                key={point.day}
-                title={`${formatDay(point.day)}: ${tokenFormat.format(point.total_tokens)} tokens`}
-                className={cn("flex-1 rounded-t bg-accent-violet/70")}
-                style={{ height: `${(point.total_tokens / maxTokens) * 100}%` }}
-              />
-            ))}
-          </div>
-        )}
-      </GlassCard>
-
-      <GlassCard className="px-5 py-4">
-        <h2 className="text-sm font-medium text-primary">Activity</h2>
-        <p className="text-xs text-muted">
-          Every recorded event type in this window — new telemetry events appear here automatically.
-        </p>
-        {eventCounts.length === 0 ? (
-          <p className="py-4 text-sm text-muted">No activity in this window yet.</p>
-        ) : (
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {eventCounts.map(([eventType, count]) => (
-              <li
-                key={eventType}
-                className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2 text-sm"
-              >
-                <span className="text-body">{prettyEventType(eventType)}</span>
-                <span className="font-semibold text-primary">{tokenFormat.format(count)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </GlassCard>
-
-      <GlassCard>
-        {loading && !summary ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading usage…</p>
-        ) : (
-          <DataTable
-            rows={summary?.users ?? []}
-            rowKey={(row) => row.user_id}
-            emptyMessage="No chat activity in this window yet."
-            columns={[
-              { key: "email", header: "User" },
-              {
-                key: "turns",
-                header: "Turns",
-                render: (row) => tokenFormat.format(row.turns),
-              },
-              {
-                key: "total_tokens",
-                header: "Tokens",
-                render: (row) => tokenFormat.format(row.total_tokens),
-              },
-              { key: "cost", header: "Cost", render: (row) => formatCost(row.cost) },
-              {
-                key: "last_active",
-                header: "Last active",
-                render: (row) => formatDay(row.last_active),
-              },
-            ]}
+    <>
+      <CrumbBar
+        crumbs={[ADMIN_CRUMB, { label: "Usage" }]}
+        state={<InstrumentLabel>Local telemetry; nothing leaves this deployment</InstrumentLabel>}
+        actions={
+          <SegmentedControl
+            aria-label="Window"
+            options={WINDOW_OPTIONS}
+            value={`${windowDays}`}
+            onChange={(id) => setWindowDays(Number(id) as UsageWindow)}
           />
+        }
+      />
+      <AdminTabs />
+      <PageBody className="flex flex-col gap-3">
+        {error && (
+          <p role="alert" className="text-ui text-data-neg">
+            {error}
+          </p>
         )}
-      </GlassCard>
-    </div>
+
+        <KpiStrip>
+          <KpiCell label="Chat turns" value={summary?.total_turns ?? null} loading={pending} />
+          <KpiCell label="Tokens" value={summary?.total_tokens ?? null} loading={pending} />
+          <KpiCell
+            label="Cost"
+            value={summary ? formatCost(summary.total_cost) : null}
+            loading={pending}
+          />
+          <KpiCell label="Active users" value={summary?.active_users ?? null} loading={pending} />
+        </KpiStrip>
+
+        <UsageCharts points={points} loading={loading} />
+
+        <PanelGrid columns={2} className="min-h-0 flex-1">
+          <TelemetryEventsPanel eventCounts={eventCounts} loading={pending} />
+          <UsageByUserPanel users={users} loading={pending} />
+        </PanelGrid>
+      </PageBody>
+    </>
   );
 }

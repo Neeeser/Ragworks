@@ -67,21 +67,21 @@ const BACKEND_ICONS = {
 const statusBadge = (status: PipelineRunStatus) => {
   if (status === "completed") {
     return (
-      <span className="flex items-center gap-1 text-[10px] font-medium text-data-pos">
-        <Check className="h-3 w-3" /> done
+      <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-data-pos">
+        <Check className="h-3 w-3" aria-hidden /> Done
       </span>
     );
   }
   if (status === "failed") {
     return (
-      <span className="flex items-center gap-1 text-[10px] font-medium text-data-neg">
-        <AlertTriangle className="h-3 w-3" /> failed
+      <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-data-neg">
+        <AlertTriangle className="h-3 w-3" aria-hidden /> Failed
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-accent-cyan">
-      <Loader2 className="h-3 w-3 animate-spin" /> running
+    <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-accent-cyan">
+      <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden /> Running
     </span>
   );
 };
@@ -130,17 +130,24 @@ function PortRow({
     isTargetSide && acceptsMany
       ? `Accepts multiple ${dataType.replace(/s$/, "").replaceAll("_", " ")} connections`
       : "";
+  // One themed tooltip per port row rather than a native `title` per label: it
+  // carries the fan-in note where there is one, and the port's type otherwise.
+  const portTooltip =
+    manyTooltip ||
+    (isTargetSide
+      ? `${label} · ${getPortTypeLabel(dataType)} · accepts one connection`
+      : `${label} · ${getPortTypeLabel(dataType)}`);
 
   return (
     <Tooltip
-      content={manyTooltip}
+      content={portTooltip}
       side="top"
       triggerElement="div"
       triggerClassName="w-full min-w-0"
     >
       <div
         className={cn(
-          "relative flex min-w-0 items-center gap-1.5 py-0.5 text-[10px] leading-4",
+          "relative flex min-w-0 items-center gap-1.5 py-0.5 text-instrument leading-4",
           isTargetSide ? "justify-start" : "justify-end",
           incompatible && "opacity-40",
         )}
@@ -149,21 +156,14 @@ function PortRow({
           aria-label={manyTooltip ? `${label} input` : undefined}
           tabIndex={manyTooltip ? 0 : undefined}
           className={cn(
-            "flex items-center gap-1.5 outline-none",
+            "flex min-w-0 items-center gap-1.5 outline-none",
             "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
           )}
         >
           {isTargetSide ? (
             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
           ) : null}
-          <span
-            className="truncate text-muted"
-            title={
-              isTargetSide && !acceptsMany
-                ? `${label} · ${getPortTypeLabel(dataType)} · accepts one connection`
-                : `${label} · ${getPortTypeLabel(dataType)}`
-            }
-          >
+          <span className="truncate text-muted">
             {label}
             {!required && isTargetSide ? <span className="text-faint"> (optional)</span> : null}
           </span>
@@ -317,7 +317,9 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
   return (
     <div
       className={cn(
-        "relative w-[264px] rounded-2xl border bg-canvas-raised/95 px-3 pb-2.5 pt-3 text-xs text-body transition-opacity duration-150",
+        // Geometry (width, padding, the fixed header height below) is what the
+        // layout and obstacle router measure — only the material changes here.
+        "relative w-[264px] rounded-panel border bg-canvas-raised px-3 pb-2.5 pt-3 text-instrument text-body transition-opacity duration-140 ease-standard",
         familyStyles.border,
         familyStyles.glow,
         selected && "ring-2 ring-accent-violet/70",
@@ -335,8 +337,8 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
           obstacle router can connect cards consistently across the graph. */}
       <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-primary">{data.label}</p>
-          <p className={cn("truncate text-[10px] uppercase tracking-[0.2em]", familyStyles.badge)}>
+          <p className="truncate text-ui font-medium leading-5 text-primary">{data.label}</p>
+          <p className={cn("truncate text-instrument leading-4", familyStyles.badge)}>
             {getNodeFamilyLabel(family)}
           </p>
         </div>
@@ -384,15 +386,14 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
       ) : null}
 
       {signature ? (
-        <div className="mt-2 rounded-xl bg-surface px-2.5 py-2">
-          <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-muted">
-            {signature.label}
-          </p>
-          <div className="mt-1 flex items-center gap-1.5">
+        <div className="mt-2 rounded-control bg-surface px-2.5 py-1.5">
+          <p className="text-instrument font-medium leading-4 text-muted">{signature.label}</p>
+          <div className="mt-0.5 flex items-center gap-1.5">
             {BackendIcon ? <BackendIcon className="h-3.5 w-3.5 shrink-0" /> : null}
+            {/* An index name / model id is a literal: mono, verbatim. */}
             <p
               className={cn(
-                "truncate font-mono text-[11px] leading-4",
+                "truncate font-mono text-instrument leading-4",
                 signature.missing ? "text-meta italic" : familyStyles.badge,
               )}
               title={signature.value}
@@ -401,7 +402,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
             </p>
           </div>
           {signature.detail ? (
-            <p className="truncate text-[10px] leading-4 text-meta" title={signature.detail}>
+            <p className="truncate text-instrument leading-4 text-meta" title={signature.detail}>
               {signature.detail}
             </p>
           ) : null}
@@ -409,7 +410,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
       ) : null}
 
       {hiddenOverrides > 0 ? (
-        <p className="mt-1.5 text-[10px] leading-4 text-faint">
+        <p className="mt-1.5 text-instrument leading-4 text-faint">
           · {hiddenOverrides} edited setting{hiddenOverrides === 1 ? "" : "s"}
         </p>
       ) : null}
@@ -421,7 +422,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
 
 export function DropPreviewNode({ data }: NodeProps<Node<DropPreviewNodeData>>) {
   return (
-    <div className="pointer-events-none flex w-[264px] items-center justify-center rounded-2xl border border-dashed border-strong bg-canvas-raised/40 px-3 py-8 text-xs uppercase tracking-[0.3em] text-body">
+    <div className="pointer-events-none flex w-[264px] items-center justify-center rounded-panel border border-dashed border-strong bg-canvas-raised/40 px-3 py-8 text-instrument font-medium text-muted">
       {data.label ?? "Drop here"}
     </div>
   );

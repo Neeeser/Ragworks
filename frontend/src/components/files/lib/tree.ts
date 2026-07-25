@@ -110,14 +110,3 @@ export function isProcessing(node: FileNode): boolean {
   const status = node.ingestion?.status;
   return status === "pending" || status === "processing";
 }
-
-const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
-
-export function formatBytes(size: number): string {
-  if (size <= 0) {
-    return "0 B";
-  }
-  const exponent = Math.min(Math.floor(Math.log(size) / Math.log(1024)), BYTE_UNITS.length - 1);
-  const value = size / 1024 ** exponent;
-  return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${BYTE_UNITS[exponent]}`;
-}

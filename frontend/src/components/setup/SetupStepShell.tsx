@@ -1,5 +1,7 @@
 "use client";
 
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -14,7 +16,12 @@ interface SetupStepShellProps {
   footer: ReactNode;
 }
 
-/** Shared frame for one wizard step: kicker, title, body, action row. */
+/**
+ * Shared frame for one wizard step: kicker, title, body, action row, on the
+ * console card material so the step reads as a finished object over the live
+ * pipeline backdrop. The backdrop deliberately parks its focused node *above*
+ * this card (see `SetupFlowBackdrop`), so the card never covers it.
+ */
 export function SetupStepShell({
   stepKey,
   direction,
@@ -26,19 +33,18 @@ export function SetupStepShell({
   return (
     <section
       key={stepKey}
-      className={cn(
-        "flex w-full max-w-xl flex-col gap-6",
-        direction === 1 ? "setup-step-forward" : "setup-step-back",
-      )}
+      className={cn("w-full", direction === 1 ? "setup-step-forward" : "setup-step-back")}
     >
-      <header className="space-y-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.4em] text-muted">{kicker}</p>
-        <h1 className="text-balance text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-          {title}
-        </h1>
-      </header>
-      <div className="space-y-4">{children}</div>
-      <footer className="flex items-center justify-between gap-3 pt-2">{footer}</footer>
+      <Panel className="flex flex-col gap-3 p-4">
+        <header>
+          <InstrumentLabel>{kicker}</InstrumentLabel>
+          <h1 className="text-head font-semibold tracking-[-0.01em] text-primary">{title}</h1>
+        </header>
+        <div className="space-y-3">{children}</div>
+        <footer className="flex items-center justify-between gap-3 border-t border-hairline pt-3">
+          {footer}
+        </footer>
+      </Panel>
     </section>
   );
 }

@@ -81,7 +81,16 @@ def start_frontend(mode: str = "dev") -> None:
     frontend_dir = config.REPO_ROOT / "frontend"
     if not (frontend_dir / "node_modules").exists():
         raise SystemExit("frontend/node_modules missing — run `make env-frontend` first.")
-    env = {**os.environ, "NEXT_PUBLIC_API_BASE_URL": config.API_BASE_URL}
+    # A separate build directory per sandbox: NEXT_PUBLIC_* values are inlined
+    # into client chunks at compile time, so sharing `.next` with a normal
+    # `make frontend` lets whichever server compiled last decide which backend
+    # the sandbox's own frontend calls. That surfaced as CORS failures against
+    # localhost:8000 from a page served on port 3010.
+    env = {
+        **os.environ,
+        "NEXT_PUBLIC_API_BASE_URL": config.API_BASE_URL,
+        "NEXT_DIST_DIR": ".next-sandbox",
+    }
     if mode == "prod":
         # NEXT_PUBLIC_* values are baked at build time, so the build itself
         # must run under the sandbox environment.

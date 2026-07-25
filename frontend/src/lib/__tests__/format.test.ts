@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { formatContextLength, formatLatency, formatPricePerMillion } from "@/lib/format";
+import {
+  formatBytes,
+  formatContextLength,
+  formatLatency,
+  formatPricePerMillion,
+} from "@/lib/format";
 
 describe("formatPricePerMillion", () => {
   it("formats a per-token price as $/M", () => {
@@ -30,7 +35,7 @@ describe("formatLatency", () => {
   });
 
   it("falls back to n/a", () => {
-    expect(formatLatency(null)).toBe("n/a");
+    expect(formatLatency(null)).toBe("—");
   });
 });
 
@@ -52,5 +57,22 @@ describe("formatContextLength", () => {
 
   it("promotes a count that rounds up to 1000K into 1M", () => {
     expect(formatContextLength(999_999)).toBe("1M");
+  });
+});
+
+describe("formatBytes", () => {
+  it("scales through units", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+    expect(formatBytes(15 * 1024 * 1024)).toBe("15 MB");
+  });
+
+  it("keeps a fraction digit only below ten of a unit", () => {
+    // A size column whose rows disagree on fraction digits is unreadable, so
+    // the switch is on the value rather than the unit.
+    expect(formatBytes(9.5 * 1024)).toBe("9.5 KB");
+    expect(formatBytes(10 * 1024)).toBe("10 KB");
   });
 });

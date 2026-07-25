@@ -6,6 +6,7 @@ import {
   IngestionOutputExplanation,
   ParserExplanation,
 } from "@/components/traces/explanations/IngestionExplanation";
+import { EffectNote, Lede } from "@/components/traces/explanations/prose";
 import {
   FusionExplanation,
   GenericRankingExplanation,
@@ -57,16 +58,12 @@ export function NodeExplanation(props: NodeExplanationProps) {
     return <Component {...props} />;
   }
   return (
-    <div className="max-w-3xl space-y-4">
-      <p className="text-sm leading-relaxed text-body">
+    <div className="max-w-3xl space-y-3">
+      <Lede>
         {props.node.data.description ??
           "Recorded inputs, outputs, and configuration for this node."}
-      </p>
-      {props.itemEffect ? (
-        <p className="rounded-xl border border-accent-cyan/30 bg-accent-cyan/5 p-3 text-sm text-primary">
-          {journeySentence(props.itemEffect)}
-        </p>
-      ) : null}
+      </Lede>
+      {props.itemEffect ? <EffectNote>{journeySentence(props.itemEffect)}</EffectNote> : null}
     </div>
   );
 }

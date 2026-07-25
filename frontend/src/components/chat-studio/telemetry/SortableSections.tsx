@@ -78,16 +78,15 @@ const SortableTelemetryItem = ({ id, config }: SortableTelemetryItemProps) => {
             ref={setActivatorNodeRef}
             type="button"
             aria-label={`Reorder ${config.title}`}
-            title="Drag to reorder"
             {...attributes}
             {...listeners}
-            className={`flex h-7 w-7 items-center justify-center rounded-full border border-hairline text-muted transition ${
+            className={`flex h-6 w-6 touch-none cursor-grab items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet active:cursor-grabbing ${
               isDragging
                 ? "bg-surface-strong text-primary"
                 : "hover:bg-surface-strong hover:text-primary"
-            } cursor-grab active:cursor-grabbing touch-none`}
+            }`}
           >
-            <GripVertical className="h-3.5 w-3.5" />
+            <GripVertical className="h-3 w-3" aria-hidden />
           </button>
         }
         isDragging={isDragging}
@@ -154,9 +153,9 @@ export const SortableSectionList = ({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="relative mt-4 min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto p-3">
         <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
-          <div className="space-y-4 pb-6">
+          <div className="space-y-2">
             {sectionOrder.map((key) => (
               <SortableTelemetryItem key={key} id={key} config={sectionConfig[key]} />
             ))}
@@ -164,7 +163,7 @@ export const SortableSectionList = ({
         </SortableContext>
         <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
           {activeConfig ? (
-            <div className="origin-top-left scale-[1.02] shadow-elevation-2">
+            <div className="shadow-elevation-2">
               <TelemetrySection
                 title={activeConfig.title}
                 description={activeConfig.description}
@@ -174,8 +173,8 @@ export const SortableSectionList = ({
                 sectionId={activeConfig.sectionId}
                 overrideActive={activeConfig.overrideActive}
                 headerAction={
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full border border-hairline text-body">
-                    <GripVertical className="h-3.5 w-3.5" />
+                  <div className="flex h-6 w-6 items-center justify-center rounded-control text-body">
+                    <GripVertical className="h-3 w-3" aria-hidden />
                   </div>
                 }
                 isDragging

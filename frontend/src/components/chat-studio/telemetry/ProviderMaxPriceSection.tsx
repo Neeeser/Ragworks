@@ -1,11 +1,13 @@
 "use client";
 
+import { Field, TextInput } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+
 import type { ProviderFormState } from "@/components/chat-studio/lib/types";
 
 type ProviderMaxPriceSectionProps = {
   providerForm: ProviderFormState;
   setProviderForm: (updater: (prev: ProviderFormState) => ProviderFormState) => void;
-  inputClasses: string;
 };
 
 const PRICE_FIELDS = [
@@ -20,35 +22,23 @@ const PRICE_FIELDS = [
 export const ProviderMaxPriceSection = ({
   providerForm,
   setProviderForm,
-  inputClasses,
 }: ProviderMaxPriceSectionProps) => (
-  <div className="space-y-3 border-t border-hairline pt-4">
-    <div className="space-y-1">
-      <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-        Max price ($/m tokens)
-      </p>
-      <p className="text-sm text-body">
-        Cap prompt, completion, request, or image pricing for this turn.
-      </p>
-    </div>
-    <div className="grid grid-cols-2 gap-3">
+  <div className="space-y-2 border-t border-hairline pt-3">
+    <InstrumentLabel>Max price ($/M tokens)</InstrumentLabel>
+    <div className="grid grid-cols-2 gap-2">
       {PRICE_FIELDS.map((field) => (
-        <label key={field.key} className="flex flex-col gap-1.5 text-sm text-body">
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
-            {field.label}
-          </span>
-          <input
+        <Field key={field.key} label={field.label}>
+          <TextInput
             type="number"
             min="0"
             step="0.0001"
-            className={inputClasses}
             placeholder={field.placeholder}
             value={providerForm[field.key]}
             onChange={(event) =>
               setProviderForm((prev) => ({ ...prev, [field.key]: event.target.value }))
             }
           />
-        </label>
+        </Field>
       ))}
     </div>
   </div>

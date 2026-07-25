@@ -1,5 +1,7 @@
 "use client";
 
+import { Readout } from "@/components/ui/readout";
+
 import type { Collection } from "@/lib/types";
 
 interface CollectionVitalsCardProps {
@@ -8,6 +10,7 @@ interface CollectionVitalsCardProps {
   documentCount: number;
 }
 
+/** What the enabled collection's tools will actually run against. */
 export const CollectionVitalsCard = ({
   collection,
   collectionCount,
@@ -15,32 +18,24 @@ export const CollectionVitalsCard = ({
 }: CollectionVitalsCardProps) => {
   if (!collection) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-ui text-muted">
         {collectionCount > 0 ? "Loading collection details…" : "No collection tools selected."}
       </p>
     );
   }
 
+  const searchPipeline = collection.tools.find((tool) => tool.is_primary)?.pipeline_id ?? "Default";
+
   return (
-    <div className="space-y-2 text-sm text-body">
-      {collectionCount > 1 && (
-        <p>
-          Tools enabled: <span className="text-primary">{collectionCount}</span> (showing primary)
-        </p>
-      )}
-      <p>
-        Documents: <span className="text-primary">{documentCount}</span>
-      </p>
-      <p>
-        Ingestion pipeline:{" "}
-        <span className="text-primary">{collection.ingest_pipeline_id ?? "Default"}</span>
-      </p>
-      <p>
-        Search tool pipeline:{" "}
-        <span className="text-primary">
-          {collection.tools.find((tool) => tool.is_primary)?.pipeline_id ?? "Default"}
-        </span>
-      </p>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {collectionCount > 1 && <Readout label="Tools enabled">{collectionCount}</Readout>}
+      <Readout label="Documents">{documentCount}</Readout>
+      <Readout label="Ingestion pipeline" className="min-w-0">
+        {collection.ingest_pipeline_id ?? "Default"}
+      </Readout>
+      <Readout label="Search pipeline" className="min-w-0">
+        {searchPipeline}
+      </Readout>
     </div>
   );
 };

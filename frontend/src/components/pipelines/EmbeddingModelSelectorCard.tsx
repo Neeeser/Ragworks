@@ -6,6 +6,8 @@ import {
 } from "@/components/models/model-catalog-filter";
 import { ModelCatalogPicker } from "@/components/models/ModelCatalogPicker";
 import { ModelOptionButton } from "@/components/models/ModelOptionButton";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
 import { formatPricePerMillion } from "@/lib/format";
 
 import type { CatalogModel } from "@/lib/types";
@@ -27,9 +29,9 @@ function EmbeddingModelRow({
     model.id === selectedModelKey &&
     model.connection_id === selectedConnectionId;
   const contextLabel = model.context_length
-    ? `${Math.round(model.context_length).toLocaleString()} ctx`
+    ? Math.round(model.context_length).toLocaleString()
     : null;
-  const dimensionLabel = model.dimension ? `Dim ${model.dimension.toLocaleString()}` : null;
+  const dimensionLabel = model.dimension ? model.dimension.toLocaleString() : null;
   const promptLabel = formatPricePerMillion(model.pricing?.prompt);
   const completionLabel = formatPricePerMillion(model.pricing?.completion);
   const description =
@@ -43,12 +45,12 @@ function EmbeddingModelRow({
       onSelect={onSelectModel}
       subtitle={`${model.connection_label} · ${model.id}`}
     >
-      {description ? <p className="mt-2 text-xs text-muted">{description}</p> : null}
-      <div className="mt-2 flex flex-wrap gap-3 text-[11px] uppercase tracking-[0.3em] text-meta">
-        {contextLabel ? <span>{contextLabel}</span> : null}
-        {dimensionLabel ? <span>{dimensionLabel}</span> : null}
-        {promptLabel ? <span>Prompt {promptLabel}</span> : null}
-        {completionLabel ? <span>Completion {completionLabel}</span> : null}
+      {description ? <p className="mt-1 max-w-[66ch] text-ui text-muted">{description}</p> : null}
+      <div className="mt-1 flex flex-wrap gap-3">
+        {contextLabel ? <Readout label="Context">{contextLabel}</Readout> : null}
+        {dimensionLabel ? <Readout label="Dimension">{dimensionLabel}</Readout> : null}
+        {promptLabel ? <Readout label="Prompt">{promptLabel}</Readout> : null}
+        {completionLabel ? <Readout label="Completion">{completionLabel}</Readout> : null}
       </div>
     </ModelOptionButton>
   );
@@ -152,15 +154,15 @@ export function EmbeddingModelSelectorCard({
       sortValue={sortValue}
       onSortChange={setSortValue}
       controlsLeading={
-        <div className="flex-1 rounded-2xl border border-hairline bg-surface px-3 py-2 text-xs text-body">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] uppercase tracking-[0.3em] text-muted">Dimension</span>
-            <span>
-              {currentModelInfo?.dimension
-                ? currentModelInfo.dimension.toLocaleString()
-                : "Select a model"}
-            </span>
-          </div>
+        <div className="flex flex-1 items-center justify-between gap-2 rounded-control border border-hairline bg-surface px-3 py-2">
+          <InstrumentLabel>Dimension</InstrumentLabel>
+          <span className="font-mono text-ui tabular-nums text-primary">
+            {currentModelInfo?.dimension ? (
+              currentModelInfo.dimension.toLocaleString()
+            ) : (
+              <span className="text-muted">—</span>
+            )}
+          </span>
         </div>
       }
       modelsError={modelsError}

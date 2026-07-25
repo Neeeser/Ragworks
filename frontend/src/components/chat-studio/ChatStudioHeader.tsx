@@ -1,61 +1,83 @@
 "use client";
 
-import { PlusCircle } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { PulseWire } from "@/components/ui/pulse-wire";
+import { Tooltip } from "@/components/ui/tooltip";
+
+import type { Crumb } from "@/components/ui/crumb-bar";
 
 type ChatStudioHeaderProps = {
+  /** The open session's title; absent before the first message creates one. */
+  sessionTitle: string | null;
+  /** How many collections back the model's tools, already summarised. */
   collectionLabel: string;
   collectionMetaLabel: string;
+  toolsEnabled: boolean;
+  /** The model this turn will run on — an identifier, rendered verbatim. */
   currentModelLabel: string;
-  showNewChatButton: boolean;
+  streaming: boolean;
   onModelSelect: () => void;
   onNewChat: () => void;
 };
 
+/**
+ * Chat Studio's top bar: the breadcrumb path, what this turn will run with, and
+ * the page's actions.
+ *
+ * The run's identity — collections, model, whether tokens are flowing right now
+ * — is live state, so it belongs here rather than in a title block the page
+ * renders for itself. The model reads as the literal the API accepts, and the
+ * pulse runs only while a response is actually streaming.
+ */
 export function ChatStudioHeader({
+  sessionTitle,
   collectionLabel,
   collectionMetaLabel,
+  toolsEnabled,
   currentModelLabel,
-  showNewChatButton,
+  streaming,
   onModelSelect,
   onNewChat,
 }: ChatStudioHeaderProps) {
+  const crumbs: Crumb[] = [{ label: "Chat Studio", href: "/chat" }];
+  if (sessionTitle) {
+    crumbs.push({ label: sessionTitle });
+  }
+
   return (
-    <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
-      <div className="flex items-start gap-3">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">Conversation</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-semibold text-primary">{collectionLabel}</h2>
-            <span className="font-mono text-xs uppercase tracking-[0.3em] text-meta">
-              {collectionMetaLabel}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onModelSelect}
-          className="hidden min-w-0 items-center gap-3 rounded-2xl border border-hairline bg-surface px-3 py-2 text-left text-xs text-body transition hover:border-strong hover:text-primary sm:flex"
-        >
-          <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-meta">Model</span>
-          <span className="min-w-0 truncate text-sm font-semibold text-primary">
-            {currentModelLabel}
-          </span>
-        </button>
-        {showNewChatButton && (
-          <Button
-            variant="secondary"
-            className="flex h-10 items-center justify-center gap-2 px-3 whitespace-nowrap"
-            onClick={onNewChat}
-          >
-            <PlusCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">New chat</span>
-          </Button>
-        )}
-      </div>
-    </div>
+    <CrumbBar
+      crumbs={crumbs}
+      state={
+        <>
+          {toolsEnabled ? (
+            <Tooltip content={collectionMetaLabel} side="bottom">
+              <Chip tone="retrieve">{collectionLabel}</Chip>
+            </Tooltip>
+          ) : null}
+          <Tooltip content="Change the chat model" side="bottom" triggerClassName="min-w-0">
+            <button
+              type="button"
+              onClick={onModelSelect}
+              className="flex min-w-0 items-center gap-2 rounded-control px-1.5 py-0.5 transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              <InstrumentLabel>Model</InstrumentLabel>
+              <span className="truncate font-mono text-ui text-primary">{currentModelLabel}</span>
+            </button>
+          </Tooltip>
+          {streaming ? <PulseWire label="Streaming response" className="w-16 shrink-0" /> : null}
+        </>
+      }
+      actions={
+        // The pane toggles live on the panes themselves (each pane's header
+        // closes it; a closed pane leaves a reopen strip at its edge) — a
+        // control far from what it moves is the one users cannot find.
+        <Button size="sm" variant="secondary" onClick={onNewChat}>
+          New chat
+        </Button>
+      }
+    />
   );
 }

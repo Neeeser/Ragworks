@@ -1,13 +1,9 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
-import { chipClass } from "@/components/chat-studio/lib/chat-constants";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Markdown } from "@/components/ui/markdown";
 import { formatDateTime } from "@/lib/datetime";
-
-import type { Components } from "react-markdown";
 
 interface PromptSectionSummary {
   id: string;
@@ -23,9 +19,10 @@ interface SystemPromptCardProps {
   promptError: string | null;
   generatedAt?: string | null;
   onEdit: () => void;
-  markdownComponents: Components;
 }
 
+/** The prompt the model will see, assembled from the base template and each
+ *  enabled tool's snippet. */
 export const SystemPromptCard = ({
   promptPreviewMarkdown,
   promptSections,
@@ -33,18 +30,13 @@ export const SystemPromptCard = ({
   promptError,
   generatedAt,
   onEdit,
-  markdownComponents,
 }: SystemPromptCardProps) => {
   if (promptLoading) {
-    return <p className="text-sm text-muted">Loading prompt…</p>;
+    return <p className="text-ui text-muted">Loading prompt…</p>;
   }
 
   if (promptError) {
-    return (
-      <div className="rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
-        {promptError}
-      </div>
-    );
+    return <p className="text-ui text-data-neg">{promptError}</p>;
   }
 
   const previewSource = promptPreviewMarkdown?.trim()
@@ -53,28 +45,23 @@ export const SystemPromptCard = ({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted">
-        Prompt combines your base instructions with each enabled tool snippet. Use the editor to
-        adjust the base template and per-tool prompt blocks.
-      </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1">
         {promptSections.map((section) => (
-          <span key={section.id} className={chipClass}>
-            {section.scope === "base" ? "Base prompt" : section.label}
-            {section.isCustom ? " · Custom" : ""}
-          </span>
+          <Chip key={section.id} tone={section.isCustom ? "accent" : "neutral"}>
+            {`${section.scope === "base" ? "Base prompt" : section.label}${
+              section.isCustom ? " · Custom" : ""
+            }`}
+          </Chip>
         ))}
       </div>
-      <div className="max-h-48 overflow-y-auto rounded-2xl border border-hairline bg-surface p-4 text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {previewSource}
-        </ReactMarkdown>
+      <div className="max-h-48 overflow-y-auto rounded-control border border-hairline bg-surface-strong p-2">
+        <Markdown className="max-w-[66ch]">{previewSource}</Markdown>
       </div>
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+      <div className="flex flex-wrap items-center gap-2">
         {generatedAt && (
-          <span>
+          <span className="text-instrument text-meta">
             Generated{" "}
-            <strong className="font-medium text-primary">{formatDateTime(generatedAt)}</strong>
+            <span className="font-mono tabular-nums text-body">{formatDateTime(generatedAt)}</span>
           </span>
         )}
         <Button variant="secondary" size="sm" className="ml-auto" onClick={onEdit}>

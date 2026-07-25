@@ -1,20 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { resolvePreviewKind, TEXT_PREVIEW_MAX_BYTES } from "@/components/files/lib/preview";
-import { formatBytes } from "@/components/files/lib/tree";
-import { Loader } from "@/components/ui/loader";
+import { Markdown } from "@/components/ui/markdown";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchFileBlob } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { formatBytes } from "@/lib/format";
 
 import type { PreviewKind } from "@/components/files/lib/preview";
 import type { FileNode } from "@/lib/types";
 
 const TEXTUAL_KINDS: ReadonlySet<PreviewKind> = new Set(["text", "markdown", "json", "table"]);
+
+/** Widths that read as lines of prose rather than a progress bar. */
+const SKELETON_LINES = ["w-full", "w-11/12", "w-4/5", "w-full", "w-3/4", "w-5/6", "w-2/3"];
 
 type LoadedPreview =
   | { state: "loading" }
@@ -33,13 +34,7 @@ function parseDelimited(text: string, delimiter: string): string[][] {
 
 function TextualPreview({ kind, text }: { kind: PreviewKind; text: string }) {
   if (kind === "markdown") {
-    return (
-      <div className="space-y-3 text-sm leading-relaxed text-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {text}
-        </ReactMarkdown>
-      </div>
-    );
+    return <Markdown className="max-w-[66ch]">{text}</Markdown>;
   }
   if (kind === "json") {
     let pretty = text;
@@ -49,7 +44,9 @@ function TextualPreview({ kind, text }: { kind: PreviewKind; text: string }) {
       // Not valid JSON (e.g. JSONL) — show it verbatim.
     }
     return (
-      <pre className="whitespace-pre-wrap break-words font-mono text-xs text-body">{pretty}</pre>
+      <pre className="whitespace-pre-wrap break-words font-mono text-instrument text-body">
+        {pretty}
+      </pre>
     );
   }
   if (kind === "table") {
@@ -57,14 +54,14 @@ function TextualPreview({ kind, text }: { kind: PreviewKind; text: string }) {
     const rows = parseDelimited(text, delimiter);
     return (
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-body">
+        <table className="w-full text-left font-mono text-instrument tabular-nums text-body">
           <tbody>
             {rows.map((cells, rowIndex) => (
               // Preview rows are positional and never reorder.
 
               <tr key={rowIndex} className="border-b border-hairline last:border-b-0">
                 {cells.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-2 py-1.5 align-top">
+                  <td key={cellIndex} className="px-2 py-1 align-top">
                     {cell}
                   </td>
                 ))}
@@ -75,7 +72,11 @@ function TextualPreview({ kind, text }: { kind: PreviewKind; text: string }) {
       </div>
     );
   }
-  return <pre className="whitespace-pre-wrap break-words font-mono text-xs text-body">{text}</pre>;
+  return (
+    <pre className="whitespace-pre-wrap break-words font-mono text-instrument text-body">
+      {text}
+    </pre>
+  );
 }
 
 /**
@@ -120,7 +121,7 @@ export function FilePreviewContent({ token, node }: { token: string; node: FileN
 
   if (kind === "none" || oversizedText) {
     return (
-      <p className="rounded-2xl border border-hairline bg-surface p-4 text-sm text-muted">
+      <p className="text-ui text-muted">
         {oversizedText
           ? `Too large to preview (${formatBytes(node.size_bytes)}) — download it instead.`
           : "No preview for this file type — download it to view."}
@@ -128,14 +129,20 @@ export function FilePreviewContent({ token, node }: { token: string; node: FileN
     );
   }
   if (loaded.state === "loading") {
+    // Lines at the geometry the text will occupy, so bytes landing reflows nothing.
     return (
-      <div className="flex items-center justify-center p-10">
-        <Loader className="h-5 w-5" />
+      <div aria-busy className="space-y-2">
+        {SKELETON_LINES.map((width, line) => (
+          <div key={`${width}-${line}`} className="flex items-center text-ui">
+            <Skeleton className={`h-2 ${width}`} />
+          </div>
+        ))}
+        <span className="sr-only">Loading preview</span>
       </div>
     );
   }
   if (loaded.state === "error") {
-    return <p className="text-sm text-data-neg">{loaded.message}</p>;
+    return <p className="text-ui text-data-neg">{loaded.message}</p>;
   }
   if (loaded.state === "text") {
     return <TextualPreview kind={kind} text={loaded.text} />;
@@ -148,7 +155,7 @@ export function FilePreviewContent({ token, node }: { token: string; node: FileN
       <img
         src={objectUrl}
         alt={node.name}
-        className="max-h-[60vh] w-full rounded-2xl object-contain"
+        className="max-h-[60vh] w-full rounded-control object-contain"
       />
     );
   }
@@ -157,7 +164,7 @@ export function FilePreviewContent({ token, node }: { token: string; node: FileN
       <iframe
         src={objectUrl}
         title={node.name}
-        className="h-[60vh] w-full rounded-2xl border border-hairline bg-white"
+        className="h-[60vh] w-full rounded-control border border-hairline"
       />
     );
   }
@@ -165,5 +172,7 @@ export function FilePreviewContent({ token, node }: { token: string; node: FileN
     return <audio src={objectUrl} controls className="w-full" />;
   }
 
-  return <video src={objectUrl} controls className="max-h-[60vh] w-full rounded-2xl bg-black" />;
+  return (
+    <video src={objectUrl} controls className="max-h-[60vh] w-full rounded-control bg-canvas" />
+  );
 }

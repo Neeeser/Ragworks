@@ -9,14 +9,29 @@
    is no hydration mismatch and no flash of the wrong theme.
    ===================================================================== */
 
-:root {
-  /* Canvas & chrome */
-  --canvas: #05060a;
-  --canvas-raised: #0b0d14;
-  --surface: rgba(255, 255, 255, 0.05);
-  --surface-strong: rgba(255, 255, 255, 0.08);
-  --border-hairline: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.3);
+/* Palette: deep-space — the dark-mode default. `data-theme` carries the
+   resolved structural mode (dark/light), stamped pre-paint by the theme
+   script; `data-palette` (blocks further down) carries the user's palette for
+   that mode. The mode defaults ARE these two base blocks, so they need no
+   override block of their own. */
+:root,
+:root[data-theme="dark"] {
+  /* Canvas & chrome. The dark palettes carry an accent cast in these values —
+     that cast is the only place "lit by the brand" lives, so components stay
+     palette-blind and a future accent swap keeps the whole look. */
+  --canvas: #0a0910;
+  --canvas-raised: #14121d;
+  --surface: rgba(167, 139, 250, 0.055);
+  --surface-strong: rgba(167, 139, 250, 0.1);
+  --border-hairline: rgba(167, 139, 250, 0.13);
+  --border-strong: rgba(167, 139, 250, 0.34);
+
+  /* Card material — the console's depth device (.card-surface). Opaque so
+     stacked content never bleeds through; lighter at the top like a plate
+     under a light source. */
+  --panel-from: #171420;
+  --panel-to: #110f18;
+  --panel-highlight: rgba(255, 255, 255, 0.055);
 
   /* Text ramp */
   --text-primary: #ffffff;
@@ -34,9 +49,10 @@
   --grad-to: #67e8f9;
   --glow: rgba(139, 92, 246, 0.3);
 
-  /* Elevation — glow in dark, shadow in light. */
-  --elevation-1: 0 0 0 rgba(0, 0, 0, 0);
-  --elevation-2: 0 0 40px var(--glow);
+  /* Elevation — real soft shadows now (cards are objects), accent halo kept
+     for the one glowing primary action per view (shadow-glow). */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --elevation-2: 0 8px 28px rgba(0, 0, 0, 0.5);
 
   /* Data-viz — pipeline stage / port colors. Meaning is fixed; the hex
      shifts per theme for legibility. Never reassign a stage's semantics. */
@@ -66,16 +82,31 @@
   --data-neg: #fb7185;
   --data-warn: #fbbf24;
 
+  /* Chart series — deliberately NOT the same family as --accent-*. A colour
+     that reads correctly as a lone status dot can fail as one of two peer
+     series: --accent-cyan (#22d3ee) measures L 0.797 on this canvas, outside
+     the 0.43–0.77 categorical band, so beside violet it out-shines its peer
+     and two equal series stop reading as equal. Every pair here is checked by
+     the dataviz validator; see palette-contract.test.ts. Add --series-3+ only
+     when a chart actually needs it, and validate before committing. */
+  --series-1: #8b5cf6;
+  --series-2: #0ea5b7;
+
   color-scheme: dark;
 }
 
+/* Palette: paper — the light-mode default. */
 :root[data-theme="light"] {
-  --canvas: #f6f7fb;
+  --canvas: #f5f4f9;
   --canvas-raised: #ffffff;
   --surface: rgba(15, 23, 42, 0.03);
   --surface-strong: rgba(15, 23, 42, 0.06);
-  --border-hairline: rgba(15, 23, 42, 0.1);
-  --border-strong: rgba(15, 23, 42, 0.22);
+  --border-hairline: rgba(76, 55, 122, 0.12);
+  --border-strong: rgba(76, 55, 122, 0.26);
+
+  --panel-from: #ffffff;
+  --panel-to: #fbfaff;
+  --panel-highlight: rgba(255, 255, 255, 0.9);
 
   --text-primary: #0f172a;
   --text-body: #334155;
@@ -91,8 +122,8 @@
   --grad-to: #0891b2;
   --glow: rgba(124, 58, 237, 0.18);
 
-  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --elevation-2: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --elevation-1: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --elevation-2: 0 8px 24px rgba(15, 23, 42, 0.12);
 
   --stage-parse: #0284c7;
   --stage-chunk: #0d9488;
@@ -118,7 +149,96 @@
   --data-neg: #e11d48;
   --data-warn: #d97706;
 
+  --series-1: #7c3aed;
+  --series-2: #0891b2;
+
   color-scheme: light;
+}
+
+/* The selectable palettes override only what differs from their mode's base
+   above, so a palette is a small readable diff rather than a full copy that
+   silently drifts. Stage/port colours keep fixed MEANING in every palette — a
+   palette may re-step a hue for legibility, never reassign it. Series pairs
+   are validated per surface; see palette-contract.test.ts. The catalog the
+   picker renders from is src/lib/palettes.ts — a new palette is one block
+   here plus one catalog entry. These blocks sit AFTER both mode bases on
+   purpose: equal specificity, so source order is what lets a palette win. */
+
+/* Palette: true-black — OLED, maximum contrast. Cast nearly neutral. */
+:root[data-palette="true-black"] {
+  --canvas: #000000;
+  --canvas-raised: #0a0a0d;
+  --surface: rgba(196, 181, 253, 0.045);
+  --surface-strong: rgba(196, 181, 253, 0.08);
+  --border-hairline: rgba(196, 181, 253, 0.13);
+  --border-strong: rgba(196, 181, 253, 0.36);
+  --panel-from: #0e0d13;
+  --panel-to: #08080b;
+  --panel-highlight: rgba(255, 255, 255, 0.06);
+}
+
+/* Palette: midnight — indigo-cast dark; the ambient light shifts blue, the
+   accents stay the brand's. */
+:root[data-palette="midnight"] {
+  --canvas: #070b16;
+  --canvas-raised: #0f1526;
+  --surface: rgba(147, 165, 250, 0.06);
+  --surface-strong: rgba(147, 165, 250, 0.1);
+  --border-hairline: rgba(147, 165, 250, 0.14);
+  --border-strong: rgba(147, 165, 250, 0.35);
+  --panel-from: #121a2e;
+  --panel-to: #0d1322;
+  --panel-highlight: rgba(255, 255, 255, 0.055);
+}
+
+/* Palette: graphite — lifted base, lower contrast for long sessions. */
+:root[data-palette="graphite"] {
+  --canvas: #15161d;
+  --canvas-raised: #1d1f28;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --border-hairline: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.26);
+  --panel-from: #1e2029;
+  --panel-to: #191b23;
+  --panel-highlight: rgba(255, 255, 255, 0.05);
+  --text-body: #d3dae4;
+  --text-muted: #9aa5b5;
+}
+
+/* Palette: high-contrast — accessibility. Text is pushed to AAA and structure
+   is made explicit; the series pair stays the validated one, because a
+   brighter pair failed the categorical cohesion band. Contrast belongs in the
+   text and border tokens, not in the data colours. */
+:root[data-palette="high-contrast"] {
+  --canvas: #000000;
+  --canvas-raised: #101010;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-strong: rgba(255, 255, 255, 0.13);
+  --border-hairline: rgba(255, 255, 255, 0.28);
+  --border-strong: rgba(255, 255, 255, 0.6);
+  --panel-from: #121212;
+  --panel-to: #0c0c0c;
+  --panel-highlight: rgba(255, 255, 255, 0.09);
+  --text-primary: #ffffff;
+  --text-body: #f1f5f9;
+  --text-muted: #cbd5e1;
+  --text-meta: #a8b4c4;
+  --text-faint: #64748b;
+}
+
+/* Palette: linen — warm light. Diffs over the paper base, which the light
+   mode attribute has already applied. */
+:root[data-palette="linen"] {
+  --canvas: #f6f3ee;
+  --canvas-raised: #fffdf9;
+  --surface: rgba(87, 63, 33, 0.04);
+  --surface-strong: rgba(87, 63, 33, 0.08);
+  --border-hairline: rgba(93, 71, 46, 0.14);
+  --border-strong: rgba(93, 71, 46, 0.3);
+  --panel-from: #fffdf9;
+  --panel-to: #fbf6ee;
+  --panel-highlight: rgba(255, 255, 255, 0.9);
 }
 
 /* The no-flash theme script sets data-theme before body paint, so the
@@ -177,12 +297,54 @@
   --color-data-neg: var(--data-neg);
   --color-data-warn: var(--data-warn);
 
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
   --shadow-glow: 0 10px 30px -10px var(--glow);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* Structural scales. Not `inline`, because these are fixed constants rather
+   than per-palette values — a palette never changes how dense the app is. */
+@theme {
+  /* Space. Redefining Tailwind's base makes the ordinary utilities the scale
+     itself: p-1=4 p-2=8 p-3=12 p-4=16 p-6=24 p-8=32. Only those six steps are
+     legal, and p-8 is the ceiling — that ceiling is what structurally prevents
+     another 10rem hero panel. Deliberately px, not rem: density must not move
+     when the type scale changes. */
+  --spacing: 4px;
+
+  /* Radius — three values plus rounded-full for pills. 10px is where
+     "product" ends and "brochure" begins; rounded-2xl/3xl stay banned in the
+     console. Status dots are square node dots (rounded-[2px]), not circles. */
+  --radius-chip: 4px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  /* Type — four roles, absolute px so they are immune to the root font-size.
+     A KPI hero value may use text-[22px]; nothing exceeds that in the console.
+
+     These were first set a step smaller (9.5/12.5/13/14). On a real screen that
+     read as zoomed-out rather than dense: 9.5px labels with 0.16em tracking are
+     genuinely hard to read, and the density bought nothing because a list of ten
+     rows still left most of the viewport empty. Dense means "no wasted space",
+     not "small" — so the scale sits at a comfortable reading size and the space
+     is filled with information instead. */
+  --text-instrument: 11px;
+  --text-ui: 14px;
+  --text-num: 15px;
+  --text-head: 17px;
+
+  /* Motion easings. Durations are bare Tailwind numerics (duration-80 … -200);
+     the doctrine is in the ragworks-ui-design skill: motion follows the
+     pointer, never the data. */
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-decel: cubic-bezier(0.2, 0, 0, 1);
+  --ease-accel: cubic-bezier(0.4, 0, 1, 1);
 }
 
 *,
@@ -206,17 +368,17 @@ body {
 }
 
 html {
-  font-size: 14.5px;
+  font-size: 15px;
 }
 
 @media (max-width: 640px) {
   html {
-    font-size: 13.5px;
+    font-size: 14px;
   }
 }
 
-/* Canonical glass card surface (used by GlassCard and a few bespoke panels):
-   token-driven fill + hairline border + themed elevation. */
+/* Canonical glass card surface — LANDING ONLY (GlassCard and the auth pages).
+   Console depth is .card-surface below; blur never ships in (console). */
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--border-hairline);
@@ -225,18 +387,204 @@ html {
   backdrop-filter: blur(18px);
 }
 
-.grid-glow {
+/* ---------------------------------------------------------------------------
+   Console materials — the soft-depth workbench (ragworks-ui-design skill).
+   --------------------------------------------------------------------------- */
+
+/* The card: lighter at the top, 1px inner top highlight, hairline border,
+   soft real shadow. Depth without blur. */
+.card-surface {
+  background: linear-gradient(180deg, var(--panel-from), var(--panel-to));
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 1px 0 var(--panel-highlight),
+    var(--elevation-1);
+}
+
+/* The console's single ambient bloom. AppShell renders it once; no page adds
+   another. color-mix on the accent tokens keeps it correct in every palette. */
+.console-bloom {
   position: relative;
 }
 
-.grid-glow::before {
+.console-bloom::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      640px 420px at -4% -10%,
+      color-mix(in srgb, var(--accent-violet) 9%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      480px 320px at 104% 108%,
+      color-mix(in srgb, var(--accent-cyan) 4%, transparent),
+      transparent 62%
+    );
+}
+
+/* The trace wire — the "you are here" mark. Active sidebar item edge
+   (vertical) and active tab underline (horizontal). Nothing else. */
+.trace-wire {
+  background: linear-gradient(180deg, var(--accent-violet), var(--accent-cyan));
+}
+
+.trace-wire-x {
+  background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan));
+}
+
+/* ---------------------------------------------------------------------------
+   Console motion. The doctrine (ragworks-ui-design skill, references/motion.md)
+   is: motion follows the pointer, never the data. Data paints instantly — there
+   is deliberately no entrance animation for rows, values, or charts here. These
+   five are the complete permitted set, and each no-ops under reduced motion.
+   --------------------------------------------------------------------------- */
+
+/* 1. Route change: one opacity fade on the content region. No travel, no
+   stagger, so no individual datum is held up by it. */
+@keyframes consoleEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.console-enter {
+  animation: consoleEnter 120ms var(--ease-decel) both;
+}
+
+/* 2. Loading: skeleton at the content's FINAL geometry, so data landing causes
+   no reflow. The shimmer is directional (left→right — the signal direction)
+   and rides `transform` only, which stays on the compositor. */
+@keyframes skeletonSweep {
+  to {
+    transform: translateX(200%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-strong);
+}
+
+.skeleton::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(circle, var(--glow), transparent 60%);
-  opacity: 0.65;
-  z-index: -1;
+  width: 60%;
+  transform: translateX(-110%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent-violet) 12%, transparent),
+    transparent
+  );
+  animation: skeletonSweep 1.4s var(--ease-standard) infinite;
+}
+
+/* 3. A value that changed while the user was already looking at it. Never on
+   first paint — this marks a change, it does not announce arrival. */
+@keyframes valueTick {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.value-tick {
+  animation: valueTick 140ms var(--ease-standard) both;
+}
+
+/* 4. A row that just arrived (a completed run): one decaying wash, then gone. */
+@keyframes rowArrive {
+  from {
+    background-color: color-mix(in srgb, var(--data-pos) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.row-arrive {
+  animation: rowArrive 480ms var(--ease-accel) both;
+}
+
+/* 5. Overlay chrome the user asked for (flyouts, menus): a 120ms scale-fade
+   with its origin at the trigger. Chrome, not data — the list inside paints
+   the moment it resolves. */
+@keyframes consoleFlyoutIn {
+  from {
+    opacity: 0;
+    transform: translateX(-2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.console-flyout {
+  transform-origin: left center;
+  animation: consoleFlyoutIn 120ms var(--ease-decel) both;
+}
+
+/* 6. The pulse — the licensed expressive motion, ONLY while data is actually
+   flowing (streaming response, running query/eval). A travelling accent beam
+   on a 2px wire. Idle things never pulse. */
+@keyframes pulseBeam {
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.pulse-track {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent-violet) 18%, transparent);
+}
+
+.pulse-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: 2px;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-violet) 40%,
+    var(--accent-cyan) 60%,
+    transparent
+  );
+  animation: pulseBeam 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-enter,
+  .console-flyout,
+  .skeleton::after,
+  .pulse-track::after,
+  .value-tick,
+  .row-arrive {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 @keyframes liveStreamTailFade {
@@ -271,57 +619,7 @@ html {
   animation: liveStreamTailFade 0.45s ease-out forwards;
 }
 
-@keyframes chatBubbleReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(18px) scale(0.96);
-    filter: blur(8px);
-  }
-  65% {
-    opacity: 1;
-    transform: translateY(-4px) scale(1.01);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes chatBubbleFloat {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-4px);
-  }
-}
-
-.chat-bubble {
-  position: relative;
-  isolation: isolate;
-  animation: chatBubbleFloat 6s ease-in-out infinite alternate;
-}
-
-.chat-bubble::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0.35;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.35), transparent 70%);
-  z-index: -1;
-}
-
-.chat-bubble-enter {
-  animation: chatBubbleReveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .chat-bubble,
-  .chat-bubble-enter,
   .live-stream-text[data-live-stream-key]::after,
   .live-stream-reasoning[data-live-reasoning-key]::after {
     animation: none !important;
@@ -503,33 +801,6 @@ html {
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;
-  }
-}
-
-/* Files browser: a short staggered rise on folder-content mount (delay is
-   set per-row via inline style, capped so deep folders don't crawl).
-   No-ops under reduced motion. */
-@keyframes filesRise {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.files-rise {
-  opacity: 0;
-  animation: filesRise 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .files-rise {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
   }
 }
 

@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { buildPreviewPayload } from "@/components/traces/trace-payload-utils";
 import { InspectableTraceItem } from "@/components/traces/values/InspectableTraceItem";
 import { TraceItemRow } from "@/components/traces/values/TraceItemRow";
+import { Chip } from "@/components/ui/chip";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
+import { Readout } from "@/components/ui/readout";
 import { cn, prettyJson, truncate } from "@/lib/utils";
 
 import type {
@@ -26,13 +30,9 @@ export type TraceValueViewProps = {
   onOpenItem?: (itemId: string) => void;
 };
 
-const chipClass =
-  "rounded-full border border-hairline bg-surface px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-muted";
-const monoClass = "font-mono text-[10px] text-muted";
-
-function Chip({ children }: { children: React.ReactNode }) {
-  return <span className={chipClass}>{children}</span>;
-}
+const monoClass = "font-mono text-instrument text-meta";
+const toggleClass =
+  "text-instrument font-medium text-accent-cyan transition duration-80 ease-standard hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 function ScrollBox({ children }: { children: React.ReactNode }) {
   // Every value view caps its own height and scrolls internally, so a large
@@ -51,16 +51,16 @@ export function TextValue({ value }: TraceValueViewProps) {
   const canExpand = Boolean(full && full.length > summary.preview.length);
   return (
     <div className="space-y-2">
-      <p className="max-h-52 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-body">
+      <p className="max-h-52 max-w-[66ch] overflow-y-auto whitespace-pre-wrap text-ui leading-relaxed text-body">
         {expanded && full ? full : summary.preview}
       </p>
       <div className="flex items-center gap-2">
-        <Chip>{summary.length.toLocaleString()} chars</Chip>
+        <Chip dot={false}>{summary.length.toLocaleString()} chars</Chip>
         {canExpand && (
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="text-[10px] uppercase tracking-[0.25em] text-accent-cyan transition hover:brightness-110"
+            className={toggleClass}
           >
             {expanded ? "Show less" : "Show full"}
           </button>
@@ -79,15 +79,15 @@ export function SourceValue({ value }: TraceValueViewProps) {
     ["Type", source.content_type ?? "—"],
   ];
   return (
-    <dl className="space-y-1.5">
+    <dl className="space-y-1">
       {rows.map(([label, val]) => (
         <div key={label} className="flex items-baseline gap-3">
-          <dt className="w-20 shrink-0 text-[10px] uppercase tracking-[0.25em] text-meta">
-            {label}
+          <dt className="w-20 shrink-0">
+            <InstrumentLabel className="text-meta">{label}</InstrumentLabel>
           </dt>
-          <dd className="min-w-0 flex-1 truncate font-mono text-[11px] text-body" title={val}>
-            {val}
-          </dd>
+          {/* Identifiers and paths break rather than truncate: the whole value
+              is the point, and a tooltip would only repeat it. */}
+          <dd className="min-w-0 flex-1 break-all font-mono text-instrument text-body">{val}</dd>
         </div>
       ))}
     </dl>
@@ -104,9 +104,11 @@ export function ChunkListValue({
   const batch = value as ChunkBatchShape;
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        <Chip>{batch.count} chunks</Chip>
-        {batch.document_id ? <Chip>doc {truncate(batch.document_id, 12)}</Chip> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip tone="chunk">{batch.count} chunks</Chip>
+        {batch.document_id ? (
+          <Readout label="Document">{truncate(batch.document_id, 12)}</Readout>
+        ) : null}
       </div>
       <ScrollBox>
         {batch.samples.map((sample) => {
@@ -120,22 +122,27 @@ export function ChunkListValue({
               onOpenItem={onOpenItem}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className={monoClass}>{sample.chunk_id}</span>
-                <span className={chipClass}>#{sample.order}</span>
+                <span className={cn("min-w-0 truncate", monoClass)}>{sample.chunk_id}</span>
+                <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
+                  #{sample.order}
+                </span>
               </div>
-              <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-body">
+              <p className="mt-1 line-clamp-3 text-ui leading-relaxed text-body">
                 {sample.preview}
               </p>
             </InspectableTraceItem>
           );
         })}
-        {batch.samples.length === 0 && <p className="text-xs text-meta">No chunk samples.</p>}
+        {batch.samples.length === 0 && <p className="text-ui text-meta">No chunk samples.</p>}
       </ScrollBox>
     </div>
   );
 }
 
-/** A fixed-length vector preview drawn as a compact bar sparkline. */
+/**
+ * A fixed-length vector preview drawn as a compact bar sparkline. Sign is a
+ * category, not a status, so the bars read chart series tokens.
+ */
 function VectorSparkline({ values }: { values: number[] }) {
   if (values.length === 0) return null;
   const max = Math.max(...values.map(Math.abs), 1e-9);
@@ -146,7 +153,7 @@ function VectorSparkline({ values }: { values: number[] }) {
         return (
           <span
             key={index}
-            className={cn("min-w-0 flex-1 rounded-[1px]", val >= 0 ? "bg-data-pos" : "bg-data-neg")}
+            className={cn("min-w-0 flex-1 rounded-[1px]", val >= 0 ? "bg-series-1" : "bg-series-2")}
             style={{ height: `${height}%` }}
           />
         );
@@ -176,10 +183,14 @@ export function EmbeddingValue({ value, focusedItemId, onFocusItem }: TraceValue
     (typeof asPreview.total_values === "number" ? asPreview.total_values : undefined) ??
     previews[0]?.preview.total_values;
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        {typeof dimension === "number" && dimension > 0 ? <Chip>{dimension}-dim</Chip> : null}
-        {typeof asSummary.count === "number" ? <Chip>{asSummary.count} vectors</Chip> : null}
+        {typeof dimension === "number" && dimension > 0 ? (
+          <Chip tone="embed">{dimension}-dim</Chip>
+        ) : null}
+        {typeof asSummary.count === "number" ? (
+          <Chip tone="embed">{asSummary.count} vectors</Chip>
+        ) : null}
       </div>
       {previews.length ? (
         <div className="space-y-2">
@@ -189,10 +200,10 @@ export function EmbeddingValue({ value, focusedItemId, onFocusItem }: TraceValue
               itemId={sample.id ?? `embedding-${index + 1}`}
               focused={Boolean(sample.id && sample.id === focusedItemId)}
               onFocusItem={sample.id ? onFocusItem : undefined}
-              className="w-full rounded-xl border border-hairline bg-canvas p-2.5 text-left"
+              className="w-full rounded-control border border-hairline bg-canvas p-2 text-left"
             >
               <VectorSparkline values={sample.preview.preview} />
-              <p className="mt-1.5 truncate font-mono text-[10px] text-meta">
+              <p className={cn("mt-1 truncate", monoClass)}>
                 {sample.id ? `${sample.id} · ` : ""}[
                 {sample.preview.preview.map((v) => v.toFixed(3)).join(", ")}
                 {sample.preview.total_values > sample.preview.preview.length ? ", …" : ""}]
@@ -201,7 +212,7 @@ export function EmbeddingValue({ value, focusedItemId, onFocusItem }: TraceValue
           ))}
         </div>
       ) : (
-        <p className="text-xs text-meta">No embedding recorded.</p>
+        <p className="text-ui text-meta">No embedding recorded.</p>
       )}
     </div>
   );
@@ -217,8 +228,8 @@ export function MatchListValue({
   const list = value as MatchListShape;
   const maxScore = Math.max(...list.top_matches.map((match) => match.score), 1e-9);
   return (
-    <div className="space-y-3">
-      <Chip>{list.count} matches</Chip>
+    <div className="space-y-2">
+      <Chip tone="retrieve">{list.count} matches</Chip>
       <ScrollBox>
         {list.top_matches.map((match) => {
           const active = focusedItemId ? match.chunk_id === focusedItemId : false;
@@ -231,22 +242,15 @@ export function MatchListValue({
               onOpenItem={onOpenItem}
             >
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-strong text-[10px] font-semibold leading-none text-body">
-                  {match.rank}
+                <span className="w-6 shrink-0 font-mono text-instrument tabular-nums text-muted">
+                  #{match.rank}
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-accent-violet to-accent-cyan"
-                    style={{ width: `${(match.score / maxScore) * 100}%` }}
-                  />
-                </div>
-                <span className="shrink-0 font-mono text-[11px] text-body">
+                <Meter value={match.score / maxScore} className="flex-1" />
+                <span className="shrink-0 font-mono text-instrument tabular-nums text-body">
                   {match.score.toFixed(3)}
                 </span>
               </div>
-              <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-body">
-                {match.preview}
-              </p>
+              <p className="mt-1 line-clamp-2 text-ui leading-relaxed text-body">{match.preview}</p>
               <p className={cn("mt-1 truncate", monoClass)}>{match.chunk_id}</p>
             </InspectableTraceItem>
           );
@@ -260,7 +264,7 @@ export function MatchListValue({
 export function MatchOrderValue({ value, focusedItemId, onFocusItem }: TraceValueViewProps) {
   const entries = value as MatchOrderEntryShape[];
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1">
       {entries.map((entry) => (
         <TraceItemRow
           key={`${entry.rank}-${entry.chunk_id}`}
@@ -269,8 +273,10 @@ export function MatchOrderValue({ value, focusedItemId, onFocusItem }: TraceValu
           onFocusItem={onFocusItem}
           className="flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2 py-1"
         >
-          <span className="text-[10px] font-semibold text-muted">#{entry.rank}</span>
-          <span className="font-mono text-[10px] text-accent-cyan">{entry.score.toFixed(3)}</span>
+          <span className="font-mono text-instrument tabular-nums text-muted">#{entry.rank}</span>
+          <span className="font-mono text-instrument tabular-nums text-accent-cyan">
+            {entry.score.toFixed(3)}
+          </span>
         </TraceItemRow>
       ))}
     </div>
@@ -289,7 +295,7 @@ export function ItemListValue({ value, focusedItemId, onFocusItem }: TraceValueV
 
   return (
     <div className="space-y-2">
-      <Chip>
+      <Chip tone={trace.kind === "chunks" ? "chunk" : "retrieve"}>
         {trace.items.length} {trace.kind}
       </Chip>
       <ScrollBox>
@@ -299,14 +305,16 @@ export function ItemListValue({ value, focusedItemId, onFocusItem }: TraceValueV
               itemId={item.id}
               focused={item.id === focusedItemId}
               onFocusItem={onFocusItem}
-              className="flex w-full items-center gap-2 rounded-xl border border-hairline bg-canvas px-2.5 py-2 text-left"
+              className="flex w-full items-center gap-2 rounded-control border border-hairline bg-canvas px-2 py-2 text-left"
             >
-              <span className="w-8 shrink-0 font-mono text-[10px] text-muted">#{rank}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-body">
+              <span className="w-8 shrink-0 font-mono text-instrument tabular-nums text-muted">
+                #{rank}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-mono text-instrument text-body">
                 {item.id}
               </span>
               {typeof item.score === "number" ? (
-                <span className="shrink-0 font-mono text-[10px] text-accent-cyan">
+                <span className="shrink-0 font-mono text-instrument tabular-nums text-accent-cyan">
                   {item.score.toFixed(3)}
                 </span>
               ) : null}
@@ -322,23 +330,22 @@ export function ItemListValue({ value, focusedItemId, onFocusItem }: TraceValueV
 export function KeyValueView({ value }: TraceValueViewProps) {
   const record = value as Record<string, string | number | boolean | null>;
   return (
-    <dl className="grid grid-cols-2 gap-2">
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
       {Object.entries(record).map(([label, val]) => (
-        <div key={label} className="rounded-xl border border-hairline bg-surface px-2.5 py-1.5">
-          <dt className="text-[10px] uppercase tracking-[0.25em] text-meta">
-            {label.replace(/_/g, " ")}
-          </dt>
-          <dd className="mt-0.5 truncate text-[12px] text-body">{String(val)}</dd>
-        </div>
+        <Readout key={label} label={label.replace(/_/g, " ")}>
+          {String(val)}
+        </Readout>
       ))}
-    </dl>
+    </div>
   );
 }
 
 /** A single scalar shown prominently (e.g. Top K). */
 export function ScalarValue({ value }: TraceValueViewProps) {
   return (
-    <p className="text-lg font-semibold text-primary">{value === null ? "—" : String(value)}</p>
+    <p className="font-mono text-[20px] tabular-nums text-primary">
+      {value === null ? "—" : String(value)}
+    </p>
   );
 }
 
@@ -348,14 +355,10 @@ export function JsonValue({ value }: TraceValueViewProps) {
   const text = expanded ? prettyJson(value) : prettyJson(buildPreviewPayload(value));
   return (
     <div className="space-y-2">
-      <pre className="max-h-52 overflow-auto rounded-xl border border-hairline bg-canvas p-3 font-mono text-[11px] leading-relaxed text-body">
+      <pre className="max-h-52 overflow-auto rounded-panel border border-hairline bg-canvas p-3 font-mono text-instrument leading-relaxed text-body">
         {text}
       </pre>
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="text-[10px] uppercase tracking-[0.25em] text-accent-cyan transition hover:brightness-110"
-      >
+      <button type="button" onClick={() => setExpanded((prev) => !prev)} className={toggleClass}>
         {expanded ? "Collapse" : "Expand"}
       </button>
     </div>

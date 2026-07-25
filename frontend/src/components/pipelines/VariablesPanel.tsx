@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { expressionSource } from "@/lib/expressions";
@@ -21,6 +22,7 @@ import {
 } from "./lib/variable-env";
 import { ConstantValueField, InputVariableFields } from "./VariableValueFields";
 
+import type { ChipTone } from "@/components/ui/chip";
 import type { CatalogModel, PipelineVariable, VariableSource, VariableType } from "@/lib/types";
 
 type NodeLike = { type: string; config: Record<string, unknown> };
@@ -44,9 +46,16 @@ const DEFAULT_VALUES: Record<VariableType, PipelineVariable["value"]> = {
 };
 
 const SOURCE_BADGES: Record<VariableSource, string> = {
-  value: "const",
-  expression: "expr",
-  input: "input",
+  value: "Constant",
+  expression: "Expression",
+  input: "Input",
+};
+
+/** Input variables come from the caller — the only source with live state. */
+const SOURCE_TONES: Record<VariableSource, ChipTone> = {
+  value: "neutral",
+  expression: "neutral",
+  input: "accent",
 };
 
 function nameProblem(name: string, taken: Set<string>): string | null {
@@ -117,8 +126,8 @@ export function VariablesPanel({
   };
 
   return (
-    <div className="mt-4 space-y-3">
-      <ul className="space-y-2">
+    <div className="space-y-2">
+      <ul className="space-y-1">
         {variables.map((variable, index) => {
           const otherNames = new Set(
             variables.filter((_, i) => i !== index).map((entry) => entry.name),
@@ -131,7 +140,7 @@ export function VariablesPanel({
             <li
               key={index}
               className={cn(
-                "rounded-2xl border bg-surface",
+                "rounded-control border bg-surface",
                 problem ? "border-data-neg/50" : "border-hairline",
               )}
             >
@@ -146,22 +155,18 @@ export function VariablesPanel({
                     setExpanded(isOpen ? null : variable.name);
                   }
                 }}
-                className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-control px-2 py-2 transition-colors duration-80 ease-standard hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
               >
-                <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span className="truncate font-mono text-xs text-body">
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  {/* A variable name is a literal the expression grammar reads. */}
+                  <span className="truncate font-mono text-ui text-body">
                     {variable.name || "—"}
                   </span>
-                  <span
-                    className={cn(
-                      "font-mono text-[10px] uppercase tracking-[0.2em]",
-                      source === "input" ? "text-accent-cyan" : "text-meta",
-                    )}
-                  >
+                  <Chip tone={SOURCE_TONES[source]} dot={false} className="shrink-0">
                     {SOURCE_BADGES[source]}
-                  </span>
+                  </Chip>
                 </span>
-                <span className="font-mono text-[11px] text-meta">
+                <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
                   {source === "expression"
                     ? `= ${formatPreviewValue(env.values.get(variable.name))}`
                     : formatPreviewValue(env.values.get(variable.name))}
@@ -179,7 +184,7 @@ export function VariablesPanel({
                   onRemove={() => removeVariable(index)}
                 />
               ) : problem ? (
-                <p className="px-3 pb-2 text-xs text-data-neg">{problem}</p>
+                <p className="px-2 pb-2 text-ui text-data-neg">{problem}</p>
               ) : null}
             </li>
           );
@@ -243,16 +248,16 @@ function VariableEditor({
   const source = variableSource(variable);
 
   return (
-    <div className="space-y-3 border-t border-hairline px-3 py-3">
+    <div className="space-y-3 border-t border-hairline p-2">
       <Field label="Name" error={problem}>
         <TextInput
           value={variable.name}
           onChange={(event) => onPatch({ name: event.target.value })}
           disabled={disabled}
-          className="font-mono text-[13px]"
+          className="font-mono text-ui"
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <Field label="Type">
           <CustomSelect
             value={variable.type}
@@ -312,7 +317,7 @@ function VariableEditor({
 
       <div className="flex items-center justify-between gap-2 pt-1">
         {referencedBy.length > 0 ? (
-          <p className="text-xs text-meta">Used by {referencedBy.join(", ")}</p>
+          <p className="min-w-0 text-instrument text-meta">Used by {referencedBy.join(", ")}</p>
         ) : (
           <span />
         )}
@@ -328,7 +333,7 @@ function VariableEditor({
         </Button>
       </div>
       {referencedBy.length > 0 ? (
-        <p className="text-xs text-data-neg">
+        <p className="max-w-[66ch] text-ui text-data-neg">
           Deleting breaks the references above until they are updated.
         </p>
       ) : null}

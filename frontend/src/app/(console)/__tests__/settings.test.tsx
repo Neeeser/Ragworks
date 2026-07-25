@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "@/app/(console)/settings/page";
 import * as apiModule from "@/lib/api";
+import { ThemeProvider } from "@/providers/theme-provider";
 
 const OLLAMA_URL = "http://192.168.1.225:11434";
 
@@ -14,6 +15,15 @@ const api = vi.mocked(apiModule);
 
 const TOKEN = "test-token";
 
+/** The console layout supplies ThemeProvider; the Appearance panel needs it. */
+function renderPage() {
+  return render(
+    <ThemeProvider>
+      <SettingsPage />
+    </ThemeProvider>,
+  );
+}
+
 describe("SettingsPage (provider connections)", () => {
   beforeEach(async () => {
     const { resetMockAuth } = await import("@/test/mocks");
@@ -21,7 +31,7 @@ describe("SettingsPage (provider connections)", () => {
   });
 
   it("lists configured connections with capability badges and built-ins", async () => {
-    render(<SettingsPage />);
+    renderPage();
 
     expect(await screen.findByText("OpenRouter")).toBeInTheDocument();
     expect(screen.getAllByText("Embeddings").length).toBeGreaterThan(0);
@@ -32,7 +42,7 @@ describe("SettingsPage (provider connections)", () => {
 
   it("adds an Ollama connection through the data-driven form", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(await screen.findByRole("button", { name: /add provider/i }));
     await user.click(await screen.findByRole("button", { name: /ollama/i }));
@@ -57,7 +67,7 @@ describe("SettingsPage (provider connections)", () => {
 
   it("shows reranking providers and the TEI connection constraint from its descriptor", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(await screen.findByRole("button", { name: /add provider/i }));
     expect(screen.getAllByText("Reranking").length).toBeGreaterThan(0);
@@ -72,7 +82,7 @@ describe("SettingsPage (provider connections)", () => {
       message: "The Ollama server is unreachable.",
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(await screen.findByRole("button", { name: /add provider/i }));
     await user.click(await screen.findByRole("button", { name: /ollama/i }));
@@ -85,7 +95,7 @@ describe("SettingsPage (provider connections)", () => {
 
   it("removes a connection after confirmation", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(await screen.findByRole("button", { name: /remove openrouter/i }));
     await user.click(await screen.findByRole("button", { name: /^remove$/i }));
@@ -98,7 +108,7 @@ describe("SettingsPage (provider connections)", () => {
   it("validates a saved connection and shows the outcome", async () => {
     api.validateConnection.mockResolvedValueOnce({ valid: true, message: "Connected." });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(await screen.findByRole("button", { name: /validate openrouter/i }));
 

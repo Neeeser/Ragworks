@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { GlassCard } from "@/components/ui/panel";
 import { TabList, tabId } from "@/components/ui/tabs";
 
 import { PipelineCatalog } from "./PipelineCatalog";
@@ -32,6 +31,11 @@ type PipelineSidebarProps = {
   knownBackends: IndexBackend[];
 };
 
+/**
+ * The editor's left rail: the pipelines in this kind plus the node library, or
+ * the open pipeline's variables. It is a pane of the workspace card, not a card
+ * of its own — a card inside a card is the nesting the console forbids.
+ */
 export function PipelineSidebar({
   pipelines,
   selectedPipelineId,
@@ -52,45 +56,51 @@ export function PipelineSidebar({
   const [tab, setTab] = useState<SidebarTab>("pipelines");
 
   return (
-    <GlassCard className="rounded-3xl p-5 xl:h-full xl:overflow-y-auto">
-      <TabList<SidebarTab>
-        tabs={[
-          { id: "pipelines", label: "Pipelines" },
-          { id: "variables", label: "Variables" },
-        ]}
-        active={tab}
-        onSelect={setTab}
-        label="Sidebar sections"
-        className="mb-4"
-      />
-      {tab === "pipelines" ? (
-        <div role="tabpanel" aria-labelledby={tabId("pipelines")}>
-          <PipelineCatalog
-            pipelines={pipelines}
-            selectedPipelineId={selectedPipelineId}
-            onSelect={onSelectPipeline}
-            onDelete={onDeletePipeline}
-            pipelineUsage={pipelineUsage}
-          />
-          <PipelineNodeLibrary
-            catalog={catalog}
-            onPreviewNode={onPreviewNode}
-            hasRerankingProvider={hasRerankingProvider}
-            rerankingProviderMessage={rerankingProviderMessage}
-            knownBackends={knownBackends}
-          />
-        </div>
-      ) : (
-        <div role="tabpanel" aria-labelledby={tabId("variables")}>
-          <VariablesPanel
-            variables={variables}
-            onChange={onVariablesChange}
-            nodes={variableNodes}
-            modelOptions={modelOptions}
-            disabled={variablesDisabled}
-          />
-        </div>
-      )}
-    </GlassCard>
+    <>
+      {/* No fixed height: the pill strip sizes to its own type, and clamping it
+          clipped the selected pill's fill. */}
+      <div className="flex shrink-0 items-center border-b border-hairline p-2">
+        <TabList<SidebarTab>
+          tabs={[
+            { id: "pipelines", label: "Pipelines" },
+            { id: "variables", label: "Variables" },
+          ]}
+          active={tab}
+          onSelect={setTab}
+          label="Sidebar sections"
+          className="w-full"
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "pipelines" ? (
+          <div role="tabpanel" aria-labelledby={tabId("pipelines")}>
+            <PipelineCatalog
+              pipelines={pipelines}
+              selectedPipelineId={selectedPipelineId}
+              onSelect={onSelectPipeline}
+              onDelete={onDeletePipeline}
+              pipelineUsage={pipelineUsage}
+            />
+            <PipelineNodeLibrary
+              catalog={catalog}
+              onPreviewNode={onPreviewNode}
+              hasRerankingProvider={hasRerankingProvider}
+              rerankingProviderMessage={rerankingProviderMessage}
+              knownBackends={knownBackends}
+            />
+          </div>
+        ) : (
+          <div role="tabpanel" aria-labelledby={tabId("variables")} className="p-2">
+            <VariablesPanel
+              variables={variables}
+              onChange={onVariablesChange}
+              nodes={variableNodes}
+              modelOptions={modelOptions}
+              disabled={variablesDisabled}
+            />
+          </div>
+        )}
+      </div>
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { InstrumentLabel } from "../ui/instrument-label";
 import { Tooltip } from "../ui/tooltip";
 
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
@@ -40,18 +41,21 @@ export function PipelineNodeLibrary({
   };
 
   return (
-    <div className="mt-6 border-t border-hairline pt-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Node library</p>
-      <p className="mt-2 text-xs text-meta">Drag nodes into the canvas to add them.</p>
-      <div className="mt-3 space-y-4">
+    <div className="border-t border-hairline p-2">
+      <div className="flex items-baseline justify-between gap-2 px-1 py-1">
+        <InstrumentLabel className="text-body">Node library</InstrumentLabel>
+        {/* Kept: drag-to-add is the only affordance the layout cannot show. */}
+        <InstrumentLabel>Drag onto the canvas</InstrumentLabel>
+      </div>
+      <div className="mt-1 space-y-3">
         {catalog.map(({ family, specs }) => {
           const styles = getNodeFamilyStyles(family);
           return (
             <div key={family}>
-              <p className={`text-xs uppercase tracking-[0.3em] ${styles.badge}`}>
+              <InstrumentLabel className={`px-1 ${styles.badge}`}>
                 {getNodeFamilyLabel(family)}
-              </p>
-              <div className="mt-2 space-y-2">
+              </InstrumentLabel>
+              <div className="mt-1 space-y-1">
                 {specs.map((spec) => {
                   const unavailable = spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider;
                   // Restriction is informational: a store-bound node still
@@ -60,19 +64,24 @@ export function PipelineNodeLibrary({
                   // hard gate. The badge just sets expectations up front.
                   const restricted = restrictedBackends(spec, knownBackends);
                   return (
-                    <div key={spec.type} className="space-y-2">
+                    <div key={spec.type}>
                       <button
                         type="button"
                         onClick={() => onPreviewNode(spec)}
                         onDragStart={(event) => handleDragStart(event, spec)}
                         draggable={!unavailable}
                         disabled={unavailable}
-                        className={`w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-left text-xs text-body ${styles.border} hover:border-strong disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-hairline`}
+                        className={`w-full rounded-control border border-hairline bg-surface px-2 py-1.5 text-left transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-hairline disabled:hover:bg-surface ${styles.border}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="font-semibold">{spec.label}</p>
-                            <p className="text-[10px] text-meta">{spec.type}</p>
+                            <p className="truncate text-ui font-medium text-primary">
+                              {spec.label}
+                            </p>
+                            {/* A node type id is a literal — mono, verbatim. */}
+                            <p className="truncate font-mono text-instrument text-meta">
+                              {spec.type}
+                            </p>
                           </div>
                           {restricted ? (
                             // One backend logo per store the node works with;
@@ -81,6 +90,7 @@ export function PipelineNodeLibrary({
                             // backends just add another icon.
                             <Tooltip
                               content={`Only available on ${backendSupportLabel(restricted)}`}
+                              side="left"
                               triggerClassName="mt-0.5 shrink-0 items-center gap-1"
                             >
                               {restricted.map((backend) => (
@@ -95,11 +105,11 @@ export function PipelineNodeLibrary({
                         </div>
                       </button>
                       {unavailable ? (
-                        <p className="text-xs text-muted">
+                        <p className="mt-1 px-1 text-instrument text-muted">
                           {rerankingProviderMessage}{" "}
                           <Link
                             href="/settings"
-                            className="text-accent-cyan underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                            className="rounded-control text-accent-cyan underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
                           >
                             Settings
                           </Link>

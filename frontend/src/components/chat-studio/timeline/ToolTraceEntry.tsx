@@ -1,5 +1,4 @@
 import { BranchedFromBanner } from "@/components/chat-studio/timeline/BranchedFromBanner";
-import { roleVariants } from "@/components/chat-studio/timeline/timeline-constants";
 import { ToolCallBubble } from "@/components/chat-studio/Tooling";
 
 import type { ChatToolEntry } from "@/components/chat-studio/lib/chat-types";
@@ -34,24 +33,20 @@ export const ToolTraceEntry = ({
   const branchedFromLabel = branchedFromSessionTitle || "Original chat";
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-1.5">
       <ToolCallBubble
         label={entry.label}
-        variantClass={roleVariants.tool}
         args={entry.args}
         response={entry.response}
         rawPayload={entry.rawPayload}
-        className="chat-bubble"
       />
       {shouldShowBranchedFrom ? (
-        <div className="flex justify-start">
-          <BranchedFromBanner
-            className="mt-2 flex items-center gap-2 text-[11px] text-muted"
-            branchedFromSessionId={branchedFromSessionId}
-            branchedFromLabel={branchedFromLabel}
-            onNavigateToSession={onNavigateToSession}
-          />
-        </div>
+        <BranchedFromBanner
+          className="flex items-center gap-1.5"
+          branchedFromSessionId={branchedFromSessionId}
+          branchedFromLabel={branchedFromLabel}
+          onNavigateToSession={onNavigateToSession}
+        />
       ) : null}
     </div>
   );

@@ -211,7 +211,7 @@ export function CreateCollectionWizard({
     <WizardShell
       open={open}
       title="Create collection"
-      subtitle="New collection wizard"
+      subtitle="New collection"
       steps={steps}
       activeStepIndex={stepIndex}
       message={message}
@@ -313,26 +313,26 @@ export function CreateCollectionWizard({
 
       {stepIndex === 2 && (
         <div className="space-y-4">
-          <div className="rounded-3xl border border-hairline bg-surface p-4">
+          <div className="rounded-panel border border-hairline bg-surface p-3">
             <button
               type="button"
-              className="flex w-full items-center justify-between text-sm text-body"
+              className="flex w-full items-center justify-between text-ui text-body"
               onClick={() => setShowAdvanced((prev) => !prev)}
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-accent-violet" />
                 Advanced pipeline defaults
               </span>
-              <span className="text-xs text-muted">{showAdvanced ? "Hide" : "Show"}</span>
+              <span className="text-ui text-muted">{showAdvanced ? "Hide" : "Show"}</span>
             </button>
             {showAdvanced ? (
               <div className="mt-4 space-y-4">
                 {!usesDefaultPipelines ? (
-                  <p className="text-sm text-muted">
+                  <p className="text-ui text-muted">
                     Advanced options are available only when the default pipelines are selected.
                   </p>
                 ) : nodeSpecs.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-muted">
+                  <div className="flex items-center gap-2 text-ui text-muted">
                     <Loader className="h-4 w-4" />
                     Loading node settings...
                   </div>
@@ -356,7 +356,7 @@ export function CreateCollectionWizard({
                 )}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted">
+              <p className="mt-3 text-ui text-muted">
                 The default pipelines apply unless you enable advanced overrides.
               </p>
             )}
@@ -366,18 +366,18 @@ export function CreateCollectionWizard({
 
       {stepIndex === 3 && (
         <div className="space-y-4">
-          <div className="rounded-3xl border border-hairline bg-surface p-4">
+          <div className="rounded-panel border border-hairline bg-surface p-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">Summary</p>
-            <div className="mt-3 space-y-3 text-sm text-body">
+            <div className="mt-3 space-y-3 text-ui text-body">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">Name</p>
-                <p className="text-base font-semibold text-primary">{form.name || "Untitled"}</p>
+                <p className="text-head font-semibold text-primary">{form.name || "Untitled"}</p>
               </div>
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
                   Description
                 </p>
-                <p className="text-sm text-body">
+                <p className="text-ui text-body">
                   {form.description || "No description provided."}
                 </p>
               </div>
@@ -386,7 +386,7 @@ export function CreateCollectionWizard({
                   <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
                     Ingestion pipeline
                   </p>
-                  <p className="text-sm text-primary">
+                  <p className="text-ui text-primary">
                     {pipelineNameById.get(form.ingestion_pipeline_id) || "Default"}
                   </p>
                 </div>
@@ -394,7 +394,7 @@ export function CreateCollectionWizard({
                   <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
                     Retrieval pipeline
                   </p>
-                  <p className="text-sm text-primary">
+                  <p className="text-ui text-primary">
                     {pipelineNameById.get(form.retrieval_pipeline_id) || "Default"}
                   </p>
                 </div>
@@ -403,7 +403,7 @@ export function CreateCollectionWizard({
                 <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-meta">
                   Advanced defaults
                 </p>
-                <p className="text-sm text-body">
+                <p className="text-ui text-body">
                   {showAdvanced && usesDefaultPipelines ? "Enabled" : "Not configured"}
                 </p>
               </div>

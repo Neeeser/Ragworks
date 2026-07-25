@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FileRowDetails } from "@/components/files/FileRowDetails";
 import * as apiModule from "@/lib/api";
-import { makeChunk, makeChunkVisualization, makeFileNode } from "@/test/fixtures";
+import { makeChunk, makeChunkVisualization } from "@/test/fixtures";
 
 import type { FileIngestion } from "@/lib/types";
 
@@ -44,10 +44,9 @@ describe("FileRowDetails", () => {
       }),
     );
 
-    render(<FileRowDetails node={makeFileNode()} ingestion={ingestion} token="token" />);
+    render(<FileRowDetails ingestion={ingestion} token="token" />);
     await waitFor(() => expect(screen.getByText(/Chunk 00/)).toBeInTheDocument());
 
-    expect(screen.getByText("Trace")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View ingestion trace" })).toBeInTheDocument();
     expect(screen.getAllByText(/Chunk \d{2}/).map((item) => item.textContent)).toEqual([
       "Chunk 00",
@@ -76,7 +75,7 @@ describe("FileRowDetails", () => {
       }),
     );
 
-    render(<FileRowDetails node={makeFileNode()} ingestion={ingestion} token="token" />);
+    render(<FileRowDetails ingestion={ingestion} token="token" />);
     await waitFor(() => expect(screen.getByText(/Chunk 07/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Trace this chunk" }));

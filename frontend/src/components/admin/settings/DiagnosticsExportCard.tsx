@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { PanelHeader } from "@/components/ui/panel";
 import { fetchAdminDiagnostics } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
@@ -42,24 +43,19 @@ export function DiagnosticsExportCard() {
   }
 
   return (
-    <section aria-labelledby="config-section-diagnostics">
-      <h2
-        id="config-section-diagnostics"
-        className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted"
-      >
-        Diagnostics
-      </h2>
-      <div className="mt-2 border-t border-hairline py-5">
-        <p className="text-sm text-body">
-          Download recent backend log records from this server process. Records are redacted and
-          hold no secrets or user content. Attach the file to a bug report.
+    <section aria-labelledby="config-section-diagnostics" className="card-surface">
+      <PanelHeader id="config-section-diagnostics" title="Diagnostics" />
+      <div className="p-3">
+        <p className="max-w-[66ch] text-ui text-muted">
+          Recent backend log records from this server process, redacted of secrets and user content.
+          Attach the file to a bug report.
         </p>
         {error && (
-          <p role="alert" className="mt-3 text-sm text-data-neg">
+          <p role="alert" className="mt-2 text-ui text-data-neg">
             {error}
           </p>
         )}
-        <div className="mt-4">
+        <div className="mt-3">
           <Button size="sm" variant="secondary" loading={downloading} onClick={handleDownload}>
             Download diagnostics
           </Button>

@@ -10,7 +10,7 @@ import { mcpEndpointUrl } from "@/components/mcp/lib/connection";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyBlock } from "@/components/ui/copy-block";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { API_BASE_URL } from "@/lib/api";
 import { useOrigin } from "@/lib/use-origin";
 import { useAppConfig } from "@/providers/config-provider";
@@ -49,10 +49,10 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
   if (config.features.mcp_access === false) return null;
 
   return (
-    <GlassCard className="rounded-3xl p-5">
+    <Panel className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">MCP</p>
+          <p className="text-ui font-medium text-primary">MCP</p>
           <HarnessMarkRow />
         </div>
         <Button type="button" onClick={() => setDialogOpen(true)}>
@@ -60,25 +60,27 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
         </Button>
       </div>
 
-      <p className="mt-3 text-sm text-body leading-relaxed">
+      <p className="mt-3 max-w-[66ch] text-ui text-muted">
         Agent harnesses reach this collection&apos;s tools over MCP at this endpoint, using an API
         key.
       </p>
 
       {endpoint && <CopyBlock className="mt-4" label="Endpoint" value={endpoint} inline />}
 
-      {error && <p className="mt-4 text-sm text-data-neg">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-ui text-data-neg">
+          {error}
+        </p>
+      )}
 
       {!loading && scopedKeys.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No key reaches this collection yet.</p>
+        <p className="mt-4 text-ui text-muted">No key reaches this collection yet.</p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <div className="mt-3 border-t border-hairline">
           {scopedKeys.map((key) => (
-            <li key={key.id}>
-              <ApiKeyRow apiKey={key} busy={busy} onRevoke={setPendingRevoke} />
-            </li>
+            <ApiKeyRow key={key.id} apiKey={key} busy={busy} onRevoke={setPendingRevoke} />
           ))}
-        </ul>
+        </div>
       )}
 
       <ConnectAgentDialog
@@ -105,6 +107,6 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
           if (target) void revoke(target.id);
         }}
       />
-    </GlassCard>
+    </Panel>
   );
 }

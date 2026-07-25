@@ -84,7 +84,7 @@ describe("PipelineNode", () => {
 
     expect(screen.getByText("Embedder")).toBeInTheDocument();
     expect(screen.getByText("Embedders")).toBeInTheDocument();
-    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("Model")).toBeInTheDocument();
     expect(screen.getByText("openai/text-embedding-3-small")).toBeInTheDocument();
     expect(screen.getByTestId("target-chunks")).toBeInTheDocument();
@@ -126,12 +126,13 @@ describe("PipelineNode", () => {
     expect(variadic).not.toHaveTextContent("(many)");
     const variadicRow = screen.getByTestId("target-results").parentElement;
     expect(variadicRow?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(3);
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Accepts multiple retrieval result connections",
+    // Every port row explains itself; only the variadic one names the fan-in.
+    const [variadicTooltip, outputTooltip] = screen.getAllByRole("tooltip");
+    expect(variadicTooltip).toHaveTextContent("Accepts multiple retrieval result connections");
+    expect(outputTooltip).toHaveTextContent("Results · Results");
+    expect(variadicTooltip.parentElement?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(
+      3,
     );
-    expect(
-      screen.getByRole("tooltip").parentElement?.querySelectorAll(STACKED_SOCKET_SELECTOR),
-    ).toHaveLength(3);
 
     render(
       <PipelineNode
@@ -156,7 +157,9 @@ describe("PipelineNode", () => {
       />,
     );
 
-    const single = screen.getByTitle(/accepts one connection/);
+    const single = screen
+      .getAllByRole("tooltip")
+      .find((node) => /accepts one connection/.test(node.textContent ?? ""));
     expect(single).toHaveTextContent("Results");
     const singleRow = screen.getAllByTestId("target-results")[1].parentElement;
     expect(singleRow?.querySelector(STACKED_SOCKET_SELECTOR)).not.toBeInTheDocument();

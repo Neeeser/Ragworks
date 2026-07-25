@@ -10,7 +10,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TextArea } from "@/components/ui/field";
-import { GlassCard } from "@/components/ui/panel";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Panel, PanelHeader } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { EvalDatasetQuery, EvalQuestionType } from "@/lib/types";
@@ -42,30 +45,42 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
   };
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline bg-surface p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Queries</p>
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-meta">
-          {total.toLocaleString()} total
-        </p>
-      </div>
+    <Panel>
+      <PanelHeader
+        title="Queries"
+        end={
+          <span className="font-mono text-instrument tabular-nums text-meta">
+            {total.toLocaleString()} total
+          </span>
+        }
+      />
+
       {actionError && (
-        <p role="alert" className="mt-3 text-sm text-data-neg">
+        <p role="alert" className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
           {actionError}
         </p>
       )}
+
       {page.error ? (
-        <p className="mt-4 text-sm text-data-neg">
+        <p className="p-3 text-ui text-data-neg">
           {getErrorMessage(page.error, "Could not load queries")}
         </p>
+      ) : page.loading && items.length === 0 ? (
+        <div aria-busy>
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="border-b border-hairline px-3 py-3 last:border-b-0">
+              <Skeleton className="h-2 max-w-96" />
+              <Skeleton className="mt-2 h-2 max-w-48" />
+            </div>
+          ))}
+          <span className="sr-only">Loading queries</span>
+        </div>
       ) : items.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
-          {page.loading ? "Loading queries…" : "No queries in this dataset."}
-        </p>
+        <p className="p-8 text-center text-ui text-muted">No queries in this dataset.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-[color:var(--border-hairline)]">
+        <ul>
           {items.map((query) => (
-            <li key={query.id} className="py-3">
+            <li key={query.id} className="border-b border-hairline px-3 py-3 last:border-b-0">
               {editing?.id === query.id ? (
                 <div className="space-y-2">
                   <TextArea
@@ -75,19 +90,21 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                     onChange={(event) => setEditing({ id: query.id, text: event.target.value })}
                   />
                   <div className="flex gap-2">
-                    <Button onClick={save} className="px-4">
-                      <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Save
+                    <Button size="sm" onClick={save}>
+                      <Check className="h-3.5 w-3.5" aria-hidden /> Save
                     </Button>
-                    <Button variant="secondary" onClick={() => setEditing(null)} className="px-4">
-                      <X className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Cancel
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
+                      <X className="h-3.5 w-3.5" aria-hidden /> Cancel
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm text-primary">{query.text}</p>
-                    <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-ui text-primary">{query.text}</p>
+                    {/* One meta line: question shape, the documents judged
+                        relevant to it, and the grader's scores. */}
+                    <p className="mt-1 text-instrument text-muted">
                       {query.question_type && `${TYPE_LABEL[query.question_type]} · `}
                       {query.gold.length > 0 &&
                         `gold: ${query.gold
@@ -100,28 +117,35 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                           .join("/")}`}
                     </p>
                     {query.quote && (
-                      <p className="mt-1 truncate text-xs text-meta" title={query.quote}>
-                        “{query.quote}”
-                      </p>
+                      <Tooltip content={query.quote} triggerClassName="mt-1 max-w-full">
+                        <span className="block truncate text-instrument text-meta">
+                          “{query.quote}”
+                        </span>
+                      </Tooltip>
                     )}
                   </div>
-                  <div className="flex shrink-0 gap-1">
-                    <button
-                      type="button"
-                      aria-label={`Edit query ${query.external_query_id}`}
-                      className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
-                      onClick={() => setEditing({ id: query.id, text: query.text })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete query ${query.external_query_id}`}
-                      className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
-                      onClick={() => setPendingDelete(query)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Tooltip content="Edit query">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Edit query ${query.external_query_id}`}
+                        onClick={() => setEditing({ id: query.id, text: query.text })}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    </Tooltip>
+                    <Tooltip content="Delete query" side="left">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Delete query ${query.external_query_id}`}
+                        className="hover:text-data-neg"
+                        onClick={() => setPendingDelete(query)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    </Tooltip>
                   </div>
                 </div>
               )}
@@ -129,23 +153,24 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
           ))}
         </ul>
       )}
+
       {total > DATASET_QUERIES_PAGE_SIZE && (
-        <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-t border-hairline px-3 py-2">
           <Button
+            size="sm"
             variant="secondary"
-            className="px-4"
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - DATASET_QUERIES_PAGE_SIZE))}
           >
             Previous
           </Button>
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-meta">
+          <InstrumentLabel className="font-mono tabular-nums">
             {offset + 1}–{Math.min(offset + DATASET_QUERIES_PAGE_SIZE, total)} of{" "}
             {total.toLocaleString()}
-          </p>
+          </InstrumentLabel>
           <Button
+            size="sm"
             variant="secondary"
-            className="px-4"
             disabled={offset + DATASET_QUERIES_PAGE_SIZE >= total}
             onClick={() => setOffset(offset + DATASET_QUERIES_PAGE_SIZE)}
           >
@@ -153,6 +178,7 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
           </Button>
         </div>
       )}
+
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete query"
@@ -165,6 +191,6 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
         }}
         onCancel={() => setPendingDelete(null)}
       />
-    </GlassCard>
+    </Panel>
   );
 }

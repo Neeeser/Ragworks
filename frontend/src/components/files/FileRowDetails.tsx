@@ -10,22 +10,50 @@ import {
   type ChunkSortField,
 } from "@/components/files/lib/chunk-sort";
 import { Button } from "@/components/ui/button";
-import { Loader } from "@/components/ui/loader";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SortControl } from "@/components/ui/sort-control";
+import { Tooltip } from "@/components/ui/tooltip";
 import { fetchDocumentChunks } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { truncate } from "@/lib/utils";
 
-import type { FileIngestion, FileNode } from "@/lib/types";
+import type { FileIngestion } from "@/lib/types";
 
 type FileRowDetailsProps = {
-  node: FileNode;
   ingestion: FileIngestion;
   token: string;
 };
 
-/** Expanded row: how the file was chunked and stored, plus its trace links. */
-export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) {
+const SORT_FIELDS: ChunkSortField[] = ["chunk_number", "ingestion_time", "tokens"];
+
+function isSortField(value: string): value is ChunkSortField {
+  return (SORT_FIELDS as string[]).includes(value);
+}
+
+function ChunkSkeleton() {
+  return (
+    <div aria-busy>
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center gap-3 border-b border-hairline px-3 py-2">
+          <Skeleton className="h-1.5 w-1.5 rounded-[2px]" />
+          <Skeleton className="h-2 w-16" />
+          <Skeleton className="h-2 flex-1" />
+        </div>
+      ))}
+      <span className="sr-only">Loading chunks</span>
+    </div>
+  );
+}
+
+/**
+ * The expanded row: how this file was chunked and stored, then the chunks
+ * themselves. Every value the ingestion record carries is here, because this is
+ * the one place a user can compare what the pipeline was configured to do with
+ * what it actually produced.
+ */
+export function FileRowDetails({ ingestion, token }: FileRowDetailsProps) {
   const router = useRouter();
   const ready = ingestion.status === "ready";
   const [sortField, setSortField] = useState<ChunkSortField>("chunk_number");
@@ -36,63 +64,57 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
     { enabled: ready },
   );
 
-  const stats: Array<{ label: string; value: string }> = [
-    { label: "Chunks", value: String(ingestion.num_chunks) },
-    { label: "Tokens", value: String(ingestion.num_tokens) },
-    { label: "Strategy", value: ingestion.chunk_strategy },
-    { label: "Chunk size", value: String(ingestion.chunk_size) },
-    { label: "Overlap", value: String(ingestion.chunk_overlap) },
-    { label: "Embedding model", value: ingestion.embedding_model || "—" },
-  ];
   const sortedChunks = useMemo(
     () => sortChunks(chunksQuery.data?.chunks ?? [], sortField, sortDirection),
     [chunksQuery.data?.chunks, sortDirection, sortField],
   );
 
   return (
-    <div className="space-y-4 border-t border-hairline bg-surface px-4 py-4 sm:pl-16">
+    <div className="border-t border-hairline bg-surface">
       {ingestion.status === "failed" && (
-        <p className="rounded-2xl border border-data-neg/40 bg-data-neg/10 p-3 text-sm text-body">
+        <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
           {ingestion.error_message ?? "Ingestion failed."}
         </p>
       )}
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-        {stats.map((item) => (
-          <div key={`${node.id}-${item.label}`}>
-            <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              {item.label}
-            </dt>
-            <dd className="mt-1 truncate text-sm text-primary" title={item.value}>
-              {item.value}
-            </dd>
-          </div>
-        ))}
-        {ingestion.ingestion_run_id && (
-          <div>
-            <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Trace</dt>
-            <dd className="mt-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => router.push(`/traces/documents/${ingestion.document_id}`)}
-              >
-                View ingestion trace
-              </Button>
-            </dd>
-          </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-hairline px-3 py-2">
+        <Readout label="Chunks">{ingestion.num_chunks.toLocaleString()}</Readout>
+        <Readout label="Tokens">{ingestion.num_tokens.toLocaleString()}</Readout>
+        <Readout label="Strategy">{ingestion.chunk_strategy}</Readout>
+        <Readout label="Chunk size">{ingestion.chunk_size.toLocaleString()}</Readout>
+        <Readout label="Overlap">{ingestion.chunk_overlap.toLocaleString()}</Readout>
+        {ingestion.embedding_model ? (
+          <Tooltip content={ingestion.embedding_model}>
+            <Readout label="Embedder">{ingestion.embedding_model}</Readout>
+          </Tooltip>
+        ) : (
+          <Readout label="Embedder">
+            <span className="text-muted">—</span>
+          </Readout>
         )}
-      </dl>
+        {ingestion.ingestion_run_id && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            onClick={() => router.push(`/traces/documents/${ingestion.document_id}`)}
+          >
+            View ingestion trace
+          </Button>
+        )}
+      </div>
+
       {ready &&
         (chunksQuery.loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <Loader className="h-4 w-4" />
-            Loading chunks…
-          </div>
+          <ChunkSkeleton />
         ) : chunksQuery.error ? (
-          <p className="text-sm text-data-neg">{chunksQuery.error}</p>
+          <p className="px-3 py-2 text-ui text-data-neg">{chunksQuery.error}</p>
         ) : (
-          <div className="space-y-2">
-            <div className="flex justify-end">
+          <>
+            {/* No section label: the readout above already says CHUNKS 2, every
+                row below is headed CHUNK nn, and the sort control names the
+                domain — a third "CHUNKS" here said nothing the screen didn't. */}
+            <div className="flex items-center justify-end border-b border-hairline px-3 py-2">
               <SortControl
                 label="Sort chunks"
                 value={sortField}
@@ -103,47 +125,42 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
                   { value: "tokens", label: "Tokens" },
                 ]}
                 onValueChange={(value) => {
-                  if (
-                    value === "chunk_number" ||
-                    value === "ingestion_time" ||
-                    value === "tokens"
-                  ) {
+                  if (isSortField(value)) {
                     setSortField(value);
                   }
                 }}
                 onDirectionChange={setSortDirection}
               />
             </div>
-            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-72 overflow-y-auto">
               {sortedChunks.map((chunk) => (
-                <details
-                  key={chunk.id}
-                  className="group rounded-2xl border border-hairline bg-canvas"
-                >
-                  <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-2.5 transition hover:bg-surface [&::-webkit-details-marker]:hidden">
+                <details key={chunk.id} className="group border-b border-hairline last:border-b-0">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2 transition-colors duration-80 ease-standard hover:bg-surface-strong [&::-webkit-details-marker]:hidden">
+                    {/* A square node dot in the chunk stage's colour — the
+                        console's status marks are mini pipeline nodes, never
+                        circles. */}
                     <span
                       aria-hidden
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-stage-chunk"
+                      className="h-1.5 w-1.5 shrink-0 rounded-[2px] bg-stage-chunk"
                     />
-                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                      Chunk {String(chunk.chunk_index).padStart(2, "0")}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm text-body">
+                    <InstrumentLabel className="shrink-0 tabular-nums">
+                      {`Chunk ${String(chunk.chunk_index).padStart(2, "0")}`}
+                    </InstrumentLabel>
+                    <span className="min-w-0 flex-1 truncate text-ui text-body">
                       {truncate(chunk.text, 110)}
                     </span>
                     <ChevronRight
-                      className="h-3.5 w-3.5 shrink-0 text-faint transition-transform group-open:rotate-90"
+                      className="h-3.5 w-3.5 shrink-0 text-faint transition-transform duration-140 ease-standard group-open:rotate-90 motion-reduce:transition-none"
                       aria-hidden
                     />
                   </summary>
-                  <div className="border-t border-hairline px-4 py-3">
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-primary">
+                  <div className="border-t border-hairline px-3 py-3">
+                    <p className="max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-primary">
                       {chunk.text}
                     </p>
                     <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
-                      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-                        {chunk.token_count} tokens · {chunk.text.length} chars ·{" "}
-                        {chunk.chunk_strategy}
+                      <span className="font-mono text-instrument tabular-nums text-meta">
+                        {`${chunk.token_count.toLocaleString()} tokens · ${chunk.text.length.toLocaleString()} chars · ${chunk.chunk_strategy}`}
                       </span>
                       <Button
                         variant="ghost"
@@ -165,7 +182,7 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
                 </details>
               ))}
             </div>
-          </div>
+          </>
         ))}
     </div>
   );

@@ -42,7 +42,7 @@ export function McpConnectionInstructions({
   return (
     <div className="space-y-4">
       <CopyBlock label="API key" value={secret} inline />
-      <p className="text-sm text-body leading-relaxed">
+      <p className="max-w-[66ch] text-ui leading-relaxed text-body">
         This key is shown once. Store it in the agent configuration now; if it is lost, revoke it
         and issue another.
       </p>
@@ -56,7 +56,9 @@ export function McpConnectionInstructions({
             label={harness.label}
             value={harness.snippet({ serverName, endpoint, secret })}
           />
-          <p className="mt-2 text-xs text-muted leading-relaxed">{harness.hint}</p>
+          <p className="mt-2 max-w-[66ch] text-instrument leading-relaxed text-muted">
+            {harness.hint}
+          </p>
         </div>
       </div>
     </div>

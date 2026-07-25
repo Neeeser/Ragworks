@@ -3,10 +3,14 @@
 import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import { Fragment } from "react";
 
-import { Loader } from "@/components/ui/loader";
+import { PageBody } from "@/components/ui/app-shell";
+import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 
 type ChatStudioViewProps = {
@@ -18,8 +22,8 @@ type ChatStudioViewProps = {
   historyOpen: boolean;
   telemetryOpen: boolean;
   onOpenHistory: () => void;
-  onCloseHistory: () => void;
   onOpenTelemetry: () => void;
+  onCloseHistory: () => void;
   onCloseTelemetry: () => void;
   header: ReactNode;
   messagesPanel: ReactNode;
@@ -28,6 +32,80 @@ type ChatStudioViewProps = {
   promptEditor: ReactNode;
 };
 
+/**
+ * The reopen affordance a closed side pane leaves behind: a slim strip at the
+ * exact edge where the pane docks, like the collapsed nav rail. A toggle far
+ * from what it moves is the one users cannot find — this one is attached.
+ */
+function PaneReopenStrip({
+  side,
+  label,
+  icon: Icon,
+  onOpen,
+}: {
+  side: "left" | "right";
+  label: string;
+  icon: LucideIcon;
+  onOpen: () => void;
+}) {
+  return (
+    <div
+      className={
+        side === "left"
+          ? "flex w-9 shrink-0 flex-col items-center border-r border-hairline bg-surface pt-2"
+          : "flex w-9 shrink-0 flex-col items-center border-l border-hairline bg-surface pt-2"
+      }
+    >
+      <Tooltip content={label} side={side === "left" ? "right" : "left"}>
+        <button
+          type="button"
+          aria-label={label}
+          aria-expanded={false}
+          onClick={onOpen}
+          className="flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/** The studio's geometry while it loads — same panes, no content yet. */
+function StudioSkeleton() {
+  return (
+    <Panel aria-busy className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="hidden w-72 shrink-0 space-y-2 border-r border-hairline bg-surface p-3 lg:block">
+        {[0, 1, 2, 3].map((row) => (
+          <Skeleton key={row} className="h-8 w-full" />
+        ))}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-3 p-4">
+          <Skeleton className="h-2 max-w-40" />
+          <Skeleton className="h-16 max-w-[66ch]" />
+          <Skeleton className="h-2 max-w-32" />
+          <Skeleton className="h-24 max-w-[66ch]" />
+        </div>
+        <div className="shrink-0 border-t border-hairline p-3">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+      <span className="sr-only">Loading Chat Studio</span>
+    </Panel>
+  );
+}
+
+/**
+ * The studio's three panes inside one card: chat history, the transcript with
+ * its composer, and run settings — separated by hairline seams rather than by
+ * backgrounds of their own, because they are one working surface.
+ *
+ * Each pane owns its scroll, so reading a long transcript never moves the
+ * session list beside it. Below the width where three panes fit, the side panes
+ * become overlays instead of disappearing: every session, setting, and control
+ * keeps a click path.
+ */
 export function ChatStudioView({
   status,
   onStatusDismiss,
@@ -37,8 +115,8 @@ export function ChatStudioView({
   historyOpen,
   telemetryOpen,
   onOpenHistory,
-  onCloseHistory,
   onOpenTelemetry,
+  onCloseHistory,
   onCloseTelemetry,
   header,
   messagesPanel,
@@ -48,95 +126,88 @@ export function ChatStudioView({
 }: ChatStudioViewProps) {
   return (
     <Fragment>
-      <div className="relative flex h-full flex-col">
-        {status && (
-          <div className="pointer-events-none absolute left-1/2 top-4 z-40 w-full max-w-2xl -translate-x-1/2 px-4">
-            <Notification
-              title="Action required"
-              message={status}
-              onDismiss={onStatusDismiss}
-              className="pointer-events-auto"
-            />
-          </div>
-        )}
+      {header}
+      {status && (
+        <div className="pointer-events-none absolute inset-x-0 top-16 z-40 flex justify-center px-4">
+          <Notification
+            title="Action required"
+            message={status}
+            onDismiss={onStatusDismiss}
+            className="pointer-events-auto w-full max-w-xl"
+          />
+        </div>
+      )}
 
-        <div className="flex flex-1 flex-col min-h-0">
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center">
-              <GlassCard className="flex items-center justify-center rounded-[2rem] p-10">
-                <Loader className="h-6 w-6" />
-              </GlassCard>
-            </div>
-          ) : (
-            <div
-              ref={chatPanelRef}
-              className="glass-panel relative flex flex-1 min-h-0 overflow-hidden rounded-[2.5rem] border border-hairline bg-canvas-raised"
-            >
-              {!isOverlayMode && historyOpen && (
-                <aside className="h-full w-72 flex-shrink-0 border-r border-hairline bg-surface">
+      <PageBody className="flex flex-col">
+        {loading ? (
+          <StudioSkeleton />
+        ) : (
+          // The ref sits on a wrapper rather than the card because the overlay
+          // breakpoint is measured from the width the panes actually share.
+          <div ref={chatPanelRef} className="flex min-h-0 flex-1">
+            <Panel className="flex min-h-0 flex-1 overflow-hidden">
+              {/* The side panes take `bg-surface`: the transcript is the pane
+                  being worked in, so it keeps the card's own material and the
+                  two supporting panes sit a shade back from it. A seam alone
+                  reads flat at this width. */}
+              {!isOverlayMode && historyOpen ? (
+                <aside
+                  aria-label="Chat history"
+                  className="min-h-0 w-72 shrink-0 border-r border-hairline bg-surface"
+                >
                   {historyPanel}
                 </aside>
+              ) : (
+                <PaneReopenStrip
+                  side="left"
+                  label="Chat history"
+                  icon={PanelLeftOpen}
+                  onOpen={onOpenHistory}
+                />
               )}
-              {!historyOpen && (
-                <button
-                  type="button"
-                  aria-label="Open history"
-                  className="absolute left-4 top-1/2 z-10 flex -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-hairline bg-surface p-2 text-body transition-all hover:border-strong hover:bg-surface-strong"
-                  onClick={onOpenHistory}
-                >
-                  <PanelLeftOpen className="h-4 w-4" />
-                </button>
-              )}
-              <div className="relative flex min-w-0 flex-1 flex-col min-h-0">
-                {header}
-                {messagesPanel}
-              </div>
 
-              {!isOverlayMode && telemetryOpen && (
-                <aside className="h-full w-[26rem] flex-shrink-0 border-l border-hairline bg-canvas p-6">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{messagesPanel}</div>
+
+              {!isOverlayMode && telemetryOpen ? (
+                <aside
+                  aria-label="Run settings"
+                  className="min-h-0 w-[26rem] shrink-0 border-l border-hairline bg-surface"
+                >
                   {telemetryPanel}
                 </aside>
+              ) : (
+                <PaneReopenStrip
+                  side="right"
+                  label="Run settings"
+                  icon={PanelRightOpen}
+                  onOpen={onOpenTelemetry}
+                />
               )}
-              {!telemetryOpen && (
-                <button
-                  type="button"
-                  aria-label="Open run settings"
-                  className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full border border-hairline bg-surface p-2 text-body hover:border-strong"
-                  onClick={onOpenTelemetry}
-                >
-                  <PanelRightOpen className="h-4 w-4" />
-                </button>
-              )}
-              {isOverlayMode && historyOpen && (
-                <div className="absolute inset-0 z-40">
-                  <button
-                    type="button"
-                    aria-label="Close history"
-                    className="absolute inset-0 bg-canvas/80 backdrop-blur-sm"
-                    onClick={onCloseHistory}
-                  />
-                  <aside className="relative z-10 h-full w-72 border-r border-hairline bg-canvas-raised">
-                    {historyPanel}
-                  </aside>
-                </div>
-              )}
-              {isOverlayMode && telemetryOpen && (
-                <div className="absolute inset-0 z-40 flex justify-end">
-                  <button
-                    type="button"
-                    aria-label="Close run settings"
-                    className="absolute inset-0 bg-canvas/80 backdrop-blur-sm"
-                    onClick={onCloseTelemetry}
-                  />
-                  <aside className="relative z-10 h-full w-[26rem] border-l border-hairline bg-canvas-raised p-6">
-                    {telemetryPanel}
-                  </aside>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+            </Panel>
+          </div>
+        )}
+      </PageBody>
+
+      {isOverlayMode && historyOpen && (
+        <ModalOverlay open onClose={onCloseHistory} labelledBy="chat-history-overlay-title">
+          <div className="flex h-[100dvh] w-80 max-w-[90vw] flex-col bg-canvas-raised">
+            <h2 id="chat-history-overlay-title" className="sr-only">
+              Chat history
+            </h2>
+            {historyPanel}
+          </div>
+        </ModalOverlay>
+      )}
+      {isOverlayMode && telemetryOpen && (
+        <ModalOverlay open onClose={onCloseTelemetry} labelledBy="run-settings-overlay-title">
+          <div className="flex h-[100dvh] w-[26rem] max-w-[95vw] flex-col bg-canvas-raised">
+            <h2 id="run-settings-overlay-title" className="sr-only">
+              Run settings
+            </h2>
+            {telemetryPanel}
+          </div>
+        </ModalOverlay>
+      )}
       {promptEditor}
     </Fragment>
   );

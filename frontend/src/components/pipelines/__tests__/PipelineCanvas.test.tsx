@@ -65,7 +65,9 @@ describe("PipelineCanvas", () => {
       />,
     );
 
-    expect(screen.getByText(/Pipeline · v1/)).toBeInTheDocument();
+    // The open pipeline's name and revision live in the top bar, not on the
+    // canvas — the canvas only says something when nothing is selected.
+    expect(screen.queryByText("Select a pipeline to edit.")).not.toBeInTheDocument();
     expect(screen.getByText("Hello")).toBeInTheDocument();
     expect(screen.getByTestId("background")).toBeInTheDocument();
     expect(screen.getByTestId("controls")).toBeInTheDocument();

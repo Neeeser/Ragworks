@@ -6,7 +6,7 @@ import { UmapCanvas } from "@/components/collections/detail/visualize/UmapCanvas
 import type { UmapPoint } from "@/lib/types";
 
 let lastDeckProps: Record<string, unknown> | null = null;
-type TooltipResult = { text: string } | null;
+type TooltipResult = { text: string; style?: Record<string, string> } | null;
 type DeckLayer = { id?: string; props: Record<string, unknown> };
 
 vi.mock("@deck.gl/core", () => ({
@@ -81,7 +81,7 @@ describe("UmapCanvas", () => {
 
   it("renders with empty points and handles zoom", () => {
     const onSelectPoint = vi.fn();
-    const { getByTitle } = render(
+    const { getByRole } = render(
       <UmapCanvas
         points={[]}
         selectedPointId={null}
@@ -92,9 +92,9 @@ describe("UmapCanvas", () => {
 
     expect(lastDeckProps?.viewState).toEqual({ target: [0, 0, 0], zoom: 0 });
 
-    fireEvent.click(getByTitle("Zoom in"));
-    fireEvent.click(getByTitle("Zoom out"));
-    const centerButton = getByTitle("Center on selection") as HTMLButtonElement;
+    fireEvent.click(getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(getByRole("button", { name: "Zoom out" }));
+    const centerButton = getByRole("button", { name: "Center on selection" }) as HTMLButtonElement;
     centerButton.removeAttribute("disabled");
     fireEvent.click(centerButton);
 
@@ -112,7 +112,7 @@ describe("UmapCanvas", () => {
     ];
     const onSelectPoint = vi.fn();
 
-    const { getByTitle } = render(
+    const { getByRole } = render(
       <UmapCanvas
         points={points}
         selectedPointId="p1"
@@ -121,8 +121,8 @@ describe("UmapCanvas", () => {
       />,
     );
 
-    fireEvent.click(getByTitle("Center on selection"));
-    fireEvent.click(getByTitle("Reset view"));
+    fireEvent.click(getByRole("button", { name: "Center on selection" }));
+    fireEvent.click(getByRole("button", { name: "Reset view" }));
 
     const layers = lastDeckProps?.layers as DeckLayer[] | undefined;
     const scatter = layers?.find((layer) => layer.id === "umap-points");
@@ -151,7 +151,10 @@ describe("UmapCanvas", () => {
     const tooltip = lastDeckProps?.getTooltip as (info: {
       object?: UmapPoint | null;
     }) => TooltipResult;
-    expect(tooltip?.({ object: points[0] })).toEqual({ text: "Chunk 0" });
+    // The tooltip's look travels as inline style because deck.gl renders it
+    // itself; the tokens keep it correct in every palette.
+    expect(tooltip?.({ object: points[0] })?.text).toBe("Chunk 0");
+    expect(tooltip?.({ object: points[0] })?.style?.background).toBe("var(--canvas-raised)");
     expect(tooltip?.({ object: null })).toBeNull();
   });
 

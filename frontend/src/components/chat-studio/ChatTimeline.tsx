@@ -1,6 +1,4 @@
 import React, { memo, useEffect, useMemo, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { isToolReasoningSegment } from "@/components/chat-studio/lib/chat-entry-helpers";
 import { EmptyTimelineState } from "@/components/chat-studio/timeline/EmptyTimelineState";
@@ -9,23 +7,20 @@ import {
   getReasoningEntryKey,
   ReasoningEntry,
 } from "@/components/chat-studio/timeline/ReasoningEntry";
-import { roleVariants } from "@/components/chat-studio/timeline/timeline-constants";
 import {
   getToolTraceEntryKey,
   ToolTraceEntry,
 } from "@/components/chat-studio/timeline/ToolTraceEntry";
 import { ToolCallBubble } from "@/components/chat-studio/Tooling";
 import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
-import { TypingAnimation } from "@/components/ui/typing-animation";
-import { cn } from "@/lib/utils";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Markdown } from "@/components/ui/markdown";
+import { PulseWire } from "@/components/ui/pulse-wire";
 
 import type { ChatEntry } from "./lib/chat-types";
 import type { ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
-import type { Components } from "react-markdown";
 
 type ChatTimelineProps = {
-  modelLabel: string;
-  onModelSelect: () => void;
   chatEntryOrder: string[];
   chatEntryMap: Map<string, ChatEntry>;
   finalStreamAssistantId: string | null;
@@ -41,7 +36,6 @@ type ChatTimelineProps = {
   onEditSubmit: () => void;
   onRetryAssistant: (messageId: string) => void;
   onBranchMessage: (messageId: string) => void;
-  markdownComponents: Components;
   overrideSections: Array<{
     id: string;
     label: string;
@@ -67,8 +61,6 @@ type ChatTimelineProps = {
 };
 
 function ChatTimelineComponent({
-  modelLabel,
-  onModelSelect,
   chatEntryOrder,
   chatEntryMap,
   finalStreamAssistantId,
@@ -84,7 +76,6 @@ function ChatTimelineComponent({
   onEditSubmit,
   onRetryAssistant,
   onBranchMessage,
-  markdownComponents,
   overrideSections,
   onOverrideSelect,
   liveResponse,
@@ -138,8 +129,6 @@ function ChatTimelineComponent({
     if (!selectedSessionId) {
       return (
         <EmptyTimelineState
-          modelLabel={modelLabel}
-          onModelSelect={onModelSelect}
           overrideSections={overrideSections}
           onOverrideSelect={onOverrideSelect}
         />
@@ -230,11 +219,9 @@ function ChatTimelineComponent({
         <ToolCallBubble
           key={bubbleKey}
           label={tool.name || "Tool"}
-          variantClass={roleVariants.tool}
           args={argsRecord}
           response={responseRecord}
           rawPayload={rawPayload}
-          className="chat-bubble chat-bubble-enter"
           status={status}
         />
       );
@@ -247,23 +234,15 @@ function ChatTimelineComponent({
           const segments = liveReasoningBlocks[phaseIndex] ?? [];
           const reasoningNode =
             segments.length > 0 ? (
-              <div
+              <CollapsibleReasoning
                 key={`${activeStreamEntryKey}-reasoning-block-${phaseIndex}`}
-                className="flex justify-start"
-              >
-                <CollapsibleReasoning
-                  segments={segments}
-                  messageId={`${activeStreamEntryKey}-reasoning-block-${phaseIndex}`}
-                  title="Reasoning"
-                  subtitle={phaseIndex === 0 ? liveReasoningSubtitle : undefined}
-                  isAutoOpen={false}
-                  preventAutoClose
-                  className={cn(
-                    "chat-bubble chat-bubble-enter max-w-[75%]",
-                    roleVariants.reasoning,
-                  )}
-                />
-              </div>
+                segments={segments}
+                messageId={`${activeStreamEntryKey}-reasoning-block-${phaseIndex}`}
+                title="Reasoning"
+                subtitle={phaseIndex === 0 ? liveReasoningSubtitle : undefined}
+                isAutoOpen={false}
+                preventAutoClose
+              />
             ) : null;
           const toolNodes = renderToolBubbles(phaseIndex);
           return [reasoningNode, toolNodes].flat().filter(Boolean) as React.ReactNode[];
@@ -274,48 +253,32 @@ function ChatTimelineComponent({
     shouldShowStreamingReasoningBubble &&
     !hasFinalReasoningForStream &&
     liveReasoningDisplaySegments.length > 0 ? (
-      <div
+      <CollapsibleReasoning
         key={liveReasoningBubbleKey}
-        className="flex justify-start"
-        data-live-reasoning-key={liveReasoningAnimationKey}
-      >
-        <CollapsibleReasoning
-          segments={liveReasoningDisplaySegments}
-          messageId="live-reasoning"
-          title="Reasoning"
-          subtitle={liveReasoningSubtitle}
-          isAutoOpen={false}
-          preventAutoClose
-          className={cn(
-            "live-stream-reasoning chat-bubble chat-bubble-enter max-w-[75%]",
-            roleVariants.reasoning,
-          )}
-        />
-      </div>
+        segments={liveReasoningDisplaySegments}
+        messageId="live-reasoning"
+        title="Reasoning"
+        subtitle={liveReasoningSubtitle}
+        isAutoOpen={false}
+        preventAutoClose
+        className="live-stream-reasoning"
+      />
     ) : null;
 
+  // The response is being produced right now, so the wire pulses — and stops
+  // the moment this block unmounts, which is when the turn finishes. Tokens
+  // themselves paint instantly; only the indicator moves.
   const assistantTypingBubble = showStreamingBubble ? (
-    <div key={assistantBubbleKey} className="flex justify-start">
-      <div className="group relative max-w-[75%]">
-        <div
-          className={cn(
-            "live-stream-text chat-bubble chat-bubble-enter rounded-2xl border px-4 py-3 text-sm shadow-2xl",
-            roleVariants.assistant,
-          )}
-          data-live-stream-key={liveResponseAnimationKey}
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-muted">ASSISTANT</p>
-          </div>
-          {showStreamingBubble && hasLiveText ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {liveResponse}
-            </ReactMarkdown>
-          ) : (
-            <TypingAnimation />
-          )}
-        </div>
+    <div key={assistantBubbleKey} className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <InstrumentLabel>Assistant</InstrumentLabel>
+        <PulseWire label="Streaming response" className="w-16" />
       </div>
+      {hasLiveText ? (
+        <div className="live-stream-text" data-live-stream-key={liveResponseAnimationKey}>
+          <Markdown className="max-w-[66ch]">{liveResponse}</Markdown>
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -353,7 +316,6 @@ function ChatTimelineComponent({
         onEditSubmit={onEditSubmit}
         onRetryAssistant={onRetryAssistant}
         onBranchMessage={onBranchMessage}
-        markdownComponents={markdownComponents}
         branchedFromSessionId={branchedFromSessionId}
         branchedFromSessionTitle={branchedFromSessionTitle}
         branchedFromMessageId={branchedFromMessageId}

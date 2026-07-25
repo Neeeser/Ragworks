@@ -14,9 +14,9 @@ vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 const api = vi.mocked(apiModule);
 
 const selectPointLabel = "Select point";
-const umapProjectionHeading = "UMAP projection";
-const recomputeUmapLabel = "Recompute";
+const recomputeLabel = "Recompute UMAP";
 const unableToLoadUmapMessage = "Unable to load UMAP.";
+const closeChunkPaneLabel = "Close chunk details";
 
 vi.mock("@/components/collections/detail/visualize/UmapCanvas", () => ({
   UmapCanvas: () => null,
@@ -48,16 +48,15 @@ describe("CollectionVisualization", () => {
   const visualization = makeUmapVisualization();
   const chunkDetail = makeChunkDetail();
 
-  it("shows load errors and empty state", async () => {
+  it("shows load errors and the empty plot", async () => {
     api.fetchCollectionUmap.mockRejectedValueOnce(new Error(unableToLoadUmapMessage));
     render(<CollectionVisualization collectionId="col-1" token="token" />);
 
     await waitFor(() => {
       expect(screen.getByText(unableToLoadUmapMessage)).toBeInTheDocument();
     });
-    expect(
-      screen.getByText("Upload documents, then compute a projection to plot their embeddings."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Computing one places every indexed chunk/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compute UMAP" })).toBeInTheDocument();
   });
 
   it("falls back to default load errors", async () => {
@@ -69,6 +68,22 @@ describe("CollectionVisualization", () => {
     });
   });
 
+  it("reports the stored projection's parameters", async () => {
+    api.fetchCollectionUmap.mockResolvedValueOnce(visualization);
+    render(<CollectionVisualization collectionId="col-1" token="token" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Points")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    // The model id is both the readout's value and its tooltip, because the
+    // column truncates it.
+    expect(screen.getAllByText("embed-1").length).toBeGreaterThan(0);
+    expect(screen.getByText("15")).toBeInTheDocument();
+    expect(screen.getByText("cosine")).toBeInTheDocument();
+  });
+
   it("renders visualization and loads chunk details", async () => {
     api.fetchCollectionUmap.mockResolvedValueOnce(visualization);
     api.computeCollectionUmap.mockResolvedValueOnce(visualization);
@@ -77,11 +92,11 @@ describe("CollectionVisualization", () => {
     render(<CollectionVisualization collectionId="col-1" token="token" />);
 
     await waitFor(() => {
-      expect(screen.getByText(umapProjectionHeading)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText(recomputeUmapLabel));
+      fireEvent.click(screen.getByRole("button", { name: recomputeLabel }));
     });
 
     fireEvent.click(screen.getByText(selectPointLabel));
@@ -89,12 +104,33 @@ describe("CollectionVisualization", () => {
       expect(api.fetchChunkDetail).toHaveBeenCalledWith("token", "chunk-1");
     });
     await waitFor(() => {
-      expect(screen.getByText("Expand")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Expand"));
-    expect(screen.getByText("Chunk preview")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(screen.getByRole("group", { name: "Render mode" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Close preview"));
+  });
+
+  it("closes the chunk pane and gives the plot the width back", async () => {
+    api.fetchCollectionUmap.mockResolvedValueOnce(visualization);
+    api.fetchChunkDetail.mockResolvedValueOnce(chunkDetail);
+
+    render(<CollectionVisualization collectionId="col-1" token="token" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText(selectPointLabel));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: closeChunkPaneLabel })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: closeChunkPaneLabel }));
+    expect(screen.queryByRole("button", { name: closeChunkPaneLabel })).not.toBeInTheDocument();
   });
 
   it("surfaces compute errors with Error messages", async () => {
@@ -104,11 +140,11 @@ describe("CollectionVisualization", () => {
     render(<CollectionVisualization collectionId="col-1" token="token" />);
 
     await waitFor(() => {
-      expect(screen.getByText(umapProjectionHeading)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText(recomputeUmapLabel));
+      fireEvent.click(screen.getByRole("button", { name: recomputeLabel }));
     });
 
     await waitFor(() => {
@@ -123,15 +159,7 @@ describe("CollectionVisualization", () => {
     render(<CollectionVisualization collectionId="col-1" token="token" />);
 
     await waitFor(() => {
-      expect(screen.getByText(umapProjectionHeading)).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          (_, element) => element?.tagName === "SPAN" && element.textContent === "1 points",
-        ),
-      ).toBeInTheDocument();
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Select a point to see chunk details.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
     });
 
     await act(async () => {
@@ -152,11 +180,11 @@ describe("CollectionVisualization", () => {
     render(<CollectionVisualization collectionId="col-1" token="token" />);
 
     await waitFor(() => {
-      expect(screen.getByText(umapProjectionHeading)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText(recomputeUmapLabel));
+      fireEvent.click(screen.getByRole("button", { name: recomputeLabel }));
     });
 
     await waitFor(() => {

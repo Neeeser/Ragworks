@@ -15,10 +15,13 @@ import {
 import { CHAT_MODEL_SORTS, useModelCatalogFilter } from "@/components/models/model-catalog-filter";
 import { ModelCatalogPicker } from "@/components/models/ModelCatalogPicker";
 import { ModelMetaBadge, ModelOptionButton } from "@/components/models/ModelOptionButton";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
 import { formatContextLength, formatPricePerMillion } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 import type {
   CatalogModel,
@@ -202,10 +205,12 @@ export function GenerateDatasetWizard({
                 }
                 subtitle={`${model.connection_label} · ${model.id}`}
               >
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
-                  {contextLabel ? <ModelMetaBadge label="ctx" value={contextLabel} /> : null}
-                  {promptLabel ? <ModelMetaBadge label="in" value={promptLabel} /> : null}
-                  {completionLabel ? <ModelMetaBadge label="out" value={completionLabel} /> : null}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {contextLabel ? <ModelMetaBadge label="Context" value={contextLabel} /> : null}
+                  {promptLabel ? <ModelMetaBadge label="Prompt" value={promptLabel} /> : null}
+                  {completionLabel ? (
+                    <ModelMetaBadge label="Completion" value={completionLabel} />
+                  ) : null}
                 </div>
               </ModelOptionButton>
             );
@@ -222,37 +227,41 @@ export function GenerateDatasetWizard({
                 role="radio"
                 aria-checked={state.preset === entry.key && state.countOverride === ""}
                 onClick={() => dispatch({ type: "set_preset", preset: entry.key })}
-                className={`rounded-2xl border p-4 text-left transition focus-visible:ring-2 focus-visible:ring-accent-violet ${
+                className={cn(
+                  "rounded-panel border p-3 text-left transition-colors duration-80 ease-standard",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                   state.preset === entry.key && state.countOverride === ""
-                    ? "border-accent-violet bg-surface-strong"
-                    : "border-hairline bg-surface hover:border-strong"
-                }`}
+                    ? "border-accent-violet bg-accent-violet/10"
+                    : "border-hairline bg-surface hover:border-strong",
+                )}
               >
-                <p className="font-medium text-primary">{entry.label}</p>
-                <p className="mt-1 text-xs text-muted">{entry.count} questions</p>
+                <p className="text-ui font-medium text-primary">{entry.label}</p>
+                <p className="mt-1 font-mono text-instrument tabular-nums text-muted">
+                  {entry.count} questions
+                </p>
               </button>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-hairline bg-surface/40">
+          <div className="rounded-panel border border-hairline bg-surface">
             <button
               type="button"
               aria-expanded={state.steeringOpen}
               onClick={() => dispatch({ type: "toggle_steering" })}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-surface focus-visible:ring-2 focus-visible:ring-accent-violet"
+              className="flex w-full items-center justify-between gap-3 rounded-panel px-3 py-2 text-left transition-colors duration-80 ease-standard hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
             >
-              <span className="flex items-center gap-2.5">
-                <span className="text-sm font-medium text-primary">Steering</span>
-                <span className="rounded-full border border-hairline px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.28em] text-meta">
+              <span className="flex items-center gap-2">
+                <span className="text-ui font-medium text-primary">Steering</span>
+                <Chip tone="neutral" dot={false}>
                   Optional
-                </span>
+                </Chip>
               </span>
-              <span className="font-mono text-[13px] leading-none text-muted">
+              <span className="font-mono text-ui leading-none text-muted" aria-hidden>
                 {state.steeringOpen ? "−" : "+"}
               </span>
             </button>
             {state.steeringOpen && (
-              <div className="space-y-4 border-t border-hairline px-4 py-4">
+              <div className="space-y-4 border-t border-hairline px-3 py-3">
                 <Field
                   label="Audience"
                   hint="Who asks these questions — shapes tone and specificity."
@@ -285,24 +294,24 @@ export function GenerateDatasetWizard({
                             })
                           }
                         />
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           aria-label={`Remove example query ${index + 1}`}
                           onClick={() => dispatch({ type: "remove_example_query", index })}
-                          className="rounded-full p-2 text-muted transition hover:bg-surface-strong hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
                         >
-                          <X className="h-4 w-4" aria-hidden />
-                        </button>
+                          <X className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
                       </div>
                     ))}
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => dispatch({ type: "add_example_query" })}
-                      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
                     >
                       <Plus className="h-3.5 w-3.5" aria-hidden />
                       Add example query
-                    </button>
+                    </Button>
                   </div>
                 </Field>
               </div>
@@ -311,7 +320,7 @@ export function GenerateDatasetWizard({
 
           <button
             type="button"
-            className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted transition hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-violet"
+            className="rounded-control text-instrument font-medium text-muted transition-colors duration-80 ease-standard hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
             aria-expanded={state.advancedOpen}
             onClick={() => dispatch({ type: "toggle_advanced" })}
           >
@@ -342,10 +351,10 @@ export function GenerateDatasetWizard({
                 <div className="grid gap-3 sm:grid-cols-3">
                   {(Object.keys(TYPE_LABELS) as EvalQuestionType[]).map((questionType) => (
                     <div key={questionType}>
-                      <p className="text-sm font-medium text-primary">
+                      <p className="text-ui font-medium text-primary">
                         {TYPE_LABELS[questionType].label}
                       </p>
-                      <p className="mb-2 mt-0.5 text-xs text-muted">
+                      <p className="mb-2 mt-0.5 text-instrument text-muted">
                         {TYPE_LABELS[questionType].detail}
                       </p>
                       <TextInput
@@ -365,7 +374,7 @@ export function GenerateDatasetWizard({
                 </div>
               </Field>
               {mixIsEmpty(state.typeShares) && (
-                <p className="text-sm text-data-warn" role="alert">
+                <p className="max-w-[66ch] text-ui text-data-warn" role="alert">
                   At least one question type needs a weight above zero.
                 </p>
               )}

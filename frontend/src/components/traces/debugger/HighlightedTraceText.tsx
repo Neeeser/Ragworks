@@ -35,7 +35,7 @@ export function HighlightedTraceText({ text, query }: HighlightedTraceTextProps)
   const pattern = new RegExp(`(${terms.map(escapePattern).join("|")})`, "giu");
   return text.split(pattern).map((part, index) =>
     terms.includes(part.toLowerCase()) ? (
-      <mark key={`${part}-${index}`} className="rounded-sm bg-accent-cyan/15 px-0.5 text-primary">
+      <mark key={`${part}-${index}`} className="rounded-chip bg-accent-cyan/15 px-0.5 text-primary">
         {part}
       </mark>
     ) : (

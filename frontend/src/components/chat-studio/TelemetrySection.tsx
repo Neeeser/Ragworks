@@ -2,6 +2,9 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import { StatusDot } from "@/components/ui/status-dot";
+import { cn } from "@/lib/utils";
+
 import type { ReactNode } from "react";
 
 interface TelemetrySectionProps {
@@ -17,6 +20,13 @@ interface TelemetrySectionProps {
   children: ReactNode;
 }
 
+/**
+ * One collapsible block of run settings.
+ *
+ * A section whose value differs from the default carries a positive node dot,
+ * because "this run is not on defaults" is the fact a user scanning the pane is
+ * looking for.
+ */
 export const TelemetrySection = ({
   title,
   description,
@@ -31,46 +41,54 @@ export const TelemetrySection = ({
 }: TelemetrySectionProps) => (
   <div
     id={sectionId}
-    className={`overflow-hidden rounded-2xl border bg-surface transition-colors ${
+    className={cn(
+      "overflow-hidden rounded-control border transition-colors duration-140 ease-standard",
       isDragging
         ? "border-data-pos/60 bg-data-pos/5"
         : isOpen
           ? "border-strong bg-surface-strong"
-          : "border-hairline"
-    }`}
+          : "border-hairline",
+    )}
   >
     <div
-      className={`flex w-full items-center justify-between gap-3 px-4 py-3 transition hover:bg-surface-strong ${
-        isOpen ? "border-b border-hairline" : ""
-      }`}
+      className={cn(
+        "flex w-full items-center gap-2 px-2 py-1.5",
+        isOpen && "border-b border-hairline",
+      )}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className="flex flex-1 items-center gap-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
       >
-        {icon && <span className="text-muted">{icon}</span>}
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-muted">{title}</p>
-            {overrideActive && <span className="h-2 w-2 rounded-full bg-data-pos" />}
-          </div>
-          {description && <p className="text-[11px] text-body">{description}</p>}
-        </div>
+        {icon && <span className="shrink-0">{icon}</span>}
+        <span className="min-w-0">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-ui font-medium text-primary">{title}</span>
+            {overrideActive && <StatusDot tone="pos" />}
+          </span>
+          {description && (
+            <span className="block truncate text-instrument text-meta">{description}</span>
+          )}
+        </span>
       </button>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1">
         {headerAction}
         <button
           type="button"
           onClick={onToggle}
           aria-label={`${title} toggle`}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition hover:bg-surface-strong"
+          className="flex h-6 w-6 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
         >
-          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {isOpen ? (
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          )}
         </button>
       </div>
     </div>
-    {isOpen && <div className="space-y-3 px-4 pb-4 pt-3">{children}</div>}
+    {isOpen && <div className="space-y-3 p-3">{children}</div>}
   </div>
 );

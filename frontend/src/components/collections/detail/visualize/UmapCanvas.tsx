@@ -13,9 +13,18 @@ import { webgl2Adapter } from "@luma.gl/webgl";
 import { Home, LocateFixed, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { Tooltip } from "@/components/ui/tooltip";
+import { useCssTokens } from "@/lib/use-css-tokens";
+import { cn } from "@/lib/utils";
+
+import { cssColorToRgba } from "./lib/plot-colors";
+import { buildInitialViewState, computeGridStep, computeMinimumSpacing } from "./lib/umap-geometry";
 import { ensureCanvasContextLimits } from "./luma-patches";
 
+import type { Rgba } from "./lib/plot-colors";
+import type { GridLine } from "./lib/umap-geometry";
 import type { UmapPoint } from "@/lib/types";
+import type { LucideIcon } from "lucide-react";
 
 type UmapCanvasProps = {
   points: UmapPoint[];
@@ -31,109 +40,29 @@ const GRID_MARGIN_MULTIPLIER = 0.2;
 const MIN_POINT_RADIUS_PX = 4;
 const MAX_POINT_RADIUS_PX = 10;
 
-function buildInitialViewState(points: UmapPoint[]): OrthographicViewState {
-  if (points.length === 0) {
-    return { target: [0, 0, 0], zoom: 0 };
-  }
-  let minX = points[0].x;
-  let maxX = points[0].x;
-  let minY = points[0].y;
-  let maxY = points[0].y;
-  points.forEach((point) => {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
-  });
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const range = Math.max(maxX - minX, maxY - minY, 1);
-  const zoom = Math.log2(400 / range);
-  const clampedZoom = Math.max(-5, Math.min(12, zoom));
-  return { target: [centerX, centerY, 0], zoom: clampedZoom };
-}
+// deck.gl takes numeric channels, so the plot resolves its palette tokens to
+// RGBA through useCssTokens (the sanctioned computed-style bridge, shared with
+// ReactFlow's dot grid) and re-reads them on every palette change. The
+// literals remain only as the deterministic first-paint fallback, before the
+// mount effect resolves the real values.
+const PLOT_TOKENS = ["--border-hairline", "--series-1", "--data-neg"] as const;
+const GRID_LINE_RGBA: Rgba = [148, 163, 184, 90];
+const POINT_RGBA: Rgba = [129, 140, 248, 200];
+const SELECTED_POINT_RGBA: Rgba = [248, 113, 113, 220];
+const POINT_ALPHA = 200;
+const SELECTED_POINT_ALPHA = 220;
 
-function computeGridStep(rawStep: number) {
-  if (!Number.isFinite(rawStep) || rawStep <= 0) {
-    return 1;
-  }
-  const exponent = Math.floor(Math.log10(rawStep));
-  const base = Math.pow(10, exponent);
-  const fraction = rawStep / base;
-  if (fraction < 1.5) return base;
-  if (fraction < 3) return 2 * base;
-  if (fraction < 7) return 5 * base;
-  return 10 * base;
-}
-
-type GridLine = { source: [number, number]; target: [number, number] };
-
-function computeMinimumSpacing(points: UmapPoint[], fallbackSpacing: number) {
-  if (points.length < 2) {
-    return fallbackSpacing;
-  }
-  let minX = points[0].x;
-  let maxX = points[0].x;
-  let minY = points[0].y;
-  let maxY = points[0].y;
-  points.forEach((point) => {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
-  });
-  const spanX = Math.max(maxX - minX, 1e-6);
-  const spanY = Math.max(maxY - minY, 1e-6);
-  const span = Math.max(spanX, spanY, 1);
-  const meanSpacing = span / Math.sqrt(points.length);
-  const cellSize = Math.max(meanSpacing, 1e-6);
-  const cellMap = new Map<string, number[]>();
-  points.forEach((point, index) => {
-    const cellX = Math.floor((point.x - minX) / cellSize);
-    const cellY = Math.floor((point.y - minY) / cellSize);
-    const key = `${cellX},${cellY}`;
-    const bucket = cellMap.get(key) ?? [];
-    bucket.push(index);
-    cellMap.set(key, bucket);
-  });
-  let minimumSpacing = Number.POSITIVE_INFINITY;
-  points.forEach((point, index) => {
-    const cellX = Math.floor((point.x - minX) / cellSize);
-    const cellY = Math.floor((point.y - minY) / cellSize);
-    let closest = Number.POSITIVE_INFINITY;
-    for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-        const key = `${cellX + offsetX},${cellY + offsetY}`;
-        const bucket = cellMap.get(key);
-        if (!bucket) {
-          continue;
-        }
-        bucket.forEach((candidateIndex) => {
-          if (candidateIndex === index) {
-            return;
-          }
-          const candidate = points[candidateIndex];
-          const dx = point.x - candidate.x;
-          const dy = point.y - candidate.y;
-          const distance = Math.hypot(dx, dy);
-          if (distance > 0 && distance < closest) {
-            closest = distance;
-          }
-        });
-      }
-    }
-    const resolvedSpacing = Number.isFinite(closest) ? closest : meanSpacing;
-    if (resolvedSpacing < minimumSpacing) {
-      minimumSpacing = resolvedSpacing;
-    }
-  });
-  /* c8 ignore start -- defensive fallback for non-finite point spacing */
-  if (!Number.isFinite(minimumSpacing)) {
-    return fallbackSpacing;
-  }
-  /* c8 ignore stop */
-  return Math.min(minimumSpacing, fallbackSpacing);
-}
+// The deck.gl tooltip is rendered by the library into its own element, so its
+// look travels as inline style; `var()` keeps it correct in every palette.
+const CANVAS_TOOLTIP_STYLE = {
+  background: "var(--canvas-raised)",
+  border: "1px solid var(--border-hairline)",
+  borderRadius: "6px",
+  boxShadow: "var(--elevation-2)",
+  color: "var(--text-primary)",
+  fontSize: "11px",
+  padding: "2px 6px",
+};
 
 export function UmapCanvas({
   points,
@@ -142,6 +71,13 @@ export function UmapCanvas({
   onSelectPoint,
 }: UmapCanvasProps) {
   ensureCanvasContextLimits();
+  const [hairline, series1, dataNeg] = useCssTokens(PLOT_TOKENS);
+  const gridColor = useMemo(() => cssColorToRgba(hairline) ?? GRID_LINE_RGBA, [hairline]);
+  const pointColor = useMemo(() => cssColorToRgba(series1, POINT_ALPHA) ?? POINT_RGBA, [series1]);
+  const selectedColor = useMemo(
+    () => cssColorToRgba(dataNeg, SELECTED_POINT_ALPHA) ?? SELECTED_POINT_RGBA,
+    [dataNeg],
+  );
   const initialViewState = useMemo(() => buildInitialViewState(points), [points]);
   const [viewState, setViewState] = useState<OrthographicViewState>(initialViewState);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -279,7 +215,7 @@ export function UmapCanvas({
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getSourcePosition: (line) => line.source,
         getTargetPosition: (line) => line.target,
-        getColor: [148, 163, 184, 90],
+        getColor: gridColor,
         getWidth: 1,
         widthUnits: "pixels",
         // `depthTest: false` (old WebGL-style parameter) is now expressed as an
@@ -297,10 +233,9 @@ export function UmapCanvas({
         radiusMaxPixels: MAX_POINT_RADIUS_PX,
         getPosition: (point) => [point.x, point.y],
         getRadius: () => baseRadius,
-        getFillColor: (point) =>
-          point.id === selectedPointId ? [248, 113, 113, 220] : [129, 140, 248, 200],
+        getFillColor: (point) => (point.id === selectedPointId ? selectedColor : pointColor),
         updateTriggers: {
-          getFillColor: selectedPointId,
+          getFillColor: [selectedPointId, selectedColor, pointColor],
           getRadius: baseRadius,
         },
         onClick: (info: PickingInfo<UmapPoint>) => {
@@ -310,7 +245,33 @@ export function UmapCanvas({
         },
       }),
     ];
-  }, [baseRadius, gridLines, onSelectPoint, points, selectedPointId]);
+  }, [
+    baseRadius,
+    gridColor,
+    gridLines,
+    onSelectPoint,
+    pointColor,
+    points,
+    selectedColor,
+    selectedPointId,
+  ]);
+
+  const controls: Array<{
+    icon: LucideIcon;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+  }> = [
+    { icon: Plus, label: "Zoom in", onClick: () => handleZoom(0.4) },
+    { icon: Minus, label: "Zoom out", onClick: () => handleZoom(-0.4) },
+    {
+      icon: LocateFixed,
+      label: "Center on selection",
+      onClick: handleCenterOnSelection,
+      disabled: !selectedPoint,
+    },
+    { icon: Home, label: "Reset view", onClick: handleResetView },
+  ];
 
   return (
     <div className="relative h-full w-full" ref={containerRef}>
@@ -325,45 +286,38 @@ export function UmapCanvas({
           info.object
             ? {
                 text: `Chunk ${info.object.chunk_index}`,
+                style: CANVAS_TOOLTIP_STYLE,
               }
             : null
         }
         style={{ position: "absolute", inset: "0" }}
       />
-      <div className="absolute bottom-4 left-4 z-10 flex flex-col overflow-hidden rounded-2xl border border-hairline bg-canvas-raised/80 text-body">
-        <button
-          type="button"
-          title="Zoom in"
-          onClick={() => handleZoom(0.4)}
-          className="flex h-10 w-10 items-center justify-center border-b border-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          title="Zoom out"
-          onClick={() => handleZoom(-0.4)}
-          className="flex h-10 w-10 items-center justify-center border-b border-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
-        >
-          <Minus className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          title="Center on selection"
-          onClick={handleCenterOnSelection}
-          disabled={!selectedPoint}
-          className="flex h-10 w-10 items-center justify-center border-b border-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet disabled:cursor-not-allowed disabled:text-faint"
-        >
-          <LocateFixed className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          title="Reset view"
-          onClick={handleResetView}
-          className="flex h-10 w-10 items-center justify-center transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
-        >
-          <Home className="h-4 w-4" />
-        </button>
+      {/* Docked to the plot's inner corner, and its tooltips open toward the
+          plot's interior so the card's clipped overflow never cuts them. */}
+      {/* No `overflow-hidden` here: it would clip the controls' own tooltips.
+          The end buttons carry the cluster's corners instead. */}
+      <div className="absolute bottom-3 left-3 z-10 flex flex-col rounded-panel border border-hairline bg-canvas-raised text-body shadow-elevation-2">
+        {controls.map(({ icon: Icon, label, onClick, disabled }, position) => (
+          <Tooltip key={label} content={label} side="right">
+            <button
+              type="button"
+              aria-label={label}
+              onClick={onClick}
+              disabled={disabled}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center transition-colors duration-80 ease-standard",
+                position === 0 && "rounded-t-panel",
+                position === controls.length - 1 && "rounded-b-panel",
+                "hover:bg-surface-strong hover:text-primary",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet",
+                "disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent",
+                position < controls.length - 1 && "border-b border-hairline",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </Tooltip>
+        ))}
       </div>
     </div>
   );

@@ -3,8 +3,8 @@ import { resolveNodeDimensions } from "../lib/pipeline-layout";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Node } from "@xyflow/react";
 
-/** Corner radius of the node card (rounded-2xl = 1rem). */
-export const BEAM_CORNER_RADIUS = 16;
+/** Corner radius of the node card (`rounded-panel` = 10px). */
+export const BEAM_CORNER_RADIUS = 10;
 
 /**
  * Length of one node beam route: entry midpoint → around the top (or bottom)
