@@ -1,177 +1,331 @@
-# Ragworks UI — Component recipes
+# Component recipes
 
-Copy-paste-ready snippets for the deep-space look. All classes are Tailwind v4 as used in
-`frontend/`, and **all colors are semantic design tokens** (see `tokens.md`) so every
-snippet works in both light and dark. Prefer the shared primitives (`Button`, `Field`,
-`GlassCard`) where one exists; these recipes are for link-CTAs, new compositions, and the
-atmosphere layers that have no primitive yet. Reference implementations live in
-`frontend/src/components/landing/`.
+Copy-paste starting points. Console recipes first, landing recipes at the end. Every snippet
+matches the shape the real primitives in `frontend/src/components/ui/` produce — prefer
+importing the primitive over pasting its markup.
 
-> If you catch yourself typing a raw `bg-white/N`, `text-slate-N`, `bg-[#…]`, or
-> `border-white/N` for chrome, stop — swap it for the token (`tokens.md` has the table).
+---
 
-## Eyebrow / section kicker (mono instrument label)
+## A console page, end to end
 
-```tsx
-<p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted">
-  <span className="h-1.5 w-1.5 rounded-full bg-accent-cyan" aria-hidden />
-  Open-source RAG workbench
-</p>
-```
-
-Live/active variant with a pinging dot. The ping loops forever, so gate it with
-`motion-reduce:animate-none` — infinite decorative motion must honor reduced motion just
-like entrances do:
+The canonical structure. `AppShell` comes from the layout; the page supplies its own
+`CrumbBar` and a scrolling `PageBody`.
 
 ```tsx
-<span className="relative flex h-1.5 w-1.5">
-  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-cyan opacity-60 motion-reduce:animate-none" />
-  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-cyan" />
-</span>
-```
+"use client";
 
-## Headline with one gradient word
+import { PageBody } from "@/components/ui/app-shell";
+import { Button } from "@/components/ui/button";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { DataRow } from "@/components/ui/data-row";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
+import { StatusDot } from "@/components/ui/status-dot";
 
-Spend the gradient on a single word — the rest stays `text-primary`.
+export default function CollectionsPage() {
+  return (
+    <>
+      <CrumbBar
+        crumbs={[{ label: "Collections" }]}
+        state={<InstrumentLabel>{`${collections.length} total`}</InstrumentLabel>}
+        actions={
+          <Button size="sm" onClick={openWizard}>
+            New collection
+          </Button>
+        }
+      />
+      <PageBody>
+        <KpiStrip>
+          <KpiCell label="Collections" value={collections.length} />
+          <KpiCell label="Documents" value={docCount} href="/collections" />
+          <KpiCell label="Failed · 24h" value={failures} tone={failures ? "neg" : "pos"} />
+        </KpiStrip>
 
-```tsx
-<h1 className="max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-tight text-primary sm:text-6xl md:text-7xl">
-  Every RAG signal,{" "}
-  <span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
-    surfaced.
-  </span>
-</h1>
-```
-
-## Primary CTA (filled violet, glowing) — as a link
-
-```tsx
-<Link
-  href="/auth/sign-in"
-  className="group flex items-center gap-2 rounded-full bg-accent-violet px-6 py-3 text-base font-semibold text-white shadow-glow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
->
-  Launch console
-  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-</Link>
-```
-
-`text-white` stays literal here — the violet fill needs white text in both themes. For real
-`<button>`s use `<Button variant="primary">` from `components/ui/button.tsx`.
-
-## Secondary CTA (hairline outline, surface fill)
-
-```tsx
-<a
-  href={GITHUB_URL}
-  target="_blank"
-  rel="noreferrer"
-  className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-6 py-3 text-base font-medium text-primary transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
->
-  <Github className="h-4 w-4" aria-hidden />
-  View source
-</a>
-```
-
-## Card / panel
-
-Prefer `GlassCard` from `components/ui/panel.tsx`. Inline equivalent:
-
-```tsx
-<div className="rounded-3xl border border-hairline bg-surface p-6">…</div>
-```
-
-## Atmosphere layers (blooms + bottom fade)
-
-Blooms mix an accent token over the canvas (via inline `style`, since `color-mix` in an
-arbitrary class is awkward) so they invert with the theme. Place behind content inside a
-`relative overflow-hidden` container:
-
-```tsx
-<div className="pointer-events-none absolute inset-0" aria-hidden>
-  <div
-    className="absolute inset-0"
-    style={{
-      backgroundImage:
-        "radial-gradient(60% 50% at 18% 12%, color-mix(in srgb, var(--accent-violet) 22%, transparent), transparent 60%)",
-    }}
-  />
-  <div
-    className="absolute inset-0"
-    style={{
-      backgroundImage:
-        "radial-gradient(55% 45% at 85% 10%, color-mix(in srgb, var(--accent-cyan) 16%, transparent), transparent 60%)",
-    }}
-  />
-  <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-canvas to-transparent" />
-</div>
-```
-
-## Theme toggle
-
-Drop `<ThemeToggle />` (`components/ui/theme-toggle.tsx`) into a top bar. It reads/writes
-the theme via `useTheme()` (`providers/theme-provider.tsx`); the pre-paint script in
-`app/layout.tsx` sets the initial theme with no flash. Don't build a bespoke toggle.
-
-## Staggered entrance
-
-`landingRise` is defined in `globals.css` and no-ops under reduced motion. Apply
-`.landing-rise` and stagger with inline `animationDelay`:
-
-```tsx
-<p className="landing-rise …" style={{ animationDelay: "0ms" }}>…</p>
-<h1 className="landing-rise …" style={{ animationDelay: "80ms" }}>…</h1>
-<p className="landing-rise …" style={{ animationDelay: "160ms" }}>…</p>
-```
-
-## Reduced-motion preference (hydration-safe)
-
-Never read the preference in a `useState` initializer or a `setState`-in-effect (both trip
-lint / cause hydration mismatch). Use `useSyncExternalStore` — the same pattern the theme
-store uses:
-
-```tsx
-function usePrefersReducedMotion(): boolean {
-  const q = "(prefers-reduced-motion: reduce)";
-  return useSyncExternalStore(
-    (onChange) => {
-      const m = window.matchMedia(q);
-      m.addEventListener("change", onChange);
-      return () => m.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia(q).matches,
-    () => false, // server snapshot: assume motion allowed
+        <div>
+          {collections.map((collection) => (
+            <DataRow
+              key={collection.id}
+              href={`/collections/${collection.id}`}
+              leading={<StatusDot tone="pos" />}
+              title={collection.name}
+              columns={[
+                <span className="font-mono tabular-nums">{stats.chunk_count} chunks</span>,
+                <span className="font-mono tabular-nums text-meta">{timeAgo(collection.updated_at)}</span>,
+              ]}
+              actions={
+                <Button size="sm" variant="ghost" aria-label={`Delete ${collection.name}`}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+          ))}
+        </div>
+      </PageBody>
+    </>
   );
 }
 ```
 
-## The pipeline as ambient backdrop (signature technique)
+Note what is **absent**: no page title block, no outer padding, no `max-width`, no wrapping
+card, no `space-y-6`.
 
-The pivotal move: render the **real** pipeline visualization (`FlowPlayer`) faint, looping,
-and non-interactive behind the hero — never a fake graphic, never real user data. It runs
-on a hand-authored, in-memory synthetic graph so it works on a public/unauthenticated page
-with zero network calls.
+---
 
-- `FlowPlayer` accepts `ambient` (hides controls, disables interaction, loops) and
-  `autoPlay`. Feed it `nodes`/`edges`/`steps` you build in a small pure module (see
-  `frontend/src/components/landing/lib/demo-flow.ts` for the reference synthetic graph).
-- Wrap it in a masked, low-opacity, `aria-hidden` layer so it fades at the edges and clears
-  the copy:
+## The instrument label
+
+```tsx
+<InstrumentLabel>CHUNK SIZE</InstrumentLabel>
+```
+
+Raw form, when a component can't be used:
+
+```
+font-mono text-instrument uppercase tracking-[0.16em] text-muted
+```
+
+---
+
+## Numerics
+
+```tsx
+<span className="font-mono tabular-nums text-primary">
+  403<span className="text-muted">ms</span>
+</span>
+```
+
+The unit is a muted span *inside* the value. Always `tabular-nums`.
+
+---
+
+## Panels sharing a seam
+
+```tsx
+<PanelGrid columns={2}>
+  <div className="p-3">…</div>
+  <div className="p-3">…</div>
+</PanelGrid>
+```
+
+Hand-rolled, when the grid needs an uneven template:
+
+```tsx
+<div className="grid grid-cols-[repeat(4,1fr)_1.5fr] border-b border-hairline">
+  <div className="border-r border-hairline p-3">…</div>
+  <div className="border-r border-hairline p-3">…</div>
+  <div className="p-3">…</div>
+</div>
+```
+
+The last cell in a row has no right border. Never `gap-*` between panels.
+
+---
+
+## A chart panel
+
+Plot ≥104px, three y-ticks, two x labels, crosshair on hover. Series read `--series-*`:
+
+```tsx
+<div className="p-3">
+  <div className="mb-2 flex items-baseline justify-between">
+    <InstrumentLabel className="text-body">PIPELINE LATENCY</InstrumentLabel>
+    {/* Two or more series → a legend is always present. */}
+    <span className="flex items-center gap-3">
+      <span className="flex items-center gap-1">
+        <span className="h-2 w-2 rounded-chip bg-series-1" />
+        <InstrumentLabel>INGEST</InstrumentLabel>
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="h-2 w-2 rounded-chip bg-series-2" />
+        <InstrumentLabel>RETRIEVAL</InstrumentLabel>
+      </span>
+    </span>
+  </div>
+  <TrendChart height={104} … />
+</div>
+```
+
+In SVG a token must travel through `style`, because CSS `var()` is invalid in a
+`fill`/`stroke` presentation attribute:
+
+```tsx
+<path
+  style={{ stroke: "var(--series-1)" }}
+  strokeWidth={2}
+  vectorEffect="non-scaling-stroke"
+/>
+```
+
+`vectorEffect="non-scaling-stroke"` keeps a 2px line 2px wide under
+`preserveAspectRatio="none"`.
+
+---
+
+## Status
+
+```tsx
+<StatusDot tone="pos" label="READY" />
+<StatusDot tone="warn" label="1 FAILED" />
+<StatusDot tone="neutral" />   {/* bare dot — only where the row already names the state */}
+```
+
+Never colour alone. Status text comes from the backend enum's `.value`.
+
+---
+
+## Loading
+
+```tsx
+{loading ? (
+  <div className="flex items-center gap-3 px-2 py-2">
+    <Skeleton className="h-1.5 w-1.5 rounded-full" />
+    <Skeleton className="h-2 max-w-40 flex-1" />
+    <Skeleton className="h-2 w-11" />
+  </div>
+) : (
+  <DataRow … />
+)}
+```
+
+The skeleton occupies the row's real height, so data landing shifts nothing. Never a spinner
+centred in a padded panel.
+
+---
+
+## Empty state
+
+```tsx
+<div className="p-8 text-center">
+  <p className="text-ui text-muted">No collections yet.</p>
+  <Button size="sm" className="mt-3" onClick={openWizard}>
+    Create collection
+  </Button>
+</div>
+```
+
+One line, at most one action. No panel, no illustration, no explanation of the feature.
+
+---
+
+## Buttons
+
+`Button` already carries the console tokens (4px radius, `duration-80`, no glow):
+
+```tsx
+<Button size="sm">Save version</Button>
+<Button size="sm" variant="secondary">Manage indexes</Button>
+<Button size="sm" variant="ghost" aria-label="Delete collection">
+  <Trash2 className="h-3.5 w-3.5" />
+</Button>
+```
+
+Icon-only always carries `aria-label`.
+
+---
+
+## Forms
+
+```tsx
+<Field label="Chunk size" htmlFor="chunk-size" hint="Model max 8,191 tokens.">
+  <TextInput id="chunk-size" value={value} onChange={onChange} />
+</Field>
+```
+
+Never hand-write the input class string — import `inputClass`. Product dropdowns use
+`CustomSelect`, never a native `<select>`, whose popup cannot follow the theme.
+
+---
+
+## Overlays
+
+```tsx
+<ModalOverlay open={open} onClose={close} labelledBy="dialog-title">
+  <div className="w-full max-w-lg rounded-panel border border-hairline bg-canvas-raised p-4">
+    <h2 id="dialog-title" className="text-head font-semibold text-primary">
+      Delete collection
+    </h2>
+    <p className="mt-1 max-w-[66ch] text-ui text-muted">
+      Purges 6 chunks from 2 indexes and 3 files from storage.
+    </p>
+  </div>
+</ModalOverlay>
+```
+
+`ModalOverlay` owns Escape, backdrop click, focus trap, Tab containment, scroll lock, and
+portalling to `document.body` — an ancestor transform creates a stacking context, so a
+non-portaled overlay's `z-50` loses to the sticky chrome. Destructive confirmations use
+`ConfirmDialog` (`confirmText` for type-to-confirm).
+
+---
+
+## A clickable row that contains a button
+
+The trap is nesting interactive elements. `DataRow` solves it by making `actions` a sibling
+of the activatable body. Hand-rolling the same shape:
+
+```tsx
+<div className="flex items-center gap-1 border-b border-hairline">
+  <Link href={href} className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2">
+    …
+  </Link>
+  <Button size="sm" variant="ghost" aria-label="Delete">…</Button>
+</div>
+```
+
+If the whole row must be activatable *and* contain a button, use a `role="button"` div with
+keyboard activation (`FileGridView` is the existing pattern) — never a nested `<button>`.
+
+---
+
+# Landing recipes
+
+Different surface, different rules — see `landing.md`. These are link-CTAs (anchors and
+`next/link`), which is why they are recipes rather than the `Button` component.
+
+**Primary link-CTA:**
+
+```
+rounded-full bg-accent-violet px-6 py-3 text-base font-semibold text-white shadow-glow
+transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2
+focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas
+```
+
+**Secondary link-CTA:**
+
+```
+rounded-full border border-hairline bg-surface px-6 py-3 text-base font-medium text-primary
+transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none
+focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2
+focus-visible:ring-offset-canvas
+```
+
+**The one gradient word per view:**
+
+```tsx
+<span className="bg-gradient-to-r from-grad-from via-grad-via to-grad-to bg-clip-text text-transparent">
+  observability
+</span>
+```
+
+**A bloom** — tokens through `color-mix` so it inverts with the palette:
 
 ```tsx
 <div
   aria-hidden
-  className="pointer-events-none absolute inset-0 opacity-30 [mask-image:radial-gradient(105%_42%_at_50%_50%,black_45%,transparent_85%)]"
->
-  <FlowPlayer nodes={nodes} edges={edges} steps={steps} ambient autoPlay={!prefersReducedMotion} />
+  className="pointer-events-none absolute inset-0"
+  style={{
+    backgroundImage:
+      "radial-gradient(60% 50% at 18% 12%, color-mix(in srgb, var(--accent-violet) 22%, transparent), transparent 60%)",
+  }}
+/>
+```
+
+**Staggered entrance:**
+
+```tsx
+<div className="landing-rise" style={{ animationDelay: "80ms" }}>
+  …
 </div>
 ```
 
-- Leave a **clear band** in the hero layout for the flow to run through, so nodes never sit
-  under a line of text (the landing hero inserts a `h-24 sm:h-32` spacer for exactly this).
-- Because it's the same component the trace viewer uses, improvements to the pipeline
-  visuals flow to both places automatically. Keep it that way — don't fork a "landing-only"
-  copy.
-
-For a non-pipeline screen that still wants a living backdrop, reuse whatever real component
-tells that screen's story (a trace graph, a chart) at low opacity — the principle is
-"show the product faintly," not "add abstract motion."
+Landing only. The console uses a single `console-enter` fade on the content region and no
+entrance on data at all.
