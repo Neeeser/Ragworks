@@ -336,7 +336,7 @@ html {
    Console motion. The doctrine (ragworks-ui-design skill, references/motion.md)
    is: motion follows the pointer, never the data. Data paints instantly — there
    is deliberately no entrance animation for rows, values, or charts here. These
-   four are the complete permitted set, and each no-ops under reduced motion.
+   five are the complete permitted set, and each no-ops under reduced motion.
    --------------------------------------------------------------------------- */
 
 /* 1. Route change: one opacity fade on the content region. No travel, no
@@ -402,8 +402,26 @@ html {
   animation: rowArrive 480ms var(--ease-accel) both;
 }
 
+/* 5. A flyout the pointer asked for: it travels out of the rail it came from.
+   Chrome, not data — the list inside paints the moment it resolves. */
+@keyframes consoleFlyoutIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.console-flyout {
+  animation: consoleFlyoutIn 120ms var(--ease-decel) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .console-enter,
+  .console-flyout,
   .skeleton,
   .value-tick,
   .row-arrive {

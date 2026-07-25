@@ -35,6 +35,17 @@ spent 28% of the width on `max-w-6xl` centring and 13% of the height on a 70px t
 
 ### Rules
 
+- **The rail's labels live in its flyouts.** Hovering or focusing a rail item opens a
+  `RailFlyout`: the section name, one factual line of what the section *is*, and up to five
+  real destinations inside it (recent collections, recent chat sessions, pipeline kinds with
+  counts). This is the one place a description earns its keep — an icon cannot say what
+  `Evals` means, so the text is telling the user something the UI genuinely cannot show. Add
+  a section by adding one entry to `SECTIONS` in `lib/rail-preview-cache.ts`; a section with
+  no entry falls back to a plain `Tooltip`.
+- **Chrome that shows data loads on first open, never on page load**, and goes through the
+  shared `SharedQueryStore` (see `lib/rail-preview-cache.ts`) — that is what dedupes a fast
+  hover-hover, retains the list for the session, and lets sign-out drop the previous
+  account's rows. A page load must pay nothing for chrome the user may never open.
 - **A page never renders its own title block.** The CrumbBar already says where you are.
   Every `PIPELINES / Ingestion pipelines` heading block cost ~110px and repeated the nav.
 - **A page never adds horizontal padding to its outermost element.** Padding belongs to the
@@ -235,6 +246,7 @@ embedder sees"` earns its place. `"Your collections"` above a list of collection
 | selected-item fields | `Inspector` |
 | a labelled fact (pipeline, mode, version) | `Chip` |
 | explaining a truncated or terse value | `Tooltip` — never a `title` attribute |
+| a hover/focus-opened preview panel | `RailFlyout` + `useFlyoutIntent` |
 | column headers for a row list | `DataRowHeader` |
 | loading placeholder | `Skeleton` |
 | overlay of any kind | `ModalOverlay` |
@@ -269,3 +281,12 @@ Part of "done", not polish:
 - Never nest a `<button>` inside a clickable row; use a `role="button"` div with keyboard
   activation (`FileGridView` is the pattern). Nested buttons are invalid HTML and shipped
   as a hydration error here once.
+- **A hover-opened panel is reachable by keyboard or it doesn't ship.** Focus opens it, its
+  contents sit next in the tab order, and Escape closes it *and* restores focus to the
+  trigger. Restoring focus fires the group's `onFocus` — so **focus first, close second**, in
+  one React batch, or Escape reopens exactly what it dismissed. Verify it by pressing Escape
+  from a control *inside* the panel: with focus already on the trigger, `.focus()` is a no-op
+  and the bug hides (that is precisely how it passed jsdom and failed in a browser).
+- **Two links to the same destination is one too many.** A panel's title over its own
+  trigger, or a row-action icon going where the row already goes, is a redundant tab stop and
+  a second identically-named link for a screen reader. Make the title text, delete the icon.

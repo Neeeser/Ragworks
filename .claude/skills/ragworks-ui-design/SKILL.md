@@ -109,6 +109,8 @@ In this order — the first three do most of the work and are the ones skipped:
 | Dropping columns when a card becomes a row | Re-form the information, don't lose it |
 | An icon-only button with no hover tooltip | The user has to click it to find out what it does |
 | An icon button going where its row already goes | Duplicate target; delete the button |
+| A hover-opened panel with no keyboard path | Hover-only chrome is unreachable by keyboard; focus opens, Escape closes (`console.md` §1) |
+| Chrome that fetches its data on page load | A preview the user may never open must cost nothing until it opens |
 | A `title="…"` attribute for a tooltip | Native tooltips can't be themed and ignore the motion system — use `Tooltip` |
 | A row list directly on the canvas | Reads as loose text; give the list a `bg-canvas-raised` surface (`console.md` §3) |
 

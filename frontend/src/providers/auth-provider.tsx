@@ -14,6 +14,7 @@ import {
 import { getProfile, loginRequest, logoutRequest, refreshSession } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { clearModelCatalogsForUser } from "@/lib/model-catalog-cache";
+import { clearRailPreviewsForUser } from "@/lib/rail-preview-cache";
 
 import type { User } from "@/lib/types";
 
@@ -100,7 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       await logoutRequest();
-      if (user?.id) clearModelCatalogsForUser(user.id);
+      if (user?.id) {
+        clearModelCatalogsForUser(user.id);
+        clearRailPreviewsForUser(user.id);
+      }
       setToken(null);
       setUser(null);
     } catch (err) {
