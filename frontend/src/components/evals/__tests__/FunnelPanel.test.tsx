@@ -40,11 +40,8 @@ describe("FunnelPanel", () => {
     render(<FunnelPanel funnel={FUNNEL} />);
     expect(screen.getByText("Indexed coverage")).toBeInTheDocument();
     expect(screen.getByText("Dense")).toBeInTheDocument();
-    expect(
-      screen.getByRole("img", {
-        name: "Dense: 70% of gold documents retained",
-      }),
-    ).toBeInTheDocument();
+    const meter = screen.getByRole("progressbar", { name: "Dense retention" });
+    expect(meter).toHaveAttribute("aria-valuetext", "70% of gold documents retained");
     expect(screen.getByText("7/10")).toBeInTheDocument();
   });
 

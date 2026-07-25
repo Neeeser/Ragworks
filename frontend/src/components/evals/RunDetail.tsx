@@ -9,6 +9,7 @@ import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
 import { Panel } from "@/components/ui/panel";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { Readout } from "@/components/ui/readout";
@@ -162,19 +163,15 @@ function ProgressCard({ detail }: { detail: EvalRun }) {
           {detail.progress_done}/{detail.progress_total}
         </span>
       </div>
-      <div
-        className="mx-3 mb-3 h-1.5 overflow-hidden rounded-full bg-surface-strong"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={detail.progress_total}
-        aria-valuenow={detail.progress_done}
-        aria-label="Run progress"
-      >
-        <div
-          className="h-full rounded-full bg-accent-violet transition-[width] duration-200 ease-decel motion-reduce:transition-none"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      <Meter
+        value={percent / 100}
+        label="Run progress"
+        valueNow={detail.progress_done}
+        valueMax={detail.progress_total}
+        animate
+        fillClassName="bg-accent-violet"
+        className="mx-3 mb-3"
+      />
     </Panel>
   );
 }

@@ -7,6 +7,7 @@ import { InspectableTraceItem } from "@/components/traces/values/InspectableTrac
 import { TraceItemRow } from "@/components/traces/values/TraceItemRow";
 import { Chip } from "@/components/ui/chip";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
 import { cn, prettyJson, truncate } from "@/lib/utils";
 
@@ -244,12 +245,7 @@ export function MatchListValue({
                 <span className="w-6 shrink-0 font-mono text-instrument tabular-nums text-muted">
                   #{match.rank}
                 </span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-strong">
-                  <span
-                    className="block h-full rounded-full bg-series-1"
-                    style={{ width: `${(match.score / maxScore) * 100}%` }}
-                  />
-                </span>
+                <Meter value={match.score / maxScore} className="flex-1" />
                 <span className="shrink-0 font-mono text-instrument tabular-nums text-body">
                   {match.score.toFixed(3)}
                 </span>

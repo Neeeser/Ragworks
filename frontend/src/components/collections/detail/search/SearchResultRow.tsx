@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
@@ -32,16 +33,11 @@ function documentLabel(chunk: QueryChunk): string {
  * only comparable within a single query.
  */
 function ScoreCell({ score, topScore }: { score: number; topScore: number }) {
-  const share = topScore > 0 ? Math.max(4, (score / topScore) * 100) : 0;
+  const share = topScore > 0 ? Math.max(0.04, score / topScore) : 0;
   return (
     <span className="flex shrink-0 items-center gap-2">
       <Readout label="Score">{score.toFixed(3)}</Readout>
-      <span
-        aria-hidden
-        className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-surface-strong"
-      >
-        <span className="block h-full rounded-full bg-series-1" style={{ width: `${share}%` }} />
-      </span>
+      <Meter value={share} className="h-1 w-16 shrink-0" />
     </span>
   );
 }
