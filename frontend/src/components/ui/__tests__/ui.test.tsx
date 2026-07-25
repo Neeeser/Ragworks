@@ -9,7 +9,6 @@ import { Notification } from "@/components/ui/notification";
 import { GlassCard } from "@/components/ui/panel";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 import { Tooltip } from "@/components/ui/tooltip";
-import { TypingAnimation } from "@/components/ui/typing-animation";
 import { WizardShell } from "@/components/ui/wizard-shell";
 
 import type { ReasoningTraceSegment } from "@/lib/types";
@@ -185,7 +184,7 @@ describe("ui components", () => {
     expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
   });
 
-  it("renders tooltips and typing animation", () => {
+  it("renders tooltips", () => {
     render(
       <div>
         <Tooltip content="" side="left">
@@ -194,7 +193,6 @@ describe("ui components", () => {
         <Tooltip content="Info" side="right">
           <span>Label</span>
         </Tooltip>
-        <TypingAnimation />
       </div>,
     );
     expect(screen.getAllByText("Label")).toHaveLength(2);

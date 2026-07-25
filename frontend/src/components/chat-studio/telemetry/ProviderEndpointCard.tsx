@@ -1,18 +1,22 @@
 "use client";
 
+import { Chip } from "@/components/ui/chip";
+import { Readout } from "@/components/ui/readout";
+import { StatusDot } from "@/components/ui/status-dot";
 import { formatPricePerMillion } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type { ProviderFormState, ProviderSelectionField } from "@/components/chat-studio/lib/types";
+import type { StatusTone } from "@/components/ui/status-dot";
 import type { ProviderEndpoint } from "@/lib/types";
 
-const ENDPOINT_STATUS_LABELS: Record<string, string> = {
-  "0": "Operational",
-  "-1": "Degraded",
-  "-2": "Unhealthy",
-  "-3": "Outage",
-  "-5": "Offline",
-  "-10": "Disabled",
+const ENDPOINT_STATUS: Record<string, { label: string; tone: StatusTone }> = {
+  "0": { label: "Operational", tone: "pos" },
+  "-1": { label: "Degraded", tone: "warn" },
+  "-2": { label: "Unhealthy", tone: "warn" },
+  "-3": { label: "Outage", tone: "neg" },
+  "-5": { label: "Offline", tone: "neg" },
+  "-10": { label: "Disabled", tone: "neutral" },
 };
 
 const formatProviderPrice = (value?: number | string | null): string => {
@@ -27,12 +31,14 @@ const formatUptimePercentage = (value?: number | null): string => {
   return `${normalized.toFixed(1)}%`;
 };
 
-const getEndpointStatusLabel = (status?: string | number | null): string => {
+const getEndpointStatus = (
+  status?: string | number | null,
+): { label: string; tone: StatusTone } => {
   if (!status) {
-    return "Unknown";
+    return { label: "Unknown", tone: "neutral" };
   }
   const key = typeof status === "number" ? String(status) : status;
-  return ENDPOINT_STATUS_LABELS[key] ?? "Unknown";
+  return ENDPOINT_STATUS[key] ?? { label: "Unknown", tone: "neutral" };
 };
 
 interface ProviderEndpointCardProps {
@@ -42,6 +48,8 @@ interface ProviderEndpointCardProps {
   onToggleField: (field: ProviderSelectionField, slug: string) => void;
 }
 
+/** One OpenRouter endpoint for the selected model, with the three routing
+ *  decisions that can be taken about it. */
 export const ProviderEndpointCard = ({
   endpoint,
   position,
@@ -59,12 +67,14 @@ export const ProviderEndpointCard = ({
   const maxTokens =
     endpoint.max_completion_tokens ?? endpoint.max_prompt_tokens ?? endpoint.context_length ?? null;
   const parameterCount = endpoint.supported_parameters?.length ?? 0;
+  const status = getEndpointStatus(endpoint.status);
   const actionClasses = (active: boolean) =>
     cn(
-      "rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.08em] transition",
+      "rounded-control px-2 py-1 text-instrument font-medium transition-colors duration-80 ease-standard",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
       active
-        ? "border-accent-violet bg-accent-violet/20 text-primary"
-        : "border-hairline bg-surface text-body hover:border-strong",
+        ? "bg-accent-violet/15 text-accent-violet"
+        : "bg-surface text-body hover:bg-surface-strong hover:text-primary",
     );
   const cardKey = `${slug}-${endpoint.provider_name ?? "unknown"}-${endpoint.tag ?? "default"}-${position}`;
   const quantizationLabel =
@@ -78,57 +88,38 @@ export const ProviderEndpointCard = ({
         : null;
 
   return (
-    <div key={cardKey} className="space-y-4 rounded-2xl border border-hairline bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-mono text-sm text-primary">{slug}</p>
-          <p className="text-xs text-muted">{endpoint.provider_name || "Unknown provider"}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-meta">
-          <span>{getEndpointStatusLabel(endpoint.status)}</span>
-          <span>Uptime {formatUptimePercentage(endpoint.uptime_last_30m)}</span>
-          {endpoint.tag && (
-            <span className="rounded-full bg-surface-strong px-2 py-0.5 text-[10px] text-body">
-              {endpoint.tag}
-            </span>
-          )}
-          {endpoint.supports_implicit_caching && (
-            <span className="rounded-full border border-data-pos/30 bg-data-pos/10 px-2 py-0.5 text-[10px] text-data-pos">
-              Cache
-            </span>
-          )}
-          {quantizationLabel && (
-            <span className="rounded-full border border-accent-cyan/30 bg-accent-cyan/10 px-2 py-0.5 text-[10px] text-accent-cyan">
-              {quantizationLabel}
-            </span>
-          )}
-        </div>
+    <div key={cardKey} className="space-y-2 py-2 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="min-w-0 truncate font-mono text-ui text-primary">{slug}</span>
+        <span className="min-w-0 truncate text-instrument text-meta">
+          {endpoint.provider_name || "Unknown provider"}
+        </span>
+        <StatusDot tone={status.tone} label={status.label} className="ml-auto shrink-0" />
       </div>
-      <div className="grid gap-2 text-sm text-body sm:grid-cols-2">
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Prompt</p>
-          <p className="mt-0.5 text-sm font-semibold text-primary">{promptPrice}</p>
-        </div>
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Completion</p>
-          <p className="mt-0.5 text-sm font-semibold text-primary">{completionPrice}</p>
-        </div>
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Capacity</p>
-          <p className="mt-0.5 text-sm font-semibold text-primary">
-            {maxTokens ? `${Math.round(maxTokens).toLocaleString()} tokens` : "—"}
-          </p>
-        </div>
-        <div className="rounded-xl border border-hairline bg-surface p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
-            Supported params
-          </p>
-          <p className="mt-0.5 text-sm font-semibold text-primary">{parameterCount}</p>
-        </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <Readout label="In">{promptPrice}</Readout>
+        <Readout label="Out">{completionPrice}</Readout>
+        <Readout label="Capacity">
+          {maxTokens ? (
+            Math.round(maxTokens).toLocaleString()
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+        </Readout>
+        <Readout label="Params">{parameterCount}</Readout>
+        <Readout label="Uptime">{formatUptimePercentage(endpoint.uptime_last_30m)}</Readout>
       </div>
-      <div className="grid gap-2 text-center sm:grid-cols-3">
+      {(endpoint.tag || endpoint.supports_implicit_caching || quantizationLabel) && (
+        <div className="flex flex-wrap gap-1">
+          {endpoint.tag && <Chip dot={false}>{endpoint.tag}</Chip>}
+          {endpoint.supports_implicit_caching && <Chip tone="pos">Cache</Chip>}
+          {quantizationLabel && <Chip tone="chunk">{quantizationLabel}</Chip>}
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-1">
         <button
           type="button"
+          aria-pressed={orderActive}
           className={actionClasses(orderActive)}
           onClick={() => onToggleField("order", slug)}
         >
@@ -136,6 +127,7 @@ export const ProviderEndpointCard = ({
         </button>
         <button
           type="button"
+          aria-pressed={onlyActive}
           className={actionClasses(onlyActive)}
           onClick={() => onToggleField("only", slug)}
         >
@@ -143,6 +135,7 @@ export const ProviderEndpointCard = ({
         </button>
         <button
           type="button"
+          aria-pressed={ignoreActive}
           className={actionClasses(ignoreActive)}
           onClick={() => onToggleField("ignore", slug)}
         >

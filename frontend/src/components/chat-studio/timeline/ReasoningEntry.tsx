@@ -1,6 +1,4 @@
-import { roleVariants } from "@/components/chat-studio/timeline/timeline-constants";
 import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
-import { cn } from "@/lib/utils";
 
 import type { ChatReasoningEntry } from "@/components/chat-studio/lib/chat-types";
 
@@ -20,17 +18,12 @@ export const getReasoningEntryKey = (
 };
 
 export const ReasoningEntry = ({ entry }: ReasoningEntryProps) => (
-  <div className="flex justify-start">
-    <div className="max-w-[75%]">
-      <CollapsibleReasoning
-        segments={entry.segments}
-        messageId={entry.id}
-        title={entry.title}
-        subtitle={entry.subtitle}
-        isAutoOpen={false}
-        preventAutoClose
-        className={cn("chat-bubble", roleVariants.reasoning)}
-      />
-    </div>
-  </div>
+  <CollapsibleReasoning
+    segments={entry.segments}
+    messageId={entry.id}
+    title={entry.title}
+    subtitle={entry.subtitle}
+    isAutoOpen={false}
+    preventAutoClose
+  />
 );

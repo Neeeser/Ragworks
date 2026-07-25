@@ -4,6 +4,7 @@ import { ArrowDown } from "lucide-react";
 
 import { ChatInput } from "@/components/chat-studio/ChatInput";
 import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
+import { Button } from "@/components/ui/button";
 
 import type { ComponentProps, RefObject, UIEventHandler } from "react";
 
@@ -17,6 +18,11 @@ type ChatStudioMessagesProps = {
   inputProps: ComponentProps<typeof ChatInput>;
 };
 
+/**
+ * The centre pane: the transcript's own scroll region with the composer pinned
+ * under it, and the follow-the-stream control that appears only once the user
+ * has scrolled away from the newest turn.
+ */
 export function ChatStudioMessages({
   messagesContainerRef,
   endRef,
@@ -27,11 +33,11 @@ export function ChatStudioMessages({
   inputProps,
 }: ChatStudioMessagesProps) {
   return (
-    <div className="flex h-full flex-col min-h-0 overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
       <div
         ref={messagesContainerRef}
         onScroll={onScroll}
-        className="relative flex-1 min-h-0 overflow-y-auto px-16 py-6 scroll-smooth !overflow-anchor-none"
+        className="relative min-h-0 flex-1 overflow-y-auto scroll-smooth p-4"
         style={{ overflowAnchor: "none" }}
       >
         <div className="flex h-full flex-col gap-4">
@@ -40,15 +46,17 @@ export function ChatStudioMessages({
         </div>
       </div>
       {showFollowButton && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[9rem] flex justify-center">
-          <button
-            type="button"
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onFollow}
             aria-label="Scroll to latest message"
-            className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-hairline bg-canvas-raised text-primary opacity-90 shadow-elevation-2 backdrop-blur-sm transition hover:bg-surface-strong hover:opacity-100"
+            className="pointer-events-auto bg-canvas-raised shadow-elevation-2"
           >
-            <ArrowDown className="h-5 w-5" />
-          </button>
+            <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+            Latest
+          </Button>
         </div>
       )}
       <ChatInput {...inputProps} />

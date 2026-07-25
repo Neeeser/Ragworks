@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { CollectionToolsCard } from "@/components/chat-studio/telemetry/CollectionToolsCard";
 import { CollectionVitalsCard } from "@/components/chat-studio/telemetry/CollectionVitalsCard";
 import { StreamingSettingsCard } from "@/components/chat-studio/telemetry/StreamingSettingsCard";
@@ -22,7 +21,6 @@ describe("Telemetry cards", () => {
         promptLoading
         promptError={null}
         onEdit={() => undefined}
-        markdownComponents={markdownComponents}
       />,
     );
 
@@ -35,7 +33,6 @@ describe("Telemetry cards", () => {
         promptLoading={false}
         promptError="Failed"
         onEdit={() => undefined}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(screen.getByText("Failed")).toBeInTheDocument();
@@ -48,7 +45,6 @@ describe("Telemetry cards", () => {
         promptError={null}
         generatedAt={baseTimestamp}
         onEdit={() => undefined}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(screen.getByText("Base prompt · Custom")).toBeInTheDocument();
@@ -62,7 +58,6 @@ describe("Telemetry cards", () => {
         promptError={null}
         generatedAt={null}
         onEdit={() => undefined}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(screen.getByText("Retriever")).toBeInTheDocument();
@@ -75,7 +70,6 @@ describe("Telemetry cards", () => {
         promptError={null}
         generatedAt={null}
         onEdit={() => undefined}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(screen.getByText("No prompt content yet.")).toBeInTheDocument();

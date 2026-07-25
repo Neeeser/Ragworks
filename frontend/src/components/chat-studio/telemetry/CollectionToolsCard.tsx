@@ -1,9 +1,13 @@
 "use client";
 
-import { chipClass } from "@/components/chat-studio/lib/chat-constants";
+import { Check } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { cn } from "@/lib/utils";
 
 import type { Collection } from "@/lib/types";
+import type { ReactNode } from "react";
 
 interface CollectionToolsCardProps {
   collections: Collection[];
@@ -14,6 +18,32 @@ interface CollectionToolsCardProps {
   collectionsError: string | null;
 }
 
+type ToolOptionProps = {
+  selected: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+};
+
+function ToolOption({ selected, onToggle, children }: ToolOptionProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-control px-2 py-1.5 text-left text-ui",
+        "transition-colors duration-80 ease-standard focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
+        selected ? "bg-accent-violet/12 text-primary" : "text-body hover:bg-surface-strong",
+      )}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-accent-violet" aria-hidden /> : null}
+    </button>
+  );
+}
+
+/** Which collections expose retrieval tools to the model on the next turn. */
 export const CollectionToolsCard = ({
   collections,
   selectedCollectionIds,
@@ -23,94 +53,59 @@ export const CollectionToolsCard = ({
   collectionsError,
 }: CollectionToolsCardProps) => {
   if (collectionsLoading) {
-    return <p className="text-sm text-muted">Loading collections…</p>;
+    return <p className="text-ui text-muted">Loading collections…</p>;
   }
 
   if (collectionsError) {
-    return <p className="text-sm text-data-neg">{collectionsError}</p>;
+    return <p className="text-ui text-data-neg">{collectionsError}</p>;
   }
 
   const noneSelected = selectedCollectionIds.length === 0;
   const collectionMap = new Map(collections.map((collection) => [collection.id, collection]));
-  const selectedEntries = selectedCollectionIds.map((collectionId) => ({
-    id: collectionId,
-    label: collectionMap.get(collectionId)?.name ?? "Unknown",
-  }));
 
   return (
     <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-primary">
-            {noneSelected
-              ? "No collections enabled"
-              : `${selectedCollectionIds.length} collection${
-                  selectedCollectionIds.length === 1 ? "" : "s"
-                } enabled`}
-          </p>
-          <p className="text-xs text-muted">
-            Select one or more collections to expose retrieval tools to the model.
-          </p>
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-ui text-primary">
+          {noneSelected
+            ? "No collections enabled"
+            : `${selectedCollectionIds.length} collection${
+                selectedCollectionIds.length === 1 ? "" : "s"
+              } enabled`}
+        </p>
         {!noneSelected && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted hover:text-primary"
-          >
+          <Button size="sm" variant="ghost" onClick={onClear}>
             Clear all
-          </button>
+          </Button>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {selectedEntries.length > 0 ? (
-          selectedEntries.map((entry) => (
-            <span key={entry.id} className={chipClass}>
-              {entry.label}
-            </span>
-          ))
-        ) : (
-          <span className={chipClass}>No collections</span>
-        )}
-      </div>
+      {!noneSelected && (
+        <div className="flex flex-wrap gap-1">
+          {selectedCollectionIds.map((collectionId) => (
+            <Chip key={collectionId} tone="retrieve">
+              {collectionMap.get(collectionId)?.name ?? "Unknown"}
+            </Chip>
+          ))}
+        </div>
+      )}
 
-      <div className="space-y-2">
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left",
-            noneSelected
-              ? "border-accent-cyan/50 bg-accent-cyan/10 text-primary"
-              : "border-hairline bg-surface text-body hover:border-strong",
-          )}
-          onClick={onClear}
-        >
-          <span>No collections</span>
-          <input type="checkbox" readOnly checked={noneSelected} />
-        </button>
+      <div className="space-y-0.5">
+        <ToolOption selected={noneSelected} onToggle={onClear}>
+          No collections
+        </ToolOption>
         {collections.length === 0 ? (
-          <p className="text-[11px] text-muted">No collections available.</p>
+          <p className="px-2 py-1.5 text-ui text-muted">No collections available.</p>
         ) : (
-          collections.map((collection) => {
-            const selected = selectedCollectionIds.includes(collection.id);
-            return (
-              <button
-                key={collection.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left",
-                  selected
-                    ? "border-accent-violet/60 bg-accent-violet/10 text-primary"
-                    : "border-hairline bg-surface text-body hover:border-strong",
-                )}
-                onClick={() => onToggle(collection.id)}
-              >
-                <span>{collection.name}</span>
-                <input type="checkbox" readOnly checked={selected} />
-              </button>
-            );
-          })
+          collections.map((collection) => (
+            <ToolOption
+              key={collection.id}
+              selected={selectedCollectionIds.includes(collection.id)}
+              onToggle={() => onToggle(collection.id)}
+            >
+              {collection.name}
+            </ToolOption>
+          ))
         )}
       </div>
     </div>

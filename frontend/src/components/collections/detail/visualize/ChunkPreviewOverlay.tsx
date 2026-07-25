@@ -2,11 +2,10 @@
 
 import { X } from "lucide-react";
 import { useId, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Markdown } from "@/components/ui/markdown";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Readout } from "@/components/ui/readout";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -29,22 +28,6 @@ const RENDER_MODES: Array<{ mode: RenderMode; label: string }> = [
   { mode: "text", label: "Plain" },
   { mode: "markdown", label: "Markdown" },
 ];
-
-// The repo ships no typography plugin, so rendered markdown is styled here from
-// tokens rather than through a `prose` class that resolves to nothing.
-const MARKDOWN_CLASS = cn(
-  "space-y-2 text-ui leading-relaxed text-body",
-  "[&_h1]:text-head [&_h1]:font-semibold [&_h1]:text-primary",
-  "[&_h2]:text-num [&_h2]:font-semibold [&_h2]:text-primary",
-  "[&_h3]:text-ui [&_h3]:font-semibold [&_h3]:text-primary",
-  "[&_strong]:font-semibold [&_strong]:text-primary",
-  "[&_a]:text-accent-cyan [&_a]:underline",
-  "[&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4",
-  "[&_code]:font-mono [&_code]:text-instrument",
-  "[&_pre]:overflow-x-auto [&_pre]:rounded-control [&_pre]:border [&_pre]:border-hairline [&_pre]:bg-surface [&_pre]:p-2",
-  "[&_table]:w-full [&_th]:text-left [&_th]:font-medium [&_th]:text-primary",
-  "[&_td]:border-t [&_td]:border-hairline [&_td]:py-1",
-);
 
 /**
  * The selected chunk at full size: the exact text a retriever would return,
@@ -154,9 +137,7 @@ export function ChunkPreviewOverlay({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {renderMode === "markdown" ? (
-                <div className={cn(MARKDOWN_CLASS, "max-w-[66ch]")}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownSource}</ReactMarkdown>
-                </div>
+                <Markdown className="max-w-[66ch]">{markdownSource}</Markdown>
               ) : (
                 <p className="max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
                   {chunk.text || ""}

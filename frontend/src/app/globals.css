@@ -587,57 +587,7 @@ html {
   animation: liveStreamTailFade 0.45s ease-out forwards;
 }
 
-@keyframes chatBubbleReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(18px) scale(0.96);
-    filter: blur(8px);
-  }
-  65% {
-    opacity: 1;
-    transform: translateY(-4px) scale(1.01);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes chatBubbleFloat {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-4px);
-  }
-}
-
-.chat-bubble {
-  position: relative;
-  isolation: isolate;
-  animation: chatBubbleFloat 6s ease-in-out infinite alternate;
-}
-
-.chat-bubble::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0.35;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.35), transparent 70%);
-  z-index: -1;
-}
-
-.chat-bubble-enter {
-  animation: chatBubbleReveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .chat-bubble,
-  .chat-bubble-enter,
   .live-stream-text[data-live-stream-key]::after,
   .live-stream-reasoning[data-live-reasoning-key]::after {
     animation: none !important;

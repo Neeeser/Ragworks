@@ -12,7 +12,6 @@ import {
 import { memo } from "react";
 
 import { DEFAULT_STREAMING_ENABLED } from "@/components/chat-studio/lib/chat-constants";
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { CollectionToolsCard } from "@/components/chat-studio/telemetry/CollectionToolsCard";
 import { CollectionVitalsCard } from "@/components/chat-studio/telemetry/CollectionVitalsCard";
 import { ModelParametersCard } from "@/components/chat-studio/telemetry/ModelParametersCard";
@@ -26,6 +25,8 @@ import { StreamingSettingsCard } from "@/components/chat-studio/telemetry/Stream
 import { SystemPromptCard } from "@/components/chat-studio/telemetry/SystemPromptCard";
 import { UsageCard } from "@/components/chat-studio/telemetry/UsageCard";
 import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import type {
   TelemetryCollectionsProps,
@@ -175,7 +176,6 @@ const TelemetryPanelComponent = ({
           promptError={promptError}
           generatedAt={promptGeneratedAt}
           onEdit={onPromptEdit}
-          markdownComponents={markdownComponents}
         />
       ),
     },
@@ -327,20 +327,13 @@ const TelemetryPanelComponent = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-hairline pb-4">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">Context</p>
-          <h2 className="text-xl font-semibold text-primary">Run settings</h2>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-hairline p-0 text-muted"
-          onClick={onClose}
-          aria-label="Close run settings"
-        >
-          <PanelRightClose className="h-4 w-4" />
-        </Button>
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3">
+        <InstrumentLabel>Run settings</InstrumentLabel>
+        <Tooltip content="Hide run settings" side="bottom" triggerClassName="ml-auto">
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close run settings">
+            <PanelRightClose className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
       </div>
       <SortableSectionList
         sectionOrder={sectionOrder}

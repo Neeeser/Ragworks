@@ -3,7 +3,6 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { makePublicConfig } from "@/test/fixtures";
 import { resetMockAppConfig, setMockAppConfig } from "@/test/mocks";
 
@@ -28,10 +27,6 @@ vi.mock("@/components/ui/collapsible-reasoning", () => ({
       {subtitle ? ` ${subtitle}` : ""}
     </div>
   ),
-}));
-
-vi.mock("@/components/ui/typing-animation", () => ({
-  TypingAnimation: () => <div data-testid="typing" />,
 }));
 
 vi.mock("react-markdown", () => ({
@@ -63,8 +58,6 @@ const buildMessage = (
 });
 
 const baseProps = (overrides: Partial<ChatTimelineProps> = {}): ChatTimelineProps => ({
-  modelLabel: "Model",
-  onModelSelect: vi.fn(),
   chatEntryOrder: [],
   chatEntryMap: new Map(),
   finalStreamAssistantId: null,
@@ -80,7 +73,6 @@ const baseProps = (overrides: Partial<ChatTimelineProps> = {}): ChatTimelineProp
   onEditSubmit: vi.fn(),
   onRetryAssistant: vi.fn(),
   onBranchMessage: vi.fn(),
-  markdownComponents,
   overrideSections: [],
   onOverrideSelect: vi.fn(),
   liveResponse: "",
@@ -108,31 +100,27 @@ describe("ChatTimeline", () => {
     resetMockAppConfig();
   });
 
-  it("renders empty state with overrides", () => {
-    const onModelSelect = vi.fn();
+  it("jumps to the run-settings section an override belongs to", () => {
     const onOverrideSelect = vi.fn();
 
     render(
       <ChatTimeline
         {...baseProps({
-          onModelSelect,
           overrideSections: [{ id: "system", label: "System" }],
           onOverrideSelect,
         })}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Model/ }));
-    expect(onModelSelect).toHaveBeenCalled();
-
     fireEvent.click(screen.getByRole("button", { name: "System" }));
     expect(onOverrideSelect).toHaveBeenCalledWith("system");
   });
 
-  it("renders empty state without overrides", () => {
+  it("names no active run settings when none differ from their defaults", () => {
     render(<ChatTimeline {...baseProps({ overrideSections: [] })} />);
 
-    expect(screen.getByText("No overrides yet")).toBeInTheDocument();
+    expect(screen.queryByText("Active run settings")).not.toBeInTheDocument();
+    expect(screen.getByText(/Sending the first message/)).toBeInTheDocument();
   });
 
   it("renders message entries and edit actions", () => {
@@ -266,7 +254,7 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getByText(/ASSISTANT • helper/)).toBeInTheDocument();
+    expect(screen.getByText(/Assistant • helper/)).toBeInTheDocument();
   });
 
   it("skips branch footer when no session is selected", () => {
@@ -407,7 +395,8 @@ describe("ChatTimeline", () => {
     );
 
     expect(screen.getAllByTestId(TOOL_BUBBLE_TESTID).length).toBeGreaterThan(0);
-    expect(screen.getByTestId("typing")).toBeInTheDocument();
+    // Tokens have not arrived yet, so the response block is the pulse alone.
+    expect(screen.getByRole("status", { name: "Streaming response" })).toBeInTheDocument();
   });
 
   it("sorts live tool events by order and id", () => {
@@ -773,10 +762,10 @@ describe("ChatTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("30 tok")).toBeInTheDocument();
-    expect(screen.getByText("10 in")).toBeInTheDocument();
-    expect(screen.getByText("20 out")).toBeInTheDocument();
-    expect(screen.getByText("5 reasoning")).toBeInTheDocument();
+    expect(screen.getByText("30")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.getByText("20")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("$0.0100")).toBeInTheDocument();
     expect(screen.getAllByText("Reasoning Assistant reasoning").length).toBeGreaterThan(0);
     expect(screen.getByText("Streaming")).toBeInTheDocument();

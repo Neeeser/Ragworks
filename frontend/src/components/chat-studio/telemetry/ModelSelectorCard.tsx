@@ -66,7 +66,7 @@ export const ModelSelectorCard = ({
         currentModelInfo ? `${currentModelInfo.connection_label} · ${currentModelInfo.id}` : null
       }
       headerAccessory={
-        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
+        <span className="font-mono text-instrument tabular-nums text-meta">
           {toolReadyModels.length} ready
         </span>
       }

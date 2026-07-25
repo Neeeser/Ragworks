@@ -1,16 +1,17 @@
 import { Edit3, GitBranch, RotateCcw } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { BranchedFromBanner } from "@/components/chat-studio/timeline/BranchedFromBanner";
 import { roleVariants, UsageInline } from "@/components/chat-studio/timeline/timeline-constants";
 import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Markdown } from "@/components/ui/markdown";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAppConfig } from "@/providers/config-provider";
 
 import type { ChatMessageEntry } from "@/components/chat-studio/lib/chat-types";
 import type { UsageBreakdown } from "@/lib/types";
-import type { Components } from "react-markdown";
 
 interface MessageEntryProps {
   entry: ChatMessageEntry;
@@ -25,7 +26,6 @@ interface MessageEntryProps {
   onEditSubmit: () => void;
   onRetryAssistant: (messageId: string) => void;
   onBranchMessage: (messageId: string) => void;
-  markdownComponents: Components;
   branchedFromSessionId: string | null;
   branchedFromSessionTitle: string | null;
   branchedFromMessageId: string | null;
@@ -41,23 +41,25 @@ interface BranchFooterProps {
   onBranchMessage: (messageId: string) => void;
 }
 
-/** Hover footer under a bubble: inline usage stats and the branch button. */
+/** What the turn cost, and the way to fork the conversation from it. */
 function BranchFooter({ show, usage, sending, messageId, onBranchMessage }: BranchFooterProps) {
   if (!show) {
     return null;
   }
   return (
-    <div className="absolute left-0 right-0 top-full mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 opacity-0 transition-opacity duration-120 ease-decel group-focus-within:opacity-100 group-hover:opacity-100">
       {usage && <UsageInline usage={usage} />}
-      <button
-        type="button"
-        className="pointer-events-auto inline-flex items-center justify-center rounded-full border border-hairline p-1 text-body hover:border-strong"
-        onClick={() => onBranchMessage(messageId)}
-        disabled={sending}
-        aria-label="Branch chat"
-      >
-        <GitBranch className="h-3.5 w-3.5" />
-      </button>
+      <Tooltip content="Branch a new chat from this message">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onBranchMessage(messageId)}
+          disabled={sending}
+          aria-label="Branch chat"
+        >
+          <GitBranch className="h-3.5 w-3.5" aria-hidden />
+        </Button>
+      </Tooltip>
     </div>
   );
 }
@@ -72,7 +74,7 @@ interface MessageActionsProps {
   onRetryAssistant: (messageId: string) => void;
 }
 
-/** Per-role header actions: Edit for user bubbles, Retry for assistant ones. */
+/** Per-role header actions: Edit for user turns, Retry for assistant ones. */
 function MessageActions({
   isUser,
   isAssistant,
@@ -83,27 +85,23 @@ function MessageActions({
   onRetryAssistant,
 }: MessageActionsProps) {
   return (
-    <div className="flex items-center gap-2 text-[11px] text-body">
+    <div className="flex items-center gap-1">
       {isUser && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-1 hover:border-strong"
-          onClick={() => onEditStart(messageId, content)}
-        >
-          <Edit3 className="h-3.5 w-3.5" />
+        <Button size="sm" variant="ghost" onClick={() => onEditStart(messageId, content)}>
+          <Edit3 className="h-3.5 w-3.5" aria-hidden />
           Edit
-        </button>
+        </Button>
       )}
       {isAssistant && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-1 hover:border-strong"
+        <Button
+          size="sm"
+          variant="ghost"
           onClick={() => onRetryAssistant(messageId)}
           disabled={sending}
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
           Retry
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -112,25 +110,30 @@ function MessageActions({
 interface MessageBodyProps {
   isEditing: boolean;
   isAssistant: boolean;
+  isUser: boolean;
   content: string;
   editingDraft: string;
   editTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
   sending: boolean;
-  markdownComponents: Components;
   onEditChange: (value: string) => void;
   onEditCancel: () => void;
   onEditSubmit: () => void;
 }
 
-/** The bubble body: edit textarea, rendered markdown, or plain text. */
+/**
+ * The turn's content: an edit box, rendered markdown, or plain text.
+ *
+ * Prose caps at a reading measure inside a pane that stays full width — the
+ * assistant's answer is read, so it gets a line length rather than a bubble.
+ */
 function MessageBody({
   isEditing,
   isAssistant,
+  isUser,
   content,
   editingDraft,
   editTextareaRef,
   sending,
-  markdownComponents,
   onEditChange,
   onEditCancel,
   onEditSubmit,
@@ -140,11 +143,11 @@ function MessageBody({
       <div className="space-y-2">
         <textarea
           ref={editTextareaRef}
-          className="min-h-[64px] w-full resize-none overflow-hidden rounded-xl bg-accent-violet/15 px-4 py-3 text-sm leading-relaxed text-primary outline-none"
+          className={cn(inputClass, "min-h-16 resize-none overflow-hidden leading-relaxed")}
           value={editingDraft}
           onChange={(event) => onEditChange(event.target.value)}
         />
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button size="sm" onClick={onEditSubmit} loading={sending}>
             Update & rerun
           </Button>
@@ -156,15 +159,18 @@ function MessageBody({
     );
   }
   if (isAssistant) {
-    return (
-      <div className="space-y-3">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {content}
-        </ReactMarkdown>
-      </div>
-    );
+    return <Markdown className="max-w-[66ch]">{content}</Markdown>;
   }
-  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{content}</p>;
+  return (
+    <p
+      className={cn(
+        "whitespace-pre-wrap text-ui leading-relaxed",
+        isUser ? "max-w-[66ch]" : "max-w-[66ch] text-body",
+      )}
+    >
+      {content}
+    </p>
+  );
 }
 
 interface BranchBannerState {
@@ -192,7 +198,7 @@ function resolveBranchBanner(
   }
   const banner = (
     <BranchedFromBanner
-      className="mb-2 flex items-center gap-2 text-[11px] text-muted"
+      className="flex items-center gap-1.5"
       branchedFromSessionId={props.branchedFromSessionId}
       branchedFromLabel={props.branchedFromSessionTitle || "Original chat"}
       onNavigateToSession={props.onNavigateToSession}
@@ -202,6 +208,21 @@ function resolveBranchBanner(
   return { above: above ? banner : null, below: above ? null : banner };
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  user: "You",
+  assistant: "Assistant",
+  system: "System",
+  tool: "Tool",
+  error: "Error",
+};
+
+/**
+ * One turn in the transcript.
+ *
+ * A user turn is a tinted block aligned right; the assistant's answer sits
+ * directly on the card's material with a reading measure, because it is the
+ * thing being read rather than a thing being distinguished.
+ */
 export const MessageEntry = (props: MessageEntryProps) => {
   const {
     entry,
@@ -216,7 +237,6 @@ export const MessageEntry = (props: MessageEntryProps) => {
     onEditSubmit,
     onRetryAssistant,
     onBranchMessage,
-    markdownComponents,
   } = props;
   const { config } = useAppConfig();
   const branchingEnabled = config.features.chat_branching !== false;
@@ -225,65 +245,66 @@ export const MessageEntry = (props: MessageEntryProps) => {
   const isUser = entry.type === "user";
   const isAssistant = entry.type === "assistant";
   const showActions = (isUser || isAssistant) && !!selectedSessionId;
-  const headerLabel = entry.message.role === "user" ? "You" : entry.message.role.toUpperCase();
+  const roleLabel = ROLE_LABELS[entry.message.role] ?? entry.message.role;
+  const headerLabel = entry.message.tool_name
+    ? `${roleLabel} • ${entry.message.tool_name}`
+    : roleLabel;
   const showBranchFooter = Boolean(selectedSessionId) && branchingEnabled;
   const banner = resolveBranchBanner(props);
   const isEditing = isUser && editingMessageId === entry.message.id;
 
   return (
     <div
-      className={cn("flex", isUser ? "justify-end" : "justify-start", showBranchFooter && "mb-5")}
+      className={cn("group flex flex-col gap-1.5", isUser && !isEditing && "items-end")}
+      data-chat-role={entry.type}
     >
-      <div className={cn("group relative max-w-[75%]", isEditing && "w-full")}>
-        {banner.above}
-        <div
-          className={cn(
-            "chat-bubble rounded-2xl border px-4 py-3 text-sm shadow-2xl transition",
-            variant,
-            isEditing &&
-              "w-full border-accent-violet/80 bg-accent-violet/25 ring-1 ring-accent-violet/35",
-          )}
-          data-chat-role={entry.type}
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-muted">
-              {headerLabel}
-              {entry.message.tool_name ? ` • ${entry.message.tool_name}` : ""}
-            </p>
-            {showActions && (
-              <MessageActions
-                isUser={isUser}
-                isAssistant={isAssistant}
-                sending={sending}
-                messageId={entry.message.id}
-                content={entry.message.content}
-                onEditStart={onEditStart}
-                onRetryAssistant={onRetryAssistant}
-              />
-            )}
-          </div>
-          <MessageBody
-            isEditing={isEditing}
+      {banner.above}
+      <div className={cn("flex items-center gap-2", isUser && !isEditing && "flex-row-reverse")}>
+        <InstrumentLabel>{headerLabel}</InstrumentLabel>
+        {showActions && (
+          <MessageActions
+            isUser={isUser}
             isAssistant={isAssistant}
-            content={entry.content}
-            editingDraft={editingDraft}
-            editTextareaRef={editTextareaRef}
             sending={sending}
-            markdownComponents={markdownComponents}
-            onEditChange={onEditChange}
-            onEditCancel={onEditCancel}
-            onEditSubmit={onEditSubmit}
+            messageId={entry.message.id}
+            content={entry.message.content}
+            onEditStart={onEditStart}
+            onRetryAssistant={onRetryAssistant}
           />
-        </div>
-        {banner.below}
-        <BranchFooter
-          show={showBranchFooter}
-          usage={entry.message.usage}
+        )}
+      </div>
+      <div
+        className={cn(
+          "min-w-0",
+          // The assistant's answer needs no container of its own; every other
+          // role is a distinguishable block.
+          !isAssistant && "rounded-panel border px-3 py-2",
+          !isAssistant && variant,
+          isUser && !isEditing && "w-fit max-w-full",
+          isEditing && "w-full border-accent-violet/60",
+        )}
+      >
+        <MessageBody
+          isEditing={isEditing}
+          isAssistant={isAssistant}
+          isUser={isUser}
+          content={entry.content}
+          editingDraft={editingDraft}
+          editTextareaRef={editTextareaRef}
           sending={sending}
-          messageId={entry.message.id}
-          onBranchMessage={onBranchMessage}
+          onEditChange={onEditChange}
+          onEditCancel={onEditCancel}
+          onEditSubmit={onEditSubmit}
         />
       </div>
+      {banner.below}
+      <BranchFooter
+        show={showBranchFooter}
+        usage={entry.message.usage}
+        sending={sending}
+        messageId={entry.message.id}
+        onBranchMessage={onBranchMessage}
+      />
     </div>
   );
 };

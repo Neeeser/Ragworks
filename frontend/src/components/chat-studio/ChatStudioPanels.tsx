@@ -7,8 +7,6 @@ import { HistoryPanel } from "@/components/chat-studio/HistoryPanel";
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
 
-import { markdownComponents } from "./lib/chat-utils";
-
 import type { useChatStream } from "@/components/chat-studio/hooks/messaging/use-chat-stream";
 import type { useCollectionTools } from "@/components/chat-studio/hooks/settings/use-collection-tools";
 import type { usePromptEditor } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
@@ -160,7 +158,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       sessions={sessions}
       selectedSessionId={selectedSessionId}
       onSelect={onNavigateToSession}
-      onNewChat={onStartNewChat}
       filterCollectionIds={collectionTools.historyFilterCollectionIds}
       filterIncludeUnassigned={collectionTools.historyFilterIncludeUnassigned}
       onFilterChange={collectionTools.handleHistoryFilterChange}
@@ -186,10 +183,18 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
 
   const header = (
     <ChatStudioHeader
+      sessionTitle={activeSession?.title ?? null}
       collectionLabel={collectionTools.collectionLabel}
       collectionMetaLabel={collectionTools.collectionMetaLabel}
+      toolsEnabled={collectionTools.selectedToolCollectionIds.length > 0}
       currentModelLabel={currentModelLabel}
-      showNewChatButton={!panel.historyOpen}
+      streaming={showStreamingBubble}
+      historyOpen={panel.historyOpen}
+      telemetryOpen={panel.telemetryOpen}
+      onToggleHistory={panel.historyOpen ? panel.handleHistoryClose : panel.handleHistoryOpen}
+      onToggleTelemetry={
+        panel.telemetryOpen ? panel.handleTelemetryClose : panel.handleTelemetryOpen
+      }
       onModelSelect={onTimelineModelSelect}
       onNewChat={onStartNewChat}
     />
@@ -203,8 +208,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       showFollowButton={showFollowButton}
       onFollow={onFollow}
       timelineProps={{
-        modelLabel: currentModelLabel,
-        onModelSelect: onTimelineModelSelect,
         chatEntryOrder,
         chatEntryMap,
         finalStreamAssistantId: chatStream.finalStreamAssistantId,
@@ -220,7 +223,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
         onEditSubmit,
         onRetryAssistant,
         onBranchMessage,
-        markdownComponents,
         overrideSections,
         onOverrideSelect: panel.handleOverrideSelect,
         liveResponse: chatStream.liveResponse,
@@ -273,7 +275,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       onReset={promptEditor.handlePromptReset}
       onInsertVariable={promptEditor.handleInsertPromptVariable}
       inputRef={promptEditor.promptEditorRef}
-      markdownComponents={markdownComponents}
     />
   );
 
@@ -286,9 +287,7 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       isOverlayMode={panel.isOverlayMode}
       historyOpen={panel.historyOpen}
       telemetryOpen={panel.telemetryOpen}
-      onOpenHistory={panel.handleHistoryOpen}
       onCloseHistory={panel.handleHistoryClose}
-      onOpenTelemetry={panel.handleTelemetryOpen}
       onCloseTelemetry={panel.handleTelemetryClose}
       header={header}
       messagesPanel={messagesPanel}

@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { resolvePreviewKind, TEXT_PREVIEW_MAX_BYTES } from "@/components/files/lib/preview";
+import { Markdown } from "@/components/ui/markdown";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchFileBlob } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -36,13 +34,7 @@ function parseDelimited(text: string, delimiter: string): string[][] {
 
 function TextualPreview({ kind, text }: { kind: PreviewKind; text: string }) {
   if (kind === "markdown") {
-    return (
-      <div className="max-w-[66ch] space-y-3 text-ui leading-relaxed text-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {text}
-        </ReactMarkdown>
-      </div>
-    );
+    return <Markdown className="max-w-[66ch]">{text}</Markdown>;
   }
   if (kind === "json") {
     let pretty = text;

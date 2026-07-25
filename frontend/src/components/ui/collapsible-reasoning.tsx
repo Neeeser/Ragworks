@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
+import { Chip } from "@/components/ui/chip";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 
 import type { ReasoningTraceSegment } from "@/lib/types";
@@ -18,6 +20,13 @@ interface CollapsibleReasoningProps {
   className?: string;
 }
 
+/**
+ * A model's reasoning steps, collapsed by default.
+ *
+ * It wears the embed stage's colour because that is the stage the console
+ * already uses for a model thinking, so the same fact reads the same way in the
+ * transcript, the trace viewer, and the pipeline editor.
+ */
 export function CollapsibleReasoning({
   segments,
   messageId,
@@ -39,7 +48,7 @@ export function CollapsibleReasoning({
   return (
     <div
       className={cn(
-        "w-full overflow-hidden rounded-2xl border border-stage-embed/40 bg-stage-embed/10 shadow-elevation-2",
+        "overflow-hidden rounded-panel border border-stage-embed/40 bg-stage-embed/10",
         className,
       )}
     >
@@ -50,33 +59,25 @@ export function CollapsibleReasoning({
           setManualState(next);
           onManualToggle?.(messageId, next);
         }}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-stage-embed/15"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors duration-80 ease-standard hover:bg-stage-embed/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
         aria-expanded={isOpen}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col leading-tight">
-            <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-stage-embed">
-              {title}
-            </span>
-            {subtitle ? (
-              <span className="text-base font-semibold text-primary">{subtitle}</span>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="rounded-full bg-stage-embed/20 px-2 py-0.5 text-xs text-stage-embed">
-            {segments.length} {segments.length === 1 ? "step" : "steps"}
-          </span>
-          {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-stage-embed" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-stage-embed" />
+        <InstrumentLabel className="text-stage-embed">{title}</InstrumentLabel>
+        {subtitle ? <span className="min-w-0 truncate text-ui text-body">{subtitle}</span> : null}
+        <Chip tone="embed" dot={false} className="ml-auto shrink-0">
+          {`${segments.length} ${segments.length === 1 ? "step" : "steps"}`}
+        </Chip>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-stage-embed transition-transform duration-140 ease-standard",
+            isOpen && "rotate-180",
           )}
-        </div>
+        />
       </button>
 
       {isOpen && (
-        <div className="border-t border-stage-embed/30 px-4 py-3 space-y-3">
+        <div className="divide-y divide-stage-embed/20 border-t border-stage-embed/30">
           {segments.map((segment, idx) => {
             const preferredText =
               (typeof segment.text === "string" && segment.text) ||
@@ -88,19 +89,14 @@ export function CollapsibleReasoning({
                 : (preferredText ?? JSON.stringify(segment, null, 2));
 
             return (
-              <div
-                key={`${messageId}-reasoning-${idx}`}
-                className="rounded-xl border border-stage-embed/20 bg-stage-embed/10 px-3 py-2"
-              >
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-xs font-semibold text-stage-embed">Step {idx + 1}</span>
+              <div key={`${messageId}-reasoning-${idx}`} className="px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <InstrumentLabel className="text-stage-embed">{`Step ${idx + 1}`}</InstrumentLabel>
                   {segment.type && (
-                    <span className="rounded bg-stage-embed/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-stage-embed">
-                      {segment.type}
-                    </span>
+                    <span className="font-mono text-instrument text-meta">{segment.type}</span>
                   )}
                 </div>
-                <pre className="whitespace-pre-wrap text-sm leading-relaxed text-body">
+                <pre className="mt-1 max-w-[66ch] whitespace-pre-wrap font-sans text-ui leading-relaxed text-body">
                   {reasoningText}
                 </pre>
               </div>

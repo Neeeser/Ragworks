@@ -1,24 +1,23 @@
 "use client";
 
-import { Filter, PanelLeftClose, PlusCircle, Trash2 } from "lucide-react";
+import { Check, Filter, PanelLeftClose, Trash2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
-import { chipClass } from "@/components/chat-studio/lib/chat-constants";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Tooltip } from "@/components/ui/tooltip";
 import { parseApiDate } from "@/lib/datetime";
 import { cn, timeAgo } from "@/lib/utils";
 
 import type { ChatSession, Collection } from "@/lib/types";
-
-/** Inactive state shared by the collection-filter rows. */
-const FILTER_ROW_INACTIVE = "border-hairline bg-surface text-body hover:border-strong";
+import type { ReactNode } from "react";
 
 interface HistoryPanelProps {
   collections: Collection[];
   sessions: ChatSession[];
   selectedSessionId: string | null;
   onSelect: (sessionId: string) => void;
-  onNewChat: () => void;
   filterCollectionIds: string[];
   filterIncludeUnassigned: boolean;
   onFilterChange: (collectionIds: string[], includeUnassigned: boolean) => void;
@@ -27,12 +26,45 @@ interface HistoryPanelProps {
   onClose: () => void;
 }
 
+type FilterOptionProps = {
+  selected: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+};
+
+/** One toggleable line in the filter menu; the tick carries the state. */
+function FilterOption({ selected, onToggle, children }: FilterOptionProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-control px-2 py-1.5 text-left text-ui",
+        "transition-colors duration-80 ease-standard focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
+        selected ? "bg-accent-violet/12 text-primary" : "text-body hover:bg-surface-strong",
+      )}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-accent-violet" aria-hidden /> : null}
+    </button>
+  );
+}
+
+/**
+ * The session list.
+ *
+ * A session's row carries what distinguishes it from its neighbours: its title,
+ * the model it ran on, when it was last touched, and which collections its tools
+ * were bound to. A session with no collections shows no chips — the absence is
+ * the fact, and a "None" pill on every such row would say nothing.
+ */
 const HistoryPanelComponent = ({
   collections,
   sessions,
   selectedSessionId,
   onSelect,
-  onNewChat,
   filterCollectionIds,
   filterIncludeUnassigned,
   onFilterChange,
@@ -99,185 +131,134 @@ const HistoryPanelComponent = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-hairline px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.35em] text-meta">History</p>
-            <h2 className="text-xl font-semibold text-primary">Chat sessions</h2>
-          </div>
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3">
+        <InstrumentLabel>Chats</InstrumentLabel>
+        <span className="font-mono text-instrument tabular-nums text-meta">{sessions.length}</span>
+        <div className="relative ml-auto" ref={filterRef}>
           <Button
-            variant="ghost"
             size="sm"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-hairline p-0 text-muted"
-            onClick={onClose}
-            aria-label="Close history"
+            variant="ghost"
+            onClick={() => setFilterOpen((prev) => !prev)}
+            aria-haspopup="menu"
+            aria-expanded={filterOpen}
+            className={filterActive ? "text-accent-violet" : undefined}
           >
-            <PanelLeftClose className="h-4 w-4" />
+            <Filter className="h-3.5 w-3.5" aria-hidden />
+            {filterActive ? `${filterCount}` : "Filter"}
           </Button>
-        </div>
-        <div className="mt-4 flex items-center">
-          <div className="relative" ref={filterRef}>
-            <button
-              type="button"
-              className={cn(
-                "flex h-9 items-center gap-2 whitespace-nowrap rounded-full border px-3 text-[11px] uppercase tracking-[0.3em] transition",
-                filterActive
-                  ? "border-accent-violet/60 bg-accent-violet/10 text-primary"
-                  : "border-hairline text-body hover:border-strong hover:text-primary",
-              )}
-              onClick={() => setFilterOpen((prev) => !prev)}
-              aria-haspopup="menu"
-              aria-expanded={filterOpen}
-            >
-              <Filter className="h-3.5 w-3.5" />
-              {filterActive ? `${filterCount}` : "Filter"}
-            </button>
-            {filterOpen && (
-              <div className="absolute left-0 z-30 mt-2 w-72 rounded-2xl border border-hairline bg-canvas-raised p-3 text-xs text-body shadow-elevation-2">
-                {filterActive && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {filterCollectionIds.map((collectionId) => (
-                      <span key={collectionId} className={chipClass}>
-                        {collectionMap.get(collectionId)?.name ?? "Unknown"}
-                      </span>
-                    ))}
-                    {filterIncludeUnassigned && <span className={chipClass}>No collections</span>}
-                  </div>
+          {filterOpen && (
+            // Opens toward the card's interior: this row is the pane's top-left
+            // corner and the card clips its own overflow.
+            <div className="console-flyout card-surface absolute left-0 z-30 mt-1 w-64 bg-canvas-raised p-2 shadow-elevation-2">
+              <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                <FilterOption selected={filterIncludeUnassigned} onToggle={toggleUnassigned}>
+                  No collections
+                </FilterOption>
+                {collections.length === 0 ? (
+                  <p className="px-2 py-1.5 text-ui text-muted">No collections available.</p>
+                ) : (
+                  collections.map((collection) => (
+                    <FilterOption
+                      key={collection.id}
+                      selected={filterCollectionIds.includes(collection.id)}
+                      onToggle={() => toggleFilterCollection(collection.id)}
+                    >
+                      {collection.name}
+                    </FilterOption>
+                  ))
                 )}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left",
-                      filterIncludeUnassigned
-                        ? "border-accent-cyan/50 bg-accent-cyan/10 text-primary"
-                        : FILTER_ROW_INACTIVE,
-                    )}
-                    onClick={toggleUnassigned}
-                  >
-                    <span>No collections</span>
-                    <input type="checkbox" readOnly checked={filterIncludeUnassigned} />
-                  </button>
-                  {collections.length === 0 ? (
-                    <p className="text-[11px] text-muted">No collections available.</p>
-                  ) : (
-                    collections.map((collection) => {
-                      const selected = filterCollectionIds.includes(collection.id);
-                      return (
-                        <button
-                          key={collection.id}
-                          type="button"
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left",
-                            selected
-                              ? "border-accent-violet/60 bg-accent-violet/10 text-primary"
-                              : FILTER_ROW_INACTIVE,
-                          )}
-                          onClick={() => toggleFilterCollection(collection.id)}
-                        >
-                          <span>{collection.name}</span>
-                          <input type="checkbox" readOnly checked={selected} />
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t border-hairline pt-3">
-                  <span className="text-[11px] text-meta">
-                    {filterActive ? "Filters active" : "Showing all"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted hover:text-primary"
-                  >
-                    Clear
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
+              {filterActive ? (
+                <div className="mt-2 flex flex-wrap gap-1 border-t border-hairline pt-2">
+                  {filterCollectionIds.map((collectionId) => (
+                    <Chip key={collectionId} tone="retrieve">
+                      {collectionMap.get(collectionId)?.name ?? "Unknown"}
+                    </Chip>
+                  ))}
+                  {filterIncludeUnassigned && <Chip>No collections</Chip>}
+                </div>
+              ) : null}
+              <div className="mt-2 flex items-center justify-between gap-2 border-t border-hairline pt-2">
+                <InstrumentLabel className="text-meta">
+                  {filterActive ? "Filters active" : "Showing all"}
+                </InstrumentLabel>
+                <Button size="sm" variant="ghost" onClick={clearFilters}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
+        <Tooltip content="Hide chat history" side="bottom">
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close history">
+            <PanelLeftClose className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
       </div>
-      <div className="border-b border-hairline px-5 py-3">
-        <Button
-          variant="secondary"
-          className="flex h-10 w-full items-center justify-center gap-2"
-          onClick={onNewChat}
-        >
-          <PlusCircle className="h-4 w-4" />
-          <span>New chat</span>
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
-          <p className="text-sm text-muted">No chats yet — start one below.</p>
+          <p className="p-8 text-center text-ui text-muted">No chats yet.</p>
         ) : (
-          <div className="space-y-2">
-            {sessions.map((session) => {
-              const isSelected = selectedSessionId === session.id;
-              const toolCollections = session.tool_collection_ids || [];
-              const toolLabelEntries =
-                toolCollections.length > 0
-                  ? toolCollections.map((collectionId) => ({
-                      key: collectionId,
-                      label: collectionMap.get(collectionId)?.name ?? "Unknown collection",
-                    }))
-                  : [{ key: "none", label: "No collections" }];
-              return (
-                <div
-                  key={session.id}
+          sessions.map((session) => {
+            const isSelected = selectedSessionId === session.id;
+            const toolCollections = session.tool_collection_ids ?? [];
+            return (
+              <div
+                key={session.id}
+                className={cn(
+                  "group flex items-start gap-1 border-b border-hairline last:border-b-0",
+                  isSelected && "bg-accent-violet/12",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelect(session.id)}
+                  aria-current={isSelected ? "true" : undefined}
                   className={cn(
-                    "group flex items-center gap-2 rounded-2xl border px-2 py-2 text-sm transition",
-                    isSelected
-                      ? "border-accent-violet bg-accent-violet/10 text-primary"
-                      : FILTER_ROW_INACTIVE,
+                    "min-w-0 flex-1 px-3 py-2 text-left",
+                    "transition-colors duration-80 ease-standard focus-visible:outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
+                    isSelected ? "text-primary" : "hover:bg-surface-strong",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onSelect(session.id)}
+                  <p
                     className={cn(
-                      "flex-1 rounded-xl px-2 py-1 text-left",
+                      "truncate text-ui font-medium",
                       isSelected ? "text-primary" : "text-body group-hover:text-primary",
                     )}
                   >
-                    <p className="text-base font-semibold">{formatSessionTitle(session)}</p>
-                    <p
-                      className={cn(
-                        "text-xs",
-                        isSelected ? "text-body" : "text-muted group-hover:text-body",
-                      )}
-                    >
-                      {session.chat_model} • {timeAgo(session.updated_at)}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {toolLabelEntries.map((entry) => (
-                        <span key={`${session.id}-${entry.key}`} className={chipClass}>
-                          {entry.label}
-                        </span>
+                    {formatSessionTitle(session)}
+                  </p>
+                  <p className="mt-0.5 flex items-baseline gap-2 text-instrument text-meta">
+                    <span className="min-w-0 truncate font-mono">{session.chat_model}</span>
+                    <span className="shrink-0 font-mono tabular-nums">
+                      {timeAgo(session.updated_at)}
+                    </span>
+                  </p>
+                  {toolCollections.length > 0 && (
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {toolCollections.map((collectionId) => (
+                        <Chip key={`${session.id}-${collectionId}`} tone="retrieve">
+                          {collectionMap.get(collectionId)?.name ?? "Unknown collection"}
+                        </Chip>
                       ))}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(session.id)}
-                    disabled={deletingSessionId === session.id}
-                    title="Delete chat"
-                    aria-label={`Delete ${session.title}`}
-                    className={cn(
-                      "inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-muted transition hover:text-data-neg disabled:cursor-not-allowed disabled:opacity-50",
-                      isSelected
-                        ? "border-strong hover:border-data-neg/60"
-                        : "border-hairline hover:border-data-neg/60",
-                    )}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                    </span>
+                  )}
+                </button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onDelete(session.id)}
+                  disabled={deletingSessionId === session.id}
+                  aria-label={`Delete ${session.title}`}
+                  className="mt-1 mr-1 shrink-0 hover:text-data-neg"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </Button>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

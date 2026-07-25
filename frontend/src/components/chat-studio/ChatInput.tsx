@@ -1,5 +1,6 @@
 "use client";
 
+import { Send, Square } from "lucide-react";
 import { type RefObject } from "react";
 
 import {
@@ -7,6 +8,8 @@ import {
   CHAT_INPUT_MIN_HEIGHT,
 } from "@/components/chat-studio/lib/chat-constants";
 import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   draft: string;
@@ -19,6 +22,11 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
+/**
+ * The composer. Send is the studio's one glowing action — the primary thing a
+ * user does here — and it becomes Stop for as long as a turn is running, so the
+ * same control always governs the turn in flight.
+ */
 export const ChatInput = ({
   draft,
   setDraft,
@@ -30,12 +38,12 @@ export const ChatInput = ({
   placeholder = "Ask anything…",
 }: ChatInputProps) => {
   return (
-    <div className="border-t border-hairline bg-surface px-6 py-4">
-      <div className="flex flex-col gap-3">
+    <div className="shrink-0 border-t border-hairline p-3">
+      <div className="flex items-end gap-2">
         <textarea
           ref={inputRef}
           rows={1}
-          className="w-full resize-none rounded-2xl border border-hairline bg-surface px-4 py-3 text-sm text-primary outline-none focus:border-accent-violet"
+          className={cn(inputClass, "resize-none leading-relaxed")}
           placeholder={placeholder}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -44,20 +52,28 @@ export const ChatInput = ({
             maxHeight: CHAT_INPUT_MAX_HEIGHT,
           }}
         />
-        <div className="flex items-center justify-between text-xs text-muted">
-          <span>{draft.length} characters</span>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              onClick={sending ? onStop : onSend}
-              disabled={!sending && !draft.trim()}
-              className="gap-2"
-            >
-              {sending ? (isStopping ? "Stopping..." : "Stop") : "Send turn"}
-            </Button>
-          </div>
-        </div>
+        <Button
+          type="button"
+          glow={!sending}
+          onClick={sending ? onStop : onSend}
+          disabled={!sending && !draft.trim()}
+        >
+          {sending ? (
+            <>
+              <Square className="h-3.5 w-3.5" aria-hidden />
+              {isStopping ? "Stopping..." : "Stop"}
+            </>
+          ) : (
+            <>
+              <Send className="h-3.5 w-3.5" aria-hidden />
+              Send turn
+            </>
+          )}
+        </Button>
       </div>
+      <p className="mt-1.5 font-mono text-instrument tabular-nums text-meta">
+        {draft.length} characters
+      </p>
     </div>
   );
 };

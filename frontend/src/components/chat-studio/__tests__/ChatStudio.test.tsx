@@ -34,12 +34,11 @@ import type {
   PromptDetails,
   RunSettingsSectionKey,
 } from "@/lib/types";
-import type { ReactNode } from "react";
 
 const CHAT_STUDIO_LOADED_KEY = "chatStudio.loaded";
 const SEND_TURN_LABEL = "Send turn";
-const OPEN_HISTORY_LABEL = "Open history";
-const OPEN_RUN_SETTINGS_LABEL = "Open run settings";
+const OPEN_HISTORY_LABEL = "Chat history";
+const OPEN_RUN_SETTINGS_LABEL = "Run settings";
 const TOOL_NAME = "collection.search";
 const AUTH_TOKEN = "token";
 
@@ -148,16 +147,6 @@ vi.mock("@/components/ui/notification", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/loader", () => ({
-  Loader: () => <div data-testid="loader" />,
-}));
-
-vi.mock("@/components/ui/panel", () => ({
-  GlassCard: ({ children }: { children: ReactNode }) => (
-    <div data-testid="glass-card">{children}</div>
-  ),
-}));
-
 const setupDefaultApiMocks = () => {
   api.branchChatSession.mockResolvedValue({
     session: altChatCompletionPayload.session,
@@ -253,13 +242,13 @@ describe("ChatStudio", () => {
   });
 
   describe("composition & guards", () => {
-    it("renders a loader while the initial session list is pending", async () => {
+    it("holds the studio's geometry while the initial session list is pending", async () => {
       api.listChatSessions.mockImplementation(() => new Promise(() => {}));
 
       render(<ChatStudio />);
       await flushPromises();
 
-      expect(screen.getByTestId("loader")).toBeInTheDocument();
+      expect(screen.getByText("Loading Chat Studio")).toBeInTheDocument();
     });
 
     it("shows status messages when missing auth or configuration", async () => {

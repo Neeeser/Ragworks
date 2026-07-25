@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { markdownComponents } from "@/components/chat-studio/lib/chat-utils";
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
 
 import type { PromptDetails } from "@/lib/types";
@@ -30,7 +29,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(container.firstChild).toBeNull();
@@ -48,7 +46,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
     expect(container.firstChild).toBeNull();
@@ -96,7 +93,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={onInsertVariable}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
 
@@ -148,7 +144,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
 
@@ -181,7 +176,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown="Preview"
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
 
@@ -215,7 +209,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
 
@@ -248,7 +241,6 @@ describe("PromptEditorOverlay", () => {
         onInsertVariable={() => undefined}
         promptPreviewMarkdown=""
         inputRef={React.createRef()}
-        markdownComponents={markdownComponents}
       />,
     );
 
