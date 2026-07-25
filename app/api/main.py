@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     admin,
+    api_keys,
     auth,
     chat,
     collections,
@@ -21,6 +22,7 @@ from app.api.routes import (
     files,
     health,
     indexes,
+    mcp,
     models,
     pipelines,
     search,
@@ -105,6 +107,7 @@ app.add_middleware(RequestContextMiddleware)
 app.include_router(health.router)
 app.include_router(config.router)
 app.include_router(auth.router)
+app.include_router(api_keys.router)
 app.include_router(connections.router)
 app.include_router(admin.router)
 app.include_router(models.router)
@@ -121,4 +124,5 @@ app.include_router(tools.router)
 app.include_router(traces.router)
 app.include_router(tokenizers.router)
 app.include_router(chat.router)
+app.include_router(mcp.router)
 app.include_router(visualizations.router)

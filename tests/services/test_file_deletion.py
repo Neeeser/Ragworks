@@ -212,3 +212,64 @@ def test_delete_purges_ingestion_events_and_umap_points(
     assert session.exec(select(models.Document)).all() == []
     assert session.exec(select(models.IngestionEvent)).all() == []
     assert session.exec(select(models.UmapPointRecord)).all() == []
+
+
+def test_delete_wins_when_ingestion_commits_chunks_mid_purge(session: Session) -> None:
+    """A file deleted while its ingestion is in flight is still deleted.
+
+    The ingestion worker commits chunk rows from its own session, and that can
+    land between the chunk purge and the document delete — the document's
+    foreign key then rejects the delete. Reproduced by committing a chunk from a
+    second session at exactly that point.
+    """
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    files = FileSystemService(session)
+    result = _upload(files, user, collection, "in-flight.txt")
+    document = result.document
+    assert document is not None
+    document.status = DocumentStatus.PROCESSING
+    session.add(document)
+    session.commit()
+
+    service = FileDeletionService(session)
+    original = service.chunks.delete_for_document
+    interloped = False
+
+    def delete_then_interlope(document_id) -> None:
+        nonlocal interloped
+        original(document_id)
+        if interloped:
+            return
+        interloped = True
+        # A separate committed transaction, exactly like the ingestion worker's.
+        with Session(session.get_bind()) as worker:
+            worker.add(
+                models.DocumentChunkRecord(
+                    document_id=document_id,
+                    collection_id=collection.id,
+                    chunk_index=0,
+                    text="late chunk",
+                    embedding=[0.1],
+                    chunk_metadata={},
+                    embedding_model="embed",
+                )
+            )
+            worker.commit()
+
+    service.chunks.delete_for_document = delete_then_interlope  # type: ignore[method-assign]
+
+    service.delete(user, collection, result.file)
+
+    assert interloped
+    with Session(session.get_bind()) as fresh:
+        assert fresh.get(models.Document, document.id) is None
+        assert (
+            fresh.exec(
+                select(models.DocumentChunkRecord).where(
+                    models.DocumentChunkRecord.document_id == document.id
+                )
+            ).all()
+            == []
+        )
+        assert fresh.get(models.FileNode, result.file.id) is None

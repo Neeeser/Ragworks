@@ -10,6 +10,7 @@ their domain module and re-exported here.
 
 from __future__ import annotations
 
+from app.db.repositories.api_key import ApiKeyRepository
 from app.db.repositories.app_setting import AppSettingRepository
 from app.db.repositories.base import Repository
 from app.db.repositories.bindings import CollectionPipelineBindingRepository
@@ -36,6 +37,7 @@ from app.db.repositories.user import AuthSessionRepository, UserRepository
 
 __all__ = [
     "HISTORY_WINDOWS",
+    "ApiKeyRepository",
     "AppSettingRepository",
     "AuthSessionRepository",
     "ChatRepository",

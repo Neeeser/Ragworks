@@ -52,7 +52,9 @@ describe("CollectionSidebar", () => {
 
   it("hides the Visualize nav item when the umap feature flag is disabled", () => {
     setMockAppConfig({
-      config: makePublicConfig({ features: { umap_visualizations: false, chat_branching: true } }),
+      config: makePublicConfig({
+        features: { umap_visualizations: false, chat_branching: true, mcp_access: true },
+      }),
     });
     render(<CollectionSidebar collection={collection} />);
 

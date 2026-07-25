@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.schemas.app_config import PublicConfig
+from app.schemas.app_config_public import PublicConfig
 from app.services.app_config import get_app_config
 
 router = APIRouter(prefix="/api/config", tags=["config"])

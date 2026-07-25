@@ -52,7 +52,11 @@ def test_public_config_returns_exact_public_shape(unauthed_client: TestClient) -
             ],
         },
         "indexing": {"default_backend": "pgvector"},
-        "features": {"umap_visualizations": True, "chat_branching": True},
+        "features": {
+            "umap_visualizations": True,
+            "chat_branching": True,
+            "mcp_access": True,
+        },
     }
     assert "models" not in body
 

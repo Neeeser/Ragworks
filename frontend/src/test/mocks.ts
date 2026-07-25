@@ -31,6 +31,7 @@ import { vi } from "vitest";
 
 import {
   makeAdminUsageSummary,
+  makeApiKey,
   makeEvalDataset,
   makeEvalDatasetQuery,
   makeAdminUsageTimeseries,
@@ -115,6 +116,9 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     createCollection: vi.fn(async () => makeCollection()),
     updateCollection: vi.fn(async () => makeCollection()),
     // collection tools
+    listApiKeys: vi.fn(async () => ({ keys: [] })),
+    createApiKey: vi.fn(async () => ({ key: makeApiKey(), secret: "rw_secret-value" })),
+    revokeApiKey: vi.fn(async () => undefined),
     listCollectionTools: vi.fn(async () => ({
       tools: [],
       ingest_pipeline_id: null,

@@ -32,6 +32,7 @@ import type {
 } from "@/lib/types";
 
 export * from "./files";
+export * from "./api-keys";
 
 export const USER_ID = "user-1";
 export const USER_EMAIL = "user@example.com";

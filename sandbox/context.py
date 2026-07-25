@@ -24,6 +24,10 @@ class SeedContext:
     token: str | None = None
     connection: models.ProviderConnection | None = None
     collection: models.Collection | None = None
+    api_key_secret: str | None = None
+    """Plaintext MCP API key, when a scenario issued one. Printed in the
+    handoff because an MCP client cannot be pointed at the endpoint without
+    it, and it is unrecoverable after issuance."""
     facts: list[str] = field(default_factory=list)
     links: list[tuple[str, str]] = field(default_factory=list)
     """(label, frontend path) deep links to seeded objects, printed in the

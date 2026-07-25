@@ -294,3 +294,40 @@ ASSET_EVAL_QUERIES: dict[str, str] = {
     "tidepool-protocol.md": "What triggers a Tidepool consensus round?",
     "glasswing-archive.md": "How does the Glasswing Archive deduplicate records?",
 }
+
+
+def issue_mcp_key(ctx: SeedContext, *, name: str = "Sandbox agent") -> None:
+    """Issue a full-capability MCP key for the seeded collection.
+
+    All three capabilities are granted because the scenario exists to exercise
+    the whole MCP surface; a narrower key is what the capability-filtering tests
+    cover.
+    """
+    from app.schemas.api_keys import ApiKeyCreate
+    from app.schemas.enums import ApiKeyCapability
+    from app.services.api_keys import ApiKeyService
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    _, secret = ApiKeyService(ctx.session).issue(
+        user,
+        ApiKeyCreate(
+            name=name,
+            capabilities=[
+                ApiKeyCapability.TOOLS_INVOKE,
+                ApiKeyCapability.FILES_READ,
+                ApiKeyCapability.FILES_WRITE,
+            ],
+            collection_ids=[collection.id],
+        ),
+    )
+    ctx.session.commit()
+    ctx.api_key_secret = secret
+    ctx.facts.append(
+        f'mcp key: "{name}" (tools:invoke, files:read, files:write) for '
+        f"collection {collection.name}"
+    )
+    ctx.facts.append(
+        f"mcp endpoint: {config.API_BASE_URL}/api/mcp/collections/{collection.id}"
+    )
+    ctx.links.append(("collection overview (MCP card)", f"/collections/{collection.id}"))

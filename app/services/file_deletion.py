@@ -11,6 +11,7 @@ faults surface as 502s, pgvector errors are our own database's.
 
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.db import models
@@ -118,9 +119,34 @@ class FileDeletionService:
     ) -> None:
         """Delete chunk rows, event/point rows, documents, and the nodes."""
         for document in documents:
-            self.chunks.delete_for_document(document.id)
-            self.documents.delete_ingestion_events(document.id)
-            self.session.delete(document)
-        self.session.flush()
+            self._purge_document_rows(document)
         for node in doomed:  # children precede parents, so FKs stay satisfied
             self.nodes.delete(node)
+
+    def _purge_document_rows(self, document: models.Document) -> None:
+        """Delete one document's chunks, events, and row — retried once.
+
+        Ingestion for a file deleted while its ingestion is still in flight
+        commits its chunk rows from the worker's own session, and that can land
+        *between* this chunk purge and the document delete — the document's
+        foreign key then rejects the delete and the whole request 500s. (An
+        agent uploading over MCP and deleting moments later hits this window
+        routinely; a person clicking through the Files page can too.) Retrying
+        inside a savepoint re-purges whatever arrived, so deletion wins instead
+        of surfacing an IntegrityError. One retry is enough: ingestion writes a
+        document's chunks once.
+        """
+        for attempt in (1, 2):
+            savepoint = self.session.begin_nested()
+            try:
+                self.chunks.delete_for_document(document.id)
+                self.documents.delete_ingestion_events(document.id)
+                self.session.delete(document)
+                self.session.flush()
+            except IntegrityError:
+                savepoint.rollback()
+                if attempt == 2:
+                    raise
+            else:
+                savepoint.commit()
+                return
