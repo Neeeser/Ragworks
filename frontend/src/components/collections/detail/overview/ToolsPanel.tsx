@@ -80,7 +80,7 @@ export function ToolsPanel({
           {rows.map((tool: CollectionTool) => (
             <li
               key={tool.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-hairline bg-surface px-4 py-3"
             >
               <div className="min-w-0">
                 <p className="truncate font-mono text-sm text-primary">{tool.name}</p>

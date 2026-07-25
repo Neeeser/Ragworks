@@ -8,6 +8,8 @@ import {
   getNodeFamilyColorVar,
   resolveNodeFamily,
 } from "@/components/pipelines/lib/pipeline-theme";
+import { Chip } from "@/components/ui/chip";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { Pipeline } from "@/lib/types";
@@ -26,7 +28,7 @@ function PreviewPane({ pipeline }: { pipeline: Pipeline }) {
   return (
     <div className="hidden w-60 shrink-0 border-l border-hairline p-3 sm:block">
       <p className="truncate text-sm font-medium text-primary">{pipeline.name}</p>
-      <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
+      <p className="mt-0.5 font-mono text-instrument tabular-nums text-meta">
         {pipeline.definition.nodes.length} nodes · v{pipeline.current_version}
       </p>
       <PipelineMiniMap definition={pipeline.definition} className="mt-3 h-24 w-full" />
@@ -116,7 +118,7 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
         aria-expanded={open}
         aria-label={label}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-4 py-2.5",
+          "flex w-full items-center justify-between gap-3 rounded-control border border-hairline bg-surface px-4 py-2.5",
           "text-left text-sm text-primary transition hover:border-strong",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
           "focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
@@ -124,11 +126,7 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
       >
         <span className="truncate">{selected?.name ?? "Select a pipeline"}</span>
         <span className="flex items-center gap-2">
-          {selected?.is_default && (
-            <span className="rounded-full border border-hairline px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-meta">
-              Default
-            </span>
-          )}
+          {selected?.is_default && <Chip dot={false}>Default</Chip>}
           <ChevronDown
             className={cn("h-4 w-4 shrink-0 text-muted transition", open && "rotate-180")}
             aria-hidden
@@ -139,7 +137,10 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
       {open && (
         <div
           onKeyDown={onListKeyDown}
-          className="absolute left-0 right-0 top-full z-30 mt-2 flex overflow-hidden rounded-2xl border border-hairline bg-canvas-raised shadow-elevation-2"
+          className={cn(
+            popoverSurfaceClass,
+            "absolute left-0 right-0 top-full z-30 mt-2 flex overflow-hidden",
+          )}
         >
           <ul
             id={listboxId}
@@ -157,7 +158,7 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
                   onMouseEnter={() => setPreviewId(pipeline.id)}
                   onFocus={() => setPreviewId(pipeline.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition",
+                    "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                     pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
                   )}
@@ -171,9 +172,9 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
                   />
                   <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
                   {pipeline.is_default && (
-                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] text-meta">
+                    <Chip dot={false} className="shrink-0">
                       Default
-                    </span>
+                    </Chip>
                   )}
                 </button>
               </li>

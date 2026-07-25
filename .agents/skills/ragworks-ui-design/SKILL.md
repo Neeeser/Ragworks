@@ -23,7 +23,7 @@ which surface you're in is the first move, because the rules genuinely conflict.
 | Read | `references/console.md` | `references/landing.md` |
 | Radius | 4 / 6 / 10px + pills | `rounded-full` CTAs, `rounded-3xl` panels |
 | Blooms | exactly one, shell-owned, ~9% accent | yes, one per view, up to 22% |
-| `GlassCard`, blur | none | yes, one per view |
+| Backdrop blur | none | none |
 | Entrance | 120ms content fade | `landing-rise`, 700ms, staggered |
 | Label voice | sentence case, sans | mono uppercase, `0.28em`–`0.4em` tracking |
 
@@ -97,6 +97,7 @@ numbers   font-mono tabular-nums, always
 motion    duration-80 / -120 / -140 / -160 / -200 · ease-standard / -decel / -accel
 surface   bg-canvas · bg-canvas-raised · bg-surface · bg-surface-strong
 card      Panel — gradient fill + inset highlight + hairline + shadow-elevation-1
+popover   popoverSurfaceClass — every floating layer (menus, flyouts, dialog bodies)
 border    border-hairline · border-strong
 text      text-primary → text-body → text-muted → text-meta → text-faint
 accent    bg-accent-violet · text-accent-cyan · data-pos / -neg / -warn

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 
 import {
@@ -60,7 +61,7 @@ export function PipelineOverridesEditor({
 
   return (
     <div className="space-y-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted">{title}</p>
+      <InstrumentLabel>{title}</InstrumentLabel>
       <div className="space-y-4">
         {pipeline.definition.nodes.map((node) => {
           const spec = specsByType.get(node.type);
@@ -77,10 +78,10 @@ export function PipelineOverridesEditor({
           const draftConfig = overrides[node.id] ?? baseConfig;
 
           return (
-            <div key={node.id} className="space-y-3 rounded-3xl border border-hairline p-4">
+            <div key={node.id} className="space-y-3 rounded-panel border border-hairline p-4">
               <div>
                 <p className="text-sm font-semibold text-primary">{node.name}</p>
-                <p className="text-xs text-muted">{node.type}</p>
+                <p className="font-mono text-instrument text-muted">{node.type}</p>
               </div>
               <div className="space-y-3">
                 {fields.map((field) => {

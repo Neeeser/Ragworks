@@ -17,7 +17,7 @@ read as a generic marketing dashboard.
 | Type | fluid display up to `text-7xl` | 11 / 14 / 15 / 17px, sentence case |
 | Label voice | mono uppercase, `0.28em`–`0.4em` | sentence-case sans (mono = data only) |
 | Glow / bloom | yes, one per view, up to 22% | one shell bloom ≤9% + one glowing button |
-| `GlassCard`, `.glass-panel` | yes | no — depth is the lit card, never blur |
+| Backdrop blur | none — panels are lit cards | none |
 | Entrance | `landing-rise`, 700ms, staggered | 120ms content fade |
 | Atmosphere backdrop | yes | no |
 

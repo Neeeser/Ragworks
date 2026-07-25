@@ -41,7 +41,7 @@ export default function ConsoleError({
         bug report so the issue can be traced.
       </p>
       {requestId && (
-        <div className="flex items-center gap-2 rounded-2xl border border-hairline bg-canvas-raised/60 px-4 py-2">
+        <div className="flex items-center gap-2 rounded-control border border-hairline bg-canvas-raised/60 px-4 py-2">
           <span className="font-mono text-xs text-muted">Request ID</span>
           <span className="font-mono text-xs text-body">{requestId}</span>
           <button

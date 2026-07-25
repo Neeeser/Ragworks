@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { Suggestion } from "./lib/expression-suggest";
@@ -67,7 +68,7 @@ export function SuggestionListbox({
       role="listbox"
       aria-label="Expression suggestions"
       style={{ top: rect.top, left: rect.left, minWidth: rect.width }}
-      className="fixed z-[70] max-h-64 overflow-y-auto rounded-panel border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
+      className={cn(popoverSurfaceClass, "fixed z-[70] max-h-64 overflow-y-auto p-1")}
     >
       {suggestions.map((suggestion, index) => (
         <li

@@ -13,6 +13,7 @@ import { webgl2Adapter } from "@luma.gl/webgl";
 import { Home, LocateFixed, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useCssTokens } from "@/lib/use-css-tokens";
 import { cn } from "@/lib/utils";
@@ -296,7 +297,9 @@ export function UmapCanvas({
           plot's interior so the card's clipped overflow never cuts them. */}
       {/* No `overflow-hidden` here: it would clip the controls' own tooltips.
           The end buttons carry the cluster's corners instead. */}
-      <div className="absolute bottom-3 left-3 z-10 flex flex-col rounded-panel border border-hairline bg-canvas-raised text-body shadow-elevation-2">
+      <div
+        className={cn(popoverSurfaceClass, "absolute bottom-3 left-3 z-10 flex flex-col text-body")}
+      >
         {controls.map(({ icon: Icon, label, onClick, disabled }, position) => (
           <Tooltip key={label} content={label} side="right">
             <button

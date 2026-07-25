@@ -4,7 +4,6 @@ import {
   needsAutoLayout,
 } from "@/components/pipelines/lib/pipeline-layout";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
-import { INDEX_STORE_NODE_ID } from "@/components/traces/IndexStoreNode";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -22,6 +21,21 @@ export type TraceIOGroup = {
 };
 
 export type TraceStage = "origin" | "retrieval";
+
+/**
+ * The shared vector index between the ingestion and retrieval bands of a
+ * combined graph. The store is data-level modeling only: journey focus
+ * traverses its read/write edges so hybrid branch paths cross bands, but the
+ * stage-lens graph never displays it (per-band tabs replaced the single
+ * combined canvas).
+ */
+export const INDEX_STORE_NODE_ID = "index::store";
+
+export type IndexStoreNodeData = {
+  indexName: string;
+  backend?: string;
+  itemFocus?: "traveled" | "absent";
+};
 
 /** One playback step: the visited node plus its resolved run and IO records. */
 export type TraceStep = {
@@ -205,8 +219,10 @@ export const buildTraceGraph = (
   const edges: TypedEdgeType[] = [...originStage.edges, ...retrievalStage.edges];
 
   // The two pipelines stay fully isolated -- no node-to-node wire between
-  // them. They meet only at the shared index, drawn as a datastore in the gap
-  // that ingestion writes into and retrieval reads from.
+  // them. They meet only at the shared index, modeled as a store node in the
+  // gap that ingestion writes into and retrieval reads from. The stage lenses
+  // never display it, but journey focus needs its read/write edges to carry a
+  // traced item across bands.
   const indexTargets = collectIndexTargets(originStage.nodes, retrievalStage.nodes);
   indexTargets.forEach((target, targetIndex) => {
     const storeId =

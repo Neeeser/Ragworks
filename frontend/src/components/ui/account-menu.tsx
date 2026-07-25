@@ -4,6 +4,7 @@ import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -86,7 +87,10 @@ export function AccountMenu({ user }: { user: User }) {
           // Deliberately not role="menu": that role promises arrow-key
           // navigation between menuitems, which this does not implement, and it
           // would also strip the implicit link/button roles from the items.
-          className="absolute bottom-0 left-full z-30 ml-2 w-48 overflow-hidden rounded-panel border border-hairline bg-canvas-raised py-1 shadow-elevation-2"
+          className={cn(
+            popoverSurfaceClass,
+            "absolute bottom-0 left-full z-30 ml-2 w-48 overflow-hidden py-1",
+          )}
         >
           <Tooltip content={user.email} side="right" triggerClassName="w-full">
             <p className="truncate px-2 py-1 text-ui text-meta">{user.email}</p>

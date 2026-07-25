@@ -278,6 +278,7 @@ Grep your console diff:
 grep -nE "rounded-(2xl|3xl|\[2)|bg-white/|text-slate-|border-white/|text-(3|4|5)xl|p-(5|7|10)\b|tracking-\[0\.(1|2|3)|uppercase|backdrop-blur|#[0-9a-fA-F]{3,8}\b" <files>
 ```
 
-Any hit is a token you skipped or a voice you broke (hex literals are allowed only inside
-`globals.css` and `pipeline-theme.ts`; `uppercase` is allowed only under
-`components/landing/`).
+Any hit is a token you skipped or a voice you broke (hex literals are allowed only in
+`globals.css`, `pipeline-theme.ts`, the palette swatches in `lib/palettes.ts`, and
+provider brand icons; `uppercase` is allowed only under `components/landing/` and
+`app/auth/`).

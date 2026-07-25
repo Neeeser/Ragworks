@@ -1,10 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
-
-import { Button } from "@/components/ui/button";
-import { Field, TextInput } from "@/components/ui/field";
-import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { NamePromptDialog } from "@/components/ui/name-prompt-dialog";
 
 type NewFolderDialogProps = {
   open: boolean;
@@ -13,52 +9,14 @@ type NewFolderDialogProps = {
 };
 
 export function NewFolderDialog({ open, onClose, onCreate }: NewFolderDialogProps) {
-  const titleId = useId();
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    if (!name.trim() || busy) return;
-    setBusy(true);
-    const created = await onCreate(name.trim());
-    setBusy(false);
-    if (created) {
-      setName("");
-      onClose();
-    }
-  };
-
   return (
-    <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        className="w-full max-w-sm rounded-panel border border-hairline bg-canvas-raised p-4 shadow-elevation-2"
-      >
-        <h3 id={titleId} className="text-head font-medium text-primary">
-          New folder
-        </h3>
-        <div className="mt-3">
-          <Field label="Name">
-            <TextInput
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="reports"
-            />
-          </Field>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={busy} disabled={!name.trim()}>
-            Create
-          </Button>
-        </div>
-      </form>
-    </ModalOverlay>
+    <NamePromptDialog
+      open={open}
+      title="New folder"
+      submitLabel="Create"
+      placeholder="reports"
+      onClose={onClose}
+      onSubmit={onCreate}
+    />
   );
 }
