@@ -88,6 +88,13 @@ Adjacent cards are separate elevated objects — `card-surface`, separated by `g
 *Inside* a card, rows separate with `border-hairline` only. Never a card per row, and
 never a bare row list on the canvas.
 
+### Pane controls attach to their pane
+
+A collapsible pane is closed from its own header and reopened from a slim strip at the
+exact edge where it docks (the collapsed-nav-rail pattern — `PaneReopenStrip` in Chat
+Studio is the reference). Never park pane toggles in the top bar: a control far from
+what it moves is the one users cannot find.
+
 ### Multi-pane cards: the secondary pane wears `bg-surface`
 
 In a two-pane card (list + preview, sidebar + canvas, history + transcript), the

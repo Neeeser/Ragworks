@@ -1,7 +1,5 @@
 "use client";
 
-import { PanelLeft, PanelRight } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CrumbBar } from "@/components/ui/crumb-bar";
@@ -21,10 +19,6 @@ type ChatStudioHeaderProps = {
   /** The model this turn will run on — an identifier, rendered verbatim. */
   currentModelLabel: string;
   streaming: boolean;
-  historyOpen: boolean;
-  telemetryOpen: boolean;
-  onToggleHistory: () => void;
-  onToggleTelemetry: () => void;
   onModelSelect: () => void;
   onNewChat: () => void;
 };
@@ -45,10 +39,6 @@ export function ChatStudioHeader({
   toolsEnabled,
   currentModelLabel,
   streaming,
-  historyOpen,
-  telemetryOpen,
-  onToggleHistory,
-  onToggleTelemetry,
   onModelSelect,
   onNewChat,
 }: ChatStudioHeaderProps) {
@@ -81,35 +71,12 @@ export function ChatStudioHeader({
         </>
       }
       actions={
-        <>
-          <Tooltip content="Chat history" side="bottom">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Chat history"
-              aria-pressed={historyOpen}
-              onClick={onToggleHistory}
-              className={historyOpen ? "bg-surface-strong text-primary" : undefined}
-            >
-              <PanelLeft className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </Tooltip>
-          <Tooltip content="Run settings" side="bottom">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Run settings"
-              aria-pressed={telemetryOpen}
-              onClick={onToggleTelemetry}
-              className={telemetryOpen ? "bg-surface-strong text-primary" : undefined}
-            >
-              <PanelRight className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </Tooltip>
-          <Button size="sm" variant="secondary" onClick={onNewChat}>
-            New chat
-          </Button>
-        </>
+        // The pane toggles live on the panes themselves (each pane's header
+        // closes it; a closed pane leaves a reopen strip at its edge) — a
+        // control far from what it moves is the one users cannot find.
+        <Button size="sm" variant="secondary" onClick={onNewChat}>
+          New chat
+        </Button>
       }
     />
   );

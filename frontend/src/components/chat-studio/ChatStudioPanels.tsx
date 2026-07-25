@@ -189,12 +189,6 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       toolsEnabled={collectionTools.selectedToolCollectionIds.length > 0}
       currentModelLabel={currentModelLabel}
       streaming={showStreamingBubble}
-      historyOpen={panel.historyOpen}
-      telemetryOpen={panel.telemetryOpen}
-      onToggleHistory={panel.historyOpen ? panel.handleHistoryClose : panel.handleHistoryOpen}
-      onToggleTelemetry={
-        panel.telemetryOpen ? panel.handleTelemetryClose : panel.handleTelemetryOpen
-      }
       onModelSelect={onTimelineModelSelect}
       onNewChat={onStartNewChat}
     />
@@ -287,6 +281,8 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       isOverlayMode={panel.isOverlayMode}
       historyOpen={panel.historyOpen}
       telemetryOpen={panel.telemetryOpen}
+      onOpenHistory={panel.handleHistoryOpen}
+      onOpenTelemetry={panel.handleTelemetryOpen}
       onCloseHistory={panel.handleHistoryClose}
       onCloseTelemetry={panel.handleTelemetryClose}
       header={header}

@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import { Fragment } from "react";
 
 import { PageBody } from "@/components/ui/app-shell";
@@ -7,7 +8,9 @@ import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 
 type ChatStudioViewProps = {
@@ -18,6 +21,8 @@ type ChatStudioViewProps = {
   isOverlayMode: boolean;
   historyOpen: boolean;
   telemetryOpen: boolean;
+  onOpenHistory: () => void;
+  onOpenTelemetry: () => void;
   onCloseHistory: () => void;
   onCloseTelemetry: () => void;
   header: ReactNode;
@@ -26,6 +31,45 @@ type ChatStudioViewProps = {
   telemetryPanel: ReactNode;
   promptEditor: ReactNode;
 };
+
+/**
+ * The reopen affordance a closed side pane leaves behind: a slim strip at the
+ * exact edge where the pane docks, like the collapsed nav rail. A toggle far
+ * from what it moves is the one users cannot find — this one is attached.
+ */
+function PaneReopenStrip({
+  side,
+  label,
+  icon: Icon,
+  onOpen,
+}: {
+  side: "left" | "right";
+  label: string;
+  icon: LucideIcon;
+  onOpen: () => void;
+}) {
+  return (
+    <div
+      className={
+        side === "left"
+          ? "flex w-9 shrink-0 flex-col items-center border-r border-hairline bg-surface pt-2"
+          : "flex w-9 shrink-0 flex-col items-center border-l border-hairline bg-surface pt-2"
+      }
+    >
+      <Tooltip content={label} side={side === "left" ? "right" : "left"}>
+        <button
+          type="button"
+          aria-label={label}
+          aria-expanded={false}
+          onClick={onOpen}
+          className="flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
 
 /** The studio's geometry while it loads — same panes, no content yet. */
 function StudioSkeleton() {
@@ -70,6 +114,8 @@ export function ChatStudioView({
   isOverlayMode,
   historyOpen,
   telemetryOpen,
+  onOpenHistory,
+  onOpenTelemetry,
   onCloseHistory,
   onCloseTelemetry,
   header,
@@ -104,24 +150,38 @@ export function ChatStudioView({
                   being worked in, so it keeps the card's own material and the
                   two supporting panes sit a shade back from it. A seam alone
                   reads flat at this width. */}
-              {!isOverlayMode && historyOpen && (
+              {!isOverlayMode && historyOpen ? (
                 <aside
                   aria-label="Chat history"
                   className="min-h-0 w-72 shrink-0 border-r border-hairline bg-surface"
                 >
                   {historyPanel}
                 </aside>
+              ) : (
+                <PaneReopenStrip
+                  side="left"
+                  label="Chat history"
+                  icon={PanelLeftOpen}
+                  onOpen={onOpenHistory}
+                />
               )}
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">{messagesPanel}</div>
 
-              {!isOverlayMode && telemetryOpen && (
+              {!isOverlayMode && telemetryOpen ? (
                 <aside
                   aria-label="Run settings"
                   className="min-h-0 w-[26rem] shrink-0 border-l border-hairline bg-surface"
                 >
                   {telemetryPanel}
                 </aside>
+              ) : (
+                <PaneReopenStrip
+                  side="right"
+                  label="Run settings"
+                  icon={PanelRightOpen}
+                  onOpen={onOpenTelemetry}
+                />
               )}
             </Panel>
           </div>
