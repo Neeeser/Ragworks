@@ -13,7 +13,6 @@ import { McpConnectionInstructions } from "@/components/mcp/McpConnectionInstruc
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { ApiKeyCapability, ApiKeyCreated, ApiKeyCreatePayload } from "@/lib/types/api-keys";
@@ -29,8 +28,6 @@ type ConnectAgentDialogProps = {
   onCreate: (payload: ApiKeyCreatePayload) => Promise<ApiKeyCreated | null>;
   onClose: () => void;
 };
-
-const labelClass = "font-mono text-[11px] uppercase tracking-[0.28em] text-muted";
 
 /**
  * Issue a key for one collection's MCP endpoint and show how to connect.
@@ -96,27 +93,27 @@ export function ConnectAgentDialog({
 
   return (
     <ModalOverlay open={open} onClose={close} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-2xl rounded-3xl p-6">
-        <h2 id={titleId} className="text-xl font-semibold tracking-tight text-primary">
+      <div className="card-surface w-full max-w-2xl bg-canvas-raised p-4 text-primary shadow-elevation-2">
+        <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
           {created ? "Connect your agent" : "Create an MCP key"}
         </h2>
 
         {created && secret ? (
-          <div className="mt-5">
+          <div className="mt-4">
             <McpConnectionInstructions
               serverName={serverNameFor(collection.name)}
               endpoint={endpoint}
               secret={secret}
             />
-            <div className="mt-6 flex justify-end">
+            <div className="mt-4 flex justify-end">
               <Button type="button" onClick={close}>
                 Done
               </Button>
             </div>
           </div>
         ) : (
-          <div className="mt-5 space-y-5">
-            <Field label="Name" labelClassName={labelClass}>
+          <div className="mt-4 space-y-4">
+            <Field label="Name">
               <TextInput
                 autoFocus
                 value={name}
@@ -126,7 +123,7 @@ export function ConnectAgentDialog({
             </Field>
 
             <fieldset>
-              <legend className={labelClass}>Permissions</legend>
+              <legend className="text-instrument font-medium text-muted">Permissions</legend>
               <div className="mt-2 space-y-2">
                 {CAPABILITY_OPTIONS.map((option) => {
                   const implied = impliedBy.has(option.value);
@@ -134,7 +131,7 @@ export function ConnectAgentDialog({
                     <label
                       key={option.value}
                       className={cn(
-                        "flex items-start gap-3 rounded-2xl border border-hairline bg-surface p-3 transition",
+                        "flex items-start gap-3 rounded-control border border-hairline bg-surface p-3 transition-colors duration-80 ease-standard",
                         implied ? "cursor-default" : "cursor-pointer hover:border-strong",
                       )}
                     >
@@ -146,8 +143,10 @@ export function ConnectAgentDialog({
                         onChange={() => toggle(option.value)}
                       />
                       <span>
-                        <span className="block text-sm text-primary">{option.label}</span>
-                        <span className="block text-xs text-muted">
+                        <span className="block text-ui font-medium text-primary">
+                          {option.label}
+                        </span>
+                        <span className="block text-instrument text-muted">
                           {implied ? impliedNote(option.value) : option.description}
                         </span>
                       </span>
@@ -157,10 +156,10 @@ export function ConnectAgentDialog({
               </div>
             </fieldset>
 
-            {error && <p className="text-sm text-data-neg">{error}</p>}
+            {error && <p className="text-ui text-data-neg">{error}</p>}
 
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={close}>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={close}>
                 Cancel
               </Button>
               <Button
@@ -174,7 +173,7 @@ export function ConnectAgentDialog({
             </div>
           </div>
         )}
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }
