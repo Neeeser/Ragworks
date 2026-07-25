@@ -283,7 +283,36 @@ look and a real compositing cost.
 
 ---
 
-## 11. Quality floor
+## 11. Small screens
+
+Desktop-first: density and composition are designed at ≥1280px and never diluted for
+phones. Below `lg` the page still works — by *reflow*, not by hiding capability:
+
+- Multi-pane layouts collapse: the preview/inspector becomes a full-screen overlay
+  (`ModalOverlay`), the secondary pane stacks or hides behind an explicit control.
+- Toolbars wrap (`flex-wrap`); the primary action stays visible, secondary actions may
+  fold into a menu.
+- Row lists drop *columns* before they drop rows — keep name + status + the one number
+  that matters; the full record stays reachable on the row's own page.
+- Wide tables/canvases scroll inside their own `overflow-x-auto`; the page never scrolls
+  horizontally.
+- Touch targets ≥32px; hover-only affordances (flyouts, tooltips, drag-drop) always have
+  a click/tap-or-keyboard path — the keyboard rules below already force this.
+
+---
+
+## 12. Placing chrome inside cards — clipping
+
+`card-surface` lists usually carry `overflow-hidden` (rounded corners) and `PageBody`
+scrolls. Any absolutely-positioned chrome inside them (tooltips, popovers) must open
+toward the card's interior — a tooltip opening off the card's top or outer edge gets
+clipped. Pick the side per placement (`side="bottom"` in a toolbar at the card's top,
+`side="left"` at a right edge); a menu that measures itself to clamp to the viewport
+must not get a scale entrance, because it would measure a mid-animation box.
+
+---
+
+## 13. Quality floor
 
 Part of "done", not polish:
 

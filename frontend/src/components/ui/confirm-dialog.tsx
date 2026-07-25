@@ -5,7 +5,6 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { GlassCard } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 type ConfirmDialogProps = {
@@ -52,15 +51,16 @@ export function ConfirmDialog({
 
   return (
     <ModalOverlay open={open} onClose={onCancel} labelledBy={titleId}>
-      <GlassCard className="w-full max-w-lg rounded-[2rem] border border-hairline bg-canvas-raised/95 p-6 text-primary">
+      <div className="card-surface w-full max-w-lg bg-canvas-raised p-4 text-primary shadow-elevation-2">
         <div className="space-y-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-            Confirm action
-          </p>
-          <h2 id={titleId} className="text-xl font-semibold text-primary">
+          {/* No "Confirm action" eyebrow: the title says what is being confirmed;
+              an eyebrow restating the dialog's nature is decorative text. */}
+          <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
             {title}
           </h2>
-          {description ? <p className="text-sm leading-relaxed text-body">{description}</p> : null}
+          {description ? (
+            <p className="max-w-[66ch] text-ui leading-relaxed text-body">{description}</p>
+          ) : null}
           {confirmText ? (
             <Field
               label={
@@ -77,10 +77,10 @@ export function ConfirmDialog({
             </Field>
           ) : null}
           {rememberLabel && onRememberChange ? (
-            <label className="flex items-center gap-3 text-sm text-body">
+            <label className="flex items-center gap-2 text-ui text-body">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-strong bg-transparent accent-[var(--accent-violet)]"
+                className="h-4 w-4 rounded-chip border-strong bg-transparent accent-[var(--accent-violet)]"
                 checked={rememberChecked}
                 onChange={(event) => onRememberChange(event.target.checked)}
               />
@@ -88,24 +88,26 @@ export function ConfirmDialog({
             </label>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <Button variant="ghost" onClick={onCancel} disabled={loading}>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button
+            size="sm"
             variant="primary"
             onClick={onConfirm}
             loading={loading}
             disabled={confirmBlocked}
             className={cn(
-              confirmVariant === "danger" &&
-                "bg-data-neg text-white shadow-lg shadow-data-neg/30 hover:brightness-110",
+              // The danger fill replaces the accent; the primary variant's inset
+              // top-light stays correct over any fill colour.
+              confirmVariant === "danger" && "bg-data-neg text-white hover:brightness-110",
             )}
           >
             {confirmLabel}
           </Button>
         </div>
-      </GlassCard>
+      </div>
     </ModalOverlay>
   );
 }

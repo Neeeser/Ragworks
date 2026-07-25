@@ -69,6 +69,12 @@ console density still doesn't leak out.
 9. **Form follows data type** — cards for state and time-series, rows for entities.
 10. **Functionality parity is a hard floor.** A restyle never drops information, actions,
     or states a page had. Re-form them; never delete them.
+11. **Desktop-first, mobile-respected.** The console is built for power users on desktop
+    — density decisions are made at ≥1280px and never watered down for phones. But every
+    page must still *work* below `lg`: panes collapse or become overlays, toolbars wrap,
+    tables scroll in their own `overflow-x-auto`, touch targets stay ≥32px. Where a
+    desktop affordance can't translate (hover flyouts, drag-drop), the click/tap path
+    must exist anyway — which the keyboard rules already require.
 
 ## Copy voice
 

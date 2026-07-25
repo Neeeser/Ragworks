@@ -134,8 +134,8 @@ export function DataRowHeader({ title, columns, hasLeading = false }: DataRowHea
   return (
     <div className="flex items-center border-b border-hairline">
       <div className={cn(CELLS, "py-2")}>
-        {/* Matches the row's leading dot so the name column starts level. */}
-        {hasLeading ? <span className="h-1.5 w-1.5 shrink-0" aria-hidden /> : null}
+        {/* Matches the row's leading node dot so the name column starts level. */}
+        {hasLeading ? <span className="h-[7px] w-[7px] shrink-0" aria-hidden /> : null}
         <InstrumentLabel className="min-w-0 flex-1">{title}</InstrumentLabel>
         {columns}
       </div>
@@ -206,7 +206,9 @@ export function DataRowSkeleton({
         <div key={row} className="flex items-center border-b border-hairline last:border-b-0">
           <div className={cn(CELLS, "py-3")}>
             {hasLeading ? (
-              <Skeleton className={cn("h-1.5 w-1.5 rounded-full", hasSubtitle && "self-start")} />
+              <Skeleton
+                className={cn("h-[7px] w-[7px] rounded-[2px]", hasSubtitle && "self-start")}
+              />
             ) : null}
             <div className="min-w-0 flex-1">
               <SkeletonLine barClassName="max-w-48" />
