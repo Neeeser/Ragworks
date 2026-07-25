@@ -6,13 +6,17 @@ import { useId, useState } from "react";
 
 import { FileIcon } from "@/components/files/FileIcon";
 import { FilePreviewContent } from "@/components/files/FilePreviewContent";
-import { IngestionBadge } from "@/components/files/IngestionBadge";
 import { downloadFileNode } from "@/components/files/lib/download";
-import { formatBytes } from "@/components/files/lib/tree";
+import { fileStatus } from "@/components/files/lib/file-status";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { formatDateTime } from "@/lib/datetime";
+import { Readout } from "@/components/ui/readout";
+import { StatusDot } from "@/components/ui/status-dot";
+import { Tooltip } from "@/components/ui/tooltip";
+import { parseApiDate } from "@/lib/datetime";
+import { formatBytes, formatTimeAgoCompact } from "@/lib/format";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 import type { FileNode } from "@/lib/types";
@@ -24,6 +28,14 @@ type FilePreviewPanelProps = {
   onRetry: (node: FileNode) => void;
   onDelete: (node: FileNode) => Promise<boolean>;
 };
+
+function TimeReadout({ label, value }: { label: string; value: string }) {
+  return (
+    <Tooltip content={parseApiDate(value)?.toLocaleString() ?? ""}>
+      <Readout label={label}>{formatTimeAgoCompact(value)}</Readout>
+    </Tooltip>
+  );
+}
 
 function PanelBody({
   token,
@@ -37,112 +49,93 @@ function PanelBody({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const ingestion = node.ingestion;
-
-  const download = () => downloadFileNode(token, node);
-
-  const metadata: Array<{ label: string; value: string }> = [
-    { label: "Type", value: node.content_type || "unknown" },
-    { label: "Size", value: formatBytes(node.size_bytes) },
-    { label: "Path", value: node.path },
-    {
-      label: "Modified",
-      value: formatDateTime(node.updated_at),
-    },
-  ];
+  const status = fileStatus(node);
+  const ready = ingestion?.status === "ready";
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <FileIcon node={node} className="h-6 w-6 shrink-0" />
-          <div className="min-w-0">
-            <h3
-              id={titleId}
-              className="truncate text-base font-semibold text-primary"
-              title={node.name}
-            >
-              {node.name}
-            </h3>
-          </div>
-          <IngestionBadge node={node} onRetry={onRetry} />
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close preview"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hairline text-body transition hover:border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-        >
-          <X className="h-4 w-4" aria-hidden />
-        </button>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3">
+        <FileIcon node={node} className="h-3.5 w-3.5 shrink-0" />
+        <Tooltip content={node.name} triggerClassName="min-w-0 flex-1">
+          <h3 id={titleId} className="w-full truncate text-ui font-medium text-primary">
+            {node.name}
+          </h3>
+        </Tooltip>
+        {status ? (
+          <Tooltip content={status.detail} triggerClassName="shrink-0">
+            <StatusDot tone={status.tone} label={status.label} />
+          </Tooltip>
+        ) : null}
+        <Tooltip content="Close preview">
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close preview">
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        <FilePreviewContent key={`${node.id}:${node.updated_at}`} token={token} node={node} />
-
-        <div className="rounded-3xl border border-hairline bg-surface p-4">
-          <dl className="grid grid-cols-2 gap-3">
-            {metadata.map((item) => (
-              <div key={item.label} className="min-w-0">
-                <dt className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-                  {item.label}
-                </dt>
-                <dd className="mt-1 truncate text-sm text-primary" title={item.value}>
-                  {item.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          {ingestion?.warnings.length ? (
-            <div className="mt-4 border-t border-hairline pt-4">
-              <h4 className="font-mono text-[11px] uppercase tracking-[0.28em] text-data-warn">
-                Ingestion warnings
-              </h4>
-              <ul className="mt-2 list-disc space-y-2 pl-4 text-sm text-body marker:text-data-warn">
-                {ingestion.warnings.map((warning, index) => (
-                  <li key={`${index}:${warning}`}>{warning}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-
-        {ingestion?.status === "failed" && (
-          <p className="rounded-2xl border border-data-neg/40 bg-data-neg/10 p-3 text-sm text-body">
-            {ingestion.error_message ?? "Ingestion failed."}
-          </p>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-hairline px-3 py-2">
+        {node.content_type ? (
+          <Tooltip content={node.content_type}>
+            <Readout label="Type">{node.content_type}</Readout>
+          </Tooltip>
+        ) : (
+          <Readout label="Type">
+            <span className="text-muted">—</span>
+          </Readout>
         )}
+        <Readout label="Size">{formatBytes(node.size_bytes)}</Readout>
+        <Readout label="Chunks">
+          {ready ? ingestion.num_chunks.toLocaleString() : <span className="text-muted">—</span>}
+        </Readout>
+        <Readout label="Tokens">
+          {ready ? ingestion.num_tokens.toLocaleString() : <span className="text-muted">—</span>}
+        </Readout>
+        <TimeReadout label="Modified" value={node.updated_at} />
+        <TimeReadout label="Created" value={node.created_at} />
+        <Tooltip content={node.path} triggerClassName="w-full">
+          <Readout label="Path" className="min-w-0 flex-1">
+            {node.path}
+          </Readout>
+        </Tooltip>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-hairline p-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={download}
-          className="flex items-center gap-2"
-        >
+      {ingestion?.status === "failed" && (
+        <p className="shrink-0 border-b border-hairline px-3 py-2 text-ui text-data-neg">
+          {ingestion.error_message ?? "Ingestion failed."}
+        </p>
+      )}
+
+      {ingestion?.warnings.length ? (
+        <div className="shrink-0 border-b border-hairline px-3 py-2">
+          <InstrumentLabel className="text-data-warn">Ingestion warnings</InstrumentLabel>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-ui text-body marker:text-data-warn">
+            {ingestion.warnings.map((warning, index) => (
+              <li key={`${index}:${warning}`}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <FilePreviewContent key={`${node.id}:${node.updated_at}`} token={token} node={node} />
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-hairline px-3 py-2">
+        <Button variant="secondary" size="sm" onClick={() => downloadFileNode(token, node)}>
           <Download className="h-3.5 w-3.5" aria-hidden />
           Download
         </Button>
-        {ingestion?.status !== "ready" &&
-          ingestion?.status !== "processing" &&
-          ingestion?.status !== "pending" && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onRetry(node)}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Ingest
-            </Button>
-          )}
+        {status?.retryable && (
+          <Button variant="secondary" size="sm" onClick={() => onRetry(node)}>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Ingest
+          </Button>
+        )}
         {ingestion?.ingestion_run_id && (
           <Button
             variant="secondary"
             size="sm"
             onClick={() => router.push(`/traces/documents/${ingestion.document_id}`)}
-            className="flex items-center gap-2"
           >
             <Route className="h-3.5 w-3.5" aria-hidden />
             Trace
@@ -152,7 +145,7 @@ function PanelBody({
           variant="ghost"
           size="sm"
           onClick={() => setConfirmingDelete(true)}
-          className="ml-auto flex items-center gap-2 text-data-neg"
+          className="ml-auto text-data-neg hover:text-data-neg"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
           Delete
@@ -182,8 +175,13 @@ function PanelBody({
 }
 
 /**
- * File preview: a right-hand panel on desktop, a fullscreen overlay (with an
- * X) below the `lg` breakpoint.
+ * The selected file's inspector: a pane docked to the right of the tree, sharing
+ * its seam, and owning its own scroll.
+ *
+ * Not a floating card — this is a working surface the user reads a file's bytes
+ * in, so it gets the full height of the browser and the tree keeps scrolling
+ * independently behind it. Below `lg` there is no room for two panes, so it
+ * becomes a fullscreen overlay with the same body.
  */
 export function FilePreviewPanel(props: FilePreviewPanelProps) {
   const titleId = useId();
@@ -193,7 +191,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
     return (
       <aside
         aria-labelledby={titleId}
-        className="sticky top-6 hidden max-h-[calc(100vh-6rem)] w-[380px] shrink-0 overflow-hidden rounded-3xl border border-hairline bg-surface lg:block"
+        className="hidden w-[380px] shrink-0 border-l border-hairline bg-canvas-raised lg:block"
       >
         <PanelBody {...props} titleId={titleId} />
       </aside>

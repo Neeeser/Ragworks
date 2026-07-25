@@ -39,8 +39,18 @@ function makeDataTransfer(): DataTransfer {
   } as unknown as DataTransfer;
 }
 
+/** The row/tile for a node, found by the name it renders. */
+async function nodeElement(name: string): Promise<HTMLElement> {
+  const label = await screen.findByText(name);
+  const draggable = label.closest(DRAGGABLE);
+  if (!(draggable instanceof HTMLElement)) {
+    throw new Error(`no draggable ancestor for ${name}`);
+  }
+  return draggable;
+}
+
 async function openMenuOn(name: string) {
-  fireEvent.contextMenu(await screen.findByTitle(name));
+  fireEvent.contextMenu(await nodeElement(name));
   return screen.findByRole("menu");
 }
 
@@ -56,7 +66,8 @@ describe("FilesBrowser right-click actions", () => {
     await openMenuOn(DOC_NAME);
     await user.click(screen.getByRole("menuitem", { name: "Copy" }));
 
-    fireEvent.contextMenu(screen.getByText(/Name/i).closest("div")!.parentElement!);
+    // The folder background: right-clicking the pane rather than a row.
+    fireEvent.contextMenu(screen.getByRole("region", { name: "Folder contents" }));
     const paste = await screen.findByRole("menuitem", { name: /Paste/ });
     await user.click(paste);
 
@@ -120,8 +131,8 @@ describe("FilesBrowser right-click actions", () => {
 describe("FilesBrowser drag-and-drop moves", () => {
   it("dropping a file onto a folder moves it there", async () => {
     renderBrowser();
-    const fileTile = (await screen.findByTitle(DOC_NAME)).closest(DRAGGABLE)!;
-    const folderTile = (await screen.findByTitle(DEST_NAME)).closest(DRAGGABLE)!;
+    const fileTile = await nodeElement(DOC_NAME);
+    const folderTile = await nodeElement(DEST_NAME);
 
     const dataTransfer = makeDataTransfer();
     await act(async () => {
@@ -139,7 +150,7 @@ describe("FilesBrowser drag-and-drop moves", () => {
 
   it("an OS-file drag is not treated as an internal move", async () => {
     renderBrowser();
-    const folderTile = (await screen.findByTitle(DEST_NAME)).closest(DRAGGABLE)!;
+    const folderTile = await nodeElement(DEST_NAME);
 
     // OS drags carry Files, never the internal node type.
     const dataTransfer = {

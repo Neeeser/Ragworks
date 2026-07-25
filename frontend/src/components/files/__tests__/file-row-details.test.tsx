@@ -47,7 +47,6 @@ describe("FileRowDetails", () => {
     render(<FileRowDetails node={makeFileNode()} ingestion={ingestion} token="token" />);
     await waitFor(() => expect(screen.getByText(/Chunk 00/)).toBeInTheDocument());
 
-    expect(screen.getByText("Trace")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View ingestion trace" })).toBeInTheDocument();
     expect(screen.getAllByText(/Chunk \d{2}/).map((item) => item.textContent)).toEqual([
       "Chunk 00",

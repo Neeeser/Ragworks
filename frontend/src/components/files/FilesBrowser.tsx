@@ -1,6 +1,5 @@
 "use client";
 
-import { UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -8,7 +7,8 @@ import { FileContextMenu } from "@/components/files/FileContextMenu";
 import { FileGridView } from "@/components/files/FileGridView";
 import { FileListView } from "@/components/files/FileListView";
 import { FilePreviewPanel } from "@/components/files/FilePreviewPanel";
-import { FilesHeader } from "@/components/files/FilesHeader";
+import { FilesEmptyState } from "@/components/files/FilesEmptyState";
+import { FilesToolbar } from "@/components/files/FilesToolbar";
 import { useDragUploads } from "@/components/files/hooks/use-drag-uploads";
 import { useFileActions } from "@/components/files/hooks/use-file-actions";
 import { useFileClipboard } from "@/components/files/hooks/use-file-clipboard";
@@ -26,14 +26,11 @@ import {
 import { NewFolderDialog } from "@/components/files/NewFolderDialog";
 import { RenameDialog } from "@/components/files/RenameDialog";
 import { UploadTray } from "@/components/files/UploadTray";
+import { PageBody } from "@/components/ui/app-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Loader } from "@/components/ui/loader";
-import { GlassCard } from "@/components/ui/panel";
 import { getErrorMessage } from "@/lib/errors";
-import { cn } from "@/lib/utils";
 
 import type { FileMenuTarget } from "@/components/files/FileContextMenu";
-import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
 import type { ChangeEvent, MouseEvent } from "react";
 
@@ -45,86 +42,14 @@ type FilesBrowserProps = {
   pathSegments: string[];
 };
 
-type EntriesViewProps = {
-  entries: FileNode[];
-  token: string;
-  viewMode: "list" | "grid";
-  selectedFileId: string | null;
-  expandedIds: Set<string>;
-  animationKey: string;
-  dnd: FileDnd;
-  onToggleExpand: (node: FileNode) => void;
-  onOpenFolder: (folder: FileNode | null) => void;
-  onSelectFile: (file: FileNode) => void;
-  onRetry: (file: FileNode) => void;
-  onContextMenu: (node: FileNode, event: MouseEvent) => void;
-};
-
-function EntriesView({
-  entries,
-  token,
-  viewMode,
-  selectedFileId,
-  expandedIds,
-  animationKey,
-  dnd,
-  onToggleExpand,
-  onOpenFolder,
-  onSelectFile,
-  onRetry,
-  onContextMenu,
-}: EntriesViewProps) {
-  if (entries.length === 0) {
-    return (
-      <GlassCard className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-strong p-14 text-center">
-        <UploadCloud className="h-8 w-8 text-muted" aria-hidden />
-        <p className="text-sm text-body">
-          Drop files or folders here, or use Upload to add your first file.
-        </p>
-      </GlassCard>
-    );
-  }
-  if (viewMode === "grid") {
-    return (
-      <FileGridView
-        entries={entries}
-        selectedId={selectedFileId}
-        onOpenFolder={onOpenFolder}
-        onSelectFile={onSelectFile}
-        onRetry={onRetry}
-        onContextMenu={onContextMenu}
-        dnd={dnd}
-        animationKey={animationKey}
-      />
-    );
-  }
-  return (
-    <FileListView
-      entries={entries}
-      token={token}
-      selectedId={selectedFileId}
-      expandedIds={expandedIds}
-      onToggleExpand={onToggleExpand}
-      onOpenFolder={onOpenFolder}
-      onSelectFile={onSelectFile}
-      onRetry={onRetry}
-      onContextMenu={onContextMenu}
-      dnd={dnd}
-      animationKey={animationKey}
-    />
-  );
-}
-
 function BrowserNotices({ error, brokenPath }: { error: string | null; brokenPath: boolean }) {
   return (
     <>
       {error && (
-        <p className="rounded-2xl border border-data-neg/40 bg-data-neg/10 p-3 text-sm text-body">
-          {error}
-        </p>
+        <p className="shrink-0 border-b border-hairline px-3 py-2 text-ui text-data-neg">{error}</p>
       )}
       {brokenPath && (
-        <p className="rounded-2xl border border-hairline bg-surface p-3 text-sm text-muted">
+        <p className="shrink-0 border-b border-hairline px-3 py-2 text-ui text-muted">
           That folder no longer exists — showing the collection root.
         </p>
       )}
@@ -132,10 +57,55 @@ function BrowserNotices({ error, brokenPath }: { error: string | null; brokenPat
   );
 }
 
+type DeleteNodeDialogProps = {
+  /** The node awaiting confirmation; null keeps the dialog closed. */
+  node: FileNode | null;
+  deleting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+
+/** Deleting a folder takes its subtree and their chunks with it, so it says so. */
+function DeleteNodeDialog({ node, deleting, onConfirm, onCancel }: DeleteNodeDialogProps) {
+  return (
+    <ConfirmDialog
+      open={node !== null}
+      title={`Delete ${node?.name ?? ""}?`}
+      description={
+        node?.kind === "folder"
+          ? "The folder, everything inside it, and any indexed chunks will be removed."
+          : "The file and any indexed chunks will be removed."
+      }
+      confirmLabel="Delete"
+      confirmVariant="danger"
+      loading={deleting}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
+  );
+}
+
+/** Where an OS-file drop will land, shown only while a drag is over the browser. */
+function DropTarget({ folderName }: { folderName: string }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-accent-violet bg-accent-violet/10"
+    >
+      <p className="rounded-control border border-hairline bg-canvas-raised px-3 py-1.5 text-ui font-medium text-primary">
+        Drop to upload into {folderName}
+      </p>
+    </div>
+  );
+}
+
 /**
- * The collection's drive: URL-addressed folders, instant client-side
- * navigation over one fetched tree, list/grid views, drag-and-drop uploads
- * and rearranging, right-click actions, and a preview panel.
+ * The collection's drive: URL-addressed folders, instant client-side navigation
+ * over one fetched tree, list/grid views, drag-and-drop uploads and rearranging,
+ * right-click actions, and a docked preview pane.
+ *
+ * The tree and the preview each own their scroll, so reading a file's bytes never
+ * moves the row you selected it from.
  */
 export function FilesBrowser({
   token,
@@ -249,71 +219,87 @@ export function FilesBrowser({
     event.target.value = "";
   };
 
-  if (tree.initialLoading) {
-    return (
-      <GlassCard className="flex items-center justify-center rounded-3xl p-10">
-        <Loader className="h-6 w-6" />
-      </GlassCard>
-    );
-  }
+  const pickFiles = () => fileInputRef.current?.click();
+  const selectFile = (file: FileNode) => setSelectedFileId(file.id);
+  const emptyState = <FilesEmptyState onPickFiles={pickFiles} />;
 
   return (
-    <div {...drag.handlers} className="relative min-h-[60vh]">
-      <div className="flex items-start gap-6">
-        <div className="min-w-0 flex-1 space-y-4">
-          <FilesHeader
-            token={token}
-            collectionId={collectionId}
-            collectionName={collectionName}
-            nodes={tree.nodes}
-            breadcrumb={breadcrumb}
-            viewMode={viewMode}
-            uploading={uploads.uploading}
-            dnd={dnd}
-            onViewModeChange={setViewMode}
-            onNavigate={navigate}
-            onSelectFile={(file) => setSelectedFileId(file.id)}
-            onNewFolder={() => setNewFolderOpen(true)}
-            onPickFiles={() => fileInputRef.current?.click()}
-          />
+    <PageBody className="flex flex-col">
+      <div {...drag.handlers} className="relative flex min-h-0 flex-1 flex-col">
+        <FilesToolbar
+          token={token}
+          collectionId={collectionId}
+          nodes={tree.nodes}
+          breadcrumb={breadcrumb}
+          viewMode={viewMode}
+          uploading={uploads.uploading}
+          dnd={dnd}
+          onViewModeChange={setViewMode}
+          onNavigate={navigate}
+          onSelectFile={selectFile}
+          onNewFolder={() => setNewFolderOpen(true)}
+          onPickFiles={pickFiles}
+        />
 
-          <BrowserNotices
-            error={tree.error ?? actions.error ?? downloadError}
-            brokenPath={brokenPath}
-          />
+        <BrowserNotices
+          error={tree.error ?? actions.error ?? downloadError}
+          brokenPath={brokenPath}
+        />
 
-          <div
+        <div className="flex min-h-0 flex-1">
+          {/* The raised surface is the scroll region itself, so a folder with
+              three files still reads as a pane rather than as a list floating
+              over bare canvas. Named, because the page has two panes and a
+              screen reader user needs to move between them. */}
+          <section
+            aria-label="Folder contents"
+            className="min-w-0 flex-1 overflow-y-auto bg-canvas-raised"
             onContextMenu={(event) => {
               event.preventDefault();
               openMenu(null, event);
             }}
           >
-            <EntriesView
-              entries={entries}
+            {viewMode === "grid" ? (
+              <FileGridView
+                entries={entries}
+                selectedId={selectedFileId}
+                onOpenFolder={navigate}
+                onSelectFile={selectFile}
+                onRetry={actions.retryIngestion}
+                onContextMenu={openMenu}
+                dnd={dnd}
+                emptyState={emptyState}
+              />
+            ) : (
+              <FileListView
+                entries={entries}
+                token={token}
+                selectedId={selectedFileId}
+                expandedIds={expandedIds}
+                loading={tree.initialLoading}
+                onToggleExpand={toggleExpand}
+                onOpenFolder={navigate}
+                onSelectFile={selectFile}
+                onRetry={actions.retryIngestion}
+                onContextMenu={openMenu}
+                dnd={dnd}
+                emptyState={emptyState}
+              />
+            )}
+          </section>
+
+          {selectedFile && (
+            <FilePreviewPanel
               token={token}
-              viewMode={viewMode}
-              selectedFileId={selectedFileId}
-              expandedIds={expandedIds}
-              animationKey={folderId ?? "root"}
-              dnd={dnd}
-              onToggleExpand={toggleExpand}
-              onOpenFolder={navigate}
-              onSelectFile={(file) => setSelectedFileId(file.id)}
+              node={selectedFile}
+              onClose={() => setSelectedFileId(null)}
               onRetry={actions.retryIngestion}
-              onContextMenu={openMenu}
+              onDelete={actions.deleteNode}
             />
-          </div>
+          )}
         </div>
 
-        {selectedFile && (
-          <FilePreviewPanel
-            token={token}
-            node={selectedFile}
-            onClose={() => setSelectedFileId(null)}
-            onRetry={actions.retryIngestion}
-            onDelete={actions.deleteNode}
-          />
-        )}
+        {drag.dragActive && <DropTarget folderName={folder ? folder.name : collectionName} />}
       </div>
 
       <input
@@ -325,20 +311,6 @@ export function FilesBrowser({
         aria-hidden
         tabIndex={-1}
       />
-
-      {drag.dragActive && (
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-0 z-20 flex items-center justify-center",
-            "rounded-3xl border-2 border-dashed border-accent-violet bg-accent-violet/10",
-          )}
-        >
-          <p className="rounded-full border border-hairline bg-canvas-raised px-4 py-2 text-sm font-semibold text-primary">
-            Drop to upload into {folder ? folder.name : collectionName}
-          </p>
-        </div>
-      )}
 
       <FileContextMenu
         target={menuTarget}
@@ -363,21 +335,13 @@ export function FilesBrowser({
         onClose={() => setRenameTarget(null)}
         onRename={actions.renameNode}
       />
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title={`Delete ${deleteTarget?.name ?? ""}?`}
-        description={
-          deleteTarget?.kind === "folder"
-            ? "The folder, everything inside it, and any indexed chunks will be removed."
-            : "The file and any indexed chunks will be removed."
-        }
-        confirmLabel="Delete"
-        confirmVariant="danger"
-        loading={deleting}
+      <DeleteNodeDialog
+        node={deleteTarget}
+        deleting={deleting}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
       />
       <UploadTray items={uploads.items} onDismiss={uploads.dismiss} />
-    </div>
+    </PageBody>
   );
 }

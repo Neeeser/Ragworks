@@ -35,12 +35,12 @@ export function NewFolderDialog({ open, onClose, onCreate }: NewFolderDialogProp
           event.preventDefault();
           void submit();
         }}
-        className="w-full max-w-sm rounded-3xl border border-hairline bg-canvas-raised p-6 shadow-elevation-2"
+        className="w-full max-w-sm rounded-panel border border-hairline bg-canvas-raised p-4 shadow-elevation-2"
       >
-        <h3 id={titleId} className="text-lg font-semibold text-primary">
+        <h3 id={titleId} className="text-head font-medium text-primary">
           New folder
         </h3>
-        <div className="mt-4">
+        <div className="mt-3">
           <Field label="Name">
             <TextInput
               autoFocus
@@ -50,7 +50,7 @@ export function NewFolderDialog({ open, onClose, onCreate }: NewFolderDialogProp
             />
           </Field>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
