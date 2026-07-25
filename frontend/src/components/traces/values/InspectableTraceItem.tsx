@@ -32,7 +32,7 @@ export function InspectableTraceItem({
         itemId={itemId}
         focused={focused}
         onFocusItem={onFocusItem}
-        className="w-full rounded-xl border border-hairline bg-canvas p-2.5 text-left"
+        className="w-full rounded-control border border-hairline bg-canvas p-2 text-left"
       >
         {children}
       </TraceItemRow>
@@ -41,7 +41,7 @@ export function InspectableTraceItem({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-hairline bg-canvas",
+        "overflow-hidden rounded-control border border-hairline bg-canvas",
         focused && "border-accent-cyan/70 bg-accent-cyan/10",
       )}
       data-focused={focused || undefined}
@@ -51,18 +51,17 @@ export function InspectableTraceItem({
         aria-label={`Inspect result ${itemId}`}
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
-        className="w-full p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
+        className="w-full p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
       >
         {children}
       </button>
       {expanded ? (
-        <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-2.5 py-2">
+        <div className="flex flex-wrap justify-end gap-1 border-t border-hairline px-2 py-2">
           <Button
             variant="secondary"
             size="sm"
             aria-label={`Open chunk ${itemId}`}
             onClick={() => onOpenItem(itemId)}
-            className="gap-1.5"
           >
             <FileText className="h-3.5 w-3.5" aria-hidden />
             Open chunk
@@ -72,7 +71,6 @@ export function InspectableTraceItem({
               size="sm"
               aria-label={`Trace this result ${itemId}`}
               onClick={() => onFocusItem(itemId)}
-              className="gap-1.5"
             >
               Trace this result
               <ArrowRight className="h-3.5 w-3.5" aria-hidden />

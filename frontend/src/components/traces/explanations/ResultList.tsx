@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatTracePreview } from "@/components/traces/explanations/summary-data";
 import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
 import type { ItemRef, TraceFocusedItem } from "@/lib/types";
@@ -54,19 +56,15 @@ export function ResultList({
   }, [focusedItemId]);
 
   return (
-    <section className="min-w-0 rounded-xl border border-hairline bg-surface p-3">
-      <div className="flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-primary">{title}</h3>
-        <span className="font-mono text-[10px] text-meta">{items.length} results</span>
-        {scoreLabel ? (
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.18em] text-accent-cyan">
-            {scoreLabel}
-          </span>
-        ) : null}
+    <section className="min-w-0 rounded-panel border border-hairline bg-surface p-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-ui font-medium text-primary">{title}</h3>
+        <Readout label="Results">{items.length}</Readout>
+        {scoreLabel ? <InstrumentLabel className="ml-auto">{scoreLabel}</InstrumentLabel> : null}
       </div>
       <ol
         aria-label={ariaLabel}
-        className={cn("mt-2 space-y-1.5 overflow-y-auto pr-1", compact ? "max-h-40" : "max-h-64")}
+        className={cn("mt-2 space-y-1 overflow-y-auto pr-1", compact ? "max-h-40" : "max-h-64")}
       >
         {items.map((item, index) => {
           const focused = item.id === focusedItemId;
@@ -85,7 +83,7 @@ export function ResultList({
               ref={focused ? focusedRef : undefined}
               aria-current={focused ? "true" : undefined}
               className={cn(
-                "relative overflow-hidden rounded-lg border transition",
+                "relative overflow-hidden rounded-control border transition-colors duration-80 ease-standard",
                 focused
                   ? "border-accent-cyan/60 bg-accent-cyan/10"
                   : selected
@@ -98,23 +96,23 @@ export function ResultList({
                 aria-label={`Inspect result ${item.id}`}
                 aria-pressed={selected}
                 onClick={() => setInspectedItemId(item.id)}
-                className="w-full px-2.5 py-2 pr-20 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
+                className="w-full px-2 py-2 pr-24 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-violet"
               >
                 <span className="flex items-center gap-2">
-                  <span className="w-7 shrink-0 font-mono text-[10px] text-muted">
+                  <span className="w-7 shrink-0 font-mono text-instrument tabular-nums text-muted">
                     #{index + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-primary">
+                  <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
                     {title}
                   </span>
                   {typeof item.score === "number" ? (
-                    <span className="shrink-0 font-mono text-[10px] text-accent-cyan">
+                    <span className="shrink-0 font-mono text-instrument tabular-nums text-accent-cyan">
                       {scoreText(item.score)}
                     </span>
                   ) : null}
                 </span>
                 {preview ? (
-                  <span className="mt-1 block line-clamp-2 pl-9 text-xs leading-relaxed text-body">
+                  <span className="mt-1 block line-clamp-2 pl-9 text-ui leading-relaxed text-body">
                     {formatTracePreview(preview)}
                   </span>
                 ) : null}
@@ -125,20 +123,15 @@ export function ResultList({
                   size="sm"
                   aria-label={`Trace result ${title}`}
                   onClick={() => onFocusItem(item.id)}
-                  className="absolute right-1.5 top-1.5 h-7 gap-1 px-2 text-[10px]"
+                  className="absolute right-1 top-1 text-instrument"
                 >
                   <LocateFixed className="h-3 w-3" aria-hidden />
                   Trace result
                 </Button>
               ) : null}
               {selected && context && onOpenArtifact ? (
-                <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-2.5 py-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onOpenArtifact(context)}
-                    className="gap-1.5"
-                  >
+                <div className="flex flex-wrap justify-end gap-1 border-t border-hairline px-2 py-2">
+                  <Button variant="secondary" size="sm" onClick={() => onOpenArtifact(context)}>
                     <FileText className="h-3.5 w-3.5" aria-hidden />
                     Open chunk
                   </Button>

@@ -3,6 +3,8 @@
 import { Columns3, PanelRightOpen, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { StatusDot } from "@/components/ui/status-dot";
 
 import type { TraceFocusedItem } from "@/lib/types";
 
@@ -43,20 +45,19 @@ export function FocusHeader({
   return (
     <section
       aria-label="Focused result"
-      className="shrink-0 border-b border-hairline bg-surface px-4 py-2"
+      className="shrink-0 border-b border-hairline bg-surface px-3 py-2"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-accent-cyan">
-          Focused chunk
-        </p>
+        {/* Focus is a live state of the view, so it wears the live tone. */}
+        <StatusDot tone="active" label="Focused chunk" />
         {resolved && focusedItem?.filename ? (
-          <span className="text-xs font-medium text-primary">{focusedItem.filename}</span>
+          <span className="text-ui font-medium text-primary">{focusedItem.filename}</span>
         ) : null}
-        {resolved && ordinal ? <span className="text-xs text-muted">{ordinal}</span> : null}
-        <span className="max-w-[260px] truncate font-mono text-[10px] text-meta">
+        {resolved && ordinal ? <span className="text-instrument text-muted">{ordinal}</span> : null}
+        <span className="max-w-64 truncate font-mono text-instrument text-meta">
           {focusedItemId}
         </span>
-        <span className="ml-auto flex items-center gap-1.5">
+        <span className="ml-auto flex items-center gap-1">
           {resolved && focusedItem?.text ? (
             <>
               {onCompareContext ? (
@@ -64,7 +65,6 @@ export function FocusHeader({
                   variant="secondary"
                   size="sm"
                   onClick={onCompareContext}
-                  className="gap-1.5"
                   aria-label="Compare focused context"
                 >
                   <Columns3 className="h-3.5 w-3.5" aria-hidden />
@@ -75,7 +75,6 @@ export function FocusHeader({
                 variant="secondary"
                 size="sm"
                 onClick={onOpenArtifact}
-                className="gap-1.5"
                 aria-label="Open focused chunk"
               >
                 <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
@@ -83,36 +82,26 @@ export function FocusHeader({
               </Button>
             </>
           ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearFocus}
-            className="gap-1.5 text-muted"
-            aria-label="Exit focused trace"
-          >
+          <Button variant="ghost" size="sm" onClick={onClearFocus} aria-label="Exit focused trace">
             <X className="h-3.5 w-3.5" aria-hidden />
             Exit focus
           </Button>
         </span>
       </div>
       {query ? (
-        <div className="mt-1.5 flex min-w-0 items-baseline gap-2 border-t border-hairline pt-1.5">
-          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.22em] text-meta">
-            Query
-          </span>
-          <p className="truncate text-xs text-body" title={query}>
-            {query}
-          </p>
+        <div className="mt-2 flex min-w-0 items-baseline gap-2 border-t border-hairline pt-2">
+          <InstrumentLabel className="shrink-0 text-meta">Query</InstrumentLabel>
+          <p className="line-clamp-2 max-w-[66ch] text-ui text-body">{query}</p>
         </div>
       ) : null}
       {!resolved || !focusedItem?.text ? (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 max-w-[66ch] text-ui text-muted">
           Chunk text unavailable — the stored chunk behind this id no longer exists (deleted or
           re-ingested content). The recorded execution data still applies.
         </p>
       ) : null}
       {ingestionOnly ? (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 max-w-[66ch] text-ui text-muted">
           This trace covers ingestion only — how the chunk was created and indexed. To follow it
           through retrieval, trace it from a search result.
         </p>

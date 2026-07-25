@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 
 import type { JourneyStep } from "@/components/traces/lib/journey";
@@ -22,11 +23,9 @@ export function RankPath({ steps, selectedNodeId, onSelectNode }: RankPathProps)
   return (
     <nav
       aria-label="Rank path"
-      className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-hairline bg-canvas px-4 py-2"
+      className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-hairline bg-surface px-3 py-2"
     >
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.22em] text-meta">
-        Rank path
-      </span>
+      <InstrumentLabel className="shrink-0 text-meta">Rank path</InstrumentLabel>
       {steps.map((step, index) => {
         const score = step.score === null ? null : scoreText(step.score);
         const scoreLabel = score ? `, score ${score}` : "";
@@ -40,15 +39,15 @@ export function RankPath({ steps, selectedNodeId, onSelectNode }: RankPathProps)
               aria-current={step.nodeId === selectedNodeId ? "step" : undefined}
               onClick={() => onSelectNode(step.nodeId)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-left transition",
+                "rounded-full border px-3 py-1 text-left transition-colors duration-80 ease-standard",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
                 step.nodeId === selectedNodeId
                   ? "border-accent-cyan/55 bg-accent-cyan/10"
-                  : "border-hairline bg-surface hover:border-strong hover:bg-surface-strong",
+                  : "border-hairline bg-canvas-raised hover:border-strong hover:bg-surface-strong",
               )}
             >
-              <span className="text-[11px] font-medium text-primary">{step.nodeName}</span>
-              <span className="ml-2 font-mono text-[10px] text-accent-cyan">
+              <span className="text-instrument font-medium text-primary">{step.nodeName}</span>
+              <span className="ml-2 font-mono text-instrument tabular-nums text-accent-cyan">
                 #{step.rank}
                 {score ? ` · ${score}` : ""}
               </span>

@@ -5,6 +5,8 @@ import { useId, useState } from "react";
 
 import { HighlightedTraceText } from "@/components/traces/debugger/HighlightedTraceText";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +31,8 @@ const chunkOrdinal = (item: TraceFocusedItem): string | null => {
 
 function TextArtifact({ item, query }: ArtifactRendererProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-hairline bg-canvas p-5">
-      <p className="whitespace-pre-wrap text-sm leading-7 text-body">
+    <div className="min-h-0 flex-1 overflow-auto rounded-panel border border-hairline bg-canvas p-4">
+      <p className="max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
         <HighlightedTraceText text={item.text || "No chunk content available."} query={query} />
       </p>
     </div>
@@ -45,18 +47,18 @@ function ComparisonArtifact({
   return (
     <article
       className={cn(
-        "flex min-h-0 flex-1 flex-col rounded-2xl border bg-canvas",
+        "flex min-h-0 flex-1 flex-col rounded-panel border bg-canvas",
         focused ? "border-accent-cyan/55" : "border-hairline",
       )}
     >
-      <header className="shrink-0 border-b border-hairline px-4 py-3">
-        <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-stage-chunk">
-          {chunkOrdinal(item) ?? "Recorded artifact"}
-        </p>
-        <p className="mt-1 truncate text-xs font-medium text-primary">{item.filename}</p>
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-2">
+        <Chip tone="chunk">{chunkOrdinal(item) ?? "Recorded artifact"}</Chip>
+        <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
+          {item.filename}
+        </span>
       </header>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <p className="whitespace-pre-wrap text-sm leading-7 text-body">
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        <p className="max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
           <HighlightedTraceText text={item.text || "No chunk content available."} query={query} />
         </p>
       </div>
@@ -123,22 +125,22 @@ export function ArtifactDrawer({
     <ModalOverlay open onClose={onClose} labelledBy={titleId} backdropClassName="bg-canvas/80">
       <aside
         className={cn(
-          "ml-auto flex h-[calc(100dvh-5rem)] max-h-full w-full flex-col rounded-3xl border border-hairline bg-canvas-raised p-5 text-primary shadow-elevation-2 sm:p-6",
+          "card-surface ml-auto flex h-[calc(100dvh-5rem)] max-h-full w-full flex-col bg-canvas-raised p-4 text-primary shadow-elevation-2",
           contextMode ? "max-w-6xl" : "max-w-3xl",
         )}
       >
-        <header className="flex shrink-0 items-start gap-4 border-b border-hairline pb-4">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-hairline bg-surface text-accent-cyan">
+        <header className="flex shrink-0 items-start gap-3 border-b border-hairline pb-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-hairline bg-surface text-accent-cyan">
             <FileText className="h-4 w-4" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted">
-              Focused artifact
-            </p>
-            <h2 id={titleId} className="mt-1 truncate text-lg font-semibold text-primary">
+            <h2
+              id={titleId}
+              className="truncate text-head font-semibold tracking-[-0.01em] text-primary"
+            >
               {title}
             </h2>
-            <p className="mt-1 truncate font-mono text-[10px] text-meta">{item.id}</p>
+            <p className="mt-1 truncate font-mono text-instrument text-meta">{item.id}</p>
           </div>
           <Button
             type="button"
@@ -146,7 +148,6 @@ export function ArtifactDrawer({
             size="sm"
             onClick={onClose}
             aria-label="Close artifact"
-            className="h-9 w-9 shrink-0 rounded-full border border-hairline p-0"
           >
             <X className="h-4 w-4" aria-hidden />
           </Button>
@@ -159,23 +160,17 @@ export function ArtifactDrawer({
               size="sm"
               onClick={() => setContextMode(true)}
               aria-label="Show source context"
-              className="gap-1.5"
             >
               <Columns3 className="h-3.5 w-3.5" aria-hidden />
               Show source context
             </Button>
           </div>
         ) : null}
-        <div className="flex min-h-0 flex-1 flex-col pt-4">
+        <div className="flex min-h-0 flex-1 flex-col pt-3">
           {contextMode ? (
             <section aria-label="Source context" className="flex min-h-0 flex-1 flex-col">
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-stage-chunk">
-                    Source context
-                  </p>
-                  <p className="mt-1 text-xs text-muted">Previous, focused, and next chunks</p>
-                </div>
+              <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
+                <InstrumentLabel>Source context</InstrumentLabel>
                 <Button
                   type="button"
                   variant="ghost"
@@ -200,7 +195,7 @@ export function ArtifactDrawer({
           ) : Renderer ? (
             <Renderer item={item} query={query} />
           ) : (
-            <p className="text-sm text-muted">No renderer is available for this artifact.</p>
+            <p className="text-ui text-muted">No renderer is available for this artifact.</p>
           )}
         </div>
       </aside>

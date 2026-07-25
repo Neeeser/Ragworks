@@ -13,12 +13,15 @@ import { useTraceDebugger } from "@/components/traces/debugger/hooks/use-trace-d
 import { useTraceStepper } from "@/components/traces/debugger/hooks/use-trace-stepper";
 import { NodeEvidencePanel } from "@/components/traces/debugger/NodeEvidencePanel";
 import { RankPath } from "@/components/traces/debugger/RankPath";
+import { TraceGraphToolbar } from "@/components/traces/debugger/TraceGraphToolbar";
 import { TraceHeader } from "@/components/traces/debugger/TraceHeader";
 import { buildExecutionSections, traceQueryText } from "@/components/traces/lib/execution";
 import { buildJourneyFocus } from "@/components/traces/lib/journey";
+import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
-import { Loader } from "@/components/ui/loader";
-import { cn } from "@/lib/utils";
+import { CrumbBar } from "@/components/ui/crumb-bar";
+import { Panel } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import type { TypedEdgeData } from "@/components/pipelines/flow/TypedEdge";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -30,14 +33,34 @@ type TraceDebuggerProps = {
   source: TraceSource;
 };
 
-const ACTIVE_TOGGLE_CLASS = "bg-surface-strong text-primary";
-const INACTIVE_TOGGLE_CLASS = "text-muted";
-
 const tracePath = (source: TraceSource): string => {
   if (source.kind === "query") return `/traces/queries/${source.id}`;
   if (source.kind === "document") return `/traces/documents/${source.id}`;
   return `/traces/runs/${source.id}`;
 };
+
+/** The debugger's geometry while it loads — same three panes, no content yet. */
+function TraceSkeleton() {
+  return (
+    <>
+      <div className="h-[clamp(180px,28vh,280px)] shrink-0 border-b border-hairline p-3">
+        <Skeleton className="h-full w-full rounded-panel" />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className="shrink-0 space-y-2 border-b border-hairline bg-surface p-3 lg:w-80 lg:border-b-0 lg:border-r">
+          {[0, 1, 2, 3, 4].map((row) => (
+            <Skeleton key={row} className="h-8 rounded-control" />
+          ))}
+        </div>
+        <div className="min-w-0 flex-1 space-y-3 p-3">
+          <Skeleton className="h-4 max-w-56" />
+          <Skeleton className="h-40 rounded-panel" />
+        </div>
+      </div>
+      <span className="sr-only">Loading trace</span>
+    </>
+  );
+}
 
 /** Full-page debugger with a compact graph, execution ledger, and evidence pane. */
 export function TraceDebugger({ source }: TraceDebuggerProps) {
@@ -65,22 +88,26 @@ export function TraceDebugger({ source }: TraceDebuggerProps) {
 
   if (!graph || !trace) {
     return (
-      <div className="flex h-full items-center justify-center rounded-2xl border border-hairline bg-canvas-raised">
-        {error ? (
-          <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Trace unavailable
-            </p>
-            <p className="text-sm text-body">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => router.back()} className="gap-1.5">
-              <ArrowLeft className="h-4 w-4" aria-hidden />
+      <>
+        <CrumbBar
+          crumbs={[{ label: "Traces" }]}
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
               Back
             </Button>
-          </div>
-        ) : (
-          <Loader className="h-6 w-6" />
-        )}
-      </div>
+          }
+        />
+        <PageBody className="flex flex-col">
+          <Panel aria-busy={!error} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {error ? (
+              <p className="max-w-[66ch] p-4 text-ui text-data-neg">{error}</p>
+            ) : (
+              <TraceSkeleton />
+            )}
+          </Panel>
+        </PageBody>
+      </>
     );
   }
 
@@ -281,127 +308,96 @@ function LoadedTraceDebugger({
   }, [graph.edges, graph.nodes, selectedNodeId]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-hairline bg-canvas-raised">
+    <>
       <TraceHeader trace={trace} combined={graph.combined} onRefresh={onRefresh} />
-      {specsNotice && (
-        <div className="shrink-0 border-b border-data-warn/30 bg-data-warn/10 px-4 py-1.5 text-xs text-data-warn">
-          {specsNotice}
-        </div>
-      )}
-      {focused && focusedItemId ? (
-        <FocusHeader
-          focusedItemId={focusedItemId}
-          focusedItem={focusedItem}
-          query={query}
-          ingestionOnly={trace.run.trigger === "ingest" && !graph.combined}
-          onOpenArtifact={() => focusedItem && openArtifact(focusedItem)}
-          onCompareContext={
-            hasAdjacentContext
-              ? () => {
-                  setArtifactMode("context");
-                  if (focusedItem) setArtifactItem(focusedItem);
-                }
-              : undefined
-          }
-          onClearFocus={clearResult}
-        />
-      ) : null}
-      {focused ? (
-        <RankPath steps={rankPath} selectedNodeId={selectedNodeId} onSelectNode={selectTraceNode} />
-      ) : null}
-      <section
-        aria-label="Trace graph"
-        className="relative h-[clamp(180px,28vh,280px)] shrink-0 border-b border-hairline bg-canvas"
-      >
-        <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
-          {graph.combined ? (
-            <div
-              role="tablist"
-              aria-label="Trace stage"
-              className="flex items-center gap-1 rounded-full border border-hairline bg-canvas-raised/90 p-1 shadow-elevation-1"
-            >
-              {(["origin", "retrieval"] as const).map((stage) => {
-                const label = stage === "origin" ? "Ingestion" : "Retrieval";
-                return (
-                  <button
-                    key={stage}
-                    type="button"
-                    role="tab"
-                    aria-selected={graphStage === stage}
-                    onClick={() => setGraphStage(stage)}
-                    className={cn(
-                      "rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                      graphStage === stage ? ACTIVE_TOGGLE_CLASS : INACTIVE_TOGGLE_CLASS,
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+      <PageBody className="flex flex-col">
+        <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {specsNotice && (
+            <p className="shrink-0 border-b border-data-warn/30 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
+              {specsNotice}
+            </p>
+          )}
+          {focused && focusedItemId ? (
+            <FocusHeader
+              focusedItemId={focusedItemId}
+              focusedItem={focusedItem}
+              query={query}
+              ingestionOnly={trace.run.trigger === "ingest" && !graph.combined}
+              onOpenArtifact={() => focusedItem && openArtifact(focusedItem)}
+              onCompareContext={
+                hasAdjacentContext
+                  ? () => {
+                      setArtifactMode("context");
+                      if (focusedItem) setArtifactItem(focusedItem);
+                    }
+                  : undefined
+              }
+              onClearFocus={clearResult}
+            />
           ) : null}
-          <div className="flex items-center gap-1 rounded-full border border-hairline bg-canvas-raised/90 p-1 shadow-elevation-1">
-            <button
-              type="button"
-              onClick={() => setShowFocusedPath(true)}
-              disabled={!focused}
-              className={cn(
-                "rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40",
-                showFocusedPath && focused ? ACTIVE_TOGGLE_CLASS : INACTIVE_TOGGLE_CLASS,
-              )}
-            >
-              Focused path
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowFocusedPath(false)}
-              className={cn(
-                "rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition",
-                !showFocusedPath ? ACTIVE_TOGGLE_CLASS : INACTIVE_TOGGLE_CLASS,
-              )}
-            >
-              Full graph
-            </button>
+          {focused ? (
+            <RankPath
+              steps={rankPath}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={selectTraceNode}
+            />
+          ) : null}
+          {/* The graph is the working pane: full-bleed on the card's own
+              material, its controls floating over it rather than costing a row. */}
+          <section
+            aria-label="Trace graph"
+            className="relative h-[clamp(180px,28vh,280px)] shrink-0 border-b border-hairline"
+          >
+            <TraceGraphToolbar
+              combined={graph.combined}
+              graphStage={graphStage}
+              onStageChange={setGraphStage}
+              focused={focused}
+              showFocusedPath={showFocusedPath}
+              onShowFocusedPath={setShowFocusedPath}
+            />
+            <div className="h-full min-h-0 min-w-0">
+              <FlowPlayer
+                nodes={displayGraph.nodes}
+                edges={displayGraph.edges}
+                steps={graph.steps}
+                playback={playback}
+                fitViewPadding={0.18}
+                minZoom={0.1}
+                compact
+                interactive
+                onActiveStepChange={followPlaybackStage}
+                onNodeSelect={selectTraceNode}
+              />
+            </div>
+          </section>
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            {/* Secondary pane: the ledger navigates, so it takes the surface
+                fill on top of the seam and the evidence pane keeps the card. */}
+            <div className="max-h-64 min-h-44 shrink-0 border-b border-hairline bg-surface lg:max-h-none lg:min-h-0 lg:w-80 lg:border-b-0 lg:border-r">
+              <ExecutionLedger
+                sections={sections}
+                selectedNodeId={selectedNodeId}
+                playbackNodeId={activeStep?.nodeId ?? null}
+                onSelectNode={selectTraceNode}
+              />
+            </div>
+            <div className="min-h-70 min-w-0 flex-1 lg:min-h-0">
+              <NodeEvidencePanel
+                key={selectedNodeId}
+                step={selectedStep}
+                node={selectedNode}
+                focusedItemId={focusedItemId}
+                contextItems={contextItems}
+                itemEffect={selectedEffect}
+                inputSources={inputSources}
+                onFocusItem={focusResult}
+                onOpenArtifact={openArtifact}
+              />
+            </div>
           </div>
-        </div>
-        <div className="h-full min-h-0 min-w-0">
-          <FlowPlayer
-            nodes={displayGraph.nodes}
-            edges={displayGraph.edges}
-            steps={graph.steps}
-            playback={playback}
-            fitViewPadding={0.18}
-            minZoom={0.1}
-            compact
-            interactive
-            onActiveStepChange={followPlaybackStage}
-            onNodeSelect={selectTraceNode}
-          />
-        </div>
-      </section>
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="max-h-[260px] min-h-[180px] shrink-0 border-b border-hairline lg:max-h-none lg:min-h-0 lg:w-[22rem] lg:border-b-0">
-          <ExecutionLedger
-            sections={sections}
-            selectedNodeId={selectedNodeId}
-            playbackNodeId={activeStep?.nodeId ?? null}
-            onSelectNode={selectTraceNode}
-          />
-        </div>
-        <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
-          <NodeEvidencePanel
-            key={selectedNodeId}
-            step={selectedStep}
-            node={selectedNode}
-            focusedItemId={focusedItemId}
-            contextItems={contextItems}
-            itemEffect={selectedEffect}
-            inputSources={inputSources}
-            onFocusItem={focusResult}
-            onOpenArtifact={openArtifact}
-          />
-        </div>
-      </div>
+        </Panel>
+      </PageBody>
       <ArtifactDrawer
         key={`${artifactItem?.id ?? "closed"}:${artifactMode}`}
         item={artifactItem}
@@ -410,6 +406,6 @@ function LoadedTraceDebugger({
         initialMode={artifactMode}
         onClose={() => setArtifactItem(null)}
       />
-    </div>
+    </>
   );
 }
