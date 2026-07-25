@@ -157,7 +157,7 @@ export function ChunkDetailPanel({ selectedPoint, ...props }: ChunkDetailPanelPr
     return (
       <aside
         aria-labelledby={titleId}
-        className="hidden w-[340px] shrink-0 border-l border-hairline lg:block"
+        className="hidden w-[340px] shrink-0 border-l border-hairline bg-surface lg:block"
       >
         <PanelBody {...props} titleId={titleId} />
       </aside>

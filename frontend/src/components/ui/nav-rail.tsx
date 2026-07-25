@@ -1,11 +1,14 @@
 "use client";
 
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useId, useRef } from "react";
 
 import { RailFlyout } from "@/components/ui/rail-flyout";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useFlyoutIntent } from "@/components/ui/use-flyout-intent";
+import { useNavCollapsed } from "@/components/ui/use-nav-collapsed";
 import { hasRailPreview } from "@/lib/rail-preview-cache";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +36,7 @@ const ITEM =
 type RailItemProps = {
   link: RailLink;
   active: boolean;
+  collapsed: boolean;
   intent: FlyoutIntent;
 };
 
@@ -47,7 +51,7 @@ type RailItemProps = {
  * in the tab order, so a keyboard user tabs straight into them. Escape closes
  * and returns focus to the sidebar link, which is the way out of that list.
  */
-function RailItem({ link, active, intent }: RailItemProps) {
+function RailItem({ link, active, collapsed, intent }: RailItemProps) {
   const Icon = link.icon;
   const linkRef = useRef<HTMLAnchorElement>(null);
   const descriptionId = useId();
@@ -58,14 +62,16 @@ function RailItem({ link, active, intent }: RailItemProps) {
     <Link
       ref={linkRef}
       href={link.href}
+      aria-label={link.label}
       aria-current={active ? "page" : undefined}
       aria-describedby={open ? descriptionId : undefined}
       onClick={intent.close}
       className={cn(
         ITEM,
+        collapsed && "justify-center px-0",
         active
           ? "bg-accent-violet/12 font-medium text-primary"
-          : "text-muted hover:bg-surface hover:text-primary",
+          : "text-muted hover:bg-surface-strong hover:text-primary",
       )}
     >
       {/* The trace wire — the "you are here" mark on the active section. */}
@@ -73,12 +79,20 @@ function RailItem({ link, active, intent }: RailItemProps) {
         <span className="trace-wire absolute inset-y-1.5 left-0 w-[2px] rounded-full" aria-hidden />
       ) : null}
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="truncate">{link.label}</span>
+      {collapsed ? null : <span className="truncate">{link.label}</span>}
     </Link>
   );
 
   if (!previewable) {
-    return railLink;
+    // Collapsed items hide their label, so the name comes back as a tooltip;
+    // expanded items already show it and need none.
+    return collapsed ? (
+      <Tooltip content={link.label} side="right">
+        {railLink}
+      </Tooltip>
+    ) : (
+      railLink
+    );
   }
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
@@ -123,55 +137,105 @@ function RailItem({ link, active, intent }: RailItemProps) {
 
 /**
  * The labeled sidebar — 184px, wordmark on top, one visible icon + label per
- * section, account controls pinned to the bottom.
+ * section, account controls pinned to the bottom. Collapsible to a 48px icon
+ * rail (expanded is the default; the choice persists per browser).
  *
  * Labels are visible because nobody should hover to learn what an icon means;
  * the flyouts add depth (what the section is + recent destinations) on top of
- * that, not instead of it. Active state is the accent fill plus the trace-wire
- * edge — one of the console's signature marks.
+ * that, not instead of it. Collapsed, the labels return as tooltips and the
+ * flyouts keep carrying the section names. Active state is the accent fill
+ * plus the trace-wire edge — one of the console's signature marks.
  */
 export function NavRail({ links, activeHref, footer }: NavRailProps) {
   const intent = useFlyoutIntent();
+  const [collapsed, setCollapsed] = useNavCollapsed();
 
   return (
     <nav
       aria-label="Sections"
-      className="relative flex w-[184px] shrink-0 flex-col gap-1 border-r border-hairline bg-surface px-2 py-3"
+      className={cn(
+        // The user moved it → 160ms decel, per the motion table.
+        "relative flex shrink-0 flex-col gap-1 border-r border-hairline bg-surface py-3 transition-[width] duration-160 ease-decel motion-reduce:transition-none",
+        collapsed ? "w-12 px-1.5" : "w-[184px] px-2",
+      )}
     >
-      <Link
-        href="/dashboard"
-        aria-label="Ragworks console"
-        className="mb-2 flex items-center gap-2 rounded-control px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-      >
-        <span className="relative block h-5 w-6" aria-hidden>
-          <Image
-            src="/ragworks-mark-dark.svg"
-            alt=""
-            fill
-            className="ragworks-mark-dark object-contain"
-            unoptimized
-          />
-          <Image
-            src="/ragworks-mark-light.svg"
-            alt=""
-            fill
-            className="ragworks-mark-light object-contain"
-            unoptimized
-          />
-        </span>
-        <span className="text-[13px] font-semibold tracking-[-0.01em] text-primary">Ragworks</span>
-      </Link>
+      <div className={cn("mb-2 flex items-center", collapsed ? "justify-center" : "gap-1 pr-1")}>
+        <Link
+          href="/dashboard"
+          aria-label="Ragworks console"
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-control px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+            collapsed && "px-1",
+          )}
+        >
+          <span className="relative block h-5 w-6 shrink-0" aria-hidden>
+            <Image
+              src="/ragworks-mark-dark.svg"
+              alt=""
+              fill
+              className="ragworks-mark-dark object-contain"
+              unoptimized
+            />
+            <Image
+              src="/ragworks-mark-light.svg"
+              alt=""
+              fill
+              className="ragworks-mark-light object-contain"
+              unoptimized
+            />
+          </span>
+          {collapsed ? null : (
+            <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-primary">
+              Ragworks
+            </span>
+          )}
+        </Link>
+        {collapsed ? null : (
+          <Tooltip content="Collapse navigation" side="right">
+            <button
+              type="button"
+              aria-label="Collapse navigation"
+              aria-expanded
+              onClick={() => setCollapsed(true)}
+              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              <PanelLeftClose className="h-4 w-4" aria-hidden />
+            </button>
+          </Tooltip>
+        )}
+      </div>
+
+      {collapsed ? (
+        <Tooltip content="Expand navigation" side="right">
+          <button
+            type="button"
+            aria-label="Expand navigation"
+            aria-expanded={false}
+            onClick={() => setCollapsed(false)}
+            className="mb-1 flex h-8 w-full items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+          >
+            <PanelLeftOpen className="h-4 w-4" aria-hidden />
+          </button>
+        </Tooltip>
+      ) : null}
 
       {links.map((link) => (
         <RailItem
           key={link.href}
           link={link}
           active={activeHref?.startsWith(link.href) ?? false}
+          collapsed={collapsed}
           intent={intent}
         />
       ))}
 
-      {footer ? <div className="mt-auto flex items-center gap-1 px-1">{footer}</div> : null}
+      {footer ? (
+        <div
+          className={cn("mt-auto flex items-center gap-1", collapsed ? "flex-col px-0" : "px-1")}
+        >
+          {footer}
+        </div>
+      ) : null}
     </nav>
   );
 }

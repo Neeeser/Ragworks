@@ -26,10 +26,14 @@ marks answer the second. Neither is optional.
 └─────────┴──────────────────────────────────────┘
 ```
 
-- **Sidebar** — 184px. Wordmark row at top (logo mark + "Ragworks", 13px semibold), then
-  one labeled item per section: icon + sentence-case label, `rounded-control`, 32px tall.
-  Active item: `bg-accent-violet/12 text-primary` plus a 2px `.trace-wire` bar on its left
-  edge. Footer pins the account menu and theme control.
+- **Sidebar** — 184px, collapsible to a 48px icon rail (`useNavCollapsed`; expanded is
+  the default and the choice persists per browser). Wordmark row at top (logo mark +
+  "Ragworks", 13px semibold) with the collapse toggle; one labeled item per section:
+  icon + sentence-case label, `rounded-control`, 32px tall. Collapsed, labels return as
+  right-side tooltips and the flyouts keep working. Active item:
+  `bg-accent-violet/12 text-primary` plus a 2px `.trace-wire` bar on its left edge.
+  Footer pins the account menu and theme control. Width animates 160ms decel (the user
+  moved it), no-op under reduced motion.
 - **Top bar** — 48px (`CrumbBar`). Carries the breadcrumb path (see signature marks),
   live system state, and the page's actions — including the page's one primary button.
 - **Tabs** — 36px, only on sectioned entities (a collection's
@@ -83,6 +87,14 @@ list of names (a spreadsheet), and loose rows floating on the canvas (unfinished
 Adjacent cards are separate elevated objects — `card-surface`, separated by `gap-3`.
 *Inside* a card, rows separate with `border-hairline` only. Never a card per row, and
 never a bare row list on the canvas.
+
+### Multi-pane cards: the secondary pane wears `bg-surface`
+
+In a two-pane card (list + preview, sidebar + canvas, history + transcript), the
+**secondary** pane — the one that navigates or inspects — carries `bg-surface` fill on
+top of the hairline seam, so the panes read as different rooms and the layout doesn't go
+flat. The primary working pane stays on the card material. Fill plus seam, never the
+seam alone; and never a third fill level inside one card.
 
 ### Stats belong to their owner
 

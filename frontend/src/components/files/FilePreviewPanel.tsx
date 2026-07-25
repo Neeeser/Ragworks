@@ -221,7 +221,9 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
     return (
       <aside
         aria-labelledby={titleId}
-        className="hidden w-[380px] shrink-0 border-l border-hairline lg:block"
+        // Secondary pane: bg-surface fill differentiates it from the working
+        // pane — fill plus seam, not the seam alone.
+        className="hidden w-[380px] shrink-0 border-l border-hairline bg-surface lg:block"
       >
         <PanelBody {...props} titleId={titleId} />
       </aside>
