@@ -120,25 +120,38 @@ def test_key_scoped_to_another_collection_is_404(
     assert response.status_code == 404
 
 
-def test_all_collections_key_reaches_a_collection_created_later(
-    mcp_client: TestClient, session: Session, mcp_user: models.User
+def test_a_keys_reach_never_grows_to_a_collection_created_later(
+    mcp_client: TestClient,
+    session: Session,
+    mcp_user: models.User,
+    mcp_collection: models.Collection,
 ) -> None:
-    """`all_collections` is a standing grant, not a snapshot of ids."""
+    """A key's scope is a fixed list, so a new collection is out of reach by default.
+
+    This is the reason there is no "every collection" grant: reach that widens
+    on its own means a key issued today silently covers corpora that did not
+    exist when it was reviewed.
+    """
     secret = issue_key(
-        session, mcp_user, capabilities=[ApiKeyCapability.TOOLS_INVOKE], all_collections=True
+        session,
+        mcp_user,
+        capabilities=[ApiKeyCapability.TOOLS_INVOKE],
+        collection_ids=[mcp_collection.id],
     )
     later = CollectionService(session).create(
         mcp_user, CollectionCreate(name="Created Later", description="")
     )
     session.commit()
 
-    response = _post(mcp_client, later.id, secret)
-
-    assert response.status_code == 200
+    assert _post(mcp_client, mcp_collection.id, secret).status_code == 200
+    assert _post(mcp_client, later.id, secret).status_code == 404
 
 
 def test_another_users_collection_is_404_even_with_a_valid_key(
-    mcp_client: TestClient, session: Session, mcp_user: models.User
+    mcp_client: TestClient,
+    session: Session,
+    mcp_user: models.User,
+    mcp_collection: models.Collection,
 ) -> None:
     stranger = models.User(
         email="stranger@example.com", full_name="S", hashed_password="hashed"
@@ -152,7 +165,10 @@ def test_another_users_collection_is_404_even_with_a_valid_key(
     )
     session.commit()
     secret = issue_key(
-        session, mcp_user, capabilities=[ApiKeyCapability.TOOLS_INVOKE], all_collections=True
+        session,
+        mcp_user,
+        capabilities=[ApiKeyCapability.TOOLS_INVOKE],
+        collection_ids=[mcp_collection.id],
     )
 
     response = _post(mcp_client, theirs.id, secret)
@@ -190,6 +206,34 @@ def test_files_read_key_sees_read_tools_but_no_write_tools(
     names = _tool_names(rpc(mcp_client, mcp_collection.id, secret, "tools/list"))
 
     assert names == ["list_files", "read_file", "search_files"]
+
+
+def test_write_capability_grants_reading_so_an_agent_can_find_what_it_edits(
+    mcp_client: TestClient, session: Session, mcp_user: models.User,
+    mcp_collection: models.Collection,
+) -> None:
+    """`files:write` alone still lists the read tools.
+
+    A write-only key would advertise `delete_file` with no `list_files` to
+    resolve a path with — a tool set unusable without guessing.
+    """
+    secret = issue_key(
+        session,
+        mcp_user,
+        capabilities=[ApiKeyCapability.FILES_WRITE],
+        collection_ids=[mcp_collection.id],
+    )
+
+    names = _tool_names(rpc(mcp_client, mcp_collection.id, secret, "tools/list"))
+
+    assert names == [
+        "list_files",
+        "read_file",
+        "search_files",
+        "upload_file",
+        "delete_file",
+        "create_folder",
+    ]
 
 
 def test_a_tool_outside_the_keys_capabilities_cannot_be_called_by_name(

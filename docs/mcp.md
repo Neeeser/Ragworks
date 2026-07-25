@@ -54,34 +54,28 @@ no published snippet needs no adapter — the dialog's **Any client** tab is the
 same request as a runnable `curl`, useful for checking the connection before
 wiring a client to it.
 
-## Why the endpoint and the key are scoped separately
+One collection is one MCP server is one key. The endpoint path decides which
+collection an agent sees — `serverInfo.name` is the collection's slug and
+`initialize`'s `instructions` carry its description, so a harness's server entry
+*is* the collection and an agent knows what corpus it is talking to without a
+discovery call — and the key issued alongside it reaches that collection and
+nothing else. Connecting five collections is five server entries and five keys,
+each revocable on its own.
 
-The **endpoint** decides *what an agent sees*. One path per collection, and the
-server built for it only ever exposes that collection: `serverInfo.name` is the
-collection's slug and `initialize`'s `instructions` carry its description, so a
-harness's server entry *is* the collection and an agent knows what corpus it is
-talking to without a discovery call.
-
-The **key** decides *which endpoints a secret may be used on*. It is a
-credential, not a router: a key reaching every collection, used against
-collection A's URL, still gets exactly collection A's tools. It never merges
-collections and never widens a tool list.
-
-They are separate because most harnesses store one credential per server entry.
-Were reach fixed to one collection, connecting five collections would mean five
-server entries *and* five secrets to rotate; with a wider key it is five entries
-and one secret. That is the only thing the choice changes — pick the collection
-itself when a key should die with it, and every collection when one agent is
-meant to follow the workspace as it grows.
+There is deliberately no "every collection" grant. Reach that widens by itself
+means a key issued today silently covers corpora that did not exist when it was
+reviewed, and it turns one leaked secret into every collection. A credential that
+spans collections belongs to a workspace-level server, not to a collection's own
+key.
 
 ## Keys and scope
 
-A key is issued per user and carries two independent scopes:
+A key is issued per user and carries two scopes:
 
 - **Capabilities** — what the bearer may do: `tools:invoke`, `files:read`,
-  `files:write`.
-- **Collections** — an explicit list, or every collection (including ones
-  created later).
+  `files:write`. `files:write` grants `files:read` with it, because an agent that
+  may upload or delete has to be able to find what it is acting on.
+- **Collections** — the explicit list the key was issued for, fixed at creation.
 
 Both are enforced on every request. Each MCP tool declares the capability it
 needs, and the tool set is filtered per request, so a capability you did not

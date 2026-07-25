@@ -33,6 +33,27 @@ export const CAPABILITY_OPTIONS: CapabilityOption[] = [
 ];
 
 /**
+ * Capabilities each capability grants along with itself — the mirror of
+ * `CAPABILITY_IMPLIES` in `app/services/api_keys.py`, which is what actually
+ * enforces this. Kept here so the picker cannot offer a combination the server
+ * will silently widen.
+ */
+export const CAPABILITY_IMPLIES: Partial<Record<ApiKeyCapability, ApiKeyCapability[]>> = {
+  "files:write": ["files:read"],
+};
+
+/** The capabilities implied by a selection but not explicitly part of it. */
+export function impliedCapabilities(selected: ApiKeyCapability[]): Set<ApiKeyCapability> {
+  return new Set(selected.flatMap((capability) => CAPABILITY_IMPLIES[capability] ?? []));
+}
+
+/** The selection plus everything it implies, in the picker's own order. */
+export function expandCapabilities(selected: ApiKeyCapability[]): ApiKeyCapability[] {
+  const granted = new Set([...selected, ...impliedCapabilities(selected)]);
+  return CAPABILITY_OPTIONS.map((option) => option.value).filter((value) => granted.has(value));
+}
+
+/**
  * Everything a client configuration is built from.
  *
  * An object rather than three positional strings: the three are all strings and

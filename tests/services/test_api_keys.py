@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.db import models
@@ -75,17 +76,42 @@ def test_issued_secret_is_stored_only_as_a_digest(
         assert secret.startswith(stored.prefix)
 
 
-def test_issuing_without_a_collection_scope_is_rejected(
+def test_a_key_reaching_no_collection_is_rejected_by_the_contract(
     session: Session, user: models.User
 ) -> None:
-    """A key that reaches nothing is a configuration error, not a valid key."""
-    with pytest.raises(InvalidInputError):
-        ApiKeyService(session).issue(
-            user,
-            ApiKeyCreate(
-                name="scopeless", capabilities=[ApiKeyCapability.TOOLS_INVOKE]
-            ),
-        )
+    """There is no "every collection" grant, so an empty scope reaches nothing.
+
+    The rejection sits on the wire model rather than the service: a key with no
+    collections is unrepresentable, not merely refused.
+    """
+    with pytest.raises(ValidationError):
+        ApiKeyCreate(name="scopeless", capabilities=[ApiKeyCapability.TOOLS_INVOKE])
+
+
+def test_write_capability_is_stored_with_the_reading_it_implies(
+    session: Session, user: models.User
+) -> None:
+    """Expansion happens at issuance, so the stored row is what the key can do.
+
+    Expanding at read time instead would leave every listing understating the
+    key's powers.
+    """
+    collection = _collection(session, user, "Notes")
+
+    api_key, _ = ApiKeyService(session).issue(
+        user,
+        ApiKeyCreate(
+            name="writer",
+            capabilities=[ApiKeyCapability.FILES_WRITE],
+            collection_ids=[collection.id],
+        ),
+    )
+    session.commit()
+
+    with Session(session.get_bind()) as fresh:
+        stored = ApiKeyRepository(fresh).get_owned(api_key.id, user.id)
+        assert stored is not None
+        assert stored.capabilities == ["files:read", "files:write"]
 
 
 def test_issuing_with_another_users_collection_is_rejected(

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
@@ -24,6 +25,16 @@ from app.schemas.api_keys import ApiKeyCreate, ApiKeyRead
 from app.schemas.enums import ApiKeyCapability
 from app.services.errors import InvalidInputError, NotFoundError
 from app.utils.time import ensure_utc, utc_now
+
+#: Capabilities that each capability grants along with itself.
+#:
+#: `files:write` implies `files:read`: an agent that may upload or delete has to
+#: be able to find what it is acting on, and a write-only key would advertise
+#: `delete_file` while withholding `list_files` — a tool set unusable without
+#: guessing paths.
+CAPABILITY_IMPLIES: dict[ApiKeyCapability, frozenset[ApiKeyCapability]] = {
+    ApiKeyCapability.FILES_WRITE: frozenset({ApiKeyCapability.FILES_READ}),
+}
 
 #: Human-recognizable secret prefix, so a leaked string is identifiable.
 SECRET_PREFIX = "rw_"
@@ -71,9 +82,29 @@ class KeyPrincipal:
 
     def reaches_collection(self, collection_id: UUID) -> bool:
         """Return whether the key's scope includes a collection."""
-        if self.api_key.all_collections:
-            return True
         return str(collection_id) in self.api_key.collection_ids
+
+
+def expand_capabilities(
+    capabilities: Iterable[ApiKeyCapability],
+) -> list[ApiKeyCapability]:
+    """Return the requested capabilities plus everything they imply.
+
+    Resolved to a fixpoint so a future chained implication cannot silently
+    under-grant, and ordered by the enum's declaration so a stored list does not
+    depend on the order the caller asked in.
+    """
+    granted = set(capabilities)
+    while True:
+        expanded = granted | {
+            implied
+            for capability in granted
+            for implied in CAPABILITY_IMPLIES.get(capability, frozenset())
+        }
+        if expanded == granted:
+            break
+        granted = expanded
+    return [member for member in ApiKeyCapability if member in granted]
 
 
 def digest_secret(secret: str) -> str:
@@ -92,7 +123,6 @@ def to_api_key_read(api_key: models.ApiKey) -> ApiKeyRead:
             for value in api_key.capabilities
             if value in {member.value for member in ApiKeyCapability}
         ],
-        all_collections=api_key.all_collections,
         collection_ids=[UUID(value) for value in api_key.collection_ids],
         created_at=ensure_utc(api_key.created_at),
         last_used_at=ensure_utc(api_key.last_used_at) if api_key.last_used_at else None,
@@ -115,7 +145,12 @@ class ApiKeyService:
         return self.keys.list_for_user(user.id)
 
     def issue(self, user: models.User, payload: ApiKeyCreate) -> tuple[models.ApiKey, str]:
-        """Create a key and return it with its one-time plaintext secret."""
+        """Create a key and return it with its one-time plaintext secret.
+
+        Implied capabilities are expanded before storage, not at read time, so
+        the row and every listing state exactly what the key can do. This is the
+        only write path, so a direct API call is normalized too.
+        """
         collection_ids = self._validated_collection_ids(user, payload)
         secret = f"{SECRET_PREFIX}{secrets.token_urlsafe(_SECRET_BYTES)}"
         expires_at = (
@@ -129,8 +164,10 @@ class ApiKeyService:
                 name=payload.name.strip(),
                 prefix=secret[: len(SECRET_PREFIX) + _DISPLAY_CHARS],
                 token_digest=digest_secret(secret),
-                capabilities=[capability.value for capability in payload.capabilities],
-                all_collections=payload.all_collections,
+                capabilities=[
+                    capability.value
+                    for capability in expand_capabilities(payload.capabilities)
+                ],
                 collection_ids=[str(value) for value in collection_ids],
                 expires_at=expires_at,
             )
@@ -175,17 +212,10 @@ class ApiKeyService:
     ) -> list[UUID]:
         """Return the key's collection scope, rejecting an unusable one.
 
-        A key must reach something: either every collection, or an explicit
-        list of collections the user actually owns. Silently dropping an
-        unknown id would hand back a key whose scope differs from the one the
-        caller asked for.
+        Every id must be a collection the user actually owns. Silently dropping
+        an unknown one would hand back a key whose scope differs from the one
+        the caller asked for.
         """
-        if payload.all_collections:
-            return []
-        if not payload.collection_ids:
-            raise InvalidInputError(
-                "Select at least one collection, or grant access to all collections."
-            )
         requested = list(dict.fromkeys(payload.collection_ids))
         owned = {
             collection.id

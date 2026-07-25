@@ -27,8 +27,8 @@ type McpAccessCardProps = {
  * This collection as an MCP server: its endpoint, the keys that reach it, and
  * the action that issues one.
  *
- * Keys granting every collection are listed here too — they reach this
- * endpoint, so hiding them would misrepresent who has access.
+ * The listing is every unrevoked key whose scope includes this collection, so it
+ * answers "who can reach this" rather than "what was issued from this page".
  */
 export function McpAccessCard({ collection, token }: McpAccessCardProps) {
   const { config } = useAppConfig();
@@ -39,11 +39,7 @@ export function McpAccessCard({ collection, token }: McpAccessCardProps) {
 
   const scopedKeys = useMemo(
     () =>
-      keys.filter(
-        (key) =>
-          key.revoked_at === null &&
-          (key.all_collections || key.collection_ids.includes(collection.id)),
-      ),
+      keys.filter((key) => key.revoked_at === null && key.collection_ids.includes(collection.id)),
     [keys, collection.id],
   );
 

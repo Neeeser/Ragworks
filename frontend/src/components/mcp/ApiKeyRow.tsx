@@ -21,9 +21,10 @@ export function ApiKeyRow({ apiKey, busy, onRevoke }: ApiKeyRowProps) {
   const powers = apiKey.capabilities
     .map((capability) => CAPABILITY_LABELS.get(capability) ?? capability)
     .join(" · ");
-  const reach = apiKey.all_collections
-    ? "Every collection"
-    : `${apiKey.collection_ids.length} collection${apiKey.collection_ids.length === 1 ? "" : "s"}`;
+  // A key normally covers the one collection it was issued from, which its name
+  // already says; only a wider reach is worth the line.
+  const reach =
+    apiKey.collection_ids.length > 1 ? `${apiKey.collection_ids.length} collections` : null;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-hairline bg-surface-strong p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -33,7 +34,7 @@ export function ApiKeyRow({ apiKey, busy, onRevoke }: ApiKeyRowProps) {
           {revoked ? " · Revoked" : ""}
         </p>
         <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-meta">
-          {apiKey.prefix}… · {reach} · {powers}
+          {[`${apiKey.prefix}…`, reach, powers].filter(Boolean).join(" · ")}
         </p>
         <p className="mt-1 text-xs text-muted">
           {apiKey.last_used_at ? `Last used ${timeAgo(apiKey.last_used_at)}` : "Never used"}

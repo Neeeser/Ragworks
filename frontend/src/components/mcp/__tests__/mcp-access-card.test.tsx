@@ -44,16 +44,13 @@ describe("McpAccessCard", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("lists keys that reach this collection, including all-collection keys", async () => {
+  it("lists every unrevoked key reaching this collection, and no others", async () => {
     api.listApiKeys.mockResolvedValue({
       keys: [
         makeApiKey({ id: "k1", name: SCOPED_AGENT, collection_ids: ["col-1"] }),
-        makeApiKey({
-          id: "k2",
-          name: "Workspace agent",
-          all_collections: true,
-          collection_ids: [],
-        }),
+        // Issued elsewhere but scoped to include this collection: it can reach
+        // the endpoint, so omitting it would misrepresent who has access.
+        makeApiKey({ id: "k2", name: "Shared agent", collection_ids: ["col-2", "col-1"] }),
         makeApiKey({ id: "k3", name: "Elsewhere agent", collection_ids: ["col-2"] }),
         makeApiKey({ id: "k4", name: "Retired agent", revoked_at: "2026-07-02T00:00:00Z" }),
       ],
@@ -62,7 +59,7 @@ describe("McpAccessCard", () => {
     renderCard();
 
     await waitFor(() => expect(screen.getByText(SCOPED_AGENT)).toBeInTheDocument());
-    expect(screen.getByText("Workspace agent")).toBeInTheDocument();
+    expect(screen.getByText("Shared agent")).toBeInTheDocument();
     expect(screen.queryByText("Elsewhere agent")).not.toBeInTheDocument();
     expect(screen.queryByText("Retired agent")).not.toBeInTheDocument();
   });

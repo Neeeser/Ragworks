@@ -14,7 +14,6 @@ export interface ApiKey {
   name: string;
   prefix: string;
   capabilities: ApiKeyCapability[];
-  all_collections: boolean;
   collection_ids: UUID[];
   created_at: string;
   last_used_at: string | null;
@@ -26,8 +25,7 @@ export interface ApiKey {
 export interface ApiKeyCreatePayload {
   name: string;
   capabilities: ApiKeyCapability[];
-  all_collections?: boolean;
-  collection_ids?: UUID[];
+  collection_ids: UUID[];
   expires_in_days?: number | null;
 }
 

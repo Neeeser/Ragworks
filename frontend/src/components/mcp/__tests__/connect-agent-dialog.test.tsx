@@ -38,23 +38,31 @@ describe("ConnectAgentDialog", () => {
       expect(onCreate).toHaveBeenCalledWith({
         name: "Field Notes agent",
         capabilities: ["tools:invoke", "files:read"],
-        all_collections: false,
         collection_ids: ["col-1"],
       }),
     );
   });
 
-  it("issues an all-collections key when that scope is chosen", async () => {
+  it("grants and locks reading when writing is chosen", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn(async () => ({ key: makeApiKey(), secret: SECRET }));
     renderDialog(onCreate);
 
-    await user.click(screen.getByRole("radio", { name: /Every collection/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Write files/ }));
+
+    // Locked rather than merely pre-checked: a key that can delete but not list
+    // cannot resolve the path it is meant to delete.
+    const read = screen.getByRole("checkbox", { name: /Read files/ });
+    expect(read).toBeChecked();
+    expect(read).toBeDisabled();
+
     await user.click(screen.getByRole("button", { name: CREATE_KEY }));
 
     await waitFor(() =>
       expect(onCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ all_collections: true, collection_ids: [] }),
+        expect.objectContaining({
+          capabilities: ["tools:invoke", "files:read", "files:write"],
+        }),
       ),
     );
   });

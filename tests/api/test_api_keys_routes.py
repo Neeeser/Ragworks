@@ -75,13 +75,15 @@ def test_create_rejects_an_unknown_capability(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_create_without_a_collection_scope_is_a_400(client: TestClient) -> None:
-    response = client.post(
-        "/api/api-keys",
-        json={"name": "scopeless", "capabilities": ["tools:invoke"]},
-    )
+def test_create_without_a_collection_scope_is_a_422(client: TestClient) -> None:
+    """A scopeless key is unrepresentable, so it fails validation, not the service."""
+    for body in (
+        {"name": "scopeless", "capabilities": ["tools:invoke"]},
+        {"name": "scopeless", "capabilities": ["tools:invoke"], "collection_ids": []},
+    ):
+        response = client.post("/api/api-keys", json=body)
 
-    assert response.status_code == 400
+        assert response.status_code == 422
 
 
 def test_revoke_marks_the_key_revoked_and_keeps_the_record(client: TestClient) -> None:

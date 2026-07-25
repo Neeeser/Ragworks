@@ -25,7 +25,6 @@ class ApiKeyRead(BaseModel):
     name: str
     prefix: str
     capabilities: list[ApiKeyCapability]
-    all_collections: bool
     collection_ids: list[UUID]
     created_at: datetime
     last_used_at: datetime | None = None
@@ -34,12 +33,15 @@ class ApiKeyRead(BaseModel):
 
 
 class ApiKeyCreate(BaseModel):
-    """Payload for issuing a key: what it may do, and where it reaches."""
+    """Payload for issuing a key: what it may do, and which collections it reaches.
+
+    `collection_ids` is always explicit — there is no "every collection" grant,
+    so a key's reach cannot silently grow to cover collections created after it.
+    """
 
     name: str = Field(min_length=1, max_length=100)
     capabilities: list[ApiKeyCapability] = Field(min_length=1, max_length=MAX_CAPABILITIES)
-    all_collections: bool = False
-    collection_ids: list[UUID] = Field(default_factory=list, max_length=200)
+    collection_ids: list[UUID] = Field(min_length=1, max_length=200)
     expires_in_days: int | None = Field(default=None, ge=1, le=3650)
 
     @field_validator("capabilities")

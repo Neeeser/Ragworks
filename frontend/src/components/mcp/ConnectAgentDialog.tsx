@@ -2,12 +2,19 @@
 
 import { useId, useState } from "react";
 
-import { CAPABILITY_OPTIONS, serverNameFor } from "@/components/mcp/lib/connection";
+import {
+  CAPABILITY_IMPLIES,
+  CAPABILITY_OPTIONS,
+  expandCapabilities,
+  impliedCapabilities,
+  serverNameFor,
+} from "@/components/mcp/lib/connection";
 import { McpConnectionInstructions } from "@/components/mcp/McpConnectionInstructions";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { GlassCard } from "@/components/ui/panel";
+import { cn } from "@/lib/utils";
 
 import type { ApiKeyCapability, ApiKeyCreated, ApiKeyCreatePayload } from "@/lib/types/api-keys";
 import type { Collection } from "@/lib/types/collections";
@@ -45,7 +52,19 @@ export function ConnectAgentDialog({
   const [capabilities, setCapabilities] = useState<ApiKeyCapability[]>(["tools:invoke"]);
   const [created, setCreated] = useState<ApiKeyCreated | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
-  const [allCollections, setAllCollections] = useState(false);
+
+  // Capabilities the current selection grants on its own: shown checked and
+  // locked, so the picker cannot express a narrower key than will be issued.
+  const impliedBy = impliedCapabilities(capabilities);
+
+  const impliedNote = (capability: ApiKeyCapability): string => {
+    const sources = CAPABILITY_OPTIONS.filter(
+      (option) =>
+        capabilities.includes(option.value) &&
+        (CAPABILITY_IMPLIES[option.value] ?? []).includes(capability),
+    ).map((option) => option.label);
+    return `Included with ${sources.join(" and ")}.`;
+  };
 
   const toggle = (capability: ApiKeyCapability) => {
     setCapabilities((current) =>
@@ -60,16 +79,14 @@ export function ConnectAgentDialog({
     setSecret(null);
     setName("");
     setCapabilities(["tools:invoke"]);
-    setAllCollections(false);
     onClose();
   };
 
   const submit = async () => {
     const result = await onCreate({
       name: name.trim() || `${collection.name} agent`,
-      capabilities,
-      all_collections: allCollections,
-      collection_ids: allCollections ? [] : [collection.id],
+      capabilities: expandCapabilities(capabilities),
+      collection_ids: [collection.id],
     });
     if (result) {
       setCreated(result);
@@ -111,62 +128,32 @@ export function ConnectAgentDialog({
             <fieldset>
               <legend className={labelClass}>Permissions</legend>
               <div className="mt-2 space-y-2">
-                {CAPABILITY_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex cursor-pointer items-start gap-3 rounded-2xl border border-hairline bg-surface p-3 transition hover:border-strong"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 accent-accent-violet"
-                      checked={capabilities.includes(option.value)}
-                      onChange={() => toggle(option.value)}
-                    />
-                    <span>
-                      <span className="block text-sm text-primary">{option.label}</span>
-                      <span className="block text-xs text-muted">{option.description}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className={labelClass}>Reach</legend>
-              <p className="mt-2 text-xs text-muted leading-relaxed">
-                This endpoint only ever serves {collection.name}. Reach decides which other
-                collections&apos; endpoints the same key may be used on.
-              </p>
-              <div className="mt-2 space-y-2">
-                {[
-                  {
-                    all: false,
-                    label: collection.name,
-                    description: "This collection's endpoint only.",
-                  },
-                  {
-                    all: true,
-                    label: "Every collection",
-                    description: "Also every collection created later.",
-                  },
-                ].map((option) => (
-                  <label
-                    key={String(option.all)}
-                    className="flex cursor-pointer items-start gap-3 rounded-2xl border border-hairline bg-surface p-3 transition hover:border-strong"
-                  >
-                    <input
-                      type="radio"
-                      name="scope"
-                      className="mt-1 h-4 w-4 accent-accent-violet"
-                      checked={allCollections === option.all}
-                      onChange={() => setAllCollections(option.all)}
-                    />
-                    <span>
-                      <span className="block text-sm text-primary">{option.label}</span>
-                      <span className="block text-xs text-muted">{option.description}</span>
-                    </span>
-                  </label>
-                ))}
+                {CAPABILITY_OPTIONS.map((option) => {
+                  const implied = impliedBy.has(option.value);
+                  return (
+                    <label
+                      key={option.value}
+                      className={cn(
+                        "flex items-start gap-3 rounded-2xl border border-hairline bg-surface p-3 transition",
+                        implied ? "cursor-default" : "cursor-pointer hover:border-strong",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 accent-accent-violet"
+                        checked={implied || capabilities.includes(option.value)}
+                        disabled={implied}
+                        onChange={() => toggle(option.value)}
+                      />
+                      <span>
+                        <span className="block text-sm text-primary">{option.label}</span>
+                        <span className="block text-xs text-muted">
+                          {implied ? impliedNote(option.value) : option.description}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
 

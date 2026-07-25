@@ -455,6 +455,18 @@ stateless Streamable HTTP server per collection. Its invariants:
 - **Out-of-scope and non-existent answer identically (404).** A key holder must
   never be able to enumerate collections it was not granted, so the URL is
   convenience and the key is the boundary.
+- **A key's collection scope is an explicit list, fixed at creation — there is
+  no grant that absorbs collections created later.** Reach that widens on its
+  own means a key issued today silently covers corpora nobody reviewed it
+  against, and one leaked secret becomes every collection; a cross-collection
+  credential belongs to a future workspace-level server, not a collection's key.
+  `ApiKeyCreate.collection_ids` is `min_length=1`, so a scopeless key is
+  unrepresentable rather than merely refused.
+- **Capability implications (`CAPABILITY_IMPLIES`) are expanded at issuance, not
+  at read time**, so the stored row and every listing state exactly what the key
+  can do — expanding on read leaves the management UI understating the key's
+  powers. `files:write` implies `files:read`: a key that can `delete_file` but
+  not `list_files` cannot resolve the path it is meant to delete.
 - **Tool execution failures are results with `is_error=True`, not JSON-RPC
   errors** (including invalid arguments — the 2025-11-25 spec asks for this so
   the model can self-correct). Only protocol faults (unknown method, unknown

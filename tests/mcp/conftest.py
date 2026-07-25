@@ -82,8 +82,7 @@ def issue_key(
     user: models.User,
     *,
     capabilities: list[ApiKeyCapability],
-    collection_ids: list[UUID] | None = None,
-    all_collections: bool = False,
+    collection_ids: list[UUID],
 ) -> str:
     """Issue a key and return its plaintext secret."""
     _, secret = ApiKeyService(session).issue(
@@ -91,8 +90,7 @@ def issue_key(
         ApiKeyCreate(
             name="agent harness",
             capabilities=capabilities,
-            all_collections=all_collections,
-            collection_ids=collection_ids or [],
+            collection_ids=collection_ids,
         ),
     )
     session.commit()
