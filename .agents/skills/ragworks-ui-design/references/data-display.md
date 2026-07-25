@@ -128,5 +128,31 @@ before `.value`.
 - Counts ≥ 1,000 get thousands separators via `toLocaleString()`.
 - Durations: `<1000` → `403ms`; `≥1000` → `2.1s`. Never `2103ms`.
 - Bytes through the shared formatter in `src/lib/format.ts` — never a hand-rolled `/1024`.
-- Timestamps in a list are relative (`1m`, `2h`, `Jul 24`); absolute on hover via `title`.
-  A column of full ISO timestamps is unreadable and always too wide.
+- Timestamps in a list are relative (`1m`, `2h`, `Jul 24`) via `formatTimeAgoCompact`;
+  the absolute value goes on hover through `Tooltip`, never a `title` attribute. A column
+  of full ISO timestamps is unreadable and always too wide.
+
+---
+
+## Identifiers are not labels
+
+A model id, index name, uuid, or file path is a **literal** — render it verbatim in
+`font-mono`, with no `uppercase` and no tracking.
+
+`Chip` carries the console's label voice (`uppercase tracking-[0.1em]`), which is right
+for a mode, a version, a stage name, or a status word. Put an identifier through it and
+two things break at once:
+
+> `anthropic/claude-3.5-haiku` renders as `ANTHROPIC/CLAUDE-3.5-HAIKU` — a string the
+> API would reject — and measured **215px** instead of **172px** in a real browser, so it
+> truncated inside a column that had room for it.
+
+The tell that you have a label and not an identifier: you could translate it, or the
+backend would accept it in any case. If neither is true, it is a literal.
+
+## A chip tone that never varies is decoration
+
+`Chip`'s dot colour has to be a function of the row's data. A `chat`-toned dot on every
+row of a recent-chats list says nothing that the list's own header doesn't — it is exactly
+the "colour that means something" rule failing in the other direction. Either the tone
+varies with the data (status, stage, kind) or the chip should not be there.

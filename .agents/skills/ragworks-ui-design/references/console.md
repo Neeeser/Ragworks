@@ -37,6 +37,11 @@ spent 28% of the width on `max-w-6xl` centring and 13% of the height on a 70px t
 
 - **A page never renders its own title block.** The CrumbBar already says where you are.
   Every `PIPELINES / Ingestion pipelines` heading block cost ~110px and repeated the nav.
+- **A region that ends mid-viewport reads as a failure to load.** A two-pane list block
+  sized to its rows floated over ~450px of bare canvas with its seam stopping in mid-air.
+  Give the last region `min-h-0 flex-1` inside a `flex flex-col` `PageBody` so the seam
+  runs to the bottom and a short list reads as a pane with little in it — which is what it
+  is — rather than as something that failed to arrive.
 - **A page never adds horizontal padding to its outermost element.** Padding belongs to the
   panel or row inside it, not to the page. This is what full-bleed means.
 - **The CrumbBar is where live state goes** — store backend, BM25 availability, connection
