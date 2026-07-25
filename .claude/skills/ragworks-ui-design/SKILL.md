@@ -82,7 +82,8 @@ console density still doesn't leak out.
 
 Engineering documentation, not a pitch. State facts; never narrate the UI. Sentence case,
 plain verbs. **Banned:** seamless, powerful, effortless, unlock, elevate, supercharge,
-"dive into", "explore", "at a glance", aphoristic taglines.
+"dive into", "explore", "at a glance", "X, surfaced.", aphoristic taglines. Applies
+identically to both surfaces.
 
 ## Quick reference
 
@@ -147,7 +148,7 @@ order — the first three do most of the work:
 | Dropping columns/actions in a redesign | Functionality parity is a hard floor — re-form, don't reduce |
 | An icon-only button with no tooltip | The user has to click it to learn what it does |
 | A `title="…"` attribute for a tooltip | Can't be themed, ignores motion — use `Tooltip` |
-| Native `<select>` in product UI | The popup can't follow the theme or carry icons — always `CustomSelect`, the one shared base. A test pinning native-select semantics (`fireEvent.change` on a combobox) is a test to rewrite with `user-event`, never a reason to keep the native control |
+| Native `<select>` in product UI | The popup can't follow the theme or carry icons — always `CustomSelect` (details in `console.md` §10) |
 
 ## Quality floor
 

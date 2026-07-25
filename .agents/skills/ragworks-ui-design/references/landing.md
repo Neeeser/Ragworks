@@ -102,7 +102,4 @@ The landing page gets atmosphere, **not** more copy. The principle holds identic
 no subheads narrating an adjacent visual, no feature lists, no aphoristic taglines. A
 running pipeline already says "this is a RAG pipeline." A sign-in form needs a heading and
 fields — not a subhead explaining what a workspace is, and not a decorative pipeline-stage
-strip.
-
-Banned register, both surfaces: seamless, powerful, effortless, unlock, elevate,
-supercharge, "dive into", "explore", "at a glance", "X, surfaced."
+strip. The banned register in SKILL.md's copy voice applies here unchanged.

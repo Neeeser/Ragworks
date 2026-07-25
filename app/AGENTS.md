@@ -348,9 +348,9 @@ frontend form code — only a new `ConfigFieldKind` would.
   (`docker-compose.dev.yml`, loopback-only port 54329); it ships the `pg_search`
   the release image runs.** On a Postgres without `pg_search` (e.g. a bare
   external `TEST_DATABASE_URL` override) the BM25 path is untested —
-  `pg_search_session` tests skip with a named reason — so a green run there is
-  not proof a sparse/hybrid change works; verify against the ParadeDB dev DB.
-  Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
+  `pg_search_session` tests skip with a named reason, so a green run there
+  proves nothing for a sparse/hybrid change (the root `AGENTS.md` dev-database
+  rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
 - **The lexical (BM25) plane mirrors the dense one, backend-natively.**
   `upsert_lexical`/`lexical_query` serve sparse indexes
   (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
