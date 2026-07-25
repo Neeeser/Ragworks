@@ -8,6 +8,7 @@ import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
+import { Panel } from "@/components/ui/panel";
 import { StatusDot } from "@/components/ui/status-dot";
 import { Tooltip } from "@/components/ui/tooltip";
 
@@ -86,7 +87,7 @@ export default function DashboardPage() {
           than ending mid-viewport. */}
       <PageBody className="flex flex-col">
         {error ? (
-          <p className="border-b border-hairline px-3 py-2 text-ui text-data-neg">
+          <p className="text-ui text-data-neg">
             {error.message}
             {/* The backend returns a request id on every response, including
                 500s — quoting it is how a user's report becomes traceable. */}
@@ -97,17 +98,18 @@ export default function DashboardPage() {
             ) : null}
           </p>
         ) : emptyWorkspace ? (
-          <div className="p-8 text-center">
+          <Panel className="p-8 text-center">
             <p className="text-ui text-muted">No collections yet.</p>
             {/* /collections owns the create wizard (it needs the pipeline and
                 node-spec catalogs), so the action goes there rather than this
-                page loading that chain for a workspace that has nothing. */}
-            <Button size="sm" className="mt-3" onClick={() => router.push("/collections")}>
+                page loading that chain for a workspace that has nothing. This is
+                the view's one primary action, so it carries the glow. */}
+            <Button size="sm" glow className="mt-3" onClick={() => router.push("/collections")}>
               Create collection
             </Button>
-          </div>
+          </Panel>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             <DashboardSummary
               collectionCount={collections.length}
               docCount={stats.docCount}

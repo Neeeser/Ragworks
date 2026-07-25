@@ -76,7 +76,7 @@ describe("DashboardPage", () => {
     const row = within(list).getByText(FIRST_DOC).closest("a");
     expect(row).toHaveAttribute("href", "/collections/col-1/files");
     expect(row).toHaveTextContent("Handbook");
-    expect(row).toHaveTextContent("READY");
+    expect(row).toHaveTextContent("Ready");
     expect(row).toHaveTextContent("7");
   });
 

@@ -27,7 +27,7 @@ type DashboardActivityProps = {
 const NUMERIC_COL = "w-16 text-right";
 
 const DOC_COL = {
-  /** Fits the longest status word, PROCESSING, beside its dot. */
+  /** Fits the longest status word, Processing, beside its dot. */
   status: "w-28",
   chunks: NUMERIC_COL,
   added: NUMERIC_COL,
@@ -40,16 +40,19 @@ const CHAT_COL = {
 };
 
 /**
- * A document's ingestion state, in the backend's own vocabulary.
- *
- * The word is rendered beside the dot rather than instead of it, so the state is
+ * A document's ingestion state: the backend's enum word humanised to sentence
+ * case, rendered beside the dot rather than instead of it, so the state is
  * readable without colour discrimination.
+ *
+ * Tones match the Files page's derivation: in-flight work (`pending`,
+ * `processing`) is `active`, not `warn` — a document being ingested is not a
+ * document that needs attention.
  */
-const STATUS_TONE: Record<DocumentStatus, StatusTone> = {
-  ready: "pos",
-  failed: "neg",
-  processing: "warn",
-  pending: "neutral",
+const STATUS: Record<DocumentStatus, { tone: StatusTone; label: string }> = {
+  ready: { tone: "pos", label: "Ready" },
+  failed: { tone: "neg", label: "Failed" },
+  processing: { tone: "active", label: "Processing" },
+  pending: { tone: "active", label: "Pending" },
 };
 
 function IngestionList({
@@ -64,8 +67,9 @@ function IngestionList({
   return (
     // A named region per list: this page carries three peer regions, and a
     // landmark each is how a screen reader user moves between them without
-    // reading every row.
-    <section aria-label="Recent ingestion" className="bg-canvas-raised">
+    // reading every row. Raw `card-surface` rather than `Panel` because the
+    // landmark needs a <section>, which the div-rendering primitive can't be.
+    <section aria-label="Recent ingestion" className="card-surface">
       <DataRowHeader
         title="Recent ingestion"
         columns={[
@@ -104,8 +108,8 @@ function IngestionList({
               columns={[
                 <StatusDot
                   key="status"
-                  tone={STATUS_TONE[doc.status]}
-                  label={doc.status.toUpperCase()}
+                  tone={STATUS[doc.status].tone}
+                  label={STATUS[doc.status].label}
                   className={DOC_COL.status}
                 />,
                 <span key="chunks" className={`font-mono tabular-nums ${DOC_COL.chunks}`}>
@@ -131,7 +135,7 @@ function IngestionList({
 
 function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boolean }) {
   return (
-    <section aria-label="Recent chats" className="bg-canvas-raised">
+    <section aria-label="Recent chats" className="card-surface">
       <DataRowHeader
         title="Recent chats"
         columns={[
@@ -158,11 +162,10 @@ function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boo
             title={session.title || "Untitled session"}
             columns={[
               // Verbatim, not a Chip: a model id is a case-sensitive identifier
-              // (`anthropic/claude-3.5-haiku`), and Chip's uppercase label voice
-              // renders it as a value the API would reject. Dropping the chip
-              // also drops a `chat`-toned dot that meant nothing — every row in
-              // this list is a chat — and the tracking that made the id truncate
-              // ~90px earlier than it needed to.
+              // (`anthropic/claude-3.5-haiku`) — a literal, so it renders in
+              // mono outside any label voice. A chip here would also carry a
+              // `chat`-toned dot that means nothing: every row in this list is
+              // a chat.
               <Tooltip key="model" content={session.chat_model} triggerClassName={CHAT_COL.model}>
                 <span className="truncate font-mono text-instrument text-muted">
                   {session.chat_model}
@@ -189,10 +192,9 @@ function ChatList({ sessions, loading }: { sessions: ChatSession[]; loading: boo
  * The two activity lists a user returns to work through: what was ingested, and
  * what was asked.
  *
- * They share a seam rather than sitting in two gapped cards, so they read as one
- * instrument with two regions. Both were previously `rounded-3xl` cards holding
- * rows that each carried their own 16px radius and border; every fact those rows
- * held is now a column, and no row reserves space for a value it doesn't have.
+ * Two adjacent cards separated by the standard `gap-3` — cards are objects; the
+ * seam language lives inside each card as hairline-separated rows. Every fact a
+ * row holds is a column, and no row reserves space for a value it doesn't have.
  */
 export function DashboardActivity({
   recentDocuments,
@@ -201,10 +203,10 @@ export function DashboardActivity({
   loading = false,
 }: DashboardActivityProps) {
   return (
-    // `flex-1` so the two regions run to the bottom of the viewport. Sized to
-    // their rows instead, the block floated over ~450px of bare canvas with the
-    // seam stopping in mid-air — which reads as the page having failed to load
-    // something rather than as two panes with little in them.
+    // `flex-1` so the two cards run to the bottom of the viewport. Sized to
+    // their rows instead, they floated over ~450px of bare canvas — which reads
+    // as the page having failed to load something rather than as two panes with
+    // little in them.
     <PanelGrid columns={2} className="min-h-0 flex-1">
       <IngestionList
         documents={recentDocuments}

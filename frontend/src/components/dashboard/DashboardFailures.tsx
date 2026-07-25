@@ -27,12 +27,14 @@ export function DashboardFailures({ failures }: DashboardFailuresProps) {
   return (
     // A named region: this page carries three peer regions, and a landmark each
     // is how a screen reader user moves between them without reading every row.
-    <section aria-label="Failed ingestion" className="border-b border-hairline bg-canvas-raised">
+    // Raw `card-surface` rather than `Panel` because the landmark needs a
+    // <section>, which the div-rendering primitive can't be.
+    <section aria-label="Failed ingestion" className="card-surface">
       {failures.map((entry) => (
         <Link
           key={entry.collectionId}
           href={`/collections/${entry.collectionId}/files`}
-          className="flex items-center gap-2 border-b border-hairline px-3 py-2 last:border-b-0 transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
+          className="flex items-center gap-2 rounded-control border-b border-hairline px-3 py-2 last:border-b-0 transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
         >
           <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-data-neg" aria-hidden />
           {/* One text flow, so a screen reader reads a sentence rather than
