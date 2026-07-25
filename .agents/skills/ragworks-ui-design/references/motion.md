@@ -109,17 +109,12 @@ layers carry `aria-hidden` and `pointer-events-none`.
 
 ---
 
-## 7. Deleted from this repo, and why
+## 7. Never in the console
 
-| Removed | Reason |
-|---|---|
-| `chatBubbleFloat 6s infinite alternate` | ambient motion on text being read |
-| `filter: blur(8px)` on message reveal | most expensive property, hottest path |
-| `scale(.96) → scale(1.01)` overshoot | bounce; wrong register for a workbench |
-| `landing-rise` on console sections | 700ms + stagger applied to *data* |
-| `.grid-glow` radial bloom per panel | per-panel light; the shell bloom is the only bloom |
-| ad-hoc `duration-150/300/500` | replaced by the table above |
-| `animate-pulse` on loading cards | replaced by `Skeleton` at final geometry |
+Ambient/looping motion on content being read · `filter: blur()` in any animation (the
+most expensive property, on the hottest path) · scale overshoot/bounce (wrong register
+for a workbench) · `landing-rise` or any staggered entrance on data · durations outside
+the table above · `animate-pulse` as a loading state (use `Skeleton` at final geometry).
 
-`landing-rise` and the big blooms remain correct — on the landing page (`landing.md`).
-The two surfaces have different jobs.
+`landing-rise` and the big blooms are correct — on the landing page (`landing.md`). The
+two surfaces have different jobs.

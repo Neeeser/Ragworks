@@ -1,12 +1,7 @@
 # Numbers, charts, and status
 
-Ragworks is an observability tool, so the data display *is* the product. This file is the
-repo-specific instance of the general `dataviz` skill — when the two disagree, the general
-method wins on procedure and this file wins on which tokens to feed it.
-
-**Before building any chart, KPI row, meter, or dashboard: load the `dataviz` skill.** It
-carries the form heuristic, the six colour checks, and the runnable validator. What follows
-is only what is specific to Ragworks.
+Ragworks is an observability tool, so the data display *is* the product. This file owns
+how numbers, charts, and status render in the console.
 
 ---
 
@@ -78,27 +73,21 @@ Charts read `--series-1 … --series-6`, in fixed order, never cycled.
 
 **Never use `--accent-cyan` as a chart series.** It measures L 0.797 on the near-black
 canvas — outside the 0.43–0.77 categorical band — so beside violet it out-shines its peer
-and two equal series stop reading as equal. This was found by running the validator, not by
-looking; the eye is unreliable here and that is the whole point of the tooling.
+and two equal series stop reading as equal. The eye is unreliable on this; trust the
+validator, not a look.
 
 Validated pairs currently in use:
 
-| Mode | Series 1 | Series 2 | Result |
-|---|---|---|---|
-| dark (`#05060a`) | `#8b5cf6` | `#0ea5b7` | all six checks pass |
-| light (`#f6f7fb`) | `#7c3aed` | `#0891b2` | all six checks pass |
+| Mode | Series 1 | Series 2 |
+|---|---|---|
+| dark (`#05060a`) | `#8b5cf6` | `#0ea5b7` |
+| light (`#f6f7fb`) | `#7c3aed` | `#0891b2` |
 
-To add or change a series slot in any palette:
-
-```bash
-# from the dataviz skill's base directory
-node scripts/validate_palette.js "<hex,hex,…>" --mode dark  --surface "<canvas hex>"
-node scripts/validate_palette.js "<hex,hex,…>" --mode light --surface "<canvas hex>"
-```
-
-Fix every `FAIL` before committing. A `WARN` on contrast obligates visible labels or a table
-view — it is not dismissable. **A palette whose series slots fail does not ship**, which is
-enforced by `src/lib/__tests__/palette-contract.test.ts`.
+When adding or changing a series slot in any palette, check the candidate's OKLab
+lightness against the canvas it sits on: every series in a palette must land inside the
+0.43–0.77 categorical band so peers read as peers, and low contrast against the canvas
+obligates visible labels or a table view. **A palette whose series slots fail does not
+ship** — `src/lib/__tests__/palette-contract.test.ts` pins each palette's slots.
 
 ---
 
@@ -133,8 +122,7 @@ they need normalising before `.value`.
 - A fixed-width row column holding several spaced facts (`docs 100% queries 100%`) gets
   `whitespace-nowrap` AND a width sized to the widest real rendering (assume every
   percentage hits 100%). One step too narrow and the cell's flex items shrink, the text
-  wraps at its internal spaces, and that one row renders taller than its peers — the
-  evals coverage column shipped exactly this.
+  wraps at its internal spaces, and that one row renders taller than its peers.
 
 ---
 
@@ -145,11 +133,9 @@ A model id, index name, uuid, or file path is a **literal** — render it verbat
 
 `Chip` carries the console's pill voice (sentence-case sans), which is right for a mode,
 a version, a stage name, or a status word. Put an identifier through any label voice and
-two things break at once (this shipped with the old uppercase chip):
-
-> `anthropic/claude-3.5-haiku` renders as `ANTHROPIC/CLAUDE-3.5-HAIKU` — a string the
-> API would reject — and measured **215px** instead of **172px** in a real browser, so it
-> truncated inside a column that had room for it.
+two things break at once: `anthropic/claude-3.5-haiku` uppercased becomes a string the
+API would reject, and the case change alters its measured width, so it can truncate in a
+column that had room for it.
 
 The tell that you have a label and not an identifier: you could translate it, or the
 backend would accept it in any case. If neither is true, it is a literal.

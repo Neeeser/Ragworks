@@ -25,7 +25,7 @@ Six families: **color & materials**, **space**, **radius**, **type**, **motion**
 
 **Only 1, 2, 3, 4, 6, 8 are legal.** Not 5, not 7, not 10, not 12. A scale with holes in
 it stops being a scale. **The `p-8` ceiling is load-bearing** — it structurally prevents
-the 10rem hero panels this design replaced.
+oversized hero panels from creeping into the console.
 
 **Why px and not rem:** density must not move when the type scale changes.
 
@@ -72,14 +72,13 @@ identifier           font-mono                                      (verbatim, n
 ```
 
 **No uppercase, no letter-spacing on console labels.** The mono-uppercase-tracked
-"instrument label" is the *landing* voice (`0.28em`+ there). In the console it made every
-screen read as plain text formatted on a page — hierarchy comes from weight and ink, not
-from tracking. Mono in the console means exactly one thing: *this is data* (a number, an
-id, a path, a content type).
+"instrument label" is the *landing* voice (`0.28em`+ there). In the console, hierarchy
+comes from weight and ink, not from tracking. Mono in the console means exactly one
+thing: *this is data* (a number, an id, a path, a content type).
 
-**Dense means "no wasted space", not "small".** This scale was once a step smaller and
-read as zoomed-out. Do not re-tighten it. Hero numerics (a KPI value) use `text-[20px]`;
-that is the only one-off size, and nothing exceeds it.
+**Dense means "no wasted space", not "small".** A tighter scale reads as zoomed-out, not
+dense — do not shrink it. Hero numerics (a KPI value) use `text-[20px]`; that is the only
+one-off size, and nothing exceeds it.
 
 Two families, already loaded — **never add a font.** Geist Sans for everything; Geist
 Mono for numerics, identifiers, code.

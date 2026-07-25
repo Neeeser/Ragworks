@@ -31,7 +31,7 @@ coverage dropped.
   `tests/test_module_size.py` (its `GRANDFATHERED` dict is the single source of
   truth for legacy exceptions, and it's currently empty). Never add an entry for new
   code, and never silence an oversize module with `# pylint: disable=too-many-lines`
-  — one of those once defeated the gate for a 1,200-line module. Split the module.
+  — a single disable comment defeats the gate entirely. Split the module.
 
 ## Layout — where code goes
 
@@ -111,10 +111,9 @@ colocate a single file with its consumer.
   `chunk_size + overlap`.** Each emitted chunk spans at most `chunk_size` tokens;
   overlap is a stride *within* that window (window `chunk_size`, step
   `chunk_size - overlap`), not extra tokens the embedder ever sees. Comparing the
-  sum against the limit (it lived in the clamp, the chunker validation, and the
-  wizard warning at once) shrank and flagged windows that actually fit, so the
-  size the wizard showed silently differed from the one ingest used. Bound
-  `chunk_size` alone; on shrink, preserve the overlap ratio.
+  sum against the limit shrinks and flags windows that actually fit, so the size
+  the wizard shows silently differs from the one ingest uses. Bound `chunk_size`
+  alone; on shrink, preserve the overlap ratio.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants
@@ -126,8 +125,7 @@ colocate a single file with its consumer.
   every *static* consumer (settings resolution, validation hooks, tokenizer
   prefetch, embedding-choice extraction) reads configs through
   `resolution.resolve_static_definition` — validating a raw definition's config
-  crashes the moment a field holds an expression (that shipped as a
-  `resolve_retrieval_settings` crash). Identity fields (backend, index name,
+  crashes the moment a field holds an expression. Identity fields (backend, index name,
   namespace, dimension, embedder model) carry the `static_only` marker so the
   taint rule keeps them independent of caller input — purge coverage depends on it.
 - **The expression grammar lives twice** (`app/pipelines/expressions/` is the
@@ -147,8 +145,8 @@ colocate a single file with its consumer.
   `NotNullViolation` on write — invisible to the suite, which builds the schema
   fresh from the current model. After removing a field, drop the column by hand
   in every database that already ran the old model (a branch-only table) or ship
-  a real drop step (a released one). Dropping `api_keys.all_collections` was
-  exactly this: green tests, 500 on every key created against an existing DB.
+  a real drop step (a released one) — otherwise the tests stay green while every
+  insert against an existing DB returns a 500.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion
@@ -350,9 +348,9 @@ frontend form code — only a new `ConfigFieldKind` would.
   (`docker-compose.dev.yml`, loopback-only port 54329); it ships the `pg_search`
   the release image runs.** On a Postgres without `pg_search` (e.g. a bare
   external `TEST_DATABASE_URL` override) the BM25 path is untested —
-  `pg_search_session` tests skip with a named reason — so a green run there is
-  not proof a sparse/hybrid change works; verify against the ParadeDB dev DB.
-  Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
+  `pg_search_session` tests skip with a named reason, so a green run there
+  proves nothing for a sparse/hybrid change (the root `AGENTS.md` dev-database
+  rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
 - **The lexical (BM25) plane mirrors the dense one, backend-natively.**
   `upsert_lexical`/`lexical_query` serve sparse indexes
   (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
@@ -434,8 +432,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   rejects the delete and the whole request 500s.
   `FileDeletionService._purge_document_rows` retries inside a savepoint for
   exactly that window. An agent uploading over MCP and deleting moments later
-  hits it routinely — which is how it was found, after a hermetic test that
-  stubbed ingestion passed.
+  hits it routinely — and a hermetic test that stubs ingestion cannot see it.
 
 ## Exposing a collection over MCP (`app/mcp/`)
 
@@ -597,7 +594,7 @@ this file in the same PR.
 
 - **A gate never iterates a whole enum** (`all(coverage[k] for k in ProviderKind)`)
   — enumerate the members it actually requires. Adding an enum member silently
-  strengthens every whole-enum gate: adding `RERANKING` once trapped users in the
+  strengthens every whole-enum gate — a new capability kind can trap users in the
   setup wizard on every page load.
 - **Strong typing everywhere.** No `Any` as an escape hatch; no `isinstance`
   ladders in place of a schema or discriminated union. Python ≥3.11 house style:
@@ -607,8 +604,8 @@ this file in the same PR.
   payload dict whose key set is genuinely open-ended) — never `Any` in place of a
   type you could write down.
 - **`cast()` is never the fix for an `Optional`.** It hides the crash at the
-  assignment and detonates downstream (a shipped `cast(str, call_id)` masked a
-  provider tool call with no id until it blew up inside `ToolCallTrace`). Handle
+  assignment and detonates downstream (a `cast(str, call_id)` masks a provider
+  tool call with no id until it blows up far from the cast). Handle
   the `None`: fallback, raise, or narrow with a real check.
 - **Validate at the boundary, trust inside.** Pydantic validates at the route;
   internal code assumes valid data. Re-validating mid-stack is noise; failing to
@@ -637,8 +634,8 @@ this file in the same PR.
   Never add a parameter, base class, or hook for a caller that doesn't exist yet.
 - **A streaming and non-streaming variant of the same operation share one
   implementation** — the variant is a parameter, or the caller drains the iterator.
-  The chat send/stream paths once drifted (two hand-synced loops and constants) so
-  a change to one silently skipped the other; the single loop lives in
+  Two hand-synced loops drift, so a change to one silently skips the other; the
+  single loop lives in
   `app/chat/run_loop.py` (parameterized by `stream`) and the single tool path in
   `app/chat/tools.py::ToolExecutor.execute`.
 - **Docstrings on modules, classes, and functions** — contract and intent, not a
@@ -681,15 +678,14 @@ this file in the same PR.
 - **Never mutate a JSON column in place** (`model.extra_metadata[key] = value`):
   our JSON columns aren't `MutableDict`-wrapped, so the session never sees the
   change and **nothing is written** — the response still looks right because it's
-  the same in-memory object. Reassign a new dict or call `flag_modified`. We
-  shipped exactly this bug in `update_collection_prompt`; its test passed for
-  months via object identity.
+  the same in-memory object, and a test asserting on that same object passes
+  anyway. Reassign a new dict or call `flag_modified`.
 - **Streaming responses outlive the request handler.** A `StreamingResponse`
   generator runs after the function returns — anything it closes over must still be
   alive, and cleanup must handle mid-stream disconnects.
 - **Persist partial stream content on *any* mid-stream termination, not just
-  `GeneratorExit`.** The chat run loop once caught only client-disconnect and lost
-  streamed content when the provider raised mid-turn. The handler wraps
+  `GeneratorExit`.** Catching only client-disconnect loses streamed content
+  whenever the provider raises mid-turn. The handler wraps
   `(GeneratorExit, Exception)` around the token-streaming step only (the tool-call
   message is already committed — wider scope would double-persist), records the
   partial, and re-raises so the route still emits an `error` SSE event. Never
@@ -721,16 +717,15 @@ this file in the same PR.
   the primary contract.
 - **A stream parser is written against captured wire frames, not assumed shapes**
   — Cohere's v2 SSE stream ends with a bare `data: [DONE]` sentinel and its chat
-  API 400s on an empty assistant history entry; both shipped as live-only bugs
-  because the mocked fixtures encoded the shape we expected instead of a
-  captured stream tail.
+  API 400s on an empty assistant history entry; fixtures that encode the shape
+  you expect instead of a captured stream tail turn these into live-only bugs.
 - **Never feature-detect a pinned SDK with `inspect.signature`.** A runtime probe
-  of Pinecone's `create_index` was always-false dead code on the version actually
-  pinned, silently no-opping a config field. Introspect the *installed* SDK while
+  is always-false dead code on the version actually pinned and silently no-ops
+  whatever it gates. Introspect the *installed* SDK while
   writing the client, then call it directly — the lockfile guarantees the version.
 - **Never `lru_cache` objects that own OS resources** (httpx clients, sessions,
-  file handles): eviction drops the reference and whatever it owns leaks (we had
-  this on `get_openrouter_client`). Use an explicit cache that closes what it
+  file handles): eviction drops the reference and whatever it owns leaks. Use an
+  explicit cache that closes what it
   evicts, and never key a long-lived cache on a raw secret you can't invalidate.
 - **`get_app_config()` is TTL-cached (30s) at module scope.** A test that mutates a
   DB override and asserts on the new value must call
@@ -798,7 +793,7 @@ schema, grep every construction site.
   (`with Session(session.get_bind()) as fresh:`). Asserting on the object the code
   just handled proves nothing — the identity map hands back the same in-memory
   instance, so the test passes even when nothing was written (this is exactly how
-  the JSON-mutation bug survived). And always close that fresh session — an
+  JSON-mutation bugs survive). And always close that fresh session — an
   unclosed one sits idle-in-transaction and deadlocks the next test's
   `DROP SCHEMA` reset, hanging the suite.
 - **Coverage is a floor, not a goal; an untested line needs a stated reason, not

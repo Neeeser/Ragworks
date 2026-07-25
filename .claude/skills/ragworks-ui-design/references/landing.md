@@ -7,8 +7,8 @@ the other. They share only the token system and the copy voice.
 The landing page's job is to make a developer understand what Ragworks is and decide to run
 it. Generosity, atmosphere, and one confident entrance are correct here. The console's job
 is to get out of the way of someone debugging at 2am. Applying console density to the
-landing page makes it look unfinished; applying landing atmosphere to the console is what
-made it look AI-generated.
+landing page makes it look unfinished; applying landing atmosphere to the console makes it
+read as a generic marketing dashboard.
 
 | | Landing | Console |
 |---|---|---|
@@ -102,7 +102,4 @@ The landing page gets atmosphere, **not** more copy. The principle holds identic
 no subheads narrating an adjacent visual, no feature lists, no aphoristic taglines. A
 running pipeline already says "this is a RAG pipeline." A sign-in form needs a heading and
 fields — not a subhead explaining what a workspace is, and not a decorative pipeline-stage
-strip.
-
-Banned register, both surfaces: seamless, powerful, effortless, unlock, elevate,
-supercharge, "dive into", "explore", "at a glance", "X, surfaced."
+strip. The banned register in SKILL.md's copy voice applies here unchanged.
