@@ -25,6 +25,23 @@ the moment the number can be read. Animate chrome and interaction. Leave data al
 Five durations. Nothing in the console exceeds 200ms. If you find yourself wanting 400ms,
 the interaction is wrong, not the duration.
 
+### Hover-opened chrome has three delays, not one
+
+A panel that opens on hover (the rail flyouts, any future hover card) needs *intent* timing
+on top of its animation, or it misfires constantly:
+
+| Moment | Delay | Why |
+|---|---|---|
+| First open | **70ms** | A pointer travelling past a column of triggers would otherwise flash every panel on the way. |
+| Switching, once one is open | **0** | Intent is already declared; a delay here reads as lag. |
+| Leave | **120ms** | Covers the moment the pointer crosses out of the trigger toward the panel. |
+
+Keyboard focus bypasses all three: focus is not ambiguous, so there is nothing to wait for.
+
+And the panel must be reachable without crossing dead space — put the gap *inside* the
+trigger's wrapper (`absolute left-full pl-2`) so travelling to the panel never fires the
+trigger's `pointerleave`.
+
 ---
 
 ## 2. The exemption, stated precisely

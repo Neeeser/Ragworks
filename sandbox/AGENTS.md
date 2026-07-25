@@ -51,6 +51,10 @@ for, and validated flows that rerun for free.
   wipe in-flight client state — a login redirect bounced back to the sign-in
   page for 30s straight until flows moved off `next dev`. `up` keeps dev
   mode for interactive testing; don't point flows at it.
+- **`up`'s dev-mode pages carry Next's own dev-tools indicator in the
+  bottom-left corner** — a dark circle with the Next mark, overlapping the
+  console rail's footer. It is not application chrome; don't "fix" it after
+  reading a screenshot, and don't assert around that corner.
 
 ## Testing a UI feature — the workflow
 
