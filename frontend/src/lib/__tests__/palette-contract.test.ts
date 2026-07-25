@@ -14,13 +14,7 @@ import { describe, expect, it } from "vitest";
 const CSS = readFileSync("src/app/globals.css", "utf8");
 
 /** Every palette selector that must define a full set of series slots. */
-const PALETTES = [
-  "deep-space",
-  "true-black",
-  "graphite",
-  "paper",
-  "high-contrast",
-] as const;
+const PALETTES = ["deep-space", "true-black", "graphite", "paper", "high-contrast"] as const;
 
 function blockFor(selector: string): string {
   // Palettes are written as one rule per palette; grab from the selector to the
