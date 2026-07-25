@@ -23,17 +23,20 @@ export function Button({
   return (
     <button
       className={cn(
-        "rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed",
+        // Console defaults: 4px radius, 80ms pointer feedback, no glow. The
+        // glow and pill shape belong to the landing surface, which uses the
+        // link-CTA recipes rather than this component.
+        "rounded-control font-medium transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60",
         {
-          primary: "bg-accent-violet text-white hover:brightness-110 shadow-glow",
+          primary: "bg-accent-violet text-white hover:brightness-110",
           secondary:
             "border border-hairline bg-surface text-primary hover:border-strong hover:bg-surface-strong",
-          ghost: "text-muted hover:text-primary hover:bg-surface",
+          ghost: "text-muted hover:bg-surface hover:text-primary",
         }[variant],
         {
-          sm: "px-3 py-1.5 text-sm",
-          md: "px-4 py-2 text-sm",
-          lg: "px-5 py-3 text-base",
+          sm: "px-2 py-1 text-ui",
+          md: "px-3 py-1.5 text-ui",
+          lg: "px-4 py-2 text-num",
         }[size],
         className,
       )}

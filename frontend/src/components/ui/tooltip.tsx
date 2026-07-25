@@ -49,10 +49,10 @@ export function Tooltip({
         className={cn(
           // w-max + max-w keeps short labels on one line while long
           // descriptions wrap instead of running off the viewport.
-          "pointer-events-none absolute z-20 w-max max-w-72 whitespace-normal rounded-2xl border border-hairline",
-          "bg-canvas-raised/95 px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-body",
-          "shadow-elevation-2 backdrop-blur",
-          "opacity-0 transition duration-150 group-hover:opacity-100 group-hover:scale-100",
+          "pointer-events-none absolute z-20 w-max max-w-72 whitespace-normal rounded-panel border border-hairline",
+          "bg-canvas-raised px-2 py-1 text-left text-ui font-medium leading-snug text-body",
+          "shadow-elevation-2",
+          "opacity-0 transition duration-120 ease-decel group-hover:opacity-100 group-hover:scale-100",
           "group-focus-within:opacity-100 group-focus-within:scale-100",
           "origin-center scale-95",
           sideClasses[side],

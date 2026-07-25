@@ -26,7 +26,9 @@ function deferred<T>() {
 }
 
 const signOutName = "Sign out";
-const consoleBrandLabel = "Console";
+// The rail brand is icon-only, so the console's presence is asserted through the
+// mark link's accessible name rather than a visible "Console" wordmark.
+const consoleBrandLabel = "Ragworks console";
 
 describe("ConsoleLayout", () => {
   let auth: ReturnType<typeof setMockAuth>;
@@ -44,8 +46,8 @@ describe("ConsoleLayout", () => {
     document.head.append(style);
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    const brandLink = (await screen.findByText(consoleBrandLabel)).closest("a");
-    const marks = brandLink?.querySelectorAll("img") ?? [];
+    const brandLink = await screen.findByRole("link", { name: consoleBrandLabel });
+    const marks = brandLink.querySelectorAll("img");
 
     expect(marks).toHaveLength(2);
     expect(marks[0]).toHaveAttribute("src", "/ragworks-mark-dark.svg");
@@ -77,7 +79,7 @@ describe("ConsoleLayout", () => {
     render(<ConsoleLayout>Overview content</ConsoleLayout>);
 
     expect(screen.getByRole("status")).toHaveTextContent("Preparing your workspace");
-    expect(screen.queryByText(consoleBrandLabel)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: consoleBrandLabel })).not.toBeInTheDocument();
     expect(screen.queryByText("Overview content")).not.toBeInTheDocument();
 
     await act(async () => {
@@ -92,15 +94,15 @@ describe("ConsoleLayout", () => {
     });
 
     await waitFor(() => expect(getMockRouter().replace).toHaveBeenCalledWith("/setup"));
-    expect(screen.queryByText(consoleBrandLabel)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: consoleBrandLabel })).not.toBeInTheDocument();
     expect(screen.queryByText("Overview content")).not.toBeInTheDocument();
   });
 
   it("renders navigation and toggles the account menu", async () => {
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    expect(await screen.findByText(consoleBrandLabel)).toBeInTheDocument();
-    const avatarButton = screen.getByRole("button", { expanded: false });
+    expect(await screen.findByRole("link", { name: consoleBrandLabel })).toBeInTheDocument();
+    const avatarButton = screen.getByRole("button", { name: "Account" });
     fireEvent.click(avatarButton);
     expect(screen.getByText(signOutName)).toBeInTheDocument();
 
@@ -130,8 +132,12 @@ describe("ConsoleLayout", () => {
     });
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    expect(await screen.findByRole("button", { name: "S" })).toBeInTheDocument();
-    expect(screen.getAllByText("solo@example.com").length).toBeGreaterThan(0);
+    const avatarButton = await screen.findByRole("button", { name: "Account" });
+    expect(avatarButton).toHaveTextContent("S");
+
+    // The email moved out of permanent chrome and into the account menu.
+    fireEvent.click(avatarButton);
+    expect(screen.getByText("solo@example.com")).toBeInTheDocument();
   });
 
   it("renders chat and pipelines routes with special layout", async () => {
