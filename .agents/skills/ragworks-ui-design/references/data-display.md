@@ -130,6 +130,11 @@ they need normalising before `.value`.
 - Timestamps in a list are relative (`1m`, `2h`, `Jul 24`) via `formatTimeAgoCompact`;
   the absolute value goes on hover through `Tooltip`, never a `title` attribute. A column
   of full ISO timestamps is unreadable and always too wide.
+- A fixed-width row column holding several spaced facts (`docs 100% queries 100%`) gets
+  `whitespace-nowrap` AND a width sized to the widest real rendering (assume every
+  percentage hits 100%). One step too narrow and the cell's flex items shrink, the text
+  wraps at its internal spaces, and that one row renders taller than its peers — the
+  evals coverage column shipped exactly this.
 
 ---
 

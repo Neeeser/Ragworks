@@ -36,7 +36,10 @@ const COL = {
   dataset: "hidden w-40 xl:block",
   status: "w-28",
   progress: "hidden w-16 text-right lg:block",
-  coverage: "hidden w-36 text-right lg:block",
+  // Sized to the widest real rendering ("docs 100% queries 100%") — one step
+  // narrower and the cell's flex items shrink, their text wraps at the inner
+  // space, and that one row turns two lines tall.
+  coverage: "hidden w-40 text-right lg:block",
   score: "w-28 text-right",
   started: "w-14 text-right",
 };
@@ -194,7 +197,7 @@ export function RunsPanel({
 function CoverageCell({ coverage }: { coverage: EvalRunCoverage | null }) {
   if (!coverage) return <span className="font-mono tabular-nums text-instrument">—</span>;
   return (
-    <span className="inline-flex items-center justify-end gap-2 font-mono tabular-nums text-instrument">
+    <span className="inline-flex items-center justify-end gap-2 whitespace-nowrap font-mono tabular-nums text-instrument">
       <Tooltip
         content={`${coverage.corpus_ingested.toLocaleString()} of ${coverage.corpus_total.toLocaleString()} corpus documents ingested`}
       >
