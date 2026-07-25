@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -139,6 +140,58 @@ export function DataRowHeader({ title, columns, hasLeading = false }: DataRowHea
         {columns}
       </div>
       <span className={cn("shrink-0", DATA_ROW_ACTIONS_SLOT)} aria-hidden />
+    </div>
+  );
+}
+
+type DataRowSkeletonProps = {
+  /** Placeholder row count. */
+  rows?: number;
+  /** Set when the real rows render a `leading` slot, so the name starts level. */
+  hasLeading?: boolean;
+  /**
+   * One width class per metadata column, in the same order and with the SAME
+   * classes as the real row's columns — those classes are what make the
+   * placeholder the content's final geometry rather than an approximation.
+   */
+  columnWidths?: string[];
+  /** What is loading. Read by screen readers; never shown. */
+  label: string;
+};
+
+/**
+ * `DataRow` geometry with every value replaced by a `Skeleton` bar.
+ *
+ * Loading is a skeleton at the content's final geometry: same row height, same
+ * column widths, so data landing causes zero reflow. The alternative every list
+ * reached for first — a spinner centred in a padded panel — is a different size
+ * than the rows that replace it, so every load ended in a visible jump.
+ *
+ * Shared rather than per-list because the geometry it has to match belongs to
+ * `DataRow`, so a local copy silently drifts the moment a row's padding, gap, or
+ * action slot changes.
+ */
+export function DataRowSkeleton({
+  rows = 3,
+  hasLeading = false,
+  columnWidths = [],
+  label,
+}: DataRowSkeletonProps) {
+  return (
+    <div aria-busy>
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="flex items-center border-b border-hairline last:border-b-0">
+          <div className={cn(CELLS, "py-3")}>
+            {hasLeading ? <Skeleton className="h-1.5 w-1.5 rounded-full" /> : null}
+            <Skeleton className="h-2 max-w-48 flex-1" />
+            {columnWidths.map((width, column) => (
+              <Skeleton key={`${width}-${column}`} className={cn("h-2", width)} />
+            ))}
+          </div>
+          <span className={cn("shrink-0", DATA_ROW_ACTIONS_SLOT)} aria-hidden />
+        </div>
+      ))}
+      <span className="sr-only">{label}</span>
     </div>
   );
 }
