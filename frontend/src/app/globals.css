@@ -377,16 +377,6 @@ html {
   }
 }
 
-/* Canonical glass card surface — LANDING ONLY (GlassCard and the auth pages).
-   Console depth is .card-surface below; blur never ships in (console). */
-.glass-panel {
-  background: var(--surface);
-  border: 1px solid var(--border-hairline);
-  border-radius: 1.25rem;
-  box-shadow: var(--elevation-2);
-  backdrop-filter: blur(18px);
-}
-
 /* ---------------------------------------------------------------------------
    Console materials — the soft-depth workbench (ragworks-ui-design skill).
    --------------------------------------------------------------------------- */

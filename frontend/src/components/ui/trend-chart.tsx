@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { parseApiDate, resolvedTimeZone } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
@@ -98,7 +99,7 @@ function TrendTooltip({
   const align = leftPct > 70 ? "-100%" : leftPct < 15 ? "0" : "-50%";
   return (
     <div
-      className="pointer-events-none absolute top-0 z-10 rounded-panel border border-hairline bg-canvas-raised px-2 py-1 shadow-elevation-2"
+      className={cn(popoverSurfaceClass, "pointer-events-none absolute top-0 z-10 px-2 py-1")}
       style={{ left: `${leftPct}%`, transform: `translate(${align}, calc(-100% - 6px))` }}
     >
       <p className="whitespace-nowrap font-mono text-instrument text-muted">

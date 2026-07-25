@@ -6,7 +6,7 @@ import { CollapsibleReasoning } from "@/components/ui/collapsible-reasoning";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Loader } from "@/components/ui/loader";
 import { Notification } from "@/components/ui/notification";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { ParameterFieldCard, ParameterInput } from "@/components/ui/parameter-controls";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WizardShell } from "@/components/ui/wizard-shell";
@@ -105,9 +105,9 @@ describe("ui components", () => {
 
   it("renders loader and panel", () => {
     const { container } = render(
-      <GlassCard>
+      <Panel>
         <Loader />
-      </GlassCard>,
+      </Panel>,
     );
     expect(container.querySelector("span")).toBeInTheDocument();
   });

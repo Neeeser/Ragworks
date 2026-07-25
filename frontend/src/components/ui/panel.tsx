@@ -80,12 +80,11 @@ export function PanelGrid({
 }
 
 /**
- * @deprecated Landing-surface only. Console screens use `Panel`.
- *
- * Kept so the ~50 unconverted call sites keep compiling while pages migrate one
- * PR at a time, but restyled onto the console look so they improve immediately
- * rather than staying glassy until their page's turn comes.
+ * The floating-surface material: popovers, menus, flyouts, tooltips, dialog
+ * bodies. A flat raised plate — panel radius, hairline border, elevation-2 —
+ * distinct from the in-page `Panel` card's lit gradient. One constant so every
+ * floating layer shares the exact surface (it was hand-typed 14 times and had
+ * started to drift).
  */
-export function GlassCard({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <Panel className={className} {...props} />;
-}
+export const popoverSurfaceClass =
+  "rounded-panel border border-hairline bg-canvas-raised shadow-elevation-2";

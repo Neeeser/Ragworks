@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { LucideIcon } from "lucide-react";
@@ -110,7 +111,7 @@ export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
       // No entrance animation: the menu measures itself in a layout effect to
       // clamp to the viewport, and a scale-fade would have it measuring a
       // mid-animation box.
-      className="fixed z-50 min-w-52 rounded-panel border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
+      className={cn(popoverSurfaceClass, "fixed z-50 min-w-52 p-1")}
       style={{ left: position.x, top: position.y, visibility: "hidden" }}
     >
       {items.map((item, index) =>

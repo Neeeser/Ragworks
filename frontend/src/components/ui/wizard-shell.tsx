@@ -6,6 +6,7 @@ import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -109,7 +110,7 @@ export function WizardShell({
 
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <div className="w-full max-w-4xl overflow-hidden rounded-panel border border-hairline bg-canvas-raised text-primary">
+      <div className={cn(popoverSurfaceClass, "w-full max-w-4xl overflow-hidden text-primary")}>
         <div className="flex items-start justify-between gap-4 border-b border-hairline p-3">
           <div className="min-w-0">
             <InstrumentLabel>{title}</InstrumentLabel>

@@ -3,7 +3,7 @@
 import { Bell, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { ReactNode } from "react";
@@ -46,7 +46,7 @@ export function Notification({
   }, [autoDismissMs, handleDismiss, onDismiss]);
 
   return (
-    <GlassCard
+    <Panel
       className={cn(
         "flex items-center gap-4 rounded-full border border-hairline bg-canvas-raised/95 px-4 py-3 text-body shadow-elevation-2 backdrop-blur",
         "transition-all duration-200",
@@ -74,6 +74,6 @@ export function Notification({
           </button>
         ) : null}
       </div>
-    </GlassCard>
+    </Panel>
   );
 }

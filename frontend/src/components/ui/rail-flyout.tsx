@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRailPreview } from "@/lib/rail-preview-cache";
 import { useAuth } from "@/providers/auth-provider";
@@ -88,7 +89,7 @@ export function RailFlyout({ href, label, descriptionId, onNavigate }: RailFlyou
   if (!preview) return null;
 
   return (
-    <div className="console-flyout w-72 rounded-panel border border-hairline bg-canvas-raised p-2 shadow-elevation-2">
+    <div className={`console-flyout w-72 p-2 ${popoverSurfaceClass}`}>
       {/* The title is text, not a link: the rail icon beside it already goes to
           the section, and a second link to the same place is one more tab stop
           and one more identically-named link for a screen reader. */}

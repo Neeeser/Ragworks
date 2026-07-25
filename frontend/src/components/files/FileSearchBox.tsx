@@ -8,6 +8,7 @@ import { useFileSearch } from "@/components/files/hooks/use-file-search";
 import { Checkbox } from "@/components/ui/checkbox";
 import { inputClass } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,7 @@ function SearchResultsDropdown({
   return (
     <div
       id={listId}
-      className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-y-auto rounded-panel border border-hairline bg-canvas-raised p-1 shadow-elevation-2"
+      className={cn(popoverSurfaceClass, "absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-y-auto p-1")}
     >
       {results.folders.length > 0 && (
         <>
@@ -245,7 +246,7 @@ export function FileSearchBox({
 
       {/* The filters panel sits above the results dropdown (z-30), which shares this anchor. */}
       {filtersOpen && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-panel border border-hairline bg-canvas-raised p-3 shadow-elevation-2">
+        <div className={cn(popoverSurfaceClass, "absolute right-0 top-full z-40 mt-1 w-56 p-3")}>
           <InstrumentLabel>Search in</InstrumentLabel>
           <div className="mt-2 space-y-2">
             {MODE_LABELS.map(({ mode, label }) => (

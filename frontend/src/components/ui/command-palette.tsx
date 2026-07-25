@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 export type CommandItem = {
@@ -77,7 +78,7 @@ export function CommandPalette({ items }: CommandPaletteProps) {
 
   return (
     <ModalOverlay open={open} onClose={() => setOpen(false)} labelledBy="command-palette-label">
-      <div className="w-full max-w-lg overflow-hidden rounded-panel border border-hairline bg-canvas-raised">
+      <div className={cn(popoverSurfaceClass, "w-full max-w-lg overflow-hidden")}>
         <label htmlFor="command-palette-input" className="sr-only" id="command-palette-label">
           Search sections and collections
         </label>

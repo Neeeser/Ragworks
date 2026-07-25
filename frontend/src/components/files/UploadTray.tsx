@@ -4,6 +4,7 @@ import { AlertCircle, Check, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +38,7 @@ export function UploadTray({ items, onDismiss }: UploadTrayProps) {
   const done = items.filter((item) => item.status !== "uploading").length;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-72 overflow-hidden rounded-panel border border-hairline bg-canvas-raised shadow-elevation-2">
+    <div className={cn(popoverSurfaceClass, "fixed bottom-4 right-4 z-40 w-72 overflow-hidden")}>
       <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-1.5">
         <InstrumentLabel className="tabular-nums">{`Uploads ${done}/${items.length}`}</InstrumentLabel>
         <Tooltip content="Dismiss finished uploads">

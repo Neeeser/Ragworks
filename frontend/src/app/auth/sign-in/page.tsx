@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
-import { GlassCard } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { registerUser } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -81,7 +81,7 @@ export default function SignInPage() {
         <ThemeToggle />
       </div>
 
-      <GlassCard className="relative z-10 flex w-full max-w-md flex-col gap-8 rounded-3xl border-hairline p-8 sm:p-10">
+      <Panel className="relative z-10 flex w-full max-w-md flex-col gap-8 rounded-3xl border-hairline p-8 sm:p-10">
         {/* Eyebrow — live instrument label. */}
         <p
           className="landing-rise flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.4em] text-muted"
@@ -197,7 +197,7 @@ export default function SignInPage() {
         >
           Back to home
         </Link>
-      </GlassCard>
+      </Panel>
     </main>
   );
 }
