@@ -9,31 +9,37 @@ import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
 import type { MouseEvent, ReactNode } from "react";
 
+/**
+ * Sticky, because the pane it sits in scrolls: a column header that scrolls away
+ * leaves a long tree as six unlabelled columns of numbers.
+ */
 function ColumnHeader() {
   return (
-    <DataRowHeader
-      title="Name"
-      columns={[
-        <InstrumentLabel key="status" className={COL.status}>
-          Status
-        </InstrumentLabel>,
-        <InstrumentLabel key="type" className={COL.type}>
-          Type
-        </InstrumentLabel>,
-        <InstrumentLabel key="size" className={COL.size}>
-          Size
-        </InstrumentLabel>,
-        <InstrumentLabel key="chunks" className={COL.chunks}>
-          Chunks
-        </InstrumentLabel>,
-        <InstrumentLabel key="tokens" className={COL.tokens}>
-          Tokens
-        </InstrumentLabel>,
-        <InstrumentLabel key="updated" className={COL.updated}>
-          Modified
-        </InstrumentLabel>,
-      ]}
-    />
+    <div className="sticky top-0 z-10 bg-canvas-raised">
+      <DataRowHeader
+        title="Name"
+        columns={[
+          <InstrumentLabel key="status" className={COL.status}>
+            Status
+          </InstrumentLabel>,
+          <InstrumentLabel key="type" className={COL.type}>
+            Type
+          </InstrumentLabel>,
+          <InstrumentLabel key="size" className={COL.size}>
+            Size
+          </InstrumentLabel>,
+          <InstrumentLabel key="chunks" className={COL.chunks}>
+            Chunks
+          </InstrumentLabel>,
+          <InstrumentLabel key="tokens" className={COL.tokens}>
+            Tokens
+          </InstrumentLabel>,
+          <InstrumentLabel key="updated" className={COL.updated}>
+            Modified
+          </InstrumentLabel>,
+        ]}
+      />
+    </div>
   );
 }
 

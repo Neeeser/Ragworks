@@ -19,10 +19,9 @@ import { fetchDocumentChunks } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { truncate } from "@/lib/utils";
 
-import type { FileIngestion, FileNode } from "@/lib/types";
+import type { FileIngestion } from "@/lib/types";
 
 type FileRowDetailsProps = {
-  node: FileNode;
   ingestion: FileIngestion;
   token: string;
 };
@@ -54,7 +53,7 @@ function ChunkSkeleton() {
  * the one place a user can compare what the pipeline was configured to do with
  * what it actually produced.
  */
-export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) {
+export function FileRowDetails({ ingestion, token }: FileRowDetailsProps) {
   const router = useRouter();
   const ready = ingestion.status === "ready";
   const [sortField, setSortField] = useState<ChunkSortField>("chunk_number");
@@ -112,8 +111,10 @@ export function FileRowDetails({ node, ingestion, token }: FileRowDetailsProps) 
           <p className="px-3 py-2 text-ui text-data-neg">{chunksQuery.error}</p>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
-              <InstrumentLabel>{`${node.name} chunks`}</InstrumentLabel>
+            {/* No section label: the readout above already says CHUNKS 2, every
+                row below is headed CHUNK nn, and the sort control names the
+                domain — a third "CHUNKS" here said nothing the screen didn't. */}
+            <div className="flex items-center justify-end border-b border-hairline px-3 py-2">
               <SortControl
                 label="Sort chunks"
                 value={sortField}

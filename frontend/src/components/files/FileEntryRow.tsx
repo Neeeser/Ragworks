@@ -24,7 +24,7 @@ function statusCell(status: FileStatus | null): ReactNode {
     return <span key="status" className={COL.status} />;
   }
   return (
-    <Tooltip key="status" content={status.detail} triggerClassName={COL.status}>
+    <Tooltip key="status" content={status.detail} side="bottom" triggerClassName={COL.status}>
       <StatusDot tone={status.tone} label={status.label} />
     </Tooltip>
   );
@@ -47,7 +47,7 @@ function typeCell(node: FileNode): ReactNode {
     );
   }
   return (
-    <Tooltip key="type" content={node.content_type} triggerClassName={COL.type}>
+    <Tooltip key="type" content={node.content_type} side="bottom" triggerClassName={COL.type}>
       <span className="block w-full truncate font-mono text-ui text-muted">
         {node.content_type}
       </span>
@@ -94,6 +94,7 @@ function rowColumns(node: FileNode): ReactNode[] {
     <Tooltip
       key="updated"
       content={parseApiDate(node.updated_at)?.toLocaleString() ?? ""}
+      side="left"
       triggerClassName={COL.updated}
     >
       <span className="font-mono text-ui tabular-nums text-meta">
@@ -116,6 +117,10 @@ type RowActionsProps = {
  * The row's own buttons, rendered as a sibling of the activatable row body —
  * never inside it, because a button nested in a button is invalid HTML and
  * shipped here once as a hydration error.
+ *
+ * Their tooltips open to the left. The tree pane scrolls, and a scroll container
+ * clips both axes, so a tooltip on a control at the pane's right edge is cut in
+ * half by the seam it sits against.
  */
 function RowActions({
   node,
@@ -128,7 +133,7 @@ function RowActions({
   return (
     <>
       {status?.retryable ? (
-        <Tooltip content="Run ingestion on this file">
+        <Tooltip content="Run ingestion on this file" side="left">
           <Button
             size="sm"
             variant="ghost"
@@ -140,7 +145,7 @@ function RowActions({
         </Tooltip>
       ) : null}
       {expandable ? (
-        <Tooltip content={expanded ? "Hide chunks" : "Show chunks"}>
+        <Tooltip content={expanded ? "Hide chunks" : "Show chunks"} side="left">
           <Button
             size="sm"
             variant="ghost"
@@ -244,9 +249,7 @@ export function FileEntryRow({
           }
         />
       </div>
-      {expanded && ingestion ? (
-        <FileRowDetails node={node} ingestion={ingestion} token={token} />
-      ) : null}
+      {expanded && ingestion ? <FileRowDetails ingestion={ingestion} token={token} /> : null}
     </li>
   );
 }
