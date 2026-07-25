@@ -1,8 +1,18 @@
 "use client";
 
-import { Loader } from "@/components/ui/loader";
-import { GlassCard } from "@/components/ui/panel";
-import { prettyJson, timeAgo, truncate } from "@/lib/utils";
+import { Maximize2, X } from "lucide-react";
+import { useId } from "react";
+
+import { Button } from "@/components/ui/button";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
+import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { Readout } from "@/components/ui/readout";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
+import { parseApiDate } from "@/lib/datetime";
+import { formatTimeAgoCompact } from "@/lib/format";
+import { useMediaQuery } from "@/lib/use-media-query";
+import { prettyJson, truncate } from "@/lib/utils";
 
 import type { ChunkDetail, UmapPoint } from "@/lib/types";
 
@@ -11,102 +21,154 @@ type ChunkDetailPanelProps = {
   loading: boolean;
   selectedPoint: UmapPoint | null;
   errorMessage: string | null;
+  onClose: () => void;
   onExpand?: () => void;
 };
 
-export function ChunkDetailPanel({
-  detail,
-  loading,
-  selectedPoint,
-  errorMessage,
-  onExpand,
-}: ChunkDetailPanelProps) {
-  if (!selectedPoint) {
-    return (
-      <GlassCard className="flex items-center justify-center rounded-3xl border border-hairline p-6">
-        <p className="text-center text-sm text-muted text-balance">
-          Select a point to see chunk details.
-        </p>
-      </GlassCard>
-    );
-  }
+/** The pane's geometry while the selected point's chunk loads. */
+function DetailSkeleton() {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+      <div className="mt-3 space-y-1.5">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-11/12" />
+        <Skeleton className="h-3 w-4/5" />
+      </div>
+    </div>
+  );
+}
 
-  if (loading) {
-    return (
-      <GlassCard className="flex items-center justify-center rounded-3xl border border-hairline p-6">
-        <Loader className="h-5 w-5" />
-      </GlassCard>
-    );
-  }
+type ChunkBodyProps = {
+  detail: ChunkDetail;
+  onExpand?: () => void;
+};
 
-  if (errorMessage) {
-    return (
-      <GlassCard className="rounded-3xl border border-hairline p-6 text-sm text-data-neg">
-        {errorMessage}
-      </GlassCard>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <GlassCard className="rounded-3xl border border-hairline p-6 text-sm text-body">
-        No chunk details available.
-      </GlassCard>
-    );
-  }
-
-  const { document, chunk } = detail;
+function ChunkBody({ detail, onExpand }: ChunkBodyProps) {
+  const { chunk } = detail;
+  const indexedAt = parseApiDate(chunk.created_at);
 
   return (
-    <GlassCard className="rounded-3xl border border-hairline p-6 text-sm text-body">
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Document</p>
-            <p className="mt-1 truncate text-base font-semibold tracking-tight text-primary">
-              {document.name}
-            </p>
-            <p className="text-xs text-meta">Indexed {timeAgo(chunk.created_at)}</p>
-          </div>
-          {onExpand ? (
-            <button
-              type="button"
-              onClick={onExpand}
-              className="shrink-0 rounded-full border border-hairline bg-surface px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-body transition hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-            >
-              Expand
-            </button>
-          ) : null}
-        </div>
-        <dl className="grid gap-1.5 border-t border-hairline pt-3">
-          {(
-            [
-              ["Chunk", `#${chunk.chunk_index + 1}`],
-              ["Strategy", chunk.chunk_strategy],
-              ["Size", `${chunk.chunk_size} tokens`],
-            ] as const
-          ).map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-3">
-              <dt className="font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-                {label}
-              </dt>
-              <dd className="text-xs text-primary">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Text</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-body">
-            {truncate(chunk.text, 600)}
-          </p>
-        </div>
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">Metadata</p>
-          <pre className="mt-2 max-h-56 overflow-auto rounded-2xl border border-hairline bg-surface p-3 text-xs text-body">
-            {prettyJson(chunk.metadata)}
-          </pre>
-        </div>
+    <>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-hairline px-3 py-2">
+        <Readout label="Chunk">{`#${chunk.chunk_index + 1}`}</Readout>
+        <Readout label="Strategy">{chunk.chunk_strategy}</Readout>
+        <Readout label="Size">
+          {chunk.chunk_size.toLocaleString()}
+          <span className="text-muted"> tokens</span>
+        </Readout>
+        {/* This pane is the card's right edge and the card clips its own
+            overflow, so tooltips here open inward. */}
+        <Tooltip content={indexedAt?.toLocaleString() ?? ""} side="left">
+          <Readout label="Indexed">{formatTimeAgoCompact(chunk.created_at)}</Readout>
+        </Tooltip>
       </div>
-    </GlassCard>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <InstrumentLabel>Chunk text</InstrumentLabel>
+        <p className="mt-1 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
+          {truncate(chunk.text, 600)}
+        </p>
+
+        <InstrumentLabel className="mt-4 block">Metadata</InstrumentLabel>
+        <pre className="mt-1 max-h-56 overflow-auto rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
+          {prettyJson(chunk.metadata)}
+        </pre>
+      </div>
+
+      {onExpand ? (
+        <div className="flex shrink-0 items-center border-t border-hairline px-3 py-2">
+          <Button variant="secondary" size="sm" onClick={onExpand}>
+            <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+            Expand
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function PanelBody({
+  detail,
+  loading,
+  errorMessage,
+  onClose,
+  onExpand,
+  titleId,
+}: Omit<ChunkDetailPanelProps, "selectedPoint"> & { titleId: string }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-hairline px-3">
+        <Tooltip
+          content={detail?.document.name ?? ""}
+          side="bottom"
+          triggerClassName="min-w-0 flex-1"
+        >
+          <h3 id={titleId} className="w-full truncate text-ui font-medium text-primary">
+            {detail ? detail.document.name : "Chunk"}
+          </h3>
+        </Tooltip>
+        <Tooltip content="Close chunk details" side="left">
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close chunk details">
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </Tooltip>
+      </div>
+
+      {loading ? <DetailSkeleton /> : null}
+
+      {!loading && errorMessage ? (
+        <p className="px-3 py-2 text-ui text-data-neg">{errorMessage}</p>
+      ) : null}
+
+      {!loading && !errorMessage && !detail ? (
+        <p className="px-3 py-2 text-ui text-muted">No chunk details available.</p>
+      ) : null}
+
+      {!loading && !errorMessage && detail ? (
+        <ChunkBody detail={detail} onExpand={onExpand} />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The selected point's chunk: a pane docked to the right of the plot inside the
+ * same card, sharing its material and separated from it by a hairline seam.
+ *
+ * It exists only while a point is selected, so an unused plane never spends a
+ * third of the plot's width on a prompt. Below `lg` there is no room for two
+ * panes, so the same body becomes a fullscreen overlay.
+ */
+export function ChunkDetailPanel({ selectedPoint, ...props }: ChunkDetailPanelProps) {
+  const titleId = useId();
+  const isDesktop = useMediaQuery("(min-width: 1024px)", true);
+
+  if (!selectedPoint) {
+    return null;
+  }
+
+  if (isDesktop) {
+    return (
+      <aside
+        aria-labelledby={titleId}
+        className="hidden w-[340px] shrink-0 border-l border-hairline lg:block"
+      >
+        <PanelBody {...props} titleId={titleId} />
+      </aside>
+    );
+  }
+
+  return (
+    <ModalOverlay open onClose={props.onClose} labelledBy={titleId}>
+      <div className="flex h-[100dvh] w-screen flex-col bg-canvas-raised">
+        <PanelBody {...props} titleId={titleId} />
+      </div>
+    </ModalOverlay>
   );
 }

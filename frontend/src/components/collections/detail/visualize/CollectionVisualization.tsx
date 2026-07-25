@@ -1,16 +1,20 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ChunkDetailPanel } from "@/components/collections/detail/visualize/ChunkDetailPanel";
 import { ChunkPreviewOverlay } from "@/components/collections/detail/visualize/ChunkPreviewOverlay";
-import { Button } from "@/components/ui/button";
-import { Loader } from "@/components/ui/loader";
-import { GlassCard } from "@/components/ui/panel";
+import {
+  ProjectionToolbar,
+  ProjectionToolbarSkeleton,
+} from "@/components/collections/detail/visualize/ProjectionToolbar";
+import { PageBody } from "@/components/ui/app-shell";
+import { Panel } from "@/components/ui/panel";
+import { PulseWire } from "@/components/ui/pulse-wire";
+import { Skeleton } from "@/components/ui/skeleton";
 import { computeCollectionUmap, fetchChunkDetail, fetchCollectionUmap } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
-import { timeAgo } from "@/lib/utils";
 
 import type { ChunkDetail, UmapPoint, UmapVisualization } from "@/lib/types";
 
@@ -19,11 +23,8 @@ const UmapCanvas = dynamic(
     import("@/components/collections/detail/visualize/UmapCanvas").then((mod) => mod.UmapCanvas),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center">
-        <Loader className="h-6 w-6" />
-      </div>
-    ),
+    // The plot's final geometry, so the canvas landing moves nothing.
+    loading: () => <Skeleton className="h-full w-full rounded-none" />,
   },
 );
 
@@ -32,6 +33,16 @@ type CollectionVisualizationProps = {
   token: string;
 };
 
+/**
+ * The collection's embeddings as a plane: every indexed chunk placed by UMAP,
+ * with the selected point's chunk docked beside it.
+ *
+ * The whole page is one card — toolbar, plot, and inspector share a single
+ * elevated surface separated by hairlines, because they are one instrument and
+ * not three stacked ones. The plot is the only element here that uses every
+ * pixel it is given, so nothing else reserves height it does not need: the
+ * inspector exists only while a point is selected.
+ */
 export function CollectionVisualization({ collectionId, token }: CollectionVisualizationProps) {
   const [visualization, setVisualization] = useState<UmapVisualization | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,16 +55,6 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const projectionId = visualization?.projection.id ?? null;
-
-  const projectionSummary = useMemo(() => {
-    if (!visualization) return null;
-    const projection = visualization.projection;
-    return {
-      computedAgo: timeAgo(projection.created_at),
-      embeddingModel: projection.embedding_model,
-      pointCount: projection.point_count,
-    };
-  }, [visualization]);
 
   const loadVisualization = useCallback(async () => {
     setLoading(true);
@@ -114,83 +115,75 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
     [token],
   );
 
-  if (loading) {
-    return (
-      <GlassCard className="flex items-center justify-center rounded-3xl border border-hairline p-10">
-        <Loader className="h-6 w-6" />
-      </GlassCard>
-    );
-  }
+  const clearSelection = useCallback(() => {
+    setSelectedPoint(null);
+    setChunkDetail(null);
+    setChunkError(null);
+  }, []);
 
   return (
-    <div className="flex min-h-[calc(100vh-240px)] flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-          UMAP projection
-        </p>
-        {projectionSummary && (
-          <p className="flex flex-wrap items-center gap-x-4 font-mono text-[11px] text-meta">
-            <span>
-              <span className="text-primary">{projectionSummary.pointCount.toLocaleString()}</span>{" "}
-              points
-            </span>
-            <span className="text-faint" aria-hidden>
-              /
-            </span>
-            <span>{projectionSummary.embeddingModel}</span>
-            <span className="text-faint" aria-hidden>
-              /
-            </span>
-            <span>computed {projectionSummary.computedAgo}</span>
-          </p>
+    <PageBody className="flex flex-col">
+      <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {loading ? (
+          <ProjectionToolbarSkeleton />
+        ) : (
+          <ProjectionToolbar
+            projection={visualization?.projection ?? null}
+            computing={computing}
+            onRefresh={loadVisualization}
+            onCompute={handleCompute}
+          />
         )}
-        <div className="ml-auto flex items-center gap-3">
-          <Button variant="secondary" size="sm" onClick={loadVisualization}>
-            Refresh
-          </Button>
-          <Button size="sm" onClick={handleCompute} loading={computing}>
-            {projectionSummary ? "Recompute" : "Compute UMAP"}
-          </Button>
-        </div>
-      </div>
-      {message && (
-        <div className="rounded-2xl border border-data-neg/30 bg-data-neg/10 p-3 text-sm text-data-neg">
-          {message}
-        </div>
-      )}
 
-      {visualization ? (
-        <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <GlassCard className="relative h-full min-h-[480px] overflow-hidden rounded-3xl border border-hairline">
-            <UmapCanvas
-              key={projectionId ?? "empty"}
-              points={visualization.points}
-              selectedPointId={selectedPoint?.id}
-              selectedPoint={selectedPoint}
-              /* c8 ignore next -- selection is exercised through the dynamic preview in tests */
-              onSelectPoint={handleSelectPoint}
-            />
-          </GlassCard>
+        {/* The pulse is licensed only while the projection is actually being
+            fitted, and unmounts the moment it finishes. */}
+        {computing ? <PulseWire label="Computing projection" className="w-full shrink-0" /> : null}
+
+        {message ? (
+          <p className="shrink-0 border-b border-hairline px-3 py-2 text-ui text-data-neg">
+            {message}
+          </p>
+        ) : null}
+
+        <div className="flex min-h-0 flex-1">
+          <section aria-label="UMAP projection" className="relative min-w-0 flex-1">
+            {loading ? (
+              <Skeleton className="h-full w-full rounded-none" />
+            ) : visualization ? (
+              <UmapCanvas
+                key={projectionId ?? "empty"}
+                points={visualization.points}
+                selectedPointId={selectedPoint?.id}
+                selectedPoint={selectedPoint}
+                /* c8 ignore next -- selection is exercised through the dynamic preview in tests */
+                onSelectPoint={handleSelectPoint}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center p-8">
+                <p className="max-w-[66ch] text-center text-ui text-muted">
+                  No projection stored. Computing one places every indexed chunk on a plane by
+                  embedding similarity.
+                </p>
+              </div>
+            )}
+          </section>
+
           <ChunkDetailPanel
             detail={chunkDetail}
             loading={chunkLoading}
             selectedPoint={selectedPoint}
             errorMessage={chunkError}
+            onClose={clearSelection}
             onExpand={chunkDetail ? () => setPreviewOpen(true) : undefined}
           />
         </div>
-      ) : (
-        <GlassCard className="flex flex-1 items-center justify-center rounded-3xl border border-hairline p-10">
-          <p className="max-w-sm text-center text-sm text-muted text-balance">
-            Upload documents, then compute a projection to plot their embeddings.
-          </p>
-        </GlassCard>
-      )}
+      </Panel>
+
       <ChunkPreviewOverlay
         isOpen={previewOpen}
         onClose={() => setPreviewOpen(false)}
         detail={chunkDetail}
       />
-    </div>
+    </PageBody>
   );
 }
