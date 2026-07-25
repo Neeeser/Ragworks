@@ -25,7 +25,7 @@ export function useFlowDotColor(): string {
     };
     read();
     const observer = new MutationObserver(read);
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
     return () => observer.disconnect();
   }, []);
 

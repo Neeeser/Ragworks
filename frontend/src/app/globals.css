@@ -9,11 +9,13 @@
    is no hydration mismatch and no flash of the wrong theme.
    ===================================================================== */
 
-/* Palette: deep-space (default). `dark` and `deep-space` are aliases so
-   preferences stored by earlier builds keep resolving. */
+/* Palette: deep-space — the dark-mode default. `data-theme` carries the
+   resolved structural mode (dark/light), stamped pre-paint by the theme
+   script; `data-palette` (blocks further down) carries the user's palette for
+   that mode. The mode defaults ARE these two base blocks, so they need no
+   override block of their own. */
 :root,
-:root[data-theme="dark"],
-:root[data-theme="deep-space"] {
+:root[data-theme="dark"] {
   /* Canvas & chrome. The dark palettes carry an accent cast in these values —
      that cast is the only place "lit by the brand" lives, so components stay
      palette-blind and a future accent swap keeps the whole look. */
@@ -93,9 +95,8 @@
   color-scheme: dark;
 }
 
-/* Palette: paper (light). `light` is the legacy alias. */
-:root[data-theme="light"],
-:root[data-theme="paper"] {
+/* Palette: paper — the light-mode default. */
+:root[data-theme="light"] {
   --canvas: #f5f4f9;
   --canvas-raised: #ffffff;
   --surface: rgba(15, 23, 42, 0.03);
@@ -154,14 +155,17 @@
   color-scheme: light;
 }
 
-/* The remaining dark palettes override only what differs from the deep-space
-   base above, so a palette is a small readable diff rather than a full copy
-   that silently drifts. Stage/port colours keep fixed MEANING in every
-   palette — a palette may re-step a hue for legibility, never reassign it.
-   Series pairs are validated per surface; see palette-contract.test.ts. */
+/* The selectable palettes override only what differs from their mode's base
+   above, so a palette is a small readable diff rather than a full copy that
+   silently drifts. Stage/port colours keep fixed MEANING in every palette — a
+   palette may re-step a hue for legibility, never reassign it. Series pairs
+   are validated per surface; see palette-contract.test.ts. The catalog the
+   picker renders from is src/lib/palettes.ts — a new palette is one block
+   here plus one catalog entry. These blocks sit AFTER both mode bases on
+   purpose: equal specificity, so source order is what lets a palette win. */
 
 /* Palette: true-black — OLED, maximum contrast. Cast nearly neutral. */
-:root[data-theme="true-black"] {
+:root[data-palette="true-black"] {
   --canvas: #000000;
   --canvas-raised: #0a0a0d;
   --surface: rgba(196, 181, 253, 0.045);
@@ -173,8 +177,22 @@
   --panel-highlight: rgba(255, 255, 255, 0.06);
 }
 
+/* Palette: midnight — indigo-cast dark; the ambient light shifts blue, the
+   accents stay the brand's. */
+:root[data-palette="midnight"] {
+  --canvas: #070b16;
+  --canvas-raised: #0f1526;
+  --surface: rgba(147, 165, 250, 0.06);
+  --surface-strong: rgba(147, 165, 250, 0.1);
+  --border-hairline: rgba(147, 165, 250, 0.14);
+  --border-strong: rgba(147, 165, 250, 0.35);
+  --panel-from: #121a2e;
+  --panel-to: #0d1322;
+  --panel-highlight: rgba(255, 255, 255, 0.055);
+}
+
 /* Palette: graphite — lifted base, lower contrast for long sessions. */
-:root[data-theme="graphite"] {
+:root[data-palette="graphite"] {
   --canvas: #15161d;
   --canvas-raised: #1d1f28;
   --surface: rgba(255, 255, 255, 0.04);
@@ -192,7 +210,7 @@
    is made explicit; the series pair stays the validated one, because a
    brighter pair failed the categorical cohesion band. Contrast belongs in the
    text and border tokens, not in the data colours. */
-:root[data-theme="high-contrast"] {
+:root[data-palette="high-contrast"] {
   --canvas: #000000;
   --canvas-raised: #101010;
   --surface: rgba(255, 255, 255, 0.07);
@@ -207,6 +225,20 @@
   --text-muted: #cbd5e1;
   --text-meta: #a8b4c4;
   --text-faint: #64748b;
+}
+
+/* Palette: linen — warm light. Diffs over the paper base, which the light
+   mode attribute has already applied. */
+:root[data-palette="linen"] {
+  --canvas: #f6f3ee;
+  --canvas-raised: #fffdf9;
+  --surface: rgba(87, 63, 33, 0.04);
+  --surface-strong: rgba(87, 63, 33, 0.08);
+  --border-hairline: rgba(93, 71, 46, 0.14);
+  --border-strong: rgba(93, 71, 46, 0.3);
+  --panel-from: #fffdf9;
+  --panel-to: #fbf6ee;
+  --panel-highlight: rgba(255, 255, 255, 0.9);
 }
 
 /* The no-flash theme script sets data-theme before body paint, so the

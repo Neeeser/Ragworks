@@ -2,19 +2,26 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_PALETTES, PALETTES } from "@/lib/palettes";
+
 /**
  * The design language's token contract, asserted against globals.css itself.
  *
  * These are mechanical checks, which is the point: palettes resolve to two
  * structural modes that get verified visually, and everything a machine can
- * check about the other palettes is checked here instead of by five visual
- * sweeps per change.
+ * check about the other palettes is checked here instead of by a visual sweep
+ * per palette per change.
  */
 
 const CSS = readFileSync("src/app/globals.css", "utf8");
 
-/** Every palette selector that must define a full set of series slots. */
-const PALETTES = ["deep-space", "true-black", "graphite", "paper", "high-contrast"] as const;
+/** The rule opener whose block defines a palette's values. The ` {` suffix
+ * anchors on the rule itself rather than a comment mentioning the selector. */
+function selectorFor(paletteId: string): string {
+  if (paletteId === DEFAULT_PALETTES.dark) return ':root[data-theme="dark"] {';
+  if (paletteId === DEFAULT_PALETTES.light) return ':root[data-theme="light"] {';
+  return `:root[data-palette="${paletteId}"] {`;
+}
 
 function blockFor(selector: string): string {
   // Palettes are written as one rule per palette; grab from the selector to the
@@ -27,18 +34,29 @@ function blockFor(selector: string): string {
 }
 
 describe("palette token contract", () => {
-  it("declares every named palette", () => {
+  it("declares a CSS block for every catalog palette", () => {
+    // The picker renders from src/lib/palettes.ts; a catalog entry with no CSS
+    // block would offer a palette that changes nothing when selected.
     for (const palette of PALETTES) {
-      expect(CSS).toContain(`[data-theme="${palette}"]`);
+      expect(blockFor(selectorFor(palette.id))).not.toBe("");
     }
   });
 
-  it("keeps dark and light as aliases so stored preferences still resolve", () => {
-    // A user who chose a theme before palettes existed has "dark" or "light" in
-    // localStorage; dropping these selectors would silently fall them back to
-    // the default and read as a bug on upgrade.
+  it("keeps dark and light as the data-theme mode selectors", () => {
+    // data-theme carries the resolved structural mode (what a pre-palette
+    // stored preference resolves to); data-palette carries the palette.
     expect(CSS).toContain('[data-theme="dark"]');
     expect(CSS).toContain('[data-theme="light"]');
+  });
+
+  it("keeps every picker swatch identical to the palette's own values", () => {
+    // The swatch is a preview of the palette; a drifted hex previews a palette
+    // that selecting doesn't produce.
+    for (const palette of PALETTES) {
+      const block = blockFor(selectorFor(palette.id)).toLowerCase();
+      expect(block).toContain(`--canvas: ${palette.swatch.canvas}`);
+      expect(block).toContain(`--panel-from: ${palette.swatch.panel}`);
+    }
   });
 
   it("defines chart series slots separately from UI accents", () => {
@@ -87,8 +105,9 @@ describe("palette token contract", () => {
   it("keeps every non-default palette a diff rather than a copy", () => {
     // A palette that redeclares the whole token set drifts from the base the
     // first time a token is added to one and not the others.
-    for (const palette of ["true-black", "graphite", "high-contrast"]) {
-      const block = blockFor(`[data-theme="${palette}"]`);
+    const defaults = new Set(Object.values(DEFAULT_PALETTES));
+    for (const palette of PALETTES.filter((entry) => !defaults.has(entry.id))) {
+      const block = blockFor(selectorFor(palette.id));
       expect(block).not.toMatch(/--stage-parse:/);
       expect(block).not.toMatch(/--port-document:/);
     }

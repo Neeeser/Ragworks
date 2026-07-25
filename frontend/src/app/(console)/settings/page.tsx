@@ -3,6 +3,7 @@
 import { ConnectionsManager } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
 import { ApiKeysPanel } from "@/components/mcp/ApiKeysPanel";
+import { AppearancePanel } from "@/components/settings/AppearancePanel";
 import { LoginSessionsPanel } from "@/components/settings/LoginSessionsPanel";
 import { PageBody } from "@/components/ui/app-shell";
 import { CrumbBar } from "@/components/ui/crumb-bar";
@@ -34,6 +35,7 @@ export default function SettingsPage() {
         {/* ConnectionsManager renders its own Panel — wrapping it again nests
             a card in a card (the two Wave-4 conversions landed simultaneously). */}
         <ConnectionsManager
+          title="Provider connections"
           authToken={authToken}
           connections={connections}
           providerTypes={providerTypes}
@@ -41,6 +43,7 @@ export default function SettingsPage() {
           error={connectionsError ?? providerTypesError}
           onChanged={reloadConnections}
         />
+        <AppearancePanel />
         <LoginSessionsPanel />
         <ApiKeysPanel />
       </PageBody>

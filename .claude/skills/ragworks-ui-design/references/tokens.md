@@ -240,15 +240,17 @@ Measured: on the dark canvas `--accent-cyan: #22d3ee` is L 0.797 in OKLab — ou
 
 ## 7. Palettes
 
-Five shipped palettes, each a values-only block:
+Seven shipped palettes, each a values-only block:
 
 | Palette | Structural mode | Note |
 |---|---|---|
 | `deep-space` | dark | default — violet cast |
+| `midnight` | dark | indigo cast |
 | `true-black` | dark | OLED; cast nearly neutral |
 | `graphite` | dark | lifted, lower contrast |
-| `paper` | light | white cards, grey shadows |
 | `high-contrast` | dark | WCAG AAA text |
+| `paper` | light | default — white cards, grey shadows |
+| `linen` | light | warm canvas |
 
 **Every identity device must survive a palette swap.** The cast, the card material, the
 bloom, the wire, the glow — all read accent/material tokens, so a future palette that
@@ -256,9 +258,16 @@ swaps violet for emerald keeps the entire language intact. Designing "for violet
 of "for `--accent-violet`" is the bug this section exists to stop.
 
 Palettes resolve to two structural modes (dark/light) — verify those two visually; the
-per-palette values are checked mechanically. Set as `data-theme="<palette>"`, written
-pre-paint by `src/lib/theme-script.ts`. Never read a colour with `getComputedStyle`,
-never cache a resolved theme.
+per-palette values are checked mechanically. Two document attributes, both written
+pre-paint by `src/lib/theme-script.ts` and owned after hydration by the theme provider:
+`data-theme` is the resolved MODE (`dark`/`light` — what the logo swap and mode-scoped
+CSS key on), `data-palette` is the user's palette for that mode (picked per mode in
+Settings → Appearance, stored per browser). Anything observing theme changes watches
+BOTH attributes. Adding a palette = one values-only diff block in `globals.css` (after
+both mode bases — source order is what lets it win) + one entry in `src/lib/palettes.ts`
+(the catalog the picker renders from; its swatch hexes are pinned to the CSS by
+`palette-contract.test.ts`). Never read a colour with `getComputedStyle`, never cache a
+resolved theme.
 
 ---
 
