@@ -67,6 +67,10 @@ dmypy.json
 cython_debug/
 
 # Frontend artifacts
+# Unqualified so a tool run from the repo root (vitest writes its cache to
+# ./node_modules/.vite) cannot commit a node_modules tree that only the
+# frontend/ prefix would have covered.
+node_modules/
 frontend/node_modules/
 frontend/.next/
 frontend/.next-sandbox/
