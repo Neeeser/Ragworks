@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
@@ -18,7 +19,9 @@ describe("EmbeddingModelSelectorCard", () => {
       />,
     );
 
-    expect(screen.getByText(/Loading embedding models/)).toBeInTheDocument();
+    // Loading is a skeleton at the list's final geometry; the only thing said
+    // out loud is the placeholder block's accessible name.
+    expect(screen.getByText("Loading embedding models")).toBeInTheDocument();
 
     rerender(
       <EmbeddingModelSelectorCard
@@ -81,7 +84,8 @@ describe("EmbeddingModelSelectorCard", () => {
     expect(screen.getByText(/No models match "nothing"/)).toBeInTheDocument();
   });
 
-  it("sorts models via the internal sort control", () => {
+  it("sorts models via the internal sort control", async () => {
+    const user = userEvent.setup();
     const models: CatalogModel[] = [
       makeCatalogModel({ id: "model-big", name: "Big", dimension: 1024, pricing: {} }),
       makeCatalogModel({ id: "model-small", name: "Small", dimension: 128, pricing: {} }),
@@ -97,10 +101,13 @@ describe("EmbeddingModelSelectorCard", () => {
       />,
     );
 
-    const buttons = () => screen.getAllByRole("button").filter((el) => el.tagName === "BUTTON");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "dimension" } });
+    // The sort control is a `CustomSelect`: a combobox trigger opening a
+    // portalled listbox, so the choice is made by opening and picking.
+    await user.click(screen.getByRole("combobox", { name: "Sort models" }));
+    await user.click(screen.getByRole("option", { name: "Sort by dimension" }));
 
-    const names = buttons()
+    const names = screen
+      .getAllByRole("button")
       .map((el) => el.textContent ?? "")
       .filter((text) => text.includes("Big") || text.includes("Small"));
     expect(names[0]).toContain("Small");

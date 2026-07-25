@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ModelSelectorCard } from "@/components/chat-studio/telemetry/ModelSelectorCard";
@@ -28,7 +29,9 @@ describe("ModelSelectorCard", () => {
       />,
     );
 
-    expect(screen.getByText(/Loading tool-compatible models/)).toBeInTheDocument();
+    // Loading is a skeleton at the list's final geometry; the only thing said
+    // out loud is the placeholder block's accessible name.
+    expect(screen.getByText("Loading tool-compatible models")).toBeInTheDocument();
 
     rerender(
       <ModelSelectorCard
@@ -73,7 +76,7 @@ describe("ModelSelectorCard", () => {
     expect(screen.getByText("Error")).toBeInTheDocument();
   });
 
-  it("renders model list and handles interactions", () => {
+  it("renders model list and handles interactions", async () => {
     const onSearchChange = vi.fn();
     const onSortChange = vi.fn();
     const onSelectModel = vi.fn();
@@ -162,21 +165,23 @@ describe("ModelSelectorCard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "Alpha" } });
-    expect(onSearchChange).toHaveBeenCalledWith("Alpha");
+    const user = userEvent.setup();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort models" }), {
-      target: { value: "price" },
-    });
+    await user.type(screen.getByPlaceholderText(/Search/), "A");
+    expect(onSearchChange).toHaveBeenCalledWith("A");
+
+    // Both dropdowns are `CustomSelect`s: a combobox trigger that opens a
+    // portalled listbox, so they are driven by opening and picking an option.
+    await user.click(screen.getByRole("combobox", { name: "Sort models" }));
+    await user.click(screen.getByRole("option", { name: "Sort by price" }));
     expect(onSortChange).toHaveBeenCalledWith("price");
 
-    const providerFilter = screen.getByRole("combobox", { name: "Filter models by provider" });
+    await user.click(screen.getByRole("combobox", { name: "Filter models by provider" }));
     expect(screen.getByRole("option", { name: "All providers" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Homelab Ollama (ollama)" })).toBeInTheDocument();
-    fireEvent.change(providerFilter, { target: { value: OLLAMA_CONNECTION } });
+    await user.click(screen.getByRole("option", { name: "Homelab Ollama (ollama)" }));
     expect(onConnectionFilterChange).toHaveBeenCalledWith(OLLAMA_CONNECTION);
 
-    fireEvent.click(screen.getByRole("button", { name: /Beta/ }));
+    await user.click(screen.getByRole("button", { name: /Beta/ }));
     expect(onSelectModel).toHaveBeenCalledWith(
       expect.objectContaining({ id: "model-2", connection_id: "conn-openrouter-1" }),
     );

@@ -4,9 +4,11 @@ import { Search } from "lucide-react";
 
 import { groupModelsByConnection } from "@/components/models/model-catalog-filter";
 import { Button } from "@/components/ui/button";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { inputClass } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Loader } from "@/components/ui/loader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import type { ConnectionOption, ModelSortDef } from "@/components/models/model-catalog-filter";
@@ -68,12 +70,8 @@ interface ModelCatalogPickerProps {
   maxVisible?: number;
 }
 
-// Native selects, deliberately, and only until a shared migration lands: the
-// chat picker's tests drive these two controls through the `combobox`/`option`
-// roles and `fireEvent.change`, which a `CustomSelect` (a Radix button + portal
-// listbox) does not expose. Product dropdowns are `CustomSelect` everywhere
-// else; the native popup here still cannot follow the product theme.
-const controlSelectClass = inputClass;
+/** Sentinel for "no provider filter" — a select value is always a string. */
+const ALL_PROVIDERS = "";
 
 function PickerHeader({
   currentModel,
@@ -130,19 +128,21 @@ function ProviderFilterSelect({
 }) {
   return (
     <div className="min-w-40 flex-1">
-      <select
+      <CustomSelect
         aria-label="Filter models by provider"
-        className={controlSelectClass}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">All providers</option>
-        {options.map((option) => (
-          <option key={option.connectionId} value={option.connectionId}>
-            {option.label} ({option.providerType})
-          </option>
-        ))}
-      </select>
+        value={value ?? ALL_PROVIDERS}
+        placeholder="All providers"
+        options={[
+          { value: ALL_PROVIDERS, label: "All providers" },
+          ...options.map((option) => ({
+            value: option.connectionId,
+            // The provider type is a backend literal, so it stays verbatim
+            // beside the connection's own name.
+            label: `${option.label} (${option.providerType})`,
+          })),
+        ]}
+        onValueChange={onChange}
+      />
     </div>
   );
 }
@@ -158,18 +158,13 @@ function SortSelect({
 }) {
   return (
     <div className="min-w-40">
-      <select
+      <CustomSelect
         aria-label="Sort models"
-        className={controlSelectClass}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        value={value ?? ""}
+        placeholder={options[0]?.label ?? "Sort"}
+        options={options.map((option) => ({ value: option.value, label: option.label }))}
+        onValueChange={onChange}
+      />
     </div>
   );
 }
@@ -255,6 +250,32 @@ function SelectionStates({
   );
 }
 
+/**
+ * A `ModelOptionButton`'s geometry with both text lines replaced by bars.
+ *
+ * The invisible character gives each bar the line box the text it stands in for
+ * occupies, so the placeholder row is the height of the row that replaces it and
+ * the catalog does not jump when it lands.
+ */
+function ModelRowSkeleton() {
+  return (
+    <div className="rounded-control border border-hairline bg-surface px-3 py-2">
+      <div className="flex items-center text-ui">
+        <span aria-hidden className="invisible w-0">
+          &nbsp;
+        </span>
+        <Skeleton className="h-2 max-w-48 flex-1" />
+      </div>
+      <div className="flex items-center text-instrument">
+        <span aria-hidden className="invisible w-0">
+          &nbsp;
+        </span>
+        <Skeleton className="h-2 max-w-32 flex-1" />
+      </div>
+    </div>
+  );
+}
+
 function ModelList({
   models,
   visibleModels,
@@ -276,7 +297,14 @@ function ModelList({
 }) {
   const hiddenCount = models.length - visibleModels.length;
   if (modelsLoading && models.length === 0) {
-    return <p className="text-ui text-muted">Loading {noun}s…</p>;
+    return (
+      <div aria-busy className="space-y-2">
+        {Array.from({ length: 4 }, (_, row) => (
+          <ModelRowSkeleton key={row} />
+        ))}
+        <span className="sr-only">Loading {noun}s</span>
+      </div>
+    );
   }
   if (visibleModels.length === 0) {
     return (
