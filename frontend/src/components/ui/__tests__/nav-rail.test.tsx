@@ -137,12 +137,16 @@ describe("NavRail flyouts", () => {
     expect(document.activeElement).toBe(railLink);
   });
 
-  it("keeps a plain tooltip on a section that has no preview", async () => {
+  it("shows a visible label and fetches nothing for a section without a preview", async () => {
     render(<NavRail links={links} activeHref="/collections" />);
 
-    fireEvent.pointerEnter(railItem("Settings").wrapper);
+    // The sidebar names every section without hover; hovering a section with
+    // no preview opens nothing and costs nothing.
+    const settings = screen.getByRole("link", { name: "Settings" });
+    expect(settings).toBeVisible();
+    fireEvent.pointerEnter(settings);
     await settle();
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Settings");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.fetchCollections).not.toHaveBeenCalled();
   });
 });

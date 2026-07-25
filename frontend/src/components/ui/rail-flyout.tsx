@@ -73,11 +73,10 @@ function RailFlyoutItems({ label, items, error, emptyLabel, onNavigate }: ItemsP
 /**
  * The section preview that flies out of the icon rail.
  *
- * It exists because a 46px icon-only rail cannot say what a section is or what
- * is inside it. So it carries three things and nothing else: the section name as
- * a link, one factual line about it, and the handful of destinations a user
- * actually wants — which is why it replaces the rail's tooltips rather than
- * sitting beside them.
+ * The sidebar label already names the section; this adds what a label cannot:
+ * one factual line about what the section is, and the handful of destinations a
+ * user actually wants (recent collections, recent chats, pipeline kinds with
+ * counts).
  *
  * Mounted only while its rail item is hovered or focused, so the fetch behind
  * `useRailPreview` happens on first open and never on page load.
