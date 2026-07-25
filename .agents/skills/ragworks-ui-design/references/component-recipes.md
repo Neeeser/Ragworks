@@ -245,7 +245,7 @@ Never hand-write the input class string — import `inputClass`. Product dropdow
 
 ```tsx
 <ModalOverlay open={open} onClose={close} labelledBy="dialog-title">
-  <div className="card-surface w-full max-w-lg bg-canvas-raised p-4 shadow-elevation-2">
+  <div className={cn(popoverSurfaceClass, "w-full max-w-lg p-4")}>
     <h2 id="dialog-title" className="text-head font-semibold text-primary">
       Delete collection
     </h2>
@@ -256,8 +256,11 @@ Never hand-write the input class string — import `inputClass`. Product dropdow
 </ModalOverlay>
 ```
 
-`ModalOverlay` owns Escape, backdrop, focus trap, scroll lock, and portalling.
-Destructive confirmations use `ConfirmDialog` (`confirmText` for type-to-confirm).
+`ModalOverlay` owns Escape, backdrop, focus trap, scroll lock, and portalling; the
+body sits on `popoverSurfaceClass` (`components/ui/panel.tsx`), like every floating
+layer. Destructive confirmations use `ConfirmDialog` (`confirmText` for
+type-to-confirm); a single-text-input prompt (new folder, rename) is
+`NamePromptDialog` (`components/ui/name-prompt-dialog.tsx`), never a bespoke form.
 
 ---
 

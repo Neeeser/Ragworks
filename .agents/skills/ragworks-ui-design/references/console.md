@@ -329,8 +329,12 @@ short of the row's own buttons reads as a broken box. `DataRow` does this; a han
 row (a session list, a sidebar row) puts `hover:bg-*` on the wrapper `group` div and
 keeps only the focus ring on the inner button/link.
 
-`GlassCard` and `.glass-panel` are **landing-only** — blur on a data card is the wrong
-look and a real compositing cost.
+Backdrop blur is retired product-wide — blur on a data card is the wrong look and a
+real compositing cost (the one exception is `ModalOverlay`'s dimming scrim). Every
+floating layer — menus, flyouts, tooltips, popovers, dialog bodies, toasts — uses
+`popoverSurfaceClass` (`components/ui/panel.tsx`): panel radius, hairline border,
+`bg-canvas-raised`, elevation-2. Never hand-type that surface; `cn(popoverSurfaceClass,
+…)` and add only layout.
 
 ---
 
