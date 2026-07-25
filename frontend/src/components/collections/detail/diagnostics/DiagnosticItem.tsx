@@ -3,27 +3,16 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
+import { ButtonLink } from "@/components/ui/button-link";
 import { Chip } from "@/components/ui/chip";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { severityStyle } from "@/lib/diagnostics-severity";
+import { severityStyle, severityTone } from "@/lib/diagnostics-severity";
 
-import type { ChipTone } from "@/components/ui/chip";
-import type { CollectionDiagnostic, DiagnosticObservation, DiagnosticSeverity } from "@/lib/types";
+import type { CollectionDiagnostic, DiagnosticObservation } from "@/lib/types";
 
 const CONFIDENCE_LABEL: Record<CollectionDiagnostic["confidence"], string> = {
   confirmed: "Confirmed",
   heuristic: "Possible",
-};
-
-/**
- * Severity as a pill tone. The labels and the icon/box vocabulary stay in
- * `lib/diagnostics-severity`, shared with the Overview card and the search
- * failure panel; only the console's pill tone is named here.
- */
-const SEVERITY_TONE: Record<DiagnosticSeverity, ChipTone> = {
-  error: "neg",
-  warning: "warn",
-  info: "neutral",
 };
 
 /**
@@ -59,7 +48,7 @@ export function DiagnosticItem({ diagnostic }: { diagnostic: CollectionDiagnosti
   return (
     <div className="border-b border-hairline p-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Chip tone={SEVERITY_TONE[diagnostic.severity]} dot>
+        <Chip tone={severityTone(diagnostic.severity)} dot>
           {severityStyle(diagnostic.severity).label}
         </Chip>
         <h3 className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
@@ -84,13 +73,10 @@ export function DiagnosticItem({ diagnostic }: { diagnostic: CollectionDiagnosti
       {(diagnostic.action || diagnostic.links.length > 0) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {diagnostic.action && (
-            <Link
-              href={diagnostic.action.route}
-              className="inline-flex items-center gap-1 rounded-control border border-hairline bg-surface px-2 py-1 text-ui text-body transition-colors duration-80 ease-standard hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-            >
+            <ButtonLink href={diagnostic.action.route}>
               {diagnostic.action.label}
               <ArrowUpRight className="h-3.5 w-3.5 text-muted" aria-hidden />
-            </Link>
+            </ButtonLink>
           )}
           {diagnostic.links.map((link) => (
             <Link

@@ -14,6 +14,7 @@ import { Panel } from "@/components/ui/panel";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { Skeleton } from "@/components/ui/skeleton";
 import { computeCollectionUmap, fetchChunkDetail, fetchCollectionUmap } from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { ChunkDetail, UmapPoint, UmapVisualization } from "@/lib/types";
@@ -63,9 +64,12 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
       const data = await fetchCollectionUmap(token, collectionId);
       setVisualization(data);
     } catch (error) {
-      const detail = getErrorMessage(error, "Unable to load UMAP.");
       setVisualization(null);
-      setMessage(detail);
+      // A 404 means no projection has been computed yet — that is the empty
+      // state (which already says so), not a failure to report in red.
+      if (!(error instanceof ApiError && error.status === 404)) {
+        setMessage(getErrorMessage(error, "Unable to load UMAP."));
+      }
     } finally {
       setLoading(false);
     }

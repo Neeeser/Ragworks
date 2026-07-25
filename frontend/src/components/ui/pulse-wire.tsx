@@ -18,6 +18,12 @@ type PulseWireProps = {
  */
 export function PulseWire({ label, className }: PulseWireProps) {
   return (
-    <span role="status" aria-label={label} className={cn("pulse-track block w-24", className)} />
+    // Both an aria-label AND a visually hidden text node: the status role takes
+    // its accessible NAME from the author (aria-label), but a live region only
+    // reliably ANNOUNCES its text content — an empty region's label is spoken
+    // inconsistently across screen readers.
+    <span role="status" aria-label={label} className={cn("pulse-track block w-24", className)}>
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }

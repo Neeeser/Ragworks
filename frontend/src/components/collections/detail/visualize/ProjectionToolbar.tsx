@@ -53,9 +53,10 @@ export function ProjectionToolbar({
             <Readout label="Computed">{formatTimeAgoCompact(projection.created_at)}</Readout>
           </Tooltip>
         </>
-      ) : (
-        <span className="text-ui text-muted">No projection stored.</span>
-      )}
+      ) : null}
+      {/* No "No projection stored." line here: the plot area's empty state
+          already says it — stating it twice on one screen is the text rule
+          failing. The toolbar's job without a projection is just the actions. */}
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <Button variant="secondary" size="sm" onClick={onRefresh}>

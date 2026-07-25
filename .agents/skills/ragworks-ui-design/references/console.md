@@ -245,6 +245,12 @@ where a value came from.
 - **Never** a spinner centred in a padded panel.
 - Errors render in place, in `text-data-neg`, with the request id available via
   `getRequestId(err)`.
+- **Absence is not an error.** A 404 for a thing that simply doesn't exist yet (no
+  projection computed, no runs recorded) renders the *empty state*, never a red error
+  line — check `ApiError.status` before surfacing the message.
+- **State a fact once per screen.** An empty page that says "nothing here" in the
+  toolbar, again as an error line, and again in the empty region is the text rule
+  failing three ways at once; the emptiest region says it, everything else stays quiet.
 
 ---
 
@@ -262,6 +268,7 @@ where a value came from.
 | column headers for a row list | `DataRowHeader` |
 | status (node dot + optional label) | `StatusDot` |
 | a status/kind pill | `Chip` (pill form: tinted fill, dot, sentence case) |
+| a link wearing button chrome | `ButtonLink` — never a hand-rolled anchor class string |
 | a bound pipeline as metadata | `StageStrip` |
 | live-process indicator | `PulseWire` / the ingestion stage pulse |
 | selected-item fields | `Inspector` |

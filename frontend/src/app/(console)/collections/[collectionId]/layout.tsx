@@ -1,13 +1,13 @@
 "use client";
 
 import { ArrowUpRight } from "lucide-react";
-import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 
 import {
   CollectionProvider,
   useCollection,
 } from "@/components/collections/detail/collection-context";
+import { ButtonLink } from "@/components/ui/button-link";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { SectionTabs } from "@/components/ui/tabs";
@@ -61,13 +61,10 @@ function CollectionShell({ children }: { children: ReactNode }) {
           </InstrumentLabel>
         }
         actions={
-          <Link
-            href={`/chat?collections=${encodeURIComponent(collection.id)}`}
-            className="flex items-center gap-1 rounded-control border border-hairline bg-surface px-2 py-1 text-ui text-body transition-colors duration-80 ease-standard hover:border-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-          >
+          <ButtonLink href={`/chat?collections=${encodeURIComponent(collection.id)}`}>
             Open in Chat studio
             <ArrowUpRight className="h-3.5 w-3.5 text-muted" aria-hidden />
-          </Link>
+          </ButtonLink>
         }
       />
       <SectionTabs tabs={tabs} />

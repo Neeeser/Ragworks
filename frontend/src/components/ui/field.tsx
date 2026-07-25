@@ -54,7 +54,11 @@ export function Field({
   });
 
   const labelElement = (
-    <label htmlFor={controlId} className={cn("block text-sm text-body", labelClassName)}>
+    // The console label voice — sentence-case sans, medium, muted.
+    <label
+      htmlFor={controlId}
+      className={cn("block text-instrument font-medium text-muted", labelClassName)}
+    >
       {label}
     </label>
   );
@@ -71,7 +75,10 @@ export function Field({
       )}
       {control}
       {description ? (
-        <p id={descriptionId} className={cn("text-xs", error ? "text-data-neg" : "text-muted")}>
+        <p
+          id={descriptionId}
+          className={cn("text-instrument", error ? "text-data-neg" : "text-muted")}
+        >
           {description}
         </p>
       ) : null}
