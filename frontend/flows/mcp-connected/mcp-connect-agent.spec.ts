@@ -31,9 +31,12 @@ test("a scoped MCP key created in the UI serves exactly its granted tools", asyn
   const endpointUrl = ((await endpoint.textContent()) ?? "").trim();
   expect(endpointUrl.startsWith(handoff.backend_url)).toBe(true);
 
-  // The seeded key, with the capabilities the scenario granted it.
+  // The seeded key, with the capabilities the scenario granted it — one
+  // sentence-case chip per capability since the soft-depth conversion.
   await expect(page.getByText("Sandbox agent").first()).toBeVisible();
-  await expect(page.getByText(/RUN TOOLS · READ FILES · WRITE FILES/i).first()).toBeVisible();
+  for (const capability of [/run tools/i, /read files/i, /write files/i]) {
+    await expect(page.getByText(capability).first()).toBeVisible();
+  }
 
   await page.getByRole("button", { name: "Connect an agent" }).click();
   await page.getByRole("textbox", { name: "Name" }).fill(KEY_NAME);
@@ -72,5 +75,10 @@ test("a scoped MCP key created in the UI serves exactly its granted tools", asyn
   await expect(row).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: `Revoke ${KEY_NAME}` }).click();
   await page.getByRole("button", { name: "Revoke", exact: true }).click();
-  await expect(page.getByText(`${KEY_NAME} · Revoked`)).toBeVisible({ timeout: 30_000 });
+  // The row stays listed with a Revoked status label, and its revoke action is
+  // gone — the state, not the old "name · Revoked" one-string rendering.
+  await expect(page.getByRole("button", { name: `Revoke ${KEY_NAME}` })).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await expect(page.getByText(/revoked/i).first()).toBeVisible({ timeout: 30_000 });
 });
