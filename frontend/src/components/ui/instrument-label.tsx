@@ -19,7 +19,13 @@ export function InstrumentLabel({
 }: HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
-      className={cn("font-mono text-instrument uppercase tracking-[0.16em] text-muted", className)}
+      className={cn(
+        // nowrap by default: these labels are short by design, and a wrapped
+        // instrument label is always a layout bug (a two-line column header
+        // silently makes the whole header row taller than its rows).
+        "whitespace-nowrap font-mono text-instrument uppercase tracking-[0.16em] text-muted",
+        className,
+      )}
       {...props}
     >
       {children}

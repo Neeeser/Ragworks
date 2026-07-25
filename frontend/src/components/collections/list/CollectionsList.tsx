@@ -8,7 +8,7 @@ import { DATA_ROW_ACTIONS_SLOT, DataRow, DataRowHeader } from "@/components/ui/d
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseApiDate } from "@/lib/datetime";
-import { formatTimeAgoCompact } from "@/lib/format";
+import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 
 import type { Collection, CollectionStats } from "@/lib/types";
 
@@ -25,9 +25,11 @@ type CollectionsListProps = {
  * readable column instead of each row measuring its own content.
  */
 const COL = {
-  docs: "w-16 text-right",
+  docs: "w-14 text-right",
   chunks: "w-20 text-right",
+  latency: "w-28 text-right",
   updated: "w-20 text-right",
+  queried: "w-24 text-right",
 };
 
 function ColumnHeader() {
@@ -41,8 +43,14 @@ function ColumnHeader() {
         <InstrumentLabel key="chunks" className={COL.chunks}>
           Chunks
         </InstrumentLabel>,
+        <InstrumentLabel key="latency" className={COL.latency}>
+          Avg query
+        </InstrumentLabel>,
         <InstrumentLabel key="updated" className={COL.updated}>
           Updated
+        </InstrumentLabel>,
+        <InstrumentLabel key="queried" className={COL.queried}>
+          Queried
         </InstrumentLabel>,
       ]}
     />
@@ -58,7 +66,9 @@ function LoadingRows() {
             <Skeleton className="h-2 max-w-48 flex-1" />
             <Skeleton className={`h-2 ${COL.docs}`} />
             <Skeleton className={`h-2 ${COL.chunks}`} />
+            <Skeleton className={`h-2 ${COL.latency}`} />
             <Skeleton className={`h-2 ${COL.updated}`} />
+            <Skeleton className={`h-2 ${COL.queried}`} />
           </div>
           <span className={DATA_ROW_ACTIONS_SLOT} aria-hidden />
         </div>
@@ -128,12 +138,30 @@ export function CollectionsList({
               <span key="chunks" className={`font-mono tabular-nums ${COL.chunks}`}>
                 {stats?.chunk_count?.toLocaleString() ?? "—"}
               </span>,
+              <span key="latency" className={`font-mono tabular-nums ${COL.latency}`}>
+                {stats?.average_latency_ms == null ? (
+                  <span className="text-muted">—</span>
+                ) : (
+                  formatLatency(stats.average_latency_ms)
+                )}
+              </span>,
               <span
                 key="updated"
                 className={`font-mono tabular-nums text-meta ${COL.updated}`}
                 title={parseApiDate(collection.updated_at)?.toLocaleString()}
               >
                 {formatTimeAgoCompact(collection.updated_at)}
+              </span>,
+              <span
+                key="queried"
+                className={`font-mono tabular-nums text-meta ${COL.queried}`}
+                title={
+                  stats?.last_used_at
+                    ? parseApiDate(stats.last_used_at)?.toLocaleString()
+                    : "Never queried"
+                }
+              >
+                {stats?.last_used_at ? formatTimeAgoCompact(stats.last_used_at) : "—"}
               </span>,
             ]}
             actions={

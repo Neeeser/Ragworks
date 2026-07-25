@@ -279,10 +279,10 @@
      rows still left most of the viewport empty. Dense means "no wasted space",
      not "small" — so the scale sits at a comfortable reading size and the space
      is filled with information instead. */
-  --text-instrument: 10.5px;
-  --text-ui: 13.5px;
-  --text-num: 14px;
-  --text-head: 16px;
+  --text-instrument: 11px;
+  --text-ui: 14px;
+  --text-num: 15px;
+  --text-head: 17px;
 
   /* Motion easings. Durations are bare Tailwind numerics (duration-80 … -200);
      the doctrine is in the ragworks-ui-design skill: motion follows the
@@ -313,12 +313,12 @@ body {
 }
 
 html {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 @media (max-width: 640px) {
   html {
-    font-size: 13.5px;
+    font-size: 14px;
   }
 }
 
