@@ -83,16 +83,20 @@ test("rebinding a pipeline asks which index the new binding uses", async ({ page
   expect(created.ok()).toBe(true);
   const alternate = (await created.json()) as { id: string };
 
-  const collections = await api.get(`${handoff.backend_url}/api/collections`, { headers });
-  const target = ((await collections.json()) as { id: string; name: string }[]).find(
-    (entry) => entry.name === "Second Collection",
-  );
-  expect(target).toBeTruthy();
+  // Its own collection: a spec that rebinds a *seeded* collection depends on
+  // whatever the specs before it left behind, which is how order-dependent
+  // flakes start.
+  const madeCollection = await api.post(`${handoff.backend_url}/api/collections`, {
+    headers,
+    data: { name: "Rebind flow collection" },
+  });
+  expect(madeCollection.ok()).toBe(true);
+  const target = (await madeCollection.json()) as { id: string };
 
   try {
-    await page.goto(`${handoff.frontend_url}/collections/${target!.id}`);
+    await page.goto(`${handoff.frontend_url}/collections/${target.id}`);
 
-    await page.getByRole("button", { name: /Default Retrieval Pipeline/ }).click();
+    await page.getByRole("button", { name: "Primary search tool pipeline" }).click();
     await page.getByRole("option", { name: "Alternate retrieval (flow)" }).click();
 
     // Pending rebind reveals the slots: the new pipeline may target another
@@ -101,18 +105,19 @@ test("rebinding a pipeline asks which index the new binding uses", async ({ page
     await expect(denseSlot).toBeVisible();
 
     await denseSlot.click();
-    await page.getByRole("option", { name: /^ragworks —/ }).click();
+    await page.getByRole("option", { name: /^second-index —/ }).click();
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByText("Pipelines updated.")).toBeVisible({ timeout: 20_000 });
 
-    const tools = await api.get(`${handoff.backend_url}/api/collections/${target!.id}/tools`, {
+    const tools = await api.get(`${handoff.backend_url}/api/collections/${target.id}/tools`, {
       headers,
     });
     const bindings = ((await tools.json()) as { tools: ToolBinding[] }).tools;
     expect(
-      bindings.some((binding) => binding.variable_values?.primary_index?.name === "ragworks"),
+      bindings.some((binding) => binding.variable_values?.primary_index?.name === "second-index"),
     ).toBe(true);
   } finally {
+    await api.delete(`${handoff.backend_url}/api/collections/${target.id}`, { headers });
     await api.delete(`${handoff.backend_url}/api/pipelines/${alternate.id}`, { headers });
   }
 });
