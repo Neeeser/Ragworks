@@ -14,11 +14,12 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 import sqlalchemy
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import bindparam, text
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db.models import VectorIndexRecord
 from app.retrieval.models import DocumentChunk
@@ -67,10 +68,39 @@ class PgvectorRepository(LexicalRepositoryMixin):
         """Return the catalog row for an index, if it exists."""
         return self._session.get(VectorIndexRecord, name)
 
-    def list_records(self) -> list[VectorIndexRecord]:
-        """Return every cataloged index ordered by name."""
-        statement = select(VectorIndexRecord).order_by(sqlalchemy.asc(VectorIndexRecord.name))
+    def list_records(self, owner_id: UUID) -> list[VectorIndexRecord]:
+        """Return the indexes one account may see, ordered by name.
+
+        That is the account's own indexes plus every owner-less one. A row
+        with no owner predates the column or was created straight in
+        Postgres; hiding those would drop live collections' indexes out of
+        the registry and make an externally-created index unadoptable.
+        """
+        statement = (
+            select(VectorIndexRecord)
+            .where(
+                sqlalchemy.or_(
+                    col(VectorIndexRecord.owner_user_id).is_(None),
+                    col(VectorIndexRecord.owner_user_id) == owner_id,
+                )
+            )
+            .order_by(sqlalchemy.asc(VectorIndexRecord.name))
+        )
         return list(self._session.exec(statement).all())
+
+    def distinct_namespaces(self, record: VectorIndexRecord, limit: int) -> list[str]:
+        """Return up to `limit` distinct namespaces holding rows in the index.
+
+        The authoritative answer to "whose data is in here", used before a
+        destructive operation on a table every account shares. The table name
+        derives from a catalog record whose name already passed the strict
+        identifier rule, so interpolating it is safe.
+        """
+        table = self._table_for(record)
+        rows = self._session.execute(
+            text(f"SELECT DISTINCT namespace FROM {table} LIMIT :limit").bindparams(limit=limit)
+        ).all()
+        return [str(row[0]) for row in rows]
 
     # -- DDL ---------------------------------------------------------------
 
@@ -90,7 +120,9 @@ class PgvectorRepository(LexicalRepositoryMixin):
             )
         )
 
-    def create_index(self, name: str, dimension: int, metric: str) -> VectorIndexRecord:
+    def create_index(
+        self, name: str, dimension: int, metric: str, owner_id: UUID
+    ) -> VectorIndexRecord:
         """Create the data table, its indexes, and the catalog row."""
         vector_opclass, halfvec_opclass, _ = _METRIC_OPS[metric]
         table = data_table_name(name)
@@ -122,7 +154,9 @@ class PgvectorRepository(LexicalRepositoryMixin):
         self._session.exec(  # type: ignore[call-overload]
             text(f"CREATE INDEX IF NOT EXISTS {table}_namespace_idx ON {table} (namespace)")
         )
-        record = VectorIndexRecord(name=name, dimension=dimension, metric=metric)
+        record = VectorIndexRecord(
+            name=name, dimension=dimension, metric=metric, owner_user_id=owner_id
+        )
         self._session.add(record)
         self._session.flush()
         return record

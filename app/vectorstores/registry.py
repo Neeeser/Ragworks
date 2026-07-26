@@ -84,7 +84,7 @@ def get_vector_store(
     if backend is IndexBackend.PGVECTOR:
         if not pgvector_available():
             raise InvalidInputError(PGVECTOR_UNAVAILABLE_DETAIL)
-        return PgvectorStore(session)
+        return PgvectorStore(session, user.id)
     api_key = _pinecone_api_key(user, session)
     if not api_key:
         raise InvalidInputError(MISSING_PINECONE_KEY_DETAIL)

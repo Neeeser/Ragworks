@@ -29,7 +29,7 @@ from app.pipelines.payloads import (
     RetrievalRequestPayload,
 )
 from app.pipelines.ports import NodePort
-from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
+from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     summarize_matches,
@@ -41,6 +41,7 @@ from app.retrieval.models import RetrievalResponse
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
+from app.services.namespace_ownership import resolve_owned_namespace
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backends_where
 
 if TYPE_CHECKING:
@@ -65,7 +66,7 @@ class RetrieverConfig(BaseModel):
         default_factory=lambda: get_settings().pinecone_index_name,
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = namespace_field()
     top_k: int | None = Field(
         default=None,
         gt=0,
@@ -157,7 +158,9 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
                 "it fetches (e.g. the top_k variable) in the pipeline editor."
             )
 
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name
@@ -270,7 +273,7 @@ class Bm25RetrieverConfig(BaseModel):
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = namespace_field()
     top_k: int | None = Field(
         default=None,
         gt=0,
@@ -333,7 +336,9 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                 "chunks it fetches (e.g. the top_k variable) in the pipeline editor."
             )
 
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name

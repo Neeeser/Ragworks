@@ -24,8 +24,8 @@ from app.services.collection_tools import CollectionToolService
 from app.services.pipelines import PipelineService
 from app.services.tool_invocation import ToolInvocationService
 from app.vectorstores.base import IndexSpec
-from app.vectorstores.pgvector import PgvectorStore
 from tests.utils.providers import install_default_pipelines
+from tests.utils.vectors import pgvector_store
 
 
 def _count_definition(index_name: str) -> PipelineDefinition:
@@ -131,7 +131,7 @@ def test_count_tool_invocation_returns_a_structured_result(
     session.refresh(user)
     install_default_pipelines(session, user)
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="counts-bm25", vector_type="sparse"))
     store.upsert_lexical(
         "counts-bm25",
@@ -188,7 +188,7 @@ def test_facet_tool_invocation_returns_grouped_buckets(
     session.refresh(user)
     install_default_pipelines(session, user)
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="facets-bm25", vector_type="sparse"))
     store.upsert_lexical(
         "facets-bm25",

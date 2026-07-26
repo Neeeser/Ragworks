@@ -27,12 +27,13 @@ from app.pipelines.nodes.validators import (
 )
 from app.pipelines.payloads import ChunkPayload, EmbeddingPayload, IndexingPayload
 from app.pipelines.ports import NodePort
-from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
+from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_embeddings, trace_chunk_items
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
+from app.services.namespace_ownership import resolve_owned_namespace
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backends_where
 
@@ -64,7 +65,7 @@ class IndexerConfig(BaseModel):
         default_factory=lambda: get_settings().pinecone_index_name,
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = namespace_field()
     dimension: int | None = Field(
         default=None,
         gt=0,
@@ -199,7 +200,9 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
             if not chunks or chunks[0].embedding is None:
                 raise ValueError("Indexer dimension could not be inferred from embeddings.")
             dimension = len(chunks[0].embedding)
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name
@@ -273,7 +276,7 @@ class Bm25IndexerConfig(BaseModel):
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
-    namespace: str = Field(default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA)
+    namespace: str = namespace_field()
     ensure_index: bool = True
 
 
@@ -324,7 +327,9 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Upsert chunk texts into the backend's sparse index."""
         payload = ChunkPayload.model_validate(inputs.get("chunks"))
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name

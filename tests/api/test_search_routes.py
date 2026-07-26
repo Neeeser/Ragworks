@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.variables import PipelineVariable, VariableSource, VariableType
+from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
 
 
@@ -159,3 +160,47 @@ def test_query_failure_returns_structured_detail(
     assert detail["code"] == "retrieval_pipeline_failed"
     assert detail["failed_node"]["node_type"]
     assert detail["pipeline_run_id"]
+
+
+def test_a_nodes_own_complaint_reaches_the_user_as_a_400(
+    client: TestClient, monkeypatch, auth_user: models.User
+) -> None:
+    """A node's typed `InvalidInputError` already says what to change.
+
+    Folding it into "internal error" (500) hides the one sentence that fixes
+    the pipeline — a namespace the account does not own, a dimension the index
+    disagrees with, a sparse index on a server without pg_search.
+    """
+    del auth_user
+
+    class _RefusingEmbedder:
+        def __init__(self, model_name: str) -> None:
+            self.model_name = model_name
+
+        @property
+        def usage(self) -> dict[str, int] | None:
+            return None
+
+        def embed_query(self, _query: str) -> list[float]:
+            raise InvalidInputError("Namespace 'col-other' belongs to another account.")
+
+        def embed_documents(self, chunks: object) -> list[list[float]]:
+            return [[0.1, 0.2, 0.3] for _ in chunks]  # type: ignore[attr-defined]
+
+    class _RefusingResolver:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def embedder(self, _connection_id: object, model_name: str, dimensions: object = None):
+            del dimensions
+            return _RefusingEmbedder(model_name)
+
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _RefusingResolver)
+    collection_id = _create_collection(client)
+
+    response = client.post(f"/api/collections/{collection_id}/query", json={"query": "hi"})
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "belongs to another account" in detail["message"]
+    assert detail["failed_node"]["node_type"]

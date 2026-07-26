@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlmodel import Session
@@ -34,7 +35,7 @@ class LexicalRepositoryMixin:
 
     _session: Session
 
-    def create_lexical_index(self, name: str) -> VectorIndexRecord:
+    def create_lexical_index(self, name: str, owner_id: UUID) -> VectorIndexRecord:
         """Create the sparse (BM25) data table, its indexes, and the catalog row.
 
         The BM25 index covers `namespace` alongside `text` so pg_search can
@@ -64,7 +65,11 @@ class LexicalRepositoryMixin:
             text(f"CREATE INDEX IF NOT EXISTS {table}_namespace_idx ON {table} (namespace)")
         )
         record = VectorIndexRecord(
-            name=name, dimension=None, metric=BM25_METRIC, vector_type="sparse"
+            name=name,
+            dimension=None,
+            metric=BM25_METRIC,
+            vector_type="sparse",
+            owner_user_id=owner_id,
         )
         self._session.add(record)
         self._session.flush()

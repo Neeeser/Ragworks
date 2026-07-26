@@ -586,6 +586,7 @@
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
             "static_only": true,
             "title": "Namespace",
             "type": "string"
@@ -684,6 +685,7 @@
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
             "static_only": true,
             "title": "Namespace",
             "type": "string"
@@ -845,6 +847,7 @@
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
             "static_only": true,
             "title": "Namespace",
             "type": "string"
@@ -927,6 +930,7 @@
           },
           "namespace": {
             "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
             "static_only": true,
             "title": "Namespace",
             "type": "string"

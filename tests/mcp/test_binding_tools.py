@@ -26,8 +26,8 @@ from app.schemas.enums import ApiKeyCapability
 from app.services.collection_tools import CollectionToolService
 from app.services.pipelines import PipelineService
 from app.vectorstores.base import IndexSpec
-from app.vectorstores.pgvector import PgvectorStore
 from tests.mcp.conftest import issue_key, rpc
+from tests.utils.vectors import pgvector_store
 
 
 def _count_definition(index_name: str) -> PipelineDefinition:
@@ -83,7 +83,7 @@ def _bind_count_tool(
     session: Session, user: models.User, collection: models.Collection
 ) -> None:
     """Seed a BM25 index and bind a count pipeline as a second tool."""
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="mcp-counts-bm25", vector_type="sparse"))
     store.upsert_lexical(
         "mcp-counts-bm25",
@@ -299,7 +299,7 @@ def test_calling_the_search_tool_returns_chunks_as_text_and_structured_content(
     """
     session = pgvector_session
     monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
     long_text = "Paris is the capital of France. " + ("detail " * 400)
     store.upsert(

@@ -362,6 +362,10 @@ frontend form code — only a new `ConfigFieldKind` would.
   `pg_search_session` tests skip with a named reason, so a green run there
   proves nothing for a sparse/hybrid change (the root `AGENTS.md` dev-database
   rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
+  **A bare `uv run pytest` is not the gate**: it skips `make test`'s database
+  setup and falls back to `DEFAULT_TEST_DATABASE_URL` (`localhost:5432`),
+  where the BM25 tests skip — so it reports green on changes CI then fails,
+  and the skip count is the only thing that says so. Run `make test`.
 - **The lexical (BM25) plane mirrors the dense one, backend-natively.**
   `upsert_lexical`/`lexical_query` serve sparse indexes
   (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
@@ -394,6 +398,28 @@ frontend form code — only a new `ConfigFieldKind` would.
   vectors in it — `ensure_no_other_owner` refuses while another registration
   claims the name, and the caller's own registration is irrelevant because a
   shared name is visible, and deletable, to accounts that never registered it.
+- **On a shared backend the destructive guard reads stored rows, not only
+  registrations.** A registration is a declaration and unregistering deliberately
+  leaves the data behind (it is what the refusal message recommends), so an
+  account with vectors but no registration is invisible to a declaration-only
+  check and the next caller's delete drops the table under them.
+  `IndexAdminService._ensure_no_foreign_rows` asks the store for its
+  `stored_namespaces` and refuses when one names another account's collection.
+- **A shared backend's catalog listing is scoped to the caller.** One deployment
+  Postgres holds every account's pgvector indexes, so an unscoped listing reads
+  every other account's index names straight off the catalog — and a name
+  describes the corpus behind it. `VectorIndexRecord.owner_user_id` is stamped at
+  creation and `list_indexes`/`describe_index` show the caller's rows plus
+  owner-less ones; owner-less stays visible on purpose, so an index created
+  straight in Postgres (or before the column existed) is still adoptable rather
+  than silently missing from a live collection's registry.
+- **`namespace` is the only tenant boundary inside a shared index, so every node
+  resolves it through `resolve_owned_namespace`.** It is an ordinary editable
+  config field, and the default template makes a collection id the whole of the
+  addressing — typing another account's `col-<uuid>` into a node pointed at a
+  shared index otherwise returns their chunks, text included. Namespaces naming
+  no collection stay allowed: they carry no ownership to enforce, and refusing
+  them would strand a pipeline whose collection was deleted.
 - **A store-bound node's identity is an expression over a binding-source index
   variable, not a literal.** `app/pipelines/index_variables.py` owns the rewrite,
   and it is behavior-preserving by construction — each variable defaults to the
