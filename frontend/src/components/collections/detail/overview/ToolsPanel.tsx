@@ -165,6 +165,7 @@ export function ToolsPanel({
 
       {configuring && configuringPipeline ? (
         <BindingIndexDialog
+          key={configuring.id}
           open
           pipeline={configuringPipeline}
           values={configuring.variable_values ?? {}}

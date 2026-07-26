@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
 import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { indexVariables } from "@/components/pipelines/lib/variable-env";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {
@@ -78,15 +79,28 @@ export function PipelinesCard({
   );
 
   const applyPrimaryTool = async (pipelineId: string) => {
+    // The per-binding endpoint takes only this pipeline's own slots — the
+    // picker renders the union across both selected pipelines.
+    const pipeline = retrievalPipelines.find((candidate) => candidate.id === pipelineId);
+    const declared = new Set(
+      indexVariables(pipeline?.definition.variables ?? []).map((slot) => slot.name),
+    );
+    const scoped = Object.fromEntries(
+      Object.entries(indexValues).filter(([name]) => declared.has(name)),
+    );
     const existing = collection.tools.find((tool) => tool.pipeline_id === pipelineId);
     if (existing) {
-      if (!existing.is_primary) {
-        await updateCollectionTool(token, collection.id, existing.id, { is_primary: true });
+      const patch = {
+        ...(existing.is_primary ? {} : { is_primary: true }),
+        ...(Object.keys(scoped).length > 0 ? { variable_values: scoped } : {}),
+      };
+      if (Object.keys(patch).length > 0) {
+        await updateCollectionTool(token, collection.id, existing.id, patch);
       }
     } else {
       const created = await addCollectionTool(token, collection.id, {
         pipeline_id: pipelineId,
-        variable_values: indexValues,
+        variable_values: scoped,
       });
       if (!created.is_primary) {
         await updateCollectionTool(token, collection.id, created.id, { is_primary: true });
