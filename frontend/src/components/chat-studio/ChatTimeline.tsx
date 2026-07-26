@@ -41,6 +41,7 @@ type ChatTimelineProps = {
     label: string;
   }>;
   onOverrideSelect: (sectionId: string) => void;
+  needsChatModel: boolean;
   liveResponse: string;
   hasLiveText: boolean;
   liveResponseAnimationKey: number;
@@ -78,6 +79,7 @@ function ChatTimelineComponent({
   onBranchMessage,
   overrideSections,
   onOverrideSelect,
+  needsChatModel,
   liveResponse,
   hasLiveText,
   liveResponseAnimationKey,
@@ -131,6 +133,7 @@ function ChatTimelineComponent({
         <EmptyTimelineState
           overrideSections={overrideSections}
           onOverrideSelect={onOverrideSelect}
+          needsChatModel={needsChatModel}
         />
       );
     }

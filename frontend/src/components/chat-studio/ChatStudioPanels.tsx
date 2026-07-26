@@ -8,6 +8,7 @@ import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverla
 import { TelemetryPanel } from "@/components/chat-studio/telemetry/TelemetryPanel";
 
 import type { useChatStream } from "@/components/chat-studio/hooks/messaging/use-chat-stream";
+import type { RunSettingsPresentation } from "@/components/chat-studio/hooks/settings/use-chat-model-affordance";
 import type { useCollectionTools } from "@/components/chat-studio/hooks/settings/use-collection-tools";
 import type { usePromptEditor } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
 import type { UsePanelControlsResult } from "@/components/chat-studio/hooks/use-panel-controls";
@@ -52,7 +53,14 @@ export interface ChatStudioPanelsProps {
   promptEditor: PromptEditor;
   telemetry: ChatStudioTelemetryGroups;
   // Header / new chat / history
-  currentModelLabel: string;
+  currentModelLabel: string | null;
+  /** No chat model is selected and nothing has been sent yet. */
+  needsChatModel: boolean;
+  /**
+   * Run settings' open state and its open/close handlers, which fold in the
+   * first-run default — read these rather than `panel`'s raw telemetry toggle.
+   */
+  runSettings: RunSettingsPresentation;
   onStartNewChat: () => void;
   onTimelineModelSelect: () => void;
   deletingSessionId: string | null;
@@ -112,6 +120,8 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
     promptEditor,
     telemetry,
     currentModelLabel,
+    needsChatModel,
+    runSettings,
     onStartNewChat,
     onTimelineModelSelect,
     deletingSessionId,
@@ -170,7 +180,7 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
 
   const telemetryPanel = (
     <TelemetryPanel
-      onClose={panel.handleTelemetryClose}
+      onClose={runSettings.onClose}
       sections={telemetry.sections}
       prompts={telemetry.prompts}
       collections={telemetry.collections}
@@ -219,6 +229,7 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
         onBranchMessage,
         overrideSections,
         onOverrideSelect: panel.handleOverrideSelect,
+        needsChatModel,
         liveResponse: chatStream.liveResponse,
         hasLiveText,
         liveResponseAnimationKey: chatStream.liveResponseAnimationKey,
@@ -280,11 +291,11 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       chatPanelRef={panel.chatPanelRef}
       isOverlayMode={panel.isOverlayMode}
       historyOpen={panel.historyOpen}
-      telemetryOpen={panel.telemetryOpen}
+      telemetryOpen={runSettings.open}
       onOpenHistory={panel.handleHistoryOpen}
-      onOpenTelemetry={panel.handleTelemetryOpen}
+      onOpenTelemetry={runSettings.onOpen}
       onCloseHistory={panel.handleHistoryClose}
-      onCloseTelemetry={panel.handleTelemetryClose}
+      onCloseTelemetry={runSettings.onClose}
       header={header}
       messagesPanel={messagesPanel}
       historyPanel={historyPanel}

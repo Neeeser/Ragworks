@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatTimeline } from "@/components/chat-studio/ChatTimeline";
+import { TELEMETRY_SECTION_IDS } from "@/components/chat-studio/lib/chat-constants";
 import { makePublicConfig } from "@/test/fixtures";
 import { resetMockAppConfig, setMockAppConfig } from "@/test/mocks";
 
@@ -43,6 +45,7 @@ const userEntryId = "entry-user";
 const TOOL_BUBBLE_TESTID = "tool-bubble";
 const ORIGINAL_CHAT_TITLE = "Original chat";
 const ASSISTANT_REASONING_TEXT = "Assistant reasoning";
+const SELECT_MODEL_LABEL = "Select model";
 
 const buildMessage = (
   role: ChatMessage["role"],
@@ -75,6 +78,7 @@ const baseProps = (overrides: Partial<ChatTimelineProps> = {}): ChatTimelineProp
   onBranchMessage: vi.fn(),
   overrideSections: [],
   onOverrideSelect: vi.fn(),
+  needsChatModel: false,
   liveResponse: "",
   hasLiveText: false,
   liveResponseAnimationKey: 0,
@@ -121,6 +125,53 @@ describe("ChatTimeline", () => {
 
     expect(screen.queryByText("Active run settings")).not.toBeInTheDocument();
     expect(screen.getByText(/Sending the first message/)).toBeInTheDocument();
+  });
+
+  it("states the model requirement and offers the choice when no model is selected", () => {
+    render(<ChatTimeline {...baseProps({ needsChatModel: true })} />);
+
+    expect(screen.getByText("Sending a message requires a chat model.")).toBeInTheDocument();
+    expect(screen.queryByText(/Sending the first message/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: SELECT_MODEL_LABEL })).toBeInTheDocument();
+  });
+
+  it("opens run settings at model routing from the empty-state action", async () => {
+    const onOverrideSelect = vi.fn();
+    const user = userEvent.setup();
+
+    render(<ChatTimeline {...baseProps({ needsChatModel: true, onOverrideSelect })} />);
+
+    await user.click(screen.getByRole("button", { name: SELECT_MODEL_LABEL }));
+
+    expect(onOverrideSelect).toHaveBeenCalledWith(TELEMETRY_SECTION_IDS.modelRouting);
+  });
+
+  it("reaches the empty-state action from the keyboard", async () => {
+    const onOverrideSelect = vi.fn();
+    const user = userEvent.setup();
+
+    render(<ChatTimeline {...baseProps({ needsChatModel: true, onOverrideSelect })} />);
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: SELECT_MODEL_LABEL })).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(onOverrideSelect).toHaveBeenCalledWith(TELEMETRY_SECTION_IDS.modelRouting);
+  });
+
+  it("drops the model action once a model is selected, keeping the run-settings summary", () => {
+    render(
+      <ChatTimeline
+        {...baseProps({
+          needsChatModel: false,
+          overrideSections: [{ id: "system", label: "System" }],
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: SELECT_MODEL_LABEL })).not.toBeInTheDocument();
+    expect(screen.getByText(/Sending the first message/)).toBeInTheDocument();
+    expect(screen.getByText("Active run settings")).toBeInTheDocument();
   });
 
   it("renders message entries and edit actions", () => {
