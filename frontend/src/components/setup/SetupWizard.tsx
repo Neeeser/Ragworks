@@ -27,10 +27,14 @@ export function SetupWizard() {
     }
   }, [status, wizard.state.step, router]);
 
+  // The shell gives this route a fixed-height column and the backdrop is
+  // full-bleed, so the step column owns the scroll: without it, a step that
+  // outgrows the viewport (five connections on the providers step) put its
+  // Continue button below the fold with no scrollable ancestor to reach it.
   return (
-    <div className="relative flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
       <SetupFlowBackdrop step={wizard.state.step} />
-      <div className="relative z-10 flex w-full max-w-xl flex-col px-4">
+      <div className="relative z-10 flex max-h-full w-full max-w-xl flex-col overflow-y-auto px-4 py-4">
         {/* Progress as a node path: square node dots, the current one stretched
             into a wire segment — the console's own mark, not a pill row. */}
         <nav aria-label="Setup progress" className="mb-3 flex items-center gap-1">
