@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import * as apiModule from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 import { makePipeline } from "@/test/fixtures";
 import { makeVectorIndex } from "@/test/fixtures/indexes";
@@ -9,6 +10,11 @@ import { makeVectorIndex } from "@/test/fixtures/indexes";
 import { BindingIndexDialog } from "../BindingIndexDialog";
 
 import type { Pipeline, PipelineVariable } from "@/lib/types";
+
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
+
+const api = vi.mocked(apiModule);
 
 const PRIMARY_INDEX: PipelineVariable = {
   name: "primary_index",
@@ -26,6 +32,7 @@ function pipelineWithIndexSlot(variables: PipelineVariable[] = [PRIMARY_INDEX]):
 function renderDialog(overrides: Partial<Parameters<typeof BindingIndexDialog>[0]> = {}) {
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onClose = vi.fn();
+  const onIndexCreated = vi.fn();
   render(
     <BindingIndexDialog
       open
@@ -35,13 +42,15 @@ function renderDialog(overrides: Partial<Parameters<typeof BindingIndexDialog>[0
         makeVectorIndex({ index_id: "index-row-1", name: "docs-main" }),
         makeVectorIndex({ index_id: "index-row-2", name: "tenant-b", backend: "pinecone" }),
       ]}
+      token="token"
       title="search_docs"
       onSave={onSave}
+      onIndexCreated={onIndexCreated}
       onClose={onClose}
       {...overrides}
     />,
   );
-  return { onSave, onClose };
+  return { onSave, onClose, onIndexCreated };
 }
 
 describe("BindingIndexDialog", () => {
@@ -96,6 +105,27 @@ describe("BindingIndexDialog", () => {
 
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("creates a compatible index in place and binds the slot to it", async () => {
+    const user = userEvent.setup();
+    api.createIndex.mockResolvedValue(
+      makeVectorIndex({ index_id: "index-row-3", name: "fresh", dimension: 1536 }),
+    );
+    const { onSave, onIndexCreated } = renderDialog();
+
+    // Making the index the binding needs happens here: bouncing to another
+    // page to create one and finding the way back is the detour this removes.
+    await user.type(screen.getByLabelText(/New 1536d index on pgvector/), "fresh");
+    await user.click(screen.getByRole("button", { name: "Create and use" }));
+
+    await waitFor(() => expect(onIndexCreated).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        primary_index: { index_id: "index-row-3", backend: "pgvector", name: "fresh" },
+      }),
+    );
   });
 
   it("reports a pipeline with no index slot instead of an empty picker", () => {

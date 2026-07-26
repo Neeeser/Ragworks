@@ -15,7 +15,7 @@ import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
 import { PanelGrid } from "@/components/ui/panel";
-import { fetchCollectionStatsHistory } from "@/lib/api";
+import { fetchCollectionStatsHistory, listCollectionTools } from "@/lib/api";
 import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 import { useApiQuery } from "@/lib/use-api-query";
 
@@ -45,6 +45,15 @@ export function CollectionOverview({
     () => fetchCollectionStatsHistory(token, collection.id, range),
     [token, collection.id, range],
   );
+
+  // One tools query for the page: the Indexes card reads each binding's index
+  // choice and the Tools panel curates the same bindings, so two fetches of
+  // the same list would drift the moment one of them mutates.
+  const toolsQuery = useApiQuery(
+    () => listCollectionTools(token, collection.id),
+    [token, collection.id],
+  );
+  const tools = useMemo(() => toolsQuery.data?.tools ?? [], [toolsQuery.data]);
 
   const points = useMemo(() => history.data?.points ?? [], [history.data]);
   const buckets = useMemo(() => points.map((point) => point.bucket_start), [points]);
@@ -119,12 +128,21 @@ export function CollectionOverview({
         onCollectionUpdated={onCollectionUpdated}
       />
 
-      <IndexesCard collection={collection} token={token} />
+      <IndexesCard
+        collection={collection}
+        token={token}
+        toolPipelines={retrievalPipelines}
+        tools={tools}
+        onToolsChanged={toolsQuery.reload}
+      />
 
       <ToolsPanel
         collection={collection}
         toolPipelines={retrievalPipelines}
+        tools={tools}
+        loading={toolsQuery.loading}
         token={token}
+        onToolsChanged={toolsQuery.reload}
         onCollectionUpdated={onCollectionUpdated}
       />
 

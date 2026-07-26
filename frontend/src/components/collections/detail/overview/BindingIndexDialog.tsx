@@ -18,11 +18,14 @@ type BindingIndexDialogProps = {
   values: Record<string, unknown>;
   /** Registered indexes the user can pick from. */
   indexes: VectorIndex[];
+  token: string;
   /** Label for the thing being configured, shown in the heading. */
   title: string;
   open: boolean;
   busy?: boolean;
   onSave: (values: Record<string, unknown>) => Promise<void>;
+  /** Called after an index is created here, so the picker list reloads. */
+  onIndexCreated: () => void;
   onClose: () => void;
 };
 
@@ -39,10 +42,12 @@ export function BindingIndexDialog({
   pipeline,
   values,
   indexes,
+  token,
   title,
   open,
   busy,
   onSave,
+  onIndexCreated,
   onClose,
 }: BindingIndexDialogProps) {
   const hasSlots = useMemo(
@@ -87,8 +92,10 @@ export function BindingIndexDialog({
             pipelines={[pipeline]}
             values={draft}
             indexes={indexes}
+            token={token}
             disabled={busy || saving}
             onChange={setDraft}
+            onIndexCreated={onIndexCreated}
           />
         ) : (
           // Said plainly rather than shown as an empty dialog: a pipeline

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countHiddenOverrides, resolveNodeSignature } from "../node-signature";
+import { BINDING_INDEX_VALUE, countHiddenOverrides, resolveNodeSignature } from "../node-signature";
 import { buildPipelineConfigFields } from "../pipeline-config";
 
 import type { PipelineConfigField } from "../pipeline-config";
@@ -82,7 +82,7 @@ describe("resolveNodeSignature", () => {
     // store-bound node, and the opposite of an unset one.
     expect(signature).toMatchObject({
       label: "Index",
-      value: "set per collection",
+      value: BINDING_INDEX_VALUE,
       detail: "primary_index",
     });
     expect(signature?.missing).toBeFalsy();

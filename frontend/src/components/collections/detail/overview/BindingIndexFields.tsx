@@ -2,9 +2,11 @@
 
 import { useMemo } from "react";
 
+import { canCreateForSlot, InlineIndexCreate } from "@/components/indexes/InlineIndexCreate";
 import { indexSlotConstraints, indexVariables } from "@/components/pipelines/lib/variable-env";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
+import { useAppConfig } from "@/providers/config-provider";
 
 import type { IndexSlotConstraint } from "@/components/pipelines/lib/variable-env";
 import type { IndexVariableValue, Pipeline, VectorIndex } from "@/lib/types";
@@ -15,8 +17,11 @@ type BindingIndexFieldsProps = {
   /** Current selections, keyed by variable name. */
   values: Record<string, unknown>;
   indexes: VectorIndex[];
+  token: string;
   disabled?: boolean;
   onChange: (values: Record<string, unknown>) => void;
+  /** Called after an index is created here, so the picker list reloads. */
+  onIndexCreated: () => void;
 };
 
 /** Read a stored binding value as an index reference, else null. */
@@ -77,9 +82,12 @@ export function BindingIndexFields({
   pipelines,
   values,
   indexes,
+  token,
   disabled,
   onChange,
+  onIndexCreated,
 }: BindingIndexFieldsProps) {
+  const { config: appConfig } = useAppConfig();
   const slots = useMemo(() => {
     const byName = new Map<string, ReturnType<typeof indexVariables>[number]>();
     for (const pipeline of pipelines) {
@@ -112,27 +120,49 @@ export function BindingIndexFields({
                   indexes.find((index) => index.index_id === current?.index_id)?.dimension ?? null,
               }
             : constraint;
+        const pick = (picked: VectorIndex) => {
+          if (!picked.index_id) return;
+          onChange({
+            ...values,
+            [slot.name]: {
+              index_id: picked.index_id,
+              backend: picked.backend,
+              name: picked.name,
+            },
+          });
+        };
+        const currentIndex = indexes.find((index) => index.index_id === current?.index_id);
         return (
-          <Field key={slot.name} label={slot.description || slot.name} hint={slot.name}>
-            <CustomSelect
-              value={current?.index_id ?? ""}
-              options={indexOptionsForSlot(indexes, anchored)}
-              placeholder="Pick an index"
-              disabled={disabled}
-              onValueChange={(indexId) => {
-                const picked = indexes.find((index) => index.index_id === indexId);
-                if (!picked?.index_id) return;
-                onChange({
-                  ...values,
-                  [slot.name]: {
-                    index_id: picked.index_id,
-                    backend: picked.backend,
-                    name: picked.name,
-                  },
-                });
-              }}
-            />
-          </Field>
+          <div key={slot.name} className="space-y-2">
+            <Field label={slot.description || slot.name} hint={slot.name}>
+              <CustomSelect
+                value={current?.index_id ?? ""}
+                options={indexOptionsForSlot(indexes, anchored)}
+                placeholder="Pick an index"
+                disabled={disabled}
+                onValueChange={(indexId) => {
+                  const picked = indexes.find((index) => index.index_id === indexId);
+                  if (picked) pick(picked);
+                }}
+              />
+            </Field>
+            {/* Creating the index the binding needs happens here rather than on
+                another page, so choosing one never turns into a detour. */}
+            {canCreateForSlot(anchored.vectorType, anchored.dimension) ? (
+              <InlineIndexCreate
+                token={token}
+                backend={currentIndex?.backend ?? appConfig.indexing.default_backend}
+                vectorType={anchored.vectorType}
+                dimension={anchored.dimension}
+                metric={currentIndex?.metric}
+                disabled={disabled}
+                onCreated={(created) => {
+                  onIndexCreated();
+                  pick(created);
+                }}
+              />
+            ) : null}
+          </div>
         );
       })}
     </div>

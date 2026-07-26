@@ -1,43 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { BindingIndexDialog } from "@/components/collections/detail/overview/BindingIndexDialog";
 import {
+  asIndexValue,
   indexOptionLabel,
-  indexOptionsForSlot,
 } from "@/components/collections/detail/overview/BindingIndexFields";
+import { CollectionIndexesDialog } from "@/components/collections/detail/overview/CollectionIndexesDialog";
 import { useIndexes } from "@/components/indexes/use-indexes";
+import { indexVariables } from "@/components/pipelines/lib/variable-env";
 import { Button } from "@/components/ui/button";
-import { CustomSelect } from "@/components/ui/custom-select";
-import { Field, TextInput } from "@/components/ui/field";
-import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
-import { createIndex, fetchCollectionIndexes, updateCollectionIndexes } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
+import { fetchCollectionIndexes, updateCollectionTool } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 
-import type { Collection, CollectionIndexSlot, VectorIndex } from "@/lib/types";
+import type { Collection, Pipeline } from "@/lib/types";
+import type { CollectionTool } from "@/lib/types/tools";
 
 type IndexesCardProps = {
   collection: Collection;
   token: string;
+  /** Pipelines bound as tools, for the index slots each binding declares. */
+  toolPipelines: Pipeline[];
+  /** The collection's tool bindings, with their own index choices. */
+  tools: CollectionTool[];
+  onToolsChanged: () => void | Promise<void>;
 };
 
 /**
- * The collection-level view of its index slots, and the one control that
- * repoints a slot across every binding at once. Changing an index moves no
- * data — the consequence is stated in the dialog, before the change, because
- * the empty reads it causes are invisible at query time.
+ * The one place a collection's indexes are chosen.
+ *
+ * Which index a collection reads and writes is a property of its bindings, so
+ * it is answerable only here — the index registry owns index entities, never
+ * where a collection points. The card states each slot's current index and
+ * repoints every binding at once; a tool binding that must differ from the
+ * rest is changed from its own row.
  */
-export function IndexesCard({ collection, token }: IndexesCardProps) {
+export function IndexesCard({
+  collection,
+  token,
+  toolPipelines,
+  tools,
+  onToolsChanged,
+}: IndexesCardProps) {
   const slots = useApiQuery(
     () => fetchCollectionIndexes(token, collection.id),
     [token, collection.id],
   );
   const { registeredIndexes, refreshIndexes } = useIndexes(token);
   const [editing, setEditing] = useState(false);
+  const [configuring, setConfiguring] = useState<CollectionTool | null>(null);
 
   const rows = slots.data?.slots ?? [];
+
+  const pipelineById = useMemo(
+    () => new Map(toolPipelines.map((pipeline) => [pipeline.id, pipeline])),
+    [toolPipelines],
+  );
+  // Only bindings that declare an index slot: a tool with no slot has nothing
+  // to change here, and listing it would suggest otherwise.
+  const toolRows = useMemo(
+    () =>
+      tools
+        .map((tool) => ({ tool, pipeline: pipelineById.get(tool.pipeline_id) ?? null }))
+        .filter(
+          (row): row is { tool: CollectionTool; pipeline: Pipeline } =>
+            row.pipeline !== null &&
+            indexVariables(row.pipeline.definition.variables ?? []).length > 0,
+        ),
+    [tools, pipelineById],
+  );
+  const configuringPipeline = configuring
+    ? (pipelineById.get(configuring.pipeline_id) ?? null)
+    : null;
 
   return (
     <Panel className="p-3">
@@ -73,8 +110,34 @@ export function IndexesCard({ collection, token }: IndexesCardProps) {
         </ul>
       )}
 
+      {toolRows.length > 0 ? (
+        <div className="mt-4 border-t border-hairline pt-3">
+          <InstrumentLabel>Per tool</InstrumentLabel>
+          <ul className="mt-2 space-y-2">
+            {toolRows.map(({ tool, pipeline }) => (
+              <li key={tool.id} className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-ui text-primary">{tool.name}</p>
+                  <p className="truncate text-instrument text-meta">
+                    {indexVariables(pipeline.definition.variables ?? [])
+                      .map((slot) => {
+                        const value = asIndexValue(tool.variable_values?.[slot.name] ?? slot.value);
+                        return `${slot.name} → ${value?.name ?? "not set"}`;
+                      })
+                      .join(" · ")}
+                  </p>
+                </div>
+                <Button variant="ghost" onClick={() => setConfiguring(tool)}>
+                  Change
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {editing ? (
-        <IndexesDialog
+        <CollectionIndexesDialog
           collectionId={collection.id}
           token={token}
           slots={rows}
@@ -82,199 +145,33 @@ export function IndexesCard({ collection, token }: IndexesCardProps) {
           onSaved={() => {
             setEditing(false);
             void slots.reload();
+            void onToolsChanged();
           }}
           onIndexCreated={refreshIndexes}
           onClose={() => setEditing(false)}
         />
       ) : null}
-    </Panel>
-  );
-}
 
-type IndexesDialogProps = {
-  collectionId: string;
-  token: string;
-  slots: CollectionIndexSlot[];
-  indexes: VectorIndex[];
-  onSaved: () => void;
-  onIndexCreated: () => void;
-  onClose: () => void;
-};
-
-/** Repoint every slot in one save; selections apply to every binding. */
-function IndexesDialog({
-  collectionId,
-  token,
-  slots,
-  indexes,
-  onSaved,
-  onIndexCreated,
-  onClose,
-}: IndexesDialogProps) {
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      slots
-        .filter((slot) => slot.current !== null)
-        .map((slot) => [slot.name, slot.current?.index_id ?? ""]),
-    ),
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const values = Object.fromEntries(
-        Object.entries(draft).map(([name, indexId]) => [name, { index_id: indexId }]),
-      );
-      await updateCollectionIndexes(token, collectionId, values);
-      onSaved();
-    } catch (err) {
-      setError(getErrorMessage(err, "Unable to update the collection's indexes."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalOverlay open onClose={onClose} labelledBy="collection-indexes-title">
-      <div className="card-surface w-full max-w-lg space-y-4 bg-canvas-raised p-4 text-primary shadow-elevation-2">
-        <div className="space-y-1">
-          <h2
-            id="collection-indexes-title"
-            className="text-head font-semibold tracking-[-0.01em] text-primary"
-          >
-            Collection indexes
-          </h2>
-          <p className="text-ui text-muted">
-            A change applies to every pipeline bound to this collection. Changing an index does not
-            move indexed data — re-ingest to populate the new index.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {slots.map((slot) => (
-            <SlotEditor
-              key={slot.name}
-              slot={slot}
-              token={token}
-              indexes={indexes}
-              value={draft[slot.name] ?? ""}
-              disabled={saving}
-              onPick={(indexId) => setDraft((prev) => ({ ...prev, [slot.name]: indexId }))}
-              onIndexCreated={onIndexCreated}
-            />
-          ))}
-        </div>
-
-        {error ? <p className="text-ui text-data-neg">{error}</p> : null}
-
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} loading={saving}>
-            Save
-          </Button>
-        </div>
-      </div>
-    </ModalOverlay>
-  );
-}
-
-type SlotEditorProps = {
-  slot: CollectionIndexSlot;
-  token: string;
-  indexes: VectorIndex[];
-  value: string;
-  disabled?: boolean;
-  onPick: (indexId: string) => void;
-  onIndexCreated: () => void;
-};
-
-/**
- * One slot's picker plus a quick-create for a compatible index. Creation is
- * offered only when the slot pins the parameters (vector type, and width for
- * dense slots) — a slot with an unknown width can't promise a compatible
- * index, so the Index Manager owns that case.
- */
-function SlotEditor({
-  slot,
-  token,
-  indexes,
-  value,
-  disabled,
-  onPick,
-  onIndexCreated,
-}: SlotEditorProps) {
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const canCreate = slot.vector_type === "sparse" || slot.expected_dimension != null;
-  const backend = slot.current?.backend ?? "pgvector";
-  const widthLabel = slot.vector_type === "sparse" ? "BM25" : `${slot.expected_dimension}d`;
-
-  const handleCreate = async () => {
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const created = await createIndex(token, {
-        backend,
-        name: newName.trim(),
-        vector_type: slot.vector_type,
-        ...(slot.vector_type === "dense" && slot.expected_dimension != null
-          ? { dimension: slot.expected_dimension, metric: slot.current?.metric ?? "cosine" }
-          : {}),
-      });
-      onIndexCreated();
-      if (created.index_id) onPick(created.index_id);
-      setNewName("");
-    } catch (err) {
-      setCreateError(getErrorMessage(err, "Unable to create the index."));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <Field label={slot.description || slot.name} hint={slot.name}>
-        <CustomSelect
-          value={value}
-          options={indexOptionsForSlot(indexes, {
-            vectorType: slot.vector_type,
-            dimension: slot.expected_dimension,
-          })}
-          placeholder="Pick an index"
-          disabled={disabled}
-          onValueChange={onPick}
+      {configuring && configuringPipeline ? (
+        <BindingIndexDialog
+          key={configuring.id}
+          open
+          pipeline={configuringPipeline}
+          values={configuring.variable_values ?? {}}
+          indexes={registeredIndexes}
+          token={token}
+          title={configuring.name}
+          onIndexCreated={refreshIndexes}
+          onSave={async (values) => {
+            await updateCollectionTool(token, collection.id, configuring.id, {
+              variable_values: values,
+            });
+            await onToolsChanged();
+            void slots.reload();
+          }}
+          onClose={() => setConfiguring(null)}
         />
-      </Field>
-      {canCreate ? (
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <Field label={`New ${widthLabel} index on ${backend}`}>
-              <TextInput
-                value={newName}
-                placeholder="new-index-name"
-                disabled={disabled || creating}
-                onChange={(event) => setNewName(event.target.value)}
-              />
-            </Field>
-          </div>
-          <Button
-            variant="secondary"
-            loading={creating}
-            disabled={disabled || newName.trim() === ""}
-            onClick={handleCreate}
-          >
-            Create and use
-          </Button>
-        </div>
       ) : null}
-      {createError ? <p className="text-ui text-data-neg">{createError}</p> : null}
-    </div>
+    </Panel>
   );
 }

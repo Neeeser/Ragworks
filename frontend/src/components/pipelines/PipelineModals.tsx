@@ -2,10 +2,10 @@
 
 import { forwardRef, useImperativeHandle, useState } from "react";
 
+import { IndexRegistryModal } from "@/components/indexes/IndexRegistryModal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { CreatePipelineWizard } from "./CreatePipelineWizard";
-import { IndexRegistryModal } from "@/components/indexes/IndexRegistryModal";
 
 import type {
   BackendInfo,

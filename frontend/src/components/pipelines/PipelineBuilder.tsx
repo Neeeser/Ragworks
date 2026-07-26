@@ -4,13 +4,13 @@ import { useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { useAuth } from "@/providers/auth-provider";
 
 import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
 import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useIndexBackends } from "./hooks/use-index-backends";
-import { useIndexes } from "@/components/indexes/use-indexes";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
 import { useNodeEditing } from "./hooks/use-node-editing";
 import { usePipelineModelCatalogs } from "./hooks/use-pipeline-model-catalogs";

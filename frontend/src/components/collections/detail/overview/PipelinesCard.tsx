@@ -40,7 +40,7 @@ export function PipelinesCard({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [indexValues, setIndexValues] = useState<Record<string, unknown>>({});
-  const { registeredIndexes } = useIndexes(token);
+  const { registeredIndexes, refreshIndexes } = useIndexes(token);
 
   const defaultIngestion = useMemo(
     () =>
@@ -178,8 +178,10 @@ export function PipelinesCard({
             pipelines={selectedPipelines}
             values={indexValues}
             indexes={registeredIndexes}
+            token={token}
             disabled={saving}
             onChange={setIndexValues}
+            onIndexCreated={refreshIndexes}
           />
         </div>
       )}

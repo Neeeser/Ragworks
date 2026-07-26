@@ -6,12 +6,13 @@ import { createIndex, fetchEmbeddingDimension } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 
-import type {
-  BackendInfo,
-  CatalogModel,
-  IndexCreatePayload,
-  ModelCatalogResponse,
-} from "@/lib/types";
+import {
+  buildIndexCreatePayload,
+  supportsCloudPlacement as backendSupportsCloudPlacement,
+} from "./create-index";
+
+import type { IndexCreateDraft } from "./create-index";
+import type { BackendInfo, CatalogModel, ModelCatalogResponse } from "@/lib/types";
 
 export const CLOUD_OPTIONS = ["aws", "gcp", "azure"];
 export const REGION_OPTIONS: Record<string, string[]> = {
@@ -20,7 +21,7 @@ export const REGION_OPTIONS: Record<string, string[]> = {
   azure: ["eastus", "westeurope", "southeastasia"],
 };
 
-type CreateFormState = Omit<IndexCreatePayload, "backend">;
+type CreateFormState = IndexCreateDraft;
 
 const DEFAULT_FORM: CreateFormState = {
   name: "",
@@ -104,9 +105,7 @@ export function useCreateIndexForm({
   const { capabilities, backend } = backendInfo;
   const metricOptions = capabilities.supported_metrics;
   const supportsSparse = capabilities.supported_vector_types.includes("sparse");
-  // Cloud/region placement is a Pinecone-only concept; pgvector lives in the
-  // deployment's own Postgres.
-  const supportsCloudPlacement = backend === "pinecone";
+  const supportsCloudPlacement = backendSupportsCloudPlacement(backend);
   const maxDimension = capabilities.max_dimension;
 
   const effectiveVectorType = supportsSparse ? (createForm.vector_type ?? "dense") : "dense";
@@ -240,20 +239,11 @@ export function useCreateIndexForm({
     setCreating(true);
     onCreateStart();
     try {
-      const payload: IndexCreatePayload = {
+      const payload = buildIndexCreatePayload(backend, {
         ...createForm,
-        backend,
-        name: createForm.name.trim(),
         vector_type: effectiveVectorType,
-      };
-      if (!supportsCloudPlacement) {
-        delete payload.cloud;
-        delete payload.region;
-        delete payload.deletion_protection;
-      }
-      if (payload.vector_type === "sparse") {
-        delete payload.dimension;
-      } else if (!payload.dimension) {
+      });
+      if (payload.vector_type !== "sparse" && !payload.dimension) {
         /* c8 ignore start -- guarded by disabled Create button */
         onError("Dense indexes require a vector dimension.");
         setCreating(false);

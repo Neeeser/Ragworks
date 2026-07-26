@@ -57,7 +57,7 @@ export function CreateCollectionWizard({
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [indexValues, setIndexValues] = useState<Record<string, unknown>>({});
-  const { registeredIndexes } = useIndexes(token);
+  const { registeredIndexes, refreshIndexes } = useIndexes(token);
   const [ingestionOverrides, setIngestionOverrides] = useState<
     Record<string, Record<string, unknown>>
   >({});
@@ -323,7 +323,9 @@ export function CreateCollectionWizard({
             pipelines={selectedPipelines}
             values={indexValues}
             indexes={registeredIndexes}
+            token={token}
             onChange={setIndexValues}
+            onIndexCreated={refreshIndexes}
           />
         </div>
       )}

@@ -52,6 +52,24 @@ export type NodeConfigSectionsProps = {
   variables: PipelineVariable[];
 } & NodeModelCatalogProps;
 
+/**
+ * What the index field says about its current state: which variable the
+ * binding fills in, the width of the literal index chosen, or that a literal
+ * one is still needed.
+ */
+function indexHelper(
+  boundVariables: string[] | null,
+  indexValue: string,
+  dimension: number | null | undefined,
+): string {
+  if (boundVariables !== null) {
+    const named = boundVariables.length > 0 ? ` · ${boundVariables.join(", ")}` : "";
+    return `${BINDING_INDEX_VALUE}${named}`;
+  }
+  if (!indexValue) return "Required";
+  return dimension ? `Dimension: ${dimension}` : "Dimension: n/a";
+}
+
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
   { value: "pgvector", label: "pgvector", hint: "Built-in Postgres" },
   { value: "pinecone", label: "Pinecone", hint: "Managed cloud" },
@@ -278,17 +296,7 @@ export function NodeConfigSections({
         <ParameterFieldCard
           label="Index"
           description="The vector index this node reads from or writes to."
-          helper={
-            boundIndexVariables !== null
-              ? `${BINDING_INDEX_VALUE}${
-                  boundIndexVariables.length > 0 ? ` · ${boundIndexVariables.join(", ")}` : ""
-                }`
-              : indexValue
-                ? selectedIndex?.dimension
-                  ? `Dimension: ${selectedIndex.dimension}`
-                  : "Dimension: n/a"
-                : "Required"
-          }
+          helper={indexHelper(boundIndexVariables, indexValue, selectedIndex?.dimension)}
           actionLabel="Manage"
           actionDisabled={isPreview}
           onAction={onOpenIndexRegistry}
