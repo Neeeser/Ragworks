@@ -36,11 +36,11 @@ function renderOverview(overrides: Partial<Parameters<typeof CollectionOverview>
 }
 
 describe("CollectionOverview", () => {
-  it("shows counts with growth charts instead of a raw collection id", async () => {
+  it("loads the collection's whole lifetime, with no range to pick", async () => {
     renderOverview();
 
     await waitFor(() => {
-      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "7d");
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", null);
     });
     // Hero counts come from stats.
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -48,38 +48,68 @@ describe("CollectionOverview", () => {
     // The raw UUID is no longer rendered as text; it's behind a copy action.
     expect(screen.queryByText("col-1")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /copy id/i })).toBeInTheDocument();
+    expect(screen.getByText("All time")).toBeInTheDocument();
   });
 
-  it("changing the time range refetches history at that range", async () => {
+  it("refetches the brushed span and offers a way back to the lifetime", async () => {
     renderOverview();
     await waitFor(() => {
-      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "7d");
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", null);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "4h" }));
+    // Keyboard-select two buckets on the Documents chart, then commit.
+    const chart = screen.getAllByRole("group", { name: /Documents over time/ })[0];
+    chart.focus();
+    // One act per key: batched updates would leave each handler reading the
+    // cursor from before the previous key.
+    await act(async () => {
+      fireEvent.keyDown(chart, { key: "ArrowRight" });
+    });
+    await act(async () => {
+      fireEvent.keyDown(chart, { key: "ArrowRight", shiftKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(chart, { key: "Enter" });
+    });
 
     await waitFor(() => {
-      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", "4h");
+      expect(api.fetchCollectionStatsHistory).toHaveBeenCalledWith("token", "col-1", {
+        start: "2024-01-01T00:00:00Z",
+        end: "2024-01-03T00:00:00.000Z",
+      });
     });
+    expect(screen.getByText("Zoomed")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset zoom" }));
+    });
+    expect(screen.getByText("All time")).toBeInTheDocument();
   });
 
-  it("splits latency into ingestion and retrieval with a details drill-in", async () => {
+  it("charts retrieval latency per tool with a legend that carries the numbers", async () => {
     renderOverview();
 
     await waitFor(() => {
-      expect(screen.getAllByText("Ingestion").length).toBeGreaterThan(0);
+      expect(screen.getByText("Ingestion latency")).toBeInTheDocument();
     });
-    expect(screen.getAllByText("Retrieval").length).toBeGreaterThan(0);
-    // Weighted window averages from the fixture buckets.
-    expect(screen.getByText("900 ms")).toBeInTheDocument();
-    expect(screen.getByText("40 ms")).toBeInTheDocument();
+    expect(screen.getByText("Retrieval latency")).toBeInTheDocument();
+    // The tool's own name is the series identity, not a generic "Retrieval".
+    expect(screen.getByRole("button", { name: /Search/ })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
-    expect(screen.getByRole("button", { name: "p95" })).toBeInTheDocument();
-    expect(screen.getAllByText("Worst p95").length).toBe(2);
+    // Collapsed, the legend row already carries its headline average.
+    expect(screen.getAllByText("40 ms").length).toBeGreaterThan(0);
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "p95" }));
-    expect(screen.getByRole("button", { name: "p95" })).toHaveAttribute("aria-pressed", "true");
+  it("hides a tool's line when its legend row is toggled off", async () => {
+    renderOverview();
+
+    const row = await screen.findByRole("button", { name: /Search/ });
+    expect(row).toHaveAttribute("aria-pressed", "true");
+
+    await act(async () => {
+      fireEvent.click(row);
+    });
+    expect(screen.getByRole("button", { name: /Search/ })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("copies the collection id from the header action", async () => {
@@ -137,7 +167,7 @@ describe("CollectionOverview", () => {
     });
   });
 
-  it("shows an empty latency state when the window has no samples", async () => {
+  it("shows empty latency states when the domain has no samples", async () => {
     api.fetchCollectionStatsHistory.mockResolvedValueOnce(
       makeStatsHistory({
         points: [
@@ -146,16 +176,19 @@ describe("CollectionOverview", () => {
             document_total: 0,
             chunk_total: 0,
             ingestion: { count: 0 },
-            retrieval: { count: 0 },
+            tools: {},
           },
         ],
+        tools: [],
+        ingestion_summary: { count: 0 },
       }),
     );
     renderOverview({ stats: null });
 
     await waitFor(() => {
-      expect(screen.getByText("No runs or queries in this window yet.")).toBeInTheDocument();
+      expect(screen.getByText("No completed ingest runs in this range.")).toBeInTheDocument();
     });
+    expect(screen.getByText("No queries recorded in this range.")).toBeInTheDocument();
   });
 
   it("surfaces history load failures", async () => {

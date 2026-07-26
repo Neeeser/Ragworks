@@ -4,22 +4,23 @@ Creation/update/prompt behavior lives in ``tests/services/test_collections.py``
 and the deletion cascade in ``tests/services/test_collection_deletion.py``; the
 cross-cutting 401/404/422 contract lives in ``tests/api/test_route_contract.py``.
 What remains here is the route+repository integration that isn't a pure service
-concern: the 404 guard and the stats aggregation shaped for the wire.
+concern: the 404 guard and the stats aggregation shaped for the wire. Activity history
+lives in ``tests/services/test_collection_history.py``.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api.routes import collections as collections_routes
 from app.db import models
 from app.db.repositories import CollectionRepository, UserRepository
-from app.schemas.enums import StatsHistoryRange
+from app.services.collection_history import BUCKET_LADDER
 
 
 def _create_user(session: Session) -> models.User:
@@ -118,187 +119,32 @@ def test_collection_stats_include_query_latency(session: Session) -> None:
     assert stats_map[collection.id].chunk_count == 8
 
 
-def _make_document(
-    collection: models.Collection,
-    user: models.User,
-    name: str,
-    num_chunks: int,
-    created_at: datetime,
-) -> models.Document:
-    return models.Document(
-        collection_id=collection.id,
-        user_id=user.id,
-        name=name,
-        content_type="text/plain",
-        status=models.DocumentStatus.READY,
-        num_chunks=num_chunks,
-        num_tokens=num_chunks * 40,
-        chunk_size=128,
-        chunk_overlap=8,
-        chunk_strategy=models.ChunkStrategy.TOKEN,
-        embedding_model="embed-model",
-        created_at=created_at,
+
+def test_stats_history_rejects_an_inverted_span(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """An end before its start is a 400, not a silently empty chart."""
+    collection = _create_collection(session, auth_user)
+
+    response = client.get(
+        f"/api/collections/{collection.id}/stats/history",
+        params={"start": "2026-07-25T12:00:00Z", "end": "2026-07-25T11:00:00Z"},
     )
 
-
-def test_stats_history_buckets_growth_and_latency(session: Session) -> None:
-    """History points carry cumulative totals, per-day latency, and gap fill."""
-    user = _create_user(session)
-    collection = _create_collection(session, user)
-    today = datetime.now(UTC).replace(tzinfo=None, hour=12)
-
-    session.add_all(
-        [
-            # Before the window: seeds the cumulative baseline.
-            _make_document(collection, user, "old.txt", 4, today - timedelta(days=20)),
-            # Inside the window, two days ago and today.
-            _make_document(collection, user, "recent.txt", 3, today - timedelta(days=2)),
-            _make_document(collection, user, "new.txt", 5, today),
-        ]
-    )
-    session.add_all(
-        [
-            models.QueryEvent(
-                user_id=user.id,
-                collection_id=collection.id,
-                query_text="q",
-                top_k=3,
-                model="embed-model",
-                context_tokens=12,
-                latency_ms=latency,
-                response_payload={},
-                created_at=today,
-            )
-            for latency in (100.0, 200.0, 300.0)
-        ]
-    )
-    pipeline = models.Pipeline(
-        user_id=user.id, name="ingest", kind=models.PipelineKind.INGESTION
-    )
-    session.add(pipeline)
-    session.commit()
-    session.add(
-        models.PipelineRun(
-            pipeline_id=pipeline.id,
-            trigger=models.BindingRole.INGEST,
-            user_id=user.id,
-            collection_id=collection.id,
-            status=models.PipelineRunStatus.COMPLETED,
-            started_at=today - timedelta(days=2),
-            completed_at=today - timedelta(days=2) + timedelta(milliseconds=1500),
-            created_at=today - timedelta(days=2),
-        )
-    )
-    # A still-running run must not contribute a latency sample.
-    session.add(
-        models.PipelineRun(
-            pipeline_id=pipeline.id,
-            trigger=models.BindingRole.INGEST,
-            user_id=user.id,
-            collection_id=collection.id,
-            status=models.PipelineRunStatus.RUNNING,
-            started_at=today,
-            created_at=today,
-        )
-    )
-    session.commit()
-
-    history = collections_routes.get_collection_stats_history(
-        collection.id,
-        range_=StatsHistoryRange.DAYS_7,
-        current_user=user,
-        session=session,
-    )
-
-    assert history.range == StatsHistoryRange.DAYS_7
-    assert history.bucket == "day"
-    assert len(history.points) == 7
-    assert all(
-        point.bucket_start.hour == 0 and point.bucket_start.minute == 0
-        for point in history.points
-    )
-    first, two_days_ago, last = history.points[0], history.points[4], history.points[-1]
-    # Baseline document predates the window.
-    assert (first.document_total, first.chunk_total) == (1, 4)
-    assert (two_days_ago.document_total, two_days_ago.chunk_total) == (2, 7)
-    assert (last.document_total, last.chunk_total) == (3, 12)
-    # Gap days still exist and carry totals forward.
-    assert history.points[5].document_total == 2
-
-    assert last.retrieval.count == 3
-    assert last.retrieval.avg_ms == pytest.approx(200.0)
-    assert last.retrieval.p50_ms == pytest.approx(200.0)
-    assert last.retrieval.p95_ms == pytest.approx(290.0)
-    assert last.retrieval.max_ms == pytest.approx(300.0)
-
-    assert two_days_ago.ingestion.count == 1
-    assert two_days_ago.ingestion.avg_ms == pytest.approx(1500.0, rel=1e-2)
-    # The RUNNING run today contributed nothing.
-    assert last.ingestion.count == 0
-    assert last.ingestion.avg_ms is None
+    assert response.status_code == 400
 
 
-def test_stats_history_missing_collection_returns_404(session: Session) -> None:
-    user = _create_user(session)
+def test_stats_history_serves_a_resolved_lifetime_domain(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """With no span the response carries the domain and bucket width it chose."""
+    collection = _create_collection(session, auth_user)
 
-    with pytest.raises(HTTPException) as excinfo:
-        collections_routes.get_collection_stats_history(
-            uuid4(),
-            range_=StatsHistoryRange.DAYS_30,
-            current_user=user,
-            session=session,
-        )
-    assert excinfo.value.status_code == 404
+    body = client.get(f"/api/collections/{collection.id}/stats/history").json()
 
-
-def test_stats_history_hourly_ranges_bucket_by_hour(session: Session) -> None:
-    """4h/24h ranges return hour buckets aligned to the clock, not days."""
-    user = _create_user(session)
-    collection = _create_collection(session, user)
-    now = datetime.now(UTC).replace(tzinfo=None)
-
-    session.add_all(
-        [
-            _make_document(collection, user, "older.txt", 2, now - timedelta(hours=3)),
-            _make_document(collection, user, "fresh.txt", 4, now),
-        ]
-    )
-    session.add(
-        models.QueryEvent(
-            user_id=user.id,
-            collection_id=collection.id,
-            query_text="q",
-            top_k=3,
-            model="embed-model",
-            context_tokens=12,
-            latency_ms=250.0,
-            response_payload={},
-            created_at=now - timedelta(hours=1),
-        )
-    )
-    session.commit()
-
-    history = collections_routes.get_collection_stats_history(
-        collection.id,
-        range_=StatsHistoryRange.HOURS_4,
-        current_user=user,
-        session=session,
-    )
-
-    assert history.bucket == "hour"
-    assert len(history.points) == 4
-    steps = [
-        (later.bucket_start - earlier.bucket_start).total_seconds()
-        for earlier, later in zip(history.points, history.points[1:], strict=False)
-    ]
-    assert steps == [3600.0, 3600.0, 3600.0]
-    # The 3-hours-ago document lands in the oldest bucket; the fresh one in the last.
-    assert (history.points[0].document_total, history.points[0].chunk_total) == (1, 2)
-    assert (history.points[-1].document_total, history.points[-1].chunk_total) == (2, 6)
-    # The query an hour ago sits in its own hour bucket, not the latest.
-    assert history.points[2].retrieval.count == 1
-    assert history.points[2].retrieval.avg_ms == pytest.approx(250.0)
-    assert history.points[-1].retrieval.count == 0
+    assert body["bucket_seconds"] in BUCKET_LADDER
+    assert body["start"] < body["end"]
+    assert body["points"], "an idle collection still renders an axis"
 
 
 def test_collection_indexes_reports_the_indexes_its_graph_names(client) -> None:
@@ -319,4 +165,3 @@ def test_collection_indexes_reports_the_indexes_its_graph_names(client) -> None:
     dense = [target for target in targets.values() if target["vector_type"] == "dense"]
     assert dense
     assert dense[0]["pipelines"]
-

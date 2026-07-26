@@ -12,7 +12,6 @@ import type {
   CollectionQueryResult,
   CollectionStats,
   CollectionStatsHistory,
-  StatsHistoryRange,
   CollectionUpdatePayload,
   Document,
   DocumentTrace,
@@ -42,13 +41,21 @@ export async function fetchCollectionStatsById(
   return apiFetch<CollectionStats>(`/api/collections/${collectionId}/stats`, { token });
 }
 
+/**
+ * Bucketed activity history. Omitting the span yields the collection's whole
+ * life; passing one narrows to it. The server picks the bucket width either
+ * way and echoes the domain it resolved.
+ */
 export async function fetchCollectionStatsHistory(
   token: string,
   collectionId: string,
-  range: StatsHistoryRange = "30d",
+  span?: { start: string; end: string } | null,
 ): Promise<CollectionStatsHistory> {
+  const query = span
+    ? `?start=${encodeURIComponent(span.start)}&end=${encodeURIComponent(span.end)}`
+    : "";
   return apiFetch<CollectionStatsHistory>(
-    `/api/collections/${collectionId}/stats/history?range=${range}`,
+    `/api/collections/${collectionId}/stats/history${query}`,
     { token },
   );
 }
