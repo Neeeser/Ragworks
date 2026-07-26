@@ -243,3 +243,31 @@ def test_register_is_idempotent_for_one_identity(session: Session) -> None:
     second = service.register(fixture.user, IndexBackend.PGVECTOR, "shared")
 
     assert first.id == second.id
+
+
+def test_a_binding_whose_pipeline_has_no_version_is_skipped(session: Session) -> None:
+    """Usage listing degrades past a broken binding instead of failing.
+
+    An index's "used by" list is read on the manager's delete path, so one
+    unresolvable binding must not make every index look unused — or, worse,
+    make the listing 500.
+    """
+    fixture = _Fixture(session)
+    fixture.bind()
+    # A second binding whose pipeline has no version at all.
+    orphan = models.Pipeline(user_id=fixture.user.id, name="No versions")
+    session.add(orphan)
+    session.commit()
+    session.refresh(orphan)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=fixture.collection.id,
+            pipeline_id=orphan.id,
+            role=models.BindingRole.TOOL,
+        )
+    )
+    session.commit()
+
+    usages = IndexRegistryService(session).usages_by_index(fixture.user)
+
+    assert fixture.index.id in usages
