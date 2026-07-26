@@ -31,7 +31,11 @@ def _declare_result_limit_argument(session: Session, user: models.User) -> None:
     ).one()
     service = PipelineService(session)
     definition = PipelineDefinition.model_validate(service.get_current_version(pipeline).definition)
+    # Index variables survive: the store-bound nodes' identity fields are
+    # expressions over them, so replacing the whole list would leave the graph
+    # referencing variables that no longer exist.
     definition.variables = [
+        *(variable for variable in definition.variables if variable.type == "index"),
         PipelineVariable(
             name="result_limit",
             type=VariableType.INTEGER,
