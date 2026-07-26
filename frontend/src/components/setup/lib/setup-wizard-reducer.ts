@@ -43,12 +43,18 @@ export interface SetupWizardState {
    * without this the wizard would yank the user forward again mid-edit.
    */
   resumed: boolean;
+  /**
+   * True once the account-specific index name has been suggested. Latches so
+   * a later render never refills a name the user cleared to retype.
+   */
+  indexNameSeeded: boolean;
 }
 
 export type SetupWizardAction =
   | { type: "NEXT" }
   | { type: "BACK" }
   | { type: "RESUME"; step: SetupStepId }
+  | { type: "SEED_INDEX_NAME"; name: string }
   | { type: "SET_CHOICES"; choices: Partial<SetupChoices> }
   | { type: "SET_CHUNK"; chunkSize?: number; chunkOverlap?: number }
   | { type: "SEED_CHUNK_DEFAULTS"; chunkSize: number; chunkOverlap: number };
@@ -58,12 +64,17 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
   direction: 1,
   chunkDirty: false,
   resumed: false,
+  indexNameSeeded: false,
   choices: {
     embeddingConnectionId: null,
     embeddingModel: "",
     embeddingDimension: null,
     backend,
-    indexName: "ragworks",
+    // Empty until the account and the backend's name-length rule are both
+    // known; `SEED_INDEX_NAME` fills it (see `defaultIndexName`). A fixed
+    // literal here would hand every account on the deployment the same name,
+    // and on pgvector that is one shared physical table.
+    indexName: "",
     collectionName: "My first collection",
     // Seeded from the selected model's window before the launch step; these are
     // the unknown-model fallback (see `chunkDefaultsFor`).
@@ -99,6 +110,17 @@ export function setupWizardReducer(
       // once: past that, the step they are on is the one they chose.
       if (state.resumed || state.step !== "welcome") return { ...state, resumed: true };
       return { ...state, step: action.step, direction: 1, resumed: true };
+    }
+    case "SEED_INDEX_NAME": {
+      // Only ever fills an untouched field, and only once — so a user who
+      // clears the box to type their own name keeps an empty box.
+      if (state.indexNameSeeded) return state;
+      if (state.choices.indexName !== "") return { ...state, indexNameSeeded: true };
+      return {
+        ...state,
+        indexNameSeeded: true,
+        choices: { ...state.choices, indexName: action.name },
+      };
     }
     case "SET_CHOICES":
       return { ...state, choices: { ...state.choices, ...action.choices } };

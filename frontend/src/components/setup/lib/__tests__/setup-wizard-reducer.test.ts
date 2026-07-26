@@ -34,8 +34,28 @@ describe("setupWizardReducer", () => {
     });
     expect(state.choices.embeddingModel).toBe("m/x");
     expect(state.choices.embeddingDimension).toBe(384);
-    expect(state.choices.indexName).toBe("ragworks");
+    expect(state.choices.collectionName).toBe("My first collection");
     expect(state.choices.backend).toBe("pgvector");
+  });
+
+  it("suggests an index name only into an untouched field, and only once", () => {
+    const seeded = setupWizardReducer(start(), {
+      type: "SEED_INDEX_NAME",
+      name: "ragworks-andrew-780c25bf",
+    });
+    expect(seeded.choices.indexName).toBe("ragworks-andrew-780c25bf");
+
+    // A user who clears the box to type their own name keeps an empty box:
+    // re-suggesting on the next render would fight them keystroke by keystroke.
+    const cleared = setupWizardReducer(seeded, {
+      type: "SET_CHOICES",
+      choices: { indexName: "" },
+    });
+    const reseeded = setupWizardReducer(cleared, {
+      type: "SEED_INDEX_NAME",
+      name: "ragworks-andrew-780c25bf",
+    });
+    expect(reseeded.choices.indexName).toBe("");
   });
 
   it("seeds model-derived chunk defaults until the user edits them", () => {

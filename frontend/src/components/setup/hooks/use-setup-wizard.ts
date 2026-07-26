@@ -5,6 +5,7 @@ import { useCallback, useMemo, useReducer, useState } from "react";
 
 import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
+import { defaultIndexName } from "@/components/setup/lib/default-index-name";
 import { resumeStep } from "@/components/setup/lib/setup-resume";
 import {
   initialSetupWizardState,
@@ -126,6 +127,15 @@ export function useSetupWizard(): SetupWizardApi {
     enabled: Boolean(authToken),
   });
   const reloadBackends = backendsQuery.reload;
+
+  // Suggest an index name once the account and the chosen backend's own
+  // name-length rule are both known — same guarded render-time seed as the
+  // resume above, so it fills an untouched field and never fights the user.
+  const nameLimit = backendsQuery.data?.find((backend) => backend.backend === state.choices.backend)
+    ?.capabilities.index_name_max_length;
+  if (!state.indexNameSeeded && user && nameLimit) {
+    dispatch({ type: "SEED_INDEX_NAME", name: defaultIndexName(user, nameLimit) });
+  }
 
   const handleConnectionsChanged = useCallback(() => {
     reloadConnections();
