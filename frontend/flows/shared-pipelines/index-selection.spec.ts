@@ -4,7 +4,8 @@
  *
  * 1. Log in via the API and open the collections list.
  * 2. Create a collection, picking a non-default index on the Pipelines step —
- *    the step must offer the choice rather than silently auto-filling one.
+ *    the step must offer the choice, and the means to create an index, rather
+ *    than silently auto-filling one or sending the user to another page.
  * 3. Confirm every binding the creation made took that index: one set of
  *    choices per collection, so ingestion writes where retrieval reads.
  * 4. Rebind the search pipeline and confirm the index pickers appear while
@@ -34,6 +35,9 @@ test("creating a collection asks which index it uses", async ({ page }) => {
   // prompt whose absence made every new collection silently inherit one.
   const denseSlot = page.getByLabel(/Vector index this pipeline uses/i);
   await expect(denseSlot).toBeVisible({ timeout: 15_000 });
+
+  // A missing index is made here, not in the registry on another page.
+  await expect(page.getByLabel(/New \d+d index on pgvector/)).toBeVisible();
 
   await denseSlot.click();
   await page.getByRole("option", { name: /^second-index —/ }).click();

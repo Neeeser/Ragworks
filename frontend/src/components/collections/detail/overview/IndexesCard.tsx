@@ -127,7 +127,11 @@ export function IndexesCard({
                       .join(" · ")}
                   </p>
                 </div>
-                <Button variant="ghost" onClick={() => setConfiguring(tool)}>
+                <Button
+                  variant="ghost"
+                  aria-label={`Change indexes for ${tool.name}`}
+                  onClick={() => setConfiguring(tool)}
+                >
                   Change
                 </Button>
               </li>

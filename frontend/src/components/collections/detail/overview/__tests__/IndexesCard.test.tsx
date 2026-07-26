@@ -215,8 +215,9 @@ describe("IndexesCard", () => {
       onToolsChanged,
     });
 
-    const rowChange = (await screen.findAllByRole("button", { name: "Change" })).at(-1)!;
-    await user.click(rowChange);
+    await user.click(
+      await screen.findByRole("button", { name: "Change indexes for search_alpha" }),
+    );
     expect(screen.getByText(/does not move indexed data/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox"));

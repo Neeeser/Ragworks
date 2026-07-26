@@ -8,8 +8,8 @@
  * 2. Confirm each binding resolves to its own index, so the shared definition
  *    is genuinely parameterised rather than merely duplicated.
  * 3. Open the second collection and repoint one tool binding at another index
- *    through the Indexes dialog, checking the re-ingest consequence is stated
- *    before the change is made.
+ *    from its row on the Indexes card — the only surface that mutates a
+ *    binding — checking the re-ingest consequence is stated before the change.
  * 4. Confirm the first collection's binding is untouched — the whole point of
  *    per-binding values.
  */
@@ -72,19 +72,27 @@ test("repointing one collection's index leaves the other alone", async ({ page }
   const before = await api.get(`${handoff.backend_url}/api/collections/${firstId}/tools`, {
     headers,
   });
+  const secondTools = await api.get(`${handoff.backend_url}/api/collections/${secondId}/tools`, {
+    headers,
+  });
   const firstIndexBefore = ((await before.json()) as { tools: ToolBinding[] }).tools[0]
     ?.variable_values?.primary_index?.name;
+  const toolName = ((await secondTools.json()) as { tools: ToolBinding[] }).tools[0].name;
 
   await page.goto(secondUrl);
-  await page.getByRole("button", { name: "Indexes" }).first().click();
+
+  // A binding is repointed from its own row on the Indexes card — the Tools
+  // panel curates bindings, it does not choose their indexes.
+  await page.getByRole("button", { name: `Change indexes for ${toolName}` }).click();
+  const dialog = page.getByRole("dialog", { name: /Indexes for/ });
 
   // The consequence is stated before the change, because an index swap moves
   // no data and the resulting empty reads are invisible at query time.
-  await expect(page.getByText(/does not move indexed data/i)).toBeVisible();
+  await expect(dialog.getByText(/does not move indexed data/i)).toBeVisible();
 
-  await page.getByRole("combobox").first().click();
+  await dialog.getByRole("combobox").first().click();
   await page.getByRole("option").first().click();
-  await page.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText(/does not move indexed data/i)).toBeHidden({ timeout: 15_000 });
 
   const after = await api.get(`${handoff.backend_url}/api/collections/${firstId}/tools`, {
@@ -100,7 +108,7 @@ test("repointing one collection's index leaves the other alone", async ({ page }
   expect(secondAfter.ok()).toBe(true);
 });
 
-test("the index manager reports which collections use an index", async ({ page }) => {
+test("the index registry reports which collections use an index", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
   const api = page.context().request;
