@@ -146,7 +146,7 @@ def test_hybrid_default_ingests_both_indexes_and_bm25_drives_ranking(
     collection = _create_collection(session, user)
     document = _ingest(monkeypatch, session, user, collection)
 
-    store = pgvector_store(session)
+    store = pgvector_store(session, user.id)
     assert store.describe_index("ragworks").vector_type == "dense"
     assert store.describe_index("ragworks-bm25").vector_type == "sparse"
     lexical = store.lexical_query(

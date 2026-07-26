@@ -143,7 +143,7 @@ def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
     assert all(record.token_count > 0 for record in chunk_records)
 
     # The indexer actually upserted the chunks into the pgvector index.
-    store = pgvector_store(session)
+    store = pgvector_store(session, user.id)
     assert store.describe_index("ragworks").dimension == 3
     indexed = store.query(
         "ragworks",
@@ -243,7 +243,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
             {token for chunk in chunks for token in chunk.text.split()}
         )
 
-        store = pgvector_store(fresh_session)
+        store = pgvector_store(fresh_session, user.id)
         indexed = store.query(
             "ragworks",
             namespace,

@@ -1,4 +1,10 @@
-"""Export the shipped default pipelines for the README animation renderer."""
+"""Export the shipped default pipelines for the README animation renderer.
+
+The output lands in `frontend/`, where the Prettier check gates CI, and
+`json.dump` cannot reproduce Prettier's short-array collapsing — so run
+`npx prettier --write` on the written file afterwards. The guard test
+compares parsed JSON, so reformatting never changes what it asserts.
+"""
 
 from __future__ import annotations
 
