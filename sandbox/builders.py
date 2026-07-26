@@ -440,7 +440,8 @@ def add_pinecone_index(
     *different* backend is actually selectable.
     """
     from app.schemas.enums import IndexBackend
-    from app.schemas.indexes import IndexCreateRequest
+    from app.schemas.indexes import IndexCreateRequest, IndexRegisterRequest
+    from app.services.errors import NotFoundError
     from app.services.index_admin import IndexAdminService
 
     user = ctx.require_user()
@@ -456,16 +457,26 @@ def add_pinecone_index(
         )
     if dimension is None:
         raise SystemExit("No dense index to size the Pinecone index from.")
-    admin.create_index(
-        user,
-        IndexCreateRequest(
-            backend=IndexBackend.PINECONE,
-            name=index_name,
-            dimension=dimension,
-            cloud="aws",
-            region="us-east-1",
-        ),
-    )
+    # A Pinecone index is a real remote resource that outlives a reseed, so
+    # adopt one that is already there instead of failing on the 409. This is
+    # the same register-or-create path the Index Manager offers.
+    try:
+        admin.describe_index(user, IndexBackend.PINECONE, index_name)
+    except NotFoundError:
+        admin.create_index(
+            user,
+            IndexCreateRequest(
+                backend=IndexBackend.PINECONE,
+                name=index_name,
+                dimension=dimension,
+                cloud="aws",
+                region="us-east-1",
+            ),
+        )
+    else:
+        admin.register_index(
+            user, IndexRegisterRequest(backend=IndexBackend.PINECONE, name=index_name)
+        )
     ctx.session.commit()
     ctx.facts.append(
         f"index: {index_name} (pinecone, dense, {dimension}d) — registered and "
