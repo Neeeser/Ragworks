@@ -265,6 +265,19 @@ One line of plain text plus, at most, one action, inside the card the data would
 
 Not an illustration, not a nested panel, not a sentence explaining the feature.
 
+**When a required choice is unmade, the empty state names the requirement and carries
+the action that resolves it.** "Sending a message requires a chat model." plus `Select
+model` beats a line describing what the screen is for: the control that makes the choice
+often lives inside a pane that starts closed, so without the action the requirement is
+discoverable only by guessing, and the primary action is a dead end until it is met.
+
+**A readout that is also the way in to setting its value wears control chrome while it is
+empty.** A top-bar value shown as bare text reads as a caption, so a first-time user has
+nothing telling them it opens anything; with no value to read, give it the border, fill
+and affordance icon of a real control, and drop back to the compact readout once a value
+exists. Hover and focus states alone are not an affordance — they only pay out after the
+user has already guessed.
+
 ---
 
 ## 8. Text you must not write
