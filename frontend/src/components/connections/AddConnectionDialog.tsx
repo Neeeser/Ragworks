@@ -11,6 +11,7 @@ import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { createConnection, validateConnectionConfig } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 import type { ProviderConnection, ProviderTypeInfo } from "@/lib/types";
 
@@ -23,11 +24,17 @@ interface AddConnectionDialogProps {
   onCreated: (connection: ProviderConnection) => void;
 }
 
+/** Indefinite article for a provider name, by its first sound's spelling. */
+const articleFor = (label: string) =>
+  "aeiou".includes(label.charAt(0).toLowerCase()) ? "an" : "a";
+
 /** The link text a provider's docs deserve — what the user has to fetch, not "documentation". */
 function docsLinkLabel(type: ProviderTypeInfo): string {
   if (type.provider_type === "ollama") return "Get Ollama";
   const needsKey = type.config_fields.some((field) => field.kind === "secret" && field.required);
-  return needsKey ? `Get a ${type.label} API key` : "Provider documentation";
+  return needsKey
+    ? `Get ${articleFor(type.label)} ${type.label} API key`
+    : "Provider documentation";
 }
 
 /**
@@ -211,9 +218,23 @@ export function AddConnectionDialog({
                 config={config}
                 onChange={(name, value) => setConfig((prev) => ({ ...prev, [name]: value }))}
               />
-              {error ? <p className="text-ui text-data-neg">{error}</p> : null}
-              {probeMessage ? <p className="text-ui text-data-pos">{probeMessage}</p> : null}
             </div>
+            {/* The probe result sits outside the scrolling body, next to the
+                Test button that produced it: at the bottom of a long form it
+                landed below the fold, so a connection read as having done
+                nothing until the user scrolled. Test and Add both clear both
+                channels first, so only one is ever set. */}
+            {error || probeMessage ? (
+              <p
+                className={cn(
+                  "border-t border-hairline px-3 py-2 text-ui",
+                  error ? "text-data-neg" : "text-data-pos",
+                )}
+                role="status"
+              >
+                {error ?? probeMessage}
+              </p>
+            ) : null}
             <div className="flex items-center justify-between gap-2 border-t border-hairline p-3">
               <Button type="button" variant="ghost" onClick={() => setSelectedType(null)}>
                 Back
