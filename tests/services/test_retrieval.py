@@ -22,8 +22,8 @@ from app.services.retrieval import RetrievalService
 from app.services.tool_invocation import RetrievalPipelineError, ToolInvocationService
 from app.telemetry.events import RetrievalQueryRan
 from app.vectorstores.base import IndexSpec
-from app.vectorstores.pgvector import PgvectorStore
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.vectors import pgvector_store
 
 
 class _StubEmbedder:
@@ -97,7 +97,7 @@ def test_query_collection_happy_path_maps_chunks_and_records_event(
     collection = _create_collection(session, user)
     service = RetrievalService(session)
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
     store.upsert(
         "ragworks",
@@ -376,7 +376,7 @@ def test_query_collection_db_error_surfaces_as_structured_failure(
     user = _create_user(session)
     collection = _create_collection(session, user)
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
     store.upsert(
         "ragworks",
@@ -589,7 +589,7 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
         retriever_top_k_expression="result_limit * 2",
     )
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
     store.upsert(
         "ragworks",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any, ClassVar
+from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
@@ -59,22 +60,41 @@ class PgvectorStore(VectorStoreBackend):
     backend: ClassVar[IndexBackend] = IndexBackend.PGVECTOR
     capabilities: ClassVar[VectorStoreCapabilities] = PGVECTOR_CAPABILITIES
 
-    def __init__(self, session: Session) -> None:
-        """Bind the store to the request/run session."""
+    def __init__(self, session: Session, owner_id: UUID) -> None:
+        """Bind the store to the request/run session and the acting account."""
         self._repo = PgvectorRepository(session)
+        self._owner_id = owner_id
 
     # -- control plane -----------------------------------------------------
 
     def list_indexes(self) -> list[VectorIndexDescription]:
-        """Return every cataloged pgvector index."""
-        return [self._describe(record) for record in self._repo.list_records()]
+        """Return the cataloged indexes this account may see.
+
+        One deployment Postgres holds every account's indexes, so the catalog
+        is scoped to the caller: their own indexes plus owner-less ones.
+        Listing the whole catalog let any account read off every other
+        account's index names.
+        """
+        return [self._describe(record) for record in self._repo.list_records(self._owner_id)]
 
     def describe_index(self, name: str) -> VectorIndexDescription:
-        """Return one index's description from the catalog."""
+        """Return one visible index's description from the catalog.
+
+        An index owned by another account is reported as absent, matching
+        `list_indexes` — describing it would hand back the scoping the
+        listing exists to apply.
+        """
         record = self._repo.get_record(name)
-        if record is None:
+        if record is None or not self._visible(record):
             raise NotFoundError(f"pgvector index '{name}' not found.")
         return self._describe(record)
+
+    def stored_namespaces(self, name: str, limit: int = 200) -> list[str]:
+        """Return distinct namespaces holding rows in an index (empty if absent)."""
+        record = self._repo.get_record(name)
+        if record is None:
+            return []
+        return self._repo.distinct_namespaces(record, limit)
 
     def create_index(self, spec: IndexSpec) -> VectorIndexDescription:
         """Create the data table and catalog row for a new index."""
@@ -84,10 +104,12 @@ class PgvectorStore(VectorStoreBackend):
         if spec.vector_type == "sparse":
             if not pg_search_available():
                 raise InvalidInputError(PG_SEARCH_UNAVAILABLE_DETAIL)
-            return self._describe(self._repo.create_lexical_index(spec.name))
+            return self._describe(self._repo.create_lexical_index(spec.name, self._owner_id))
         if spec.dimension is None:
             raise InvalidInputError("pgvector indexes require a dimension.")
-        record = self._repo.create_index(spec.name, spec.dimension, spec.metric)
+        record = self._repo.create_index(
+            spec.name, spec.dimension, spec.metric, self._owner_id
+        )
         return self._describe(record)
 
     def delete_index(self, name: str) -> None:
@@ -273,6 +295,10 @@ class PgvectorStore(VectorStoreBackend):
             ),
             score=value if raw_score else to_similarity(metric, value),
         )
+
+    def _visible(self, record: VectorIndexRecord) -> bool:
+        """Whether the acting account may see an index in the catalog."""
+        return record.owner_user_id is None or record.owner_user_id == self._owner_id
 
     def _require_record(self, index: str, *, vector_type: str | None = None) -> VectorIndexRecord:
         """Return the catalog row, checking its vector type when demanded."""

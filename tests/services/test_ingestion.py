@@ -27,9 +27,9 @@ from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingest_binding
 from app.services.pipelines import PipelineService
-from app.vectorstores.pgvector import PgvectorStore
 from app.vectorstores.registry import VectorStoreProvider
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.vectors import pgvector_store
 
 
 class _StubEmbedder:
@@ -143,7 +143,7 @@ def test_ingest_document_happy_path_persists_chunks_and_marks_ready(
     assert all(record.token_count > 0 for record in chunk_records)
 
     # The indexer actually upserted the chunks into the pgvector index.
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     assert store.describe_index("ragworks").dimension == 3
     indexed = store.query(
         "ragworks",
@@ -243,7 +243,7 @@ def test_oversized_chunk_is_split_with_ready_document_and_persisted_warnings(
             {token for chunk in chunks for token in chunk.text.split()}
         )
 
-        store = PgvectorStore(fresh_session)
+        store = pgvector_store(fresh_session)
         indexed = store.query(
             "ragworks",
             namespace,

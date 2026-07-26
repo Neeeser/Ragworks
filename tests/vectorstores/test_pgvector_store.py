@@ -14,6 +14,7 @@ from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.services.errors import InvalidInputError, NotFoundError
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pgvector import PgvectorStore
+from tests.utils.vectors import pgvector_store
 
 
 def _chunk(chunk_id: str, embedding: list[float], text: str = "chunk text") -> DocumentChunk:
@@ -32,7 +33,7 @@ def _make_index(store: PgvectorStore, name: str = "docs", dimension: int = 3) ->
 
 
 def test_create_describe_list_delete_round_trip(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
 
     described = store.describe_index("docs")
@@ -49,20 +50,20 @@ def test_create_describe_list_delete_round_trip(pgvector_session: Session) -> No
 
 
 def test_create_duplicate_index_rejected(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
     with pytest.raises(InvalidInputError, match="already exists"):
         _make_index(store)
 
 
 def test_create_index_with_invalid_name_rejected_before_ddl(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     with pytest.raises(InvalidInputError):
         store.create_index(IndexSpec(name="Bad_Name", dimension=3, metric="cosine"))
 
 
 def test_upsert_and_query_returns_nearest_first(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
     store.upsert(
         "docs",
@@ -83,7 +84,7 @@ def test_upsert_and_query_returns_nearest_first(pgvector_session: Session) -> No
 
 
 def test_upsert_updates_existing_chunk(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
     store.upsert("docs", "ns-1", [_chunk("a", [1.0, 0.0, 0.0], text="old")])
     store.upsert("docs", "ns-1", [_chunk("a", [1.0, 0.0, 0.0], text="new")])
@@ -93,7 +94,7 @@ def test_upsert_updates_existing_chunk(pgvector_session: Session) -> None:
 
 
 def test_namespaces_are_isolated(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
     store.upsert("docs", "ns-1", [_chunk("a", [1.0, 0.0, 0.0])])
     store.upsert("docs", "ns-2", [_chunk("b", [1.0, 0.0, 0.0])])
@@ -103,7 +104,7 @@ def test_namespaces_are_isolated(pgvector_session: Session) -> None:
 
 
 def test_delete_namespace_is_idempotent(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
     store.upsert("docs", "ns-1", [_chunk("a", [1.0, 0.0, 0.0])])
 
@@ -114,20 +115,20 @@ def test_delete_namespace_is_idempotent(pgvector_session: Session) -> None:
 
 
 def test_dimension_mismatch_rejected(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store, dimension=3)
     with pytest.raises(InvalidInputError, match="dimension"):
         store.upsert("docs", "ns-1", [_chunk("a", [1.0, 0.0])])
 
 
 def test_query_missing_index_raises_not_found(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     with pytest.raises(NotFoundError):
         store.query("missing", "ns-1", embedding=[1.0, 0.0, 0.0], top_k=5)
 
 
 def test_ensure_index_creates_once(pgvector_session: Session) -> None:
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     spec = IndexSpec(name="docs", dimension=3, metric="cosine")
     store.ensure_index(spec)
     store.ensure_index(spec)
@@ -141,7 +142,7 @@ def test_schema_inspection_recognizes_vector_columns(pgvector_session: Session) 
     pgvector SQLAlchemy type registered, reflection emits `SAWarning: Did not
     recognize type 'vector'` on each vec_ table.
     """
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store)
 
     with warnings.catch_warnings():
@@ -178,7 +179,7 @@ def test_high_dimension_index_round_trips_via_halfvec(pgvector_session: Session)
     """
     if not _halfvec_available(pgvector_session):
         pytest.skip("pgvector on the test server predates halfvec (0.7.0)")
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     dimension = 3072
     _make_index(store, name="big", dimension=dimension)
 
@@ -201,7 +202,7 @@ def test_high_dimension_index_round_trips_via_halfvec(pgvector_session: Session)
 
 def test_low_dimension_index_keeps_full_precision_hnsw(pgvector_session: Session) -> None:
     """Dimensions within the fp32 HNSW cap keep the plain vector index."""
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
     _make_index(store, name="docs", dimension=3)
 
     definition = _index_definition(pgvector_session, "vec_docs_embedding_idx")
@@ -224,7 +225,7 @@ def test_concurrent_ensure_index_is_serialized_not_an_integrity_error(
     import threading
 
     spec = IndexSpec(name="race-idx", dimension=3, metric="cosine")
-    store_a = PgvectorStore(pgvector_session)
+    store_a = pgvector_store(pgvector_session)
     store_a.ensure_index(spec)  # uncommitted: holds the DDL locks
 
     b_error: list[Exception] = []
@@ -234,7 +235,7 @@ def test_concurrent_ensure_index_is_serialized_not_an_integrity_error(
         with Session(pgvector_session.get_bind()) as session_b:
             b_started.set()
             try:
-                PgvectorStore(session_b).ensure_index(spec)
+                pgvector_store(session_b).ensure_index(spec)
                 session_b.commit()
             except Exception as exc:
                 b_error.append(exc)
@@ -247,12 +248,12 @@ def test_concurrent_ensure_index_is_serialized_not_an_integrity_error(
     worker.join(timeout=10)
     assert not worker.is_alive(), "session B never finished ensure_index"
     assert b_error == []
-    assert PgvectorStore(pgvector_session).describe_index("race-idx").name == "race-idx"
+    assert pgvector_store(pgvector_session).describe_index("race-idx").name == "race-idx"
 
 
 def test_index_stats_missing_existing_and_populated(pgvector_session: Session) -> None:
     """`index_stats` reports absence, then existence with a namespace-scoped count."""
-    store = PgvectorStore(pgvector_session)
+    store = pgvector_store(pgvector_session)
 
     absent = store.index_stats("docs")
     assert absent.exists is False

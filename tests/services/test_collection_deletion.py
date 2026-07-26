@@ -30,9 +30,9 @@ from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
 from app.vectorstores import registry as registry_module
 from app.vectorstores.base import IndexSpec
-from app.vectorstores.pgvector import PgvectorStore
 from app.vectorstores.pinecone.store import is_missing_namespace_error
 from tests.utils.providers import add_pinecone_connection, install_default_pipelines
+from tests.utils.vectors import pgvector_store
 
 
 @pytest.fixture(autouse=True)
@@ -303,7 +303,7 @@ def test_delete_purges_pgvector_namespace_without_pinecone(
     user = _create_user(session)
     collection = _create_collection(session, user)
 
-    store = PgvectorStore(session)
+    store = pgvector_store(session)
     store.create_index(IndexSpec(name="ragworks", dimension=2, metric="cosine"))
     from app.retrieval.models import DocumentChunk, DocumentMetadata
 
