@@ -205,6 +205,38 @@ describe("CollectionSearch", () => {
     expect(screen.getByText("top_k")).toBeInTheDocument();
   });
 
+  it("labels a declared argument in words and keeps its key beside the control", async () => {
+    api.listCollectionTools.mockResolvedValueOnce({
+      tools: [
+        makeCollectionTool({
+          id: "b-limit",
+          arguments: [
+            {
+              name: "result_limit",
+              type: "integer",
+              description: "Results returned.",
+              required: false,
+              default: 5,
+              minimum: 1,
+              maximum: 50,
+              choices: [],
+              expose_to_llm: false,
+            },
+          ],
+        }),
+      ],
+      ingest_pipeline_id: null,
+    });
+    render(<CollectionSearch collectionId="col-labels" token="token" />);
+
+    expect(await screen.findByText("Result limit")).toBeInTheDocument();
+    expect(screen.getByText("result_limit")).toBeInTheDocument();
+    // The key stays quotable to a screen reader: it is what the request sends.
+    expect(
+      screen.getByRole("spinbutton", { name: "Result limit (result_limit)" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers a tool selector and runs the chosen tool's binding", async () => {
     api.listCollectionTools.mockResolvedValueOnce({
       tools: [
@@ -290,7 +322,7 @@ describe("CollectionSearch", () => {
     render(<CollectionSearch collectionId="col-required-bool" token="token" />);
 
     const booleanControl = await screen.findByRole("combobox", {
-      name: "Argument include_archived",
+      name: "Include archived (include_archived)",
     });
     fireEvent.change(screen.getByLabelText(queryInputLabel), { target: { value: "Find" } });
     fireEvent.click(booleanControl);

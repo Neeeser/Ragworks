@@ -64,7 +64,7 @@ describe("effectiveResultDepth", () => {
       },
     });
     const cap = effectiveResultDepth(pipeline.definition, { result_limit: 10 }, 25);
-    expect(cap).toEqual({ depth: 10, label: "result_limit" });
+    expect(cap).toEqual({ depth: 10, kind: "variable", label: "result_limit" });
     expect(truncatedCutoffs([1, 5, 10, 25], cap.depth)).toEqual([25]);
   });
 
@@ -83,7 +83,7 @@ describe("effectiveResultDepth", () => {
       },
     });
     const cap = effectiveResultDepth(pipeline.definition, {}, 25);
-    expect(cap).toEqual({ depth: 5, label: "Semantic Retriever" });
+    expect(cap).toEqual({ depth: 5, kind: "node", label: "Semantic Retriever" });
   });
 
   it("falls back to the run's own request depth when nothing caps it", () => {
@@ -100,7 +100,11 @@ describe("effectiveResultDepth", () => {
         edges: [],
       },
     });
-    expect(effectiveResultDepth(pipeline.definition, {}, 25)).toEqual({ depth: 25, label: "" });
+    expect(effectiveResultDepth(pipeline.definition, {}, 25)).toEqual({
+      depth: 25,
+      kind: "none",
+      label: "",
+    });
     expect(truncatedCutoffs([1, 5, 10, 25], 25)).toEqual([]);
   });
 });
