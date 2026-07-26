@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.routes import collections as collections_routes
 from app.db import models
@@ -299,3 +299,41 @@ def test_stats_history_hourly_ranges_bucket_by_hour(session: Session) -> None:
     assert history.points[2].retrieval.count == 1
     assert history.points[2].retrieval.avg_ms == pytest.approx(250.0)
     assert history.points[-1].retrieval.count == 0
+
+
+def test_collection_indexes_roundtrip(client, session: Session) -> None:
+    """GET lists merged slots; PUT repoints them across every binding."""
+    created = client.post("/api/collections", json={"name": "Slots"}).json()
+
+    read = client.get(f"/api/collections/{created['id']}/indexes")
+    assert read.status_code == 200
+    slots = {slot["name"]: slot for slot in read.json()["slots"]}
+    assert "primary_index" in slots
+    assert slots["primary_index"]["vector_type"] == "dense"
+
+    owner = session.exec(
+        select(models.User).where(models.User.email == "owner@example.com")
+    ).one()
+    moved = models.RegisteredIndex(
+        user_id=owner.id,
+        backend="pgvector",
+        name="moved-dense",
+        vector_type="dense",
+    )
+    session.add(moved)
+    session.commit()
+    session.refresh(moved)
+
+    updated = client.put(
+        f"/api/collections/{created['id']}/indexes",
+        json={"values": {"primary_index": {"index_id": str(moved.id)}}},
+    )
+    assert updated.status_code == 200
+    slots = {slot["name"]: slot for slot in updated.json()["slots"]}
+    assert slots["primary_index"]["current"]["name"] == "moved-dense"
+
+    rejected = client.put(
+        f"/api/collections/{created['id']}/indexes",
+        json={"values": {"mystery": {"index_id": str(moved.id)}}},
+    )
+    assert rejected.status_code == 400

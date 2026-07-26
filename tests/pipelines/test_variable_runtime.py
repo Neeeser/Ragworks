@@ -11,6 +11,7 @@ from sqlmodel import Session
 from app.core.config import get_settings
 from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutor
 from app.pipelines.nodes.io import (
@@ -23,7 +24,7 @@ from app.pipelines.nodes.limiting import ResultLimitConfig, ResultLimitNode
 from app.pipelines.nodes.retrieval import VectorRetrieverConfig, VectorRetrieverNode
 from app.pipelines.payloads import RetrievalPayload, RetrievalRequestPayload
 from app.pipelines.registry import build_default_registry
-from app.pipelines.resolution import build_environment, resolve_definition
+from app.pipelines.resolution import resolve_definition
 from app.pipelines.variables import (
     PipelineInputArgument,
     PipelineVariable,

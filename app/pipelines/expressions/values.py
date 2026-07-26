@@ -1,11 +1,15 @@
 """Value and type domain for pipeline expressions.
 
 Expressions are strongly typed over a small closed set of types. `integer`
-promotes to `number` in arithmetic; `model` is a structured provider-model
-reference whose members (`connection_id`, `model_name`) are the only
-member-access surface in the grammar. Pipeline `enum` variables enter the
-expression layer as plain strings (their choice constraint is enforced when
-the environment is built, not here).
+promotes to `number` in arithmetic; `model` and `index` are structured
+references whose members are the only member-access surface in the grammar.
+Pipeline `enum` variables enter the expression layer as plain strings (their
+choice constraint is enforced when the environment is built, not here).
+
+Structured types are how a node config field points at a *choice* made
+elsewhere: `emb_model.model_name` reads a provider model, `primary_index.name`
+reads a registered vector index. Both dereference to strings, because config
+fields take scalars.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ class ExprType(StrEnum):
     STRING = "string"
     BOOLEAN = "boolean"
     MODEL = "model"
+    INDEX = "index"
 
 
 class ModelValue(BaseModel):
@@ -35,7 +40,24 @@ class ModelValue(BaseModel):
     model_name: str
 
 
-ExprValue = int | float | str | bool | ModelValue
+class IndexValue(BaseModel):
+    """A registered vector index reference.
+
+    Carries the identity a store-bound node needs — which backend, which index
+    name — so a binding can repoint a pipeline at a different index (possibly
+    on a different backend) without editing the definition. `index_id` is the
+    `registered_indexes` row this came from; capability validation reads
+    `backend` to check the referencing nodes support it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    index_id: UUID
+    backend: str
+    name: str
+
+
+ExprValue = int | float | str | bool | ModelValue | IndexValue
 """Runtime values an expression can produce or reference."""
 
 MODEL_MEMBERS: dict[str, ExprType] = {
@@ -43,6 +65,19 @@ MODEL_MEMBERS: dict[str, ExprType] = {
     "model_name": ExprType.STRING,
 }
 """Members reachable via `.` on a model-typed variable, with their types."""
+
+INDEX_MEMBERS: dict[str, ExprType] = {
+    "id": ExprType.STRING,
+    "backend": ExprType.STRING,
+    "name": ExprType.STRING,
+}
+"""Members reachable via `.` on an index-typed variable, with their types."""
+
+MEMBERS_BY_TYPE: dict[ExprType, dict[str, ExprType]] = {
+    ExprType.MODEL: MODEL_MEMBERS,
+    ExprType.INDEX: INDEX_MEMBERS,
+}
+"""The full member-access surface, keyed by the structured type that owns it."""
 
 
 def is_numeric(expr_type: ExprType) -> bool:
@@ -65,4 +100,6 @@ def value_type(value: ExprValue) -> ExprType:
         return ExprType.NUMBER
     if isinstance(value, str):
         return ExprType.STRING
+    if isinstance(value, IndexValue):
+        return ExprType.INDEX
     return ExprType.MODEL

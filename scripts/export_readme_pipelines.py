@@ -44,11 +44,26 @@ def build_capture_payload() -> dict[str, object]:
         for node in scene["definition"]["nodes"]  # type: ignore[index]
     }
     specs = [
-        spec.model_dump(mode="json")
+        _pinned_spec(spec.model_dump(mode="json"))
         for spec in default_registry().specs()
         if spec.type in rendered_types
     ]
     return {"scenes": scenes, "node_specs": specs}
+
+
+def _pinned_spec(spec: dict[str, object]) -> dict[str, object]:
+    """Pin a spec's default backend to the one the scenes render.
+
+    A store-bound node's `backend` default is read from the deployment's app
+    config, so exporting on a Pinecone-configured machine would otherwise
+    write a different committed artifact than exporting on a pgvector one.
+    The README illustration shows the shipped default, and a committed file
+    must be a function of the code, never of the exporter's database.
+    """
+    config = spec.get("default_config")
+    if isinstance(config, dict) and "backend" in config:
+        spec["default_config"] = {**config, "backend": IndexBackend.PGVECTOR.value}
+    return spec
 
 
 def main() -> None:

@@ -20,6 +20,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, ValidationError
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.environment import declared_arguments
 from app.pipelines.nodes.io import (
     IngestionInputNode,
     RetrievalInputConfig,
@@ -27,7 +28,7 @@ from app.pipelines.nodes.io import (
     RetrievalOutputConfig,
     RetrievalOutputNode,
 )
-from app.pipelines.resolution import declared_arguments, resolve_static_definition
+from app.pipelines.resolution import resolve_static_definition
 from app.pipelines.variables import PipelineInputArgument
 
 #: Reserved terminal-node type id for structured (non-chunk) tool results.

@@ -1,0 +1,198 @@
+"""Registered indexes: reading, adopting, and finding who points at one.
+
+An index a pipeline can target is a `RegisteredIndex` row, not a bare string.
+This module owns the two questions that need both the registry and the stored
+pipeline definitions:
+
+- **which index does a binding select?** — every binding-source index variable
+  on the bound pipeline, resolved against the binding's `variable_values`, and
+- **who is using this index?** — the inverse, which deletion consults so an
+  index a pipeline still targets cannot be removed out from under it.
+
+`IndexUsage` deliberately reads *declared* references rather than observed
+runs: a pipeline that has not run yet still owns its index, and waiting for a
+run to prove it would let the first delete succeed silently.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from uuid import UUID
+
+from sqlmodel import Session
+
+from app.db import models
+from app.db.repositories import (
+    CollectionPipelineBindingRepository,
+    CollectionRepository,
+    RegisteredIndexRepository,
+)
+from app.pipelines.definition import PipelineDefinition
+from app.pipelines.expressions import IndexValue
+from app.pipelines.variables import (
+    PipelineVariable,
+    VariableSource,
+    VariableType,
+    VariableValueError,
+    coerce_literal,
+)
+from app.schemas.enums import IndexBackend
+from app.services.errors import InvalidInputError, NotFoundError
+from app.services.pipelines import PipelineService
+
+
+@dataclass(frozen=True)
+class IndexUsage:
+    """One binding's reference to one registered index."""
+
+    index_id: UUID
+    collection: models.Collection
+    pipeline: models.Pipeline
+    binding: models.CollectionPipelineBinding
+
+
+def index_variables(definition: PipelineDefinition) -> list[PipelineVariable]:
+    """Return the definition's binding-source index variables, in order."""
+    return [
+        variable
+        for variable in definition.variables
+        if variable.source is VariableSource.BINDING
+        and variable.type is VariableType.INDEX
+    ]
+
+
+def selected_indexes(
+    definition: PipelineDefinition,
+    binding_values: dict[str, object] | None,
+) -> dict[str, IndexValue]:
+    """Return `{variable name: index}` a binding resolves to.
+
+    A variable whose override and default are both missing or malformed is
+    skipped: this is a read path (listings, usage, diagnostics), and the
+    validator is what reports the broken declaration.
+    """
+    values = binding_values or {}
+    selected: dict[str, IndexValue] = {}
+    for variable in index_variables(definition):
+        raw = values.get(variable.name, variable.value)
+        if raw is None:
+            continue
+        try:
+            resolved = coerce_literal(VariableType.INDEX, raw)
+        except VariableValueError:
+            continue
+        if isinstance(resolved, IndexValue):
+            selected[variable.name] = resolved
+    return selected
+
+
+class IndexRegistryService:
+    """Registration, adoption, and usage of a user's vector indexes."""
+
+    def __init__(self, session: Session) -> None:
+        """Bind the service to the request session."""
+        self._session = session
+        self._indexes = RegisteredIndexRepository(session)
+
+    def list_registered(
+        self, user: models.User, backend: IndexBackend | None = None
+    ) -> list[models.RegisteredIndex]:
+        """List the user's registered indexes."""
+        return self._indexes.list_for_user(user.id, backend=backend)
+
+    def get(self, user: models.User, index_id: UUID) -> models.RegisteredIndex:
+        """Return one registered index the user owns, else raise `NotFoundError`."""
+        index = self._indexes.get(index_id, user.id)
+        if index is None:
+            raise NotFoundError("Index not found.")
+        return index
+
+    def register(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        user: models.User,
+        backend: IndexBackend,
+        name: str,
+        *,
+        vector_type: str = "dense",
+        dimension: int | None = None,
+        metric: str | None = None,
+    ) -> models.RegisteredIndex:
+        """Register an index, returning the existing row when already known."""
+        index = self._indexes.get_or_create(
+            user.id,
+            backend,
+            name,
+            vector_type=vector_type,
+            dimension=dimension,
+            metric=metric,
+        )
+        self._session.commit()
+        self._session.refresh(index)
+        return index
+
+    def usages(self, user: models.User) -> list[IndexUsage]:
+        """Return every declared reference from a binding to a registered index."""
+        bindings = CollectionPipelineBindingRepository(self._session).list_for_user(user.id)
+        if not bindings:
+            return []
+        collections = {
+            collection.id: collection
+            for collection in CollectionRepository(self._session).list_for_user(user.id)
+        }
+        return list(self._iter_usages(bindings, collections))
+
+    def usages_by_index(self, user: models.User) -> dict[UUID, list[IndexUsage]]:
+        """Group `usages()` by the index each reference points at."""
+        grouped: dict[UUID, list[IndexUsage]] = {}
+        for usage in self.usages(user):
+            grouped.setdefault(usage.index_id, []).append(usage)
+        return grouped
+
+    def ensure_unused(self, user: models.User, index: models.RegisteredIndex) -> None:
+        """Raise when a binding still points at the index.
+
+        Deleting a registration a pipeline targets would leave that pipeline
+        writing to (or reading from) a store nothing in the app admits to
+        owning, so the error names the collections instead.
+        """
+        usages = self.usages_by_index(user).get(index.id, [])
+        if not usages:
+            return
+        names = ", ".join(sorted({usage.collection.name for usage in usages}))
+        raise InvalidInputError(
+            f"Index '{index.name}' is still used by: {names}. "
+            "Point those collections at another index first."
+        )
+
+    def unregister(self, user: models.User, index: models.RegisteredIndex) -> None:
+        """Delete a registration row after checking nothing references it."""
+        self.ensure_unused(user, index)
+        self._indexes.delete(index)
+        self._session.commit()
+
+    def _iter_usages(
+        self,
+        bindings: Iterable[models.CollectionPipelineBinding],
+        collections: dict[UUID, models.Collection],
+    ) -> Iterator[IndexUsage]:
+        """Yield one usage per binding-declared index reference."""
+        pipelines = PipelineService(self._session)
+        for binding in bindings:
+            collection = collections.get(binding.collection_id)
+            if collection is None:
+                continue
+            pipeline = self._session.get(models.Pipeline, binding.pipeline_id)
+            if pipeline is None:
+                continue
+            try:
+                definition = pipelines.get_definition(pipeline)
+            except ValueError:
+                continue
+            for index in selected_indexes(definition, binding.variable_values).values():
+                yield IndexUsage(
+                    index_id=index.index_id,
+                    collection=collection,
+                    pipeline=pipeline,
+                    binding=binding,
+                )

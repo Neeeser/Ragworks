@@ -1,5 +1,5 @@
 import type { UsageBreakdown } from "@/lib/types/chat";
-import type { UUID } from "@/lib/types/common";
+import type { IndexBackend, UUID } from "@/lib/types/common";
 
 export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
@@ -90,6 +90,9 @@ export interface CollectionCreatePayload {
   description?: string;
   metadata?: Record<string, unknown>;
   ingest_pipeline_id?: UUID | null;
+  /** The collection's index choices, applied to every binding it creates —
+   * one set, so ingestion always writes where retrieval reads. */
+  variable_values?: Record<string, unknown>;
   /** Bound in order; the first becomes the primary search tool. */
   tool_pipeline_ids?: UUID[] | null;
   pipeline_overrides?: CollectionPipelineOverrides;
@@ -100,6 +103,8 @@ export interface CollectionUpdatePayload {
   description?: string;
   metadata?: Record<string, unknown>;
   ingest_pipeline_id?: UUID | null;
+  /** Index choices for the rebound ingest binding; absent leaves them as-is. */
+  variable_values?: Record<string, unknown>;
 }
 
 export interface Document {
@@ -250,4 +255,29 @@ export interface CollectionQueryArgument {
 
 export interface CollectionQueryArgumentsResponse {
   arguments: CollectionQueryArgument[];
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexRef`. */
+export interface CollectionIndexRef {
+  index_id: string;
+  name: string;
+  backend: IndexBackend;
+  vector_type: string;
+  dimension: number | null;
+  metric: string | null;
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexSlot`. */
+export interface CollectionIndexSlot {
+  name: string;
+  vector_type: string;
+  description: string | null;
+  expected_dimension: number | null;
+  current: CollectionIndexRef | null;
+  pipelines: string[];
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexesRead`. */
+export interface CollectionIndexesRead {
+  slots: CollectionIndexSlot[];
 }

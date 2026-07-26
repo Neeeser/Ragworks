@@ -11,6 +11,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 
 | scenario | state | needs keys |
 | --- | --- | --- |
+| `backend-swap` | shared-pipelines plus a Pinecone connection and registered index: both backends are selectable, so binding-index swaps and the count/facet capability refusals can be exercised for real. | `OPENROUTER_API_KEY`, `PINECONE_API_KEY` |
 | `blank` | Empty database — for testing registration, login, and the setup wizard itself. | none |
 | `cohere-connected` | Admin user with a working Cohere connection (API key from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `COHERE_API_KEY` |
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
@@ -20,6 +21,20 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
 | `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
+| `shared-pipelines` | collection-ready plus a second collection bound to the same pipelines on its own dense + BM25 indexes: the modular-pipeline state, where one definition serves two collections. | `OPENROUTER_API_KEY` |
+
+## `backend-swap`
+
+shared-pipelines plus a Pinecone connection and registered index: both backends are selectable, so binding-index swaps and the count/facet capability refusals can be exercised for real.
+
+Requires: `OPENROUTER_API_KEY`, `PINECONE_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from shared-pipelines (two collections sharing one pipeline pair on their own pgvector indexes)
+- a live-validated Pinecone connection
+- a registered Pinecone index sandbox-remote, sized to the embedding model
+- a tool binding can be repointed from pgvector to Pinecone from the collection's Indexes control
+- a count or facet pipeline is refused on Pinecone, naming the nodes that cannot run there
 
 ## `blank`
 
@@ -120,3 +135,16 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated Ollama connection (embeddings + chat) at OLLAMA_BASE_URL
 - pgvector is available as the vector store; no index or collection yet
+
+## `shared-pipelines`
+
+collection-ready plus a second collection bound to the same pipelines on its own dense + BM25 indexes: the modular-pipeline state, where one definition serves two collections.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
+- a second collection "Second Collection" bound to the *same* ingest and tool pipelines, with no documents of its own
+- indexes second-index (dense) and second-index-bm25 (sparse), registered and selected by the second collection's bindings
+- the Index Manager lists four registered indexes and reports which collections use each
+- editing either pipeline changes both collections; changing a binding's index changes only that collection

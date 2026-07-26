@@ -4,9 +4,10 @@ Three declaration shapes power pipeline variables:
 
 - `PipelineVariable` — a variable on `PipelineDefinition.variables`, the
   single owner of every declaration: a constant (`source="value"`), derived
-  from an expression over other variables (`source="expression"`), or
+  from an expression over other variables (`source="expression"`),
   caller-supplied (`source="input"` — `value` is the default, `None` meaning
-  the caller must supply it).
+  the caller must supply it), or set per collection binding
+  (`source="binding"` — `value` is the default a binding overrides).
 - `PipelineInputArgument` — the *derived* caller-facing argument shape: built
   from the input-source variables a `retrieval.input` node accepts (its
   config lists variable names). The search API and the chat tool schema
@@ -27,12 +28,13 @@ Node configs reference variables with a tagged wire value
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validator
 
-from app.pipelines.expressions import ExprType, ExprValue, ModelValue
+from app.pipelines.expressions import ExprType, ExprValue, IndexValue, ModelValue
 from app.pipelines.expressions.functions import BUILTINS
 
 EXPRESSION_KEY = "$expr"
@@ -40,8 +42,26 @@ EXPRESSION_KEY = "$expr"
 QUERY_VARIABLE = "query"
 """Built-in retrieval argument: always present, always a string."""
 
+COLLECTION_ID_VARIABLE = "collection_id"
+COLLECTION_NAME_VARIABLE = "collection_name"
+USER_ID_VARIABLE = "user_id"
+
+COLLECTION_VARIABLES: tuple[str, ...] = (
+    COLLECTION_ID_VARIABLE,
+    COLLECTION_NAME_VARIABLE,
+    USER_ID_VARIABLE,
+)
+"""Built-in strings describing the collection a pipeline runs for.
+
+Always present and always *untainted*: they are fixed the moment a pipeline is
+bound to a collection, never caller input, so identity fields may derive index
+names from them (`'col-' + collection_id`) without breaking the taint rule.
+"""
+
 VARIABLE_NAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
-RESERVED_VARIABLE_NAMES = frozenset({QUERY_VARIABLE, "true", "false", *BUILTINS})
+RESERVED_VARIABLE_NAMES = frozenset(
+    {QUERY_VARIABLE, *COLLECTION_VARIABLES, "true", "false", *BUILTINS}
+)
 
 STATIC_ONLY_KEY = "static_only"
 """json_schema_extra marker for identity config fields (index names, backends,
@@ -53,7 +73,7 @@ STATIC_ONLY_EXTRA: dict[str, JsonValue] = {STATIC_ONLY_KEY: True}
 """Pass as `Field(json_schema_extra=STATIC_ONLY_EXTRA)` on identity fields."""
 
 ScalarValue = int | float | str | bool
-VariableValue = ScalarValue | ModelValue
+VariableValue = ScalarValue | ModelValue | IndexValue
 
 
 class VariableType(StrEnum):
@@ -65,6 +85,7 @@ class VariableType(StrEnum):
     BOOLEAN = "boolean"
     ENUM = "enum"
     MODEL = "model"
+    INDEX = "index"
 
 
 EXPR_TYPES: dict[VariableType, ExprType] = {
@@ -76,6 +97,7 @@ EXPR_TYPES: dict[VariableType, ExprType] = {
     # enforced when values enter the environment, not by the type system.
     VariableType.ENUM: ExprType.STRING,
     VariableType.MODEL: ExprType.MODEL,
+    VariableType.INDEX: ExprType.INDEX,
 }
 
 
@@ -85,17 +107,20 @@ class VariableSource(StrEnum):
     VALUE = "value"
     EXPRESSION = "expression"
     INPUT = "input"
+    BINDING = "binding"
 
 
 class PipelineVariable(BaseModel):
     """A pipeline-level variable declaration.
 
     `source` selects the value's origin: a constant (`value`), a derived
-    `expression`, or caller `input`. For input variables `value` is the
-    default — `None` means the caller must supply one — and `expose_to_llm`
-    publishes it in the chat tool schema. Definitions saved before `source`
-    existed omit it; the normalizer infers expression-vs-value so they parse
-    unchanged.
+    `expression`, caller `input`, or per-collection `binding`. For input
+    variables `value` is the default — `None` means the caller must supply
+    one — and `expose_to_llm` publishes it in the chat tool schema. A binding
+    variable's `value` is the default a `CollectionPipelineBinding` overrides,
+    which is what lets one pipeline serve many collections against different
+    indexes. Definitions saved before `source` existed omit it; the normalizer
+    infers expression-vs-value so they parse unchanged.
     """
 
     name: str = Field(max_length=64)
@@ -143,10 +168,12 @@ class PipelineInputArgument(BaseModel):
 def as_input_argument(variable: PipelineVariable) -> PipelineInputArgument:
     """Project an input-source variable onto the caller-facing argument shape.
 
-    A model-typed default has no scalar wire shape (and model-typed inputs are
+    A structured default has no scalar wire shape (and structured inputs are
     a validation error anyway), so it projects as required-with-no-default.
     """
-    default = variable.value if not isinstance(variable.value, ModelValue) else None
+    default = (
+        variable.value if not isinstance(variable.value, (ModelValue, IndexValue)) else None
+    )
     return PipelineInputArgument(
         name=variable.name,
         type=variable.type,
@@ -169,6 +196,53 @@ class PipelineOutputField(BaseModel):
 
 class VariableValueError(ValueError):
     """A literal or supplied value does not satisfy its declaration."""
+
+
+@dataclass(frozen=True)
+class CollectionScope:
+    """The collection a pipeline runs for, as expression built-in values.
+
+    A pure value object rather than the db model: the expression layer needs
+    three strings, and taking the table would drag persistence into variable
+    resolution. Validation (which has no collection) uses `placeholder()` so
+    expressions still type-check as strings.
+    """
+
+    collection_id: str
+    collection_name: str
+    user_id: str
+
+    @classmethod
+    def placeholder(cls) -> CollectionScope:
+        """Return the empty scope static validation resolves against."""
+        return cls(collection_id="", collection_name="", user_id="")
+
+    def as_values(self) -> dict[str, str]:
+        """Return the built-in name → value mapping for the environment."""
+        return {
+            COLLECTION_ID_VARIABLE: self.collection_id,
+            COLLECTION_NAME_VARIABLE: self.collection_name,
+            USER_ID_VARIABLE: self.user_id,
+        }
+
+
+@dataclass(frozen=True)
+class BindingContext:
+    """The collection binding an environment resolves for.
+
+    One object because the two travel together everywhere: a binding names
+    both the collection whose descriptors the built-ins expose and the
+    per-binding variable overrides. `empty()` is the editor's view — no
+    collection, no overrides, defaults throughout.
+    """
+
+    collection: CollectionScope
+    values: Mapping[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def empty(cls) -> BindingContext:
+        """Return the context static validation resolves against."""
+        return cls(collection=CollectionScope.placeholder())
 
 
 @dataclass(frozen=True)
@@ -214,6 +288,13 @@ def coerce_literal(
         except ValidationError as error:
             raise VariableValueError(
                 "expected a model value with connection_id and model_name"
+            ) from error
+    if declared is VariableType.INDEX:
+        try:
+            return IndexValue.model_validate(value)
+        except ValidationError as error:
+            raise VariableValueError(
+                "expected an index value with index_id, backend, and name"
             ) from error
     if declared is VariableType.BOOLEAN:
         if not isinstance(value, bool):

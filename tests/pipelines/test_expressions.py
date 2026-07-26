@@ -24,6 +24,7 @@ from app.pipelines.expressions import (
     ExpressionTypeError,
     ExprType,
     ExprValue,
+    IndexValue,
     ModelValue,
     check_type,
     evaluate,
@@ -52,6 +53,12 @@ def _env_values(env: dict[str, Any]) -> dict[str, ExprValue]:
             values[name] = ModelValue(
                 connection_id=UUID(entry["value"]["connection_id"]),
                 model_name=entry["value"]["model_name"],
+            )
+        elif entry["type"] == "index":
+            values[name] = IndexValue(
+                index_id=UUID(entry["value"]["index_id"]),
+                backend=entry["value"]["backend"],
+                name=entry["value"]["name"],
             )
         else:
             values[name] = entry["value"]

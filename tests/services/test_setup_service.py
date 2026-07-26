@@ -385,3 +385,58 @@ def test_bootstrap_replaces_existing_default_pipelines(
             )
         ).all()
     assert len(defaults) == 2
+
+
+def test_bootstrap_registers_the_indexes_its_pipelines_target(
+    pg_search_session: Session,
+) -> None:
+    """The wizard is a scaffolding path, so its pipelines carry index variables.
+
+    A scaffolding path that skipped registration would produce the one kind of
+    pipeline a collection can never repoint, and its indexes would be missing
+    from the Index Manager's "used by" list.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    _create_pgvector_index(session, user)
+
+    SetupService(session).bootstrap(user, _bootstrap_request(connection))
+
+    with Session(session.get_bind()) as fresh:
+        rows = fresh.exec(
+            select(models.RegisteredIndex).where(models.RegisteredIndex.user_id == user.id)
+        ).all()
+        names = {row.name for row in rows}
+        versions = fresh.exec(select(models.PipelineVersion)).all()
+
+    assert "first-index" in names
+    index_variables = [
+        variable
+        for version in versions
+        for variable in version.definition.get("variables", [])
+        if variable.get("type") == "index"
+    ]
+    assert index_variables
+    assert all(variable["source"] == "binding" for variable in index_variables)
+
+
+def test_bootstrap_registers_the_bm25_sibling_index(
+    pg_search_session: Session,
+) -> None:
+    """The hybrid default names two indexes; both must be selectable."""
+    session = pg_search_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    _create_pgvector_index(session, user)
+
+    SetupService(session).bootstrap(user, _bootstrap_request(connection))
+
+    with Session(session.get_bind()) as fresh:
+        rows = fresh.exec(
+            select(models.RegisteredIndex).where(models.RegisteredIndex.user_id == user.id)
+        ).all()
+
+    by_type = {row.vector_type: row.name for row in rows}
+    assert by_type.get("dense") == "first-index"
+    assert by_type.get("sparse") == "first-index-bm25"

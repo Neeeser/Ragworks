@@ -268,6 +268,12 @@ Delete on sight:
 Keep text that tells the user something the UI cannot show: a constraint, a consequence,
 where a value came from.
 
+**A consequence that is invisible after the fact is stated before it.** Repointing a
+binding's index moves no data, so the collection reads an empty store until it is
+re-ingested — and nothing at query time says so, because retrieval simply returns
+nothing. Say it in the control that makes the change, not in a toast afterwards. This is
+the one case where explanatory copy is required rather than tolerated.
+
 **The counter-rule: on a page of stacked peer panels, every panel carries an `h2` naming
 its domain.** A panel whose only header is a count and an action (`3 configured · Add
 provider`) is unfindable among titled siblings — users read the feature as missing. A

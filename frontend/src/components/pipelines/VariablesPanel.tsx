@@ -10,7 +10,6 @@ import { Field, TextInput } from "@/components/ui/field";
 import { expressionSource } from "@/lib/expressions";
 import { cn } from "@/lib/utils";
 
-import { ExpressionInput } from "./ExpressionInput";
 import {
   RESERVED_VARIABLE_NAMES,
   RETRIEVAL_INPUT_TYPE,
@@ -20,10 +19,16 @@ import {
   formatPreviewValue,
   variableSource,
 } from "./lib/variable-env";
-import { ConstantValueField, InputVariableFields } from "./VariableValueFields";
+import { VariableValueEditor } from "./VariableValueFields";
 
 import type { ChipTone } from "@/components/ui/chip";
-import type { CatalogModel, PipelineVariable, VariableSource, VariableType } from "@/lib/types";
+import type {
+  CatalogModel,
+  PipelineVariable,
+  VariableSource,
+  VariableType,
+  VectorIndex,
+} from "@/lib/types";
 
 type NodeLike = { type: string; config: Record<string, unknown> };
 
@@ -33,6 +38,8 @@ type VariablesPanelProps = {
   /** Current canvas nodes — reference checks and input-node acceptance. */
   nodes: NodeLike[];
   modelOptions: CatalogModel[];
+  /** Registered indexes a binding-source index variable can default to. */
+  indexOptions: VectorIndex[];
   disabled?: boolean;
 };
 
@@ -43,19 +50,32 @@ const DEFAULT_VALUES: Record<VariableType, PipelineVariable["value"]> = {
   boolean: false,
   enum: "",
   model: null,
+  index: null,
 };
+
+/** Types whose value is picked from a catalog, not typed or derived. */
+const PICKED_TYPES = new Set<VariableType>(["model", "index"]);
+
+/** A binding variable's label everywhere it appears: the chip, and both
+ * source pickers. One constant so the three can never disagree. */
+const BINDING_SOURCE_LABEL = "Per collection";
 
 const SOURCE_BADGES: Record<VariableSource, string> = {
   value: "Constant",
   expression: "Expression",
   input: "Input",
+  binding: BINDING_SOURCE_LABEL,
 };
 
-/** Input variables come from the caller — the only source with live state. */
+const BINDING_SOURCE_OPTION = { value: "binding", label: BINDING_SOURCE_LABEL };
+
+/** Caller input and per-collection bindings both vary at runtime; constants
+ * and expressions are fixed by the definition. */
 const SOURCE_TONES: Record<VariableSource, ChipTone> = {
   value: "neutral",
   expression: "neutral",
   input: "accent",
+  binding: "accent",
 };
 
 function nameProblem(name: string, taken: Set<string>): string | null {
@@ -99,6 +119,7 @@ export function VariablesPanel({
   onChange,
   nodes,
   modelOptions,
+  indexOptions,
   disabled,
 }: VariablesPanelProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -178,6 +199,7 @@ export function VariablesPanel({
                   problem={problem}
                   env={env}
                   modelOptions={modelOptions}
+                  indexOptions={indexOptions}
                   referencedBy={referenceSites(variable.name, variables, nodes)}
                   disabled={disabled}
                   onPatch={(patch) => update(index, patch)}
@@ -203,6 +225,7 @@ type VariableEditorProps = {
   problem: string | null;
   env: ReturnType<typeof buildStaticEnvironment>;
   modelOptions: CatalogModel[];
+  indexOptions: VectorIndex[];
   referencedBy: string[];
   disabled?: boolean;
   onPatch: (patch: Partial<PipelineVariable>) => void;
@@ -212,11 +235,16 @@ type VariableEditorProps = {
 /** The patch a type switch applies: reset the value, keep what still fits. */
 function typePatch(variable: PipelineVariable, type: VariableType): Partial<PipelineVariable> {
   const source = variableSource(variable);
+  const picked = PICKED_TYPES.has(type);
+  // A picked type holds a chosen value, so it can only be a constant or a
+  // per-collection binding — never an expression, and never caller input
+  // (identity from a request would break the static-only rule).
+  const nextSource = picked && source !== "binding" ? "value" : variable.source;
   return {
     type,
     value: source === "expression" || source === "input" ? null : DEFAULT_VALUES[type],
-    expression: type === "model" ? null : variable.expression,
-    source: type === "model" && source !== "value" ? "value" : variable.source,
+    expression: picked ? null : variable.expression,
+    source: nextSource,
     choices: type === "enum" ? (variable.choices ?? []) : undefined,
     minimum: undefined,
     maximum: undefined,
@@ -240,6 +268,7 @@ function VariableEditor({
   problem,
   env,
   modelOptions,
+  indexOptions,
   referencedBy,
   disabled,
   onPatch,
@@ -268,14 +297,22 @@ function VariableEditor({
           />
         </Field>
         {variable.type !== "model" ? (
-          <Field label="Source">
+          <Field
+            label="Source"
+            hint={source === "binding" ? "Each collection sets its own value." : undefined}
+          >
             <CustomSelect
               value={source}
-              options={[
-                { value: "value", label: "Value" },
-                { value: "expression", label: "Expression" },
-                { value: "input", label: "Input" },
-              ]}
+              options={
+                variable.type === "index"
+                  ? [{ value: "value", label: "Value" }, BINDING_SOURCE_OPTION]
+                  : [
+                      { value: "value", label: "Value" },
+                      { value: "expression", label: "Expression" },
+                      { value: "input", label: "Input" },
+                      BINDING_SOURCE_OPTION,
+                    ]
+              }
               placeholder="Source"
               disabled={disabled}
               onValueChange={(mode) => {
@@ -291,6 +328,7 @@ function VariableEditor({
         source={source}
         env={env}
         modelOptions={modelOptions}
+        indexOptions={indexOptions}
         disabled={disabled}
         onPatch={onPatch}
       />
@@ -339,57 +377,4 @@ function VariableEditor({
       ) : null}
     </div>
   );
-}
-
-/** The value control for one variable, dispatched on its source and type. */
-function VariableValueEditor({
-  variable,
-  source,
-  env,
-  modelOptions,
-  disabled,
-  onPatch,
-}: {
-  variable: PipelineVariable;
-  source: VariableSource;
-  env: ReturnType<typeof buildStaticEnvironment>;
-  modelOptions: CatalogModel[];
-  disabled?: boolean;
-  onPatch: (patch: Partial<PipelineVariable>) => void;
-}) {
-  if (source === "input") {
-    return <InputVariableFields variable={variable} disabled={disabled} onPatch={onPatch} />;
-  }
-  if (source === "expression" && variable.type !== "model") {
-    return (
-      <ExpressionInput
-        aria-label={`Expression for ${variable.name}`}
-        value={variable.expression ?? ""}
-        onChange={(expression) => onPatch({ expression })}
-        env={env}
-        expectedType={variable.type === "enum" ? "string" : variable.type}
-      />
-    );
-  }
-  if (variable.type === "model") {
-    const modelValue = variable.value && typeof variable.value === "object" ? variable.value : null;
-    return (
-      <Field label="Model">
-        <CustomSelect
-          value={modelValue ? `${modelValue.connection_id}::${modelValue.model_name}` : ""}
-          options={modelOptions.map((model) => ({
-            value: `${model.connection_id}::${model.id}`,
-            label: `${model.name} — ${model.connection_label}`,
-          }))}
-          placeholder="Pick a model"
-          disabled={disabled}
-          onValueChange={(encoded) => {
-            const [connectionId, ...rest] = encoded.split("::");
-            onPatch({ value: { connection_id: connectionId, model_name: rest.join("::") } });
-          }}
-        />
-      </Field>
-    );
-  }
-  return <ConstantValueField variable={variable} disabled={disabled} onPatch={onPatch} />;
 }

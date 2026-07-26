@@ -14,13 +14,18 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.variables import PipelineVariable
 
-CURRENT_DEFINITION_SCHEMA_VERSION = 2
+CURRENT_DEFINITION_SCHEMA_VERSION = 3
 """Bumped when a stored definition's shape changes (see `app/pipelines/upgrades.py`).
 
 Version 2: variables own input declarations (`source="input"`); the
 `retrieval.input` node's `arguments` config is a list of variable names; and
 fusion nodes never truncate (a Result Limit node carries the cut). Stored raw
 definitions *without* the key predate the field and are treated as version 1.
+
+Version 3: index identity is a binding-source index variable rather than a
+literal on each store-bound node, so one pipeline serves many collections;
+collection placeholders (`{collection_id}`) become ordinary expressions over
+the built-in descriptors.
 """
 
 

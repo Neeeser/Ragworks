@@ -9,7 +9,14 @@ import { PipelineNodeLibrary } from "./PipelineNodeLibrary";
 import { VariablesPanel } from "./VariablesPanel";
 
 import type { NodeFamily } from "./lib/pipeline-theme";
-import type { CatalogModel, IndexBackend, NodeSpec, Pipeline, PipelineVariable } from "@/lib/types";
+import type {
+  CatalogModel,
+  IndexBackend,
+  NodeSpec,
+  Pipeline,
+  PipelineVariable,
+  VectorIndex,
+} from "@/lib/types";
 
 type SidebarTab = "pipelines" | "variables";
 
@@ -25,6 +32,7 @@ type PipelineSidebarProps = {
   onVariablesChange: (variables: PipelineVariable[]) => void;
   variableNodes: Array<{ type: string; config: Record<string, unknown> }>;
   modelOptions: CatalogModel[];
+  indexOptions: VectorIndex[];
   variablesDisabled: boolean;
   hasRerankingProvider: boolean;
   rerankingProviderMessage?: string | null;
@@ -48,6 +56,7 @@ export function PipelineSidebar({
   onVariablesChange,
   variableNodes,
   modelOptions,
+  indexOptions,
   variablesDisabled,
   hasRerankingProvider,
   rerankingProviderMessage,
@@ -96,6 +105,7 @@ export function PipelineSidebar({
               onChange={onVariablesChange}
               nodes={variableNodes}
               modelOptions={modelOptions}
+              indexOptions={indexOptions}
               disabled={variablesDisabled}
             />
           </div>

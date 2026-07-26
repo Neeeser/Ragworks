@@ -12,6 +12,7 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.main import app
 from app.db import models
 from app.db.repositories import UserRepository
+from app.schemas.enums import IndexBackend
 
 
 @pytest.fixture(name="keyless_user")
@@ -190,3 +191,112 @@ def test_describe_missing_index_is_404(keyless_client: TestClient) -> None:
 def test_indexes_require_auth(unauthed_client: TestClient) -> None:
     assert unauthed_client.get("/api/indexes").status_code == 401
     assert unauthed_client.get("/api/indexes/backends").status_code == 401
+
+
+def test_created_index_is_registered_and_pickable(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    """Creating through the app registers it: no adopt step for your own index."""
+    created = keyless_client.post(
+        "/api/indexes",
+        json={"backend": "pgvector", "name": "docs", "dimension": 8},
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["registered"] is True
+    assert created.json()["index_id"] is not None
+
+
+def test_unregistered_physical_index_is_listed_as_adoptable(
+    keyless_client: TestClient, pgvector_session: Session, keyless_user: models.User
+) -> None:
+    """An index the store holds without a row is shown, not hidden."""
+    from app.vectorstores.base import IndexSpec
+    from app.vectorstores.registry import get_vector_store
+
+    store = get_vector_store(
+        IndexBackend.PGVECTOR, user=keyless_user, session=pgvector_session
+    )
+    store.create_index(IndexSpec(name="external", dimension=8, metric="cosine"))
+    pgvector_session.commit()
+
+    listed = keyless_client.get("/api/indexes", params={"backend": "pgvector"})
+
+    entry = next(idx for idx in listed.json()["indexes"] if idx["name"] == "external")
+    assert entry["registered"] is False
+    assert entry["index_id"] is None
+
+
+def test_register_adopts_an_existing_index_with_its_real_parameters(
+    keyless_client: TestClient, pgvector_session: Session, keyless_user: models.User
+) -> None:
+    """Adoption reads dimension/metric from the store, never from the request."""
+    from app.vectorstores.base import IndexSpec
+    from app.vectorstores.registry import get_vector_store
+
+    store = get_vector_store(
+        IndexBackend.PGVECTOR, user=keyless_user, session=pgvector_session
+    )
+    store.create_index(IndexSpec(name="external", dimension=8, metric="cosine"))
+    pgvector_session.commit()
+
+    registered = keyless_client.post(
+        "/api/indexes/register", json={"backend": "pgvector", "name": "external"}
+    )
+
+    assert registered.status_code == 201, registered.text
+    body = registered.json()
+    assert body["registered"] is True
+    assert body["dimension"] == 8
+    assert body["metric"] == "cosine"
+
+
+def test_register_is_idempotent(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    keyless_client.post(
+        "/api/indexes", json={"backend": "pgvector", "name": "docs", "dimension": 8}
+    )
+
+    again = keyless_client.post(
+        "/api/indexes/register", json={"backend": "pgvector", "name": "docs"}
+    )
+
+    assert again.status_code == 201
+    rows = pgvector_session.exec(select(models.RegisteredIndex)).all()
+    assert [row.name for row in rows] == ["docs"]
+
+
+def test_registered_index_missing_from_the_store_is_reported_not_dropped(
+    keyless_client: TestClient, pgvector_session: Session, keyless_user: models.User
+) -> None:
+    """A row whose index vanished still matters — a binding may target it."""
+    from app.db.repositories import RegisteredIndexRepository
+
+    RegisteredIndexRepository(pgvector_session).get_or_create(
+        keyless_user.id, IndexBackend.PGVECTOR, "ghost", dimension=8, metric="cosine"
+    )
+    pgvector_session.commit()
+
+    listed = keyless_client.get("/api/indexes", params={"backend": "pgvector"})
+
+    entry = next(idx for idx in listed.json()["indexes"] if idx["name"] == "ghost")
+    assert entry["registered"] is True
+    assert entry["exists"] is False
+
+
+def test_unregister_leaves_the_index_in_the_store(
+    keyless_client: TestClient, pgvector_session: Session
+) -> None:
+    created = keyless_client.post(
+        "/api/indexes", json={"backend": "pgvector", "name": "docs", "dimension": 8}
+    )
+    index_id = created.json()["index_id"]
+
+    removed = keyless_client.delete(f"/api/indexes/registrations/{index_id}")
+
+    assert removed.status_code == 200
+    assert removed.json()["status"] == "unregistered"
+    listed = keyless_client.get("/api/indexes", params={"backend": "pgvector"}).json()
+    entry = next(idx for idx in listed["indexes"] if idx["name"] == "docs")
+    assert entry["registered"] is False

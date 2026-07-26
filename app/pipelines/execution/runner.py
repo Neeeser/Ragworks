@@ -23,11 +23,14 @@ from app.db import models
 from app.observability import events as log_events
 from app.observability import get_logger
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
 from app.pipelines.registry import NodeRegistry, default_registry
-from app.pipelines.resolution import build_environment, resolve_definition
+from app.pipelines.resolution import resolve_definition
+from app.pipelines.settings import collection_scope
 from app.pipelines.tracing import PipelineTraceRecorder
+from app.pipelines.variables import BindingContext
 from app.providers.registry import ProviderResolver
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
@@ -76,6 +79,7 @@ class PipelineRunner:
         query: str | None = None,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
+        binding_values: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
         """Create a pipeline run row, its trace recorder, and its context.
 
@@ -83,12 +87,19 @@ class PipelineRunner:
         the definition's declarations) and resolves every `$expr` config
         value before the run row is created — invalid caller input raises
         `VariableResolutionError` and never records a failed run.
+
+        `binding_values` are the collection binding's answers for the
+        pipeline's binding-source variables, so the run reads the same index
+        the settings resolver and purge cascade resolved for this collection.
         """
         environment = build_environment(
             definition,
             query=query,
             supplied=arguments,
             request_top_k=top_k,
+            binding=BindingContext(
+                collection=collection_scope(collection), values=binding_values or {}
+            ),
         )
         resolved = resolve_definition(definition, environment)
         # The caller-facing result limit becomes the run's effective request

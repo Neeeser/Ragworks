@@ -7,12 +7,14 @@ from uuid import UUID
 import pytest
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-from app.pipelines.expressions import ExprType
-from app.pipelines.nodes.io import RetrievalInputNode
-from app.pipelines.resolution import (
+from app.pipelines.environment import (
     VariableResolutionError,
     build_environment,
     declared_arguments,
+)
+from app.pipelines.expressions import ExprType
+from app.pipelines.nodes.io import RetrievalInputNode
+from app.pipelines.resolution import (
     default_environment,
     resolve_definition,
     strip_expressions,

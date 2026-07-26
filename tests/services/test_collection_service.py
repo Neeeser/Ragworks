@@ -14,17 +14,23 @@ import pytest
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import CollectionRepository, UserRepository
+from app.db.repositories import (
+    CollectionPipelineBindingRepository,
+    CollectionRepository,
+    UserRepository,
+)
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.resolution import resolve_static_definition
 from app.schemas.collections import (
     CollectionCreate,
     CollectionPipelineOverrides,
     CollectionUpdate,
     PipelineNodeOverride,
 )
+from app.schemas.enums import IndexBackend
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
@@ -118,8 +124,13 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
         n for n in pipeline_service.get_definition(ingestion_pipeline).nodes
         if n.type == "chunker.token"
     )
+    # Resolved, because a store-bound node's backend is an expression over the
+    # pipeline's index variable — the raw config holds the expression.
     updated_retriever = next(
-        n for n in pipeline_service.get_definition(retrieval_pipeline).nodes
+        n
+        for n in resolve_static_definition(
+            pipeline_service.get_definition(retrieval_pipeline)
+        ).nodes
         if n.type == "retriever.vector"
     )
     # Merged, not replaced: the untouched sibling field survives the override.
@@ -319,3 +330,163 @@ def test_update_prompt_persists_and_clears_template(session: Session) -> None:
         persisted = fresh.get(models.Collection, collection.id)
         assert persisted is not None
         assert SYSTEM_PROMPT_METADATA_KEY not in persisted.extra_metadata
+
+
+def test_create_applies_one_index_choice_to_every_binding(session: Session) -> None:
+    """Ingestion must write where retrieval reads.
+
+    Creation takes a single set of index choices rather than one per binding,
+    so a new collection cannot start out indexing into one store and querying
+    another — the mismatch the diagnostics rules exist to catch.
+    """
+    user = _create_user(session)
+    index = models.RegisteredIndex(
+        user_id=user.id,
+        backend=IndexBackend.PGVECTOR,
+        name="chosen-index",
+        vector_type="dense",
+        dimension=1536,
+    )
+    session.add(index)
+    session.commit()
+    session.refresh(index)
+
+    created = CollectionService(session).create(
+        user,
+        CollectionCreate(
+            name="Chosen index",
+            variable_values={
+                "primary_index": {
+                    "index_id": str(index.id),
+                    "backend": "pgvector",
+                    "name": "chosen-index",
+                }
+            },
+        ),
+    )
+
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(created.id)
+    selected = {
+        models.BindingRole(binding.role).value: binding.variable_values.get("primary_index")
+        for binding in bindings
+    }
+    assert selected["ingest"] == selected["tool"]
+    assert selected["ingest"]["name"] == "chosen-index"
+
+
+def _dense_tool_pipeline(session: Session, user: models.User) -> models.Pipeline:
+    """A callable pipeline declaring only `primary_index` — no BM25 slot."""
+    from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+    from app.pipelines.nodes.io import RetrievalInputNode
+    from app.pipelines.nodes.retrieval import VectorRetrieverNode
+    from app.pipelines.variables import PipelineVariable, VariableSource, VariableType
+
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(
+                id="in", type=RetrievalInputNode.type, name="In", config={"arguments": []}
+            ),
+            PipelineNodeDefinition(
+                id="retrieve",
+                type=VectorRetrieverNode.type,
+                name="Retrieve",
+                config={
+                    "backend": {"$expr": "primary_index.backend"},
+                    "index_name": {"$expr": "primary_index.name"},
+                    "top_k": 5,
+                },
+            ),
+        ],
+        variables=[
+            PipelineVariable(
+                name="primary_index",
+                type=VariableType.INDEX,
+                source=VariableSource.BINDING,
+                value={"index_id": str(uuid4()), "backend": "pgvector", "name": "dense-only"},
+            )
+        ],
+    )
+    pipeline = models.Pipeline(user_id=user.id, name="Dense-only tool")
+    session.add(pipeline)
+    session.commit()
+    session.refresh(pipeline)
+    session.add(
+        models.PipelineVersion(
+            pipeline_id=pipeline.id,
+            version=1,
+            definition=definition.model_dump(mode="json"),
+        )
+    )
+    session.commit()
+    return pipeline
+
+
+def test_create_scopes_shared_values_to_each_bindings_own_slots(
+    session: Session,
+) -> None:
+    """A slot only one pipeline declares is not an unknown for the other.
+
+    The wizard sends the union of every selected pipeline's index slots, so a
+    hybrid ingest paired with a dense-only tool must not fail creation over
+    the BM25 slot the tool never declared.
+    """
+    user = _create_user(session)
+    tool = _dense_tool_pipeline(session, user)
+    dense = models.RegisteredIndex(
+        user_id=user.id,
+        backend=IndexBackend.PGVECTOR,
+        name="chosen-dense",
+        vector_type="dense",
+    )
+    sparse = models.RegisteredIndex(
+        user_id=user.id,
+        backend=IndexBackend.PGVECTOR,
+        name="chosen-bm25",
+        vector_type="sparse",
+    )
+    session.add(dense)
+    session.add(sparse)
+    session.commit()
+    session.refresh(dense)
+    session.refresh(sparse)
+
+    created = CollectionService(session).create(
+        user,
+        CollectionCreate(
+            name="Mixed slots",
+            tool_pipeline_ids=[tool.id],
+            variable_values={
+                "primary_index": {
+                    "index_id": str(dense.id),
+                    "backend": "pgvector",
+                    "name": "chosen-dense",
+                },
+                "bm25_index": {
+                    "index_id": str(sparse.id),
+                    "backend": "pgvector",
+                    "name": "chosen-bm25",
+                },
+            },
+        ),
+    )
+
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(created.id)
+    by_role = {models.BindingRole(binding.role).value: binding for binding in bindings}
+    assert by_role["ingest"].variable_values["bm25_index"]["name"] == "chosen-bm25"
+    tool_values = by_role["tool"].variable_values
+    assert tool_values["primary_index"]["name"] == "chosen-dense"
+    assert "bm25_index" not in tool_values
+
+
+def test_create_still_rejects_a_slot_no_pipeline_declares(session: Session) -> None:
+    """Scoping is per binding, not a licence to swallow typos."""
+    user = _create_user(session)
+
+    with pytest.raises(InvalidInputError, match="binding variable named"):
+        CollectionService(session).create(
+            user,
+            CollectionCreate(
+                name="Typo",
+                variable_values={"primry_index": {"index_id": str(uuid4())}},
+            ),
+        )

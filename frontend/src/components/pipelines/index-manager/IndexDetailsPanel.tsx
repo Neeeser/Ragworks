@@ -13,11 +13,20 @@ import type { VectorIndex } from "@/lib/types";
 type IndexDetailsPanelProps = {
   index: VectorIndex | null;
   onDelete: (name: string) => void;
+  /** Adopt an index the store holds but the registry does not know. */
+  onRegister: (index: VectorIndex) => void;
+  registering?: boolean;
 };
 
-/** Read-only detail card for the selected vector index, plus the entry point into
- * the delete-confirmation flow (owned by the parent IndexManagerModal). */
-export function IndexDetailsPanel({ index, onDelete }: IndexDetailsPanelProps) {
+/** Read-only detail card for the selected vector index, plus the entry points into
+ * the delete-confirmation and registration flows (both owned by the parent
+ * IndexManagerModal). */
+export function IndexDetailsPanel({
+  index,
+  onDelete,
+  onRegister,
+  registering,
+}: IndexDetailsPanelProps) {
   return (
     <Panel className="overflow-hidden">
       <div className="flex h-8 items-center justify-between gap-2 border-b border-hairline pl-3 pr-1">
@@ -51,11 +60,47 @@ export function IndexDetailsPanel({ index, onDelete }: IndexDetailsPanelProps) {
             {index.dimension ?? <span className="text-muted">—</span>}
           </Readout>
           <Readout label="Metric">{index.metric ?? "cosine"}</Readout>
+          <Readout label="Registered">{index.registered ? "Yes" : "No"}</Readout>
           {index.host ? (
             <Readout label="Host" className="w-full">
               {index.host}
             </Readout>
           ) : null}
+          {index.registered ? (
+            <div className="w-full">
+              <InstrumentLabel>Used by</InstrumentLabel>
+              {index.in_use_by && index.in_use_by.length > 0 ? (
+                <ul className="mt-1 space-y-0.5">
+                  {index.in_use_by.map((usage) => (
+                    <li key={`${usage.collection_id}-${usage.pipeline_id}-${usage.role}`}>
+                      <span className="text-ui text-body">{usage.collection_name}</span>
+                      <span className="text-instrument text-meta">
+                        {" · "}
+                        {usage.pipeline_name} ({usage.role})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-ui text-muted">Nothing points at this index.</p>
+              )}
+            </div>
+          ) : (
+            <div className="w-full space-y-2">
+              <p className="max-w-[66ch] text-ui text-muted">
+                This index exists in the store but is not registered, so no pipeline can select it.
+                Register it to make it available.
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onRegister(index)}
+                loading={registering}
+              >
+                Register index
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <p className="p-8 text-center text-ui text-muted">Select an index to see its details.</p>

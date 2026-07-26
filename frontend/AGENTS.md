@@ -265,6 +265,14 @@ the same PR.
   `mcpEndpointUrl` takes both and prefers the API base. Read the browser origin
   through `useOrigin()` (`src/lib/use-origin.ts`), which gives React a server
   snapshot instead of a state-plus-effect hydration dance.
+- **Only a registered index is selectable.** `useIndexes` derives
+  `registeredIndexes`/`unregisteredIndexes` from one fetch — pickers offer the
+  registered set, the Index Manager shows both so an index created outside the app
+  is visible rather than hidden. Never add a second hook that re-fetches the list.
+- **A control that changes which index a binding targets states the consequence
+  before the change.** Switching indexes moves no data, so the collection reads an
+  empty store until it is re-ingested — and that outcome is invisible at query
+  time, because retrieval just returns nothing.
 - **Admin settings render from the config catalog, not per-field forms.**
   `AdminSettingsPage` fetches `GET /api/admin/config` and renders one
   `ConfigFieldControl` per entry, dispatched on `field.kind` — a new backend config

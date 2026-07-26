@@ -134,6 +134,17 @@ colocate a single file with its consumer.
   that both pytest and vitest execute. A grammar or semantics change lands in both
   implementations plus the vectors, never one side — the vectors are what make the
   drift impossible, so never skip them.
+- **Binding values and the collection built-ins (`collection_id`,
+  `collection_name`, `user_id`) are untainted by design.** Both are fixed when a
+  pipeline is bound to a collection rather than supplied per request, so an
+  identity field may derive an index name from them and still resolve to one
+  deterministic index per binding — which is exactly what purge coverage needs.
+  Adding them to `tainted` would reject every index name a collection computes.
+- **The validator's type environment must carry every built-in the runtime
+  environment carries** (`_static_types` in `validation_variables.py`). A built-in
+  present at run time but missing from validation makes every expression over it
+  "unknown variable", and the fallback then *strips* the identity field it fed —
+  turning a valid pipeline into one with no index.
 - **One PR ships at most one stored-data migration.** A shape that only ever
   existed on the branch is reworked *inside* the pending migration (hand-fix your
   own dev DB rows), never patched with a second version bump — releases migrate
@@ -367,6 +378,30 @@ frontend form code — only a new `ConfigFieldKind` would.
 - **Per-document vector deletion goes through `delete_document_vectors`** (chunk
   vector ids are `{document_id}:{order}`). Never delete a whole namespace to remove
   one file.
+- **An index a pipeline targets is a `RegisteredIndex` row, never a bare name.**
+  Registration is what makes an index selectable, so *every* path that generates a
+  pipeline (setup wizard, default scaffolding, the migration) routes its definition
+  through `register_definition_indexes`
+  (`app/services/index_scaffolding.py`) — a path that skips it produces the one
+  pipeline a collection can never repoint, and its indexes stay invisible to the
+  Index Manager's in-use list. Deleting a registration consults *declared*
+  references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
+  that has not run yet still owns its index.
+- **A store-bound node's identity is an expression over a binding-source index
+  variable, not a literal.** `app/pipelines/index_variables.py` owns the rewrite,
+  and it is behavior-preserving by construction — each variable defaults to the
+  literal the definition already carried. A migration that changes which index a
+  collection resolves to detaches a corpus from its data and nothing downstream
+  reports it: retrieval simply returns nothing.
+- **Backend compatibility is per binding, and the error names the nodes.** Since an
+  index carries its backend, a graph valid as authored can be invalid for one
+  collection; `incompatible_nodes` (`app/services/index_compatibility.py`) is the
+  one check, read by binding writes, validation, and diagnostics. A bare
+  "incompatible backend" leaves the user guessing which of a dozen nodes to change.
+- **Which plane an index variable feeds is derived from the nodes that read it**
+  (`index_variable_vector_types`), never from its name — a variable called
+  `secondary_index` feeding a BM25 retriever needs a sparse index, and inferring
+  from spelling mispicks the moment an author names one differently.
 
 ## Model providers (`app/providers/` + `provider_connections`)
 
@@ -804,6 +839,16 @@ schema, grep every construction site.
 - **Never write tests that execute Protocol/ABC stub bodies or assert
   `NotImplementedError` on abstract methods** — they assert nothing and rot
   silently when signatures change.
+- **A test that writes an `app_settings` override deletes the row on teardown,
+  not just `invalidate_app_config_cache()`.** The cache is process state but the
+  override is a real row: leaving it changes what every later test reads from
+  `get_app_config()`, and the failure lands in whichever unrelated test runs
+  next — so it only reproduces under one test order.
+- **A committed generated artifact is a function of the code, never of the
+  exporting machine's configuration.** `scripts/export_readme_pipelines.py` pins
+  the backend it renders because a node's default is read from app config;
+  without that, exporting on a differently-configured deployment rewrites the
+  file and its guard test fails for a reason unrelated to the change.
 - **All patching goes through `monkeypatch`.** A bare module-attribute assignment
   outlives its test and poisons whatever runs next, order-dependently. And never
   build fakes with `SimpleNamespace(__str__=lambda: ...)`: dunder lookup happens on

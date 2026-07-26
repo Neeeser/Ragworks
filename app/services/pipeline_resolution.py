@@ -26,7 +26,14 @@ from app.db.repositories import CollectionPipelineBindingRepository
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.interface import PipelineInterface
 from app.pipelines.registry import NodeRegistry, default_registry
-from app.pipelines.settings import IndexTarget, PipelineSettings, resolve_pipeline_settings
+from app.pipelines.resolution import resolve_static_definition
+from app.pipelines.settings import (
+    IndexTarget,
+    PipelineSettings,
+    collection_scope,
+    resolve_pipeline_settings,
+)
+from app.pipelines.variables import BindingContext
 from app.services.errors import InvalidInputError
 from app.services.pipeline_validation import log_pipeline_validation_warnings
 from app.services.pipelines import PipelineService
@@ -42,12 +49,20 @@ class PipelineResolutionError(InvalidInputError):
 
 @dataclass(frozen=True)
 class ResolvedPipeline:
-    """A resolved binding: its pipeline, definition, settings, and interface."""
+    """A resolved binding: its pipeline, definition, settings, and interface.
+
+    `definition` is the stored graph (expressions intact — it is what the
+    editor round-trips and what a run resolves per request);
+    `static_definition` is the same graph with this binding's values applied,
+    which is the view any "what does this collection actually target?"
+    question must read.
+    """
 
     service: PipelineService
     binding: models.CollectionPipelineBinding
     pipeline: models.Pipeline
     definition: PipelineDefinition
+    static_definition: PipelineDefinition
     settings: PipelineSettings
     interface: PipelineInterface
 
@@ -79,13 +94,23 @@ def _load_resolved(
         service.validate_definition(user, definition), context=f"{context} execution"
     )
     settings = resolve_pipeline_settings(
-        definition, collection, registry or default_registry()
+        definition,
+        collection,
+        registry or default_registry(),
+        binding_values=binding.variable_values,
+    )
+    static_definition = resolve_static_definition(
+        definition,
+        binding=BindingContext(
+            collection=collection_scope(collection), values=binding.variable_values
+        ),
     )
     return ResolvedPipeline(
         service=service,
         binding=binding,
         pipeline=pipeline,
         definition=definition,
+        static_definition=static_definition,
         settings=settings,
         interface=interface,
     )

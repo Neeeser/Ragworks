@@ -25,7 +25,7 @@ from app.pipelines.expressions.parser import (
     StringLiteral,
     Unary,
 )
-from app.pipelines.expressions.values import MODEL_MEMBERS, ExprType, is_numeric
+from app.pipelines.expressions.values import MEMBERS_BY_TYPE, ExprType, is_numeric
 
 _LITERAL_TYPES: dict[type[Expression], ExprType] = {
     IntLiteral: ExprType.INTEGER,
@@ -59,17 +59,19 @@ def check_type(expr: Expression, env: Mapping[str, ExprType]) -> ExprType:
 
 
 def _check_member(expr: Member, env: Mapping[str, ExprType]) -> ExprType:
-    """Type a member access: model variables expose a fixed member set."""
+    """Type a member access: structured variables expose a fixed member set."""
     base = check_type(expr.base, env)
-    if base is not ExprType.MODEL:
+    members = MEMBERS_BY_TYPE.get(base)
+    if members is None:
+        structured = " or ".join(sorted(MEMBERS_BY_TYPE))
         raise ExpressionTypeError(
-            f"Member access requires a model variable, got {base}", expr.position
+            f"Member access requires a {structured} variable, got {base}", expr.position
         )
-    member = MODEL_MEMBERS.get(expr.attribute)
+    member = members.get(expr.attribute)
     if member is None:
-        allowed = ", ".join(sorted(MODEL_MEMBERS))
+        allowed = ", ".join(sorted(members))
         raise ExpressionTypeError(
-            f"Unknown model member '{expr.attribute}' (expected one of: {allowed})",
+            f"Unknown {base} member '{expr.attribute}' (expected one of: {allowed})",
             expr.position,
         )
     return member

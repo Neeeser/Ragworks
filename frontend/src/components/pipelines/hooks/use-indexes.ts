@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listIndexes } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -8,7 +8,12 @@ import { getErrorMessage } from "@/lib/errors";
 import type { VectorIndex } from "@/lib/types";
 
 export interface UseIndexesResult {
+  /** Every index the user can see, registered or not. */
   indexes: VectorIndex[];
+  /** Indexes a pipeline binding can point at — registration is the gate. */
+  registeredIndexes: VectorIndex[];
+  /** Present in a store with no registration row, offered for adoption. */
+  unregisteredIndexes: VectorIndex[];
   indexesLoading: boolean;
   indexesError: string | null;
   refreshIndexes: () => void;
@@ -18,6 +23,11 @@ export interface UseIndexesResult {
  * Loads the vector-index list across every backend the user can use (pgvector
  * always; Pinecone when a key is configured). Both the initial load and the
  * manual "Refresh" action go through the single `load` function below.
+ *
+ * The registered/unregistered split is derived here rather than fetched
+ * twice: pickers offer `registeredIndexes` (only a registered index can be
+ * bound), while the manager shows everything so an index the operator did not
+ * create through the app is still visible.
  */
 export function useIndexes(token: string | null): UseIndexesResult {
   const [indexes, setIndexes] = useState<VectorIndex[]>([]);
@@ -55,5 +65,18 @@ export function useIndexes(token: string | null): UseIndexesResult {
     load(authToken);
   }, [token, load]);
 
-  return { indexes, indexesLoading, indexesError, refreshIndexes };
+  const registeredIndexes = useMemo(() => indexes.filter((index) => index.registered), [indexes]);
+  const unregisteredIndexes = useMemo(
+    () => indexes.filter((index) => !index.registered),
+    [indexes],
+  );
+
+  return {
+    indexes,
+    registeredIndexes,
+    unregisteredIndexes,
+    indexesLoading,
+    indexesError,
+    refreshIndexes,
+  };
 }

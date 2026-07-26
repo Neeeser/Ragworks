@@ -27,8 +27,10 @@ from app.pipelines.expressions.parser import (
     Unary,
 )
 from app.pipelines.expressions.values import (
+    INDEX_MEMBERS,
     MODEL_MEMBERS,
     ExprValue,
+    IndexValue,
     ModelValue,
     value_type,
 )
@@ -77,15 +79,19 @@ def _require_integer(value: ExprValue, op: str, position: int) -> int:
 
 
 def _evaluate_member(expr: Member, env: Mapping[str, ExprValue]) -> ExprValue:
-    """Evaluate model member access to its string value."""
+    """Evaluate structured member access to its string value."""
     base = evaluate(expr.base, env)
-    if not isinstance(base, ModelValue) or expr.attribute not in MODEL_MEMBERS:
-        raise ExpressionTypeError(
-            f"Cannot access '{expr.attribute}' on {value_type(base)}", expr.position
-        )
-    if expr.attribute == "connection_id":
-        return str(base.connection_id)
-    return base.model_name
+    if isinstance(base, ModelValue) and expr.attribute in MODEL_MEMBERS:
+        if expr.attribute == "connection_id":
+            return str(base.connection_id)
+        return base.model_name
+    if isinstance(base, IndexValue) and expr.attribute in INDEX_MEMBERS:
+        if expr.attribute == "id":
+            return str(base.index_id)
+        return base.backend if expr.attribute == "backend" else base.name
+    raise ExpressionTypeError(
+        f"Cannot access '{expr.attribute}' on {value_type(base)}", expr.position
+    )
 
 
 def _evaluate_binary(expr: Binary, env: Mapping[str, ExprValue]) -> ExprValue:

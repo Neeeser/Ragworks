@@ -10,10 +10,12 @@ import dataclasses
 from uuid import uuid4
 
 from app.db import models
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.settings import IndexTarget
+from app.pipelines.settings import IndexTarget, PipelineSettings
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
+from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
 from app.services.diagnostics.rules.data import IndexProbeRule
 from app.services.diagnostics.rules.embedding import (
     EmbeddingConnectionMismatchRule,
@@ -25,6 +27,7 @@ from app.services.diagnostics.rules.indexing import (
     Bm25IndexMismatchRule,
     DenseIndexMismatchRule,
     HybridTargetMismatchRule,
+    IndexDimensionMismatchRule,
     NamespaceMismatchRule,
 )
 from app.services.diagnostics.rules.node_config import NodeConfigRule
@@ -275,3 +278,156 @@ def test_probe_unavailable_degrades_to_info(base_retrieval):
     assert findings
     assert all(f.severity == "info" and f.confidence == "heuristic" for f in findings)
     assert all(f.code == "index_status_unavailable" for f in findings)
+
+
+class TestBackendCapabilityRule:
+    """Nodes pointed at a backend that cannot serve them."""
+
+    def test_a_facet_node_on_pinecone_is_an_error_naming_the_node(
+        self, base_retrieval: PipelineSettings
+    ) -> None:
+        """The finding lists the offending node, not just the backend.
+
+        A bare "incompatible backend" leaves the user guessing which of a
+        dozen nodes to change.
+        """
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="facet",
+                    type="facet.bm25",
+                    name="Facet",
+                    config={
+                        "backend": "pinecone",
+                        "index_name": "remote",
+                        "field": "document_id",
+                    },
+                )
+            ]
+        )
+        ctx = make_context(retrieval=base_retrieval, retrieval_definition=definition)
+
+        findings = BackendCapabilityRule().evaluate(ctx)
+
+        assert [finding.code for finding in findings] == ["backend_capability_unsupported"]
+        assert findings[0].severity == "error"
+        assert any("facet" in observation.value for observation in findings[0].observations)
+
+    def test_a_supported_graph_produces_nothing(
+        self, base_retrieval: PipelineSettings
+    ) -> None:
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="facet",
+                    type="facet.bm25",
+                    name="Facet",
+                    config={
+                        "backend": "pgvector",
+                        "index_name": "docs-bm25",
+                        "field": "document_id",
+                    },
+                )
+            ]
+        )
+        ctx = make_context(retrieval=base_retrieval, retrieval_definition=definition)
+
+        assert BackendCapabilityRule().evaluate(ctx) == []
+
+    def test_an_unresolved_side_is_skipped(self) -> None:
+        """A collection with no bound pipeline has nothing to check."""
+        assert BackendCapabilityRule().evaluate(make_context()) == []
+
+
+# -- index dimension vs registered record ----------------------------------
+
+
+class TestIndexDimensionMismatch:
+    """A side's stated dimension must match its registered index's record."""
+
+    def _user(self, session) -> models.User:
+        user = models.User(
+            email="dimrule@example.com", full_name="D", hashed_password="x"
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+
+    def _register(self, session, user, target, dimension) -> None:
+        session.add(
+            models.RegisteredIndex(
+                user_id=user.id,
+                backend=target.backend,
+                name=target.index_name,
+                vector_type="dense",
+                dimension=dimension,
+            )
+        )
+        session.commit()
+
+    def test_a_narrower_registered_index_is_a_confirmed_error(
+        self, base_ingestion, session
+    ) -> None:
+        user = self._user(session)
+        target = next(
+            t for t in base_ingestion.index_targets if t.vector_type == "dense"
+        )
+        self._register(session, user, target, 768)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=1536),
+            session=session,
+            user=user,
+        )
+
+        findings = IndexDimensionMismatchRule().evaluate(ctx)
+
+        assert len(findings) == 1
+        assert findings[0].severity == "error"
+        assert "768" in findings[0].summary
+        assert "1536" in findings[0].summary
+
+    def test_silent_when_the_pipeline_states_no_dimension(
+        self, base_ingestion, session
+    ) -> None:
+        """The default pipelines state none — the record alone proves nothing."""
+        user = self._user(session)
+        target = next(
+            t for t in base_ingestion.index_targets if t.vector_type == "dense"
+        )
+        self._register(session, user, target, 768)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=None),
+            session=session,
+            user=user,
+        )
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []
+
+    def test_silent_when_the_index_is_not_registered(
+        self, base_ingestion, session
+    ) -> None:
+        user = self._user(session)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=1536),
+            session=session,
+            user=user,
+        )
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []
+
+    def test_silent_when_the_side_has_no_dense_target(
+        self, base_ingestion, session
+    ) -> None:
+        """A sparse-only side has no width to check."""
+        user = self._user(session)
+        sparse_only = replace(
+            base_ingestion,
+            dimension=1536,
+            index_targets=tuple(
+                t for t in base_ingestion.index_targets if t.vector_type == "sparse"
+            ),
+        )
+        ctx = make_context(ingestion=sparse_only, session=session, user=user)
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []

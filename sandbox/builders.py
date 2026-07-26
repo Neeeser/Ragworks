@@ -331,3 +331,154 @@ def issue_mcp_key(ctx: SeedContext, *, name: str = "Sandbox agent") -> None:
         f"mcp endpoint: {config.API_BASE_URL}/api/mcp/collections/{collection.id}"
     )
     ctx.links.append(("collection overview (MCP card)", f"/collections/{collection.id}"))
+
+
+def add_second_collection_sharing_pipelines(
+    ctx: SeedContext,
+    *,
+    name: str = "Second Collection",
+    index_name: str = "second-index",
+) -> None:
+    """Bind the *same* pipelines to a second collection on its own index.
+
+    The state the binding-variable design exists for: one pipeline definition,
+    two collections, two indexes — impossible before, because index identity
+    lived in the definition and varying it meant copying the pipeline. Both
+    collections resolve from the same stored graph, so a change to the pipeline
+    reaches both.
+    """
+    from app.db.repositories import (
+        CollectionPipelineBindingRepository,
+        RegisteredIndexRepository,
+    )
+    from app.schemas.collections import CollectionCreate
+    from app.schemas.enums import IndexBackend
+    from app.schemas.indexes import IndexCreateRequest
+    from app.services.binding_variables import index_value_for
+    from app.services.collections import CollectionService
+    from app.services.index_admin import IndexAdminService
+    from app.services.index_compatibility import index_variable_vector_types
+    from app.services.index_registry import index_variables
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    admin = IndexAdminService(ctx.session)
+    dimension = next(
+        (
+            index.dimension
+            for index in admin.list_indexes(user, IndexBackend.PGVECTOR)
+            if index.dimension
+        ),
+        None,
+    )
+    if dimension is None:
+        raise SystemExit("No dense pgvector index to size the second index from.")
+
+    indexes = RegisteredIndexRepository(ctx.session)
+    rows = {}
+    # Both planes, because the default pipelines are hybrid: pointing a BM25
+    # node at a dense index would return nothing with no error to explain it.
+    for vector_type, spec in (
+        ("dense", IndexCreateRequest(
+            backend=IndexBackend.PGVECTOR, name=index_name, dimension=dimension
+        )),
+        ("sparse", IndexCreateRequest(
+            backend=IndexBackend.PGVECTOR,
+            name=f"{index_name}-bm25",
+            vector_type="sparse",
+        )),
+    ):
+        created = admin.create_index(user, spec)
+        row = indexes.find_by_identity(user.id, IndexBackend.PGVECTOR, created.name)
+        if row is None:
+            raise SystemExit(f"Index '{created.name}' was created but not registered.")
+        rows[vector_type] = row
+
+    # Created through the service, so it binds the same default pipelines the
+    # first collection uses; only the index selection differs.
+    second = CollectionService(ctx.session).create(
+        user,
+        CollectionCreate(
+            name=name, description="Shares the first collection's pipelines."
+        ),
+    )
+    ctx.session.flush()
+
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    pipelines = PipelineService(ctx.session)
+    for binding in bindings.list_for_collection(second.id):
+        pipeline = pipelines.get_pipeline(binding.pipeline_id, user.id)
+        if pipeline is None:
+            continue
+        definition = pipelines.get_definition(pipeline)
+        slots = index_variables(definition)
+        if not slots:
+            continue
+        wanted = index_variable_vector_types(definition)
+        binding.variable_values = {
+            slot.name: index_value_for(rows[wanted.get(slot.name, "dense")])
+            for slot in slots
+        }
+        ctx.session.add(binding)
+    ctx.session.commit()
+    ctx.facts.append(
+        f'collection: "{name}" bound to the same pipelines on index {index_name}'
+    )
+    ctx.links.append((f"{name} overview", f"/collections/{second.id}"))
+
+
+def add_pinecone_index(
+    ctx: SeedContext,
+    *,
+    index_name: str = "sandbox-remote",
+    dimension: int | None = None,
+) -> None:
+    """Register a Pinecone index alongside the pgvector ones.
+
+    Gives the sandbox both backends at once, which is what a backend swap
+    needs: the capability check only has something to say when an index on a
+    *different* backend is actually selectable.
+    """
+    from app.schemas.enums import IndexBackend
+    from app.schemas.indexes import IndexCreateRequest, IndexRegisterRequest
+    from app.services.errors import NotFoundError
+    from app.services.index_admin import IndexAdminService
+
+    user = ctx.require_user()
+    admin = IndexAdminService(ctx.session)
+    if dimension is None:
+        dimension = next(
+            (
+                index.dimension
+                for index in admin.list_indexes(user, IndexBackend.PGVECTOR)
+                if index.dimension
+            ),
+            None,
+        )
+    if dimension is None:
+        raise SystemExit("No dense index to size the Pinecone index from.")
+    # A Pinecone index is a real remote resource that outlives a reseed, so
+    # adopt one that is already there instead of failing on the 409. This is
+    # the same register-or-create path the Index Manager offers.
+    try:
+        admin.describe_index(user, IndexBackend.PINECONE, index_name)
+    except NotFoundError:
+        admin.create_index(
+            user,
+            IndexCreateRequest(
+                backend=IndexBackend.PINECONE,
+                name=index_name,
+                dimension=dimension,
+                cloud="aws",
+                region="us-east-1",
+            ),
+        )
+    else:
+        admin.register_index(
+            user, IndexRegisterRequest(backend=IndexBackend.PINECONE, name=index_name)
+        )
+    ctx.session.commit()
+    ctx.facts.append(
+        f"index: {index_name} (pinecone, dense, {dimension}d) — registered and "
+        "selectable, so a binding can be swapped onto another backend"
+    )

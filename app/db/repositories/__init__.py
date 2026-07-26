@@ -25,6 +25,7 @@ from app.db.repositories.collection_stats import (
 from app.db.repositories.document import ChunkRepository, DocumentRepository
 from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
 from app.db.repositories.files import FileNodeRepository
+from app.db.repositories.indexes import RegisteredIndexRepository
 from app.db.repositories.pipeline import (
     PipelineRepository,
     PipelineRunRepository,
@@ -56,6 +57,7 @@ __all__ = [
     "PipelineVersionRepository",
     "ProviderConnectionRepository",
     "QueryRepository",
+    "RegisteredIndexRepository",
     "Repository",
     "TelemetryRepository",
     "UserRepository",

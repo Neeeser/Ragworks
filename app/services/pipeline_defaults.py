@@ -32,6 +32,7 @@ from app.pipelines.settings import resolve_definition_backend
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
+from app.services.index_scaffolding import register_definition_indexes
 
 if TYPE_CHECKING:
     from app.services.pipelines import PipelineService
@@ -79,9 +80,13 @@ def ensure_default_pipelines(
             user=user,
             name="Default Ingestion Pipeline",
             description="Baseline ingestion pipeline for uploads.",
-            definition=build_default_ingestion_pipeline(
-                embedding_connection_id=embedding[0],
-                embedding_model=embedding[1],
+            definition=register_definition_indexes(
+                service.session,
+                user,
+                build_default_ingestion_pipeline(
+                    embedding_connection_id=embedding[0],
+                    embedding_model=embedding[1],
+                ),
             ),
             change_summary="Initial default ingestion pipeline.",
             template_slug=DEFAULT_INGEST_SLUG,
@@ -94,9 +99,13 @@ def ensure_default_pipelines(
             user=user,
             name="Default Retrieval Pipeline",
             description="Baseline retrieval pipeline for queries.",
-            definition=build_default_retrieval_pipeline(
-                embedding_connection_id=embedding[0],
-                embedding_model=embedding[1],
+            definition=register_definition_indexes(
+                service.session,
+                user,
+                build_default_retrieval_pipeline(
+                    embedding_connection_id=embedding[0],
+                    embedding_model=embedding[1],
+                ),
             ),
             change_summary="Initial default retrieval pipeline.",
             template_slug=DEFAULT_SEARCH_SLUG,

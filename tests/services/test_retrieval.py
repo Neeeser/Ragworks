@@ -415,7 +415,12 @@ def _declare_pipeline_variables(
     outputs: list[dict[str, str]] | None = None,
     retriever_top_k_expression: str | None = None,
 ) -> None:
-    """Rewrite the user's default retrieval pipeline with declared input variables."""
+    """Rewrite the user's default retrieval pipeline with declared input variables.
+
+    Index variables survive the rewrite: a store-bound node's identity is an
+    expression over them, so replacing the whole list would leave the graph
+    referencing variables that no longer exist.
+    """
     from app.pipelines.definition import PipelineDefinition
     from app.pipelines.variables import PipelineVariable, VariableSource
 
@@ -428,19 +433,28 @@ def _declare_pipeline_variables(
     service = PipelineService(session)
     version = service.get_current_version(pipeline)
     definition = PipelineDefinition.model_validate(version.definition)
+    # The scaffold's index variables stay: the node identity fields are
+    # expressions over them, so dropping them leaves the graph referencing
+    # variables that no longer exist.
+    index_variables = [
+        variable for variable in definition.variables if variable.type == "index"
+    ]
     definition.variables = [
-        PipelineVariable.model_validate(
-            {
-                "source": VariableSource.INPUT,
-                "value": argument.get("default"),
-                **{
-                    key: value
-                    for key, value in argument.items()
-                    if key not in ("default", "required")
-                },
-            }
-        )
-        for argument in arguments
+        *index_variables,
+        *(
+            PipelineVariable.model_validate(
+                {
+                    "source": VariableSource.INPUT,
+                    "value": argument.get("default"),
+                    **{
+                        key: value
+                        for key, value in argument.items()
+                        if key not in ("default", "required")
+                    },
+                }
+            )
+            for argument in arguments
+        ),
     ]
     names = [str(argument["name"]) for argument in arguments]
     for node in definition.nodes:

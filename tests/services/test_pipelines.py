@@ -13,6 +13,7 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
+from app.pipelines.resolution import resolve_static_definition
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
@@ -416,11 +417,21 @@ class TestDefaultBackendRotation:
     """
 
     @pytest.fixture(autouse=True)
-    def _invalidate_cache(self):
+    def _isolate_backend_setting(self, session: Session):
+        """Invalidate the config cache and drop the override afterwards.
+
+        The override is a real row, so leaving it behind changes what every
+        later test reads from `get_app_config()` — including the committed
+        README fixture's expected default backend, which then fails only when
+        the test order puts this class first.
+        """
+        from app.db.repositories import AppSettingRepository
         from app.services.app_config import invalidate_app_config_cache
 
         invalidate_app_config_cache()
         yield
+        AppSettingRepository(session).delete("indexing.default_backend")
+        session.commit()
         invalidate_app_config_cache()
 
     @staticmethod
@@ -433,11 +444,20 @@ class TestDefaultBackendRotation:
         invalidate_app_config_cache()
 
     def _node_backends(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
+        """Backends the pipeline's store-bound nodes resolve to.
+
+        Read through resolution, not the raw config: identity fields hold
+        expressions over the pipeline's index variable, so the stored dict
+        says `{"$expr": ...}` while the pipeline still targets one backend.
+        """
         version = service.get_current_version(pipeline)
+        definition = resolve_static_definition(
+            PipelineDefinition.model_validate(version.definition)
+        )
         return {
-            str(node["config"].get("backend"))
-            for node in version.definition["nodes"]
-            if node["type"] in {"indexer.vector", "retriever.vector"}
+            str(node.config.get("backend"))
+            for node in definition.nodes
+            if node.type in {"indexer.vector", "retriever.vector"}
         }
 
     def test_stale_defaults_rotate_to_configured_backend(self, session: Session) -> None:

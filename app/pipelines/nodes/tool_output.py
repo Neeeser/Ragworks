@@ -10,7 +10,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.expressions import ExpressionError, ModelValue, evaluate, parse
+from app.pipelines.expressions import (
+    ExpressionError,
+    IndexValue,
+    ModelValue,
+    evaluate,
+    parse,
+)
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.payloads import (
     RetrievalPayload,
@@ -46,6 +52,11 @@ def evaluate_output_fields(
             raise ValueError(
                 f"Output '{output.name}': dereference the model variable with "
                 ".connection_id or .model_name."
+            )
+        if isinstance(value, IndexValue):
+            raise ValueError(
+                f"Output '{output.name}': dereference the index variable with "
+                ".backend or .name."
             )
         results[output.name] = value
     return results

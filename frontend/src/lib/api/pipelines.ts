@@ -5,6 +5,7 @@ import type {
   HuggingFaceTokenizerDownload,
   IndexBackend,
   IndexCreatePayload,
+  IndexRegisterPayload,
   NodeSpec,
   Pipeline,
   PipelineDefinition,
@@ -66,6 +67,24 @@ export async function createIndex(
     method: "POST",
     token,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function registerIndex(
+  token: string,
+  payload: IndexRegisterPayload,
+): Promise<VectorIndex> {
+  return apiFetch<VectorIndex>("/api/indexes/register", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function unregisterIndex(token: string, indexId: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/indexes/registrations/${indexId}`, {
+    method: "DELETE",
+    token,
   });
 }
 

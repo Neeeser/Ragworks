@@ -57,6 +57,7 @@ describe("PipelineSidebar", () => {
         onVariablesChange={() => undefined}
         variableNodes={[]}
         modelOptions={[]}
+        indexOptions={[]}
         variablesDisabled={false}
         hasRerankingProvider={false}
         knownBackends={["pgvector", "pinecone"]}

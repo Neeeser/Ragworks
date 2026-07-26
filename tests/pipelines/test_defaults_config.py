@@ -231,7 +231,7 @@ for definition in (_build_ingestion(), _build_retrieval()):
 
 def test_default_retrieval_pipeline_declares_result_limit_argument() -> None:
     """The scaffold exposes the caller-facing final result limit explicitly."""
-    from app.pipelines.resolution import declared_arguments
+    from app.pipelines.environment import declared_arguments
 
     definition = build_default_retrieval_pipeline(
         embedding_connection_id=uuid4(), embedding_model="test-embed"

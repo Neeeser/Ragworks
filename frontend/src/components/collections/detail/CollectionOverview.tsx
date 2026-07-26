@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { DiagnosticsCard } from "@/components/collections/detail/overview/DiagnosticsCard";
+import { IndexesCard } from "@/components/collections/detail/overview/IndexesCard";
 import { LatencyCard } from "@/components/collections/detail/overview/LatencyCard";
 import { PipelinesCard } from "@/components/collections/detail/overview/PipelinesCard";
 import { RangePicker } from "@/components/collections/detail/overview/RangePicker";
@@ -117,6 +118,8 @@ export function CollectionOverview({
         token={token}
         onCollectionUpdated={onCollectionUpdated}
       />
+
+      <IndexesCard collection={collection} token={token} />
 
       <ToolsPanel
         collection={collection}

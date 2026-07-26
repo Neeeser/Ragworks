@@ -62,11 +62,17 @@ def install_default_pipelines(
     Global default models are gone, so tests that exercise flows which expect
     defaults (collection create, ingestion, retrieval) install them around an
     explicit connection + model first. Returns the embedding connection.
+
+    Index registration runs here for the same reason the wizard runs it: a
+    scaffolded pipeline that kept literal index identity is one no collection
+    could repoint, so a helper that skipped it would hand tests a shape the
+    product never produces.
     """
     from app.pipelines.defaults import (
         build_default_ingestion_pipeline,
         build_default_retrieval_pipeline,
     )
+    from app.services.index_scaffolding import register_definition_indexes
     from app.services.pipelines import (
         DEFAULT_INGEST_SLUG,
         DEFAULT_SEARCH_SLUG,
@@ -79,8 +85,12 @@ def install_default_pipelines(
         user=user,
         name="Default Ingestion Pipeline",
         description="Baseline ingestion pipeline for uploads.",
-        definition=build_default_ingestion_pipeline(
-            embedding_connection_id=resolved.id, embedding_model=embedding_model
+        definition=register_definition_indexes(
+            session,
+            user,
+            build_default_ingestion_pipeline(
+                embedding_connection_id=resolved.id, embedding_model=embedding_model
+            ),
         ),
         change_summary="Test scaffold.",
         template_slug=DEFAULT_INGEST_SLUG,
@@ -89,8 +99,12 @@ def install_default_pipelines(
         user=user,
         name="Default Retrieval Pipeline",
         description="Baseline retrieval pipeline for queries.",
-        definition=build_default_retrieval_pipeline(
-            embedding_connection_id=resolved.id, embedding_model=embedding_model
+        definition=register_definition_indexes(
+            session,
+            user,
+            build_default_retrieval_pipeline(
+                embedding_connection_id=resolved.id, embedding_model=embedding_model
+            ),
         ),
         change_summary="Test scaffold.",
         template_slug=DEFAULT_SEARCH_SLUG,

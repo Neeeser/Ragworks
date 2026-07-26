@@ -46,6 +46,7 @@ from app.services.errors import (
     ServiceError,
     is_external_provider_error,
 )
+from app.services.index_scaffolding import register_definition_indexes
 from app.services.pipeline_defaults import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
@@ -243,6 +244,13 @@ class SetupService:
             DEFAULT_SEARCH_SLUG: search,
         }
         definitions.update(self._aggregate_tool_definitions(payload))
+        # Registered here, not per-branch below: the wizard is a scaffolding
+        # path like default scaffolding, so its pipelines must ship in the same
+        # index-variable shape or the collection could never repoint them.
+        definitions = {
+            slug: register_definition_indexes(self.session, user, definition)
+            for slug, definition in definitions.items()
+        }
         warnings = [
             issue
             for definition in definitions.values()
