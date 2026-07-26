@@ -86,11 +86,24 @@
      that reads correctly as a lone status dot can fail as one of two peer
      series: --accent-cyan (#22d3ee) measures L 0.797 on this canvas, outside
      the 0.43–0.77 categorical band, so beside violet it out-shines its peer
-     and two equal series stop reading as equal. Every pair here is checked by
-     the dataviz validator; see palette-contract.test.ts. Add --series-3+ only
-     when a chart actually needs it, and validate before committing. */
+     and two equal series stop reading as equal. Every slot here is checked by
+     the dataviz validator; see palette-contract.test.ts. Add a slot only when a
+     chart actually needs it, and validate before committing.
+
+     All six are validated as an ALL-PAIRS set, not adjacent-only: the UMAP
+     plane is a scatter, where any two documents' points can land beside each
+     other, so every pair has to separate — not just neighbours in the order.
+     That is what pins the blue to a dark step (a lighter one collapses into
+     series 1 under deuteranopia) and holds the greens off the teal. On the
+     lifted `graphite` panel the darkest slots sit just under 3:1, which the
+     dataviz rule allows only with visible labels — the document legend on the
+     plane is that relief, and it is not optional. */
   --series-1: #8b5cf6;
   --series-2: #0ea5b7;
+  --series-3: #bd586b;
+  --series-4: #ae8a0d;
+  --series-5: #4a710a;
+  --series-6: #116aac;
 
   color-scheme: dark;
 }
@@ -151,6 +164,10 @@
 
   --series-1: #7c3aed;
   --series-2: #0891b2;
+  --series-3: #b15d6b;
+  --series-4: #b18e15;
+  --series-5: #436416;
+  --series-6: #10568c;
 
   color-scheme: light;
 }
@@ -207,8 +224,8 @@
 }
 
 /* Palette: high-contrast — accessibility. Text is pushed to AAA and structure
-   is made explicit; the series pair stays the validated one, because a
-   brighter pair failed the categorical cohesion band. Contrast belongs in the
+   is made explicit; the series slots stay the validated dark set, because a
+   brighter set failed the categorical cohesion band. Contrast belongs in the
    text and border tokens, not in the data colours. */
 :root[data-palette="high-contrast"] {
   --canvas: #000000;
@@ -299,6 +316,10 @@
 
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
 
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
