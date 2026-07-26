@@ -5,25 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { IndexesCard } from "@/components/collections/detail/overview/IndexesCard";
 import * as apiModule from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
-import { makeCollection, makePipeline } from "@/test/fixtures";
+import { makeCollection } from "@/test/fixtures";
 import { makeVectorIndex } from "@/test/fixtures/indexes";
-import { makeCollectionTool } from "@/test/fixtures/tools";
 
-import type { CollectionIndexSlot, Pipeline, PipelineVariable } from "@/lib/types";
-import type { CollectionTool } from "@/lib/types/tools";
+import type { CollectionIndexSlot, CollectionIndexTarget } from "@/lib/types";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 const api = vi.mocked(apiModule);
-
-const PRIMARY_INDEX: PipelineVariable = {
-  name: "primary_index",
-  type: "index",
-  source: "binding",
-  description: "Vector index this pipeline uses",
-  value: { index_id: "row-1", backend: "pgvector", name: "docs-main" },
-};
 
 function denseSlot(overrides: Partial<CollectionIndexSlot> = {}): CollectionIndexSlot {
   return {
@@ -44,70 +34,74 @@ function denseSlot(overrides: Partial<CollectionIndexSlot> = {}): CollectionInde
   };
 }
 
-function toolPipeline(): Pipeline {
-  const pipeline = makePipeline({ id: "pipe-1" });
-  return { ...pipeline, definition: { ...pipeline.definition, variables: [PRIMARY_INDEX] } };
+function denseTarget(overrides: Partial<CollectionIndexTarget> = {}): CollectionIndexTarget {
+  return {
+    name: "docs-main",
+    backend: "pgvector",
+    vector_type: "dense",
+    dimension: 1536,
+    pipelines: ["Default Ingestion Pipeline", "Default Retrieval Pipeline"],
+    ...overrides,
+  };
 }
 
 function seedIndexes() {
   api.listIndexes.mockResolvedValue([
-    makeVectorIndex({
-      index_id: "row-1",
-      name: "docs-main",
-      registered: true,
-      dimension: 1536,
-    }),
-    makeVectorIndex({
-      index_id: "row-2",
-      name: "docs-alt",
-      registered: true,
-      dimension: 1536,
-    }),
-    makeVectorIndex({
-      index_id: "row-3",
-      name: "wrong-dim",
-      registered: true,
-      dimension: 768,
-    }),
+    makeVectorIndex({ index_id: "row-1", name: "docs-main", registered: true, dimension: 1536 }),
+    makeVectorIndex({ index_id: "row-2", name: "docs-alt", registered: true, dimension: 1536 }),
+    makeVectorIndex({ index_id: "row-3", name: "wrong-dim", registered: true, dimension: 768 }),
   ]);
 }
 
-function renderCard(
-  overrides: {
-    tools?: CollectionTool[];
-    toolPipelines?: Pipeline[];
-    onToolsChanged?: () => void;
-  } = {},
-) {
-  const onToolsChanged = overrides.onToolsChanged ?? vi.fn();
+function renderCard() {
+  const onIndexesChanged = vi.fn();
   render(
-    <IndexesCard
-      collection={makeCollection()}
-      token="token"
-      toolPipelines={overrides.toolPipelines ?? []}
-      tools={overrides.tools ?? []}
-      onToolsChanged={onToolsChanged}
-    />,
+    <IndexesCard collection={makeCollection()} token="token" onIndexesChanged={onIndexesChanged} />,
   );
-  return { onToolsChanged };
+  return { onIndexesChanged };
 }
 
 describe("IndexesCard", () => {
-  it("lists each slot with its current index and the pipelines sharing it", async () => {
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
+  it("states where the data lives when the pipelines name their own index", async () => {
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [], targets: [denseTarget()] });
     seedIndexes();
     renderCard();
 
-    expect(await screen.findByText(/docs-main — pgvector · 1536d/)).toBeInTheDocument();
+    expect(await screen.findByText("docs-main")).toBeInTheDocument();
+    expect(screen.getByText("1536d")).toBeInTheDocument();
     expect(
       screen.getByText(/Default Ingestion Pipeline, Default Retrieval Pipeline/),
     ).toBeInTheDocument();
   });
 
+  it("offers no repoint control when no pipeline exposes a slot", async () => {
+    api.fetchCollectionIndexes.mockResolvedValue({
+      slots: [],
+      targets: [denseTarget(), denseTarget({ name: "docs-bm25", vector_type: "sparse" })],
+    });
+    seedIndexes();
+    renderCard();
+
+    // The index a pipeline names is the pipeline's decision; a Change button
+    // here would be a second place to make it.
+    await screen.findByText("docs-main");
+    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
+    expect(screen.getByText("BM25")).toBeInTheDocument();
+  });
+
+  it("lists each exposed slot with its current index and the pipelines sharing it", async () => {
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
+    seedIndexes();
+    renderCard();
+
+    expect(await screen.findByText(/docs-main — pgvector · 1536d/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
+  });
+
   it("saves a repoint through the fan-out endpoint and warns about data", async () => {
     const user = userEvent.setup();
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
-    api.updateCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
+    api.updateCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
     seedIndexes();
     renderCard();
 
@@ -128,7 +122,7 @@ describe("IndexesCard", () => {
 
   it("offers a wrong-width index only as a disabled, explained option", async () => {
     const user = userEvent.setup();
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
     seedIndexes();
     renderCard();
 
@@ -141,7 +135,7 @@ describe("IndexesCard", () => {
 
   it("creates a compatible index from the slot and selects it", async () => {
     const user = userEvent.setup();
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
     api.createIndex.mockResolvedValue(
       makeVectorIndex({ index_id: "row-new", name: "fresh", registered: true, dimension: 1536 }),
     );
@@ -165,7 +159,7 @@ describe("IndexesCard", () => {
 
   it("keeps the dialog open and shows the server's rejection", async () => {
     const user = userEvent.setup();
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
+    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()], targets: [] });
     api.updateCollectionIndexes.mockRejectedValue(
       new ApiError(
         400,
@@ -182,68 +176,18 @@ describe("IndexesCard", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
-  it("states which index each tool binding resolves to", async () => {
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
-    seedIndexes();
-    renderCard({
-      toolPipelines: [toolPipeline()],
-      tools: [
-        makeCollectionTool({
-          name: "search_alpha",
-          variable_values: {
-            primary_index: { index_id: "row-2", backend: "pgvector", name: "docs-alt" },
-          },
-        }),
-      ],
+  it("shows both planes when a pipeline fixes one index and exposes another", async () => {
+    api.fetchCollectionIndexes.mockResolvedValue({
+      slots: [denseSlot()],
+      targets: [denseTarget({ name: "docs-bm25", vector_type: "sparse", dimension: null })],
     });
-
-    // A binding that diverges from the collection-wide slot is visible rather
-    // than hidden behind the merged view.
-    expect(await screen.findByText("search_alpha")).toBeInTheDocument();
-    expect(screen.getByText("primary_index → docs-alt")).toBeInTheDocument();
-  });
-
-  it("repoints one tool binding without touching the others", async () => {
-    const user = userEvent.setup();
-    const onToolsChanged = vi.fn();
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
-    api.updateCollectionTool.mockResolvedValue(makeCollectionTool());
     seedIndexes();
-    renderCard({
-      toolPipelines: [toolPipeline()],
-      tools: [makeCollectionTool({ id: "binding-1", name: "search_alpha" })],
-      onToolsChanged,
-    });
+    renderCard();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Change indexes for search_alpha" }),
-    );
-    expect(screen.getByText(/does not move indexed data/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: /docs-alt/ }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(api.updateCollectionTool).toHaveBeenCalledWith("token", "col-1", "binding-1", {
-        variable_values: {
-          primary_index: { index_id: "row-2", backend: "pgvector", name: "docs-alt" },
-        },
-      }),
-    );
-    expect(onToolsChanged).toHaveBeenCalled();
-  });
-
-  it("omits a tool binding whose pipeline declares no index slot", async () => {
-    const base = makePipeline({ id: "pipe-1" });
-    api.fetchCollectionIndexes.mockResolvedValue({ slots: [denseSlot()] });
-    seedIndexes();
-    renderCard({
-      toolPipelines: [{ ...base, definition: { ...base.definition, variables: [] } }],
-      tools: [makeCollectionTool({ name: "search_alpha" })],
-    });
-
-    await screen.findByText(/docs-main — pgvector · 1536d/);
-    expect(screen.queryByText("search_alpha")).not.toBeInTheDocument();
+    // Mixing is the point: a fixed store and a per-collection one coexist, and
+    // only the slot gets a control.
+    expect(await screen.findByText("docs-bm25")).toBeInTheDocument();
+    expect(screen.getByText(/docs-main — pgvector · 1536d/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change" })).toBeInTheDocument();
   });
 });

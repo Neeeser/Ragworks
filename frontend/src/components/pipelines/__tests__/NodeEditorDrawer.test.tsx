@@ -8,7 +8,7 @@ import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { VectorIndex } from "@/lib/types";
+import type { PipelineVariable, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 import type { ComponentProps } from "react";
 
@@ -122,6 +122,13 @@ const makeNode = (
     configSchema,
   },
 });
+
+const PRIMARY_SLOT: PipelineVariable = {
+  name: "primary_index",
+  type: "index",
+  source: "binding",
+  description: "Vector index this pipeline uses",
+};
 
 const indexes: VectorIndex[] = [
   { name: "alpha", backend: "pinecone", dimension: 768 },
@@ -325,19 +332,86 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
-  it("reads an index supplied by the binding as set per collection, not Required", () => {
+  it("reads an index supplied by the binding as a filled slot, not Required", () => {
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
         backend: { $expr: "primary_index.backend" },
         index_name: { $expr: "primary_index.name" },
       }),
       vectorIndexes: indexes,
+      variables: [PRIMARY_SLOT],
     });
 
     // The collection's Indexes card fills this in; "Required" would report a
     // correctly configured pipeline as unfinished.
-    expect(screen.getByText("set per collection · primary_index")).toBeInTheDocument();
+    expect(screen.getByText("Each collection fills this slot")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Index slot" })).toBeInTheDocument();
     expect(screen.queryByText("Required")).not.toBeInTheDocument();
+  });
+
+  it("declares a second slot so one pipeline can hold two stores", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    const onDeclareIndexSlot = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "alpha",
+        dimension: 768,
+      }),
+      onApply,
+      onDeclareIndexSlot,
+      vectorIndexes: indexes,
+      variables: [PRIMARY_SLOT],
+    });
+
+    // A pipeline splitting its corpus needs a slot per store; binding every
+    // store to the same one merges two corpora into whichever is written last.
+    await user.click(screen.getByRole("radio", { name: /Per collection/ }));
+    await user.click(screen.getByRole("combobox", { name: "Index slot" }));
+    await user.click(screen.getByRole("option", { name: "+ New slot…" }));
+    await user.type(screen.getByLabelText("Slot name"), "facts_index");
+    await user.click(screen.getByRole("button", { name: "Add slot" }));
+
+    expect(onDeclareIndexSlot).toHaveBeenCalledWith({
+      name: "facts_index",
+      vectorType: "dense",
+      defaultIndex: expect.objectContaining({ name: "alpha" }),
+    });
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
+    expect(onApply).toHaveBeenCalledWith("node-1", {
+      label: "Node",
+      config: {
+        backend: { $expr: "facts_index.backend" },
+        index_name: { $expr: "facts_index.name" },
+      },
+    });
+  });
+
+  it("returning to a named index clears the slot off both identity fields", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: { $expr: "primary_index.backend" },
+        index_name: { $expr: "primary_index.name" },
+      }),
+      onApply,
+      vectorIndexes: indexes,
+      variables: [PRIMARY_SLOT],
+    });
+
+    await user.click(screen.getByRole("radio", { name: /This pipeline/ }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /local/ }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
+
+    // Leaving `backend` as an expression keeps the node reading a variable it
+    // no longer names.
+    expect(onApply).toHaveBeenCalledWith("node-1", {
+      label: "Node",
+      config: { backend: "pgvector", index_name: "local", dimension: 384 },
+    });
   });
 
   it("switching the backend clears the previously selected index in the draft", () => {
@@ -367,7 +441,9 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radiogroup", { name: "Vector store backend" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
   });

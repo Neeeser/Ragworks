@@ -23,7 +23,7 @@ import {
 } from "@/lib/expressions";
 
 import type { ExprType, ExprValue } from "@/lib/expressions";
-import type { PipelineVariable, VariableSource, VariableType } from "@/lib/types";
+import type { PipelineVariable, VariableSource, VariableType, VectorIndex } from "@/lib/types";
 
 export const QUERY_VARIABLE = "query";
 export const RETRIEVAL_INPUT_TYPE = "retrieval.input";
@@ -334,4 +334,39 @@ export function indexSlotConstraints(pipelines: PipelineLike[]): Map<string, Ind
     }
   }
   return constraints;
+}
+
+/** A new binding-source index slot, as declared from a node's index field. */
+export type IndexSlotDeclaration = {
+  name: string;
+  vectorType: string;
+  /** The index the slot defaults to — the one the declaring node named. */
+  defaultIndex: VectorIndex | null;
+};
+
+/**
+ * Build the variable a newly declared index slot adds to the definition.
+ *
+ * The default is the index the declaring node already named, so exposing a
+ * slot is behaviour-preserving: every collection keeps resolving to that
+ * index until one of them chooses otherwise.
+ */
+export function buildIndexSlotVariable(slot: IndexSlotDeclaration): PipelineVariable {
+  return {
+    name: slot.name,
+    type: "index",
+    source: "binding",
+    description:
+      slot.vectorType === "sparse"
+        ? "Lexical (BM25) index this pipeline uses"
+        : "Vector index this pipeline uses",
+    value:
+      slot.defaultIndex?.index_id != null
+        ? {
+            index_id: slot.defaultIndex.index_id,
+            backend: slot.defaultIndex.backend,
+            name: slot.defaultIndex.name,
+          }
+        : null,
+  };
 }

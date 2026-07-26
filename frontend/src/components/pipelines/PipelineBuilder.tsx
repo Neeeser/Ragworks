@@ -28,6 +28,7 @@ import {
   toPipelineDefinition,
 } from "./lib/pipeline-utils";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
+import { buildIndexSlotVariable } from "./lib/variable-env";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
 import { PipelineBuilderWorkspace } from "./PipelineBuilderWorkspace";
 import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
@@ -36,6 +37,7 @@ import { PipelineModals } from "./PipelineModals";
 import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 
 import type { TypedEdgeType } from "./flow/TypedEdge";
+import type { IndexSlotDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
 import type { NodeSpec, PipelineKind, PipelineVariable } from "@/lib/types";
@@ -299,6 +301,17 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
     : [];
 
+  // Declaring a slot from a node's index field: the variable defaults to the
+  // index that node already named, so exposing one changes nothing about
+  // where data lands until a collection chooses otherwise.
+  const handleDeclareIndexSlot = useCallback((slot: IndexSlotDeclaration) => {
+    setVariables((previous) =>
+      previous.some((variable) => variable.name === slot.name)
+        ? previous
+        : [...previous, buildIndexSlotVariable(slot)],
+    );
+  }, []);
+
   return (
     <>
       <PipelineModals
@@ -390,6 +403,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         validationErrors={selectedNodeErrors}
         validationIssues={selectedValidationIssues}
         variables={variables}
+        onDeclareIndexSlot={handleDeclareIndexSlot}
         vectorIndexes={indexes}
         onOpenIndexRegistry={handleOpenIndexRegistry}
         embeddingModels={embeddingModels}

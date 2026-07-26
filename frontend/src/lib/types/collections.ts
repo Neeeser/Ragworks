@@ -279,7 +279,22 @@ export interface CollectionIndexSlot {
   pipelines: string[];
 }
 
+/** Mirrors `app/schemas/collections.py::CollectionIndexTarget`.
+ *
+ * An index a bound pipeline names inside its own graph. There is nothing to
+ * select — the choice belongs to the pipeline that names it — but the
+ * collection still has to be able to say where its data lives.
+ */
+export interface CollectionIndexTarget {
+  name: string;
+  backend: IndexBackend;
+  vector_type: string;
+  dimension: number | null;
+  pipelines: string[];
+}
+
 /** Mirrors `app/schemas/collections.py::CollectionIndexesRead`. */
 export interface CollectionIndexesRead {
   slots: CollectionIndexSlot[];
+  targets: CollectionIndexTarget[];
 }
