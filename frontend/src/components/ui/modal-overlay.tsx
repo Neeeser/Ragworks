@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 type ModalOverlayProps = {
   open: boolean;
@@ -33,6 +33,10 @@ export function ModalOverlay({
   closeOnBackdrop = true,
 }: ModalOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  // Whether the gesture that will produce the next click *started* on the backdrop.
+  // A click whose pointerdown landed anywhere else is not a backdrop dismissal.
+  const pressStartedOnBackdrop = useRef(false);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const stackIdRef = useRef(Symbol("modal-overlay"));
   const onCloseRef = useRef(onClose);
@@ -80,11 +84,23 @@ export function ModalOverlay({
       }
     };
 
+    // Recorded in the capture phase on the document so a pointerdown inside a
+    // portaled popup (a CustomSelect listbox lives on <body>, outside the dialog)
+    // is seen too. The browser dispatches the resulting click on the nearest
+    // common ancestor of pointerdown and pointerup — which for a portaled popup
+    // is the backdrop itself, so target-only checks read it as a backdrop click
+    // and dismiss the whole dialog.
+    const handlePointerDown = (event: PointerEvent) => {
+      pressStartedOnBackdrop.current = event.target === backdropRef.current;
+    };
+
     window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
     return () => {
       const stackIndex = openOverlayStack.indexOf(stackId);
       if (stackIndex !== -1) openOverlayStack.splice(stackIndex, 1);
       window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.body.style.overflow = previousOverflow;
       previouslyFocused.current?.focus();
     };
@@ -94,17 +110,26 @@ export function ModalOverlay({
     return null;
   }
 
+  const handleBackdropClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const startedOnBackdrop = pressStartedOnBackdrop.current;
+    pressStartedOnBackdrop.current = false;
+    if (event.target !== event.currentTarget) return;
+    if (!startedOnBackdrop) return;
+    onClose();
+  };
+
   // Portaled to <body>: an ancestor with a transform (e.g. an entrance
   // animation) creates a stacking context, and without the portal the
   // overlay's z-index competes inside it and loses to the sticky navbar.
   return createPortal(
     <div
+      ref={backdropRef}
       className={cn(
         "fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 px-4 py-10 backdrop-blur-sm",
         backdropClassName,
       )}
       role="presentation"
-      onClick={closeOnBackdrop ? onClose : undefined}
+      onClick={closeOnBackdrop ? handleBackdropClick : undefined}
     >
       <div
         ref={dialogRef}
