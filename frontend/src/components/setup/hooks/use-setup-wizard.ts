@@ -5,6 +5,7 @@ import { useCallback, useMemo, useReducer, useState } from "react";
 
 import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
+import { resumeStep } from "@/components/setup/lib/setup-resume";
 import {
   initialSetupWizardState,
   setupWizardReducer,
@@ -76,9 +77,19 @@ export interface SetupWizardApi {
 /** One state domain: wizard progression, remote catalogs, and mutations. */
 export function useSetupWizard(): SetupWizardApi {
   const { token, user, loading: authLoading } = useAuth();
-  const { markComplete } = useSetupStatus();
+  const { markComplete, status } = useSetupStatus();
   const router = useRouter();
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
+
+  // Place a returning user on the first step still holding a decision, as a
+  // guarded render-time adjustment rather than an effect: an effect would
+  // paint the welcome step first and jump a frame later, and it would re-fire
+  // on every background status refresh. `RESUME` latches, so this runs once
+  // and Back still reaches every earlier step.
+  if (!state.resumed && status) {
+    const target = resumeStep(status);
+    if (target !== state.step) dispatch({ type: "RESUME", step: target });
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);

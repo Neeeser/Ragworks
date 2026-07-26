@@ -36,11 +36,19 @@ export interface SetupWizardState {
    * the user typed.
    */
   chunkDirty: boolean;
+  /**
+   * True once readiness has been consulted to place the user on a step.
+   * Latches so going Back to an earlier step is never undone by a later
+   * status refresh — the token rotation re-runs the status query, and
+   * without this the wizard would yank the user forward again mid-edit.
+   */
+  resumed: boolean;
 }
 
 export type SetupWizardAction =
   | { type: "NEXT" }
   | { type: "BACK" }
+  | { type: "RESUME"; step: SetupStepId }
   | { type: "SET_CHOICES"; choices: Partial<SetupChoices> }
   | { type: "SET_CHUNK"; chunkSize?: number; chunkOverlap?: number }
   | { type: "SEED_CHUNK_DEFAULTS"; chunkSize: number; chunkOverlap: number };
@@ -49,6 +57,7 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
   step: "welcome",
   direction: 1,
   chunkDirty: false,
+  resumed: false,
   choices: {
     embeddingConnectionId: null,
     embeddingModel: "",
@@ -84,6 +93,12 @@ export function setupWizardReducer(
       const index = SETUP_STEPS.indexOf(state.step);
       if (index <= 0) return state;
       return { ...state, step: SETUP_STEPS[index - 1], direction: -1 };
+    }
+    case "RESUME": {
+      // Only ever places a user who is still on the entry step, and only
+      // once: past that, the step they are on is the one they chose.
+      if (state.resumed || state.step !== "welcome") return { ...state, resumed: true };
+      return { ...state, step: action.step, direction: 1, resumed: true };
     }
     case "SET_CHOICES":
       return { ...state, choices: { ...state.choices, ...action.choices } };

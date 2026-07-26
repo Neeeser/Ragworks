@@ -38,9 +38,9 @@ def _invalidate_cache() -> Iterator[None]:
     invalidate_app_config_cache()
 
 
-def _create_user(session: Session) -> models.User:
+def _create_user(session: Session, *, email: str = "setup@example.com") -> models.User:
     user = models.User(
-        email="setup@example.com",
+        email=email,
         full_name="Setup User",
         hashed_password="hashed",
     )
@@ -89,6 +89,25 @@ def test_status_reports_missing_pieces(session: Session) -> None:
     assert status.has_index is False
     assert status.has_collection is False
     assert status.setup_complete is False
+
+
+def test_another_users_index_does_not_count_as_this_users_readiness(
+    pgvector_session: Session,
+) -> None:
+    """`has_index` is per-user registration, never the store's global listing.
+
+    A pgvector index name is one physical table for the whole deployment, so
+    listing the store reports a neighbour's index to a brand-new account —
+    and the wizard would treat an index they cannot select as theirs.
+    """
+    session = pgvector_session
+    neighbor = _create_user(session, email="neighbor@example.com")
+    _create_pgvector_index(session, neighbor)
+    newcomer = _create_user(session, email="newcomer@example.com")
+
+    status = SetupService(session).status(newcomer)
+
+    assert status.has_index is False
 
 
 def test_status_complete_when_providers_index_and_collection_exist(
