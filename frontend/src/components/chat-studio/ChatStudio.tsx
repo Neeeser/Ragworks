@@ -221,6 +221,7 @@ export function ChatStudio() {
     historyFilterCollectionIds: collectionTools.historyFilterCollectionIds,
     historyFilterIncludeUnassigned: collectionTools.historyFilterIncludeUnassigned,
     resolveValidToolCollectionIds: collectionTools.resolveValidToolCollectionIds,
+    consumeDeepLinkCollectionIds: collectionTools.consumeDeepLinkCollectionIds,
     setSelectedToolCollectionIds: collectionTools.setSelectedToolCollectionIds,
     setParameterOverrides: modelParameters.setParameterOverrides,
     setProviderForm: providerPreferences.setProviderForm,

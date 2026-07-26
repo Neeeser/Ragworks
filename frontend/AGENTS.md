@@ -187,6 +187,15 @@ the same PR.
   reset to `[0]`), return previous identities for unchanged content, and not
   flip `loading`. A fresh `nodeSpecs` identity re-fires the canvas-seeding
   effect and silently wipes unsaved pipeline edits.
+- **A deep-link query param is a one-shot intent: consume it once and let it beat
+  persisted defaults.** Seeding state from a `?param=` in a mount-time initializer
+  and seeding the same state from last-used/session settings when an async load
+  resolves is a race the persisted value usually wins — and per-user persistence
+  then masks it, because the second visit looks correct. Read the param once, spend
+  it at the seeding site, and never re-apply it afterwards (re-applying resurrects
+  it over a change the user made after load).
+- **Read a repeatable query key with `getAll`, not `get`.** `get` returns only the
+  first value, so `?ids=a&ids=b` silently drops everything after `a`.
 - **Worker-backed providers own their full teardown.** On unmount, terminate the
   worker, cancel in-flight and pending work, and make already-queued microtasks
   no-op so tests and route transitions cannot retain stale background work.

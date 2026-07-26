@@ -39,6 +39,8 @@ interface UseCollectionToolsResult {
   toggleToolCollection: (collectionId: string) => void;
   clearToolCollections: () => void;
   toolCollectionsDirtyRef: React.MutableRefObject<boolean>;
+  /** Deep-linked collection ids, returned once and empty on every later call. */
+  consumeDeepLinkCollectionIds: () => string[];
 }
 
 /**
@@ -65,6 +67,20 @@ export function useCollectionTools({
   const [contextWindow, setContextWindow] = useState<number>(0);
   const toolCollectionsDirtyRef = useRef(false);
   const historyFilterTouchedRef = useRef(false);
+  // `?collections=` states the intent for this visit (the collection page's
+  // "Open in Chat studio" link). It is read once and then spent: the new-chat
+  // defaults must not seed the persisted last-used collections over it, and
+  // nothing may re-apply it after the user has changed the selection.
+  const deepLinkCollectionIdsRef = useRef<string[] | null>(null);
+  if (deepLinkCollectionIdsRef.current === null) {
+    deepLinkCollectionIdsRef.current = parseCollectionIdsParam(urlCollectionsValue);
+  }
+
+  const consumeDeepLinkCollectionIds = useCallback(() => {
+    const ids = deepLinkCollectionIdsRef.current ?? [];
+    deepLinkCollectionIdsRef.current = [];
+    return ids;
+  }, []);
 
   const historyFilterActive =
     historyFilterCollectionIds.length > 0 || historyFilterIncludeUnassigned;
@@ -269,5 +285,6 @@ export function useCollectionTools({
     toggleToolCollection,
     clearToolCollections,
     toolCollectionsDirtyRef,
+    consumeDeepLinkCollectionIds,
   };
 }
