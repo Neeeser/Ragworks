@@ -246,6 +246,34 @@ class TestBindingRejection:
                 },
             )
 
+    def test_a_dense_index_in_a_lexical_slot_is_rejected(self, session: Session) -> None:
+        """A BM25 node reading a dense index returns nothing rather than failing."""
+        user, collection = self._collection(session)
+        index = models.RegisteredIndex(
+            user_id=user.id,
+            backend=IndexBackend.PGVECTOR,
+            name="dense-one",
+            vector_type="dense",
+        )
+        session.add(index)
+        session.commit()
+        session.refresh(index)
+
+        with pytest.raises(InvalidInputError, match="needs a sparse index"):
+            resolve_binding_values(
+                session,
+                user,
+                collection,
+                _facet_definition(),
+                {
+                    "bm25_index": {
+                        "index_id": str(index.id),
+                        "backend": "pgvector",
+                        "name": "dense-one",
+                    }
+                },
+            )
+
     def test_a_value_for_an_undeclared_variable_is_rejected(self, session: Session) -> None:
         user, collection = self._collection(session)
 

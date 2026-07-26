@@ -26,8 +26,6 @@ from app.pipelines.nodes.retrieval import BaseRetrieverNode
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.variables import expression_source
 from app.schemas.enums import IndexBackend
-from app.vectorstores.base import VectorStoreCapabilities
-from app.vectorstores.registry import CAPABILITIES_BY_BACKEND
 
 
 @dataclass(frozen=True)
@@ -104,40 +102,6 @@ def incompatible_nodes(
             )
         )
     return findings
-
-
-def capabilities_for(backend: IndexBackend) -> VectorStoreCapabilities:
-    """Return a backend's declared capabilities."""
-    return CAPABILITIES_BY_BACKEND[backend]
-
-
-def vector_type_mismatches(
-    definition: PipelineDefinition,
-    registry: NodeRegistry,
-    vector_types: dict[str, str],
-) -> list[str]:
-    """Return messages for nodes pointed at the wrong kind of index.
-
-    `vector_types` maps index name to the registered index's `vector_type`. A
-    BM25 node reading a dense index (or the reverse) returns nothing at run
-    time rather than failing, so it is worth naming before the first query.
-    """
-    messages: list[str] = []
-    for node in definition.nodes:
-        node_cls = registry.get_node_class(node.type)
-        if node_cls is None:
-            continue
-        index_name = (node.config or {}).get("index_name")
-        if not isinstance(index_name, str) or index_name not in vector_types:
-            continue
-        wanted = "sparse" if _is_lexical(node.type) else "dense"
-        actual = vector_types[index_name]
-        if actual != wanted:
-            messages.append(
-                f"Node '{node.id}' reads a {wanted} index but '{index_name}' "
-                f"is registered as {actual}."
-            )
-    return messages
 
 
 def index_variable_vector_types(definition: PipelineDefinition) -> dict[str, str]:

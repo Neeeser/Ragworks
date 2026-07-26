@@ -140,6 +140,7 @@ def _validate_indexes(
     a caller cannot pin a name or backend that disagrees with the registry.
     """
     indexes = RegisteredIndexRepository(session)
+    wanted = index_variable_vector_types(definition)
     for variable in index_variables(definition):
         supplied = values.get(variable.name)
         if supplied is None:
@@ -149,6 +150,15 @@ def _validate_indexes(
         if row is None:
             raise InvalidInputError(
                 f"Variable '{variable.name}': index not found. Register the index first."
+            )
+        expected = wanted.get(variable.name)
+        if expected is not None and row.vector_type != expected:
+            # A lexical node reading a dense index (or the reverse) returns
+            # nothing rather than failing, so the mismatch is worth naming
+            # here instead of surfacing as an empty result set later.
+            raise InvalidInputError(
+                f"Variable '{variable.name}' needs a {expected} index, but "
+                f"'{row.name}' is {row.vector_type}."
             )
         values[variable.name] = index_value_for(row)
 
