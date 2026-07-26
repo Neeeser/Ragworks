@@ -232,3 +232,36 @@ describe("useSetupWizard.finish — validation warnings", () => {
     expect(routerReplace).toHaveBeenCalledWith("/collections/collection-1");
   });
 });
+
+describe("useSetupWizard.ensureIndex — shared create payload", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createIndex.mockResolvedValue({} as never);
+  });
+
+  it("shapes the create request through the shared payload builder", async () => {
+    // The wizard used to hand-build this body, so every rule the builder
+    // states — trim the name, drop placement fields a backend has no concept
+    // of — silently skipped the one path every new user walks.
+    const { result } = await mountWizard();
+
+    act(() => {
+      result.current.setChoices({
+        embeddingConnectionId: CONNECTION_ID,
+        embeddingModel: "all-minilm",
+        embeddingDimension: 384,
+        backend: "pgvector",
+        indexName: "  ragworks-mine  ",
+      });
+    });
+
+    await act(async () => {
+      await result.current.ensureIndex();
+    });
+
+    const payload = createIndex.mock.calls[0][1];
+    expect(payload.name).toBe("ragworks-mine");
+    expect(payload).not.toHaveProperty("cloud");
+    expect(payload).not.toHaveProperty("region");
+  });
+});
