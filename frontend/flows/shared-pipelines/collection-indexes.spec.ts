@@ -64,22 +64,22 @@ test("the Indexes card moves every binding to a newly created index", async ({ p
   });
 
   // Both bindings — ingest and tool — now resolve to the new index.
-  const slots = await api.get(
-    `${handoff.backend_url}/api/collections/${collectionId}/indexes`,
-    { headers },
-  );
+  const slots = await api.get(`${handoff.backend_url}/api/collections/${collectionId}/indexes`, {
+    headers,
+  });
   expect(slots.ok()).toBe(true);
   const dense = ((await slots.json()) as { slots: SlotRead[] }).slots.find(
     (slot) => slot.vector_type === "dense",
   );
   expect(dense?.current?.name).toBe(indexName);
 
-  const tools = await api.get(
-    `${handoff.backend_url}/api/collections/${collectionId}/tools`,
-    { headers },
-  );
-  const toolValues = ((await tools.json()) as {
-    tools: { variable_values?: Record<string, { name: string }> }[];
-  }).tools[0]?.variable_values;
+  const tools = await api.get(`${handoff.backend_url}/api/collections/${collectionId}/tools`, {
+    headers,
+  });
+  const toolValues = (
+    (await tools.json()) as {
+      tools: { variable_values?: Record<string, { name: string }> }[];
+    }
+  ).tools[0]?.variable_values;
   expect(toolValues?.primary_index?.name).toBe(indexName);
 });
