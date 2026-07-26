@@ -254,20 +254,56 @@ def test_recent_retrieval_failures_empty_is_clean():
 # -- probe rule (category C) -----------------------------------------------
 
 
-def test_probe_missing_index_is_error(base_retrieval):
-    """A probe reporting the index absent is a confirmed error."""
+def test_probe_missing_index_is_error_once_ingestion_has_run(base_retrieval):
+    """A probe reporting the index absent after an ingestion run is an error."""
     prober = StubProber(IndexStats(exists=False, count=0))
-    ctx = make_context(retrieval=base_retrieval, prober=prober)
+    ctx = make_context(retrieval=base_retrieval, prober=prober, has_ingestion_run=True)
     findings = IndexProbeRule().evaluate(ctx)
     assert any(f.code == "missing_index" and f.severity == "error" for f in findings)
 
 
-def test_probe_empty_index_is_warning(base_retrieval):
-    """An existing but empty index is a warning."""
+def test_probe_empty_index_is_warning_once_ingestion_has_run(base_retrieval):
+    """An existing but empty index after an ingestion run is a warning."""
     prober = StubProber(IndexStats(exists=True, count=0))
-    ctx = make_context(retrieval=base_retrieval, prober=prober)
+    ctx = make_context(retrieval=base_retrieval, prober=prober, has_ingestion_run=True)
     findings = IndexProbeRule().evaluate(ctx)
     assert any(f.code == "empty_index" and f.severity == "warning" for f in findings)
+
+
+def test_probe_missing_index_is_info_before_any_ingestion(base_retrieval):
+    """A never-ingested collection's absent index is a note, not an error.
+
+    The BM25 sibling index is created by the first ingestion run, so a brand-new
+    collection would otherwise open its Overview on "1 error".
+    """
+    prober = StubProber(IndexStats(exists=False, count=0))
+    ctx = make_context(retrieval=base_retrieval, prober=prober, has_ingestion_run=False)
+    findings = IndexProbeRule().evaluate(ctx)
+    missing = [f for f in findings if f.code == "missing_index"]
+    assert missing
+    assert all(f.severity == "info" for f in missing)
+    assert all("created by the first ingestion run" in f.summary for f in missing)
+
+
+def test_probe_empty_index_is_info_before_any_ingestion(base_retrieval):
+    """A never-ingested collection's empty index is a note, not a warning."""
+    prober = StubProber(IndexStats(exists=True, count=0))
+    ctx = make_context(retrieval=base_retrieval, prober=prober, has_ingestion_run=False)
+    findings = IndexProbeRule().evaluate(ctx)
+    empty = [f for f in findings if f.code == "empty_index"]
+    assert empty
+    assert all(f.severity == "info" for f in empty)
+    assert all("has not ingested any documents yet" in f.summary for f in empty)
+
+
+def test_probe_summaries_never_read_as_broken_grammar(base_retrieval):
+    """The missing-index sentence names what queries the index, in both states."""
+    prober = StubProber(IndexStats(exists=False, count=0))
+    for ingested in (True, False):
+        ctx = make_context(retrieval=base_retrieval, prober=prober, has_ingestion_run=ingested)
+        summaries = [f.summary for f in IndexProbeRule().evaluate(ctx) if f.code == "missing_index"]
+        assert summaries
+        assert all("' retrieval queries does not exist" not in s for s in summaries)
 
 
 def test_probe_unavailable_degrades_to_info(base_retrieval):
