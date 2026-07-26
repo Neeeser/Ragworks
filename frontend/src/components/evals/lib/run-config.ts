@@ -73,7 +73,13 @@ export function coerceInputs(
 export interface DepthCap {
   /** The result depth this cap imposes. */
   depth: number;
-  /** What imposes it: a bound variable's name or a node's display name. */
+  /**
+   * What kind of thing imposes it. A variable's `label` is a machine name the
+   * caller sends and a node's is an authored display name, so the two read
+   * differently and a consumer must be able to tell them apart.
+   */
+  kind: "variable" | "node" | "none";
+  /** The variable's name or the node's display name; empty when nothing caps. */
   label: string;
 }
 
@@ -95,18 +101,18 @@ export function effectiveResultDepth(
     if (!isDepthVariable(variable)) continue;
     const bound = inputs[variable.name];
     if (typeof bound === "number" && Number.isFinite(bound)) {
-      caps.push({ depth: bound, label: variable.name });
+      caps.push({ depth: bound, kind: "variable", label: variable.name });
     }
   }
   for (const node of definition?.nodes ?? []) {
     for (const key of ["top_k", "max_results"] as const) {
       const value = node.config?.[key];
       if (typeof value === "number" && Number.isFinite(value)) {
-        caps.push({ depth: value, label: node.name });
+        caps.push({ depth: value, kind: "node", label: node.name });
       }
     }
   }
-  let effective: DepthCap = { depth: maxK, label: "" };
+  let effective: DepthCap = { depth: maxK, kind: "none", label: "" };
   for (const cap of caps) {
     if (cap.depth < effective.depth) effective = cap;
   }

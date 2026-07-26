@@ -17,9 +17,11 @@ import {
 } from "@/components/evals/lib/run-config";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
+import { ParameterId } from "@/components/ui/parameter-label";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
 import { createEvalRun } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { humanizeIdentifier } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -218,7 +220,12 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
             />
           </Field>
           {inputVariables.map((variable) => (
-            <Field key={variable.name} label={variable.name} hint={inputHint(variable, maxK)}>
+            <Field
+              key={variable.name}
+              label={humanizeIdentifier(variable.name)}
+              labelEnd={<ParameterId name={variable.name} />}
+              hint={inputHint(variable, maxK)}
+            >
               <TextInput
                 value={runInputs[variable.name] ?? defaultInputValue(variable, maxK)}
                 onChange={(event) =>
@@ -290,11 +297,19 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
           </Field>
           {truncated.length > 0 && (
             <p className="max-w-[66ch] text-ui text-data-warn" role="alert">
-              {depthCap.label
-                ? `${depthCap.label} caps results at ${depthCap.depth}, so `
-                : `The pipeline returns at most ${depthCap.depth} results, so `}
-              {truncated.map((k) => `@${k}`).join(", ")} will always read as misses. Raise the cap
-              or drop those cutoffs.
+              {depthCap.kind === "variable" ? (
+                <>
+                  {humanizeIdentifier(depthCap.label)} (
+                  <ParameterId name={depthCap.label} className="text-data-warn" />) caps results at{" "}
+                  {depthCap.depth},{" "}
+                </>
+              ) : depthCap.kind === "node" ? (
+                `${depthCap.label} caps results at ${depthCap.depth}, `
+              ) : (
+                `The pipeline returns at most ${depthCap.depth} results, `
+              )}
+              so {truncated.map((k) => `@${k}`).join(", ")} will always read as misses. Raise the
+              cap or drop those cutoffs.
             </p>
           )}
           <button

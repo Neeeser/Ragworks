@@ -2,6 +2,7 @@
 
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TextInput } from "@/components/ui/field";
+import { ParameterLabel, parameterAccessibleName } from "@/components/ui/parameter-label";
 import { Tooltip } from "@/components/ui/tooltip";
 
 import type { QueryArgumentValues } from "./use-collection-search";
@@ -12,13 +13,6 @@ type QueryArgumentControlsProps = {
   values: QueryArgumentValues;
   onChange: (name: string, value: number | string | boolean | undefined) => void;
 };
-
-/**
- * An argument's name is the key the tool's schema declares and the API accepts
- * verbatim, so it renders as a mono literal rather than through the console's
- * sentence-case label voice.
- */
-export const ARGUMENT_NAME_CLASS = "shrink-0 font-mono text-instrument text-muted";
 
 /**
  * One typed control per declared pipeline argument, rendered inline beside
@@ -37,7 +31,7 @@ export function QueryArgumentControls({
         // ignores the motion system.
         <Tooltip key={argument.name} content={argument.description ?? ""} side="bottom">
           <span className="flex items-center gap-2">
-            <span className={ARGUMENT_NAME_CLASS}>{argument.name}</span>
+            <ParameterLabel name={argument.name} />
             <ArgumentControl
               argument={argument}
               value={values[argument.name]}
@@ -59,7 +53,7 @@ function ArgumentControl({
   value: number | string | boolean | undefined;
   onChange: (name: string, value: number | string | boolean | undefined) => void;
 }) {
-  const ariaLabel = `Argument ${argument.name}`;
+  const ariaLabel = parameterAccessibleName(argument.name);
   if (argument.type === "boolean") {
     return (
       <CustomSelect

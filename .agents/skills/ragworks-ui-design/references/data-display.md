@@ -140,6 +140,23 @@ column that had room for it.
 The tell that you have a label and not an identifier: you could translate it, or the
 backend would accept it in any case. If neither is true, it is a literal.
 
+## A parameter is named twice: label first, key second
+
+A pipeline argument or variable has both — a name a person reads and a `result_limit`
+key the API accepts verbatim — and the label leads. Use `ParameterLabel` (inline, for a
+control with no `Field`) or `Field`'s `label` + `labelEnd={<ParameterId …/>}`; both put
+`humanizeIdentifier(name)` in the sentence-case sans label voice and the key beside it in
+mono at `text-instrument text-meta`. The control's accessible name carries both, via
+`parameterAccessibleName`.
+
+The key never disappears — it is what a user quotes when the request they sent is the
+thing in question — but a snake_case id standing alone as a form label hands a first-time
+user a machine string where a label belongs. The same pairing carries into prose: a
+sentence naming a parameter reads with the label and cites the key once inline in mono.
+
+Authoring surfaces are the exception. In the pipeline editor's variable and IO panels the
+identifier *is* the thing being edited, so it stays a bare mono literal.
+
 ## A chip tone that never varies is decoration
 
 `Chip`'s dot colour has to be a function of the row's data. A `chat`-toned dot on every

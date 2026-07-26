@@ -3,16 +3,14 @@
 import { History, Search } from "lucide-react";
 import { useMemo } from "react";
 
-import {
-  ARGUMENT_NAME_CLASS,
-  QueryArgumentControls,
-} from "@/components/collections/detail/search/QueryArgumentControls";
+import { QueryArgumentControls } from "@/components/collections/detail/search/QueryArgumentControls";
 import { SearchFailurePanel } from "@/components/collections/detail/search/SearchFailurePanel";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TextArea, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
+import { ParameterLabel, parameterAccessibleName } from "@/components/ui/parameter-label";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { Tooltip } from "@/components/ui/tooltip";
 
@@ -120,9 +118,10 @@ export function SearchComposer({ search }: { search: CollectionSearchState }) {
             // showing the legacy control while it loads misrepresents a
             // declaring tool for a moment.
             <label className="flex items-center gap-2">
-              <span className={ARGUMENT_NAME_CLASS}>top_k</span>
+              <ParameterLabel name="top_k" />
               <TextInput
                 type="number"
+                aria-label={parameterAccessibleName("top_k")}
                 min={1}
                 max={50}
                 value={search.topK}
