@@ -5,6 +5,7 @@ import { useCallback, useMemo, useReducer, useState } from "react";
 
 import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
+import { buildIndexCreatePayload } from "@/components/indexes/create-index";
 import { applySetupSeeds } from "@/components/setup/lib/setup-seeding";
 import {
   initialSetupWizardState,
@@ -188,12 +189,14 @@ export function useSetupWizard(): SetupWizardApi {
         );
       }
       try {
-        await createIndex(token, {
-          backend,
-          name: indexName,
-          dimension: embeddingDimension,
-          metric: "cosine",
-        });
+        await createIndex(
+          token,
+          buildIndexCreatePayload(backend, {
+            name: indexName,
+            dimension: embeddingDimension,
+            metric: "cosine",
+          }),
+        );
       } catch (err) {
         // Adopt an existing index only when its dimension matches the model.
         const existing = await describeIndex(token, backend, indexName).catch(() => null);
