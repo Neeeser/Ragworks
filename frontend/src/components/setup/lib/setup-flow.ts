@@ -83,8 +83,38 @@ export type SetupFlow = {
   edges: TypedEdgeType[];
 };
 
-/** Build the synthetic setup-step pipeline graph. Pure — safe to memoize once. */
-export function buildSetupFlow(): SetupFlow {
+/**
+ * The wizard choices the backdrop nodes read out. Structurally a subset of
+ * `SetupChoices`, kept narrow here so the graph builder depends on the four
+ * values it renders rather than on the whole wizard state.
+ */
+export type SetupFlowChoices = {
+  embeddingModel?: string;
+  embeddingDimension?: number | null;
+  indexName?: string;
+  backend?: string;
+};
+
+/**
+ * Config each node's signature readout resolves from, so a node narrates the
+ * choice the user has actually made instead of holding "no model selected"
+ * through the whole run.
+ */
+const configFor = (id: SetupStepId, choices: SetupFlowChoices): Record<string, unknown> => {
+  if (id === "model") {
+    return {
+      model_name: choices.embeddingModel ?? "",
+      dimension: choices.embeddingDimension ?? undefined,
+    };
+  }
+  if (id === "index") {
+    return { index_name: choices.indexName ?? "", backend: choices.backend };
+  }
+  return {};
+};
+
+/** Build the synthetic setup-step pipeline graph. Pure — safe to memoize. */
+export function buildSetupFlow(choices: SetupFlowChoices = {}): SetupFlow {
   const nodes: Node<PipelineNodeData>[] = SETUP_NODES.map((node, index) => ({
     id: node.id,
     type: "pipelineNode",
@@ -95,7 +125,7 @@ export function buildSetupFlow(): SetupFlow {
       description: node.description,
       inputs: node.input ? [toPort(node.input)] : [],
       outputs: node.output ? [toPort(node.output)] : [],
-      config: {},
+      config: configFor(node.id, choices),
     },
   }));
 

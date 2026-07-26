@@ -33,7 +33,7 @@ export function SetupWizard() {
   // Continue button below the fold with no scrollable ancestor to reach it.
   return (
     <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
-      <SetupFlowBackdrop step={wizard.state.step} />
+      <SetupFlowBackdrop step={wizard.state.step} choices={wizard.state.choices} />
       <div className="relative z-10 flex max-h-full w-full max-w-xl flex-col overflow-y-auto px-4 py-4">
         {/* Progress as a node path: square node dots, the current one stretched
             into a wire segment — the console's own mark, not a pill row. */}
