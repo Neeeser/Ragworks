@@ -5,6 +5,7 @@ import type {
   ChunkVisualization,
   Collection,
   CollectionCreatePayload,
+  CollectionIndexesRead,
   CollectionPromptDetails,
   CollectionQueryArgumentsResponse,
   CollectionQueryRequest,
@@ -103,6 +104,25 @@ export async function updateCollection(
     method: "PATCH",
     token,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchCollectionIndexes(
+  token: string,
+  collectionId: string,
+): Promise<CollectionIndexesRead> {
+  return apiFetch<CollectionIndexesRead>(`/api/collections/${collectionId}/indexes`, { token });
+}
+
+export async function updateCollectionIndexes(
+  token: string,
+  collectionId: string,
+  values: Record<string, unknown>,
+): Promise<CollectionIndexesRead> {
+  return apiFetch<CollectionIndexesRead>(`/api/collections/${collectionId}/indexes`, {
+    method: "PUT",
+    token,
+    body: JSON.stringify({ values }),
   });
 }
 

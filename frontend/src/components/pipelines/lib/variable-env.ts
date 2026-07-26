@@ -13,7 +13,14 @@
  * derived from them still resolves to one index per binding.
  */
 
-import { checkType, evaluate, parse, references, ExpressionError } from "@/lib/expressions";
+import {
+  checkType,
+  evaluate,
+  expressionSource,
+  parse,
+  references,
+  ExpressionError,
+} from "@/lib/expressions";
 
 import type { ExprType, ExprValue } from "@/lib/expressions";
 import type { PipelineVariable, VariableSource, VariableType } from "@/lib/types";
@@ -247,4 +254,64 @@ export function formatPreviewValue(value: ExprValue | undefined): string {
   if (typeof value === "number")
     return Number.isInteger(value) ? String(value) : value.toPrecision(6).replace(/\.?0+$/, "");
   return String(value);
+}
+
+/** Mirrors `app/pipelines/index_variables.py::_LEXICAL_NODE_TYPES` — the
+ * BM25/lexical node family, whose index slots need a sparse index. */
+const LEXICAL_NODE_TYPES = new Set(["indexer.bm25", "retriever.bm25", "count.bm25", "facet.bm25"]);
+
+export interface IndexSlotConstraint {
+  /** "dense" | "sparse", derived from the nodes reading the slot (sparse wins). */
+  vectorType: string;
+  /** The width a compatible dense index must store, when the definition states one. */
+  dimension: number | null;
+}
+
+type PipelineLike = {
+  definition: {
+    nodes?: Array<{ type: string; config?: Record<string, unknown> | null }>;
+    variables?: PipelineVariable[];
+  };
+};
+
+/**
+ * Per-slot compatibility constraints, derived the same way the backend does:
+ * vector type from the nodes that reference the slot (never its name), and
+ * dimension from any node config that states one. The server re-checks on
+ * save — this only keeps the picker from offering choices the save rejects.
+ */
+export function indexSlotConstraints(pipelines: PipelineLike[]): Map<string, IndexSlotConstraint> {
+  const constraints = new Map<string, IndexSlotConstraint>();
+  for (const pipeline of pipelines) {
+    let statedDimension: number | null = null;
+    const referenced = new Map<string, boolean>(); // slot -> any lexical reader
+    for (const node of pipeline.definition.nodes ?? []) {
+      const config = node.config ?? {};
+      const dimension = config["dimension"];
+      if (typeof dimension === "number") statedDimension = dimension;
+      const lexical = LEXICAL_NODE_TYPES.has(node.type);
+      for (const value of Object.values(config)) {
+        const source = expressionSource(value);
+        if (source === null) continue;
+        let refs: Set<string>;
+        try {
+          refs = references(parse(source));
+        } catch {
+          continue;
+        }
+        for (const name of refs) {
+          referenced.set(name, lexical || (referenced.get(name) ?? false));
+        }
+      }
+    }
+    for (const variable of indexVariables(pipeline.definition.variables ?? [])) {
+      const lexical = referenced.get(variable.name) ?? false;
+      const existing = constraints.get(variable.name);
+      constraints.set(variable.name, {
+        vectorType: lexical || existing?.vectorType === "sparse" ? "sparse" : "dense",
+        dimension: existing?.dimension ?? (lexical ? null : statedDimension),
+      });
+    }
+  }
+  return constraints;
 }

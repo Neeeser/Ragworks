@@ -1,5 +1,5 @@
 import type { UsageBreakdown } from "@/lib/types/chat";
-import type { UUID } from "@/lib/types/common";
+import type { IndexBackend, UUID } from "@/lib/types/common";
 
 export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
@@ -255,4 +255,29 @@ export interface CollectionQueryArgument {
 
 export interface CollectionQueryArgumentsResponse {
   arguments: CollectionQueryArgument[];
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexRef`. */
+export interface CollectionIndexRef {
+  index_id: string;
+  name: string;
+  backend: IndexBackend;
+  vector_type: string;
+  dimension: number | null;
+  metric: string | null;
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexSlot`. */
+export interface CollectionIndexSlot {
+  name: string;
+  vector_type: string;
+  description: string | null;
+  expected_dimension: number | null;
+  current: CollectionIndexRef | null;
+  pipelines: string[];
+}
+
+/** Mirrors `app/schemas/collections.py::CollectionIndexesRead`. */
+export interface CollectionIndexesRead {
+  slots: CollectionIndexSlot[];
 }
