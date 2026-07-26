@@ -141,6 +141,6 @@ describe("AddConnectionDialog provider picker", () => {
       makeProviderType({ provider_type: "pgvector", label: "pgvector", builtin: true }),
     ]);
     expect(screen.queryByRole("button", { name: /pgvector/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Every available provider is already connected.")).toBeInTheDocument();
+    expect(screen.getByText("No provider types are available.")).toBeInTheDocument();
   });
 });

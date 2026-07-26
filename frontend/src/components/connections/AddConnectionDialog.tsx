@@ -171,7 +171,7 @@ export function AddConnectionDialog({
             ))}
             {providerChoices.length === 0 ? (
               <div className="col-span-2 p-8 text-center">
-                <p className="text-ui text-muted">Every available provider is already connected.</p>
+                <p className="text-ui text-muted">No provider types are available.</p>
               </div>
             ) : null}
           </div>
