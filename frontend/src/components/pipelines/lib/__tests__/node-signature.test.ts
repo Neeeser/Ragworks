@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countHiddenOverrides, resolveNodeSignature } from "../node-signature";
+import { BINDING_INDEX_VALUE, countHiddenOverrides, resolveNodeSignature } from "../node-signature";
 import { buildPipelineConfigFields } from "../pipeline-config";
 
 import type { PipelineConfigField } from "../pipeline-config";
@@ -69,6 +69,39 @@ describe("resolveNodeSignature", () => {
   it("flags a vector node with a blank index as missing", () => {
     const signature = resolveNodeSignature("retriever.vector", { index_name: "" }, []);
     expect(signature).toMatchObject({ value: "no index selected", missing: true });
+  });
+
+  it("reads an index named by a binding variable as set per collection", () => {
+    const signature = resolveNodeSignature(
+      "indexer.vector",
+      { backend: { $expr: "primary_index.backend" }, index_name: { $expr: "primary_index.name" } },
+      [],
+    );
+
+    // The collection's binding supplies this index — the normal shape for a
+    // store-bound node, and the opposite of an unset one.
+    expect(signature).toMatchObject({
+      label: "Index",
+      value: BINDING_INDEX_VALUE,
+      detail: "primary_index",
+    });
+    expect(signature?.missing).toBeFalsy();
+  });
+
+  it("names the BM25 slot on a lexical node bound to its own variable", () => {
+    expect(
+      resolveNodeSignature("retriever.bm25", { index_name: { $expr: "bm25_index.name" } }, []),
+    ).toMatchObject({ value: "set per collection", detail: "bm25_index" });
+  });
+
+  it("still reads as bound when the index expression derives from the collection", () => {
+    expect(
+      resolveNodeSignature(
+        "indexer.pgvector",
+        { index_name: { $expr: "'col-' + collection_id" } },
+        [],
+      ),
+    ).toMatchObject({ value: "set per collection", detail: "collection_id" });
   });
 
   it("pins the backend icon on legacy per-backend node types", () => {

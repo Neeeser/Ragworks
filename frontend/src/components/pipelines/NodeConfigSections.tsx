@@ -17,6 +17,7 @@ import {
   acceptedNamesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
+import { BINDING_INDEX_VALUE } from "./lib/node-signature";
 import { buildPipelineConfigFields, coerceFieldValue } from "./lib/pipeline-config";
 import { CREATE_SENTINEL } from "./lib/pipeline-kinds";
 import { sortIndexesByName } from "./lib/pipeline-utils";
@@ -25,6 +26,7 @@ import {
   RETRIEVAL_INPUT_TYPE,
   RETRIEVAL_OUTPUT_TYPE,
   buildStaticEnvironment,
+  expressionVariableNames,
 } from "./lib/variable-env";
 import { NodeModelSelectors } from "./NodeModelSelectors";
 
@@ -46,9 +48,27 @@ export type NodeConfigSectionsProps = {
   validationErrors: string[];
   validationIssues?: PipelineValidationIssue[];
   vectorIndexes: VectorIndex[];
-  onOpenIndexManager?: () => void;
+  onOpenIndexRegistry?: () => void;
   variables: PipelineVariable[];
 } & NodeModelCatalogProps;
+
+/**
+ * What the index field says about its current state: which variable the
+ * binding fills in, the width of the literal index chosen, or that a literal
+ * one is still needed.
+ */
+function indexHelper(
+  boundVariables: string[] | null,
+  indexValue: string,
+  dimension: number | null | undefined,
+): string {
+  if (boundVariables !== null) {
+    const named = boundVariables.length > 0 ? ` · ${boundVariables.join(", ")}` : "";
+    return `${BINDING_INDEX_VALUE}${named}`;
+  }
+  if (!indexValue) return "Required";
+  return dimension ? `Dimension: ${dimension}` : "Dimension: n/a";
+}
 
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
   { value: "pgvector", label: "pgvector", hint: "Built-in Postgres" },
@@ -68,7 +88,7 @@ export function NodeConfigSections({
   validationErrors,
   validationIssues = [],
   vectorIndexes,
-  onOpenIndexManager,
+  onOpenIndexRegistry,
   variables,
   ...modelCatalogProps
 }: NodeConfigSectionsProps) {
@@ -128,6 +148,9 @@ export function NodeConfigSections({
   );
   const indexValue = typeof config.index_name === "string" ? config.index_name : "";
   const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
+  // The index may be supplied by the collection's binding rather than named
+  // here; saying "Required" then reports a correct pipeline as unfinished.
+  const boundIndexVariables = expressionVariableNames(config.index_name);
 
   const setConfigValue = (key: string, value: unknown | undefined) => {
     const nextConfig = { ...config };
@@ -153,7 +176,7 @@ export function NodeConfigSections({
 
   const handleIndexChange = (value: string) => {
     if (value === CREATE_SENTINEL) {
-      onOpenIndexManager?.();
+      onOpenIndexRegistry?.();
       return;
     }
     const nextConfig = { ...config };
@@ -273,25 +296,22 @@ export function NodeConfigSections({
         <ParameterFieldCard
           label="Index"
           description="The vector index this node reads from or writes to."
-          helper={
-            indexValue
-              ? selectedIndex?.dimension
-                ? `Dimension: ${selectedIndex.dimension}`
-                : "Dimension: n/a"
-              : "Required"
-          }
+          helper={indexHelper(boundIndexVariables, indexValue, selectedIndex?.dimension)}
           actionLabel="Manage"
           actionDisabled={isPreview}
-          onAction={onOpenIndexManager}
+          onAction={onOpenIndexRegistry}
         >
           <CustomSelect
             value={indexValue}
             onValueChange={handleIndexChange}
             disabled={isPreview}
             aria-label="Vector index"
-            placeholder="Select an index"
+            placeholder={boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index"}
             options={[
-              { value: "", label: "Select an index" },
+              {
+                value: "",
+                label: boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index",
+              },
               ...(indexValue && !selectedIndex
                 ? [
                     {

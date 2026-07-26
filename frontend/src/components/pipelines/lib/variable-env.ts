@@ -256,6 +256,26 @@ export function formatPreviewValue(value: ExprValue | undefined): string {
   return String(value);
 }
 
+/**
+ * The variable names an expression-tagged config value reads, or null when the
+ * value is a plain literal.
+ *
+ * A store-bound node's index identity is an expression over a binding index
+ * variable, so this is what separates "the collection sets this" from "nothing
+ * is set" — reading such a value as a missing string reports a correct,
+ * normal pipeline as misconfigured. An expression that fails to parse yields
+ * an empty list: still bound, just not nameable.
+ */
+export function expressionVariableNames(value: unknown): string[] | null {
+  const source = expressionSource(value);
+  if (source === null) return null;
+  try {
+    return [...references(parse(source))];
+  } catch {
+    return [];
+  }
+}
+
 /** Mirrors `app/pipelines/index_variables.py::_LEXICAL_NODE_TYPES` — the
  * BM25/lexical node family, whose index slots need a sparse index. */
 const LEXICAL_NODE_TYPES = new Set(["indexer.bm25", "retriever.bm25", "count.bm25", "facet.bm25"]);

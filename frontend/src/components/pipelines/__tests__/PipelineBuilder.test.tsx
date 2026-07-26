@@ -136,9 +136,9 @@ vi.mock("@/components/pipelines/NodeEditorDrawer", () => ({
         )}
         <button
           type="button"
-          onClick={() => (props.onOpenIndexManager as (flag?: boolean) => void)?.(true)}
+          onClick={() => (props.onOpenIndexRegistry as (flag?: boolean) => void)?.(true)}
         >
-          Open index manager
+          Open index registry
         </button>
         <button
           type="button"
@@ -244,12 +244,12 @@ vi.mock("@/components/pipelines/PipelineSidebar", () => ({
 vi.mock("@/components/pipelines/PipelineHeader", () => ({
   PipelineHeader: ({
     onCreatePipeline,
-    onManageIndexes,
+    onOpenIndexRegistry,
     onOpenSave,
     onOpenHistory,
   }: {
     onCreatePipeline: () => void;
-    onManageIndexes: () => void;
+    onOpenIndexRegistry: () => void;
     onOpenSave: () => void;
     onOpenHistory: () => void;
   }) => (
@@ -257,8 +257,8 @@ vi.mock("@/components/pipelines/PipelineHeader", () => ({
       <button type="button" onClick={onCreatePipeline}>
         Create pipeline
       </button>
-      <button type="button" onClick={onManageIndexes}>
-        Manage indexes
+      <button type="button" onClick={onOpenIndexRegistry}>
+        Index registry
       </button>
       <button type="button" onClick={onOpenSave}>
         Open save dialog
@@ -274,11 +274,11 @@ vi.mock("@/components/pipelines/CreatePipelineWizard", () => ({
   CreatePipelineWizard: ({
     open,
     onCreated,
-    onOpenIndexManager,
+    onOpenIndexRegistry,
   }: {
     open: boolean;
     onCreated: (pipeline: Pipeline) => void;
-    onOpenIndexManager?: () => void;
+    onOpenIndexRegistry?: () => void;
   }) =>
     open ? (
       <div>
@@ -306,15 +306,15 @@ vi.mock("@/components/pipelines/CreatePipelineWizard", () => ({
         >
           Finish create
         </button>
-        <button type="button" onClick={onOpenIndexManager}>
+        <button type="button" onClick={onOpenIndexRegistry}>
           Open indexes from wizard
         </button>
       </div>
     ) : null,
 }));
 
-vi.mock("@/components/pipelines/index-manager/IndexManagerModal", () => ({
-  IndexManagerModal: ({
+vi.mock("@/components/indexes/IndexRegistryModal", () => ({
+  IndexRegistryModal: ({
     open,
     onClose,
     onRefresh,
@@ -822,12 +822,12 @@ describe("PipelineBuilder", () => {
     });
   });
 
-  it("opens index manager and selects embedding models", async () => {
+  it("opens index registry and selects embedding models", async () => {
     render(<PipelineBuilder kind="ingestion" />);
 
     await waitFor(() => expect(lastDrawerProps).not.toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "Open index manager" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open index registry" }));
     fireEvent.click(screen.getByRole("button", { name: "Close indexes" }));
 
     fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
@@ -854,7 +854,7 @@ describe("PipelineBuilder", () => {
     expect(screen.getByTestId("canvas")).toHaveTextContent(/cannot be deleted/);
   });
 
-  it("handles drag previews, index manager return, and embedding selection", async () => {
+  it("handles drag previews, index registry return, and embedding selection", async () => {
     const pipelineWithEdge: Pipeline = {
       ...pipeline,
       definition: {

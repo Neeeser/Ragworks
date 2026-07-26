@@ -4,13 +4,13 @@ import { useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { useAuth } from "@/providers/auth-provider";
 
 import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
 import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useIndexBackends } from "./hooks/use-index-backends";
-import { useIndexes } from "./hooks/use-indexes";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
 import { useNodeEditing } from "./hooks/use-node-editing";
 import { usePipelineModelCatalogs } from "./hooks/use-pipeline-model-catalogs";
@@ -269,8 +269,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     persistLayout,
   });
 
-  const handleOpenIndexManager = (returnToWizard?: boolean) =>
-    modalsRef.current?.openIndexManager(returnToWizard);
+  const handleOpenIndexRegistry = (returnToWizard?: boolean) =>
+    modalsRef.current?.openIndexRegistry(returnToWizard);
 
   const handleOpenSave = () => {
     const validationErrors = Object.values(nodeErrors).flat();
@@ -325,7 +325,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       <PipelineHeader
         kind={kind}
         onCreatePipeline={() => modalsRef.current?.openCreatePipeline()}
-        onManageIndexes={() => handleOpenIndexManager()}
+        onOpenIndexRegistry={() => handleOpenIndexRegistry()}
         unsavedCount={pendingMaterialChanges.length}
         onOpenSave={handleOpenSave}
         onOpenHistory={() => setHistoryOpen(true)}
@@ -391,7 +391,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         validationIssues={selectedValidationIssues}
         variables={variables}
         vectorIndexes={indexes}
-        onOpenIndexManager={handleOpenIndexManager}
+        onOpenIndexRegistry={handleOpenIndexRegistry}
         embeddingModels={embeddingModels}
         embeddingCatalog={embeddingCatalog}
         embeddingModelsLoading={embeddingModelsLoading}

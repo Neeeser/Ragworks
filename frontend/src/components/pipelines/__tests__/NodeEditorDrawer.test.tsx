@@ -155,7 +155,7 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
   return render(<NodeEditorDrawer {...props} />);
 };
 
-function DrawerWithIndexManager() {
+function DrawerWithIndexRegistry() {
   const [managerOpen, setManagerOpen] = React.useState(false);
   return (
     <>
@@ -167,7 +167,7 @@ function DrawerWithIndexManager() {
         variables={[]}
         validationErrors={[]}
         vectorIndexes={indexes}
-        onOpenIndexManager={() => setManagerOpen(true)}
+        onOpenIndexRegistry={() => setManagerOpen(true)}
         embeddingModels={[]}
         embeddingCatalog={null}
         embeddingModelsLoading={false}
@@ -182,10 +182,10 @@ function DrawerWithIndexManager() {
       <ModalOverlay
         open={managerOpen}
         onClose={() => setManagerOpen(false)}
-        labelledBy="index-manager-title"
+        labelledBy="index-registry-title"
       >
         <div>
-          <h2 id="index-manager-title">Index manager</h2>
+          <h2 id="index-registry-title">Index registry</h2>
           <button type="button">Manager action</button>
         </div>
       </ModalOverlay>
@@ -325,6 +325,21 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
+  it("reads an index supplied by the binding as set per collection, not Required", () => {
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: { $expr: "primary_index.backend" },
+        index_name: { $expr: "primary_index.name" },
+      }),
+      vectorIndexes: indexes,
+    });
+
+    // The collection's Indexes card fills this in; "Required" would report a
+    // correctly configured pipeline as unfinished.
+    expect(screen.getByText("set per collection · primary_index")).toBeInTheDocument();
+    expect(screen.queryByText("Required")).not.toBeInTheDocument();
+  });
+
   it("switching the backend clears the previously selected index in the draft", () => {
     const onApply = vi.fn();
     renderDrawer({
@@ -378,14 +393,14 @@ describe("NodeEditorDrawer", () => {
     );
   });
 
-  it("keeps focus in the index manager opened from the create sentinel", async () => {
+  it("keeps focus in the index registry opened from the create sentinel", async () => {
     const user = userEvent.setup();
-    render(<DrawerWithIndexManager />);
+    render(<DrawerWithIndexRegistry />);
 
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     await user.click(screen.getByRole("option", { name: /Add new index/ }));
 
-    expect(screen.getByRole("dialog", { name: "Index manager" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Index registry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Manager action" })).toHaveFocus();
   });
 

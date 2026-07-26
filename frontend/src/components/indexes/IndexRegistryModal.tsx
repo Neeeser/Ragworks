@@ -26,7 +26,7 @@ import type {
   VectorIndex,
 } from "@/lib/types";
 
-type IndexManagerModalProps = {
+type IndexRegistryModalProps = {
   open: boolean;
   token: string;
   indexes: VectorIndex[];
@@ -43,12 +43,17 @@ type IndexManagerModalProps = {
 };
 
 /**
- * Orchestrates the Pinecone index manager: the index list, the details/create panel
+ * Orchestrates the index registry: the index list, the details/create panel
  * switch, and the delete-confirmation flow. The panel components (IndexListPanel,
  * IndexDetailsPanel, CreateIndexForm) are presentational; this component owns the
  * cross-cutting state (selection, view mode, notifications) that ties them together.
+ *
+ * The registry owns index *entities* — creating one, adopting one the store
+ * already holds, deleting an unused one, and reporting which collections point
+ * at each. It never repoints a collection: which index a collection reads and
+ * writes belongs to that collection's binding, on its Indexes card.
  */
-export function IndexManagerModal({
+export function IndexRegistryModal({
   open,
   token,
   indexes,
@@ -62,7 +67,7 @@ export function IndexManagerModal({
   onCatalogVisible,
   onClose,
   onRefresh,
-}: IndexManagerModalProps) {
+}: IndexRegistryModalProps) {
   const titleId = useId();
   const { config } = useAppConfig();
   const [activeBackend, setActiveBackend] = useState<IndexBackend>(config.indexing.default_backend);
@@ -162,9 +167,17 @@ export function IndexManagerModal({
             />
           ) : null}
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline p-3">
-            <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
-              Vector index manager
-            </h2>
+            <div className="min-w-0">
+              <h2 id={titleId} className="text-head font-semibold tracking-[-0.01em] text-primary">
+                Index registry
+              </h2>
+              {/* States where the other half of the decision lives: this dialog
+                  owns index entities, a collection owns which one it uses. */}
+              <p className="text-instrument text-meta">
+                Create, adopt, and delete indexes. A collection picks which one it uses on its
+                Indexes card.
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="secondary" onClick={onRefresh} disabled={loading}>
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden />

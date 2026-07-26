@@ -146,5 +146,5 @@ After seeding:
 - everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
 - a second collection "Second Collection" bound to the *same* ingest and tool pipelines, with no documents of its own
 - indexes second-index (dense) and second-index-bm25 (sparse), registered and selected by the second collection's bindings
-- the Index Manager lists four registered indexes and reports which collections use each
+- the index registry lists four registered indexes and reports which collections use each
 - editing either pipeline changes both collections; changing a binding's index changes only that collection

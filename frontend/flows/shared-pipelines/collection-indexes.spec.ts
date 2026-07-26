@@ -5,10 +5,11 @@
  * 1. Create a fresh collection through the API — its bindings auto-fill from
  *    the default pipelines' indexes.
  * 2. The Indexes card lists the dense and BM25 slots with each current index
- *    and the pipelines sharing the slot.
+ *    and the pipelines sharing the slot, plus a row per tool binding.
  * 3. Open Change: the dense picker offers only dense indexes, labeled with
  *    backend and width.
- * 4. Quick-create a compatible index from the slot and save.
+ * 4. Create a compatible index from the slot without leaving the dialog, and
+ *    save.
  * 5. Confirm through the API that the ingest *and* tool bindings both moved —
  *    the fan-out that replaces one dialog per binding.
  */
@@ -43,7 +44,11 @@ test("the Indexes card moves every binding to a newly created index", async ({ p
   await expect(page.getByText(/— pgvector · \d+d/).first()).toBeVisible();
   await expect(page.getByText(/— pgvector · sparse/).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Change" }).click();
+  // Every binding this collection has is listed here too — the card is the
+  // only place a binding's index is changed.
+  await expect(page.getByRole("button", { name: /^Change indexes for / })).toBeVisible();
+
+  await page.getByRole("button", { name: "Change", exact: true }).click();
   await expect(page.getByText(/applies to every pipeline bound/i)).toBeVisible();
 
   // The dense picker offers no sparse index.

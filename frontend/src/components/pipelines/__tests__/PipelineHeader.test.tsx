@@ -17,7 +17,7 @@ const renderHeader = (overrides: Partial<ComponentProps<typeof PipelineHeader>> 
     <PipelineHeader
       kind="ingestion"
       onCreatePipeline={() => undefined}
-      onManageIndexes={() => undefined}
+      onOpenIndexRegistry={() => undefined}
       unsavedCount={0}
       onOpenSave={() => undefined}
       onOpenHistory={() => undefined}
@@ -33,7 +33,7 @@ describe("PipelineHeader", () => {
     const onCreate = vi.fn();
     const onManage = vi.fn();
 
-    renderHeader({ onCreatePipeline: onCreate, onManageIndexes: onManage });
+    renderHeader({ onCreatePipeline: onCreate, onOpenIndexRegistry: onManage });
 
     // The breadcrumb path owns the page's identity; no title block repeats it.
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Pipelines");
@@ -47,7 +47,7 @@ describe("PipelineHeader", () => {
       "/pipelines/retrieval",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage indexes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Index registry" }));
     expect(onManage).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: NEW_PIPELINE }));
@@ -77,7 +77,7 @@ describe("PipelineHeader", () => {
       <PipelineHeader
         kind="ingestion"
         onCreatePipeline={() => undefined}
-        onManageIndexes={() => undefined}
+        onOpenIndexRegistry={() => undefined}
         unsavedCount={3}
         onOpenSave={onOpenSave}
         onOpenHistory={onOpenHistory}

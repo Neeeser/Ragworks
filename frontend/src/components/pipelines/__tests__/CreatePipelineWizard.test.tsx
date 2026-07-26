@@ -85,7 +85,7 @@ function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
     embeddingModelsError: null,
     onClose: () => undefined,
     onCreated: () => undefined,
-    onOpenIndexManager: () => undefined,
+    onOpenIndexRegistry: () => undefined,
     ...overrides,
   };
 }
@@ -126,8 +126,8 @@ describe("CreatePipelineWizard", () => {
 
   it("handles step navigation and index creation prompt", async () => {
     const user = userEvent.setup();
-    const onOpenIndexManager = vi.fn();
-    renderWizard({ onOpenIndexManager });
+    const onOpenIndexRegistry = vi.fn();
+    renderWizard({ onOpenIndexRegistry });
 
     expect(getNextButton()).toBeDisabled();
 
@@ -144,10 +144,10 @@ describe("CreatePipelineWizard", () => {
     expect(indexSelector).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("listbox")).toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /Add new index/ }));
-    expect(onOpenIndexManager).toHaveBeenCalled();
+    expect(onOpenIndexRegistry).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /Create index/ }));
-    expect(onOpenIndexManager).toHaveBeenCalledTimes(2);
+    expect(onOpenIndexRegistry).toHaveBeenCalledTimes(2);
   }, 10000);
 
   it("requires an index selection before proceeding", async () => {

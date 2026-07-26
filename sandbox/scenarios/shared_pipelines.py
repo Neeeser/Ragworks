@@ -5,7 +5,7 @@ only way to give a second collection its own index was to copy the pipeline,
 so every later pipeline edit had to be repeated per copy. Here both
 collections resolve from the same stored definitions and differ only in the
 index each binding selects — which is what the Indexes control on a tool
-binding edits, and what the Index Manager's "used by" list reports.
+binding edits, and what the index registry's "used by" list reports.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from sandbox.scenarios import collection_ready
         "tool pipelines, with no documents of its own",
         "indexes second-index (dense) and second-index-bm25 (sparse), registered "
         "and selected by the second collection's bindings",
-        "the Index Manager lists four registered indexes and reports which "
+        "the index registry lists four registered indexes and reports which "
         "collections use each",
         "editing either pipeline changes both collections; changing a binding's "
         "index changes only that collection",

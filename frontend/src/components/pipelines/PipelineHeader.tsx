@@ -16,7 +16,7 @@ import type { PipelineKind } from "@/lib/types";
 type PipelineHeaderProps = {
   kind: PipelineKind;
   onCreatePipeline: () => void;
-  onManageIndexes: () => void;
+  onOpenIndexRegistry: () => void;
   /** Material changes since the saved revision; drives the pill + save button. */
   unsavedCount: number;
   onOpenSave: () => void;
@@ -45,7 +45,7 @@ const KIND_TABS: SectionTab[] = PIPELINE_KINDS.map((value) => ({
 export function PipelineHeader({
   kind,
   onCreatePipeline,
-  onManageIndexes,
+  onOpenIndexRegistry,
   unsavedCount,
   onOpenSave,
   onOpenHistory,
@@ -78,8 +78,8 @@ export function PipelineHeader({
         }
         actions={
           <>
-            <Button size="sm" variant="secondary" onClick={onManageIndexes}>
-              Manage indexes
+            <Button size="sm" variant="secondary" onClick={onOpenIndexRegistry}>
+              Index registry
             </Button>
             {hasPipeline ? (
               <>

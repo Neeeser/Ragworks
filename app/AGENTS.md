@@ -384,7 +384,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   through `register_definition_indexes`
   (`app/services/index_scaffolding.py`) — a path that skips it produces the one
   pipeline a collection can never repoint, and its indexes stay invisible to the
-  Index Manager's in-use list. Deleting a registration consults *declared*
+  index registry's in-use list. Deleting a registration consults *declared*
   references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
   that has not run yet still owns its index.
 - **A store-bound node's identity is an expression over a binding-source index

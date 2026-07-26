@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -20,7 +21,7 @@ type IndexDetailsPanelProps = {
 
 /** Read-only detail card for the selected vector index, plus the entry points into
  * the delete-confirmation and registration flows (both owned by the parent
- * IndexManagerModal). */
+ * IndexRegistryModal). */
 export function IndexDetailsPanel({
   index,
   onDelete,
@@ -70,10 +71,17 @@ export function IndexDetailsPanel({
             <div className="w-full">
               <InstrumentLabel>Used by</InstrumentLabel>
               {index.in_use_by && index.in_use_by.length > 0 ? (
+                // Each user links to the collection that owns the choice: this
+                // panel reports who points here, it never repoints them.
                 <ul className="mt-1 space-y-0.5">
                   {index.in_use_by.map((usage) => (
                     <li key={`${usage.collection_id}-${usage.pipeline_id}-${usage.role}`}>
-                      <span className="text-ui text-body">{usage.collection_name}</span>
+                      <Link
+                        href={`/collections/${usage.collection_id}`}
+                        className="rounded-control text-ui text-body transition-colors duration-80 ease-standard hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                      >
+                        {usage.collection_name}
+                      </Link>
                       <span className="text-instrument text-meta">
                         {" · "}
                         {usage.pipeline_name} ({usage.role})

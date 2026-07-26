@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Loader } from "@/components/ui/loader";
@@ -57,7 +57,7 @@ export function CreateCollectionWizard({
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [indexValues, setIndexValues] = useState<Record<string, unknown>>({});
-  const { registeredIndexes } = useIndexes(token);
+  const { registeredIndexes, refreshIndexes } = useIndexes(token);
   const [ingestionOverrides, setIngestionOverrides] = useState<
     Record<string, Record<string, unknown>>
   >({});
@@ -323,7 +323,9 @@ export function CreateCollectionWizard({
             pipelines={selectedPipelines}
             values={indexValues}
             indexes={registeredIndexes}
+            token={token}
             onChange={setIndexValues}
+            onIndexCreated={refreshIndexes}
           />
         </div>
       )}

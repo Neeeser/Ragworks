@@ -276,7 +276,7 @@ the same PR.
   snapshot instead of a state-plus-effect hydration dance.
 - **Only a registered index is selectable.** `useIndexes` derives
   `registeredIndexes`/`unregisteredIndexes` from one fetch — pickers offer the
-  registered set, the Index Manager shows both so an index created outside the app
+  registered set, the index registry shows both so an index created outside the app
   is visible rather than hidden. Never add a second hook that re-fetches the list.
 - **A control that changes which index a binding targets states the consequence
   before the change.** Switching indexes moves no data, so the collection reads an

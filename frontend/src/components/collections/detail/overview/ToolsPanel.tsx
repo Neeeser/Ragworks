@@ -2,20 +2,16 @@
 
 import { useMemo, useState } from "react";
 
-import { BindingIndexDialog } from "@/components/collections/detail/overview/BindingIndexDialog";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {
   addCollectionTool,
   fetchCollection,
-  listCollectionTools,
   removeCollectionTool,
   updateCollectionTool,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
-import { useApiQuery } from "@/lib/use-api-query";
 
 import type { Collection, Pipeline } from "@/lib/types";
 import type { CollectionTool } from "@/lib/types/tools";
@@ -23,30 +19,37 @@ import type { CollectionTool } from "@/lib/types/tools";
 type ToolsPanelProps = {
   collection: Collection;
   toolPipelines: Pipeline[];
+  tools: CollectionTool[];
+  loading?: boolean;
   token: string;
+  onToolsChanged: () => void | Promise<void>;
   onCollectionUpdated: (collection: Collection) => void;
 };
 
-/** The collection's tool bindings: what chat exposes when this collection loads. */
+/**
+ * The collection's tool bindings: what chat exposes when this collection loads.
+ *
+ * Which index a binding targets is not decided here — that is the Indexes
+ * card's job, so a collection's index choices stay in one place instead of
+ * being split across every card that happens to touch a binding.
+ */
 export function ToolsPanel({
   collection,
   toolPipelines,
+  tools,
+  loading = false,
   token,
+  onToolsChanged,
   onCollectionUpdated,
 }: ToolsPanelProps) {
   const [pipelineToAdd, setPipelineToAdd] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [configuring, setConfiguring] = useState<CollectionTool | null>(null);
-  const { registeredIndexes } = useIndexes(token);
-
-  const tools = useApiQuery(() => listCollectionTools(token, collection.id), [token, collection]);
-  const rows = useMemo(() => tools.data?.tools ?? [], [tools.data]);
 
   const unboundPipelines = useMemo(
     () =>
-      toolPipelines.filter((pipeline) => !rows.some((tool) => tool.pipeline_id === pipeline.id)),
-    [toolPipelines, rows],
+      toolPipelines.filter((pipeline) => !tools.some((tool) => tool.pipeline_id === pipeline.id)),
+    [toolPipelines, tools],
   );
 
   const mutate = async (action: () => Promise<unknown>) => {
@@ -54,6 +57,7 @@ export function ToolsPanel({
     setError(null);
     try {
       await action();
+      await onToolsChanged();
       onCollectionUpdated(await fetchCollection(token, collection.id));
     } catch (err) {
       setError(getErrorMessage(err, "Unable to update tools."));
@@ -68,11 +72,6 @@ export function ToolsPanel({
     setPipelineToAdd("");
   };
 
-  const configuringPipeline = useMemo(
-    () => toolPipelines.find((pipeline) => pipeline.id === configuring?.pipeline_id) ?? null,
-    [toolPipelines, configuring],
-  );
-
   return (
     <Panel className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,11 +81,11 @@ export function ToolsPanel({
         </p>
       </div>
 
-      {rows.length === 0 && !tools.loading ? (
+      {tools.length === 0 && !loading ? (
         <p className="mt-4 text-sm text-muted">No tools bound to this collection.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {rows.map((tool: CollectionTool) => (
+          {tools.map((tool: CollectionTool) => (
             <li
               key={tool.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-hairline bg-surface px-4 py-3"
@@ -128,9 +127,6 @@ export function ToolsPanel({
                 >
                   {tool.enabled ? "Disable" : "Enable"}
                 </Button>
-                <Button variant="ghost" disabled={busy} onClick={() => setConfiguring(tool)}>
-                  Indexes
-                </Button>
                 <Button
                   variant="ghost"
                   disabled={busy || tool.is_primary}
@@ -162,26 +158,6 @@ export function ToolsPanel({
       )}
 
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-
-      {configuring && configuringPipeline ? (
-        <BindingIndexDialog
-          key={configuring.id}
-          open
-          pipeline={configuringPipeline}
-          values={configuring.variable_values ?? {}}
-          indexes={registeredIndexes}
-          title={configuring.name}
-          busy={busy}
-          onSave={async (values) => {
-            await updateCollectionTool(token, collection.id, configuring.id, {
-              variable_values: values,
-            });
-            await tools.reload();
-            onCollectionUpdated(await fetchCollection(token, collection.id));
-          }}
-          onClose={() => setConfiguring(null)}
-        />
-      ) : null}
     </Panel>
   );
 }

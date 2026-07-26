@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { IndexManagerModal } from "@/components/pipelines/index-manager/IndexManagerModal";
+import { IndexRegistryModal } from "@/components/indexes/IndexRegistryModal";
 import * as apiModule from "@/lib/api";
 import {
   makeBackendInfo,
@@ -35,7 +35,7 @@ vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
 
 const api = vi.mocked(apiModule);
 
-describe("IndexManagerModal", () => {
+describe("IndexRegistryModal", () => {
   const indexes: VectorIndex[] = [
     makeVectorIndex({ name: "alpha", dimension: 768, host: "host", status: { state: "READY" } }),
   ];
@@ -56,7 +56,7 @@ describe("IndexManagerModal", () => {
 
   it("returns null when closed", () => {
     const { container } = render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open={false}
         token="token"
         indexes={[]}
@@ -71,7 +71,7 @@ describe("IndexManagerModal", () => {
 
   it("shows loading state while indexes are fetching", () => {
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={[]}
@@ -91,7 +91,7 @@ describe("IndexManagerModal", () => {
     const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={indexes}
@@ -133,7 +133,7 @@ describe("IndexManagerModal", () => {
     const user = userEvent.setup();
     api.deleteIndex.mockRejectedValueOnce("Delete failed");
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={indexes}
@@ -155,7 +155,7 @@ describe("IndexManagerModal", () => {
     const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={[]}
@@ -234,7 +234,7 @@ describe("IndexManagerModal", () => {
     const user = userEvent.setup();
     const onRefresh = vi.fn();
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={[]}
@@ -265,7 +265,7 @@ describe("IndexManagerModal", () => {
   it("switches between index list views", async () => {
     const user = userEvent.setup();
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={indexes}
@@ -283,11 +283,46 @@ describe("IndexManagerModal", () => {
     expect(screen.getByText("Index details")).toBeInTheDocument();
   });
 
+  it("links each collection using an index to the page that repoints it", () => {
+    render(
+      <IndexRegistryModal
+        open
+        token="token"
+        indexes={[
+          makeVectorIndex({
+            name: "alpha",
+            registered: true,
+            in_use_by: [
+              {
+                collection_id: "col-9",
+                collection_name: "Support docs",
+                pipeline_id: "pipe-1",
+                pipeline_name: "Default Ingestion Pipeline",
+                role: "ingest",
+              },
+            ],
+          }),
+        ]}
+        backends={[makeBackendInfo(), makePineconeBackendInfo()]}
+        embeddingModels={embeddingModels}
+        onClose={() => undefined}
+        onRefresh={() => undefined}
+      />,
+    );
+
+    // The registry reports who uses an index and sends the user to the
+    // collection that owns the choice — it never repoints a binding itself.
+    expect(screen.getByRole("link", { name: "Support docs" })).toHaveAttribute(
+      "href",
+      "/collections/col-9",
+    );
+  });
+
   it("handles escape key dismissal", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={indexes}
@@ -302,10 +337,10 @@ describe("IndexManagerModal", () => {
     expect(screen.getByText(confirmDeletionText)).toBeInTheDocument();
 
     // First Escape closes only the topmost dialog (the delete confirmation); the
-    // index manager itself stays open.
+    // index registry itself stays open.
     await user.keyboard("{Escape}");
     expect(screen.queryByText(confirmDeletionText)).not.toBeInTheDocument();
-    expect(screen.getByText("Vector index manager")).toBeInTheDocument();
+    expect(screen.getByText("Index registry")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
@@ -314,7 +349,7 @@ describe("IndexManagerModal", () => {
 
   it("renders external error messages", () => {
     render(
-      <IndexManagerModal
+      <IndexRegistryModal
         open
         token="token"
         indexes={[]}

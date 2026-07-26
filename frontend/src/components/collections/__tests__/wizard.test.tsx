@@ -11,6 +11,9 @@ import { makeCollection, makeNodeSpec, makePipeline } from "@/test/fixtures";
 import type { NodeSpec, Pipeline } from "@/lib/types";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+// The pipelines step renders the index slots, whose inline create reads the
+// deployment's default backend from the public config.
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 const api = vi.mocked(apiModule);
 
