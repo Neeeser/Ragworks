@@ -10,10 +10,12 @@ import dataclasses
 from uuid import uuid4
 
 from app.db import models
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.settings import IndexTarget
+from app.pipelines.settings import IndexTarget, PipelineSettings
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
+from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
 from app.services.diagnostics.rules.data import IndexProbeRule
 from app.services.diagnostics.rules.embedding import (
     EmbeddingConnectionMismatchRule,
@@ -288,9 +290,6 @@ class TestBackendCapabilityRule:
         A bare "incompatible backend" leaves the user guessing which of a
         dozen nodes to change.
         """
-        from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
-
         definition = PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(
@@ -316,9 +315,6 @@ class TestBackendCapabilityRule:
     def test_a_supported_graph_produces_nothing(
         self, base_retrieval: PipelineSettings
     ) -> None:
-        from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
-
         definition = PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(
@@ -339,6 +335,4 @@ class TestBackendCapabilityRule:
 
     def test_an_unresolved_side_is_skipped(self) -> None:
         """A collection with no bound pipeline has nothing to check."""
-        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
-
         assert BackendCapabilityRule().evaluate(make_context()) == []
