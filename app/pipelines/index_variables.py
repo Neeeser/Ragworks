@@ -22,7 +22,6 @@ from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.indexing import BaseIndexerNode, Bm25IndexerNode
 from app.pipelines.nodes.retrieval import BaseRetrieverNode, Bm25RetrieverNode
 from app.pipelines.registry import NodeRegistry
-from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.variables import (
     EXPRESSION_KEY,
     PipelineVariable,
@@ -237,11 +236,3 @@ def _rewrite_node(
             config["namespace"] = {EXPRESSION_KEY: expression}
             changed = True
     return node.model_copy(update={"config": config}) if changed else node
-
-
-def default_namespace_expression() -> str:
-    """The expression form of the default per-collection namespace."""
-    expression = template_to_expression(DEFAULT_NAMESPACE_TEMPLATE)
-    if expression is None:  # pragma: no cover - the default always templates
-        raise ValueError("The default namespace template has no placeholder.")
-    return expression

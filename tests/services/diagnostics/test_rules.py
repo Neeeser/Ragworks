@@ -275,3 +275,70 @@ def test_probe_unavailable_degrades_to_info(base_retrieval):
     assert findings
     assert all(f.severity == "info" and f.confidence == "heuristic" for f in findings)
     assert all(f.code == "index_status_unavailable" for f in findings)
+
+
+class TestBackendCapabilityRule:
+    """Nodes pointed at a backend that cannot serve them."""
+
+    def test_a_facet_node_on_pinecone_is_an_error_naming_the_node(
+        self, base_retrieval: PipelineSettings
+    ) -> None:
+        """The finding lists the offending node, not just the backend.
+
+        A bare "incompatible backend" leaves the user guessing which of a
+        dozen nodes to change.
+        """
+        from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
+
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="facet",
+                    type="facet.bm25",
+                    name="Facet",
+                    config={
+                        "backend": "pinecone",
+                        "index_name": "remote",
+                        "field": "document_id",
+                    },
+                )
+            ]
+        )
+        ctx = make_context(retrieval=base_retrieval, retrieval_definition=definition)
+
+        findings = BackendCapabilityRule().evaluate(ctx)
+
+        assert [finding.code for finding in findings] == ["backend_capability_unsupported"]
+        assert findings[0].severity == "error"
+        assert any("facet" in observation.value for observation in findings[0].observations)
+
+    def test_a_supported_graph_produces_nothing(
+        self, base_retrieval: PipelineSettings
+    ) -> None:
+        from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
+
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="facet",
+                    type="facet.bm25",
+                    name="Facet",
+                    config={
+                        "backend": "pgvector",
+                        "index_name": "docs-bm25",
+                        "field": "document_id",
+                    },
+                )
+            ]
+        )
+        ctx = make_context(retrieval=base_retrieval, retrieval_definition=definition)
+
+        assert BackendCapabilityRule().evaluate(ctx) == []
+
+    def test_an_unresolved_side_is_skipped(self) -> None:
+        """A collection with no bound pipeline has nothing to check."""
+        from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
+
+        assert BackendCapabilityRule().evaluate(make_context()) == []
