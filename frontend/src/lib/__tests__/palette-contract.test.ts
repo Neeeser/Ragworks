@@ -62,10 +62,20 @@ describe("palette token contract", () => {
   it("defines chart series slots separately from UI accents", () => {
     // The two families exist because --accent-cyan measures L 0.797 on the dark
     // canvas — outside the categorical band — so it cannot serve as series 2.
-    expect(CSS).toMatch(/--series-1:/);
-    expect(CSS).toMatch(/--series-2:/);
-    expect(CSS).toMatch(/--color-series-1: var\(--series-1\)/);
-    expect(CSS).toMatch(/--color-series-2: var\(--series-2\)/);
+    for (const slot of [1, 2, 3, 4, 5, 6]) {
+      expect(CSS).toMatch(new RegExp(`--series-${slot}:`));
+      expect(CSS).toMatch(new RegExp(`--color-series-${slot}: var\\(--series-${slot}\\)`));
+    }
+  });
+
+  it("gives both structural modes the same series slots", () => {
+    // The UMAP plane cycles documents through every slot, so a mode missing one
+    // paints those documents with an unresolved var() — no colour at all.
+    const slotsIn = (paletteId: string) =>
+      [...blockFor(selectorFor(paletteId)).matchAll(/--series-(\d+):/g)].map((match) => match[1]);
+
+    expect(slotsIn(DEFAULT_PALETTES.dark)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(slotsIn(DEFAULT_PALETTES.light)).toEqual(["1", "2", "3", "4", "5", "6"]);
   });
 
   it("never uses the UI accent cyan as a chart series", () => {

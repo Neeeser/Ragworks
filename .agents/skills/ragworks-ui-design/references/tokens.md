@@ -231,7 +231,10 @@ Measured: on the dark canvas `--accent-cyan: #22d3ee` is L 0.797 in OKLab — ou
 0.43–0.77 categorical band — so beside violet it out-shines its peer. `#0ea5b7` passes.
 
 - Charts read `--series-*`. Chrome reads `--accent-*`. Neither substitutes.
-- Series hues are assigned in fixed order and never cycled; colour follows the entity.
+- Series hues are assigned in fixed order; colour follows the entity, never its rank. A
+  category set with no ceiling (one slot per document) cycles the six rather than
+  generating a hue outside the validated band — see `data-display.md` §4 for the two
+  conditions that makes honest.
 - `data-pos/neg/warn` are reserved for status, never "series 4".
 - Every palette's series slots are validated in CI (`palette-contract.test.ts`).
 

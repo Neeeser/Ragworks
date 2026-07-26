@@ -69,25 +69,47 @@ The label is sentence-case sans (the console voice); only the value is mono.
 
 ## 4. Series colours
 
-Charts read `--series-1 … --series-6`, in fixed order, never cycled.
+Charts read `--series-1 … --series-6`, assigned in fixed order.
 
 **Never use `--accent-cyan` as a chart series.** It measures L 0.797 on the near-black
 canvas — outside the 0.43–0.77 categorical band — so beside violet it out-shines its peer
 and two equal series stop reading as equal. The eye is unreliable on this; trust the
 validator, not a look.
 
-Validated pairs currently in use:
+The validated slots, defined once per structural mode in `globals.css` (every palette
+inherits them):
 
-| Mode | Series 1 | Series 2 |
-|---|---|---|
-| dark (`#05060a`) | `#8b5cf6` | `#0ea5b7` |
-| light (`#f6f7fb`) | `#7c3aed` | `#0891b2` |
+| Mode | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| dark | `#8b5cf6` | `#0ea5b7` | `#bd586b` | `#ae8a0d` | `#4a710a` | `#116aac` |
+| light | `#7c3aed` | `#0891b2` | `#b15d6b` | `#b18e15` | `#436416` | `#10568c` |
 
-When adding or changing a series slot in any palette, check the candidate's OKLab
-lightness against the canvas it sits on: every series in a palette must land inside the
-0.43–0.77 categorical band so peers read as peers, and low contrast against the canvas
-obligates visible labels or a table view. **A palette whose series slots fail does not
-ship** — `src/lib/__tests__/palette-contract.test.ts` pins each palette's slots.
+The set is validated **all-pairs**, not adjacent-only, because a scatter can land any two
+categories side by side. That is what holds the blue at a dark step — a lighter one
+collapses into series 1 under deuteranopia — and why the darkest slots sit just under 3:1
+on the lifted `graphite` panel, which the rule permits only alongside visible labels.
+
+When adding or changing a slot, check the candidate's OKLab lightness against the surface
+it sits on: every series must land inside the categorical band so peers read as peers, and
+low contrast obligates visible labels or a table view. **A palette whose series slots fail
+does not ship** — `src/lib/__tests__/palette-contract.test.ts` pins the slots.
+
+### An unbounded category set cycles; the legend carries identity
+
+Six slots serve a chart whose categories are known. When the categories are *data* — one
+per document, collection, or pipeline, with no ceiling — the slots cycle rather than
+generating a seventh hue, because a generated colour lands wherever the arithmetic puts it
+and silently leaves the validated band.
+
+Cycling is only honest with two things in place, and both are required:
+
+- **The slot follows a stable identifier, never rank or name** — the entity's position in
+  an id-sorted list. Ordering by name repaints the whole view on a rename; ordering by
+  appearance repaints it whenever the backend returns rows in a new order.
+- **A legend lists every category with its swatch**, so a repeated colour is disambiguated
+  by something other than colour. Per-mark hover naming the entity is the second layer.
+
+`components/collections/detail/visualize/lib/document-series.ts` is the implementation.
 
 ---
 

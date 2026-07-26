@@ -2,6 +2,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UmapCanvas } from "@/components/collections/detail/visualize/UmapCanvas";
+import { makeUmapPoint } from "@/test/fixtures";
 
 import type { UmapPoint } from "@/lib/types";
 
@@ -107,8 +108,17 @@ describe("UmapCanvas", () => {
 
   it("centers on selection and triggers point selection", () => {
     const points: UmapPoint[] = [
-      { id: "p1", chunk_id: "c1", document_id: "d1", chunk_index: 0, x: 10, y: 20 },
-      { id: "p2", chunk_id: "c2", document_id: "d2", chunk_index: 1, x: 20, y: 40 },
+      makeUmapPoint({ id: "p1", chunk_id: "c1", document_id: "d1", chunk_index: 0, x: 10, y: 20 }),
+      makeUmapPoint({
+        id: "p2",
+        chunk_id: "c2",
+        document_id: "d2",
+        document_name: "Notes.md",
+        text_snippet: "A second document's chunk.",
+        chunk_index: 1,
+        x: 20,
+        y: 40,
+      }),
     ];
     const onSelectPoint = vi.fn();
 
@@ -144,8 +154,10 @@ describe("UmapCanvas", () => {
       const getFillColor = scatter.props.getFillColor as (point: UmapPoint) => unknown;
       expect(getPosition(points[0])).toEqual([points[0].x, points[0].y]);
       expect(getRadius()).toBeGreaterThan(0);
+      // Selection wins over the document colour; the unselected point wears
+      // its own document's series slot (d2 sorts second, so slot 2).
       expect(getFillColor(points[0])).toEqual([248, 113, 113, 220]);
-      expect(getFillColor(points[1])).toEqual([129, 140, 248, 200]);
+      expect(getFillColor(points[1])).toEqual([14, 165, 183, 200]);
     }
 
     const tooltip = lastDeckProps?.getTooltip as (info: {
@@ -153,15 +165,31 @@ describe("UmapCanvas", () => {
     }) => TooltipResult;
     // The tooltip's look travels as inline style because deck.gl renders it
     // itself; the tokens keep it correct in every palette.
-    expect(tooltip?.({ object: points[0] })?.text).toBe("Chunk 0");
+    expect(tooltip?.({ object: points[0] })?.text).toBe(
+      "Handbook.pdf · chunk 0\nRagworks indexes documents.",
+    );
     expect(tooltip?.({ object: points[0] })?.style?.background).toBe("var(--canvas-raised)");
     expect(tooltip?.({ object: null })).toBeNull();
   });
 
   it("covers grid step branches and spacing fallbacks", async () => {
     const points: UmapPoint[] = [
-      { id: "p1", chunk_id: "c1", document_id: "d1", chunk_index: 0, x: NaN, y: NaN },
-      { id: "p2", chunk_id: "c2", document_id: "d2", chunk_index: 1, x: NaN, y: NaN },
+      makeUmapPoint({
+        id: "p1",
+        chunk_id: "c1",
+        document_id: "d1",
+        chunk_index: 0,
+        x: NaN,
+        y: NaN,
+      }),
+      makeUmapPoint({
+        id: "p2",
+        chunk_id: "c2",
+        document_id: "d2",
+        chunk_index: 1,
+        x: NaN,
+        y: NaN,
+      }),
     ];
 
     render(

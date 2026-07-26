@@ -12,7 +12,7 @@ from umap import UMAP
 
 from app.db import models
 from app.services.errors import InvalidInputError, NotFoundError
-from app.visualization.umap.repository import ChunkEmbeddingRow, UmapRepository
+from app.visualization.umap.repository import ChunkEmbeddingRow, UmapPointRow, UmapRepository
 
 
 @dataclass(frozen=True)
@@ -36,20 +36,19 @@ class UmapService:
 
     def get_latest_projection(
         self, collection_id: UUID
-    ) -> tuple[models.UmapProjectionRecord, list[models.UmapPointRecord]]:
+    ) -> tuple[models.UmapProjectionRecord, list[UmapPointRow]]:
         """Return the latest projection and its points for a collection."""
         projection = self._repo.get_latest_projection(collection_id)
         if projection is None:
             raise NotFoundError("UMAP projection not found.")
-        points = self._repo.list_points(projection.id)
-        return projection, points
+        return projection, self._repo.list_points(projection.id)
 
     def compute_projection(
         self,
         user: models.User,
         collection: models.Collection,
         config: UmapConfig,
-    ) -> tuple[models.UmapProjectionRecord, list[models.UmapPointRecord]]:
+    ) -> tuple[models.UmapProjectionRecord, list[UmapPointRow]]:
         """Compute and persist a UMAP projection for a collection."""
         chunk_rows = self._repo.list_chunk_embeddings(collection.id)
         if len(chunk_rows) < 3:
@@ -97,11 +96,14 @@ class UmapService:
         self._session.add(projection)
         self._session.flush()
 
-        points = self._build_points(projection.id, chunk_rows, coordinates)
-        self._session.add_all(points)
+        self._session.add_all(self._build_points(projection.id, chunk_rows, coordinates))
         self._session.flush()
 
-        return projection, points
+        # Re-read through the same join the GET uses, so a freshly computed
+        # projection and a stored one are byte-identical on the wire -- the
+        # plot must not colour or label differently depending on which call
+        # produced the points.
+        return projection, self._repo.list_points(projection.id)
 
     @staticmethod
     def _build_points(

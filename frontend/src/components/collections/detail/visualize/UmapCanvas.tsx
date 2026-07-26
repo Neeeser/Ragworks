@@ -18,6 +18,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useCssTokens } from "@/lib/use-css-tokens";
 import { cn } from "@/lib/utils";
 
+import { DocumentLegend } from "./DocumentLegend";
+import { SERIES_TOKENS, buildDocumentSeries, seriesIndexByDocument } from "./lib/document-series";
 import { cssColorToRgba } from "./lib/plot-colors";
 import { buildInitialViewState, computeGridStep, computeMinimumSpacing } from "./lib/umap-geometry";
 import { ensureCanvasContextLimits } from "./luma-patches";
@@ -46,15 +48,31 @@ const MAX_POINT_RADIUS_PX = 10;
 // ReactFlow's dot grid) and re-reads them on every palette change. The
 // literals remain only as the deterministic first-paint fallback, before the
 // mount effect resolves the real values.
-const PLOT_TOKENS = ["--border-hairline", "--series-1", "--data-neg"] as const;
+const PLOT_TOKENS = ["--border-hairline", "--data-neg", ...SERIES_TOKENS] as const;
+const HAIRLINE_TOKEN = 0;
+const SELECTED_TOKEN = 1;
+const FIRST_SERIES_TOKEN = 2;
 const GRID_LINE_RGBA: Rgba = [148, 163, 184, 90];
-const POINT_RGBA: Rgba = [129, 140, 248, 200];
+// The dark mode's six slots, as channels. Used only for the pre-mount paint and
+// in jsdom, where getComputedStyle resolves no custom properties.
+const SERIES_RGBA: Rgba[] = [
+  [139, 92, 246, 200],
+  [14, 165, 183, 200],
+  [189, 88, 107, 200],
+  [174, 138, 13, 200],
+  [74, 113, 10, 200],
+  [17, 106, 172, 200],
+];
 const SELECTED_POINT_RGBA: Rgba = [248, 113, 113, 220];
 const POINT_ALPHA = 200;
 const SELECTED_POINT_ALPHA = 220;
 
 // The deck.gl tooltip is rendered by the library into its own element, so its
 // look travels as inline style; `var()` keeps it correct in every palette.
+// This is the plot's hover layer rather than the shared `Tooltip` primitive
+// because a point has no DOM node to anchor to and the box has to follow the
+// cursor across the canvas — it is emphatically not a `title` attribute: it is
+// themed, and it paints the moment the pointer picks a point.
 const CANVAS_TOOLTIP_STYLE = {
   background: "var(--canvas-raised)",
   border: "1px solid var(--border-hairline)",
@@ -62,8 +80,24 @@ const CANVAS_TOOLTIP_STYLE = {
   boxShadow: "var(--elevation-2)",
   color: "var(--text-primary)",
   fontSize: "11px",
-  padding: "2px 6px",
+  lineHeight: "1.45",
+  maxWidth: "260px",
+  padding: "4px 6px",
+  // The snippet is one collapsed line from the server, but the document name
+  // sits on its own line above it, and long names must wrap rather than push
+  // the box off the canvas.
+  whiteSpace: "pre-line",
 };
+
+/**
+ * What a hovered point says: which document it came from, which chunk of it,
+ * and how that chunk reads. The snippet arrives already collapsed and clipped
+ * from the server — a tooltip names a point, it does not read it back.
+ */
+function pointTooltipText(point: UmapPoint): string {
+  const heading = `${point.document_name} · chunk ${point.chunk_index}`;
+  return point.text_snippet ? `${heading}\n${point.text_snippet}` : heading;
+}
 
 export function UmapCanvas({
   points,
@@ -72,13 +106,29 @@ export function UmapCanvas({
   onSelectPoint,
 }: UmapCanvasProps) {
   ensureCanvasContextLimits();
-  const [hairline, series1, dataNeg] = useCssTokens(PLOT_TOKENS);
-  const gridColor = useMemo(() => cssColorToRgba(hairline) ?? GRID_LINE_RGBA, [hairline]);
-  const pointColor = useMemo(() => cssColorToRgba(series1, POINT_ALPHA) ?? POINT_RGBA, [series1]);
-  const selectedColor = useMemo(
-    () => cssColorToRgba(dataNeg, SELECTED_POINT_ALPHA) ?? SELECTED_POINT_RGBA,
-    [dataNeg],
+  // Read as one array rather than destructured: useCssTokens returns state, so
+  // the array's identity is stable until the palette actually changes — and
+  // these memos feed the layer memo, which must not rebuild every render.
+  const tokens = useCssTokens(PLOT_TOKENS);
+  const gridColor = useMemo(
+    () => cssColorToRgba(tokens[HAIRLINE_TOKEN] ?? "") ?? GRID_LINE_RGBA,
+    [tokens],
   );
+  const selectedColor = useMemo(
+    () => cssColorToRgba(tokens[SELECTED_TOKEN] ?? "", SELECTED_POINT_ALPHA) ?? SELECTED_POINT_RGBA,
+    [tokens],
+  );
+  const seriesColors = useMemo(
+    () =>
+      SERIES_TOKENS.map(
+        (_token, index) =>
+          cssColorToRgba(tokens[FIRST_SERIES_TOKEN + index] ?? "", POINT_ALPHA) ??
+          SERIES_RGBA[index],
+      ),
+    [tokens],
+  );
+  const documentSeries = useMemo(() => buildDocumentSeries(points), [points]);
+  const seriesSlots = useMemo(() => seriesIndexByDocument(documentSeries), [documentSeries]);
   const initialViewState = useMemo(() => buildInitialViewState(points), [points]);
   const [viewState, setViewState] = useState<OrthographicViewState>(initialViewState);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -234,9 +284,12 @@ export function UmapCanvas({
         radiusMaxPixels: MAX_POINT_RADIUS_PX,
         getPosition: (point) => [point.x, point.y],
         getRadius: () => baseRadius,
-        getFillColor: (point) => (point.id === selectedPointId ? selectedColor : pointColor),
+        getFillColor: (point) =>
+          point.id === selectedPointId
+            ? selectedColor
+            : (seriesColors[seriesSlots.get(point.document_id) ?? 0] ?? SERIES_RGBA[0]),
         updateTriggers: {
-          getFillColor: [selectedPointId, selectedColor, pointColor],
+          getFillColor: [selectedPointId, selectedColor, seriesColors, seriesSlots],
           getRadius: baseRadius,
         },
         onClick: (info: PickingInfo<UmapPoint>) => {
@@ -251,10 +304,11 @@ export function UmapCanvas({
     gridColor,
     gridLines,
     onSelectPoint,
-    pointColor,
     points,
     selectedColor,
     selectedPointId,
+    seriesColors,
+    seriesSlots,
   ]);
 
   const controls: Array<{
@@ -286,13 +340,14 @@ export function UmapCanvas({
         getTooltip={(info) =>
           info.object
             ? {
-                text: `Chunk ${info.object.chunk_index}`,
+                text: pointTooltipText(info.object),
                 style: CANVAS_TOOLTIP_STYLE,
               }
             : null
         }
         style={{ position: "absolute", inset: "0" }}
       />
+      <DocumentLegend series={documentSeries} />
       {/* Docked to the plot's inner corner, and its tooltips open toward the
           plot's interior so the card's clipped overflow never cuts them. */}
       {/* No `overflow-hidden` here: it would clip the controls' own tooltips.

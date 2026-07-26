@@ -2,19 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ChunkDetailPanel } from "@/components/collections/detail/visualize/ChunkDetailPanel";
-import { makeChunk, makeChunkDetail, makeDocument } from "@/test/fixtures";
-
-import type { UmapPoint } from "@/lib/types";
+import { makeChunk, makeChunkDetail, makeDocument, makeUmapPoint } from "@/test/fixtures";
 
 describe("ChunkDetailPanel", () => {
-  const selectedPoint: UmapPoint = {
-    id: "point-1",
-    chunk_id: "chunk-1",
-    document_id: "doc-1",
-    chunk_index: 0,
-    x: 1,
-    y: 2,
-  };
+  const selectedPoint = makeUmapPoint({ id: "point-1", x: 1, y: 2 });
 
   const detail = makeChunkDetail({
     document: makeDocument({ name: "Doc", chunk_size: 12 }),

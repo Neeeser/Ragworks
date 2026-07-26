@@ -27,12 +27,12 @@ import type {
   PipelineVersion,
   PromptDetails,
   ToolCallTrace,
-  UmapVisualization,
   User,
 } from "@/lib/types";
 
 export * from "./files";
 export * from "./api-keys";
+export * from "./visualization";
 
 export const USER_ID = "user-1";
 export const USER_EMAIL = "user@example.com";
@@ -330,28 +330,6 @@ export function makeQueryResult(
     usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
     query_event_id: "event-1",
     pipeline_run_id: "run-1",
-    ...overrides,
-  };
-}
-
-export function makeUmapVisualization(
-  overrides: Partial<UmapVisualization> = {},
-): UmapVisualization {
-  return {
-    projection: {
-      id: "umap-1",
-      collection_id: "col-1",
-      embedding_model: "embed-1",
-      n_neighbors: 15,
-      min_dist: 0.1,
-      metric: "cosine",
-      n_components: 2,
-      random_state: 42,
-      point_count: 1,
-      created_at: TIMESTAMP,
-      updated_at: TIMESTAMP,
-    },
-    points: [{ id: "pt-1", chunk_id: "chunk-1", document_id: "doc-1", chunk_index: 0, x: 0, y: 0 }],
     ...overrides,
   };
 }

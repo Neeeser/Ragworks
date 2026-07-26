@@ -13,7 +13,7 @@ from app.api.routes import visualizations as visualizations_routes
 from app.db import models
 from app.schemas.visualization import UmapComputeRequest
 from app.visualization.umap import service as umap_service
-from app.visualization.umap.repository import ChunkEmbeddingRow
+from app.visualization.umap.repository import SNIPPET_CHARS, ChunkEmbeddingRow, build_snippet
 
 
 def _create_user(session: Session) -> models.User:
@@ -172,6 +172,96 @@ def test_compute_collection_umap_creates_projection(session: Session) -> None:
     points = session.exec(select(models.UmapPointRecord)).all()
     assert len(projections) == 1
     assert len(points) == 3
+
+
+def test_umap_points_carry_their_source_document_name_and_snippet(session: Session) -> None:
+    """Ensure every point names the document it came from and excerpts its chunk.
+
+    The plot colours points by source document and names them on hover, so a
+    payload carrying only ids would force one request per document before the
+    plane could say anything about itself.
+    """
+    user = _create_user(session)
+    collection = _create_collection(session, user.id)
+    document = _create_document(session, collection, user)
+    _create_chunks(session, document, collection)
+
+    payload = UmapComputeRequest(n_neighbors=2, min_dist=0.0, random_state=1)
+    computed = visualizations_routes.compute_collection_umap(
+        collection.id,
+        payload,
+        current_user=user,
+        session=session,
+    )
+
+    assert {point.document_name for point in computed.points} == {"Visualization Doc"}
+    assert sorted(point.text_snippet for point in computed.points) == [
+        "Chunk 0",
+        "Chunk 1",
+        "Chunk 2",
+    ]
+
+    # A stored projection and a freshly computed one must be identical on the
+    # wire, or the plot would label differently depending on which call ran.
+    fetched = visualizations_routes.get_collection_umap(
+        collection.id,
+        current_user=user,
+        session=session,
+    )
+    assert [point.model_dump() for point in fetched.points] == [
+        point.model_dump() for point in computed.points
+    ]
+
+
+def test_umap_point_snippet_collapses_whitespace_and_clips_long_chunks(
+    session: Session,
+) -> None:
+    """Ensure a long, multi-line chunk reaches the plot as one clipped line."""
+    user = _create_user(session)
+    collection = _create_collection(session, user.id)
+    document = _create_document(session, collection, user)
+    chunks = _create_chunks(session, document, collection)
+    chunks[0].text = "Ragworks\n\n   indexes    documents.\n" + ("padding " * 60)
+    session.add(chunks[0])
+    session.commit()
+
+    payload = UmapComputeRequest(n_neighbors=2, min_dist=0.0, random_state=1)
+    response = visualizations_routes.compute_collection_umap(
+        collection.id,
+        payload,
+        current_user=user,
+        session=session,
+    )
+
+    snippet = next(
+        point.text_snippet for point in response.points if point.chunk_id == chunks[0].id
+    )
+    assert snippet.startswith("Ragworks indexes documents. padding")
+    assert "\n" in chunks[0].text
+    assert "\n" not in snippet
+    assert snippet.endswith("…")
+    assert len(snippet) <= SNIPPET_CHARS + 1
+
+
+def test_build_snippet_leaves_a_chunk_that_fits_unclipped() -> None:
+    """Ensure an exact-fit chunk keeps every character and gains no ellipsis."""
+    text = "x" * SNIPPET_CHARS
+
+    assert build_snippet(text, len(text)) == text
+    assert build_snippet(text + "y", len(text) + 1).endswith("…")
+
+
+def test_build_snippet_marks_a_chunk_whose_whitespace_collapses_under_the_limit() -> None:
+    """Ensure text left out is always signalled, even when collapsing shrinks it.
+
+    An indented chunk collapses well below the limit, so a length test on the
+    fetched window alone reports the excerpt as the whole chunk.
+    """
+    window = "word" + "    " * 200
+    total = len(window) + 500
+
+    assert build_snippet(window, total) == "word…"
+    assert build_snippet(window, len(window)) == "word"
 
 
 def test_compute_collection_umap_rejects_small_collections(session: Session) -> None:

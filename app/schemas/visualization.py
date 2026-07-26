@@ -12,6 +12,7 @@ from app.schemas.base import DateTimeConfigMixin
 
 if TYPE_CHECKING:
     from app.db import models
+    from app.visualization.umap.repository import UmapPointRow
 
 
 class UmapComputeRequest(BaseModel):
@@ -58,25 +59,35 @@ class UmapProjectionRead(DateTimeConfigMixin, BaseModel):
 
 
 class UmapPointRead(BaseModel):
-    """UMAP point details returned to API clients."""
+    """UMAP point details returned to API clients.
+
+    `document_name` and `text_snippet` are joined at read time rather than
+    stored: they are what lets the plot colour a point by its source document
+    and name it on hover, and a point that carried only ids would force the
+    browser into one request per document to say anything about it.
+    """
 
     id: UUID
     chunk_id: UUID
     document_id: UUID
+    document_name: str
+    text_snippet: str
     chunk_index: int
     x: float
     y: float
 
     @classmethod
-    def from_model(cls, point: models.UmapPointRecord) -> UmapPointRead:
-        """Build a schema instance from a point model."""
+    def from_row(cls, row: UmapPointRow) -> UmapPointRead:
+        """Build a schema instance from a joined point row."""
         return cls(
-            id=point.id,
-            chunk_id=point.chunk_id,
-            document_id=point.document_id,
-            chunk_index=point.chunk_index,
-            x=point.x,
-            y=point.y,
+            id=row.point.id,
+            chunk_id=row.point.chunk_id,
+            document_id=row.point.document_id,
+            document_name=row.document_name,
+            text_snippet=row.text_snippet,
+            chunk_index=row.point.chunk_index,
+            x=row.point.x,
+            y=row.point.y,
         )
 
 
