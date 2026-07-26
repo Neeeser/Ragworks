@@ -594,3 +594,42 @@ class TestDimensionCompatibility:
 
         assert values["primary_index"]["name"] == "docs-alt"  # type: ignore[index]
 
+
+
+class TestIndexSelectionShapes:
+    """What a supplied index selection may look like."""
+
+    def _collection(self, session: Session) -> tuple[models.User, models.Collection]:
+        user = models.User(email="shape@example.com", full_name="S", hashed_password="x")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        collection = models.Collection(
+            user_id=user.id, name="Docs", description="", extra_metadata={}
+        )
+        session.add(collection)
+        session.commit()
+        session.refresh(collection)
+        return user, collection
+
+    def test_a_malformed_index_id_is_named_in_the_error(self, session: Session) -> None:
+        user, collection = self._collection(session)
+
+        with pytest.raises(InvalidInputError, match="not an index id"):
+            resolve_binding_values(
+                session,
+                user,
+                collection,
+                _facet_definition(),
+                {"bm25_index": {"index_id": "not-a-uuid"}},
+            )
+
+    def test_a_non_index_value_is_rejected_with_the_shape_error(
+        self, session: Session
+    ) -> None:
+        user, collection = self._collection(session)
+
+        with pytest.raises(InvalidInputError, match="bm25_index"):
+            resolve_binding_values(
+                session, user, collection, _facet_definition(), {"bm25_index": 42}
+            )

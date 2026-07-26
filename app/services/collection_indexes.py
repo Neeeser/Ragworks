@@ -71,34 +71,7 @@ class CollectionIndexService:
         """Merge every binding's index variables into named slots."""
         drafts: dict[str, _SlotDraft] = {}
         for bound in self._bound_pipelines(user, collection):
-            wanted = index_variable_vector_types(bound.definition)
-            selected = selected_indexes(bound.definition, bound.binding.variable_values)
-            for variable in index_variables(bound.definition):
-                draft = drafts.setdefault(variable.name, _SlotDraft(name=variable.name))
-                if bound.pipeline.name not in draft.pipelines:
-                    draft.pipelines.append(bound.pipeline.name)
-                if draft.description is None and variable.description:
-                    draft.description = variable.description
-                vector_type = wanted.get(variable.name)
-                if vector_type == "sparse":  # sparse wins, as at bind time
-                    draft.vector_type = "sparse"
-                if draft.current is None:
-                    value = selected.get(variable.name)
-                    row = (
-                        self._indexes.get(value.index_id, user.id)
-                        if value is not None
-                        else None
-                    )
-                    if row is not None:
-                        draft.current = _to_ref(row)
-                if draft.expected_dimension is None:
-                    settings = resolve_pipeline_settings(
-                        bound.definition,
-                        collection,
-                        default_registry(),
-                        binding_values=bound.binding.variable_values,
-                    )
-                    draft.expected_dimension = settings.dimension
+            self._merge_binding(drafts, bound, user, collection)
         for draft in drafts.values():
             # The bind-time anchor falls back to the current index's own
             # width, so the slot advertises the same constraint it enforces.
@@ -121,6 +94,38 @@ class CollectionIndexService:
                 for draft in sorted(drafts.values(), key=lambda d: d.name)
             ]
         )
+
+    def _merge_binding(
+        self,
+        drafts: dict[str, _SlotDraft],
+        bound: _BoundPipeline,
+        user: models.User,
+        collection: models.Collection,
+    ) -> None:
+        """Fold one binding's index variables into the slot drafts."""
+        wanted = index_variable_vector_types(bound.definition)
+        selected = selected_indexes(bound.definition, bound.binding.variable_values)
+        for variable in index_variables(bound.definition):
+            draft = drafts.setdefault(variable.name, _SlotDraft(name=variable.name))
+            if bound.pipeline.name not in draft.pipelines:
+                draft.pipelines.append(bound.pipeline.name)
+            if draft.description is None and variable.description:
+                draft.description = variable.description
+            if wanted.get(variable.name) == "sparse":  # sparse wins, as at bind time
+                draft.vector_type = "sparse"
+            if draft.current is None:
+                value = selected.get(variable.name)
+                row = self._indexes.get(value.index_id, user.id) if value is not None else None
+                if row is not None:
+                    draft.current = _to_ref(row)
+            if draft.expected_dimension is None:
+                settings = resolve_pipeline_settings(
+                    bound.definition,
+                    collection,
+                    default_registry(),
+                    binding_values=bound.binding.variable_values,
+                )
+                draft.expected_dimension = settings.dimension
 
     def update(
         self,

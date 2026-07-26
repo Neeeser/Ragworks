@@ -415,3 +415,19 @@ class TestIndexDimensionMismatch:
         )
 
         assert IndexDimensionMismatchRule().evaluate(ctx) == []
+
+    def test_silent_when_the_side_has_no_dense_target(
+        self, base_ingestion, session
+    ) -> None:
+        """A sparse-only side has no width to check."""
+        user = self._user(session)
+        sparse_only = replace(
+            base_ingestion,
+            dimension=1536,
+            index_targets=tuple(
+                t for t in base_ingestion.index_targets if t.vector_type == "sparse"
+            ),
+        )
+        ctx = make_context(ingestion=sparse_only, session=session, user=user)
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []
