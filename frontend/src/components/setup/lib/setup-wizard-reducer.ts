@@ -90,6 +90,26 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
   },
 });
 
+/**
+ * Place the user on `step`, but only from the entry step and only once.
+ * Past that the step they are on is the one they chose, so a later status
+ * refresh cannot pull them out of it.
+ */
+function resumed(state: SetupWizardState, step: SetupStepId): SetupWizardState {
+  if (state.resumed || state.step !== "welcome") return { ...state, resumed: true };
+  return { ...state, step, direction: 1, resumed: true };
+}
+
+/**
+ * Suggest `name`, but only into an untouched field and only once — a user
+ * who clears the box to type their own name keeps an empty box.
+ */
+function withSeededIndexName(state: SetupWizardState, name: string): SetupWizardState {
+  if (state.indexNameSeeded) return state;
+  if (state.choices.indexName !== "") return { ...state, indexNameSeeded: true };
+  return { ...state, indexNameSeeded: true, choices: { ...state.choices, indexName: name } };
+}
+
 export function setupWizardReducer(
   state: SetupWizardState,
   action: SetupWizardAction,
@@ -105,23 +125,10 @@ export function setupWizardReducer(
       if (index <= 0) return state;
       return { ...state, step: SETUP_STEPS[index - 1], direction: -1 };
     }
-    case "RESUME": {
-      // Only ever places a user who is still on the entry step, and only
-      // once: past that, the step they are on is the one they chose.
-      if (state.resumed || state.step !== "welcome") return { ...state, resumed: true };
-      return { ...state, step: action.step, direction: 1, resumed: true };
-    }
-    case "SEED_INDEX_NAME": {
-      // Only ever fills an untouched field, and only once — so a user who
-      // clears the box to type their own name keeps an empty box.
-      if (state.indexNameSeeded) return state;
-      if (state.choices.indexName !== "") return { ...state, indexNameSeeded: true };
-      return {
-        ...state,
-        indexNameSeeded: true,
-        choices: { ...state.choices, indexName: action.name },
-      };
-    }
+    case "RESUME":
+      return resumed(state, action.step);
+    case "SEED_INDEX_NAME":
+      return withSeededIndexName(state, action.name);
     case "SET_CHOICES":
       return { ...state, choices: { ...state.choices, ...action.choices } };
     case "SET_CHUNK": {

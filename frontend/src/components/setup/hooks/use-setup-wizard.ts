@@ -5,8 +5,7 @@ import { useCallback, useMemo, useReducer, useState } from "react";
 
 import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
-import { defaultIndexName } from "@/components/setup/lib/default-index-name";
-import { resumeStep } from "@/components/setup/lib/setup-resume";
+import { applySetupSeeds } from "@/components/setup/lib/setup-seeding";
 import {
   initialSetupWizardState,
   setupWizardReducer,
@@ -82,15 +81,6 @@ export function useSetupWizard(): SetupWizardApi {
   const router = useRouter();
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
 
-  // Place a returning user on the first step still holding a decision, as a
-  // guarded render-time adjustment rather than an effect: an effect would
-  // paint the welcome step first and jump a frame later, and it would re-fire
-  // on every background status refresh. `RESUME` latches, so this runs once
-  // and Back still reaches every earlier step.
-  if (!state.resumed && status) {
-    const target = resumeStep(status);
-    if (target !== state.step) dispatch({ type: "RESUME", step: target });
-  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -128,14 +118,8 @@ export function useSetupWizard(): SetupWizardApi {
   });
   const reloadBackends = backendsQuery.reload;
 
-  // Suggest an index name once the account and the chosen backend's own
-  // name-length rule are both known — same guarded render-time seed as the
-  // resume above, so it fills an untouched field and never fights the user.
-  const nameLimit = backendsQuery.data?.find((backend) => backend.backend === state.choices.backend)
-    ?.capabilities.index_name_max_length;
-  if (!state.indexNameSeeded && user && nameLimit) {
-    dispatch({ type: "SEED_INDEX_NAME", name: defaultIndexName(user, nameLimit) });
-  }
+  // Step placement and the suggested index name, both guarded and latching.
+  applySetupSeeds(state, dispatch, { status, user, backends: backendsQuery.data });
 
   const handleConnectionsChanged = useCallback(() => {
     reloadConnections();

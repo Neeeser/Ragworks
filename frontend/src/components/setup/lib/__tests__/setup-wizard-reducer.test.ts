@@ -39,11 +39,12 @@ describe("setupWizardReducer", () => {
   });
 
   it("suggests an index name only into an untouched field, and only once", () => {
+    const suggested = "ragworks-andrew-780c25bf";
     const seeded = setupWizardReducer(start(), {
       type: "SEED_INDEX_NAME",
-      name: "ragworks-andrew-780c25bf",
+      name: suggested,
     });
-    expect(seeded.choices.indexName).toBe("ragworks-andrew-780c25bf");
+    expect(seeded.choices.indexName).toBe(suggested);
 
     // A user who clears the box to type their own name keeps an empty box:
     // re-suggesting on the next render would fight them keystroke by keystroke.
@@ -53,7 +54,7 @@ describe("setupWizardReducer", () => {
     });
     const reseeded = setupWizardReducer(cleared, {
       type: "SEED_INDEX_NAME",
-      name: "ragworks-andrew-780c25bf",
+      name: suggested,
     });
     expect(reseeded.choices.indexName).toBe("");
   });
