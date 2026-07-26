@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
-import { useCreateIndexForm } from "@/components/pipelines/index-manager/use-create-index-form";
+import { useCreateIndexForm } from "@/components/indexes/use-create-index-form";
 import { fetchEmbeddingDimension } from "@/lib/api";
 import { makeBackendInfo, makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
 

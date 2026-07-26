@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { CreatePipelineWizard } from "./CreatePipelineWizard";
-import { IndexManagerModal } from "./index-manager/IndexManagerModal";
+import { IndexRegistryModal } from "@/components/indexes/IndexRegistryModal";
 
 import type {
   BackendInfo,
@@ -19,7 +19,7 @@ import type {
 
 export type PipelineModalsHandle = {
   openCreatePipeline: () => void;
-  openIndexManager: (returnToWizard?: boolean) => void;
+  openIndexRegistry: (returnToWizard?: boolean) => void;
 };
 
 type PipelineModalsProps = {
@@ -45,9 +45,9 @@ type PipelineModalsProps = {
 
 /**
  * Orchestrates the three pipeline-builder modals: the delete-pipeline confirmation, the
- * create-pipeline wizard, and the index manager - including the handshake where the
- * wizard's "add a new index" step closes itself, opens the index manager, and reopens
- * once the index manager is dismissed. That handshake is local state here rather than
+ * create-pipeline wizard, and the index registry - including the handshake where the
+ * wizard's "add a new index" step closes itself, opens the index registry, and reopens
+ * once the index registry is dismissed. That handshake is local state here rather than
  * lifted to PipelineBuilder since it only concerns transitions between these two
  * modals; callers just imperatively request "open create pipeline" / "open index
  * manager" via the ref handle.
@@ -77,15 +77,15 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
     ref,
   ) {
     const [showCreatePipeline, setShowCreatePipeline] = useState(false);
-    const [showIndexManager, setShowIndexManager] = useState(false);
+    const [showIndexRegistry, setShowIndexRegistry] = useState(false);
     const [returnToPipelineWizard, setReturnToPipelineWizard] = useState(false);
 
     useImperativeHandle(
       ref,
       () => ({
         openCreatePipeline: () => setShowCreatePipeline(true),
-        openIndexManager: (returnToWizard) => {
-          setShowIndexManager(true);
+        openIndexRegistry: (returnToWizard) => {
+          setShowIndexRegistry(true);
           if (returnToWizard) {
             setReturnToPipelineWizard(true);
           }
@@ -124,14 +124,14 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           onCatalogVisible={onCatalogVisible}
           onClose={() => setShowCreatePipeline(false)}
           onCreated={onPipelineCreated}
-          onOpenIndexManager={() => {
+          onOpenIndexRegistry={() => {
             setShowCreatePipeline(false);
-            setShowIndexManager(true);
+            setShowIndexRegistry(true);
             setReturnToPipelineWizard(true);
           }}
         />
-        <IndexManagerModal
-          open={showIndexManager}
+        <IndexRegistryModal
+          open={showIndexRegistry}
           token={token}
           indexes={indexes}
           backends={backends}
@@ -143,7 +143,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           loading={indexesLoading}
           error={indexesError}
           onClose={() => {
-            setShowIndexManager(false);
+            setShowIndexRegistry(false);
             if (returnToPipelineWizard) {
               setShowCreatePipeline(true);
               setReturnToPipelineWizard(false);

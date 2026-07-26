@@ -21,7 +21,7 @@ type WizardStoreStepProps = {
   indexName: string;
   onIndexSelect: (value: string) => void;
   backendInfo: BackendInfo | null;
-  onOpenIndexManager: () => void;
+  onOpenIndexRegistry: () => void;
   /** Set when the chosen template can't run on the selected backend. */
   capabilityWarning: string | null;
 };
@@ -35,7 +35,7 @@ export function WizardStoreStep({
   indexName,
   onIndexSelect,
   backendInfo,
-  onOpenIndexManager,
+  onOpenIndexRegistry,
   capabilityWarning,
 }: WizardStoreStepProps) {
   return (
@@ -98,7 +98,7 @@ export function WizardStoreStep({
           <p className="text-ui text-muted">
             No {BACKEND_TITLES[backend]} indexes yet — create one to continue.
           </p>
-          <Button size="sm" variant="secondary" className="mt-3" onClick={onOpenIndexManager}>
+          <Button size="sm" variant="secondary" className="mt-3" onClick={onOpenIndexRegistry}>
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Create index
           </Button>

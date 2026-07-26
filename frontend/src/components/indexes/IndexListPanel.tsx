@@ -19,7 +19,7 @@ type IndexListPanelProps = {
   onSelectCreate: () => void;
 };
 
-/** The left-hand rail of the index manager: the scrollable list of existing indexes
+/** The left-hand rail of the index registry: the scrollable list of existing indexes
  * plus the "Create index" action that switches the details panel into create mode. */
 export function IndexListPanel({
   indexes,

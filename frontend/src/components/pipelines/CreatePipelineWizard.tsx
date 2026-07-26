@@ -58,7 +58,7 @@ type CreatePipelineWizardProps = {
   onCatalogVisible?: () => void;
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
-  onOpenIndexManager: () => void;
+  onOpenIndexRegistry: () => void;
 };
 
 const chunkerDefaults = (nodeSpecs: NodeSpec[]) => {
@@ -83,7 +83,7 @@ export function CreatePipelineWizard({
   onCatalogVisible,
   onClose,
   onCreated,
-  onOpenIndexManager,
+  onOpenIndexRegistry,
 }: CreatePipelineWizardProps) {
   const { config } = useAppConfig();
   const defaultBackend = config.indexing.default_backend;
@@ -297,7 +297,7 @@ export function CreatePipelineWizard({
 
   const handleIndexSelect = (value: string) => {
     if (value === CREATE_SENTINEL) {
-      onOpenIndexManager();
+      onOpenIndexRegistry();
       return;
     }
     setIndexName(value);
@@ -370,7 +370,7 @@ export function CreatePipelineWizard({
           indexName={indexName}
           onIndexSelect={handleIndexSelect}
           backendInfo={backendInfo}
-          onOpenIndexManager={onOpenIndexManager}
+          onOpenIndexRegistry={onOpenIndexRegistry}
           capabilityWarning={capabilityWarning}
         />
       )}

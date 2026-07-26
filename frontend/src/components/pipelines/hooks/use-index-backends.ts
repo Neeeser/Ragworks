@@ -12,7 +12,7 @@ export interface UseIndexBackendsResult {
 }
 
 /** Loads each vector-store backend's availability, key status, and capability
- * limits, which the wizard and index manager render their forms from. */
+ * limits, which the wizard and index registry render their forms from. */
 export function useIndexBackends(token: string | null): UseIndexBackendsResult {
   const { data, loading, error } = useApiQuery(() => fetchIndexBackends(token ?? ""), [token], {
     enabled: Boolean(token),

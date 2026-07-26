@@ -6,7 +6,7 @@ import {
   indexOptionLabel,
   indexOptionsForSlot,
 } from "@/components/collections/detail/overview/BindingIndexFields";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";

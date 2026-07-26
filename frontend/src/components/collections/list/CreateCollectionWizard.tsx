@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Loader } from "@/components/ui/loader";

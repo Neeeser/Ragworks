@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { indexVariables } from "@/components/pipelines/lib/variable-env";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";

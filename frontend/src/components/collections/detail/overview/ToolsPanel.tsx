@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { BindingIndexDialog } from "@/components/collections/detail/overview/BindingIndexDialog";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
-import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
+import { useIndexes } from "@/components/indexes/use-indexes";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {

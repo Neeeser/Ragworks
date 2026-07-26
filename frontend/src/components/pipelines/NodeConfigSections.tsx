@@ -46,7 +46,7 @@ export type NodeConfigSectionsProps = {
   validationErrors: string[];
   validationIssues?: PipelineValidationIssue[];
   vectorIndexes: VectorIndex[];
-  onOpenIndexManager?: () => void;
+  onOpenIndexRegistry?: () => void;
   variables: PipelineVariable[];
 } & NodeModelCatalogProps;
 
@@ -68,7 +68,7 @@ export function NodeConfigSections({
   validationErrors,
   validationIssues = [],
   vectorIndexes,
-  onOpenIndexManager,
+  onOpenIndexRegistry,
   variables,
   ...modelCatalogProps
 }: NodeConfigSectionsProps) {
@@ -153,7 +153,7 @@ export function NodeConfigSections({
 
   const handleIndexChange = (value: string) => {
     if (value === CREATE_SENTINEL) {
-      onOpenIndexManager?.();
+      onOpenIndexRegistry?.();
       return;
     }
     const nextConfig = { ...config };
@@ -282,7 +282,7 @@ export function NodeConfigSections({
           }
           actionLabel="Manage"
           actionDisabled={isPreview}
-          onAction={onOpenIndexManager}
+          onAction={onOpenIndexRegistry}
         >
           <CustomSelect
             value={indexValue}
