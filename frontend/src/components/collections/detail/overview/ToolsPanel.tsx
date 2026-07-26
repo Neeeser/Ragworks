@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 
+import { BindingIndexDialog } from "@/components/collections/detail/overview/BindingIndexDialog";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
+import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {
@@ -35,6 +37,8 @@ export function ToolsPanel({
   const [pipelineToAdd, setPipelineToAdd] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [configuring, setConfiguring] = useState<CollectionTool | null>(null);
+  const { registeredIndexes } = useIndexes(token);
 
   const tools = useApiQuery(() => listCollectionTools(token, collection.id), [token, collection]);
   const rows = useMemo(() => tools.data?.tools ?? [], [tools.data]);
@@ -63,6 +67,11 @@ export function ToolsPanel({
     await mutate(() => addCollectionTool(token, collection.id, { pipeline_id: pipelineToAdd }));
     setPipelineToAdd("");
   };
+
+  const configuringPipeline = useMemo(
+    () => toolPipelines.find((pipeline) => pipeline.id === configuring?.pipeline_id) ?? null,
+    [toolPipelines, configuring],
+  );
 
   return (
     <Panel className="p-3">
@@ -119,6 +128,9 @@ export function ToolsPanel({
                 >
                   {tool.enabled ? "Disable" : "Enable"}
                 </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => setConfiguring(tool)}>
+                  Indexes
+                </Button>
                 <Button
                   variant="ghost"
                   disabled={busy || tool.is_primary}
@@ -150,6 +162,25 @@ export function ToolsPanel({
       )}
 
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+
+      {configuring && configuringPipeline ? (
+        <BindingIndexDialog
+          open
+          pipeline={configuringPipeline}
+          values={configuring.variable_values ?? {}}
+          indexes={registeredIndexes}
+          title={configuring.name}
+          busy={busy}
+          onSave={async (values) => {
+            await updateCollectionTool(token, collection.id, configuring.id, {
+              variable_values: values,
+            });
+            await tools.reload();
+            onCollectionUpdated(await fetchCollection(token, collection.id));
+          }}
+          onClose={() => setConfiguring(null)}
+        />
+      ) : null}
     </Panel>
   );
 }

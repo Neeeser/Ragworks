@@ -21,6 +21,9 @@ export interface CollectionTool {
   is_primary: boolean;
   enabled: boolean;
   position: number;
+  /** This binding's answers for the pipeline's binding-source variables —
+   * chiefly which index it targets. */
+  variable_values?: Record<string, unknown>;
 }
 
 /** Mirrors `app/schemas/tools.py::CollectionToolsResponse`. */
@@ -52,10 +55,16 @@ export interface ToolInvocationResponse {
 /** Mirrors `app/schemas/tools.py::CollectionToolCreate`. */
 export interface CollectionToolCreatePayload {
   pipeline_id: UUID;
+  /** Values for the pipeline's binding-source variables. Omitted slots
+   * auto-fill from the collection's existing indexes. */
+  variable_values?: Record<string, unknown>;
 }
 
 /** Mirrors `app/schemas/tools.py::CollectionToolUpdate`. */
 export interface CollectionToolUpdatePayload {
   is_primary?: boolean;
   enabled?: boolean;
+  /** Absent leaves the binding's variables untouched; `{}` clears every
+   * override back to the pipeline's defaults. */
+  variable_values?: Record<string, unknown>;
 }

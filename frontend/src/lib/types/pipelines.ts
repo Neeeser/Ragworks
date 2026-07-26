@@ -21,6 +21,28 @@ export interface VectorIndex {
   spec?: Record<string, unknown> | null;
   deletion_protection?: string | null;
   tags?: Record<string, string> | null;
+  /** The registration row's id, or null when the index is unregistered. */
+  index_id?: string | null;
+  /** Whether a pipeline binding can select this index. */
+  registered?: boolean;
+  /** False for a registered index the store no longer holds. */
+  exists?: boolean;
+  in_use_by?: IndexUsage[];
+}
+
+/** Mirrors `app/schemas/indexes.py::IndexUsageRead` — one binding that
+ * references a registered index; deletion is refused while any exist. */
+export interface IndexUsage {
+  collection_id: UUID;
+  collection_name: string;
+  pipeline_id: UUID;
+  pipeline_name: string;
+  role: string;
+}
+
+export interface IndexRegisterPayload {
+  backend: IndexBackend;
+  name: string;
 }
 
 export interface IndexCreatePayload {
@@ -93,24 +115,34 @@ export interface PipelineEdgeDefinition {
   ui?: Record<string, unknown>;
 }
 
-export type VariableType = "integer" | "number" | "string" | "boolean" | "enum" | "model";
+export type VariableType = "integer" | "number" | "string" | "boolean" | "enum" | "model" | "index";
 
 export interface ModelVariableValue {
   connection_id: string;
   model_name: string;
 }
 
-export type VariableScalar = number | string | boolean;
-export type VariableValue = VariableScalar | ModelVariableValue;
+/** Mirrors `app/pipelines/expressions/values.py::IndexValue` — the registered
+ * index a binding selects, dereferenced in expressions as `.backend`/`.name`. */
+export interface IndexVariableValue {
+  index_id: string;
+  backend: IndexBackend;
+  name: string;
+}
 
-export type VariableSource = "value" | "expression" | "input";
+export type VariableScalar = number | string | boolean;
+export type VariableValue = VariableScalar | ModelVariableValue | IndexVariableValue;
+
+export type VariableSource = "value" | "expression" | "input" | "binding";
 
 /** Mirrors `app/pipelines/variables.py::PipelineVariable`.
  *
  * `source: "input"` marks a caller-supplied variable: `value` is its default
  * (null/absent = the caller must supply one) and `expose_to_llm` publishes it
- * in the chat tool schema. Definitions saved before `source` existed omit it;
- * the backend infers expression-vs-value.
+ * in the chat tool schema. `source: "binding"` marks one a collection binding
+ * sets — chiefly which index the pipeline targets — where `value` is the
+ * default a binding overrides. Definitions saved before `source` existed omit
+ * it; the backend infers expression-vs-value.
  */
 export interface PipelineVariable {
   name: string;

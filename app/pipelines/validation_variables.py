@@ -38,6 +38,7 @@ from app.pipelines.validation_declarations import (
     variabledeclaration_issues,
 )
 from app.pipelines.variables import (
+    COLLECTION_VARIABLES,
     EXPR_TYPES,
     QUERY_VARIABLE,
     PipelineVariable,
@@ -217,6 +218,8 @@ def _static_types(
     reported separately and simply stop expanding).
     """
     types: dict[str, ExprType] = {QUERY_VARIABLE: ExprType.STRING}
+    for builtin in COLLECTION_VARIABLES:
+        types[builtin] = ExprType.STRING
     for variable in definition.variables:
         types.setdefault(variable.name, EXPR_TYPES[variable.type])
 

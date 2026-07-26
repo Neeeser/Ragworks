@@ -3,7 +3,17 @@
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 
-import type { PipelineVariable } from "@/lib/types";
+import { ExpressionInput } from "./ExpressionInput";
+
+import type { buildStaticEnvironment } from "./lib/variable-env";
+import type {
+  CatalogModel,
+  IndexVariableValue,
+  ModelVariableValue,
+  PipelineVariable,
+  VariableSource,
+  VectorIndex,
+} from "@/lib/types";
 
 type PatchProps = {
   variable: PipelineVariable;
@@ -211,4 +221,105 @@ export function ConstantValueField({ variable, disabled, onPatch }: PatchProps) 
       />
     </Field>
   );
+}
+
+/** The value control for one variable, dispatched on its source and type. */
+export function VariableValueEditor({
+  variable,
+  source,
+  env,
+  modelOptions,
+  indexOptions,
+  disabled,
+  onPatch,
+}: {
+  variable: PipelineVariable;
+  source: VariableSource;
+  env: ReturnType<typeof buildStaticEnvironment>;
+  modelOptions: CatalogModel[];
+  indexOptions: VectorIndex[];
+  disabled?: boolean;
+  onPatch: (patch: Partial<PipelineVariable>) => void;
+}) {
+  if (source === "input") {
+    return <InputVariableFields variable={variable} disabled={disabled} onPatch={onPatch} />;
+  }
+  if (source === "expression" && variable.type !== "model") {
+    return (
+      <ExpressionInput
+        aria-label={`Expression for ${variable.name}`}
+        value={variable.expression ?? ""}
+        onChange={(expression) => onPatch({ expression })}
+        env={env}
+        expectedType={variable.type === "enum" ? "string" : variable.type}
+      />
+    );
+  }
+  if (variable.type === "index") {
+    const selected = indexValueOf(variable.value);
+    return (
+      <Field
+        label="Default index"
+        hint={
+          source === "binding"
+            ? "Collections that do not choose one use this."
+            : "Every collection uses this index."
+        }
+      >
+        <CustomSelect
+          value={selected?.index_id ?? ""}
+          options={indexOptions.map((index) => ({
+            value: index.index_id ?? "",
+            label: `${index.name} — ${index.backend}`,
+          }))}
+          placeholder="Pick an index"
+          disabled={disabled}
+          onValueChange={(indexId) => {
+            const picked = indexOptions.find((index) => index.index_id === indexId);
+            if (!picked?.index_id) return;
+            onPatch({
+              value: {
+                index_id: picked.index_id,
+                backend: picked.backend,
+                name: picked.name,
+              },
+            });
+          }}
+        />
+      </Field>
+    );
+  }
+  if (variable.type === "model") {
+    const modelValue = modelValueOf(variable.value);
+    return (
+      <Field label="Model">
+        <CustomSelect
+          value={modelValue ? `${modelValue.connection_id}::${modelValue.model_name}` : ""}
+          options={modelOptions.map((model) => ({
+            value: `${model.connection_id}::${model.id}`,
+            label: `${model.name} — ${model.connection_label}`,
+          }))}
+          placeholder="Pick a model"
+          disabled={disabled}
+          onValueChange={(encoded) => {
+            const [connectionId, ...rest] = encoded.split("::");
+            onPatch({ value: { connection_id: connectionId, model_name: rest.join("::") } });
+          }}
+        />
+      </Field>
+    );
+  }
+  return <ConstantValueField variable={variable} disabled={disabled} onPatch={onPatch} />;
+}
+
+/** Narrow a stored variable value to a model reference, else null. */
+function modelValueOf(value: PipelineVariable["value"]): ModelVariableValue | null {
+  if (!value || typeof value !== "object" || "index_id" in value) return null;
+  return value;
+}
+
+/** Narrow a stored variable value to an index reference, else null. */
+function indexValueOf(value: PipelineVariable["value"]): IndexVariableValue | null {
+  if (!value || typeof value !== "object" || !("index_id" in value)) return null;
+  return value;
 }

@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from app.db import models
 from app.pipelines.definition import (
+    CURRENT_DEFINITION_SCHEMA_VERSION,
     PipelineDefinition,
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
@@ -653,7 +654,7 @@ def test_stored_v1_definition_is_migrated_once(session: Session) -> None:
     stored = PipelineService(session).get_definition(pipeline)
     assert any(node.type == "limit.results" for node in stored.nodes)
     assert any(variable.source is VariableSource.INPUT for variable in stored.variables)
-    assert version.definition.get("schema_version") == 2
+    assert version.definition.get("schema_version") == CURRENT_DEFINITION_SCHEMA_VERSION
 
     # The user deletes the migrated Top-N node — the next boot must not reinsert it.
     trimmed = stored.model_copy(

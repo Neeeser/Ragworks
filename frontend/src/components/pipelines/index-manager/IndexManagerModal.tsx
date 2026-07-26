@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Notification } from "@/components/ui/notification";
 import { TabList } from "@/components/ui/tabs";
-import { deleteIndex } from "@/lib/api";
+import { deleteIndex, registerIndex } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAppConfig } from "@/providers/config-provider";
 
@@ -70,6 +70,7 @@ export function IndexManagerModal({
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"details" | "create">("details");
   const wasOpenRef = useRef(false);
@@ -111,6 +112,21 @@ export function IndexManagerModal({
     }
     wasOpenRef.current = open;
   }, [open, sortedIndexes.length]);
+
+  const handleRegister = async (index: VectorIndex) => {
+    setRegistering(true);
+    setNotificationMessage(null);
+    setLocalError(null);
+    try {
+      await registerIndex(token, { backend: index.backend, name: index.name });
+      onRefresh();
+      setNotificationMessage("Index registered.");
+    } catch (err) {
+      setLocalError(getErrorMessage(err, "Unable to register index."));
+    } finally {
+      setRegistering(false);
+    }
+  };
 
   const handleDelete = async (indexName: string) => {
     setDeleting(true);
@@ -205,7 +221,12 @@ export function IndexManagerModal({
 
               <div className="min-w-0 space-y-3">
                 {viewMode === "details" ? (
-                  <IndexDetailsPanel index={selectedIndex} onDelete={setDeleteTarget} />
+                  <IndexDetailsPanel
+                    index={selectedIndex}
+                    onDelete={setDeleteTarget}
+                    onRegister={handleRegister}
+                    registering={registering}
+                  />
                 ) : activeBackendInfo ? (
                   <CreateIndexForm
                     key={activeBackend}

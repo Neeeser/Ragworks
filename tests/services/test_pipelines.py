@@ -13,6 +13,7 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
+from app.pipelines.resolution import resolve_static_definition
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
@@ -433,11 +434,20 @@ class TestDefaultBackendRotation:
         invalidate_app_config_cache()
 
     def _node_backends(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
+        """Backends the pipeline's store-bound nodes resolve to.
+
+        Read through resolution, not the raw config: identity fields hold
+        expressions over the pipeline's index variable, so the stored dict
+        says `{"$expr": ...}` while the pipeline still targets one backend.
+        """
         version = service.get_current_version(pipeline)
+        definition = resolve_static_definition(
+            PipelineDefinition.model_validate(version.definition)
+        )
         return {
-            str(node["config"].get("backend"))
-            for node in version.definition["nodes"]
-            if node["type"] in {"indexer.vector", "retriever.vector"}
+            str(node.config.get("backend"))
+            for node in definition.nodes
+            if node.type in {"indexer.vector", "retriever.vector"}
         }
 
     def test_stale_defaults_rotate_to_configured_backend(self, session: Session) -> None:

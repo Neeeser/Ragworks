@@ -105,7 +105,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     onRetryRerankingModels,
   } = usePipelineModelCatalogs(token, user?.id);
 
-  const { indexes, indexesLoading, indexesError, refreshIndexes } = useIndexes(token);
+  const { indexes, registeredIndexes, indexesLoading, indexesError, refreshIndexes } =
+    useIndexes(token);
   const { backends } = useIndexBackends(token);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>([]);
@@ -348,6 +349,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onVariablesChange: setVariables,
           variableNodes,
           modelOptions: embeddingModels,
+          indexOptions: registeredIndexes,
           variablesDisabled: !selectedPipeline,
           hasRerankingProvider,
           rerankingProviderMessage,

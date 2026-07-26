@@ -31,6 +31,7 @@ const renderPanel = (
       onChange={onChange}
       nodes={nodes}
       modelOptions={[]}
+      indexOptions={[]}
       disabled={false}
     />,
   );

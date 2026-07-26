@@ -10,6 +10,10 @@ export function makeVectorIndex(overrides: Partial<VectorIndex> = {}): VectorInd
     status: { ready: true, state: "Ready" },
     host: "index-1.pinecone.io",
     deletion_protection: "disabled",
+    index_id: "index-row-1",
+    registered: true,
+    exists: true,
+    in_use_by: [],
     ...overrides,
   };
 }

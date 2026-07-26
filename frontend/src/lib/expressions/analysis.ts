@@ -53,10 +53,7 @@ function checkMember(
   const members = MEMBERS_BY_TYPE[base];
   if (members === undefined) {
     const structured = Object.keys(MEMBERS_BY_TYPE).sort().join(" or ");
-    throw typeError(
-      `Member access requires a ${structured} variable, got ${base}`,
-      expr.position,
-    );
+    throw typeError(`Member access requires a ${structured} variable, got ${base}`, expr.position);
   }
   const member = members[expr.attribute];
   if (member === undefined) {

@@ -1,25 +1,34 @@
 /**
  * Static variable environments for the editor, mirroring the backend's
- * `default_environment` semantics (`app/pipelines/resolution.py`): the
- * built-in `query`, every input-source variable (default or a
- * constraint-respecting placeholder — tainted, since callers supply them),
- * and every other variable (constants validated, derived expressions
- * evaluated in dependency order). Powers live expression type checks and
- * value previews before anything is saved.
+ * `default_environment` semantics (`app/pipelines/environment.py`): the
+ * built-in `query`, the built-in collection descriptors, every input-source
+ * variable (default or a constraint-respecting placeholder — tainted, since
+ * callers supply them), every binding-source variable at its default, and
+ * every other variable (constants validated, derived expressions evaluated in
+ * dependency order). Powers live expression type checks and value previews
+ * before anything is saved.
+ *
+ * Binding values and collection descriptors are deliberately untainted: both
+ * are fixed when a pipeline is bound to a collection, so an index name
+ * derived from them still resolves to one index per binding.
  */
 
 import { checkType, evaluate, parse, references, ExpressionError } from "@/lib/expressions";
 
 import type { ExprType, ExprValue } from "@/lib/expressions";
-import type { PipelineVariable, VariableType } from "@/lib/types";
+import type { PipelineVariable, VariableSource, VariableType } from "@/lib/types";
 
 export const QUERY_VARIABLE = "query";
 export const RETRIEVAL_INPUT_TYPE = "retrieval.input";
 export const RETRIEVAL_OUTPUT_TYPE = "retrieval.output";
 
+/** Built-in strings describing the collection a pipeline is bound to. */
+export const COLLECTION_VARIABLES = ["collection_id", "collection_name", "user_id"] as const;
+
 export const VARIABLE_NAME_PATTERN = /^[a-z_][a-z0-9_]*$/;
 export const RESERVED_VARIABLE_NAMES = new Set([
   QUERY_VARIABLE,
+  ...COLLECTION_VARIABLES,
   "true",
   "false",
   "min",
@@ -37,6 +46,7 @@ export const VARIABLE_TYPE_OPTIONS: Array<{ value: VariableType; label: string }
   { value: "boolean", label: "Boolean" },
   { value: "enum", label: "Enum" },
   { value: "model", label: "Model" },
+  { value: "index", label: "Index" },
 ];
 
 export function exprTypeOf(type: VariableType): ExprType {
@@ -47,9 +57,19 @@ export function exprTypeOf(type: VariableType): ExprType {
 type NodeLike = { type: string; config: Record<string, unknown> };
 
 /** The variable's effective source (older payloads may omit the field). */
-export function variableSource(variable: PipelineVariable): "value" | "expression" | "input" {
+export function variableSource(variable: PipelineVariable): VariableSource {
   if (variable.source) return variable.source;
   return variable.expression != null ? "expression" : "value";
+}
+
+/** The binding-source variables, in declaration order. */
+export function bindingVariables(variables: PipelineVariable[]): PipelineVariable[] {
+  return variables.filter((variable) => variableSource(variable) === "binding");
+}
+
+/** The binding-source index variables — the index slots a collection fills. */
+export function indexVariables(variables: PipelineVariable[]): PipelineVariable[] {
+  return bindingVariables(variables).filter((variable) => variable.type === "index");
 }
 
 /** The input-source variables, in declaration order. */
@@ -83,7 +103,7 @@ export interface StaticEnvironment {
   /** Per-variable problems found while building the environment. */
   problems: Map<string, string>;
   /** Each name's source — powers the suggestion dropdown's badges. */
-  sources: Map<string, "value" | "expression" | "input">;
+  sources: Map<string, VariableSource>;
 }
 
 function inputPlaceholder(variable: PipelineVariable): ExprValue {
@@ -147,7 +167,16 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
   const values = new Map<string, ExprValue>([[QUERY_VARIABLE, ""]]);
   const tainted = new Set<string>([QUERY_VARIABLE]);
   const problems = new Map<string, string>();
-  const sources = new Map<string, "value" | "expression" | "input">([[QUERY_VARIABLE, "input"]]);
+  const sources = new Map<string, VariableSource>([[QUERY_VARIABLE, "input"]]);
+
+  // Collection descriptors are always in scope and never tainted: they are
+  // fixed when the pipeline is bound, so an identity field may derive from
+  // them without breaking the static-only rule.
+  for (const name of COLLECTION_VARIABLES) {
+    types.set(name, "string");
+    values.set(name, "");
+    sources.set(name, "value");
+  }
 
   for (const variable of inputVariables(variables)) {
     if (types.has(variable.name)) continue;
@@ -157,9 +186,19 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
     sources.set(variable.name, "input");
   }
 
+  // Binding variables resolve to their default here: the editor has no
+  // collection, and the default is what every binding starts from.
+  for (const variable of bindingVariables(variables)) {
+    if (types.has(variable.name)) continue;
+    types.set(variable.name, exprTypeOf(variable.type));
+    sources.set(variable.name, "binding");
+    if (variable.value != null) values.set(variable.name, variable.value as ExprValue);
+  }
+
   const declared = new Map<string, PipelineVariable>();
   for (const variable of variables) {
-    if (variableSource(variable) === "input") continue;
+    const source = variableSource(variable);
+    if (source === "input" || source === "binding") continue;
     if (types.has(variable.name) || declared.has(variable.name)) continue;
     declared.set(variable.name, variable);
     types.set(variable.name, exprTypeOf(variable.type));
@@ -204,7 +243,7 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
 /** Format an evaluated value for a compact preview. */
 export function formatPreviewValue(value: ExprValue | undefined): string {
   if (value === undefined) return "—";
-  if (typeof value === "object") return value.model_name;
+  if (typeof value === "object") return "name" in value ? value.name : value.model_name;
   if (typeof value === "number")
     return Number.isInteger(value) ? String(value) : value.toPrecision(6).replace(/\.?0+$/, "");
   return String(value);
