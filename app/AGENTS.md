@@ -362,6 +362,10 @@ frontend form code — only a new `ConfigFieldKind` would.
   `pg_search_session` tests skip with a named reason, so a green run there
   proves nothing for a sparse/hybrid change (the root `AGENTS.md` dev-database
   rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
+  **A bare `uv run pytest` is not the gate**: it skips `make test`'s database
+  setup and falls back to `DEFAULT_TEST_DATABASE_URL` (`localhost:5432`),
+  where the BM25 tests skip — so it reports green on changes CI then fails,
+  and the skip count is the only thing that says so. Run `make test`.
 - **The lexical (BM25) plane mirrors the dense one, backend-natively.**
   `upsert_lexical`/`lexical_query` serve sparse indexes
   (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
