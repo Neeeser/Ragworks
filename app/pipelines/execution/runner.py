@@ -23,10 +23,11 @@ from app.db import models
 from app.observability import events as log_events
 from app.observability import get_logger
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
 from app.pipelines.registry import NodeRegistry, default_registry
-from app.pipelines.resolution import build_environment, resolve_definition
+from app.pipelines.resolution import resolve_definition
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.utils.file_storage import FileStorage

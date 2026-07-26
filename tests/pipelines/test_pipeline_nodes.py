@@ -18,6 +18,7 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutor
 from app.pipelines.node import PipelineNodeBase
@@ -32,7 +33,7 @@ from app.pipelines.payloads import (
 )
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry, build_default_registry
-from app.pipelines.resolution import build_environment, resolve_definition
+from app.pipelines.resolution import resolve_definition
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (

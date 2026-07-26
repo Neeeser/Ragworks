@@ -18,10 +18,10 @@ from sqlmodel import Session
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import QueryRepository
+from app.pipelines.environment import VariableResolutionError
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.interface import ToolOutputKind
 from app.pipelines.payloads import RetrievalPayload, dump_outputs
-from app.pipelines.resolution import VariableResolutionError
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
 from app.schemas.retrieval import (

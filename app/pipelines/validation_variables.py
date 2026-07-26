@@ -14,6 +14,10 @@ from pydantic import ValidationError
 
 from app.pipelines.config_fields import expected_expr_type, field_schema, is_static_only
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.environment import (
+    VariableResolutionError,
+    build_environment,
+)
 from app.pipelines.expressions import (
     ExpressionError,
     ExprType,
@@ -29,10 +33,6 @@ from app.pipelines.nodes.io import (
     RetrievalOutputNode,
 )
 from app.pipelines.registry import NodeRegistry
-from app.pipelines.resolution import (
-    VariableResolutionError,
-    build_environment,
-)
 from app.pipelines.validation_declarations import (
     name_issues,
     variabledeclaration_issues,
@@ -66,6 +66,30 @@ def collect_variable_issues(
     return _dedupe(issues)
 
 
+_DEREFERENCE_HINTS: dict[ExprType, str] = {
+    ExprType.MODEL: "the model variable with .connection_id or .model_name",
+    ExprType.INDEX: "the index variable with .backend or .name",
+}
+
+
+def _output_expression_message(
+    name: str,
+    expression: str,
+    types: dict[str, ExprType],
+) -> str | None:
+    """Return why an output expression is invalid, or None when it is fine.
+
+    A structured result is rejected: outputs travel on the wire as scalars, so
+    a model or index variable is always dereferenced first.
+    """
+    try:
+        result = check_type(parse(expression), types)
+    except ExpressionError as error:
+        return f"Output '{name}': {error.message}."
+    hint = _DEREFERENCE_HINTS.get(result)
+    return f"Output '{name}': dereference {hint}." if hint else None
+
+
 def _output_issues(
     definition: PipelineDefinition,
     types: dict[str, ExprType],
@@ -96,15 +120,7 @@ def _output_issues(
                 message = f"Duplicate output name '{output.name}'."
             else:
                 seen.add(output.name)
-                try:
-                    result = check_type(parse(output.expression), types)
-                    if result is ExprType.MODEL:
-                        message = (
-                            f"Output '{output.name}': dereference the model variable "
-                            "with .connection_id or .model_name."
-                        )
-                except ExpressionError as error:
-                    message = f"Output '{output.name}': {error.message}."
+                message = _output_expression_message(output.name, output.expression, types)
             if message is not None:
                 issues.append(
                     PipelineValidationIssue(
