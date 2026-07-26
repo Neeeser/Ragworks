@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CollectionVisualization } from "@/components/collections/detail/visualize/CollectionVisualization";
 import * as apiModule from "@/lib/api";
-import { makeChunkDetail, makeUmapVisualization } from "@/test/fixtures";
+import { makeChunk, makeChunkDetail, makeUmapPoint, makeUmapVisualization } from "@/test/fixtures";
 
 import type { ReactNode } from "react";
 
@@ -39,6 +39,13 @@ vi.mock("next/dynamic", () => ({
         <button type="button" onClick={() => onSelectPoint(points[0])}>
           Select point
         </button>
+        {/* One button per further point, so a test can select two in a row and
+            control the order their chunk requests resolve in. */}
+        {points.slice(1).map((point, index) => (
+          <button key={point.id} type="button" onClick={() => onSelectPoint(point)}>
+            {`Select point ${index + 2}`}
+          </button>
+        ))}
       </div>
     );
   },
@@ -195,5 +202,47 @@ describe("CollectionVisualization", () => {
     await waitFor(() => {
       expect(screen.getByText("Unable to load chunk details.")).toBeInTheDocument();
     });
+  });
+});
+
+describe("CollectionVisualization chunk request ordering", () => {
+  const twoPoints = makeUmapVisualization({
+    points: [makeUmapPoint(), makeUmapPoint({ id: "pt-2", chunk_id: "chunk-2" })],
+  });
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("shows the chunk of the point clicked last when responses arrive out of order", async () => {
+    // Two clicks, the first one slower. Without a request generation the late
+    // response overwrites the newer one, so the inspector docks the first
+    // point's chunk beside the second point's selection.
+    const first = deferred<Awaited<ReturnType<typeof api.fetchChunkDetail>>>();
+    const second = deferred<Awaited<ReturnType<typeof api.fetchChunkDetail>>>();
+    api.fetchCollectionUmap.mockResolvedValueOnce(twoPoints);
+    api.fetchChunkDetail.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    render(<CollectionVisualization collectionId="col-1" token="token" />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: recomputeLabel })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText(selectPointLabel));
+    fireEvent.click(screen.getByText("Select point 2"));
+
+    await act(async () => {
+      second.resolve(makeChunkDetail({ chunk: makeChunk({ text: "Second chunk body." }) }));
+      first.resolve(makeChunkDetail({ chunk: makeChunk({ text: "First chunk body." }) }));
+    });
+
+    expect(screen.getByText("Second chunk body.")).toBeInTheDocument();
+    expect(screen.queryByText("First chunk body.")).not.toBeInTheDocument();
   });
 });
