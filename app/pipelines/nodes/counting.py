@@ -27,12 +27,13 @@ from app.pipelines.payloads import (
     dump_outputs,
 )
 from app.pipelines.ports import NodePort
-from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE, resolve_collection_template
+from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_text
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.schemas.enums import IndexBackend
 from app.services.errors import InvalidInputError, NotFoundError
+from app.services.namespace_ownership import resolve_owned_namespace
 from app.vectorstores.base import FacetBucket
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backends_where
 
@@ -54,9 +55,7 @@ class Bm25CountConfig(BaseModel):
         default=IndexBackend.PGVECTOR, json_schema_extra=STATIC_ONLY_EXTRA
     )
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
-    namespace: str = Field(
-        default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA
-    )
+    namespace: str = namespace_field()
 
 
 class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
@@ -104,7 +103,9 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Count lexical matches for the query request."""
         payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name
@@ -164,9 +165,7 @@ class Bm25FacetConfig(BaseModel):
         default=IndexBackend.PGVECTOR, json_schema_extra=STATIC_ONLY_EXTRA
     )
     index_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
-    namespace: str = Field(
-        default=DEFAULT_NAMESPACE_TEMPLATE, json_schema_extra=STATIC_ONLY_EXTRA
-    )
+    namespace: str = namespace_field()
     field: str = Field(
         default="filename",
         min_length=1,
@@ -225,7 +224,9 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Facet lexical matches for the query request."""
         payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
-        namespace = resolve_collection_template(self.config.namespace, context.collection)
+        namespace = resolve_owned_namespace(
+            self.config.namespace, context.collection, context.session
+        )
         index_name = (
             resolve_collection_template(self.config.index_name, context.collection)
             or self.config.index_name
