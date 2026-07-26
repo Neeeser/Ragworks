@@ -9,6 +9,7 @@ important checks first.
 from __future__ import annotations
 
 from app.services.diagnostics.rules.base import DiagnosticRule
+from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
 from app.services.diagnostics.rules.data import IndexProbeRule
 from app.services.diagnostics.rules.embedding import (
     EmbeddingConnectionMismatchRule,
@@ -33,6 +34,7 @@ DIAGNOSTIC_RULES: list[DiagnosticRule] = [
     EmbeddingConnectionMismatchRule(),
     EmbeddingDimensionMismatchRule(),
     BackendMismatchRule(),
+    BackendCapabilityRule(),
     DenseIndexMismatchRule(),
     NamespaceMismatchRule(),
     Bm25IndexMismatchRule(),

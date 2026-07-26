@@ -150,4 +150,5 @@ def to_tool_read(
         is_primary=resolved.binding.is_primary,
         enabled=resolved.binding.enabled,
         position=resolved.binding.position,
+        variable_values=dict(resolved.binding.variable_values),
     )

@@ -9,12 +9,14 @@ pipeline's derived interface, never a stored flag).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from uuid import UUID
 
 from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import CollectionPipelineBindingRepository
+from app.services.binding_variables import resolve_binding_values
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
 
@@ -56,6 +58,7 @@ class CollectionToolService:
         user: models.User,
         collection: models.Collection,
         pipeline_id: UUID,
+        variable_values: Mapping[str, object] | None = None,
     ) -> models.CollectionPipelineBinding:
         """Bind a pipeline as a tool; the first tool becomes primary."""
         pipeline = self._require_callable_pipeline(user, pipeline_id)
@@ -68,8 +71,42 @@ class CollectionToolService:
             role=models.BindingRole.TOOL,
             is_primary=not existing,
             position=max((b.position for b in existing), default=-1) + 1,
+            variable_values=resolve_binding_values(
+                self.session,
+                user,
+                collection,
+                self.pipelines.get_definition(pipeline),
+                variable_values,
+            ),
         )
         self.bindings.add(binding)
+        return binding
+
+    def set_variable_values(
+        self,
+        user: models.User,
+        collection: models.Collection,
+        binding_id: UUID,
+        variable_values: Mapping[str, object],
+    ) -> models.CollectionPipelineBinding:
+        """Repoint one binding's variables (its index, typically).
+
+        Reassigns the whole dict rather than mutating in place: the JSON
+        column is not `MutableDict`-wrapped, so an in-place update is never
+        written while the in-memory object still reads correct.
+        """
+        binding = self._require_binding(collection, binding_id)
+        pipeline = self.pipelines.get_pipeline(binding.pipeline_id, user.id)
+        if pipeline is None:
+            raise NotFoundError("Pipeline not found.")
+        binding.variable_values = resolve_binding_values(
+            self.session,
+            user,
+            collection,
+            self.pipelines.get_definition(pipeline),
+            variable_values,
+        )
+        self.session.add(binding)
         return binding
 
     def remove_tool(
@@ -126,6 +163,7 @@ class CollectionToolService:
         user: models.User,
         collection: models.Collection,
         pipeline_id: UUID,
+        variable_values: Mapping[str, object] | None = None,
     ) -> models.CollectionPipelineBinding:
         """Bind (or rebind) the collection's single ingest pipeline."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
@@ -136,15 +174,24 @@ class CollectionToolService:
             raise InvalidInputError(
                 f"Pipeline '{pipeline.name}' does not accept documents and cannot ingest."
             )
+        values = resolve_binding_values(
+            self.session,
+            user,
+            collection,
+            self.pipelines.get_definition(pipeline),
+            variable_values,
+        )
         existing = self.get_ingest_binding(collection)
         if existing is not None:
             existing.pipeline_id = pipeline.id
+            existing.variable_values = values
             self.session.add(existing)
             return existing
         binding = models.CollectionPipelineBinding(
             collection_id=collection.id,
             pipeline_id=pipeline.id,
             role=models.BindingRole.INGEST,
+            variable_values=values,
         )
         self.bindings.add(binding)
         return binding
@@ -162,6 +209,15 @@ class CollectionToolService:
                 f"Pipeline '{pipeline.name}' has no query input and cannot serve as a tool."
             )
         return pipeline
+
+    def _require_binding(
+        self, collection: models.Collection, binding_id: UUID
+    ) -> models.CollectionPipelineBinding:
+        """Return one of the collection's bindings in any role, or raise."""
+        binding = self.bindings.get_for_collection(collection.id, binding_id)
+        if binding is None:
+            raise NotFoundError("Binding not found.")
+        return binding
 
     def _require_tool_binding(
         self, collection: models.Collection, binding_id: UUID

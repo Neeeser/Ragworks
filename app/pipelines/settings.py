@@ -21,6 +21,7 @@ the ingest pipeline never touched.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypeVar
 from uuid import UUID
@@ -61,6 +62,7 @@ from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition
 from app.pipelines.template import resolve_collection_template
+from app.pipelines.variables import BindingContext, CollectionScope
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 
@@ -267,18 +269,36 @@ def _union_targets(*candidates: IndexTarget | None) -> tuple[IndexTarget, ...]:
     return tuple(targets)
 
 
+def collection_scope(collection: models.Collection) -> CollectionScope:
+    """Project a collection onto the expression built-ins it supplies."""
+    return CollectionScope(
+        collection_id=str(collection.id),
+        collection_name=collection.name or "",
+        user_id=str(collection.user_id),
+    )
+
+
 def resolve_pipeline_settings(  # pylint: disable=too-many-locals
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,
+    *,
+    binding_values: Mapping[str, object] | None = None,
 ) -> PipelineSettings:
-    """Resolve settings from any pipeline definition.
+    """Resolve settings from any pipeline definition, for one binding.
 
     Expressions resolve against the static default environment first — the
     taint rule guarantees identity fields never depend on runtime input, so
     the static view is the authoritative one for index targets and purges.
+    `binding_values` is what makes those targets per binding: the same stored
+    definition resolves to whichever index this collection selected.
     """
-    definition = resolve_static_definition(definition)
+    definition = resolve_static_definition(
+        definition,
+        binding=BindingContext(
+            collection=collection_scope(collection), values=binding_values or {}
+        ),
+    )
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
     indexer_backend, indexer_model, indexer_found = _resolve_backend_node_config(
