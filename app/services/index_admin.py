@@ -30,10 +30,17 @@ from app.schemas.indexes import (
     IndexRegisterRequest,
     IndexUsageRead,
 )
+from app.services.errors import InvalidInputError
 from app.services.index_registry import IndexRegistryService, IndexUsage
+from app.services.namespace_ownership import has_foreign_namespace
 from app.telemetry import record
 from app.telemetry.events import IndexCreated, IndexDeleted
-from app.vectorstores.base import IndexSpec, VectorIndexDescription, validate_index_spec
+from app.vectorstores.base import (
+    IndexSpec,
+    VectorIndexDescription,
+    VectorStoreBackend,
+    validate_index_spec,
+)
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, backend_statuses, get_vector_store
 
 
@@ -235,21 +242,50 @@ class IndexAdminService:
         Refuses too when another account has registered the same name on a
         backend whose names are shared workspace-wide — that check runs
         whether or not the caller registered the index themselves, because
-        every account can see (and therefore delete) a shared name.
+        every account can see (and therefore delete) a shared name — and
+        when the index physically holds another account's rows. Both run:
+        a registration is a declaration that survives an empty index, while
+        stored rows are a fact that survives an account dropping its
+        registration.
         """
         registry = IndexRegistryService(self._session)
         indexes = RegisteredIndexRepository(self._session)
         row = indexes.find_by_identity(user.id, backend, name)
         if row is not None:
             registry.ensure_unused(user, row)
+        store = get_vector_store(backend, user=user, session=self._session)
         if CAPABILITIES_BY_BACKEND[backend].shared_across_users:
             registry.ensure_no_other_owner(user, backend, name)
-        store = get_vector_store(backend, user=user, session=self._session)
+            self._ensure_no_foreign_rows(user, store, name, backend)
         store.delete_index(name)
         if row is not None:
             indexes.delete(row)
         self._session.commit()
         record(IndexDeleted(user_id=user.id, backend=backend.value, index_name=name))
+
+    def _ensure_no_foreign_rows(
+        self,
+        user: models.User,
+        store: VectorStoreBackend,
+        name: str,
+        backend: IndexBackend,
+    ) -> None:
+        """Raise when the shared index holds rows from another account.
+
+        The registration check alone leaves a hole: unregistering explicitly
+        keeps the data (it is what the refusal message recommends), so an
+        account that stops declaring an index still has vectors inside it,
+        and the next caller's delete drops the table under them. Stored
+        namespaces are the fact that outlives the declaration.
+        """
+        if not has_foreign_namespace(self._session, store.stored_namespaces(name), user.id):
+            return
+        raise InvalidInputError(
+            f"Index '{name}' holds data belonging to another account, and "
+            f"{backend.value} stores one physical index per name for the whole "
+            "deployment — deleting it here would destroy that data. Remove your "
+            "registration instead, which leaves the index in place."
+        )
 
     def _usable_backends(self, user: models.User) -> list[IndexBackend]:
         """Backends this user can list right now (pgvector present, connection set)."""

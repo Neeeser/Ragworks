@@ -208,6 +208,18 @@ class VectorStoreBackend(ABC):
     def delete_index(self, name: str) -> None:
         """Delete an index and its data; missing index is a no-op."""
 
+    def stored_namespaces(self, name: str, limit: int = 200) -> list[str]:
+        """Return up to `limit` distinct namespaces holding rows in an index.
+
+        Capability-gated (`capabilities.shared_across_users`): the answer to
+        "whose data would a destructive call actually destroy". A backend
+        whose indexes are per-user keeps this default — its namespaces can
+        only belong to the account reaching them, so there is nothing to
+        report.
+        """
+        del name, limit
+        return []
+
     # -- data plane --------------------------------------------------------
 
     @abstractmethod
