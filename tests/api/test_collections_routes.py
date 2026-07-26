@@ -301,16 +301,30 @@ def test_stats_history_hourly_ranges_bucket_by_hour(session: Session) -> None:
     assert history.points[-1].retrieval.count == 0
 
 
-def test_collection_indexes_roundtrip(client, session: Session) -> None:
-    """GET lists merged slots; PUT repoints them across every binding."""
-    created = client.post("/api/collections", json={"name": "Slots"}).json()
+def test_collection_indexes_reports_the_indexes_its_graph_names(client) -> None:
+    """A collection can always answer where its data lives.
+
+    The ordinary pipeline names its own index, so there is no slot to fill
+    and nothing to choose here — but the page still has to say which store
+    the corpus is in, which is what `targets` carries.
+    """
+    created = client.post("/api/collections", json={"name": "Indexes"}).json()
 
     read = client.get(f"/api/collections/{created['id']}/indexes")
-    assert read.status_code == 200
-    slots = {slot["name"]: slot for slot in read.json()["slots"]}
-    assert "primary_index" in slots
-    assert slots["primary_index"]["vector_type"] == "dense"
 
+    assert read.status_code == 200
+    body = read.json()
+    assert body["slots"] == []
+    targets = {target["name"]: target for target in body["targets"]}
+    assert targets
+    dense = [target for target in targets.values() if target["vector_type"] == "dense"]
+    assert dense
+    assert dense[0]["pipelines"]
+
+
+def test_collection_indexes_rejects_an_undeclared_slot(client, session: Session) -> None:
+    """A name no bound pipeline declares is a 400, not a silent no-op."""
+    created = client.post("/api/collections", json={"name": "Slots"}).json()
     owner = session.exec(
         select(models.User).where(models.User.email == "owner@example.com")
     ).one()
@@ -324,16 +338,9 @@ def test_collection_indexes_roundtrip(client, session: Session) -> None:
     session.commit()
     session.refresh(moved)
 
-    updated = client.put(
-        f"/api/collections/{created['id']}/indexes",
-        json={"values": {"primary_index": {"index_id": str(moved.id)}}},
-    )
-    assert updated.status_code == 200
-    slots = {slot["name"]: slot for slot in updated.json()["slots"]}
-    assert slots["primary_index"]["current"]["name"] == "moved-dense"
-
     rejected = client.put(
         f"/api/collections/{created['id']}/indexes",
         json={"values": {"mystery": {"index_id": str(moved.id)}}},
     )
+
     assert rejected.status_code == 400

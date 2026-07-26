@@ -20,7 +20,7 @@ from typing import Any
 
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.expressions import ExpressionError, parse, references
-from app.pipelines.index_variables import is_lexical_node
+from app.pipelines.index_identity import is_lexical_node
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.nodes.indexing import BaseIndexerNode
 from app.pipelines.nodes.retrieval import BaseRetrieverNode

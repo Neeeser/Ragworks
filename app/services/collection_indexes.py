@@ -17,13 +17,16 @@ from sqlmodel import Session
 from app.db import models
 from app.db.repositories import CollectionPipelineBindingRepository, RegisteredIndexRepository
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.index_identity import collect_index_identities
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_pipeline_settings
 from app.schemas.collections import (
     CollectionIndexesRead,
     CollectionIndexRef,
     CollectionIndexSlot,
+    CollectionIndexTarget,
 )
+from app.schemas.enums import IndexBackend
 from app.services.binding_variables import (
     ensure_declared_somewhere,
     resolve_binding_values,
@@ -41,6 +44,17 @@ class _BoundPipeline:
     binding: models.CollectionPipelineBinding
     pipeline: models.Pipeline
     definition: PipelineDefinition
+
+
+@dataclass
+class _TargetDraft:
+    """A literal index target being merged across bindings."""
+
+    name: str
+    backend: IndexBackend
+    vector_type: str
+    dimension: int | None = None
+    pipelines: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -68,10 +82,12 @@ class CollectionIndexService:
     def read(
         self, user: models.User, collection: models.Collection
     ) -> CollectionIndexesRead:
-        """Merge every binding's index variables into named slots."""
+        """Merge the bindings' index variables and literal targets."""
         drafts: dict[str, _SlotDraft] = {}
+        targets: dict[tuple[IndexBackend, str, str], _TargetDraft] = {}
         for bound in self._bound_pipelines(user, collection):
             self._merge_binding(drafts, bound, user, collection)
+            self._merge_targets(targets, bound)
         for draft in drafts.values():
             # The bind-time anchor falls back to the current index's own
             # width, so the slot advertises the same constraint it enforces.
@@ -92,8 +108,40 @@ class CollectionIndexService:
                     pipelines=draft.pipelines,
                 )
                 for draft in sorted(drafts.values(), key=lambda d: d.name)
-            ]
+            ],
+            targets=[
+                CollectionIndexTarget(
+                    name=draft.name,
+                    backend=draft.backend,
+                    vector_type=draft.vector_type,
+                    dimension=draft.dimension,
+                    pipelines=draft.pipelines,
+                )
+                for draft in sorted(targets.values(), key=lambda d: (d.vector_type, d.name))
+            ],
         )
+
+    def _merge_targets(
+        self,
+        targets: dict[tuple[IndexBackend, str, str], _TargetDraft],
+        bound: _BoundPipeline,
+    ) -> None:
+        """Fold one binding's literally-named indexes into the target drafts."""
+        for identity in collect_index_identities(bound.definition, default_registry()):
+            key = (identity.backend, identity.name, identity.vector_type)
+            draft = targets.setdefault(
+                key,
+                _TargetDraft(
+                    name=identity.name,
+                    backend=identity.backend,
+                    vector_type=identity.vector_type,
+                    dimension=identity.dimension,
+                ),
+            )
+            if draft.dimension is None:
+                draft.dimension = identity.dimension
+            if bound.pipeline.name not in draft.pipelines:
+                draft.pipelines.append(bound.pipeline.name)
 
     def _merge_binding(
         self,

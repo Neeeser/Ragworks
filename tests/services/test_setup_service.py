@@ -409,11 +409,12 @@ def test_bootstrap_replaces_existing_default_pipelines(
 def test_bootstrap_registers_the_indexes_its_pipelines_target(
     pg_search_session: Session,
 ) -> None:
-    """The wizard is a scaffolding path, so its pipelines carry index variables.
+    """The wizard registers the index its pipelines name, and names it in the graph.
 
-    A scaffolding path that skipped registration would produce the one kind of
-    pipeline a collection can never repoint, and its indexes would be missing
-    from the Index Manager's "used by" list.
+    A scaffolding path that skipped registration would leave its indexes
+    missing from the index registry's "used by" list and unselectable in
+    every picker. Registering must not also hoist the choice out of the
+    graph: a first-run pipeline exposes no slot its author never asked for.
     """
     session = pg_search_session
     user = _create_user(session)
@@ -436,8 +437,14 @@ def test_bootstrap_registers_the_indexes_its_pipelines_target(
         for variable in version.definition.get("variables", [])
         if variable.get("type") == "index"
     ]
-    assert index_variables
-    assert all(variable["source"] == "binding" for variable in index_variables)
+    assert index_variables == []
+    indexers = [
+        node
+        for version in versions
+        for node in version.definition.get("nodes", [])
+        if node.get("type", "").startswith("indexer.")
+    ]
+    assert any(node["config"].get("index_name") == "first-index" for node in indexers)
 
 
 def test_bootstrap_registers_the_bm25_sibling_index(

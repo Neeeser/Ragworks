@@ -38,6 +38,20 @@ from app.services.prompts import SYSTEM_PROMPT_METADATA_KEY
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
+def _create_slot_user(session: Session, email: str = "slots@example.com") -> models.User:
+    """A user whose default pipelines expose their indexes as binding slots.
+
+    Naming the index in the graph is the default shape, so a test about slot
+    selection has to opt in the same way an author does.
+    """
+    user = models.User(email=email, full_name="Slots", hashed_password="hashed")
+    UserRepository(session).add(user)
+    session.commit()
+    session.refresh(user)
+    install_default_pipelines(session, user, expose_slots=True)
+    return user
+
+
 def _create_user(session: Session) -> models.User:
     user = models.User(
         email="user@example.com",
@@ -339,7 +353,7 @@ def test_create_applies_one_index_choice_to_every_binding(session: Session) -> N
     so a new collection cannot start out indexing into one store and querying
     another — the mismatch the diagnostics rules exist to catch.
     """
-    user = _create_user(session)
+    user = _create_slot_user(session)
     index = models.RegisteredIndex(
         user_id=user.id,
         backend=IndexBackend.PGVECTOR,
@@ -430,7 +444,7 @@ def test_create_scopes_shared_values_to_each_bindings_own_slots(
     hybrid ingest paired with a dense-only tool must not fail creation over
     the BM25 slot the tool never declared.
     """
-    user = _create_user(session)
+    user = _create_slot_user(session)
     tool = _dense_tool_pipeline(session, user)
     dense = models.RegisteredIndex(
         user_id=user.id,

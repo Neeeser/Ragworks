@@ -192,6 +192,36 @@ def test_index_targets_union_indexer_and_retriever_sides() -> None:
     }
 
 
+def test_index_targets_include_every_dense_store() -> None:
+    """A graph splitting its corpus across two dense indexes lists both.
+
+    Only the first indexer used to reach the target list, so the second
+    store's vectors survived every purge and the next query re-served
+    documents the user had deleted.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _node(
+                "memories",
+                "indexer.vector",
+                {"backend": "pgvector", "index_name": "memories", "dimension": 768},
+            ),
+            _node(
+                "facts",
+                "indexer.vector",
+                {"backend": "pgvector", "index_name": "facts", "dimension": 768},
+            ),
+        ],
+        edges=[],
+    )
+
+    settings = resolve_pipeline_settings(definition, _collection(), default_registry())
+
+    assert {
+        (target.index_name, target.vector_type) for target in settings.index_targets
+    } == {("memories", "dense"), ("facts", "dense")}
+
+
 def test_index_targets_dedupe_shared_identity() -> None:
     """An indexer and retriever naming the same index yield one target."""
     definition = PipelineDefinition(

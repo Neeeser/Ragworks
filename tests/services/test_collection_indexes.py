@@ -29,7 +29,7 @@ def _user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_default_pipelines(session, user, expose_slots=True)
     return user
 
 

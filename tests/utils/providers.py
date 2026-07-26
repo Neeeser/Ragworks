@@ -56,6 +56,7 @@ def install_default_pipelines(
     connection: models.ProviderConnection | None = None,
     *,
     embedding_model: str = "test-embed",
+    expose_slots: bool = False,
 ) -> models.ProviderConnection:
     """Install default pipelines the way the setup wizard would.
 
@@ -63,34 +64,41 @@ def install_default_pipelines(
     defaults (collection create, ingestion, retrieval) install them around an
     explicit connection + model first. Returns the embedding connection.
 
-    Index registration runs here for the same reason the wizard runs it: a
-    scaffolded pipeline that kept literal index identity is one no collection
-    could repoint, so a helper that skipped it would hand tests a shape the
-    product never produces.
+    Index registration runs here for the same reason the wizard runs it: an
+    index a scaffolded pipeline names must exist as a selectable entity. It
+    stays named in the graph, which is the shape the product produces —
+    exposing it as a collection-filled slot is a deliberate authoring step
+    (`expose_index_slots`), never something scaffolding does on its own.
     """
     from app.pipelines.defaults import (
         build_default_ingestion_pipeline,
         build_default_retrieval_pipeline,
     )
+    from app.pipelines.definition import PipelineDefinition
     from app.services.index_scaffolding import register_definition_indexes
     from app.services.pipelines import (
         DEFAULT_INGEST_SLUG,
         DEFAULT_SEARCH_SLUG,
         PipelineService,
     )
+    from tests.utils.pipelines import expose_index_slots
 
     resolved = connection or add_openrouter_connection(session, user)
     service = PipelineService(session)
+
+    def prepare(definition: PipelineDefinition) -> PipelineDefinition:
+        """Register the definition's indexes, optionally exposing them as slots."""
+        registered = register_definition_indexes(session, user, definition)
+        return expose_index_slots(session, user, registered) if expose_slots else registered
+
     service.create_pipeline(
         user=user,
         name="Default Ingestion Pipeline",
         description="Baseline ingestion pipeline for uploads.",
-        definition=register_definition_indexes(
-            session,
-            user,
+        definition=prepare(
             build_default_ingestion_pipeline(
                 embedding_connection_id=resolved.id, embedding_model=embedding_model
-            ),
+            )
         ),
         change_summary="Test scaffold.",
         template_slug=DEFAULT_INGEST_SLUG,
@@ -99,12 +107,10 @@ def install_default_pipelines(
         user=user,
         name="Default Retrieval Pipeline",
         description="Baseline retrieval pipeline for queries.",
-        definition=register_definition_indexes(
-            session,
-            user,
+        definition=prepare(
             build_default_retrieval_pipeline(
                 embedding_connection_id=resolved.id, embedding_model=embedding_model
-            ),
+            )
         ),
         change_summary="Test scaffold.",
         template_slug=DEFAULT_SEARCH_SLUG,

@@ -185,10 +185,27 @@ class CollectionIndexSlot(BaseModel):
     pipelines: list[str] = Field(default_factory=list)
 
 
+class CollectionIndexTarget(BaseModel):
+    """An index a bound pipeline names inside its own graph.
+
+    Reported so a collection can always answer "where does my data live",
+    including the ordinary case where no slot is exposed at all. It carries
+    no selection because there is nothing to select here: the choice belongs
+    to the pipeline that names it, and the link is to that pipeline.
+    """
+
+    name: str
+    backend: IndexBackend
+    vector_type: str
+    dimension: int | None = None
+    pipelines: list[str] = Field(default_factory=list)
+
+
 class CollectionIndexesRead(BaseModel):
-    """Every index slot of a collection, with its current selection."""
+    """A collection's indexes: the fixed targets, and the fillable slots."""
 
     slots: list[CollectionIndexSlot]
+    targets: list[CollectionIndexTarget] = Field(default_factory=list)
 
 
 class CollectionIndexesUpdate(BaseModel):
