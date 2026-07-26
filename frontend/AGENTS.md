@@ -341,6 +341,13 @@ the same PR.
 - **`cn` resolves Tailwind conflicts via `tailwind-merge`** — a later class
   deterministically wins. Don't rely on stylesheet order, and don't use `cn` for
   non-class strings (joining ARIA id lists — use a plain join).
+- **Every custom `@theme` scale is declared to tailwind-merge in
+  `src/lib/utils.ts`** (`text`, `radius`, `shadow`, `ease` — mirroring
+  `globals.css`). An undeclared size token falls into the catch-all colour group,
+  so `cn("text-instrument text-muted")` silently deletes the size and the element
+  renders at the inherited scale instead of its token's — invisible in tests,
+  because the class string still looks plausible. Adding a token to a custom
+  scale updates both files.
 - **Accessibility is part of done**, not polish: accessible names on icon buttons,
   `htmlFor` on labels, `aria-expanded` on expandables, and anything
   keyboard-reachable must actually work with a keyboard (test with `user-event`,
