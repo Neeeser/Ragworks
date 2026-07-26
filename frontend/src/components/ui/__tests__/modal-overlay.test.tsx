@@ -158,6 +158,23 @@ describe("ModalOverlay", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores a click that reaches the backdrop from a press inside the dialog", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalOverlay open onClose={onClose}>
+        <button type="button">Inside</button>
+      </ModalOverlay>,
+    );
+
+    // A portaled popup (CustomSelect's listbox) opens on pointerdown outside the
+    // dialog element, so the browser dispatches the click on the nearest common
+    // ancestor — the backdrop. Only the press origin distinguishes it from a real
+    // backdrop dismissal.
+    fireEvent.pointerDown(screen.getByText("Inside"));
+    fireEvent.click(screen.getByRole("presentation"));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("does not close on backdrop click when closeOnBackdrop is false", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -1,6 +1,6 @@
 "use client";
 
-import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
+import { Background, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo } from "react";
 
@@ -12,6 +12,7 @@ import { pipelineNodeTypes } from "@/components/pipelines/PipelineNode";
 import { buildSetupFlow } from "@/components/setup/lib/setup-flow";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 
+import type { SetupFlowChoices } from "@/components/setup/lib/setup-flow";
 import type { SetupStepId } from "@/components/setup/lib/setup-wizard-reducer";
 
 const FLY_MS = 900;
@@ -20,9 +21,24 @@ const FOCUS_ZOOM = 1.05;
 // so it sits centered above the step copy instead of hiding behind it. Large
 // on purpose: the band should clear even the tallest step (the model list).
 const SCREEN_LIFT_PX = 290;
+// Screen-space pixels kept between the lifted node's top edge and the top of
+// the pane.
+const LIFT_MARGIN_PX = 24;
+
+/**
+ * How far the focused node may be lifted on a pane of this height. Unclamped,
+ * the fixed lift pushes the whole node band off the top of a short viewport
+ * (720px) — the backdrop's nodes are then simply not on screen.
+ */
+export function focusLiftPx(paneHeight: number, nodeHeight: number): number {
+  if (paneHeight <= 0) return SCREEN_LIFT_PX;
+  const headroom = paneHeight / 2 - (nodeHeight * FOCUS_ZOOM) / 2 - LIFT_MARGIN_PX;
+  return Math.max(0, Math.min(SCREEN_LIFT_PX, headroom));
+}
 
 function ViewportDirector({ step }: { step: SetupStepId }) {
   const { setCenter, getNode } = useReactFlow();
+  const paneHeight = useStore((state) => state.height);
   const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
@@ -33,12 +49,12 @@ function ViewportDirector({ step }: { step: SetupStepId }) {
     if (!node) return;
     const width = node.measured?.width ?? 260;
     const height = node.measured?.height ?? 150;
-    void setCenter(
-      node.position.x + width / 2,
-      node.position.y + height / 2 + SCREEN_LIFT_PX / FOCUS_ZOOM,
-      { zoom: FOCUS_ZOOM, duration },
-    );
-  }, [step, reducedMotion, setCenter, getNode]);
+    const lift = focusLiftPx(paneHeight, height);
+    void setCenter(node.position.x + width / 2, node.position.y + height / 2 + lift / FOCUS_ZOOM, {
+      zoom: FOCUS_ZOOM,
+      duration,
+    });
+  }, [step, reducedMotion, setCenter, getNode, paneHeight]);
 
   return null;
 }
@@ -49,8 +65,19 @@ function ViewportDirector({ step }: { step: SetupStepId }) {
  * (which glows as `active`). Non-interactive and aria-hidden — decoration
  * built from the real product component, never a fake illustration.
  */
-export function SetupFlowBackdrop({ step }: { step: SetupStepId }) {
-  const { nodes, edges } = useMemo(() => buildSetupFlow(), []);
+export function SetupFlowBackdrop({
+  step,
+  choices,
+}: {
+  step: SetupStepId;
+  /** Rendered as the model and index nodes' signature readouts. */
+  choices?: SetupFlowChoices;
+}) {
+  const { embeddingModel, embeddingDimension, indexName, backend } = choices ?? {};
+  const { nodes, edges } = useMemo(
+    () => buildSetupFlow({ embeddingModel, embeddingDimension, indexName, backend }),
+    [embeddingModel, embeddingDimension, indexName, backend],
+  );
   const dotColor = useFlowDotColor();
 
   // Stable node identity: the active glow travels through the context, not

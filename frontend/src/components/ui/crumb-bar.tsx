@@ -63,7 +63,13 @@ export function CrumbBar({ crumbs, state, actions, className }: CrumbBarProps) {
   return (
     <div
       className={cn(
-        "relative flex h-12 shrink-0 items-center gap-3 border-b border-hairline px-4",
+        // 48px and one line from `sm` up. Below it the row wraps instead of
+        // overflowing: a phone cannot hold a breadcrumb path, live state and
+        // an action on one line, and the action is the part that must stay
+        // reachable — so state and actions fall to a second line rather than
+        // colliding with the crumbs.
+        "relative flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline px-4 py-2",
+        "sm:h-12 sm:flex-nowrap sm:py-0",
         className,
       )}
     >

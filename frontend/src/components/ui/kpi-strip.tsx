@@ -25,14 +25,16 @@ type KpiStripProps = {
  */
 export function KpiStrip({ children, className }: KpiStripProps) {
   return (
-    <div
-      className={cn(
-        "card-surface grid auto-cols-fr grid-flow-col",
-        "[&>*]:border-r [&>*]:border-hairline [&>*:last-child]:border-r-0",
-        className,
-      )}
-    >
-      {children}
+    // shrink-0 because overflow-hidden zeroes a flex item's automatic minimum
+    // size: in a scrolling flex column (PageBody) a long sibling would collapse
+    // the strip to its borders.
+    <div className={cn("card-surface shrink-0 overflow-hidden", className)}>
+      {/* One row at `lg` and up, two cells per row below it: five cells sharing
+          a 375px viewport give each label ~70px, which is not a KPI, it is
+          overlapping text. Every cell carries a right and bottom hairline and
+          the negative margins push the outer ones past the card's clip, so the
+          seams stay interior at any cell count. */}
+      <div className="-mb-px -mr-px flex flex-wrap">{children}</div>
     </div>
   );
 }
@@ -53,6 +55,8 @@ type KpiCellProps = {
   tooltip?: string;
   loading?: boolean;
 };
+
+const KPI_CELL_BOX = "grow basis-1/2 border-b border-r border-hairline sm:basis-1/3 lg:basis-0";
 
 const TONE: Record<NonNullable<KpiCellProps["tone"]>, string> = {
   default: "text-primary",
@@ -102,13 +106,19 @@ export function KpiCell({
     <div className="p-3">{body}</div>
   );
 
-  if (!tooltip) return cell;
   // The trigger wraps the whole cell (block, so it fills its strip column and
   // keeps the seam on itself); focus events from an inner link bubble, so a
   // keyboard user still gets the description.
-  return (
+  const described = tooltip ? (
     <Tooltip content={tooltip} triggerElement="div" triggerClassName="block">
       {cell}
     </Tooltip>
+  ) : (
+    cell
   );
+
+  // The cell owns its box in the strip: two per row on a phone, three from
+  // `sm`, one shared row from `lg`. Its own hairlines make the seams, and the
+  // strip clips the ones on its outer edges.
+  return <div className={KPI_CELL_BOX}>{described}</div>;
 }

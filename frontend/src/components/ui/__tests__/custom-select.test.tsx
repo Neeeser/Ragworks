@@ -187,6 +187,45 @@ describe("CustomSelect", () => {
     expect(within(trigger).getByTestId("alpha-icon")).toBeInTheDocument();
   });
 
+  it("does not dismiss the dialog it sits in when opened with the mouse", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    function WizardHarness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <ModalOverlay
+          open={open}
+          onClose={() => {
+            onClose();
+            setOpen(false);
+          }}
+          labelledBy="wizard"
+        >
+          <div>
+            <h2 id="wizard">New run</h2>
+            <ControlledSelect />
+          </div>
+        </ModalOverlay>
+      );
+    }
+    render(<WizardHarness />);
+
+    const backdrop = screen.getByRole("presentation");
+    const trigger = screen.getByRole("combobox", { name: SELECT_LABEL });
+    // Press without releasing: Radix opens the popup on pointerdown and calls
+    // preventDefault, so the pointerup never lands on the trigger.
+    await user.pointer({ keys: "[MouseLeft>]", target: trigger });
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    // The popup portals to <body>, so the browser dispatches the click of that
+    // same gesture on the backdrop rather than on the trigger.
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    // Radix marks everything outside its popup aria-hidden while open, so query
+    // the wizard by text rather than by dialog role.
+    expect(screen.getByText("New run")).toBeInTheDocument();
+  });
+
   it("announces and enforces a disabled trigger", async () => {
     const user = userEvent.setup();
     render(<ControlledSelect disabled />);
