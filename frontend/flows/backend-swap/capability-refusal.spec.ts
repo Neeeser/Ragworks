@@ -99,14 +99,10 @@ test("a binding swaps onto another backend, and an unsupported node is refused",
   expect(indexResponse.ok()).toBe(true);
   const { indexes } = (await indexResponse.json()) as { indexes: IndexRead[] };
 
-  const pinecone = indexes.find(
-    (index) => index.backend === "pinecone" && index.registered,
-  );
+  const pinecone = indexes.find((index) => index.backend === "pinecone" && index.registered);
   const sparse = indexes.find(
     (index) =>
-      index.vector_type === "sparse" &&
-      index.registered &&
-      index.name.startsWith("second"),
+      index.vector_type === "sparse" && index.registered && index.name.startsWith("second"),
   );
   expect(pinecone?.index_id).toBeTruthy();
   expect(sparse?.index_id).toBeTruthy();
@@ -115,8 +111,7 @@ test("a binding swaps onto another backend, and an unsupported node is refused",
     `${handoff.backend_url}/api/collections/${collectionId}/tools`,
     { headers },
   );
-  const searchBinding = ((await toolsResponse.json()) as { tools: { id: string }[] })
-    .tools[0];
+  const searchBinding = ((await toolsResponse.json()) as { tools: { id: string }[] }).tools[0];
 
   // A plain hybrid graph runs on either backend, so the swap is allowed —
   // and the BM25 slot stays on pgvector, spanning two stores.

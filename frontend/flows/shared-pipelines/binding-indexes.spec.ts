@@ -53,8 +53,7 @@ test("one pipeline serves two collections against different indexes", async ({ p
   expect(secondPipelines).toEqual(firstPipelines);
 
   // ...resolved against different indexes.
-  const indexNameOf = (tools: ToolBinding[]) =>
-    tools[0]?.variable_values?.primary_index?.name;
+  const indexNameOf = (tools: ToolBinding[]) => tools[0]?.variable_values?.primary_index?.name;
   expect(indexNameOf(first.tools)).toBeTruthy();
   expect(indexNameOf(second.tools)).toBeTruthy();
   expect(indexNameOf(second.tools)).not.toBe(indexNameOf(first.tools));
