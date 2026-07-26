@@ -104,7 +104,10 @@ export function ConnectionsManager({
       {/* shrink-0 because overflow-hidden zeroes a flex item's automatic
           minimum size: inside PageBody's flex column, a long sibling (many
           login sessions) collapsed this panel to its 2px of borders. */}
-      <Panel className="shrink-0 overflow-hidden">
+      {/* @container: the rows below lay themselves out against this card's own
+          width, so the same panel reads as one line on the settings page and
+          stacks inside the setup wizard's narrow step card. */}
+      <Panel className="@container shrink-0 overflow-hidden">
         {title ? (
           <PanelHeader
             title={title}
@@ -157,7 +160,7 @@ export function ConnectionsManager({
         {builtins.map((type) => (
           <div
             key={type.provider_type}
-            className="flex flex-col gap-2 border-b border-hairline px-3 py-2 last:border-b-0 lg:flex-row lg:items-center lg:gap-3"
+            className="flex flex-col gap-2 border-b border-hairline px-3 py-2 last:border-b-0 @3xl:flex-row @3xl:items-center @3xl:gap-3"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <StatusDot tone={type.available ? "pos" : "neg"} />
@@ -171,7 +174,9 @@ export function ConnectionsManager({
                 {type.available ? null : <Chip tone="neg">Unavailable</Chip>}
               </div>
             </div>
-            <ProviderKindBadges kinds={type.kinds} />
+            <div className="shrink-0">
+              <ProviderKindBadges kinds={type.kinds} />
+            </div>
           </div>
         ))}
 

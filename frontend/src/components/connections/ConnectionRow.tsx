@@ -84,8 +84,14 @@ export function ConnectionRow({
         ? "Stored config no longer validates."
         : null;
 
+  // Container variants, not viewport ones: this row renders both on the wide
+  // settings page and inside the setup wizard's ~576px step card. Keyed to the
+  // viewport, the narrow card still laid the row out in one line, and the name
+  // column — the only shrinkable cell next to the chips and three actions —
+  // computed to zero width, hiding the label and breaking the base URL one
+  // character per line.
   return (
-    <div className="flex flex-col gap-2 border-b border-hairline px-3 py-2 last:border-b-0 lg:flex-row lg:items-center lg:gap-3">
+    <div className="flex flex-col gap-2 border-b border-hairline px-3 py-2 last:border-b-0 @3xl:flex-row @3xl:items-center @3xl:gap-3">
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <StatusDot tone={tone} className="mt-1.5" />
         <ProviderIcon
@@ -120,8 +126,10 @@ export function ConnectionRow({
           ) : null}
         </div>
       </div>
-      <ProviderKindBadges kinds={connection.kinds} />
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="shrink-0">
+        <ProviderKindBadges kinds={connection.kinds} />
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-1">
         <Button
           type="button"
           variant="ghost"
