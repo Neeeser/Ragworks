@@ -6,7 +6,7 @@
 
 import { typeError } from "./errors";
 import { BUILTINS, arityMessage } from "./functions";
-import { MODEL_MEMBERS, isNumericType, type ExprType } from "./values";
+import { MEMBERS_BY_TYPE, isNumericType, type ExprType } from "./values";
 
 import type { Expression } from "./parser";
 
@@ -50,14 +50,19 @@ function checkMember(
   env: TypeEnvironment,
 ): ExprType {
   const base = checkType(expr.base, env);
-  if (base !== "model") {
-    throw typeError(`Member access requires a model variable, got ${base}`, expr.position);
-  }
-  const member = MODEL_MEMBERS[expr.attribute];
-  if (member === undefined) {
-    const allowed = Object.keys(MODEL_MEMBERS).sort().join(", ");
+  const members = MEMBERS_BY_TYPE[base];
+  if (members === undefined) {
+    const structured = Object.keys(MEMBERS_BY_TYPE).sort().join(" or ");
     throw typeError(
-      `Unknown model member '${expr.attribute}' (expected one of: ${allowed})`,
+      `Member access requires a ${structured} variable, got ${base}`,
+      expr.position,
+    );
+  }
+  const member = members[expr.attribute];
+  if (member === undefined) {
+    const allowed = Object.keys(members).sort().join(", ");
+    throw typeError(
+      `Unknown ${base} member '${expr.attribute}' (expected one of: ${allowed})`,
       expr.position,
     );
   }

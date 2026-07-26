@@ -6,7 +6,14 @@
 
 import { evalError, typeError } from "./errors";
 import { BUILTINS, arityMessage } from "./functions";
-import { MODEL_MEMBERS, isModelValue, valueType, type ExprValue } from "./values";
+import {
+  INDEX_MEMBERS,
+  MODEL_MEMBERS,
+  isIndexValue,
+  isModelValue,
+  valueType,
+  type ExprValue,
+} from "./values";
 
 import type { Expression } from "./parser";
 
@@ -56,10 +63,16 @@ function evaluateMember(
   env: ValueEnvironment,
 ): ExprValue {
   const base = evaluate(expr.base, env);
-  if (!isModelValue(base) || !(expr.attribute in MODEL_MEMBERS)) {
-    throw typeError(`Cannot access '${expr.attribute}' on ${valueType(base)}`, expr.position);
+  if (typeof base === "object" && base !== null) {
+    if (isIndexValue(base) && expr.attribute in INDEX_MEMBERS) {
+      if (expr.attribute === "id") return base.index_id;
+      return expr.attribute === "backend" ? base.backend : base.name;
+    }
+    if (isModelValue(base) && expr.attribute in MODEL_MEMBERS) {
+      return expr.attribute === "connection_id" ? base.connection_id : base.model_name;
+    }
   }
-  return expr.attribute === "connection_id" ? base.connection_id : base.model_name;
+  throw typeError(`Cannot access '${expr.attribute}' on ${valueType(base)}`, expr.position);
 }
 
 function evaluateBinary(

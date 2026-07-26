@@ -16,7 +16,7 @@ from app.pipelines.expressions.errors import (
 )
 from app.pipelines.expressions.evaluator import evaluate
 from app.pipelines.expressions.parser import Expression, parse
-from app.pipelines.expressions.values import ExprType, ExprValue, ModelValue
+from app.pipelines.expressions.values import ExprType, ExprValue, IndexValue, ModelValue
 
 __all__ = [
     "ExprType",
@@ -26,6 +26,7 @@ __all__ = [
     "ExpressionEvalError",
     "ExpressionSyntaxError",
     "ExpressionTypeError",
+    "IndexValue",
     "ModelValue",
     "check_type",
     "evaluate",
