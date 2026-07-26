@@ -169,6 +169,11 @@ the same PR.
 - **Group props by domain, not by count.** Past ~10 props, group related props into
   typed objects built with `useMemo`. A huge prop interface is a smell that the
   parent owns state the child's hooks should own.
+- **Read `useCssTokens`' result as one array; never destructure it.** It returns
+  state, so the array keeps its identity until the palette actually changes —
+  `const [a, ...rest] = useCssTokens(…)` builds a fresh `rest` every render, and
+  any memo keyed on it recomputes forever. On a canvas that rebuilds every
+  deck.gl layer per render, which no test notices because the output is correct.
 - **`React.memo` only works with stable props.** Every object/callback prop a
   memoized child receives must come from `useMemo`/`useCallback` — one inline
   literal defeats the memo. During streaming this is the difference between
