@@ -125,9 +125,16 @@ class ToolInvocationService:
         Reads the FAILED node from the in-memory trace recorder -- never a DB
         query, because a mid-run DB error (e.g. a vector-dimension mismatch)
         aborts the transaction and any post-failure SELECT would raise. Derives
-        a readable message that names the node and pins the status: 502 for an
-        upstream provider fault, 500 for an internal bug. The raw provider text
-        stays in the trace, never the primary message.
+        a readable message that names the node and pins the status: 400 for a
+        node's own typed complaint about its configuration, 502 for an upstream
+        provider fault, 500 for an internal bug. The raw provider text stays in
+        the trace, never the primary message.
+
+        The 400 branch matters because a node's `InvalidInputError` already
+        says exactly what to change (a namespace the account does not own, an
+        embedding dimension the index disagrees with, a sparse index on a
+        server without pg_search). Folding those into "internal error" hides
+        the one sentence that would fix the pipeline.
         """
         failed_node_run = handle.trace.failed_node_run
         failed_node = (
@@ -139,24 +146,29 @@ class ToolInvocationService:
             if failed_node_run
             else None
         )
-        external = is_external_provider_error(exc)
         where = f" at {failed_node.node_name}" if failed_node else ""
-        message = (
-            f"Retrieval failed{where}: the model provider returned an error. "
-            "Open the run trace for the provider's full message."
-            if external
-            else f"Retrieval failed{where} due to an internal error. See the run trace for details."
-        )
+        message, status_code = self._classify(exc, where)
         detail = RetrievalFailureDetail(
             message=message,
             code="retrieval_pipeline_failed",
             failed_node=failed_node,
             pipeline_run_id=handle.run.id,
         )
-        return RetrievalPipelineError(
-            detail.model_dump(mode="json"),
-            status_code=502 if external else 500,
-        )
+        return RetrievalPipelineError(detail.model_dump(mode="json"), status_code=status_code)
+
+    @staticmethod
+    def _classify(exc: Exception, where: str) -> tuple[str, int]:
+        """Return the user-facing message and status for a failed run."""
+        if isinstance(exc, InvalidInputError):
+            return f"Retrieval failed{where}: {exc.detail}", 400
+        if is_external_provider_error(exc):
+            return (
+                f"Retrieval failed{where}: the model provider returned an error. "
+                "Open the run trace for the provider's full message."
+            ), 502
+        return (
+            f"Retrieval failed{where} due to an internal error. See the run trace for details."
+        ), 500
 
     # pylint: disable-next=too-many-arguments
     def _record_and_respond(
