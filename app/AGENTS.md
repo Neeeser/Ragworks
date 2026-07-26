@@ -609,6 +609,12 @@ diagnostics` (see `docs/diagnostics.md`). The invariants:
   `ctx.retrieval_settings` — never a raw node-config dict, never a re-resolve. A GET
   that scaffolded/bound a default pipeline would mutate state on every Overview
   visit; `scaffold=False` is why it can't.
+- **A condition that is the expected state of a collection reports at `info`
+  until it stops being expected.** Before the first ingestion run (`ctx.
+  has_ingestion_run` — an ingest-triggered `PipelineRun` row, not a document
+  count, since a `Document` exists from upload before any pipeline touches it)
+  a missing or empty index is how a new collection looks, and flagging it as an
+  error opens every fresh workspace on a failure the user cannot act on.
 - **`consistent` deliberately ignores `run_failures` and `node_config`** — it claims
   the current *configuration* is sound, not that nothing is noteworthy. Keep the
   Overview copy ("Configuration consistent") honest about that.

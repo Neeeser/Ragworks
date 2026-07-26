@@ -7,6 +7,7 @@ against pgvector, aggregation, and the cache signature end to end.
 
 from __future__ import annotations
 
+import pytest
 from sqlmodel import Session
 
 from app.db import models
@@ -15,7 +16,9 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.services.diagnostics import CollectionDiagnosticsService
+from app.services.diagnostics import context as context_module
 from app.services.pipelines import PipelineService
+from app.vectorstores.base import IndexStats
 from tests.utils.providers import add_openrouter_connection
 
 
@@ -106,6 +109,41 @@ def test_matched_models_have_no_embedding_error(session: Session):
     response = CollectionDiagnosticsService(session).run(user, collection)
     codes = {d.code for d in response.diagnostics}
     assert "embedding_model_mismatch" not in codes
+
+
+def test_fresh_collection_reports_no_index_errors(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """A collection nobody has ingested into opens clean, not "Issues found".
+
+    The Overview card reads `consistent` + the error count, so indexes that
+    only the first ingestion run creates must not register as errors there.
+    """
+    user = _user(session)
+    collection = _collection_with_models(
+        session, user, ingest_model="same", retrieval_model="same"
+    )
+
+    class _AbsentIndexProber:
+        """Stand-in store where no index exists yet (the pre-ingest reality)."""
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def stats(self, *args: object, **kwargs: object) -> IndexStats:
+            return IndexStats(exists=False, count=0)
+
+    monkeypatch.setattr(context_module, "VectorStoreProber", _AbsentIndexProber)
+
+    response = CollectionDiagnosticsService(session).run(user, collection)
+
+    assert response.error_count == 0
+    assert response.consistent is True
+    index_findings = [
+        d for d in response.diagnostics if d.code in {"missing_index", "empty_index"}
+    ]
+    assert index_findings
+    assert all(d.severity == "info" for d in index_findings)
 
 
 def test_signature_busts_on_pipeline_version_change(session: Session):

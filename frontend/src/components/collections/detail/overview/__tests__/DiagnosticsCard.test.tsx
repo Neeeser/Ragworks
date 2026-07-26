@@ -23,6 +23,28 @@ describe("DiagnosticsCard", () => {
     );
   });
 
+  it("stays 'Configuration consistent' when a fresh collection has only info findings", async () => {
+    api.fetchCollectionDiagnostics.mockResolvedValueOnce(
+      makeCollectionDiagnostics({
+        diagnostics: [
+          makeDiagnostic({
+            code: "missing_index",
+            severity: "info",
+            category: "index_config",
+            title: "Retrieval index not created yet",
+            summary:
+              "The index 'ragworks-bm25' that retrieval queries is created by the first ingestion run.",
+          }),
+        ],
+      }),
+    );
+    render(<DiagnosticsCard collectionId="col-1" token="t" />);
+
+    await waitFor(() => expect(screen.getByText("Configuration consistent")).toBeInTheDocument());
+    expect(screen.queryByText("Issues found")).not.toBeInTheDocument();
+    expect(screen.getByText("0 errors, 0 warnings")).toBeInTheDocument();
+  });
+
   it("labels a clean collection 'Configuration consistent'", async () => {
     api.fetchCollectionDiagnostics.mockResolvedValueOnce(
       makeCollectionDiagnostics({ diagnostics: [] }),

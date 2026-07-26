@@ -37,6 +37,12 @@ class DiagnosticContext:
     A side is `None` when its pipeline could not be resolved read-only; the
     matching `*_error` then holds why. Rules that compare the two sides must
     tolerate either being absent.
+
+    `has_ingestion_run` is the "has anything ever been ingested here?" signal:
+    an ingest-triggered `PipelineRun` row of any status. It is a run row rather
+    than a document count because a `Document` exists from upload, before any
+    pipeline touches it -- a rule keying on documents would call a collection
+    ingested while its indexes are still uncreated.
     """
 
     collection: models.Collection
@@ -51,6 +57,7 @@ class DiagnosticContext:
     retrieval_validation: PipelineValidationResult | None = None
     recent_ingestion_failures: list[models.PipelineRun] = field(default_factory=list)
     recent_retrieval_failures: list[models.PipelineRun] = field(default_factory=list)
+    has_ingestion_run: bool = False
 
     @property
     def ingestion_settings(self) -> PipelineSettings | None:
@@ -107,5 +114,8 @@ def build_context(
         models.BindingRole.TOOL,
         status=models.PipelineRunStatus.FAILED,
         limit=_RECENT_FAILURE_LIMIT,
+    )
+    ctx.has_ingestion_run = bool(
+        runs.list_recent_for_collection(collection.id, models.BindingRole.INGEST, limit=1)
     )
     return ctx

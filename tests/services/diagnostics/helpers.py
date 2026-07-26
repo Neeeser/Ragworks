@@ -92,6 +92,7 @@ def make_context(
     retrieval_definition: PipelineDefinition | None = None,
     session: object | None = None,
     user: models.User | None = None,
+    has_ingestion_run: bool = False,
 ) -> DiagnosticContext:
     """Build a `DiagnosticContext` with the given resolved sides.
 
@@ -99,6 +100,7 @@ def make_context(
     returns `None`, exercising the tolerate-missing-side path). Rules that
     read the registry (index rows) need a real `session` and a persisted
     `user`; the rest never touch either, so both default to stand-ins.
+    `has_ingestion_run` defaults to False -- the brand-new-collection state.
     """
     collection = _collection()
     if user is not None:
@@ -109,6 +111,7 @@ def make_context(
         or models.User(email="u@example.com", full_name="U", hashed_password="x"),
         session=session,  # type: ignore[arg-type]  # None for rules that never touch it
         prober=prober or StubProber(),  # type: ignore[arg-type]
+        has_ingestion_run=has_ingestion_run,
     )
     if ingestion is not None:
         ctx.ingestion = _ResolvedStub(  # type: ignore[assignment]

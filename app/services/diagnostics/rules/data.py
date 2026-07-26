@@ -25,6 +25,11 @@ class IndexProbeRule:
     Emits `missing_index` (error) when an index retrieval reads does not exist,
     `empty_index` (warning) when it exists but holds no vectors, and
     `index_status_unavailable` (info) when the store cannot be reached.
+
+    Both index findings drop to `info` until the collection has an ingestion
+    run: an index nothing has written to yet is the expected state of a new
+    collection (the BM25 sibling is created on first ingest), and reporting it
+    as an error opens every fresh workspace on a failure it cannot act on.
     """
 
     code = "index_probe"
@@ -67,35 +72,76 @@ class IndexProbeRule:
                 )
             ]
         if not stats.exists:
-            return [
-                build_diagnostic(
-                    code="missing_index",
-                    severity="error",
-                    confidence="confirmed",
-                    category=self.category,
-                    title="Retrieval index does not exist",
-                    summary=(
-                        f"The index '{target.index_name}' retrieval queries does "
-                        "not exist in the store yet. Ingest documents to create "
-                        "it; searches return nothing until then."
-                    ),
-                    resources=[resource],
-                )
-            ]
+            return [self._missing_index(ctx, target, resource)]
         if stats.count == 0:
-            return [
-                build_diagnostic(
-                    code="empty_index",
-                    severity="warning",
-                    confidence="confirmed",
-                    category=self.category,
-                    title="Retrieval index is empty",
-                    summary=(
-                        f"The index '{target.index_name}' exists but holds no "
-                        "vectors, so searches return nothing. Ingest documents "
-                        "into this collection."
-                    ),
-                    resources=[resource],
-                )
-            ]
+            return [self._empty_index(ctx, target, resource)]
         return []
+
+    def _missing_index(
+        self,
+        ctx: DiagnosticContext,
+        target: IndexTarget,
+        resource: DiagnosticResource,
+    ) -> CollectionDiagnostic:
+        """An index retrieval reads that the store does not hold."""
+        if not ctx.has_ingestion_run:
+            return build_diagnostic(
+                code="missing_index",
+                severity="info",
+                confidence="confirmed",
+                category=self.category,
+                title="Retrieval index not created yet",
+                summary=(
+                    f"The index '{target.index_name}' that retrieval queries is "
+                    "created by the first ingestion run. This collection has not "
+                    "ingested any documents yet."
+                ),
+                resources=[resource],
+            )
+        return build_diagnostic(
+            code="missing_index",
+            severity="error",
+            confidence="confirmed",
+            category=self.category,
+            title="Retrieval index does not exist",
+            summary=(
+                f"The index '{target.index_name}' that retrieval queries does not "
+                "exist in the store yet. Ingest documents to create it; searches "
+                "return nothing until then."
+            ),
+            resources=[resource],
+        )
+
+    def _empty_index(
+        self,
+        ctx: DiagnosticContext,
+        target: IndexTarget,
+        resource: DiagnosticResource,
+    ) -> CollectionDiagnostic:
+        """An index that exists but holds no vectors."""
+        if not ctx.has_ingestion_run:
+            return build_diagnostic(
+                code="empty_index",
+                severity="info",
+                confidence="confirmed",
+                category=self.category,
+                title="Retrieval index holds no vectors yet",
+                summary=(
+                    f"The index '{target.index_name}' holds no vectors. This "
+                    "collection has not ingested any documents yet; searches "
+                    "return nothing until it does."
+                ),
+                resources=[resource],
+            )
+        return build_diagnostic(
+            code="empty_index",
+            severity="warning",
+            confidence="confirmed",
+            category=self.category,
+            title="Retrieval index is empty",
+            summary=(
+                f"The index '{target.index_name}' exists but holds no vectors, so "
+                "searches return nothing. Ingest documents into this collection."
+            ),
+            resources=[resource],
+        )

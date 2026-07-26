@@ -31,6 +31,10 @@ registered rule — there are no one-off warning strings. The fields that matter
   that is probably benign is a `warning` (e.g. the same model on two different
   connections). `info` is a neutral or degraded note (e.g. a probe that couldn't
   reach the store).
+  A finding whose condition is the *expected* state of a collection reports at
+  `info` until that stops being true: before a collection's first ingestion run,
+  `missing_index` and `empty_index` are notes (the index is created on first
+  ingest), and they become an error/warning once an ingestion run exists.
 - **`confidence`** — `confirmed` (an observed condition) vs `heuristic` (a risk flag
   that may be benign). Severity and confidence are independent: an error is always
   confirmed; a warning may be either.
@@ -59,7 +63,9 @@ a `DiagnosticContext` once per request, iterates `DIAGNOSTIC_RULES`
 so that a rule which throws degrades to a single `info` finding rather than sinking
 the endpoint. The context resolves both pipeline sides **read-only** (it never
 scaffolds or binds a default pipeline — a GET must not mutate), gathers recent run
-history, and holds a budget-bounded `VectorStoreProber` for the live index checks.
+history plus `has_ingestion_run` (any ingest-triggered `PipelineRun` row — a
+`Document` exists from upload, before a pipeline touches it), and holds a
+budget-bounded `VectorStoreProber` for the live index checks.
 
 ## Adding a rule
 
