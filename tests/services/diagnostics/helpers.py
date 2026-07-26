@@ -15,6 +15,7 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.definition import PipelineDefinition
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import (
     PipelineSettings,
@@ -64,10 +65,18 @@ def _base_retrieval() -> PipelineSettings:
 
 @dataclasses.dataclass
 class _ResolvedStub:
-    """Minimal stand-in for a Resolved{Ingestion,Retrieval}Pipeline."""
+    """Minimal stand-in for a Resolved{Ingestion,Retrieval}Pipeline.
+
+    `static_definition` is the binding-resolved graph — the view any rule
+    asking "what does this collection actually target?" must read, since the
+    answer varies per binding.
+    """
 
     settings: object
     pipeline: models.Pipeline
+    static_definition: PipelineDefinition = dataclasses.field(
+        default_factory=lambda: PipelineDefinition(nodes=[])
+    )
 
 
 def make_context(
@@ -79,6 +88,8 @@ def make_context(
     retrieval_validation: object | None = None,
     recent_ingestion_failures: list[models.PipelineRun] | None = None,
     recent_retrieval_failures: list[models.PipelineRun] | None = None,
+    ingestion_definition: PipelineDefinition | None = None,
+    retrieval_definition: PipelineDefinition | None = None,
 ) -> DiagnosticContext:
     """Build a `DiagnosticContext` with the given resolved sides.
 
@@ -98,6 +109,7 @@ def make_context(
             pipeline=models.Pipeline(
                 user_id=collection.user_id, name="Ingestion", kind=models.PipelineKind.INGESTION
             ),
+            static_definition=ingestion_definition or PipelineDefinition(nodes=[]),
         )
     if retrieval is not None:
         ctx.retrieval = _ResolvedStub(  # type: ignore[assignment]
@@ -105,6 +117,7 @@ def make_context(
             pipeline=models.Pipeline(
                 user_id=collection.user_id, name="Retrieval", kind=models.PipelineKind.RETRIEVAL
             ),
+            static_definition=retrieval_definition or PipelineDefinition(nodes=[]),
         )
     ctx.ingestion_validation = ingestion_validation  # type: ignore[assignment]
     ctx.retrieval_validation = retrieval_validation  # type: ignore[assignment]

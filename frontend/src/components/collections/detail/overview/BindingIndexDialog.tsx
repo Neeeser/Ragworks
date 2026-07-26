@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 
 import { indexVariables } from "@/components/pipelines/lib/variable-env";
 import { Button } from "@/components/ui/button";
-import { CustomSelect } from "@/components/ui/custom-select";
-import { Field } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { IndexVariableValue, Pipeline, VectorIndex } from "@/lib/types";
+import { BindingIndexFields } from "./BindingIndexFields";
+
+import type { Pipeline, VectorIndex } from "@/lib/types";
 
 type BindingIndexDialogProps = {
   /** The pipeline whose binding variables this dialog fills in. */
@@ -25,12 +25,6 @@ type BindingIndexDialogProps = {
   onSave: (values: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 };
-
-/** Read a stored binding value as an index reference, else null. */
-function asIndexValue(value: unknown): IndexVariableValue | null {
-  if (!value || typeof value !== "object" || !("index_id" in value)) return null;
-  return value as IndexVariableValue;
-}
 
 /**
  * Repoint one binding's indexes.
@@ -51,8 +45,8 @@ export function BindingIndexDialog({
   onSave,
   onClose,
 }: BindingIndexDialogProps) {
-  const slots = useMemo(
-    () => indexVariables(pipeline.definition.variables ?? []),
+  const hasSlots = useMemo(
+    () => indexVariables(pipeline.definition.variables ?? []).length > 0,
     [pipeline.definition.variables],
   );
   const [draft, setDraft] = useState<Record<string, unknown>>(values);
@@ -88,40 +82,13 @@ export function BindingIndexDialog({
           </p>
         </div>
 
-        {slots.length === 0 ? (
-          <p className="text-ui text-muted">This pipeline has no index to choose.</p>
-        ) : (
-          <div className="space-y-3">
-            {slots.map((slot) => {
-              const current = asIndexValue(draft[slot.name] ?? slot.value);
-              return (
-                <Field key={slot.name} label={slot.description || slot.name} hint={slot.name}>
-                  <CustomSelect
-                    value={current?.index_id ?? ""}
-                    options={indexes.map((index) => ({
-                      value: index.index_id ?? "",
-                      label: `${index.name} — ${index.backend}`,
-                    }))}
-                    placeholder="Pick an index"
-                    disabled={busy || saving}
-                    onValueChange={(indexId) => {
-                      const picked = indexes.find((index) => index.index_id === indexId);
-                      if (!picked?.index_id) return;
-                      setDraft((previous) => ({
-                        ...previous,
-                        [slot.name]: {
-                          index_id: picked.index_id,
-                          backend: picked.backend,
-                          name: picked.name,
-                        },
-                      }));
-                    }}
-                  />
-                </Field>
-              );
-            })}
-          </div>
-        )}
+        <BindingIndexFields
+          pipelines={[pipeline]}
+          values={draft}
+          indexes={indexes}
+          disabled={busy || saving}
+          onChange={setDraft}
+        />
 
         {error ? <p className="text-ui text-data-neg">{error}</p> : null}
 
@@ -129,7 +96,7 @@ export function BindingIndexDialog({
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} loading={saving} disabled={slots.length === 0}>
+          <Button onClick={handleSave} loading={saving} disabled={!hasSlots}>
             Save
           </Button>
         </div>

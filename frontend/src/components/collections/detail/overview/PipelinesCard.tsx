@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
+import { useIndexes } from "@/components/pipelines/hooks/use-indexes";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {
@@ -36,6 +38,8 @@ export function PipelinesCard({
   const [bindings, setBindings] = useState({ ingestion: "", retrieval: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [indexValues, setIndexValues] = useState<Record<string, unknown>>({});
+  const { registeredIndexes } = useIndexes(token);
 
   const defaultIngestion = useMemo(
     () =>
@@ -64,6 +68,15 @@ export function PipelinesCard({
     bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "") ||
     bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "");
 
+  const selectedPipelines = useMemo(
+    () =>
+      [
+        ingestionPipelines.find((pipeline) => pipeline.id === bindings.ingestion),
+        retrievalPipelines.find((pipeline) => pipeline.id === bindings.retrieval),
+      ].filter((pipeline): pipeline is Pipeline => Boolean(pipeline)),
+    [ingestionPipelines, retrievalPipelines, bindings],
+  );
+
   const applyPrimaryTool = async (pipelineId: string) => {
     const existing = collection.tools.find((tool) => tool.pipeline_id === pipelineId);
     if (existing) {
@@ -73,6 +86,7 @@ export function PipelinesCard({
     } else {
       const created = await addCollectionTool(token, collection.id, {
         pipeline_id: pipelineId,
+        variable_values: indexValues,
       });
       if (!created.is_primary) {
         await updateCollectionTool(token, collection.id, created.id, { is_primary: true });
@@ -92,6 +106,7 @@ export function PipelinesCard({
       if (bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "")) {
         await updateCollection(token, collection.id, {
           ingest_pipeline_id: bindings.ingestion || null,
+          variable_values: indexValues,
         });
       }
       if (
@@ -140,6 +155,20 @@ export function PipelinesCard({
           />
         </div>
       </div>
+      {/* Shown while a rebind is pending: a new pipeline may target a
+          different index, and the user should choose it here rather than
+          discover the auto-filled one afterwards. */}
+      {dirty && (
+        <div className="mt-3">
+          <BindingIndexFields
+            pipelines={selectedPipelines}
+            values={indexValues}
+            indexes={registeredIndexes}
+            disabled={saving}
+            onChange={setIndexValues}
+          />
+        </div>
+      )}
       {(dirty || message) && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {dirty && (

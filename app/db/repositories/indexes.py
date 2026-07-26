@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import asc
@@ -40,17 +39,6 @@ class RegisteredIndexRepository(Repository):
         if index is None or index.user_id != user_id:
             return None
         return index
-
-    def list_by_ids(
-        self, index_ids: Sequence[UUID], user_id: UUID
-    ) -> list[models.RegisteredIndex]:
-        """Return the user's indexes among `index_ids` (unknown ids are skipped)."""
-        if not index_ids:
-            return []
-        statement = user_scoped(
-            select(models.RegisteredIndex), models.RegisteredIndex, user_id
-        ).where(col(models.RegisteredIndex.id).in_(list(index_ids)))
-        return list(self.session.exec(statement).all())
 
     def find_by_identity(
         self,
@@ -96,10 +84,6 @@ class RegisteredIndexRepository(Repository):
                 metric=metric,
             )
         )
-
-    def add(self, index: models.RegisteredIndex) -> models.RegisteredIndex:
-        """Persist a new registered index and return it."""
-        return self._add(index)
 
     def delete(self, index: models.RegisteredIndex) -> None:
         """Delete a registration row; the caller flushes/commits."""

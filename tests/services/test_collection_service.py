@@ -14,17 +14,23 @@ import pytest
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import CollectionRepository, UserRepository
+from app.db.repositories import (
+    CollectionPipelineBindingRepository,
+    CollectionRepository,
+    UserRepository,
+)
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.resolution import resolve_static_definition
 from app.schemas.collections import (
     CollectionCreate,
     CollectionPipelineOverrides,
     CollectionUpdate,
     PipelineNodeOverride,
 )
+from app.schemas.enums import IndexBackend
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
@@ -118,8 +124,13 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
         n for n in pipeline_service.get_definition(ingestion_pipeline).nodes
         if n.type == "chunker.token"
     )
+    # Resolved, because a store-bound node's backend is an expression over the
+    # pipeline's index variable — the raw config holds the expression.
     updated_retriever = next(
-        n for n in pipeline_service.get_definition(retrieval_pipeline).nodes
+        n
+        for n in resolve_static_definition(
+            pipeline_service.get_definition(retrieval_pipeline)
+        ).nodes
         if n.type == "retriever.vector"
     )
     # Merged, not replaced: the untouched sibling field survives the override.
@@ -319,3 +330,45 @@ def test_update_prompt_persists_and_clears_template(session: Session) -> None:
         persisted = fresh.get(models.Collection, collection.id)
         assert persisted is not None
         assert SYSTEM_PROMPT_METADATA_KEY not in persisted.extra_metadata
+
+
+def test_create_applies_one_index_choice_to_every_binding(session: Session) -> None:
+    """Ingestion must write where retrieval reads.
+
+    Creation takes a single set of index choices rather than one per binding,
+    so a new collection cannot start out indexing into one store and querying
+    another — the mismatch the diagnostics rules exist to catch.
+    """
+    user = _create_user(session)
+    index = models.RegisteredIndex(
+        user_id=user.id,
+        backend=IndexBackend.PGVECTOR,
+        name="chosen-index",
+        vector_type="dense",
+        dimension=1536,
+    )
+    session.add(index)
+    session.commit()
+    session.refresh(index)
+
+    created = CollectionService(session).create(
+        user,
+        CollectionCreate(
+            name="Chosen index",
+            variable_values={
+                "primary_index": {
+                    "index_id": str(index.id),
+                    "backend": "pgvector",
+                    "name": "chosen-index",
+                }
+            },
+        ),
+    )
+
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(created.id)
+    selected = {
+        models.BindingRole(binding.role).value: binding.variable_values.get("primary_index")
+        for binding in bindings
+    }
+    assert selected["ingest"] == selected["tool"]
+    assert selected["ingest"]["name"] == "chosen-index"

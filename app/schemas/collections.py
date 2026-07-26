@@ -46,11 +46,18 @@ class CollectionCreate(CollectionBase):
 
     `tool_pipeline_ids` bind in order (the first becomes the primary search
     tool); omitted, the user's default search pipeline is bound as primary.
+
+    `variable_values` are the collection's index choices, applied to *every*
+    binding it creates. One set rather than one per binding on purpose:
+    ingestion must write where retrieval reads, and letting the two be chosen
+    separately at creation is how a collection ends up indexing into one store
+    and querying another.
     """
 
     ingest_pipeline_id: UUID | None = None
     tool_pipeline_ids: list[UUID] | None = None
     pipeline_overrides: CollectionPipelineOverrides | None = None
+    variable_values: dict[str, Any] = Field(default_factory=dict)
 
 
 class CollectionUpdate(BaseModel):
@@ -64,6 +71,8 @@ class CollectionUpdate(BaseModel):
     description: str | None = None
     metadata: dict[str, Any] | None = None
     ingest_pipeline_id: UUID | None = None
+    #: Index choices for the rebound ingest binding; absent leaves them as-is.
+    variable_values: dict[str, Any] | None = None
 
 
 class CollectionToolBindingRead(BaseModel):

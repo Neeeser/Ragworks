@@ -90,9 +90,13 @@ class CollectionService:
         )
         self.repo.add(collection)
         self.session.flush()
-        self.tools.set_ingest_pipeline(user, collection, ingest.id)
+        # The same index choices reach every binding, so a new collection
+        # cannot start out writing to one store and reading from another.
+        self.tools.set_ingest_pipeline(
+            user, collection, ingest.id, payload.variable_values
+        )
         for pipeline in tool_pipelines:
-            self.tools.add_tool(user, collection, pipeline.id)
+            self.tools.add_tool(user, collection, pipeline.id, payload.variable_values)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -112,7 +116,9 @@ class CollectionService:
         if payload.metadata is not None:
             collection.extra_metadata = {**collection.extra_metadata, **payload.metadata}
         if payload.ingest_pipeline_id is not None:
-            self.tools.set_ingest_pipeline(user, collection, payload.ingest_pipeline_id)
+            self.tools.set_ingest_pipeline(
+                user, collection, payload.ingest_pipeline_id, payload.variable_values
+            )
         self.session.add(collection)
         self.session.commit()
         self.session.refresh(collection)
