@@ -46,8 +46,8 @@ class IndexValue(BaseModel):
     Carries the identity a store-bound node needs — which backend, which index
     name — so a binding can repoint a pipeline at a different index (possibly
     on a different backend) without editing the definition. `index_id` is the
-    `vector_indexes` row this came from; capability validation reads `backend`
-    to check the referencing nodes support it.
+    `registered_indexes` row this came from; capability validation reads
+    `backend` to check the referencing nodes support it.
     """
 
     model_config = ConfigDict(frozen=True)

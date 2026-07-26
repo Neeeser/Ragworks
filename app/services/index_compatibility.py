@@ -20,6 +20,7 @@ from typing import Any
 
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.expressions import ExpressionError, parse, references
+from app.pipelines.index_variables import is_lexical_node
 from app.pipelines.node import PipelineNodeBase
 from app.pipelines.nodes.indexing import BaseIndexerNode
 from app.pipelines.nodes.retrieval import BaseRetrieverNode
@@ -114,7 +115,7 @@ def index_variable_vector_types(definition: PipelineDefinition) -> dict[str, str
     """
     wanted: dict[str, str] = {}
     for node in definition.nodes:
-        vector_type = "sparse" if _is_lexical(node.type) else "dense"
+        vector_type = "sparse" if is_lexical_node(node.type) else "dense"
         for value in (node.config or {}).values():
             source = expression_source(value)
             if source is None:
@@ -129,8 +130,3 @@ def index_variable_vector_types(definition: PipelineDefinition) -> dict[str, str
                 if vector_type == "sparse" or name not in wanted:
                     wanted[name] = vector_type
     return wanted
-
-
-def _is_lexical(node_type: str) -> bool:
-    """Return True for the BM25/lexical node family."""
-    return node_type.endswith(".bm25")
