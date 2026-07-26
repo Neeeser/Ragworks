@@ -23,6 +23,7 @@ from app.schemas.collections import (
     CollectionUpdate,
     PipelineNodeOverride,
 )
+from app.services.binding_variables import ensure_declared_somewhere, subset_declared
 from app.services.collection_tools import CollectionToolService
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import resolve_ingest_binding, resolve_primary_tool
@@ -92,11 +93,26 @@ class CollectionService:
         self.session.flush()
         # The same index choices reach every binding, so a new collection
         # cannot start out writing to one store and reading from another.
+        # Each binding takes only the slots its own pipeline declares — the
+        # union is validated first so a typo'd name still fails loudly.
+        definitions = {
+            pipeline.id: self.pipelines.get_definition(pipeline)
+            for pipeline in [ingest, *tool_pipelines]
+        }
+        ensure_declared_somewhere(definitions.values(), payload.variable_values)
         self.tools.set_ingest_pipeline(
-            user, collection, ingest.id, payload.variable_values
+            user,
+            collection,
+            ingest.id,
+            subset_declared(definitions[ingest.id], payload.variable_values),
         )
         for pipeline in tool_pipelines:
-            self.tools.add_tool(user, collection, pipeline.id, payload.variable_values)
+            self.tools.add_tool(
+                user,
+                collection,
+                pipeline.id,
+                subset_declared(definitions[pipeline.id], payload.variable_values),
+            )
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -117,12 +133,45 @@ class CollectionService:
             collection.extra_metadata = {**collection.extra_metadata, **payload.metadata}
         if payload.ingest_pipeline_id is not None:
             self.tools.set_ingest_pipeline(
-                user, collection, payload.ingest_pipeline_id, payload.variable_values
+                user,
+                collection,
+                payload.ingest_pipeline_id,
+                self._scoped_ingest_values(
+                    user, collection, payload.ingest_pipeline_id, payload.variable_values
+                ),
             )
         self.session.add(collection)
         self.session.commit()
         self.session.refresh(collection)
         return collection
+
+    def _scoped_ingest_values(
+        self,
+        user: models.User,
+        collection: models.Collection,
+        pipeline_id: UUID,
+        values: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        """Scope an ingest rebind's shared values to the new pipeline's slots.
+
+        The overview sends one value set covering every pipeline it shows, so
+        a tool-only slot must not fail the ingest rebind; a name no bound
+        pipeline declares still does.
+        """
+        if values is None:
+            return None
+        pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
+        if pipeline is None:
+            return values  # set_ingest_pipeline raises the 404 with context
+        definition = self.pipelines.get_definition(pipeline)
+        others = [
+            self.pipelines.get_definition(bound)
+            for binding in self.tools.list_tools(collection)
+            if (bound := self.pipelines.get_pipeline(binding.pipeline_id, user.id))
+            is not None
+        ]
+        ensure_declared_somewhere([definition, *others], values)
+        return subset_declared(definition, values)
 
     def prompt_read(
         self,

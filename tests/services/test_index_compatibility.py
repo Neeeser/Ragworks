@@ -16,6 +16,7 @@ from sqlmodel import Session
 from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
+from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.registry import default_registry
 from app.pipelines.resolution import resolve_static_definition
@@ -414,4 +415,182 @@ class TestAutoFill:
             "backend": "pgvector",
             "name": "docs-bm25",
         }
+
+
+def _dense_definition(dimension: int | None = None) -> PipelineDefinition:
+    """A dense retrieval graph fed by an index variable.
+
+    `dimension` pins the embedding dimension in the definition itself; None
+    matches the default pipelines, whose dimension is only known at run time.
+    """
+    nodes = [
+        PipelineNodeDefinition(
+            id="embed",
+            type=EmbedderNode.type,
+            name="Embed",
+            config={
+                "model_name": "test-embedder",
+                **({"dimension": dimension} if dimension is not None else {}),
+            },
+        ),
+        PipelineNodeDefinition(
+            id="retrieve",
+            type=VectorRetrieverNode.type,
+            name="Retrieve",
+            config={
+                "backend": {"$expr": "primary_index.backend"},
+                "index_name": {"$expr": "primary_index.name"},
+                "top_k": 5,
+            },
+        ),
+    ]
+    return PipelineDefinition(
+        nodes=nodes,
+        variables=[_index_variable("primary_index", "pgvector", "docs-main")],
+    )
+
+
+class TestDimensionCompatibility:
+    """A dense selection must match the dimension the pipeline actually emits.
+
+    Without this, a binding accepts an index of the wrong width and the dense
+    branch silently returns nothing at query time (fusion papers over it with
+    BM25 hits), while ingest fails per-document at upsert.
+    """
+
+    def _collection(self, session: Session) -> tuple[models.User, models.Collection]:
+        user = models.User(email="dims@example.com", full_name="D", hashed_password="x")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        collection = models.Collection(
+            user_id=user.id, name="Docs", description="", extra_metadata={}
+        )
+        session.add(collection)
+        session.commit()
+        session.refresh(collection)
+        return user, collection
+
+    def _registered(
+        self,
+        session: Session,
+        user: models.User,
+        name: str,
+        dimension: int | None,
+    ) -> models.RegisteredIndex:
+        index = models.RegisteredIndex(
+            user_id=user.id,
+            backend=IndexBackend.PGVECTOR,
+            name=name,
+            vector_type="dense",
+            dimension=dimension,
+        )
+        session.add(index)
+        session.commit()
+        session.refresh(index)
+        return index
+
+    def _selection(self, index: models.RegisteredIndex) -> dict[str, object]:
+        return {
+            "primary_index": {
+                "index_id": str(index.id),
+                "backend": "pgvector",
+                "name": index.name,
+            }
+        }
+
+    def _bind(
+        self,
+        session: Session,
+        user: models.User,
+        collection: models.Collection,
+        index: models.RegisteredIndex,
+    ) -> models.CollectionPipelineBinding:
+        """Bind a pipeline resolving to `index`, making it the collection's."""
+        pipeline = models.Pipeline(user_id=user.id, name="Existing")
+        session.add(pipeline)
+        session.commit()
+        session.refresh(pipeline)
+        session.add(
+            models.PipelineVersion(
+                pipeline_id=pipeline.id,
+                version=1,
+                definition=_dense_definition().model_dump(mode="json"),
+            )
+        )
+        binding = models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+            variable_values=self._selection(index),
+        )
+        session.add(binding)
+        session.commit()
+        session.refresh(binding)
+        return binding
+
+    def test_an_index_narrower_than_the_definition_states_is_rejected(
+        self, session: Session
+    ) -> None:
+        user, collection = self._collection(session)
+        wrong = self._registered(session, user, "wrong-dim", 768)
+
+        with pytest.raises(InvalidInputError, match="768"):
+            resolve_binding_values(
+                session, user, collection, _dense_definition(1536), self._selection(wrong)
+            )
+
+    def test_a_selection_conflicting_with_the_collections_bindings_is_rejected(
+        self, session: Session
+    ) -> None:
+        """The default pipelines state no dimension, so the anchor is the
+        collection's existing dense index — ingest writes where retrieval reads."""
+        user, collection = self._collection(session)
+        current = self._registered(session, user, "docs-main", 1536)
+        self._bind(session, user, collection, current)
+        wrong = self._registered(session, user, "wrong-dim", 768)
+
+        with pytest.raises(InvalidInputError) as error:
+            resolve_binding_values(
+                session, user, collection, _dense_definition(), self._selection(wrong)
+            )
+
+        assert "768" in str(error.value)
+        assert "1536" in str(error.value)
+
+    def test_the_binding_being_changed_does_not_anchor_itself(
+        self, session: Session
+    ) -> None:
+        """Excluding the binding under edit is what lets a lone binding move."""
+        user, collection = self._collection(session)
+        current = self._registered(session, user, "docs-main", 1536)
+        binding = self._bind(session, user, collection, current)
+        narrow = self._registered(session, user, "narrow", 768)
+
+        values = resolve_binding_values(
+            session,
+            user,
+            collection,
+            _dense_definition(),
+            self._selection(narrow),
+            exclude_binding_ids=frozenset({binding.id}),
+        )
+
+        assert values["primary_index"] == {
+            "index_id": str(narrow.id),
+            "backend": "pgvector",
+            "name": "narrow",
+        }
+
+    def test_a_matching_dimension_is_accepted(self, session: Session) -> None:
+        user, collection = self._collection(session)
+        current = self._registered(session, user, "docs-main", 1536)
+        self._bind(session, user, collection, current)
+        sibling = self._registered(session, user, "docs-alt", 1536)
+
+        values = resolve_binding_values(
+            session, user, collection, _dense_definition(), self._selection(sibling)
+        )
+
+        assert values["primary_index"]["name"] == "docs-alt"  # type: ignore[index]
 

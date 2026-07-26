@@ -18,7 +18,8 @@ Two behaviors matter:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from types import EllipsisType
 from uuid import UUID
 
 from sqlmodel import Session
@@ -60,18 +61,24 @@ def collection_indexes(
     session: Session,
     user: models.User,
     collection: models.Collection,
+    *,
+    exclude_binding_ids: frozenset[UUID] = frozenset(),
 ) -> dict[str, models.RegisteredIndex]:
     """Return the collection's current indexes, keyed by vector type.
 
     Derived from the collection's existing bindings rather than stored: a
     collection does not *own* indexes, it uses whichever ones its pipelines
     point at, and deriving keeps that answer true after every rebind.
+    `exclude_binding_ids` drops bindings from the derivation — a binding being
+    repointed must not anchor its own validation.
     """
     indexes = RegisteredIndexRepository(session)
     bindings = CollectionPipelineBindingRepository(session).list_for_collection(collection.id)
     pipelines = PipelineService(session)
     found: dict[str, models.RegisteredIndex] = {}
     for binding in bindings:
+        if binding.id in exclude_binding_ids:
+            continue
         pipeline = pipelines.get_pipeline(binding.pipeline_id, user.id)
         if pipeline is None:
             continue
@@ -100,39 +107,83 @@ def resolve_binding_values(
     collection: models.Collection,
     definition: PipelineDefinition,
     supplied: Mapping[str, object] | None = None,
+    *,
+    exclude_binding_ids: frozenset[UUID] = frozenset(),
 ) -> dict[str, object]:
     """Return the values to store on a binding: supplied, auto-filled, defaults.
 
     Raises `InvalidInputError` when a supplied index is unknown, not owned by
-    the user, or on a backend the graph's nodes cannot run.
+    the user, of the wrong vector type or dimension, or on a backend the
+    graph's nodes cannot run. `exclude_binding_ids` names the binding(s) being
+    rewritten in this operation, so the dimension check anchors on the
+    collection's *other* bindings — a coordinated move of every binding at
+    once excludes them all and is anchored by the definition alone.
     """
     values = dict(supplied or {})
     _reject_unknown(definition, values)
-    _validate_indexes(session, user, definition, values)
+    _validate_indexes(session, user, collection, definition, values, exclude_binding_ids)
     _autofill_indexes(session, user, collection, definition, values)
     _reject_incompatible(collection, definition, values)
     return values
 
 
-def _reject_unknown(definition: PipelineDefinition, values: dict[str, object]) -> None:
-    """Reject values naming variables the pipeline does not expose."""
-    declared = {
+def declared_binding_names(definition: PipelineDefinition) -> set[str]:
+    """Return the names of the definition's binding-source variables."""
+    return {
         variable.name
         for variable in definition.variables
         if variable.source is VariableSource.BINDING
     }
+
+
+def subset_declared(
+    definition: PipelineDefinition, values: Mapping[str, object]
+) -> dict[str, object]:
+    """Return only the entries naming this definition's binding variables.
+
+    Collection-level entry points share one value set across every binding,
+    so a slot only the *other* pipeline declares is expected here, not an
+    error — `ensure_declared_somewhere` is what still catches typos.
+    """
+    declared = declared_binding_names(definition)
+    return {name: value for name, value in values.items() if name in declared}
+
+
+def ensure_declared_somewhere(
+    definitions: Iterable[PipelineDefinition], values: Mapping[str, object]
+) -> None:
+    """Reject values no involved pipeline declares.
+
+    The per-binding subset silently drops foreign names, so without this a
+    typo'd slot name would vanish instead of failing — and the index the user
+    thought they chose would quietly stay unset.
+    """
+    declared: set[str] = set()
+    for definition in definitions:
+        declared |= declared_binding_names(definition)
     unknown = sorted(set(values) - declared)
+    if unknown:
+        raise InvalidInputError(
+            f"No selected pipeline has a binding variable named: {', '.join(unknown)}."
+        )
+
+
+def _reject_unknown(definition: PipelineDefinition, values: dict[str, object]) -> None:
+    """Reject values naming variables the pipeline does not expose."""
+    unknown = sorted(set(values) - declared_binding_names(definition))
     if unknown:
         raise InvalidInputError(
             f"This pipeline has no binding variable named: {', '.join(unknown)}."
         )
 
 
-def _validate_indexes(
+def _validate_indexes(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     session: Session,
     user: models.User,
+    collection: models.Collection,
     definition: PipelineDefinition,
     values: dict[str, object],
+    exclude_binding_ids: frozenset[UUID],
 ) -> None:
     """Replace supplied index selections with the registry's own identity.
 
@@ -141,6 +192,7 @@ def _validate_indexes(
     """
     indexes = RegisteredIndexRepository(session)
     wanted = index_variable_vector_types(definition)
+    anchor: tuple[int, str] | None | EllipsisType = ...
     for variable in index_variables(definition):
         supplied = values.get(variable.name)
         if supplied is None:
@@ -160,7 +212,48 @@ def _validate_indexes(
                 f"Variable '{variable.name}' needs a {expected} index, but "
                 f"'{row.name}' is {row.vector_type}."
             )
+        if row.vector_type == "dense" and row.dimension is not None:
+            if anchor is ...:  # computed once, and only when a dense pick needs it
+                anchor = _dimension_anchor(
+                    session, user, collection, definition, exclude_binding_ids
+                )
+            if anchor is not None and row.dimension != anchor[0]:
+                dimension, source = anchor
+                # A width mismatch never errors at query time — the dense
+                # branch just returns nothing — so it is rejected here, the
+                # only moment the mistake is visible.
+                raise InvalidInputError(
+                    f"Variable '{variable.name}': index '{row.name}' stores "
+                    f"{row.dimension}-dimensional vectors, but {source} uses "
+                    f"{dimension}. Repoint the collection's indexes together "
+                    "to change dimensions."
+                )
         values[variable.name] = index_value_for(row)
+
+
+def _dimension_anchor(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    definition: PipelineDefinition,
+    exclude_binding_ids: frozenset[UUID],
+) -> tuple[int, str] | None:
+    """Return the dense dimension a selection must match, with its source.
+
+    The definition's own stated dimension wins; the default pipelines state
+    none (the model's native width is only known at run time), so the anchor
+    falls back to the collection's current dense index — ingest must write
+    where retrieval reads. No anchor means no constraint to enforce.
+    """
+    settings = resolve_pipeline_settings(definition, collection, default_registry())
+    if settings.dimension is not None:
+        return settings.dimension, "this pipeline"
+    existing = collection_indexes(
+        session, user, collection, exclude_binding_ids=exclude_binding_ids
+    ).get("dense")
+    if existing is not None and existing.dimension is not None:
+        return existing.dimension, f"the collection's index '{existing.name}'"
+    return None
 
 
 def _index_id(variable_name: str, supplied: object) -> UUID:

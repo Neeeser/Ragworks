@@ -105,6 +105,7 @@ class CollectionToolService:
             collection,
             self.pipelines.get_definition(pipeline),
             variable_values,
+            exclude_binding_ids=frozenset({binding.id}),
         )
         self.session.add(binding)
         return binding
@@ -174,14 +175,17 @@ class CollectionToolService:
             raise InvalidInputError(
                 f"Pipeline '{pipeline.name}' does not accept documents and cannot ingest."
             )
+        existing = self.get_ingest_binding(collection)
         values = resolve_binding_values(
             self.session,
             user,
             collection,
             self.pipelines.get_definition(pipeline),
             variable_values,
+            exclude_binding_ids=(
+                frozenset({existing.id}) if existing is not None else frozenset()
+            ),
         )
-        existing = self.get_ingest_binding(collection)
         if existing is not None:
             existing.pipeline_id = pipeline.id
             existing.variable_values = values
