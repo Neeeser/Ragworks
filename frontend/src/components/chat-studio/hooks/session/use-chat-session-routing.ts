@@ -36,7 +36,11 @@ export function useChatSessionRouting(): UseChatSessionRoutingResult {
     value: null,
     active: false,
   });
-  const urlCollectionsValue = searchParams.get("collections");
+  // Deep links are written comma-separated (`buildCollectionsQuery`), but a
+  // hand-built or framework-rewritten URL can repeat the key instead; reading
+  // only the first value would silently drop every collection after it.
+  const collectionsParams = searchParams.getAll("collections");
+  const urlCollectionsValue = collectionsParams.length > 0 ? collectionsParams.join(",") : null;
 
   const buildChatUrl = useCallback((sessionId: string | null, collectionIds: string[]) => {
     const basePath = sessionId ? `/chat/${sessionId}` : "/chat";

@@ -31,6 +31,7 @@ export interface UseSessionLifecycleParams extends ChatStudioCoreState {
   historyFilterCollectionIds: string[];
   historyFilterIncludeUnassigned: boolean;
   resolveValidToolCollectionIds: (ids: string[]) => string[];
+  consumeDeepLinkCollectionIds: () => string[];
   setSelectedToolCollectionIds: React.Dispatch<React.SetStateAction<string[]>>;
   setParameterOverrides: React.Dispatch<React.SetStateAction<ParameterOverrides>>;
   setProviderForm: React.Dispatch<React.SetStateAction<ProviderFormState>>;
@@ -65,6 +66,7 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     historyFilterCollectionIds,
     historyFilterIncludeUnassigned,
     resolveValidToolCollectionIds,
+    consumeDeepLinkCollectionIds,
     setSelectedToolCollectionIds,
     setParameterOverrides,
     setProviderForm,
@@ -264,20 +266,30 @@ export function useSessionLifecycle(params: UseSessionLifecycleParams): UseSessi
     }
     const pendingIds = pendingSessionIdsRef.current;
     const latestSession = sessions.find((session) => !pendingIds.has(session.id)) ?? null;
+    // A `?collections=` deep link is this visit's stated intent, so it wins over
+    // whichever persisted selection would otherwise seed the new chat. Consuming
+    // it here (never on the carried-forward "New chat" snapshot above) applies it
+    // exactly once, so a later background session refetch cannot resurrect it.
+    const deepLinkedCollectionIds = resolveValidToolCollectionIds(consumeDeepLinkCollectionIds());
+    const seedToolCollectionIds = (persisted: string[]) => {
+      setSelectedToolCollectionIds(
+        deepLinkedCollectionIds.length > 0 ? deepLinkedCollectionIds : persisted,
+      );
+    };
     if (latestSession) {
       setActiveModelId(latestSession.chat_model);
       setActiveConnectionId(latestSession.provider_connection_id ?? null);
       setParameterOverrides(latestSession.parameter_overrides ?? {});
       setProviderForm(createProviderFormFromPreferences(latestSession.provider_preferences));
       setStreamingEnabled(latestSession.stream ?? DEFAULT_STREAMING_ENABLED);
-      setSelectedToolCollectionIds(latestSession.tool_collection_ids ?? []);
+      seedToolCollectionIds(latestSession.tool_collection_ids ?? []);
     } else if (user) {
       setActiveModelId(user.last_used_chat_model ?? null);
       setActiveConnectionId(user.last_used_chat_connection_id ?? null);
       setParameterOverrides(user.last_used_parameters ?? {});
       setProviderForm(createProviderFormFromPreferences(user.last_used_provider));
       setStreamingEnabled(user.last_used_stream ?? DEFAULT_STREAMING_ENABLED);
-      setSelectedToolCollectionIds(
+      seedToolCollectionIds(
         resolveValidToolCollectionIds(user.last_used_tool_collection_ids ?? []),
       );
     }

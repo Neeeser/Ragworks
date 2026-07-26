@@ -347,6 +347,53 @@ describe("ChatStudio", () => {
       });
     });
 
+    it("keeps deep-linked collections over the last-used selection on a fresh load", async () => {
+      // /chat?collections=col-2 arriving from a collection page: the deep link
+      // states the intent for this visit and must survive the new-chat defaults
+      // seeded from the user's last-used run settings (col-1).
+      api.listChatSessions.mockResolvedValueOnce([]);
+      setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: ["col-1"] } });
+      setQuery("collections=col-2");
+
+      render(<ChatStudio />);
+      await openRunSettings();
+      await flushPromises();
+
+      expect(
+        (mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] })
+          .selectedToolCollectionIds,
+      ).toEqual(["col-2"]);
+    });
+
+    it("keeps deep-linked collections over the latest session's tool selection", async () => {
+      // The other new-chat defaults branch: an existing session supplies the
+      // seed instead of the user record, and it must not win over the deep link.
+      setQuery("collections=col-2");
+
+      render(<ChatStudio />);
+      await openRunSettings();
+      await flushPromises();
+
+      expect(
+        (mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] })
+          .selectedToolCollectionIds,
+      ).toEqual(["col-2"]);
+    });
+
+    it("enables every id in a repeated collections param, ignoring unknown ones", async () => {
+      api.listChatSessions.mockResolvedValueOnce([]);
+      setQuery("collections=col-2&collections=col-1&collections=missing");
+
+      render(<ChatStudio />);
+      await openRunSettings();
+      await flushPromises();
+
+      expect(
+        (mockTelemetryPanelProps as { selectedToolCollectionIds?: string[] })
+          .selectedToolCollectionIds,
+      ).toEqual(["col-2", "col-1"]);
+    });
+
     it("filters last-used tool collections against available collections", async () => {
       api.listChatSessions.mockResolvedValueOnce([]);
       setAuthState({ user: { ...baseUser, last_used_tool_collection_ids: ["col-1", "missing"] } });
