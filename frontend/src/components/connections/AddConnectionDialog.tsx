@@ -3,10 +3,11 @@
 import { useId, useState } from "react";
 
 import { ConnectionConfigFields } from "@/components/connections/ConnectionConfigFields";
+import { toProviderChoices } from "@/components/connections/lib/provider-choices";
+import { ProviderChoiceCard } from "@/components/connections/ProviderChoiceCard";
 import { ProviderIcon } from "@/components/connections/ProviderIcon";
 import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { createConnection, validateConnectionConfig } from "@/lib/api";
@@ -74,14 +75,7 @@ export function AddConnectionDialog({
     onClose();
   };
 
-  const selectableTypes = providerTypes.filter((type) => {
-    if (type.builtin) return false;
-    if (type.max_connections_per_user == null) return true;
-    const count = existingConnections.filter(
-      (connection) => connection.provider_type === type.provider_type,
-    ).length;
-    return count < type.max_connections_per_user;
-  });
+  const providerChoices = toProviderChoices(providerTypes, existingConnections);
 
   const handlePickType = (type: ProviderTypeInfo) => {
     setSelectedType(type);
@@ -168,27 +162,14 @@ export function AddConnectionDialog({
         </div>
         {!selectedType ? (
           <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3">
-            {selectableTypes.map((type) => (
-              <button
-                key={type.provider_type}
-                type="button"
-                onClick={() => handlePickType(type)}
-                className="group relative flex flex-col items-center gap-2 rounded-control border border-hairline bg-surface p-3 text-center transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-              >
-                {type.recommended ? (
-                  <Chip tone="accent" dot={false} className="absolute right-2 top-2">
-                    Recommended
-                  </Chip>
-                ) : null}
-                <ProviderIcon
-                  providerType={type.provider_type}
-                  className="mt-3 h-8 w-8 text-muted transition-colors duration-80 ease-standard group-hover:text-accent-violet"
-                />
-                <span className="text-ui font-medium text-primary">{type.label}</span>
-                <ProviderKindBadges kinds={type.kinds} />
-              </button>
+            {providerChoices.map((choice) => (
+              <ProviderChoiceCard
+                key={choice.type.provider_type}
+                choice={choice}
+                onPick={() => handlePickType(choice.type)}
+              />
             ))}
-            {selectableTypes.length === 0 ? (
+            {providerChoices.length === 0 ? (
               <div className="col-span-2 p-8 text-center">
                 <p className="text-ui text-muted">Every available provider is already connected.</p>
               </div>
