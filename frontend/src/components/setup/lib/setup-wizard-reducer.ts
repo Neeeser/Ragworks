@@ -36,11 +36,25 @@ export interface SetupWizardState {
    * the user typed.
    */
   chunkDirty: boolean;
+  /**
+   * True once readiness has been consulted to place the user on a step.
+   * Latches so going Back to an earlier step is never undone by a later
+   * status refresh — the token rotation re-runs the status query, and
+   * without this the wizard would yank the user forward again mid-edit.
+   */
+  resumed: boolean;
+  /**
+   * True once the account-specific index name has been suggested. Latches so
+   * a later render never refills a name the user cleared to retype.
+   */
+  indexNameSeeded: boolean;
 }
 
 export type SetupWizardAction =
   | { type: "NEXT" }
   | { type: "BACK" }
+  | { type: "RESUME"; step: SetupStepId }
+  | { type: "SEED_INDEX_NAME"; name: string }
   | { type: "SET_CHOICES"; choices: Partial<SetupChoices> }
   | { type: "SET_CHUNK"; chunkSize?: number; chunkOverlap?: number }
   | { type: "SEED_CHUNK_DEFAULTS"; chunkSize: number; chunkOverlap: number };
@@ -49,12 +63,18 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
   step: "welcome",
   direction: 1,
   chunkDirty: false,
+  resumed: false,
+  indexNameSeeded: false,
   choices: {
     embeddingConnectionId: null,
     embeddingModel: "",
     embeddingDimension: null,
     backend,
-    indexName: "ragworks",
+    // Empty until the account and the backend's name-length rule are both
+    // known; `SEED_INDEX_NAME` fills it (see `defaultIndexName`). A fixed
+    // literal here would hand every account on the deployment the same name,
+    // and on pgvector that is one shared physical table.
+    indexName: "",
     collectionName: "My first collection",
     // Seeded from the selected model's window before the launch step; these are
     // the unknown-model fallback (see `chunkDefaultsFor`).
@@ -69,6 +89,26 @@ export const initialSetupWizardState = (backend: IndexBackend): SetupWizardState
     rerankerModel: "",
   },
 });
+
+/**
+ * Place the user on `step`, but only from the entry step and only once.
+ * Past that the step they are on is the one they chose, so a later status
+ * refresh cannot pull them out of it.
+ */
+function resumed(state: SetupWizardState, step: SetupStepId): SetupWizardState {
+  if (state.resumed || state.step !== "welcome") return { ...state, resumed: true };
+  return { ...state, step, direction: 1, resumed: true };
+}
+
+/**
+ * Suggest `name`, but only into an untouched field and only once — a user
+ * who clears the box to type their own name keeps an empty box.
+ */
+function withSeededIndexName(state: SetupWizardState, name: string): SetupWizardState {
+  if (state.indexNameSeeded) return state;
+  if (state.choices.indexName !== "") return { ...state, indexNameSeeded: true };
+  return { ...state, indexNameSeeded: true, choices: { ...state.choices, indexName: name } };
+}
 
 export function setupWizardReducer(
   state: SetupWizardState,
@@ -85,6 +125,10 @@ export function setupWizardReducer(
       if (index <= 0) return state;
       return { ...state, step: SETUP_STEPS[index - 1], direction: -1 };
     }
+    case "RESUME":
+      return resumed(state, action.step);
+    case "SEED_INDEX_NAME":
+      return withSeededIndexName(state, action.name);
     case "SET_CHOICES":
       return { ...state, choices: { ...state.choices, ...action.choices } };
     case "SET_CHUNK": {

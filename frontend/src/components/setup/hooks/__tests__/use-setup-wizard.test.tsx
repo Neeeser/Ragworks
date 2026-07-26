@@ -1,12 +1,19 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
+const { routerReplace, statusRef } = vi.hoisted(() => ({
+  routerReplace: vi.fn(),
+  statusRef: { current: null } as { current: SetupStatus | null },
+}));
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 vi.mock("@/providers/setup-status-provider", () => ({
-  useSetupStatus: () => ({ status: null, refresh: vi.fn(), markComplete: vi.fn() }),
+  useSetupStatus: () => ({
+    status: statusRef.current,
+    refresh: vi.fn(),
+    markComplete: vi.fn(),
+  }),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: routerReplace }),
@@ -23,6 +30,9 @@ vi.mock("@/lib/model-catalog-cache", () => ({
 
 import { useSetupWizard } from "@/components/setup/hooks/use-setup-wizard";
 import * as api from "@/lib/api";
+import { makeSetupStatus } from "@/test/fixtures";
+
+import type { SetupStatus } from "@/lib/types";
 
 const CONNECTION_ID = "conn-1";
 const MODEL_ID = "openai/text-embedding-3-small";
@@ -30,12 +40,79 @@ const createIndex = vi.mocked(api.createIndex);
 const fetchEmbeddingDimension = vi.mocked(api.fetchEmbeddingDimension);
 const bootstrapSetup = vi.mocked(api.bootstrapSetup);
 
-async function mountWizard() {
+// Readiness is module state behind the provider mock, so it has to be cleared
+// for every test or one describe's status decides another's resume step.
+beforeEach(() => {
+  statusRef.current = null;
+});
+
+async function mountWizard(expectedStep = "welcome") {
   const hook = renderHook(() => useSetupWizard());
   // Let the connections/backends queries settle so nothing re-renders mid-assert.
-  await waitFor(() => expect(hook.result.current.state.step).toBe("welcome"));
+  await waitFor(() => expect(hook.result.current.state.step).toBe(expectedStep));
   return hook;
 }
+
+describe("useSetupWizard — resuming a partly-configured workspace", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("opens on the model step when every required provider is already connected", async () => {
+    // Regression: the wizard always resumed at providers, so a returning user
+    // had to click Continue through a step with nothing left to do on it.
+    statusRef.current = makeSetupStatus({
+      has_embedding_provider: true,
+      has_chat_provider: true,
+      has_vector_store: true,
+    });
+
+    const { result } = await mountWizard("model");
+
+    expect(result.current.state.step).toBe("model");
+  });
+
+  it("still opens on welcome for a workspace with no progress", async () => {
+    statusRef.current = makeSetupStatus();
+
+    const { result } = await mountWizard("welcome");
+
+    expect(result.current.state.step).toBe("welcome");
+  });
+
+  it("lets Back reach the steps the resume skipped", async () => {
+    statusRef.current = makeSetupStatus({
+      has_embedding_provider: true,
+      has_chat_provider: true,
+      has_vector_store: true,
+    });
+    const { result } = await mountWizard("model");
+
+    act(() => result.current.back());
+    expect(result.current.state.step).toBe("providers");
+
+    act(() => result.current.back());
+    expect(result.current.state.step).toBe("welcome");
+  });
+
+  it("does not pull the user forward again after they navigate back", async () => {
+    // The auth provider rotates its token every 12 minutes, re-running the
+    // status query; re-resuming on that refresh would yank the user out of
+    // the step they deliberately went back to.
+    statusRef.current = makeSetupStatus({
+      has_embedding_provider: true,
+      has_chat_provider: true,
+      has_vector_store: true,
+    });
+    const { result, rerender } = await mountWizard("model");
+    act(() => result.current.back());
+
+    statusRef.current = { ...statusRef.current };
+    rerender();
+
+    expect(result.current.state.step).toBe("providers");
+  });
+});
 
 describe("useSetupWizard.ensureIndex — embedding dimension resolution", () => {
   beforeEach(() => {

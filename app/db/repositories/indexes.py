@@ -55,6 +55,25 @@ class RegisteredIndexRepository(Repository):
         )
         return self.session.exec(statement).first()
 
+    def other_owner_exists(
+        self,
+        user_id: UUID,
+        backend: IndexBackend,
+        name: str,
+    ) -> bool:
+        """Whether a *different* user has registered `(backend, name)`.
+
+        Deliberately not user-scoped: on a backend whose index names are
+        shared workspace-wide, this is the only signal that a destructive
+        operation would land on somebody else's data.
+        """
+        statement = select(models.RegisteredIndex).where(
+            col(models.RegisteredIndex.backend) == backend,
+            col(models.RegisteredIndex.name) == name,
+            col(models.RegisteredIndex.user_id) != user_id,
+        )
+        return self.session.exec(statement).first() is not None
+
     def get_or_create(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         user_id: UUID,

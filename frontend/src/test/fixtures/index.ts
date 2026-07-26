@@ -401,6 +401,7 @@ export * from "@/test/fixtures/config";
 export * from "@/test/fixtures/chat-scenarios";
 
 export { makeBackendInfo, makePineconeBackendInfo, makeVectorIndex } from "./indexes";
+export * from "./setup";
 
 export {
   makeCatalogModel,

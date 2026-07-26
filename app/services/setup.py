@@ -1,8 +1,8 @@
 """First-run setup: derived readiness status and the one-shot bootstrap.
 
 `status` derives readiness from real state (provider connections covering
-embedding/chat/vector-store, an index the user can reach, a collection) so it
-can never drift from reality. `bootstrap` applies the wizard's confirmed
+embedding/chat/vector-store, an index the user has registered, a collection)
+so it can never drift from reality. `bootstrap` applies the wizard's confirmed
 choices in one transaction: default ingestion and retrieval pipelines built
 around the chosen connection/model/index and the first collection attached to
 them. There are no global default models to seed — the embedding choice lives
@@ -11,7 +11,6 @@ inside the scaffolded pipeline definitions.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -23,6 +22,7 @@ from app.db.repositories import (
     CollectionRepository,
     PipelineRepository,
     ProviderConnectionRepository,
+    RegisteredIndexRepository,
 )
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
@@ -37,15 +37,10 @@ from app.pipelines.tool_defaults import (
 )
 from app.providers.base import effective_embedding_input_limit
 from app.providers.registry import build_adapter, get_provider, resolve_connection
-from app.schemas.enums import IndexBackend, ProviderKind
+from app.schemas.enums import ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
 from app.services.collection_tools import CollectionToolService
-from app.services.errors import (
-    InvalidInputError,
-    NotFoundError,
-    ServiceError,
-    is_external_provider_error,
-)
+from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_scaffolding import register_definition_indexes
 from app.services.pipeline_defaults import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
 from app.services.pipelines import (
@@ -57,8 +52,6 @@ from app.telemetry import record
 from app.telemetry.events import CollectionCreated
 from app.vectorstores.base import VectorIndexDescription
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, get_vector_store
-
-logger = logging.getLogger(__name__)
 
 #: Pipeline entity name + description per scaffolded slug (distinct from the
 #: tool name exposed to the assistant, which lives in the node config).
@@ -169,24 +162,16 @@ class SetupService:
         return SetupBootstrapResult(collection=collection, warnings=warnings)
 
     def _has_index(self, user: models.User) -> bool:
-        """True when any reachable backend holds at least one index.
+        """True when *this user* has registered at least one index.
 
-        A backend whose provider is unreachable (or whose prerequisite is
-        missing) counts as index-less rather than failing status -- readiness
-        must always be answerable.
+        Registration is the readiness signal, not the store's own listing: a
+        pgvector name is shared workspace-wide, so listing physical indexes
+        reports another account's index as this user's readiness and the
+        wizard would treat an index they cannot select as their own. Only a
+        registered index is selectable by a binding, which is exactly what
+        "ready" has to mean here.
         """
-        for backend in IndexBackend:
-            try:
-                store = get_vector_store(backend, user=user, session=self.session)
-                if store.list_indexes():
-                    return True
-            except ServiceError:
-                continue
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                if not is_external_provider_error(exc):
-                    raise
-                logger.warning("Skipping %s while deriving setup status: %s", backend, exc)
-        return False
+        return bool(RegisteredIndexRepository(self.session).list_for_user(user.id))
 
     def _validate_index(self, user: models.User, payload: SetupBootstrapRequest) -> None:
         """Ensure the chosen index exists and matches the model's dimension."""

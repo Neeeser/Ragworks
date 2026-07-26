@@ -41,6 +41,9 @@ PGVECTOR_CAPABILITIES = VectorStoreCapabilities(
     supported_vector_types=("dense", "sparse"),
     supports_lexical_count=True,
     supports_lexical_facet=True,
+    # One deployment Postgres holds every user's indexes, and an index name
+    # maps to exactly one `vec_<name>` table, so a name is shared workspace-wide.
+    shared_across_users=True,
     requires_api_key=False,
 )
 

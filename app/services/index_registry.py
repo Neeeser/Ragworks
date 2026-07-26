@@ -165,6 +165,29 @@ class IndexRegistryService:
             "Point those collections at another index first."
         )
 
+    def ensure_no_other_owner(
+        self, user: models.User, backend: IndexBackend, name: str
+    ) -> None:
+        """Raise when another account has registered the same `(backend, name)`.
+
+        On a backend whose index names are shared workspace-wide, one name is
+        one physical store for every account, so destroying it here destroys
+        vectors belonging to someone who never saw the action and cannot
+        undo it. Registration is the ownership signal, matching
+        `ensure_unused`'s declared-reference rule; the other account is not
+        named, because a user must not be able to enumerate their neighbours.
+        """
+        if not RegisteredIndexRepository(self._session).other_owner_exists(
+            user.id, backend, name
+        ):
+            return
+        raise InvalidInputError(
+            f"Index '{name}' is also registered by another account, and "
+            f"{backend.value} stores one physical index per name for the whole "
+            "deployment — deleting it here would destroy that account's vectors. "
+            "Remove your registration instead, which leaves the index in place."
+        )
+
     def unregister(self, user: models.User, index: models.RegisteredIndex) -> None:
         """Delete a registration row after checking nothing references it."""
         self.ensure_unused(user, index)

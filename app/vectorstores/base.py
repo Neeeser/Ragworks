@@ -73,6 +73,14 @@ class VectorStoreCapabilities(BaseModel):
     #: BY over the lex table); Pinecone has no query-conditioned aggregation
     #: API at all (`describe_index_stats` only reports totals per namespace).
     supports_lexical_facet: bool = False
+    #: Whether one index name refers to the same physical index for every
+    #: user on the deployment. pgvector does — its indexes are tables in the
+    #: app's own Postgres, keyed by name alone — so two accounts that pick
+    #: the same name share a table and are separated only by `namespace`.
+    #: Pinecone does not: each user's indexes live in their own project,
+    #: reached through their own connection. Destructive control-plane
+    #: operations consult this before acting on another account's data.
+    shared_across_users: bool = False
     requires_api_key: bool
 
     @property

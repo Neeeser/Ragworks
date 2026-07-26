@@ -283,6 +283,12 @@ the same PR.
   `registeredIndexes`/`unregisteredIndexes` from one fetch — pickers offer the
   registered set, the index registry shows both so an index created outside the app
   is visible rather than hidden. Never add a second hook that re-fetches the list.
+- **A suggested default that names a shared backend resource is derived per
+  account, never a fixed literal.** A pgvector index name is one physical table
+  for the whole deployment, so one default hands every account the same store —
+  their vectors interleave where neither can see the other, and the wizard is
+  where that starts. Build the name from the account and the backend's own
+  `index_name_max_length`, leaving room for the `-bm25` sibling.
 - **A control that changes which index a binding targets states the consequence
   before the change.** Switching indexes moves no data, so the collection reads an
   empty store until it is re-ingested — and that outcome is invisible at query

@@ -5,6 +5,7 @@ import { useCallback, useMemo, useReducer, useState } from "react";
 
 import { computeKindCoverage } from "@/components/connections/ConnectionsManager";
 import { useConnections, useProviderTypes } from "@/components/connections/hooks/use-connections";
+import { applySetupSeeds } from "@/components/setup/lib/setup-seeding";
 import {
   initialSetupWizardState,
   setupWizardReducer,
@@ -76,9 +77,10 @@ export interface SetupWizardApi {
 /** One state domain: wizard progression, remote catalogs, and mutations. */
 export function useSetupWizard(): SetupWizardApi {
   const { token, user, loading: authLoading } = useAuth();
-  const { markComplete } = useSetupStatus();
+  const { markComplete, status } = useSetupStatus();
   const router = useRouter();
   const [state, dispatch] = useReducer(setupWizardReducer, "pgvector", initialSetupWizardState);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -115,6 +117,9 @@ export function useSetupWizard(): SetupWizardApi {
     enabled: Boolean(authToken),
   });
   const reloadBackends = backendsQuery.reload;
+
+  // Step placement and the suggested index name, both guarded and latching.
+  applySetupSeeds(state, dispatch, { status, user, backends: backendsQuery.data });
 
   const handleConnectionsChanged = useCallback(() => {
     reloadConnections();
