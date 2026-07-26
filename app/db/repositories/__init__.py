@@ -16,12 +16,18 @@ from app.db.repositories.base import Repository
 from app.db.repositories.bindings import CollectionPipelineBindingRepository
 from app.db.repositories.chat import ChatRepository
 from app.db.repositories.collection import CollectionRepository
-from app.db.repositories.collection_stats import (
-    HISTORY_WINDOWS,
-    CollectionStats,
-    CollectionStatsRepository,
-    HistoryWindow,
+from app.db.repositories.collection_history import (
+    BoundTool,
+    CollectionHistoryRepository,
+    HistoryDomain,
+    PipelineChangeMarker,
 )
+from app.db.repositories.collection_latency import (
+    CollectionLatencyRepository,
+    LatencyBucketStats,
+    LatencySummaryStats,
+)
+from app.db.repositories.collection_stats import CollectionStats, CollectionStatsRepository
 from app.db.repositories.document import ChunkRepository, DocumentRepository
 from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
 from app.db.repositories.files import FileNodeRepository
@@ -36,12 +42,14 @@ from app.db.repositories.telemetry import TelemetryRepository
 from app.db.repositories.user import AuthSessionRepository, UserRepository
 
 __all__ = [
-    "HISTORY_WINDOWS",
     "ApiKeyRepository",
     "AppSettingRepository",
     "AuthSessionRepository",
+    "BoundTool",
     "ChatRepository",
     "ChunkRepository",
+    "CollectionHistoryRepository",
+    "CollectionLatencyRepository",
     "CollectionPipelineBindingRepository",
     "CollectionRepository",
     "CollectionStats",
@@ -50,7 +58,10 @@ __all__ = [
     "EvalDatasetRepository",
     "EvalRunRepository",
     "FileNodeRepository",
-    "HistoryWindow",
+    "HistoryDomain",
+    "LatencyBucketStats",
+    "LatencySummaryStats",
+    "PipelineChangeMarker",
     "PipelineRepository",
     "PipelineRunRepository",
     "PipelineVersionRepository",

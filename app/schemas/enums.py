@@ -146,13 +146,16 @@ class ApiKeyCapability(str, Enum):
     FILES_WRITE = "files:write"
 
 
-class StatsHistoryRange(str, Enum):
-    """Trailing window for collection activity history (bucketed hour/day)."""
+class PipelineMarkerKind(str, Enum):
+    """A pipeline change plotted on the collection activity timeline.
 
-    HOURS_4 = "4h"
-    HOURS_24 = "24h"
-    DAYS_7 = "7d"
-    DAYS_30 = "30d"
+    `VERSION` is a saved `PipelineVersion`; `TOOL_ADDED` is the moment a
+    pipeline was bound to the collection as a tool. Unbinding has no member
+    because bindings are hard-deleted, so that history does not exist.
+    """
+
+    VERSION = "version"
+    TOOL_ADDED = "tool_added"
 
 
 class CollectionPurpose(str, Enum):
