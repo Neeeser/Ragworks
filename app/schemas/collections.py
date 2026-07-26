@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.base import DateTimeConfigMixin
-from app.schemas.enums import StatsHistoryRange
+from app.schemas.enums import IndexBackend, StatsHistoryRange
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 
 BucketGranularity = Literal["hour", "day"]
@@ -155,3 +155,47 @@ class CollectionStatsHistoryRead(BaseModel):
     range: StatsHistoryRange
     bucket: BucketGranularity
     points: list[CollectionStatsHistoryPoint]
+
+
+class CollectionIndexRef(BaseModel):
+    """A registered index as referenced by a collection's binding."""
+
+    index_id: UUID
+    name: str
+    backend: IndexBackend
+    vector_type: str
+    dimension: int | None = None
+    metric: str | None = None
+
+
+class CollectionIndexSlot(BaseModel):
+    """One index slot the collection's bound pipelines expose.
+
+    Slots are merged by variable name across bindings — an ingest and a tool
+    pipeline both reading `primary_index` are one slot, because ingestion must
+    write where retrieval reads. `expected_dimension` mirrors the bind-time
+    anchor: the width a compatible dense index must store, when known.
+    """
+
+    name: str
+    vector_type: str
+    description: str | None = None
+    expected_dimension: int | None = None
+    current: CollectionIndexRef | None = None
+    pipelines: list[str] = Field(default_factory=list)
+
+
+class CollectionIndexesRead(BaseModel):
+    """Every index slot of a collection, with its current selection."""
+
+    slots: list[CollectionIndexSlot]
+
+
+class CollectionIndexesUpdate(BaseModel):
+    """Repoint index slots across every binding that declares them.
+
+    One value per slot name, fanned out server-side, so ingest and every tool
+    move together — the per-binding endpoints exist for deliberate divergence.
+    """
+
+    values: dict[str, Any]

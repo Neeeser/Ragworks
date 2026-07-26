@@ -25,6 +25,8 @@ from app.db.repositories import (
 from app.schemas.collections import (
     CollectionCreate,
     CollectionDeleteResponse,
+    CollectionIndexesRead,
+    CollectionIndexesUpdate,
     CollectionPromptRead,
     CollectionPromptUpdate,
     CollectionRead,
@@ -35,6 +37,7 @@ from app.schemas.collections import (
 )
 from app.schemas.enums import StatsHistoryRange
 from app.services.collection_deletion import CollectionDeletionService
+from app.services.collection_indexes import CollectionIndexService
 from app.services.collections import CollectionService
 from app.services.errors import ServiceError
 from app.utils.time import utc_now
@@ -139,6 +142,37 @@ def get_collection_prompt(
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
         return CollectionService(session).prompt_read(collection, current_user)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.get("/{collection_id}/indexes", response_model=CollectionIndexesRead)
+def get_collection_indexes(
+    collection_id: UUID,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> CollectionIndexesRead:
+    """Return the collection's index slots with their current selections."""
+    collection = get_collection_or_404(collection_id, current_user.id, session)
+    try:
+        return CollectionIndexService(session).read(current_user, collection)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.put("/{collection_id}/indexes", response_model=CollectionIndexesRead)
+def update_collection_indexes(
+    collection_id: UUID,
+    payload: CollectionIndexesUpdate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> CollectionIndexesRead:
+    """Repoint index slots across every binding that declares them."""
+    collection = get_collection_or_404(collection_id, current_user.id, session)
+    try:
+        return CollectionIndexService(session).update(
+            current_user, collection, payload.values
+        )
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 

@@ -218,15 +218,14 @@ def _validate_indexes(  # pylint: disable=too-many-arguments,too-many-positional
                     session, user, collection, definition, exclude_binding_ids
                 )
             if anchor is not None and row.dimension != anchor[0]:
-                dimension, source = anchor
                 # A width mismatch never errors at query time — the dense
                 # branch just returns nothing — so it is rejected here, the
                 # only moment the mistake is visible.
                 raise InvalidInputError(
                     f"Variable '{variable.name}': index '{row.name}' stores "
-                    f"{row.dimension}-dimensional vectors, but {source} uses "
-                    f"{dimension}. Repoint the collection's indexes together "
-                    "to change dimensions."
+                    f"{row.dimension}-dimensional vectors, but {anchor[1]} "
+                    f"uses {anchor[0]}. Repoint the collection's indexes "
+                    "together to change dimensions."
                 )
         values[variable.name] = index_value_for(row)
 
@@ -257,7 +256,21 @@ def _dimension_anchor(
 
 
 def _index_id(variable_name: str, supplied: object) -> UUID:
-    """Extract the index id from a supplied selection."""
+    """Extract the index id from a supplied selection.
+
+    An id alone identifies the index — backend and name are rebuilt from the
+    registry row regardless — so a bare `{"index_id": …}` is accepted and the
+    full `IndexValue` shape only enforced when the id itself is absent.
+    """
+    if isinstance(supplied, Mapping):
+        raw = supplied.get("index_id")
+        if raw is not None:
+            try:
+                return UUID(str(raw))
+            except ValueError as error:
+                raise InvalidInputError(
+                    f"Variable '{variable_name}': '{raw}' is not an index id."
+                ) from error
     try:
         value = coerce_literal(VariableType.INDEX, supplied)
     except VariableValueError as error:
