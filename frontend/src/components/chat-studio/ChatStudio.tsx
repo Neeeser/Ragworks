@@ -11,6 +11,7 @@ import { useChatSessionRouting } from "@/components/chat-studio/hooks/session/us
 import { useSessionHistoryPolling } from "@/components/chat-studio/hooks/session/use-session-history-polling";
 import { useSessionLifecycle } from "@/components/chat-studio/hooks/session/use-session-lifecycle";
 import { useSessionMessages } from "@/components/chat-studio/hooks/session/use-session-messages";
+import { useChatModelAffordance } from "@/components/chat-studio/hooks/settings/use-chat-model-affordance";
 import { useCollectionTools } from "@/components/chat-studio/hooks/settings/use-collection-tools";
 import { useModelCatalog } from "@/components/chat-studio/hooks/settings/use-model-catalog";
 import { useModelParameters } from "@/components/chat-studio/hooks/settings/use-model-parameters";
@@ -25,7 +26,6 @@ import { usePanelControls } from "@/components/chat-studio/hooks/use-panel-contr
 import {
   CHAT_INPUT_MAX_HEIGHT,
   CHAT_INPUT_MIN_HEIGHT,
-  TELEMETRY_SECTION_IDS,
 } from "@/components/chat-studio/lib/chat-constants";
 import { useConnections } from "@/components/connections/hooks/use-connections";
 import { useAuth } from "@/providers/auth-provider";
@@ -188,9 +188,18 @@ export function ChatStudio() {
 
   const panel = usePanelControls({ setLoading: state.setLoading });
 
+  const modelAffordance = useChatModelAffordance({
+    panel,
+    currentModelInfo: modelCatalog.currentModelInfo,
+    activeModelId,
+    hasMessages: chatEntryOrder.length > 0,
+    ready: !loading,
+  });
+  const runSettingsOpen = modelAffordance.runSettings.open;
+
   useEffect(() => {
-    if (panel.telemetryOpen && panel.modelSelectorOpen) void refreshModels();
-  }, [panel.modelSelectorOpen, panel.telemetryOpen, refreshModels]);
+    if (runSettingsOpen && panel.modelSelectorOpen) void refreshModels();
+  }, [panel.modelSelectorOpen, runSettingsOpen, refreshModels]);
 
   const sortSessions = useCallback((items: typeof sessions) => {
     const pendingIds = state.pendingSessionIdsRef.current;
@@ -321,19 +330,12 @@ export function ChatStudio() {
     setActiveConnectionId,
   });
 
-  const currentModelLabel = modelCatalog.currentModelInfo?.name || activeModelId || "Select model";
-
   const handleNavigateToSession = useCallback(
     (sessionId: string) => {
       const session = sessions.find((item) => item.id === sessionId);
       navigateToChat(sessionId, session?.tool_collection_ids ?? []);
     },
     [navigateToChat, sessions],
-  );
-
-  const handleTimelineModelSelect = useCallback(
-    () => panel.handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting),
-    [panel],
   );
 
   const showFollowButton =
@@ -375,9 +377,11 @@ export function ChatStudio() {
         parameters: telemetryParameters,
         usage: telemetryUsage,
       }}
-      currentModelLabel={currentModelLabel}
+      currentModelLabel={modelAffordance.currentModelLabel}
+      needsChatModel={modelAffordance.needsChatModel}
+      runSettings={modelAffordance.runSettings}
       onStartNewChat={handleStartNewChat}
-      onTimelineModelSelect={handleTimelineModelSelect}
+      onTimelineModelSelect={modelAffordance.onSelectModel}
       deletingSessionId={deletingSessionId}
       sessions={sessions}
       onDeleteSession={handleDeleteSession}

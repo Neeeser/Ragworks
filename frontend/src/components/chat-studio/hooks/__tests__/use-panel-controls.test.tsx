@@ -103,6 +103,31 @@ describe("usePanelControls", () => {
     expect(result.current.modelParametersOpen).toBe(false);
   });
 
+  it("lands the caret in the revealed section's search field", () => {
+    vi.useFakeTimers();
+    const section = document.createElement("div");
+    section.id = TELEMETRY_SECTION_IDS.modelRouting;
+    const search = document.createElement("input");
+    search.type = "search";
+    section.append(search);
+    document.body.append(section);
+
+    try {
+      const { result } = renderPanelControls();
+
+      act(() => result.current.handleOverrideSelect(TELEMETRY_SECTION_IDS.modelRouting));
+      expect(result.current.modelSelectorOpen).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(80);
+      });
+
+      expect(document.activeElement).toBe(search);
+    } finally {
+      section.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the responsive overlays mutually exclusive", () => {
     window.innerWidth = 800;
     const { result } = renderPanelControls();

@@ -201,6 +201,13 @@ the same PR.
   it over a change the user made after load).
 - **Read a repeatable query key with `getAll`, not `get`.** `get` returns only the
   first value, so `?ids=a&ids=b` silently drops everything after `a`.
+- **A pane's state-dependent default is derived at render, never stored.** Computing
+  "open unless the user closed it" as `stored || (condition && !dismissed)` cannot get
+  stuck; writing that default into the pane's own state through an effect re-fires on
+  every background refetch, so the pane springs open under a user who closed it and
+  stays open after the condition it existed for is gone. Latching the default into state
+  during render has the same failure with a worse shape — it latches on the render where
+  async data has not landed yet, and nothing unlatches it.
 - **Worker-backed providers own their full teardown.** On unmount, terminate the
   worker, cancel in-flight and pending work, and make already-queued microtasks
   no-op so tests and route transitions cannot retain stale background work.

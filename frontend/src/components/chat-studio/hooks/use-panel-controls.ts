@@ -207,8 +207,22 @@ export function usePanelControls(params: UsePanelControlsParams): UsePanelContro
           target.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       };
+      // Land the caret in the section's own search field, so a jump made from
+      // the keyboard leaves the user inside the section rather than back where
+      // they started. Sections without a search field keep focus where it is.
+      // Runs only on the settled pass: a section expanded by this same call has
+      // only just mounted its content.
+      const focusSectionSearch = () => {
+        const target = document.getElementById(sectionId);
+        target
+          ?.querySelector<HTMLInputElement>('input[type="search"]')
+          ?.focus({ preventScroll: true });
+      };
       window.requestAnimationFrame(scrollToSection);
-      window.setTimeout(scrollToSection, 80);
+      window.setTimeout(() => {
+        scrollToSection();
+        focusSectionSearch();
+      }, 80);
     },
     [
       setCollectionToolsOpen,

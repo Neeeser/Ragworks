@@ -1,10 +1,13 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
+
 import { Chip } from "@/components/ui/chip";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import type { Crumb } from "@/components/ui/crumb-bar";
 
@@ -16,7 +19,7 @@ type ChatStudioHeaderProps = {
   collectionMetaLabel: string;
   toolsEnabled: boolean;
   /** The model this turn will run on — an identifier, rendered verbatim. */
-  currentModelLabel: string;
+  currentModelLabel: string | null;
   streaming: boolean;
   onModelSelect: () => void;
 };
@@ -54,14 +57,38 @@ export function ChatStudioHeader({
               <Chip tone="retrieve">{collectionLabel}</Chip>
             </Tooltip>
           ) : null}
-          <Tooltip content="Change the chat model" side="bottom" triggerClassName="min-w-0">
+          <Tooltip
+            content={
+              currentModelLabel ? "Change the chat model" : "Choose the model this chat runs on"
+            }
+            side="bottom"
+            triggerClassName="min-w-0"
+          >
             <button
               type="button"
               onClick={onModelSelect}
-              className="flex min-w-0 items-center gap-2 rounded-control px-1.5 py-0.5 transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+              className={cn(
+                "flex min-w-0 items-center gap-2 rounded-control transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+                currentModelLabel
+                  ? // A selected model is a readout: the value carries it, and
+                    // chrome around a value the user is only reading is noise.
+                    "px-1.5 py-0.5 hover:bg-surface"
+                  : // With nothing selected there is no value to read, so the
+                    // control wears its chrome at rest. Bare text gives a
+                    // first-time user nothing to tell them this is the way in
+                    // to the one choice they have to make before sending.
+                    "border border-hairline bg-surface px-2 py-1 hover:border-strong hover:bg-surface-strong",
+              )}
             >
               <InstrumentLabel>Model</InstrumentLabel>
-              <span className="truncate font-mono text-ui text-primary">{currentModelLabel}</span>
+              {currentModelLabel ? (
+                <span className="truncate font-mono text-ui text-primary">{currentModelLabel}</span>
+              ) : (
+                <>
+                  <span className="text-ui text-body">Select model</span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+                </>
+              )}
             </button>
           </Tooltip>
           {streaming ? <PulseWire label="Streaming response" className="w-16 shrink-0" /> : null}
