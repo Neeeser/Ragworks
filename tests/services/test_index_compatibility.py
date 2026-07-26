@@ -338,3 +338,80 @@ def test_binding_context_resolves_the_definition_per_collection() -> None:
 
     assert pinned.node_map()["facet"].config["backend"] == "pinecone"
     assert pinned.node_map()["facet"].config["index_name"] == "remote"
+
+
+class TestAutoFill:
+    """An unset index slot takes the collection's existing index."""
+
+    def _seeded(self, session: Session) -> tuple[models.User, models.Collection]:
+        user = models.User(email="autofill@example.com", full_name="A", hashed_password="x")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        collection = models.Collection(
+            user_id=user.id, name="Docs", description="", extra_metadata={}
+        )
+        session.add(collection)
+        session.commit()
+        session.refresh(collection)
+        return user, collection
+
+    def test_defaults_stand_when_the_collection_has_no_indexes_yet(
+        self, session: Session
+    ) -> None:
+        """A brand-new collection has nothing to inherit, so the default holds."""
+        user, collection = self._seeded(session)
+
+        values = resolve_binding_values(session, user, collection, _facet_definition())
+
+        assert values == {}
+
+    def test_an_unset_slot_inherits_the_collections_index_of_that_plane(
+        self, session: Session
+    ) -> None:
+        user, collection = self._seeded(session)
+        sparse = models.RegisteredIndex(
+            user_id=user.id,
+            backend=IndexBackend.PGVECTOR,
+            name="docs-bm25",
+            vector_type="sparse",
+        )
+        session.add(sparse)
+        session.commit()
+        session.refresh(sparse)
+        # An existing binding is what makes the index "the collection's".
+        pipeline = models.Pipeline(user_id=user.id, name="Existing")
+        session.add(pipeline)
+        session.commit()
+        session.refresh(pipeline)
+        session.add(
+            models.PipelineVersion(
+                pipeline_id=pipeline.id,
+                version=1,
+                definition=_facet_definition().model_dump(mode="json"),
+            )
+        )
+        session.add(
+            models.CollectionPipelineBinding(
+                collection_id=collection.id,
+                pipeline_id=pipeline.id,
+                role=models.BindingRole.TOOL,
+                variable_values={
+                    "bm25_index": {
+                        "index_id": str(sparse.id),
+                        "backend": "pgvector",
+                        "name": "docs-bm25",
+                    }
+                },
+            )
+        )
+        session.commit()
+
+        values = resolve_binding_values(session, user, collection, _facet_definition())
+
+        assert values["bm25_index"] == {
+            "index_id": str(sparse.id),
+            "backend": "pgvector",
+            "name": "docs-bm25",
+        }
+
