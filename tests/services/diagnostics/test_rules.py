@@ -27,6 +27,7 @@ from app.services.diagnostics.rules.indexing import (
     Bm25IndexMismatchRule,
     DenseIndexMismatchRule,
     HybridTargetMismatchRule,
+    IndexDimensionMismatchRule,
     NamespaceMismatchRule,
 )
 from app.services.diagnostics.rules.node_config import NodeConfigRule
@@ -336,3 +337,81 @@ class TestBackendCapabilityRule:
     def test_an_unresolved_side_is_skipped(self) -> None:
         """A collection with no bound pipeline has nothing to check."""
         assert BackendCapabilityRule().evaluate(make_context()) == []
+
+
+# -- index dimension vs registered record ----------------------------------
+
+
+class TestIndexDimensionMismatch:
+    """A side's stated dimension must match its registered index's record."""
+
+    def _user(self, session) -> models.User:
+        user = models.User(
+            email="dimrule@example.com", full_name="D", hashed_password="x"
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+
+    def _register(self, session, user, target, dimension) -> None:
+        session.add(
+            models.RegisteredIndex(
+                user_id=user.id,
+                backend=target.backend,
+                name=target.index_name,
+                vector_type="dense",
+                dimension=dimension,
+            )
+        )
+        session.commit()
+
+    def test_a_narrower_registered_index_is_a_confirmed_error(
+        self, base_ingestion, session
+    ) -> None:
+        user = self._user(session)
+        target = next(
+            t for t in base_ingestion.index_targets if t.vector_type == "dense"
+        )
+        self._register(session, user, target, 768)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=1536),
+            session=session,
+            user=user,
+        )
+
+        findings = IndexDimensionMismatchRule().evaluate(ctx)
+
+        assert len(findings) == 1
+        assert findings[0].severity == "error"
+        assert "768" in findings[0].summary
+        assert "1536" in findings[0].summary
+
+    def test_silent_when_the_pipeline_states_no_dimension(
+        self, base_ingestion, session
+    ) -> None:
+        """The default pipelines state none — the record alone proves nothing."""
+        user = self._user(session)
+        target = next(
+            t for t in base_ingestion.index_targets if t.vector_type == "dense"
+        )
+        self._register(session, user, target, 768)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=None),
+            session=session,
+            user=user,
+        )
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []
+
+    def test_silent_when_the_index_is_not_registered(
+        self, base_ingestion, session
+    ) -> None:
+        user = self._user(session)
+        ctx = make_context(
+            ingestion=replace(base_ingestion, dimension=1536),
+            session=session,
+            user=user,
+        )
+
+        assert IndexDimensionMismatchRule().evaluate(ctx) == []

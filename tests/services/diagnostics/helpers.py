@@ -90,17 +90,24 @@ def make_context(
     recent_retrieval_failures: list[models.PipelineRun] | None = None,
     ingestion_definition: PipelineDefinition | None = None,
     retrieval_definition: PipelineDefinition | None = None,
+    session: object | None = None,
+    user: models.User | None = None,
 ) -> DiagnosticContext:
     """Build a `DiagnosticContext` with the given resolved sides.
 
     Pass `None` for a side to leave it unresolved (the `*_settings` property
-    returns `None`, exercising the tolerate-missing-side path).
+    returns `None`, exercising the tolerate-missing-side path). Rules that
+    read the registry (index rows) need a real `session` and a persisted
+    `user`; the rest never touch either, so both default to stand-ins.
     """
     collection = _collection()
+    if user is not None:
+        collection.user_id = user.id
     ctx = DiagnosticContext(
         collection=collection,
-        user=models.User(email="u@example.com", full_name="U", hashed_password="x"),
-        session=None,  # type: ignore[arg-type]  # rules under test never touch the session
+        user=user
+        or models.User(email="u@example.com", full_name="U", hashed_password="x"),
+        session=session,  # type: ignore[arg-type]  # None for rules that never touch it
         prober=prober or StubProber(),  # type: ignore[arg-type]
     )
     if ingestion is not None:

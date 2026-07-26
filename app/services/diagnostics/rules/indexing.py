@@ -8,11 +8,18 @@ targets, never a raw config dict.
 
 from __future__ import annotations
 
-from app.pipelines.settings import IndexTarget
-from app.schemas.diagnostics import CollectionDiagnostic, DiagnosticAction, DiagnosticCategory
+from app.db.repositories import RegisteredIndexRepository
+from app.pipelines.settings import IndexTarget, PipelineSettings
+from app.schemas.diagnostics import (
+    CollectionDiagnostic,
+    DiagnosticAction,
+    DiagnosticCategory,
+    DiagnosticObservation,
+)
 from app.schemas.enums import IndexBackend
 from app.services.diagnostics.context import DiagnosticContext
 from app.services.diagnostics.rules.base import (
+    PipelineSide,
     build_diagnostic,
     paired_observation,
     pipeline_builder_route,
@@ -241,3 +248,65 @@ class HybridTargetMismatchRule:
                 ],
             )
         ]
+
+
+class IndexDimensionMismatchRule:
+    """A side's stated dimension differs from its registered index (error).
+
+    Bind-time validation now refuses this pairing, but bindings made before
+    that gate existed (or edited around it) still resolve — and the failure
+    they produce is invisible: the dense branch returns nothing at query time
+    while ingest fails per-document at upsert. Only fires when the pipeline
+    states a dimension and the registered index records one.
+    """
+
+    code = "index_dimension_mismatch"
+    category: DiagnosticCategory = "index_config"
+
+    def evaluate(self, ctx: DiagnosticContext) -> list[CollectionDiagnostic]:
+        """Compare each side's dimension against its dense index's record."""
+        sides: tuple[tuple[PipelineSide, PipelineSettings | None], ...] = (
+            ("ingestion", ctx.ingestion_settings),
+            ("retrieval", ctx.retrieval_settings),
+        )
+        indexes = RegisteredIndexRepository(ctx.session)
+        findings: list[CollectionDiagnostic] = []
+        for side, settings in sides:
+            if settings is None or settings.dimension is None:
+                continue
+            target = _target_of(settings.index_targets, "dense")
+            if target is None:
+                continue
+            row = indexes.find_by_identity(ctx.user.id, target.backend, target.index_name)
+            if row is None or row.dimension is None or row.dimension == settings.dimension:
+                continue
+            findings.append(
+                build_diagnostic(
+                    code=self.code,
+                    severity="error",
+                    confidence="confirmed",
+                    category=self.category,
+                    title="Index dimension differs from the pipeline",
+                    summary=(
+                        f"The {side} pipeline produces {settings.dimension}-"
+                        f"dimensional vectors, but its index '{row.name}' stores "
+                        f"{row.dimension}. Queries match nothing and ingest "
+                        "rejects every document; pick an index of the right "
+                        "width or re-create this one."
+                    ),
+                    resources=[pipeline_resource(ctx, side)],
+                    observations=[
+                        DiagnosticObservation(
+                            label="Pipeline dimension", value=str(settings.dimension)
+                        ),
+                        DiagnosticObservation(
+                            label=f"Index '{row.name}'", value=str(row.dimension)
+                        ),
+                    ],
+                    action=DiagnosticAction(
+                        label=f"Edit {side} pipeline",
+                        route=pipeline_builder_route(side),
+                    ),
+                )
+            )
+        return findings

@@ -21,6 +21,7 @@ from app.services.diagnostics.rules.indexing import (
     Bm25IndexMismatchRule,
     DenseIndexMismatchRule,
     HybridTargetMismatchRule,
+    IndexDimensionMismatchRule,
     NamespaceMismatchRule,
 )
 from app.services.diagnostics.rules.node_config import NodeConfigRule
@@ -36,6 +37,7 @@ DIAGNOSTIC_RULES: list[DiagnosticRule] = [
     BackendMismatchRule(),
     BackendCapabilityRule(),
     DenseIndexMismatchRule(),
+    IndexDimensionMismatchRule(),
     NamespaceMismatchRule(),
     Bm25IndexMismatchRule(),
     HybridTargetMismatchRule(),
