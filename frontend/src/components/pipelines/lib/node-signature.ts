@@ -1,4 +1,5 @@
 import { resolveNodeFamily } from "./pipeline-theme";
+import { expressionVariableNames } from "./variable-env";
 
 import type { PipelineConfigField } from "./pipeline-config";
 
@@ -50,22 +51,38 @@ const chunkerSignature = (read: ConfigReader, withStrategy: boolean): NodeSignat
   };
 };
 
+/** The readout for an index the collection's binding supplies. */
+export const BINDING_INDEX_VALUE = "set per collection";
+
 const indexSignature = (
   read: ConfigReader,
   backend: SignatureBackend | undefined,
   hasBackendKey: boolean,
 ): NodeSignature => {
-  const indexName = asString(read("index_name"));
   const namespace = asString(read("namespace"));
+  const consumedKeys = hasBackendKey
+    ? ["index_name", "namespace", "backend"]
+    : ["index_name", "namespace"];
+  // An index named by an expression is bound per collection, which is the
+  // normal shape for a store-bound node — never "no index selected".
+  const bound = expressionVariableNames(read("index_name"));
+  if (bound !== null) {
+    return {
+      label: "Index",
+      value: BINDING_INDEX_VALUE,
+      detail: bound.length > 0 ? bound.join(", ") : namespace,
+      backend,
+      consumedKeys,
+    };
+  }
+  const indexName = asString(read("index_name"));
   return {
     label: "Index",
     value: indexName ?? "no index selected",
     detail: namespace,
     backend,
     missing: indexName === undefined,
-    consumedKeys: hasBackendKey
-      ? ["index_name", "namespace", "backend"]
-      : ["index_name", "namespace"],
+    consumedKeys,
   };
 };
 

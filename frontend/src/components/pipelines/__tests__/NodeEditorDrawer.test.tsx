@@ -325,6 +325,21 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
+  it("reads an index supplied by the binding as set per collection, not Required", () => {
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: { $expr: "primary_index.backend" },
+        index_name: { $expr: "primary_index.name" },
+      }),
+      vectorIndexes: indexes,
+    });
+
+    // The collection's Indexes card fills this in; "Required" would report a
+    // correctly configured pipeline as unfinished.
+    expect(screen.getByText("set per collection · primary_index")).toBeInTheDocument();
+    expect(screen.queryByText("Required")).not.toBeInTheDocument();
+  });
+
   it("switching the backend clears the previously selected index in the draft", () => {
     const onApply = vi.fn();
     renderDrawer({

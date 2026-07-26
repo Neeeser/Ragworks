@@ -17,6 +17,7 @@ import {
   acceptedNamesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
+import { BINDING_INDEX_VALUE } from "./lib/node-signature";
 import { buildPipelineConfigFields, coerceFieldValue } from "./lib/pipeline-config";
 import { CREATE_SENTINEL } from "./lib/pipeline-kinds";
 import { sortIndexesByName } from "./lib/pipeline-utils";
@@ -25,6 +26,7 @@ import {
   RETRIEVAL_INPUT_TYPE,
   RETRIEVAL_OUTPUT_TYPE,
   buildStaticEnvironment,
+  expressionVariableNames,
 } from "./lib/variable-env";
 import { NodeModelSelectors } from "./NodeModelSelectors";
 
@@ -128,6 +130,9 @@ export function NodeConfigSections({
   );
   const indexValue = typeof config.index_name === "string" ? config.index_name : "";
   const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
+  // The index may be supplied by the collection's binding rather than named
+  // here; saying "Required" then reports a correct pipeline as unfinished.
+  const boundIndexVariables = expressionVariableNames(config.index_name);
 
   const setConfigValue = (key: string, value: unknown | undefined) => {
     const nextConfig = { ...config };
@@ -274,11 +279,15 @@ export function NodeConfigSections({
           label="Index"
           description="The vector index this node reads from or writes to."
           helper={
-            indexValue
-              ? selectedIndex?.dimension
-                ? `Dimension: ${selectedIndex.dimension}`
-                : "Dimension: n/a"
-              : "Required"
+            boundIndexVariables !== null
+              ? `${BINDING_INDEX_VALUE}${
+                  boundIndexVariables.length > 0 ? ` · ${boundIndexVariables.join(", ")}` : ""
+                }`
+              : indexValue
+                ? selectedIndex?.dimension
+                  ? `Dimension: ${selectedIndex.dimension}`
+                  : "Dimension: n/a"
+                : "Required"
           }
           actionLabel="Manage"
           actionDisabled={isPreview}
@@ -289,9 +298,12 @@ export function NodeConfigSections({
             onValueChange={handleIndexChange}
             disabled={isPreview}
             aria-label="Vector index"
-            placeholder="Select an index"
+            placeholder={boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index"}
             options={[
-              { value: "", label: "Select an index" },
+              {
+                value: "",
+                label: boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index",
+              },
               ...(indexValue && !selectedIndex
                 ? [
                     {
