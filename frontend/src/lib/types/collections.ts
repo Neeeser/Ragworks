@@ -166,6 +166,8 @@ export interface UmapPoint {
   id: UUID;
   chunk_id: UUID;
   document_id: UUID;
+  document_name: string;
+  text_snippet: string;
   chunk_index: number;
   x: number;
   y: number;

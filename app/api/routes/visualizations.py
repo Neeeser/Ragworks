@@ -57,7 +57,7 @@ def get_collection_umap(
         raise to_http_exception(exc) from exc
     return UmapVisualizationRead(
         projection=UmapProjectionRead.from_model(projection),
-        points=[UmapPointRead.from_model(point) for point in points],
+        points=[UmapPointRead.from_row(row) for row in points],
     )
 
 
@@ -82,5 +82,5 @@ def compute_collection_umap(
         raise to_http_exception(exc) from exc
     return UmapVisualizationRead(
         projection=UmapProjectionRead.from_model(projection),
-        points=[UmapPointRead.from_model(point) for point in points],
+        points=[UmapPointRead.from_row(row) for row in points],
     )
