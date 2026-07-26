@@ -30,6 +30,7 @@ from app.db.models.evals import (
 )
 from app.db.models.events import IngestionEvent, QueryEvent
 from app.db.models.files import FileNode
+from app.db.models.index import RegisteredIndex
 from app.db.models.pipeline import (
     Pipeline,
     PipelineNodeIO,
@@ -91,6 +92,7 @@ __all__ = [
     "PipelineVersion",
     "ProviderConnection",
     "QueryEvent",
+    "RegisteredIndex",
     "TelemetryEventRow",
     "TimestampMixin",
     "UmapPointRecord",

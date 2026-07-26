@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
 from sqlmodel import Session
 
@@ -15,6 +17,7 @@ from app.schemas.indexes import (
     IndexDeleteResponse,
     IndexList,
     IndexRead,
+    IndexRegisterRequest,
 )
 from app.services.errors import ServiceError
 from app.services.index_admin import IndexAdminService
@@ -44,6 +47,34 @@ def list_backends(
 ) -> BackendInfoList:
     """Describe every vector-store backend's usability for the current user."""
     return BackendInfoList(backends=IndexAdminService(session).backends(current_user))
+
+
+# Also declared before `/{index_name}`, for the same reason.
+@router.post("/register", response_model=IndexRead, status_code=status.HTTP_201_CREATED)
+def register_index(
+    payload: IndexRegisterRequest,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> IndexRead:
+    """Adopt an existing index into the registry so bindings can select it."""
+    try:
+        return IndexAdminService(session).register_index(current_user, payload)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.delete("/registrations/{index_id}", response_model=IndexDeleteResponse)
+def unregister_index(
+    index_id: UUID,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> IndexDeleteResponse:
+    """Remove a registration without touching the index itself."""
+    try:
+        IndexAdminService(session).unregister_index(current_user, index_id)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    return IndexDeleteResponse(status="unregistered")
 
 
 @router.get("/{index_name}", response_model=IndexRead)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -10,7 +11,13 @@ from app.schemas.enums import IndexBackend
 
 
 class IndexRead(BaseModel):
-    """Serialized vector-index metadata, tagged with its backend."""
+    """Serialized vector-index metadata, tagged with its backend.
+
+    `index_id` is the registration row when the index has one. An index that
+    exists physically but is unregistered reports `index_id=None`: it is shown
+    (so nothing is hidden from the operator) but cannot be picked in a binding
+    until it is registered.
+    """
 
     name: str
     backend: IndexBackend
@@ -22,6 +29,32 @@ class IndexRead(BaseModel):
     spec: dict[str, Any] | None = None
     deletion_protection: str | None = None
     tags: dict[str, str] | None = None
+    index_id: UUID | None = None
+    registered: bool = False
+    exists: bool = True
+    in_use_by: list[IndexUsageRead] = Field(default_factory=list)
+
+
+class IndexUsageRead(BaseModel):
+    """One collection binding that references a registered index.
+
+    Deletion reads these: removing an index a pipeline still points at turns
+    every later run into an empty-result mystery, so the API refuses and names
+    who is using it.
+    """
+
+    collection_id: UUID
+    collection_name: str
+    pipeline_id: UUID
+    pipeline_name: str
+    role: str
+
+
+class IndexRegisterRequest(BaseModel):
+    """Adopt a physically-existing index into the registry."""
+
+    backend: IndexBackend
+    name: str = Field(min_length=1, max_length=45)
 
 
 class IndexList(BaseModel):

@@ -35,6 +35,23 @@ class CollectionPipelineBindingRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def list_for_user(self, user_id: UUID) -> list[models.CollectionPipelineBinding]:
+        """List every binding across a user's collections.
+
+        Index usage is a cross-collection question ("who points at this
+        index?"), so it needs the whole set rather than one collection's.
+        """
+        statement = (
+            select(models.CollectionPipelineBinding)
+            .join(
+                models.Collection,
+                col(models.Collection.id) == col(models.CollectionPipelineBinding.collection_id),
+            )
+            .where(col(models.Collection.user_id) == user_id)
+            .order_by(asc(col(models.CollectionPipelineBinding.created_at)))
+        )
+        return list(self.session.exec(statement).all())
+
     def get(self, binding_id: UUID) -> models.CollectionPipelineBinding | None:
         """Return a binding by id (ownership is checked via its collection)."""
         return self.session.get(models.CollectionPipelineBinding, binding_id)

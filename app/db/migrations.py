@@ -31,6 +31,11 @@ _JSON_LIST_DEFAULT_COLUMNS = frozenset(
         ("pipeline_runs", "warnings"),
     }
 )
+_JSON_OBJECT_DEFAULT_COLUMNS = frozenset(
+    {
+        ("collection_pipeline_bindings", "variable_values"),
+    }
+)
 _LEGACY_COLUMN_BACKFILLS = {
     (
         "document_chunks",
@@ -211,9 +216,17 @@ def _add_column(
 
 
 def _missing_column_default(table_name: str, column_name: str) -> tuple[str | None, bool]:
-    """Return a temporary backfill default for known non-scalar migrations."""
+    """Return a temporary backfill default for known non-scalar migrations.
+
+    A `default_factory` is not a scalar default, so a non-nullable JSON column
+    added to a table that already has rows would otherwise be created nullable
+    and leave every existing row NULL — which reads back as `None` where the
+    model promises a container.
+    """
     if (table_name, column_name) in _JSON_LIST_DEFAULT_COLUMNS:
         return "'[]'", True
+    if (table_name, column_name) in _JSON_OBJECT_DEFAULT_COLUMNS:
+        return "'{}'", True
     return None, False
 
 
