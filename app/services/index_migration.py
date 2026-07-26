@@ -23,7 +23,6 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.db import models
 from app.db.repositories import (
     PipelineRepository,
     PipelineVersionRepository,
@@ -96,19 +95,3 @@ def _register_identities(
         )
         resolved[variable] = row.id
     return resolved
-
-
-def registered_index_for(
-    session: Session,
-    user: models.User,
-    identity: IndexIdentity,
-) -> models.RegisteredIndex:
-    """Register (or fetch) the row for one index identity."""
-    return RegisteredIndexRepository(session).get_or_create(
-        user.id,
-        identity.backend,
-        identity.name,
-        vector_type=identity.vector_type,
-        dimension=identity.dimension if identity.vector_type == "dense" else None,
-        metric=identity.metric if identity.vector_type == "dense" else None,
-    )

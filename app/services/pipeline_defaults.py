@@ -25,7 +25,6 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition
-from app.pipelines.index_variables import rewrite_index_identity
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.resolution import resolve_static_definition
@@ -33,7 +32,7 @@ from app.pipelines.settings import resolve_definition_backend
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
-from app.services.index_migration import registered_index_for
+from app.services.index_scaffolding import register_definition_indexes
 
 if TYPE_CHECKING:
     from app.services.pipelines import PipelineService
@@ -52,30 +51,6 @@ class DefaultPipelines:
 
     ingestion: models.Pipeline
     retrieval: models.Pipeline
-
-
-def _with_index_entities(
-    service: PipelineService,
-    user: models.User,
-    definition: PipelineDefinition,
-) -> PipelineDefinition:
-    """Register the definition's indexes and point it at them by variable.
-
-    Scaffolded defaults ship in the same shape the migration produces, so a
-    fresh install and an upgraded one behave identically — a default that
-    still carried literal identity would be the one pipeline a user could not
-    repoint per collection.
-    """
-    rewritten = rewrite_index_identity(definition, default_registry())
-    if not rewritten.changed:
-        return definition
-    ids = {
-        variable: registered_index_for(service.session, user, identity).id
-        for variable, identity in rewritten.identities.items()
-    }
-    return rewrite_index_identity(
-        definition, default_registry(), index_ids=ids
-    ).definition
 
 
 def ensure_default_pipelines(
@@ -105,8 +80,8 @@ def ensure_default_pipelines(
             user=user,
             name="Default Ingestion Pipeline",
             description="Baseline ingestion pipeline for uploads.",
-            definition=_with_index_entities(
-                service,
+            definition=register_definition_indexes(
+                service.session,
                 user,
                 build_default_ingestion_pipeline(
                     embedding_connection_id=embedding[0],
@@ -124,8 +99,8 @@ def ensure_default_pipelines(
             user=user,
             name="Default Retrieval Pipeline",
             description="Baseline retrieval pipeline for queries.",
-            definition=_with_index_entities(
-                service,
+            definition=register_definition_indexes(
+                service.session,
                 user,
                 build_default_retrieval_pipeline(
                     embedding_connection_id=embedding[0],

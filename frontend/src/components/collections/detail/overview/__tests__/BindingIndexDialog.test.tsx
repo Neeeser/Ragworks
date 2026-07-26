@@ -2,10 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { BindingIndexDialog } from "../BindingIndexDialog";
 import { ApiError } from "@/lib/api-error";
 import { makePipeline } from "@/test/fixtures";
 import { makeVectorIndex } from "@/test/fixtures/indexes";
+
+import { BindingIndexDialog } from "../BindingIndexDialog";
 
 import type { Pipeline, PipelineVariable } from "@/lib/types";
 

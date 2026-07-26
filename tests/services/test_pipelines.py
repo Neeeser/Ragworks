@@ -417,11 +417,21 @@ class TestDefaultBackendRotation:
     """
 
     @pytest.fixture(autouse=True)
-    def _invalidate_cache(self):
+    def _isolate_backend_setting(self, session: Session):
+        """Invalidate the config cache and drop the override afterwards.
+
+        The override is a real row, so leaving it behind changes what every
+        later test reads from `get_app_config()` — including the committed
+        README fixture's expected default backend, which then fails only when
+        the test order puts this class first.
+        """
+        from app.db.repositories import AppSettingRepository
         from app.services.app_config import invalidate_app_config_cache
 
         invalidate_app_config_cache()
         yield
+        AppSettingRepository(session).delete("indexing.default_backend")
+        session.commit()
         invalidate_app_config_cache()
 
     @staticmethod

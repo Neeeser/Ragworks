@@ -425,3 +425,49 @@ def add_second_collection_sharing_pipelines(
         f'collection: "{name}" bound to the same pipelines on index {index_name}'
     )
     ctx.links.append((f"{name} overview", f"/collections/{second.id}"))
+
+
+def add_pinecone_index(
+    ctx: SeedContext,
+    *,
+    index_name: str = "sandbox-remote",
+    dimension: int | None = None,
+) -> None:
+    """Register a Pinecone index alongside the pgvector ones.
+
+    Gives the sandbox both backends at once, which is what a backend swap
+    needs: the capability check only has something to say when an index on a
+    *different* backend is actually selectable.
+    """
+    from app.schemas.enums import IndexBackend
+    from app.schemas.indexes import IndexCreateRequest
+    from app.services.index_admin import IndexAdminService
+
+    user = ctx.require_user()
+    admin = IndexAdminService(ctx.session)
+    if dimension is None:
+        dimension = next(
+            (
+                index.dimension
+                for index in admin.list_indexes(user, IndexBackend.PGVECTOR)
+                if index.dimension
+            ),
+            None,
+        )
+    if dimension is None:
+        raise SystemExit("No dense index to size the Pinecone index from.")
+    admin.create_index(
+        user,
+        IndexCreateRequest(
+            backend=IndexBackend.PINECONE,
+            name=index_name,
+            dimension=dimension,
+            cloud="aws",
+            region="us-east-1",
+        ),
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f"index: {index_name} (pinecone, dense, {dimension}d) — registered and "
+        "selectable, so a binding can be swapped onto another backend"
+    )

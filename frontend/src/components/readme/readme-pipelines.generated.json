@@ -138,7 +138,7 @@
         ],
         "viewport": {},
         "variables": [],
-        "schema_version": 2
+        "schema_version": 3
       }
     },
     {
@@ -300,7 +300,7 @@
             "expose_to_llm": true
           }
         ],
-        "schema_version": 2
+        "schema_version": 3
       }
     }
   ],
