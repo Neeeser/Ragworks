@@ -82,13 +82,19 @@ export function BindingIndexDialog({
           </p>
         </div>
 
-        <BindingIndexFields
-          pipelines={[pipeline]}
-          values={draft}
-          indexes={indexes}
-          disabled={busy || saving}
-          onChange={setDraft}
-        />
+        {hasSlots ? (
+          <BindingIndexFields
+            pipelines={[pipeline]}
+            values={draft}
+            indexes={indexes}
+            disabled={busy || saving}
+            onChange={setDraft}
+          />
+        ) : (
+          // Said plainly rather than shown as an empty dialog: a pipeline
+          // with no index slot is a legitimate shape, not a load failure.
+          <p className="text-ui text-muted">This pipeline has no index to choose.</p>
+        )}
 
         {error ? <p className="text-ui text-data-neg">{error}</p> : null}
 
