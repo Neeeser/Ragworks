@@ -112,6 +112,20 @@ top of the hairline seam, so the panes read as different rooms and the layout do
 flat. The primary working pane stays on the card material. Fill plus seam, never the
 seam alone; and never a third fill level inside one card.
 
+### One decision, one surface — entity lifecycle vs. what an entity points at
+
+A control is placed by *what kind of decision it makes*, and it appears in exactly one
+place. Indexes are the worked example: the **index registry** (opened from the Pipelines
+top bar) owns index entities — create, adopt an unregistered index, delete an unused one,
+and report which collections use each. A **collection's Indexes card** owns which index
+that collection reads and writes, for every binding including a single tool's, and is the
+only surface that mutates a binding. A second place to make the same change is what makes
+a feature read as scattered, and the two copies drift into disagreeing.
+
+Where one decision needs the other, reach across rather than duplicate: the registry
+links to the collection that owns a choice, and a binding flow creates an index inline
+through the shared control instead of sending the user to the registry and back.
+
 ### Stats belong to their owner
 
 - An **entity list** never gets an aggregate KPI strip above it. Each entity's numbers

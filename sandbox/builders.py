@@ -86,7 +86,7 @@ def create_pgvector_index(
     """Create the default pgvector dense index sized to the embedding model.
 
     Probes the model's dimension through the provider (one tiny embed call),
-    then creates the index the way the index manager UI would.
+    then creates the index the way the index registry UI would.
     """
     from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
     from app.providers.registry import get_provider
@@ -459,7 +459,7 @@ def add_pinecone_index(
         raise SystemExit("No dense index to size the Pinecone index from.")
     # A Pinecone index is a real remote resource that outlives a reseed, so
     # adopt one that is already there instead of failing on the 409. This is
-    # the same register-or-create path the Index Manager offers.
+    # the same register-or-create path the index registry offers.
     try:
         admin.describe_index(user, IndexBackend.PINECONE, index_name)
     except NotFoundError:
