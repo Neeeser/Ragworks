@@ -387,6 +387,13 @@ frontend form code — only a new `ConfigFieldKind` would.
   index registry's in-use list. Deleting a registration consults *declared*
   references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
   that has not run yet still owns its index.
+- **A destructive control-plane call checks `capabilities.shared_across_users`
+  before it acts.** Registered-index identity is per user, but a pgvector name
+  maps to one `vec_<name>` table for the whole deployment (accounts separated
+  only by `namespace`), so deleting "my" index by name drops every account's
+  vectors in it — `ensure_no_other_owner` refuses while another registration
+  claims the name, and the caller's own registration is irrelevant because a
+  shared name is visible, and deletable, to accounts that never registered it.
 - **A store-bound node's identity is an expression over a binding-source index
   variable, not a literal.** `app/pipelines/index_variables.py` owns the rewrite,
   and it is behavior-preserving by construction — each variable defaults to the

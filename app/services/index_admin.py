@@ -231,12 +231,19 @@ class IndexAdminService:
         Refuses while a binding still targets it: dropping the store under a
         live pipeline turns every later run into empty results with no error
         to explain them.
+
+        Refuses too when another account has registered the same name on a
+        backend whose names are shared workspace-wide — that check runs
+        whether or not the caller registered the index themselves, because
+        every account can see (and therefore delete) a shared name.
         """
         registry = IndexRegistryService(self._session)
         indexes = RegisteredIndexRepository(self._session)
         row = indexes.find_by_identity(user.id, backend, name)
         if row is not None:
             registry.ensure_unused(user, row)
+        if CAPABILITIES_BY_BACKEND[backend].shared_across_users:
+            registry.ensure_no_other_owner(user, backend, name)
         store = get_vector_store(backend, user=user, session=self._session)
         store.delete_index(name)
         if row is not None:
