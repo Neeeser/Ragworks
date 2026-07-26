@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChunkDetailPanel } from "@/components/collections/detail/visualize/ChunkDetailPanel";
 import { ChunkPreviewOverlay } from "@/components/collections/detail/visualize/ChunkPreviewOverlay";
@@ -54,6 +54,10 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
   const [chunkLoading, setChunkLoading] = useState(false);
   const [chunkError, setChunkError] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Which chunk request the inspector is showing. Two selections resolve in
+  // whatever order the network returns them, so a slow first click would
+  // otherwise dock its chunk beside the point clicked second.
+  const chunkRequestRef = useRef(0);
 
   const projectionId = visualization?.projection.id ?? null;
 
@@ -102,18 +106,22 @@ export function CollectionVisualization({ collectionId, token }: CollectionVisua
 
   const handleSelectPoint = useCallback(
     async (point: UmapPoint) => {
+      const request = ++chunkRequestRef.current;
       setSelectedPoint(point);
       setChunkLoading(true);
       setChunkDetail(null);
       setChunkError(null);
       try {
         const detail = await fetchChunkDetail(token, point.chunk_id);
+        if (request !== chunkRequestRef.current) return;
         setChunkDetail(detail);
       } catch (error) {
-        const detail = getErrorMessage(error, "Unable to load chunk details.");
-        setChunkError(detail);
+        if (request !== chunkRequestRef.current) return;
+        setChunkError(getErrorMessage(error, "Unable to load chunk details."));
       } finally {
-        setChunkLoading(false);
+        if (request === chunkRequestRef.current) {
+          setChunkLoading(false);
+        }
       }
     },
     [token],
