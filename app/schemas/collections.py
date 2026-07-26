@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.schemas.base import DateTimeConfigMixin
-from app.schemas.enums import IndexBackend, StatsHistoryRange
+from app.schemas.enums import BindingRole, IndexBackend, PipelineMarkerKind
 from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 
-BucketGranularity = Literal["hour", "day"]
+#: Series key for query events whose pipeline run was never recorded. Grouped
+#: rather than dropped, so a chart's lines always sum to the collection's traffic.
+UNATTRIBUTED_TOOL_KEY = "unattributed"
 
 
 class CollectionBase(BaseModel):
@@ -127,27 +129,84 @@ class LatencyBucket(BaseModel):
     max_ms: float | None = None
 
 
-class CollectionStatsHistoryPoint(DateTimeConfigMixin, BaseModel):
-    """One activity bucket (an hour or a day, per the requested range).
+class LatencySummary(BaseModel):
+    """Latency aggregates for one flow over the whole requested domain.
 
-    Document/chunk totals are cumulative as of the end of the bucket;
-    latency aggregates cover only events that occurred within it.
+    Computed from raw events, never folded from `LatencyBucket` values:
+    percentiles do not average or max, so a domain p95 assembled from bucket
+    p95s reports "the worst bucket's p95" under a name that claims otherwise.
+    """
+
+    count: int = 0
+    avg_ms: float | None = None
+    p50_ms: float | None = None
+    p95_ms: float | None = None
+    p99_ms: float | None = None
+    max_ms: float | None = None
+
+
+class ToolLatencySeries(BaseModel):
+    """One retrieval series: a bound tool, or the unattributed remainder.
+
+    `key` is what `CollectionStatsHistoryPoint.tools` is keyed by, so the chart
+    joins buckets to series without re-deriving identity.
+    """
+
+    key: str
+    pipeline_id: UUID | None = None
+    name: str
+    summary: LatencySummary = Field(default_factory=LatencySummary)
+
+
+class PipelineMarker(DateTimeConfigMixin, BaseModel):
+    """A pipeline change, placed on the timeline the charts share.
+
+    `role` says which charts show it: `INGEST` markers explain document/chunk
+    and ingestion-latency movement, `TOOL` markers belong to one retrieval
+    series (`key` names it).
+    """
+
+    at: datetime
+    pipeline_id: UUID
+    key: str
+    role: BindingRole
+    kind: PipelineMarkerKind
+    version: int | None = None
+    label: str
+
+
+class CollectionStatsHistoryPoint(DateTimeConfigMixin, BaseModel):
+    """One activity bucket, `bucket_seconds` wide.
+
+    Document/chunk totals are cumulative as of the end of the bucket; latency
+    aggregates cover only events that occurred within it. `tools` holds one
+    entry per series that saw traffic in this bucket — absent keys are gaps,
+    not zeros, so a chart never draws a query that did not happen.
     """
 
     bucket_start: datetime
     document_total: int
     chunk_total: int
     ingestion: LatencyBucket = Field(default_factory=LatencyBucket)
-    retrieval: LatencyBucket = Field(default_factory=LatencyBucket)
+    tools: dict[str, LatencyBucket] = Field(default_factory=dict)
 
 
-class CollectionStatsHistoryRead(BaseModel):
-    """Bucketed activity history for a collection's trailing window."""
+class CollectionStatsHistoryRead(DateTimeConfigMixin, BaseModel):
+    """Bucketed activity history over a resolved domain.
+
+    The domain defaults to the collection's lifetime and narrows to an
+    explicit `start`/`end`; both are echoed back with the bucket width the
+    server chose, so the client never re-derives the axis it was given.
+    """
 
     collection_id: UUID
-    range: StatsHistoryRange
-    bucket: BucketGranularity
+    start: datetime
+    end: datetime
+    bucket_seconds: int
     points: list[CollectionStatsHistoryPoint]
+    tools: list[ToolLatencySeries] = Field(default_factory=list)
+    ingestion_summary: LatencySummary = Field(default_factory=LatencySummary)
+    markers: list[PipelineMarker] = Field(default_factory=list)
 
 
 class CollectionIndexTarget(BaseModel):

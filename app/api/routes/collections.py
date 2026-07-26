@@ -8,6 +8,7 @@ a domain error. Creation/update/prompt behavior lives in
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -17,7 +18,8 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import collection_to_schema, get_collection_or_404, to_http_exception
 from app.db import models
 from app.db.repositories import (
-    HISTORY_WINDOWS,
+    CollectionHistoryRepository,
+    CollectionLatencyRepository,
     CollectionRepository,
     CollectionStats,
     CollectionStatsRepository,
@@ -29,17 +31,15 @@ from app.schemas.collections import (
     CollectionPromptRead,
     CollectionPromptUpdate,
     CollectionRead,
-    CollectionStatsHistoryPoint,
     CollectionStatsHistoryRead,
     CollectionStatsRead,
     CollectionUpdate,
 )
-from app.schemas.enums import StatsHistoryRange
 from app.services.collection_deletion import CollectionDeletionService
+from app.services.collection_history import CollectionHistoryService
 from app.services.collection_indexes import CollectionIndexService
 from app.services.collections import CollectionService
 from app.services.errors import ServiceError
-from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
@@ -97,28 +97,32 @@ def get_collection_stats(
 @router.get("/{collection_id}/stats/history", response_model=CollectionStatsHistoryRead)
 def get_collection_stats_history(
     collection_id: UUID,
-    range_: StatsHistoryRange = Query(default=StatsHistoryRange.DAYS_30, alias="range"),
+    start: datetime | None = Query(default=None),
+    end: datetime | None = Query(default=None),
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionStatsHistoryRead:
-    """Return bucketed activity history for a collection's trailing window."""
+    """Return bucketed activity history over the collection's lifetime or a span.
+
+    Omitting `start`/`end` yields the lifetime domain; supplying both narrows
+    to that span. The server always chooses the bucket width and echoes the
+    resolved domain back.
+    """
     collection = get_collection_or_404(collection_id, current_user.id, session)
-    window = HISTORY_WINDOWS[range_]
-    points = CollectionStatsRepository(session).stats_history_for(
-        current_user.id,
-        collection.id,
-        window=window,
-        now=utc_now(),
+    service = CollectionHistoryService(
+        CollectionHistoryRepository(session),
+        CollectionLatencyRepository(session),
     )
-    return CollectionStatsHistoryRead(
-        collection_id=collection.id,
-        range=range_,
-        bucket=window.trunc,
-        points=[
-            CollectionStatsHistoryPoint.model_validate(point, from_attributes=True)
-            for point in points
-        ],
-    )
+    try:
+        return service.history_for(
+            user_id=current_user.id,
+            collection_id=collection.id,
+            collection_created_at=collection.created_at,
+            start=start,
+            end=end,
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.get("/{collection_id}", response_model=CollectionRead)
