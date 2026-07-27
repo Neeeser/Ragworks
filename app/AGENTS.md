@@ -9,8 +9,9 @@ added to, and tested.
 
 Before declaring any backend change done, run `make verify` — typecheck (`mypy app`,
 `strict = true`, zero errors), lint (`ruff check app tests sandbox` — including
-the PLR09xx design budgets that replaced pylint), then test (`uv run pytest`).
-All three must be green. Run `make coverage` separately and review
+the PLR09xx design budgets that replaced pylint), then test (`uv run pytest --cov`).
+All three must be green. The test stage carries coverage so the suite runs
+once — never follow the gate with a separate `make coverage`. Review
 `term-missing` for untested lines you introduced — `fail_under` in `pyproject.toml`
 sits a few points below the last measured percentage so coverage can't silently
 collapse. Lowering `fail_under` to make a change pass is not a fix; find out why
@@ -276,7 +277,7 @@ The expected shape, in order:
 6. If the frontend consumes it, update the hand-mirrored types in
    `frontend/src/lib/types/` in the same PR.
 
-Then run the gate (`make verify`, `make coverage`).
+Then run the gate (`make verify` — coverage is its test stage).
 
 ## Adding a config setting
 

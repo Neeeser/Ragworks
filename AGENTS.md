@@ -39,14 +39,20 @@ slow loop this tiering exists to prevent. The loop:
   tests/<area> -n 0`); frontend — `npm run typecheck` + targeted vitest. Commit and
   push as you go; an intermediate push may be red in CI, that's expected.
 - **Full gate — once, when the work is done** (before declaring the change done /
-  marking the PR ready): backend `make verify` (typecheck → lint → test) plus
-  `make coverage` (review `term-missing`); frontend `npm run verify` (typecheck →
-  lint → tests) plus `make format-check-frontend`. Re-run only if more commits
-  follow.
+  marking the PR ready): backend `make verify` (typecheck → lint → test *with
+  coverage* — one suite execution; never follow it with a separate `make
+  coverage`, that is a second full run), reviewing `term-missing`; frontend
+  `npm run verify` (typecheck → lint → tests) plus `make format-check-frontend`.
+  Re-run only if more commits follow.
 
 If you only changed one side, only that side's gate is required. CI (`ci.yml`) runs
 both gates (plus a frontend `npm run build`) on every PR and push to `main`; only
 the finished PR's CI run must be green — don't loop on mid-work CI failures.
+
+**Never re-run a suite to read a different part of its output.** Piping a run
+straight into `grep` discards everything else, so the next question — the failure
+list after the pass count, the coverage total after the failures — costs another
+full run. Redirect once to a file, then grep the file as many times as needed.
 
 The backend suite runs parallel (pytest-xdist) against per-process databases
 copied from a schema template (`tests/utils/db.py`), and database names encode the
@@ -242,7 +248,8 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   `scripts/ensure_postgres.py`, which starts the Dockerized ParadeDB dev DB
   (Docker required) or waits on an external `DATABASE_URL` / `TEST_DATABASE_URL`
   when one is set
-- `make verify`: the backend gate — typecheck → lint → test
+- `make verify`: the backend gate — typecheck → lint → test with coverage (one
+  suite run; don't add a separate `make coverage` after it)
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure);
   `-report` variants are non-blocking, `-open` variants open the HTML report

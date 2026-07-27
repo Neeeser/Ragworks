@@ -139,8 +139,8 @@ Key invariants (full detail in the AGENTS.md files):
 Nothing ships without its gate passing:
 
 ```bash
-make verify              # backend gate: mypy strict → ruff → pytest
-make coverage            # coverage run (floor enforced; review term-missing)
+make verify              # backend gate: mypy strict → ruff → pytest+coverage
+make coverage            # the same run standalone (floor enforced; review term-missing)
 cd frontend && npm run verify   # frontend gate: tsc → eslint → vitest
 make format-check-frontend
 ```
@@ -166,7 +166,7 @@ make format-check-frontend
 | --- | --- |
 | `make env` | Install backend (uv) + frontend (npm) deps |
 | `make run` / `make server` / `make frontend` | Run both / backend / frontend |
-| `make verify` | Backend gate: typecheck → lint → test |
+| `make verify` | Backend gate: typecheck → lint → test with coverage |
 | `make test` / `make test-frontend` | Backend / frontend tests |
 | `make coverage` / `make coverage-frontend` | Coverage (fails on test failure) |
 | `make coverage-open` / `make coverage-open-frontend` | Open HTML coverage reports |
@@ -175,8 +175,6 @@ make format-check-frontend
 
 ## Known gaps (tracked)
 
-- No CI yet — `make verify` / `npm run verify` are discipline-enforced; wiring
-  them into GitHub Actions is the highest-value next step.
 - Frontend wire types are hand-mirrored; generating from `/openapi.json` via
   `openapi-typescript` would eliminate drift.
 - Provider API keys are stored plaintext at rest (wire exposure is guarded by a
