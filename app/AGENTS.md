@@ -7,14 +7,18 @@ added to, and tested.
 
 ## The gate
 
-Before finishing any backend change, run `make verify` — typecheck (`mypy app`,
+Before declaring any backend change done, run `make verify` — typecheck (`mypy app`,
 `strict = true`, zero errors), lint (`ruff check app tests` + a slim pylint kept for
 the design checks ruff doesn't cover, `--fail-under=10`), then test (`uv run
 pytest`). All three must be green. Run `make coverage` separately and review
 `term-missing` for untested lines you introduced — `fail_under` in `pyproject.toml`
 sits a few points below the last measured percentage so coverage can't silently
 collapse. Lowering `fail_under` to make a change pass is not a fix; find out why
-coverage dropped.
+coverage dropped. This is the *full* gate — run it once when the work is done, not
+per edit; the per-edit fast tier (ruff + mypy + the touched area's tests with
+`-n 0`) lives in the root `AGENTS.md`. The suite is parallel by default
+(pytest-xdist, per-worker template-copied databases); pass `-n 0` for a quick
+single-file run so worker startup doesn't dominate.
 
 - **The suite never hits live providers.** OpenRouter/Pinecone/Ollama are stubbed at
   the client boundary; no API credentials are needed to run any test. If live smoke
