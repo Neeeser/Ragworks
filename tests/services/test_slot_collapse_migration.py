@@ -236,3 +236,34 @@ def test_definitions_without_slots_are_left_alone(session: Session) -> None:
 
     assert collapse_index_slots(session) == 0
     assert _definition_of(session, pipeline.id) == literal
+
+
+def test_a_second_boot_is_a_no_op(session: Session) -> None:
+    """The migration runs on every startup; the second one must find nothing."""
+    user = _user(session)
+    collection = _collection(session, user, "Only")
+    pipeline = _pipeline(session, user, _slotted_definition("ragworks"))
+    _ensure_values_column(session)
+    _bind(session, collection, pipeline)
+
+    first = collapse_index_slots(session)
+    second = collapse_index_slots(session)
+
+    assert first == 1
+    assert second == 0
+    assert _index_name(_definition_of(session, pipeline.id)) == "ragworks"
+
+
+def test_a_malformed_stored_definition_is_skipped(session: Session) -> None:
+    """A row that is not a definition object must not stop the boot."""
+    user = _user(session)
+    pipeline = models.Pipeline(user_id=user.id, name="Broken")
+    session.add(pipeline)
+    session.commit()
+    session.refresh(pipeline)
+    session.add(
+        models.PipelineVersion(pipeline_id=pipeline.id, version=1, definition=[])
+    )
+    session.commit()
+
+    assert collapse_index_slots(session) == 0

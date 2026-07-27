@@ -85,3 +85,30 @@ class TestIncompatibleNodes:
             )
 
             assert incompatible_nodes(definition, REGISTRY) == []
+
+
+class TestValidationGate:
+    """The findings reach pipeline validation, so a save is refused."""
+
+    def test_a_facet_graph_on_pinecone_fails_validation(self) -> None:
+        """Checked at save because a node names its own index.
+
+        The graph is wrong for every collection that could bind it, so
+        catching it per binding would be catching it too late — and too
+        often.
+        """
+        from app.pipelines.validation import PipelineValidator
+
+        result = PipelineValidator(REGISTRY).validate(_facet_definition("pinecone"))
+
+        assert result.valid is False
+        message = " ".join(result.errors)
+        assert "facet" in message
+        assert "pinecone" in message
+
+    def test_the_same_graph_on_pgvector_passes(self) -> None:
+        from app.pipelines.validation import PipelineValidator
+
+        issues = PipelineValidator(REGISTRY).validate(_facet_definition("pgvector")).issues
+
+        assert [issue for issue in issues if issue.code == "backend_unsupported"] == []

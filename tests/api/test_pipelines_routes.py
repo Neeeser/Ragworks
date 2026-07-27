@@ -344,3 +344,46 @@ def test_create_pipeline_creates_record(session: Session) -> None:
     assert created.name == "New Pipeline"
     assert created.validation_issues
     assert created.validation_issues[0].severity == "warning"
+
+
+def test_copy_pipeline_duplicates_the_graph_under_a_new_name(session: Session) -> None:
+    """Copying is how one graph becomes two that differ.
+
+    A pipeline names the index it uses, so serving another collection from
+    another store means another pipeline; the copy has to carry the graph or
+    the user is rebuilding it by hand.
+    """
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+    original = PipelineService(session).get_definition(pipeline)
+
+    response = pipelines_routes.copy_pipeline(
+        pipelines_routes.PipelineCopyRequest(),
+        pipeline=pipeline,
+        current_user=user,
+        session=session,
+    )
+
+    assert response.id != pipeline.id
+    assert response.name == f"{pipeline.name} (copy)"
+    with Session(session.get_bind()) as fresh:
+        copy = fresh.get(models.Pipeline, response.id)
+        assert copy is not None
+        # A copy claims no default role: two pipelines holding one template
+        # slug would make "the default ingestion pipeline" ambiguous.
+        assert copy.template_slug is None
+        assert PipelineService(fresh).get_definition(copy) == original
+
+
+def test_copy_pipeline_accepts_an_explicit_name(session: Session) -> None:
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+
+    response = pipelines_routes.copy_pipeline(
+        pipelines_routes.PipelineCopyRequest(name="Facts ingestion"),
+        pipeline=pipeline,
+        current_user=user,
+        session=session,
+    )
+
+    assert response.name == "Facts ingestion"
