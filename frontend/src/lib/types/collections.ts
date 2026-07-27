@@ -41,22 +41,66 @@ export interface LatencyBucket {
   max_ms?: number | null;
 }
 
-export type StatsHistoryRange = "4h" | "24h" | "7d" | "30d";
-export type StatsBucketGranularity = "hour" | "day";
+/** Series key for query events whose pipeline run was never recorded. */
+export const UNATTRIBUTED_TOOL_KEY = "unattributed";
+
+/**
+ * Domain-wide latency aggregates. Computed server-side from raw events —
+ * percentiles neither average nor max, so these can never be folded from the
+ * per-bucket values on the client.
+ */
+export interface LatencySummary {
+  count: number;
+  avg_ms?: number | null;
+  p50_ms?: number | null;
+  p95_ms?: number | null;
+  p99_ms?: number | null;
+  max_ms?: number | null;
+}
+
+/** One retrieval series: a bound tool, or the unattributed remainder. */
+export interface ToolLatencySeries {
+  key: string;
+  pipeline_id?: UUID | null;
+  name: string;
+  summary: LatencySummary;
+}
+
+export type PipelineMarkerKind = "version" | "tool_added";
+
+/**
+ * A pipeline change plotted on the shared timeline. `role` picks the charts it
+ * belongs to: `ingest` explains growth and ingestion latency, `tool` belongs to
+ * the retrieval series named by `key`.
+ */
+export interface PipelineMarker {
+  at: string;
+  pipeline_id: UUID;
+  key: string;
+  role: "ingest" | "tool";
+  kind: PipelineMarkerKind;
+  version?: number | null;
+  label: string;
+}
 
 export interface CollectionStatsHistoryPoint {
   bucket_start: string;
   document_total: number;
   chunk_total: number;
   ingestion: LatencyBucket;
-  retrieval: LatencyBucket;
+  /** Keyed by series key; an absent key is a gap, never a zero-latency query. */
+  tools: Record<string, LatencyBucket>;
 }
 
 export interface CollectionStatsHistory {
   collection_id: UUID;
-  range: StatsHistoryRange;
-  bucket: StatsBucketGranularity;
+  start: string;
+  end: string;
+  bucket_seconds: number;
   points: CollectionStatsHistoryPoint[];
+  tools: ToolLatencySeries[];
+  ingestion_summary: LatencySummary;
+  markers: PipelineMarker[];
 }
 
 export interface PromptVariable {

@@ -11,7 +11,7 @@ import { Panel, PanelGrid } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { TrendChart } from "@/components/ui/trend-chart";
+import { TrendChart, utcDayLabel } from "@/components/ui/trend-chart";
 import { parseApiDate } from "@/lib/datetime";
 import { formatTimeAgoCompact } from "@/lib/format";
 
@@ -98,7 +98,8 @@ function UsageCharts({ points, loading }: { points: AdminUsagePoint[]; loading: 
           <InstrumentLabel className="mb-2 block">{chart.label}</InstrumentLabel>
           <TrendChart
             buckets={buckets}
-            granularity="day"
+            bucketSeconds={86400}
+            formatBucket={utcDayLabel}
             height={104}
             area
             series={[
