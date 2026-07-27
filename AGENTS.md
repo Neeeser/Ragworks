@@ -61,7 +61,11 @@ keyed by schema hash, so a worktree on another branch legitimately owns a differ
 one, and Postgres does not refuse the drop while it is only being *copied* from —
 sweeping mid-run makes every `CREATE DATABASE … TEMPLATE` in the neighbouring run
 fail on a database that just vanished. `make test-clean-templates` sweeps on
-purpose, when nothing is running.
+purpose, when nothing is running. **Never hand-name a database for a one-off run**
+(`ragworks_verify_final`, `ragworks_issue76_test`): a name outside the harness's
+worktree-derived scheme belongs to no worktree, so no sweep can ever prove it is
+dead and it survives every cleanup forever — take the database the Makefile targets
+give you.
 
 # Bug fixes require a regression test
 
@@ -98,6 +102,18 @@ failing-then-passing test is incomplete.
 - Every PR carries at least one release-notes label (`breaking`, `feature`, `fix`,
   `docs`, `ci`, `dependencies`, `chore`, or `skip-changelog`) — the `PR labels` check
   fails without one, and `.github/release.yml` uses them to organize release notes.
+- **A merged PR cleans up what it created**, in this order: `make
+  clean-worktree-dbs` (from inside the worktree, while it still exists — the target
+  derives this worktree's own database names, so it cannot reach a neighbouring
+  run), then delete the local branch, then `git worktree remove` **from the main
+  checkout** — a worktree cannot remove itself while you are standing in it.
+  The target also drops databases whose worktree no longer exists — the name
+  encodes the worktree path, so a key matching no live worktree is orphaned by
+  definition and nothing can be running in it. That is the safety net for the
+  session that ends before it cleans up, which is why cleanup can't rest on the
+  rule alone. Never hand-write a `LIKE 'ragworks%'` sweep: it matches every other
+  worktree's databases too, and dropping one mid-run makes the neighbouring suite
+  fail on a database that just vanished.
 
 # Releases
 

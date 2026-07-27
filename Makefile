@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-clean-templates clean-worktree-dbs test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -24,7 +24,7 @@ DEBUG ?= true
 # The application and test URLs resolve independently: a server override never
 # turns the test URL into an empty value, or vice versa. Only computed for
 # DB-touching goals so `make help`/`make lint` skip it.
-DB_GOALS := run server postgres postgres-test test test-verbose coverage coverage-report verify
+DB_GOALS := run server postgres postgres-test test test-verbose coverage coverage-report verify test-clean-templates clean-worktree-dbs
 ifneq ($(filter $(DB_GOALS),$(MAKECMDGOALS)),)
   _DATABASE_URL_ORIGIN := $(origin DATABASE_URL)
   _TEST_DATABASE_URL_ORIGIN := $(origin TEST_DATABASE_URL)
@@ -57,6 +57,8 @@ help:
 	@echo "  make test      - run pytest"
 	@echo "  make test-verbose - run pytest with verbose output and durations"
 	@echo "  make test-frontend - run frontend tests (vitest)"
+	@echo "  make clean-worktree-dbs - drop this worktree's test + sandbox databases"
+	@echo "  make test-clean-templates - drop stale schema templates (nothing running)"
 	@echo "  make coverage  - pytest + missing lines + html report (the gate's test stage)"
 	@echo "  make coverage-report - same, but never fails"
 	@echo "  make coverage-open - open htmlcov/index.html"
@@ -106,6 +108,11 @@ test-clean-templates: postgres-test
 	@# Schema templates are keyed by schema hash, so branches accumulate them.
 	@# Never swept during a run: another worktree's live run may own one.
 	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run python -c "from tests.utils.db import drop_stale_templates; print(drop_stale_templates())"
+
+clean-worktree-dbs: postgres-test
+	@# This worktree's test + sandbox databases only, by derived key rather
+	@# than a glob, so it cannot reach a neighbouring worktree's run.
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run python scripts/clean_worktree_databases.py
 
 test-verbose: postgres-test
 	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest -vv --durations=0
