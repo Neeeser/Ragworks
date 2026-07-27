@@ -272,7 +272,7 @@ def resolve_pipeline_settings(  # pylint: disable=too-many-locals
         )
 
     sparse = sparse_targets(definition, collection)
-    if not indexer_found and not retriever_found and any(sparse):
+    if not indexer_found and not retriever_found and sparse:
         # A sparse-only graph gets no phantom dense target.
         dense = []
 

@@ -3,18 +3,15 @@
 Purge cascades iterate a pipeline's targets, so this list is what makes
 deleting a collection or a document clear every index the graph wrote to.
 It covers both planes (dense and sparse) and both sides (indexer and
-retriever), and it lists *every* dense store rather than the primary one:
-a graph may deliberately split its corpus across several indexes, and a
-store missing from this list keeps its vectors after a delete and re-serves
-them on the next query.
+retriever), and on each plane it lists *every* store the graph names rather
+than the primary one: a graph may deliberately split its corpus across
+several indexes, and a store missing from this list keeps its vectors after
+a delete and re-serves them on the next query.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeVar
-
-from pydantic import BaseModel
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
@@ -40,7 +37,17 @@ from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template
 from app.schemas.enums import IndexBackend
 
-ConfigModel = TypeVar("ConfigModel", bound=BaseModel)
+Bm25Config = Bm25CountConfig | Bm25FacetConfig | Bm25IndexerConfig | Bm25RetrieverConfig
+
+# The lexical node family and the config model each one's index name is read
+# through, so a newly registered BM25 node reaches the purge list by adding
+# its entry here rather than by a fifth hand-written lookup.
+_LEXICAL_CONFIGS: dict[str, type[Bm25Config]] = {
+    Bm25IndexerNode.type: Bm25IndexerConfig,
+    Bm25RetrieverNode.type: Bm25RetrieverConfig,
+    Bm25CountNode.type: Bm25CountConfig,
+    Bm25FacetNode.type: Bm25FacetConfig,
+}
 
 
 @dataclass(frozen=True)
@@ -92,23 +99,21 @@ def dense_targets(
 def sparse_targets(
     definition: PipelineDefinition,
     collection: models.Collection,
-) -> list[IndexTarget | None]:
-    """Every lexical index the graph indexes, queries, counts, or facets."""
-    return [
-        _sparse_target(
-            collection, _resolve_bm25_config(definition, Bm25IndexerNode.type, Bm25IndexerConfig)
-        ),
-        _sparse_target(
-            collection,
-            _resolve_bm25_config(definition, Bm25RetrieverNode.type, Bm25RetrieverConfig),
-        ),
-        _sparse_target(
-            collection, _resolve_bm25_config(definition, Bm25CountNode.type, Bm25CountConfig)
-        ),
-        _sparse_target(
-            collection, _resolve_bm25_config(definition, Bm25FacetNode.type, Bm25FacetConfig)
-        ),
-    ]
+) -> list[IndexTarget]:
+    """Every lexical index the graph indexes, queries, counts, or facets.
+
+    Every such node, not one per node type: a graph writing two lexical
+    indexes keeps the second one's rows through every purge if only the
+    first reaches this list — the dense failure, on the plane a hybrid
+    pipeline also writes.
+    """
+    targets: list[IndexTarget] = []
+    for node in definition.nodes:
+        model = _LEXICAL_CONFIGS.get(node.type)
+        if model is None:
+            continue
+        targets.append(_sparse_target(collection, model.model_validate(node.config or {})))
+    return targets
 
 
 def union_targets(*candidates: IndexTarget | None) -> tuple[IndexTarget, ...]:
@@ -135,26 +140,9 @@ def _dense_target(
     return IndexTarget(backend=backend, index_name=index_name, vector_type="dense")
 
 
-def _sparse_target(
-    collection: models.Collection,
-    config: Bm25CountConfig | Bm25FacetConfig | Bm25IndexerConfig | Bm25RetrieverConfig | None,
-) -> IndexTarget | None:
+def _sparse_target(collection: models.Collection, config: Bm25Config) -> IndexTarget:
     """Build the sparse index target for a BM25 node config."""
-    if config is None:
-        return None
     index_name = (
         resolve_collection_template(config.index_name, collection) or config.index_name
     )
     return IndexTarget(backend=config.backend, index_name=index_name, vector_type="sparse")
-
-
-def _resolve_bm25_config(
-    definition: PipelineDefinition,
-    node_type: str,
-    model: type[ConfigModel],
-) -> ConfigModel | None:
-    """Return the validated BM25 node config, or None when absent."""
-    node = next((candidate for candidate in definition.nodes if candidate.type == node_type), None)
-    if node is None:
-        return None
-    return model.model_validate(node.config or {})
