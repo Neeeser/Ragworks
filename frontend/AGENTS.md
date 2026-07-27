@@ -300,6 +300,17 @@ the same PR.
   before the change.** Switching indexes moves no data, so the collection reads an
   empty store until it is re-ingested — and that outcome is invisible at query
   time, because retrieval just returns nothing.
+- **A store-bound node's index field states where the index comes from — named
+  here, or a slot each collection fills — and picking a source never rewrites
+  config on its own.** Writing on the toggle discards the index the node names
+  before the user has said what replaces it, and that literal is exactly what a
+  newly declared slot defaults to. Leaving a slot must clear the expression off
+  _every_ identity field it wrote (`backend` as well as `index_name`), or the
+  node keeps reading a variable it no longer names.
+- **A collection surface shows an index control only where the pipeline exposed a
+  slot.** Everything else it lists is a statement of where the data lives. An
+  index a graph names is the graph's decision; offering a second place to change
+  it is what makes indexes feel scattered across the app.
 - **Admin settings render from the config catalog, not per-field forms.**
   `AdminSettingsPage` fetches `GET /api/admin/config` and renders one
   `ConfigFieldControl` per entry, dispatched on `field.kind` — a new backend config

@@ -144,6 +144,7 @@ Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
 After seeding:
 - everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
+- the default pipelines expose their indexes as the per-collection slots primary_index and bm25_index
 - a second collection "Second Collection" bound to the *same* ingest and tool pipelines, with no documents of its own
 - indexes second-index (dense) and second-index-bm25 (sparse), registered and selected by the second collection's bindings
 - the index registry lists four registered indexes and reports which collections use each

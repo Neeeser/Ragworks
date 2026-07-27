@@ -1,11 +1,13 @@
-"""The collection-level view of index slots, and the fan-out that repoints them.
+"""A collection's indexes: the ones its graphs name, and the slots they expose.
 
-A collection's bindings each hold their own index choices, but the choices
-are one decision: ingestion must write where retrieval reads. This service
-merges every binding's index variables into named *slots* (`primary_index`,
-`bm25_index`, …) for the Overview to render, and applies a slot change to
-every binding that declares it in one operation — the per-binding endpoints
-remain for deliberate divergence.
+Most bindings name their own index, so the collection reports them as
+read-only *targets* — the Overview still has to say where the corpus lives
+even when there is nothing to choose. A pipeline whose author deliberately
+exposed an index variable contributes a *slot* instead: a question only a
+collection can answer. Slots merge by name across bindings, because ingestion
+must write where retrieval reads, and one update fans out to every binding
+declaring the slot — the per-binding endpoints remain for deliberate
+divergence.
 """
 
 from __future__ import annotations
@@ -87,7 +89,7 @@ class CollectionIndexService:
         targets: dict[tuple[IndexBackend, str, str], _TargetDraft] = {}
         for bound in self._bound_pipelines(user, collection):
             self._merge_binding(drafts, bound, user, collection)
-            self._merge_targets(targets, bound)
+            self._merge_targets(targets, bound, user)
         for draft in drafts.values():
             # The bind-time anchor falls back to the current index's own
             # width, so the slot advertises the same constraint it enforces.
@@ -125,6 +127,7 @@ class CollectionIndexService:
         self,
         targets: dict[tuple[IndexBackend, str, str], _TargetDraft],
         bound: _BoundPipeline,
+        user: models.User,
     ) -> None:
         """Fold one binding's literally-named indexes into the target drafts."""
         for identity in collect_index_identities(bound.definition, default_registry()):
@@ -139,7 +142,10 @@ class CollectionIndexService:
                 ),
             )
             if draft.dimension is None:
-                draft.dimension = identity.dimension
+                # A node states no width — the embedder beside it decides one —
+                # so the registered index is what knows how wide the store is.
+                row = self._indexes.find_by_identity(user.id, identity.backend, identity.name)
+                draft.dimension = row.dimension if row is not None else None
             if bound.pipeline.name not in draft.pipelines:
                 draft.pipelines.append(bound.pipeline.name)
 

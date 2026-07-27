@@ -1,16 +1,20 @@
 """Two collections sharing one pair of pipelines, on different indexes.
 
-The state first-class index entities exist for. Before binding variables, the
-only way to give a second collection its own index was to copy the pipeline,
-so every later pipeline edit had to be repeated per copy. Here both
-collections resolve from the same stored definitions and differ only in the
-index each binding selects — which is what the Indexes control on a tool
-binding edits, and what the index registry's "used by" list reports.
+The state index slots exist for. A pipeline names its own index, which is
+what most collections want — they are separated by namespace inside it. When
+one definition must instead serve collections on *different* stores, its
+author exposes the index as a slot, and each collection answers it. Both
+collections here resolve from the same stored definitions and differ only in
+the index their binding selects, which is what the collection's Indexes
+control edits and what the index registry's "used by" list reports.
 """
 
 from __future__ import annotations
 
-from sandbox.builders import add_second_collection_sharing_pipelines
+from sandbox.builders import (
+    add_second_collection_sharing_pipelines,
+    expose_pipeline_index_slots,
+)
 from sandbox.context import SeedContext
 from sandbox.registry import scenario
 from sandbox.scenarios import collection_ready
@@ -27,6 +31,8 @@ from sandbox.scenarios import collection_ready
     state=(
         "everything from collection-ready (admin user, OpenRouter connection, "
         "hybrid pipelines, 3 ingested documents)",
+        "the default pipelines expose their indexes as the per-collection slots "
+        "primary_index and bm25_index",
         'a second collection "Second Collection" bound to the *same* ingest and '
         "tool pipelines, with no documents of its own",
         "indexes second-index (dense) and second-index-bm25 (sparse), registered "
@@ -38,6 +44,7 @@ from sandbox.scenarios import collection_ready
     ),
 )
 def seed(ctx: SeedContext) -> None:
-    """Seed collection-ready, then attach a second collection to its pipelines."""
+    """Seed collection-ready, expose index slots, then attach a second collection."""
     collection_ready.seed(ctx)
+    expose_pipeline_index_slots(ctx)
     add_second_collection_sharing_pipelines(ctx)

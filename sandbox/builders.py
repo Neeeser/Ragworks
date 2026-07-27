@@ -333,6 +333,91 @@ def issue_mcp_key(ctx: SeedContext, *, name: str = "Sandbox agent") -> None:
     ctx.links.append(("collection overview (MCP card)", f"/collections/{collection.id}"))
 
 
+def expose_pipeline_index_slots(ctx: SeedContext) -> None:
+    """Point the default pipelines' store nodes at collection-filled slots.
+
+    The authoring step a user takes in the node editor when one definition
+    must serve collections on different stores: a node's identity fields
+    become expressions over an index variable, defaulting to the index it
+    already named. Scaffolding never does this on its own, so a scenario
+    about sharing pipelines across indexes has to opt in the same way.
+    """
+    from app.db.repositories import RegisteredIndexRepository
+    from app.pipelines.index_identity import is_lexical_node, store_bound_node
+    from app.pipelines.registry import default_registry
+    from app.pipelines.variables import (
+        EXPRESSION_KEY,
+        PipelineVariable,
+        VariableSource,
+        VariableType,
+    )
+    from app.schemas.enums import IndexBackend
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    service = PipelineService(ctx.session)
+    indexes = RegisteredIndexRepository(ctx.session)
+    registry = default_registry()
+
+    for pipeline in service.list_pipelines(user.id):
+        definition = service.get_definition(pipeline)
+        nodes = []
+        # Plain values rather than rows: this module may not import app models
+        # at module scope, so there is no type to annotate a row dict with.
+        declared: dict[str, tuple[str, str, str, str]] = {}
+        for node in definition.nodes:
+            config = dict(node.config or {})
+            name = config.get("index_name")
+            if not store_bound_node(node.type, registry) or not isinstance(name, str) or not name:
+                nodes.append(node)
+                continue
+            sparse = is_lexical_node(node.type)
+            slot = "bm25_index" if sparse else "primary_index"
+            row = indexes.find_by_identity(
+                user.id, IndexBackend(config.get("backend", "pgvector")), name
+            )
+            if row is None:
+                nodes.append(node)
+                continue
+            declared[slot] = (
+                "sparse" if sparse else "dense",
+                str(row.id),
+                IndexBackend(row.backend).value,
+                row.name,
+            )
+            config["index_name"] = {EXPRESSION_KEY: f"{slot}.name"}
+            if "backend" in config:
+                config["backend"] = {EXPRESSION_KEY: f"{slot}.backend"}
+            nodes.append(node.model_copy(update={"config": config}))
+        if not declared:
+            continue
+        variables = [
+            variable for variable in definition.variables if variable.name not in declared
+        ]
+        for slot, (vector_type, index_id, backend, index_name) in declared.items():
+            variables.append(
+                PipelineVariable(
+                    name=slot,
+                    type=VariableType.INDEX,
+                    source=VariableSource.BINDING,
+                    description=(
+                        "Lexical (BM25) index this pipeline uses"
+                        if vector_type == "sparse"
+                        else "Vector index this pipeline uses"
+                    ),
+                    value={"index_id": index_id, "backend": backend, "name": index_name},
+                )
+            )
+        service.update_pipeline(
+            pipeline=pipeline,
+            definition=definition.model_copy(update={"nodes": nodes, "variables": variables}),
+            change_summary="Expose the index as a per-collection slot.",
+            actor_id=user.id,
+        )
+    ctx.session.commit()
+    ctx.facts.append("pipelines: index exposed as the per-collection slots primary_index/bm25_index")
+
+
 def add_second_collection_sharing_pipelines(
     ctx: SeedContext,
     *,

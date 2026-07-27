@@ -5,11 +5,14 @@
  * 1. Log in via the API and confirm through the API that both collections
  *    bind the *same* pipeline ids — the state that previously required a
  *    per-collection copy.
- * 2. Confirm each binding resolves to its own index, so the shared definition
- *    is genuinely parameterised rather than merely duplicated.
- * 3. Open the second collection and repoint one tool binding at another index
- *    from its row on the Indexes card — the only surface that mutates a
- *    binding — checking the re-ingest consequence is stated before the change.
+ * 2. Confirm each collection *resolves* to its own index, so the shared
+ *    definition is genuinely parameterised rather than merely duplicated.
+ *    Resolution, not the stored binding value: a collection that predates the
+ *    slot holds no value and reads the variable's default, which is a correct
+ *    state the raw values cannot distinguish from an unfilled slot.
+ * 3. Open the second collection and repoint its slot from the Indexes card —
+ *    the only surface that answers a slot — checking the re-ingest
+ *    consequence is stated before the change.
  * 4. Confirm the first collection's binding is untouched — the whole point of
  *    per-binding values.
  */
@@ -52,11 +55,22 @@ test("one pipeline serves two collections against different indexes", async ({ p
   const secondPipelines = second.tools.map((tool) => tool.pipeline_id).sort();
   expect(secondPipelines).toEqual(firstPipelines);
 
-  // ...resolved against different indexes.
-  const indexNameOf = (tools: ToolBinding[]) => tools[0]?.variable_values?.primary_index?.name;
-  expect(indexNameOf(first.tools)).toBeTruthy();
-  expect(indexNameOf(second.tools)).toBeTruthy();
-  expect(indexNameOf(second.tools)).not.toBe(indexNameOf(first.tools));
+  // ...resolving against different indexes.
+  const [firstDense, secondDense] = await Promise.all(
+    [firstId, secondId].map(async (id) => {
+      const response = await api.get(`${handoff.backend_url}/api/collections/${id}/indexes`, {
+        headers,
+      });
+      expect(response.ok()).toBe(true);
+      const { slots } = (await response.json()) as {
+        slots: { vector_type: string; current: { name: string } | null }[];
+      };
+      return slots.find((slot) => slot.vector_type === "dense")?.current?.name;
+    }),
+  );
+  expect(firstDense).toBeTruthy();
+  expect(secondDense).toBeTruthy();
+  expect(secondDense).not.toBe(firstDense);
 });
 
 test("repointing one collection's index leaves the other alone", async ({ page }) => {
@@ -77,14 +91,14 @@ test("repointing one collection's index leaves the other alone", async ({ page }
   });
   const firstIndexBefore = ((await before.json()) as { tools: ToolBinding[] }).tools[0]
     ?.variable_values?.primary_index?.name;
-  const toolName = ((await secondTools.json()) as { tools: ToolBinding[] }).tools[0].name;
+  expect(secondTools.ok()).toBe(true);
 
   await page.goto(secondUrl);
 
-  // A binding is repointed from its own row on the Indexes card — the Tools
-  // panel curates bindings, it does not choose their indexes.
-  await page.getByRole("button", { name: `Change indexes for ${toolName}` }).click();
-  const dialog = page.getByRole("dialog", { name: /Indexes for/ });
+  // The collection's Indexes card answers its slots; the Tools panel curates
+  // bindings, it does not choose their indexes.
+  await page.getByRole("button", { name: "Change", exact: true }).click();
+  const dialog = page.getByRole("dialog");
 
   // The consequence is stated before the change, because an index swap moves
   // no data and the resulting empty reads are invisible at query time.

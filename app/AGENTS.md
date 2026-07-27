@@ -158,6 +158,11 @@ colocate a single file with its consumer.
   in every database that already ran the old model (a branch-only table) or ship
   a real drop step (a released one) — otherwise the tests stay green while every
   insert against an existing DB returns a 500.
+- **`index_targets` lists every dense store the graph touches, not the primary
+  one.** Purges iterate it (`app/pipelines/index_targets.py`), so a graph
+  splitting its corpus across two indexes keeps the second one's vectors through
+  every delete and re-serves removed documents on the next query. The scalar
+  `backend`/`index_name` settings still describe the primary store.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion
@@ -386,9 +391,11 @@ frontend form code — only a new `ConfigFieldKind` would.
   Registration is what makes an index selectable, so *every* path that generates a
   pipeline (setup wizard, default scaffolding, the migration) routes its definition
   through `register_definition_indexes`
-  (`app/services/index_scaffolding.py`) — a path that skips it produces the one
-  pipeline a collection can never repoint, and its indexes stay invisible to the
-  index registry's in-use list. Deleting a registration consults *declared*
+  (`app/services/index_scaffolding.py`) — a path that skips it leaves its indexes
+  invisible to the index registry's in-use list and unselectable in every picker.
+  Registration is *all* it does: the definition comes back unchanged, because
+  making an index an entity and hoisting the choice out of the graph are separate
+  decisions. Deleting a registration consults *declared*
   references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
   that has not run yet still owns its index.
 - **A destructive control-plane call checks `capabilities.shared_across_users`
@@ -420,12 +427,20 @@ frontend form code — only a new `ConfigFieldKind` would.
   shared index otherwise returns their chunks, text included. Namespaces naming
   no collection stay allowed: they carry no ownership to enforce, and refusing
   them would strand a pipeline whose collection was deleted.
-- **A store-bound node's identity is an expression over a binding-source index
-  variable, not a literal.** `app/pipelines/index_variables.py` owns the rewrite,
-  and it is behavior-preserving by construction — each variable defaults to the
-  literal the definition already carried. A migration that changes which index a
-  collection resolves to detaches a corpus from its data and nothing downstream
-  reports it: retrieval simply returns nothing.
+- **A store-bound node names its own index; pointing one at a collection-filled
+  slot is an authoring choice, never something a scaffolder or migration
+  derives.** An index's width is decided by the embedder beside it, so identity
+  belongs in the graph — and a graph you can read tells you where data lands.
+  `app/pipelines/index_identity.py` only *reads* identity back out (for
+  registration) and converts legacy `{collection_id}` namespace templates. Any
+  rule that folds a definition's store nodes onto one shared variable merges two
+  corpora into whichever is written last, silently: the run succeeds and
+  retrieval returns the wrong chunks.
+- **Collections are separated inside one index by `namespace`, not by having
+  their own index.** One pipeline already serves every collection without
+  interference, so exposing a slot buys only the rarer case of collections on
+  *different* stores. Making it the default puts an infrastructure decision on
+  every collection that never needed one.
 - **Backend compatibility is per binding, and the error names the nodes.** Since an
   index carries its backend, a graph valid as authored can be invalid for one
   collection; `incompatible_nodes` (`app/services/index_compatibility.py`) is the

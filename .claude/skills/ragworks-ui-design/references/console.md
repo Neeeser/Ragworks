@@ -115,12 +115,24 @@ seam alone; and never a third fill level inside one card.
 ### One decision, one surface — entity lifecycle vs. what an entity points at
 
 A control is placed by *what kind of decision it makes*, and it appears in exactly one
-place. Indexes are the worked example: the **index registry** (opened from the Pipelines
-top bar) owns index entities — create, adopt an unregistered index, delete an unused one,
-and report which collections use each. A **collection's Indexes card** owns which index
-that collection reads and writes, for every binding including a single tool's, and is the
-only surface that mutates a binding. A second place to make the same change is what makes
-a feature read as scattered, and the two copies drift into disagreeing.
+place. Indexes are the worked example, in three layers:
+
+- The **index registry** (opened from the Pipelines top bar) owns index *entities* —
+  create, adopt an unregistered index, delete an unused one, report which collections
+  use each.
+- A **pipeline's node** owns which index it reads and writes. That is where the decision
+  belongs, because the index's width is decided by the embedder beside it, and because
+  a graph you can read should tell you where data lands.
+- A **collection's Indexes card** *states* the indexes its bound graphs name, read-only,
+  so the page can always answer "where does my data live". It gains a control only for a
+  slot a pipeline author deliberately exposed — a question the graph asks and only a
+  collection can answer.
+
+A second place to make the same change is what makes a feature read as scattered, and
+the two copies drift into disagreeing. Equally: a control offered where there is no
+decision to make — a picker for something the graph already fixed — reads as a setting
+the user must understand, and every collection then carries an infrastructure choice
+that only a few of them ever needed.
 
 Where one decision needs the other, reach across rather than duplicate: the registry
 links to the collection that owns a choice, and a binding flow creates an index inline
