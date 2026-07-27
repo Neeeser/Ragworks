@@ -165,6 +165,6 @@ class CollectionRepository(Repository):
         """Return a mapping of user id -> number of collections they own."""
         statement = select(
             models.Collection.user_id,
-            func.count(),  # pylint: disable=not-callable
+            func.count(),
         ).group_by(col(models.Collection.user_id))
         return {user_id: count for user_id, count in self.session.exec(statement).all()}

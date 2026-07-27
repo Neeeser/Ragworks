@@ -92,7 +92,6 @@ def _clamp_chunk_window(
 
 
 # The setup wizard passes the complete explicit scaffold configuration here.
-# pylint: disable=too-many-arguments
 def build_default_ingestion_pipeline(
     *,
     embedding_connection_id: UUID,
@@ -237,7 +236,6 @@ def build_default_ingestion_pipeline(
     return PipelineDefinition(nodes=nodes, edges=edges, viewport={})
 
 
-# pylint: enable=too-many-arguments
 
 
 def build_default_retrieval_pipeline(

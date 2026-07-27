@@ -114,7 +114,7 @@ def declared_arguments(definition: PipelineDefinition) -> list[PipelineInputArgu
     ]
 
 
-def build_environment(  # pylint: disable=too-many-locals
+def build_environment(
     definition: PipelineDefinition,
     *,
     query: str | None = None,

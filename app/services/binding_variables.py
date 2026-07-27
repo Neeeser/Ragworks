@@ -177,7 +177,7 @@ def _reject_unknown(definition: PipelineDefinition, values: dict[str, object]) -
         )
 
 
-def _validate_indexes(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def _validate_indexes(
     session: Session,
     user: models.User,
     collection: models.Collection,

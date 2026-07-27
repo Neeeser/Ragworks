@@ -319,7 +319,7 @@ def _node_config_issues(
     return issues
 
 
-def _config_expression_issues(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def _config_expression_issues(
     node: PipelineNodeDefinition,
     key: str,
     source: str,

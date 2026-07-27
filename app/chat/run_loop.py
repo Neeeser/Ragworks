@@ -291,7 +291,7 @@ def _provider_turn(
         # Persist partial content on client disconnect (GeneratorExit) AND on a
         # mid-stream provider failure, then re-raise so the route surfaces an
         # error event. Not swallowed — always re-raised.
-        except (GeneratorExit, Exception):  # pylint: disable=broad-exception-caught
+        except (GeneratorExit, Exception):
             _record_partial(run, state)
             raise
         run.run_state.provider = outcome.provider or run.run_state.provider

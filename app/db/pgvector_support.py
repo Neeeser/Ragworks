@@ -15,7 +15,7 @@ _pgvector_available: bool = True
 
 def set_pgvector_available(available: bool) -> None:
     """Record whether the Postgres server has the pgvector extension."""
-    global _pgvector_available  # pylint: disable=global-statement
+    global _pgvector_available
     _pgvector_available = available
 
 

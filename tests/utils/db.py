@@ -124,7 +124,7 @@ def _ensure_template(admin: Engine) -> None:
                 try:
                     with template_engine.begin() as connection:
                         connection.execute(text(f"CREATE EXTENSION IF NOT EXISTS {extension}"))
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     pass  # extension unavailable on this server; marked tests skip
             SQLModel.metadata.create_all(template_engine)
         finally:
@@ -134,7 +134,7 @@ def _ensure_template(admin: Engine) -> None:
 
 def reset_database(engine: Engine) -> None:
     """Give this worker a fresh database copied from the schema template."""
-    global _template_ready  # pylint: disable=global-statement
+    global _template_ready
     database = make_url(get_database_url()).database
     engine.dispose()  # our own pooled connections would block the drop
     admin = _admin_engine()
@@ -152,7 +152,6 @@ def reset_database(engine: Engine) -> None:
 
 def open_session() -> Iterator[Session]:
     """Yield a SQLModel session backed by a freshly reset test database."""
-    # pylint: disable=import-outside-toplevel
     from app.services.app_config import invalidate_app_config_cache
 
     engine = create_test_engine()

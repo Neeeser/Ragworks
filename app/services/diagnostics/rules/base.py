@@ -77,7 +77,6 @@ def paired_observation(
 
 
 def build_diagnostic(
-    # pylint: disable=too-many-arguments  # keyword-only mirror of CollectionDiagnostic
     *,
     code: str,
     severity: DiagnosticSeverity,

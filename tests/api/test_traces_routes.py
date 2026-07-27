@@ -142,7 +142,7 @@ def test_trace_service_rejects_run_with_missing_pipeline(session: Session) -> No
     )
 
     with pytest.raises(TraceNotFoundError):
-        TraceService(session)._resolve_definition(run)  # pylint: disable=protected-access
+        TraceService(session)._resolve_definition(run)
 
 
 def test_trace_service_get_run_trace_returns_payload(session: Session) -> None:

@@ -88,7 +88,7 @@ class CollectionDiagnosticsService:
         """Evaluate one rule, degrading an unexpected failure to an info finding."""
         try:
             return rule.evaluate(ctx)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             # A rule must never sink the endpoint; a bug in one check becomes a
             # single informational finding, and the rest still run.
             logger.warning("Diagnostic rule %s failed", rule.code, exc_info=True)

@@ -94,7 +94,7 @@ def handle_request(
         result = server.handle(message)
     except ProtocolError as exc:
         return McpHttpResponse(200, error_payload(message.id, exc))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         # A bug must still reach the client as a parseable JSON-RPC error rather
         # than an HTML 500 no MCP client can read. Logged with the request's
         # correlation id; never swallowed silently.

@@ -339,7 +339,7 @@ def _ingest_one(user_id: UUID, collection_id: UUID, document_id: UUID) -> bool:
             IngestionService(session).ingest_document(
                 user=user, collection=collection, document=document
             )
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             # Deliberately broad: see docstring.
             logger.exception("Eval corpus document %s failed to ingest", document.name)
             return False

@@ -62,7 +62,7 @@ class PipelineRunner:
         self._session = session
         self._executor = PipelineExecutor(registry or default_registry())
 
-    def start(  # pylint: disable=too-many-arguments,too-many-locals
+    def start(
         self,
         *,
         pipeline: models.Pipeline,

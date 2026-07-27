@@ -66,7 +66,6 @@ def _build_reasoning_request_options(
 # Resolves model info, tool support, parameter overrides, reasoning options,
 # provider preferences, and context window in one pass; splitting further
 # would just relocate these locals into an intermediate object.
-# pylint: disable-next=too-many-arguments
 def prepare_model_settings(
     *,
     provider: ChatProvider,

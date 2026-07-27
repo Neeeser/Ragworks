@@ -84,7 +84,7 @@ class CollectionDeletionService:
         store = get_vector_store(backend, user=user, session=self.session)
         try:
             store.delete_namespace(index_name, namespace)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # The Pinecone store already swallowed the benign missing-namespace
             # case; anything that still raises from it is a real upstream fault.
             # pgvector errors are our own database's and surface as themselves.

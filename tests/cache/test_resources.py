@@ -42,8 +42,8 @@ def test_creation_is_single_flight_and_keys_are_stored_as_opaque_digests() -> No
 
     assert calls == 1
     assert resources == [resources[0]] * 4
-    assert "secret" not in cache._stored_identifiers()  # pylint: disable=protected-access
-    assert len(cache._stored_identifiers()[0]) == 64  # pylint: disable=protected-access
+    assert "secret" not in cache._stored_identifiers()
+    assert len(cache._stored_identifiers()[0]) == 64
     cache.close_all()
 
 

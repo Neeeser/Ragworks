@@ -10,7 +10,7 @@ from ..models import Document
 from .base import DocumentParser, DocumentSource, build_document_from_source
 
 
-class PdfToTextParser(DocumentParser):  # pylint: disable=too-few-public-methods
+class PdfToTextParser(DocumentParser):
     """Extract native text content from PDF documents."""
 
     def parse(self, source: DocumentSource) -> Document:

@@ -155,7 +155,7 @@ def invoke_collection_tool(
         # Persist the failed run so its trace link resolves (see search.py).
         try:
             session.commit()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             session.rollback()
         raise to_http_exception(exc) from exc
     except ServiceError as exc:

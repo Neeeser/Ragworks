@@ -62,7 +62,7 @@ class ToolInvocationService:
         self.settings = get_settings()
         self.session = session
 
-    def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def invoke_binding(
         self,
         user: models.User,
         collection: models.Collection,
@@ -77,7 +77,7 @@ class ToolInvocationService:
             user, collection, resolved, query, top_k=top_k, arguments=arguments
         )
 
-    def invoke(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def invoke(
         self,
         user: models.User,
         collection: models.Collection,
@@ -170,7 +170,6 @@ class ToolInvocationService:
             f"Retrieval failed{where} due to an internal error. See the run trace for details."
         ), 500
 
-    # pylint: disable-next=too-many-arguments
     def _record_and_respond(
         self,
         *,
@@ -219,7 +218,6 @@ class ToolInvocationService:
             pipeline_run_id=handle.run.id,
         )
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _start_run(
         self,
         runner: PipelineRunner,
@@ -265,7 +263,6 @@ class ToolInvocationService:
             for scored in payload.response.matches
         ]
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _record_query_event(
         self,
         *,

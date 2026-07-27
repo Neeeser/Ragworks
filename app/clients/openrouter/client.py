@@ -240,7 +240,6 @@ class OpenRouterClient:
     # OpenRouter's chat-completion surface has ~8 independent optional knobs
     # (tools, tool_choice, parallel_tool_calls, extra_headers/body, parameters,
     # stream); grouping them into an object would just relocate the same list.
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _build_chat_kwargs(
         self,
         messages: list[dict[str, Any]],
@@ -277,7 +276,6 @@ class OpenRouterClient:
 
     # Mirrors the OpenRouter SDK's chat.completions.create surface one-for-one;
     # see the comment on `_build_chat_kwargs` for why these aren't grouped.
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def chat(
         self,
         messages: list[dict[str, Any]],
@@ -305,7 +303,6 @@ class OpenRouterClient:
         return OpenRouterChatResponse.model_validate(response.model_dump())
 
     # Streaming twin of `chat`; same surface, see `_build_chat_kwargs` for why.
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def chat_stream(
         self,
         messages: list[dict[str, Any]],

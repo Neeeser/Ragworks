@@ -47,7 +47,7 @@ class DocumentRepository(Repository):
         statement = (
             select(
                 col(models.Document.collection_id),
-                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+                func.count(col(models.Document.id)),
             )
             .where(
                 col(models.Document.collection_id).in_(ids),
@@ -143,7 +143,7 @@ class DocumentRepository(Repository):
         """Return a mapping of user id -> number of documents they own."""
         statement = select(
             models.Document.user_id,
-            func.count(),  # pylint: disable=not-callable
+            func.count(),
         ).group_by(col(models.Document.user_id))
         return {user_id: count for user_id, count in self.session.exec(statement).all()}
 

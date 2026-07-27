@@ -21,7 +21,6 @@ from app.schemas.retrieval import CollectionQueryResponse
 from app.utils.ordering import unique_in_order
 
 
-# pylint: disable-next=too-many-arguments
 def score_query(
     *,
     run_id: UUID,

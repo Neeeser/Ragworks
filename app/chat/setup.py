@@ -235,7 +235,6 @@ class ChatSetupBuilder:
 
     # Orchestrates tool-collection resolution, model-settings resolution, and
     # prompt assembly for a turn; see the module docstring for the full sequence.
-    # pylint: disable=too-many-locals
     def build(
         self,
         *,

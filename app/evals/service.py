@@ -61,7 +61,7 @@ def run_dataset_download(dataset_id: UUID) -> None:
             entry = get_builtin(dataset.source_ref or "")
             triple = download_builtin(entry)
             EvalService(session).persist_triple(dataset, triple)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # Deliberately broad: the FAILED dataset row is the outcome a
             # background task records; there is no caller left to re-raise to.
             logger.exception("Benchmark download failed for dataset %s", dataset_id)
@@ -136,7 +136,6 @@ class EvalService:
         self.session.refresh(dataset)
         return dataset
 
-    # pylint: disable-next=too-many-arguments
     def upload_dataset(
         self,
         user: models.User,

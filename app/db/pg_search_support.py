@@ -15,7 +15,7 @@ _pg_search_available: bool = True
 
 def set_pg_search_available(available: bool) -> None:
     """Record whether the Postgres server has the pg_search extension."""
-    global _pg_search_available  # pylint: disable=global-statement
+    global _pg_search_available
     _pg_search_available = available
 
 

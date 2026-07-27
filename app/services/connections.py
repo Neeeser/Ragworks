@@ -45,7 +45,7 @@ def _connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
     """Return actual capabilities, retaining Settings access during outages."""
     try:
         return adapter.kinds
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         if not (is_external_provider_error(exc) or isinstance(exc, ServiceError)):
             raise
         logger.warning(
@@ -242,7 +242,7 @@ class ConnectionService:
         try:
             invalidate_connection_caches(connection)
             invalidate_embedding_dimensions(connection.id)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.warning(
                 "Cache cleanup failed for provider connection %s.",
                 connection.id,
