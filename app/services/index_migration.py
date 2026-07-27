@@ -70,8 +70,10 @@ def migrate_index_entities(session: Session) -> int:
         )
         version.definition = final.model_dump(mode="json")
         session.add(version)
-        if identities or final.nodes != definition.nodes:
-            migrated += 1
+        # Every row below the gate is rewritten and stamped, so the count is
+        # rows migrated — counting only the ones that gained a registration
+        # reports fewer definitions than the boot actually rewrote.
+        migrated += 1
     if migrated:
         logger.info("Migrated %d pipeline definitions onto index entities.", migrated)
     session.commit()

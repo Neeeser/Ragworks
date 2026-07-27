@@ -436,11 +436,16 @@ frontend form code — only a new `ConfigFieldKind` would.
   rule that folds a definition's store nodes onto one shared variable merges two
   corpora into whichever is written last, silently: the run succeeds and
   retrieval returns the wrong chunks.
-- **Collections are separated inside one index by `namespace`, not by having
-  their own index.** One pipeline already serves every collection without
-  interference, so exposing a slot buys only the rarer case of collections on
-  *different* stores. Making it the default puts an infrastructure decision on
-  every collection that never needed one.
+- **A user's collections are separated inside one index by `namespace`, not by
+  having their own index.** One pipeline already serves every collection that
+  user owns without interference, so exposing a slot buys only the rarer case of
+  collections on *different* stores. Making it the default puts an
+  infrastructure decision on every collection that never needed one. This is a
+  claim about one account's collections and says nothing about accounts: on a
+  shared backend a name is one physical store for the whole deployment, so a
+  default that hands two accounts the same name interleaves their vectors where
+  neither can see the other — which is why index names offered to a user are
+  derived per account.
 - **Backend compatibility is per binding, and the error names the nodes.** Since an
   index carries its backend, a graph valid as authored can be invalid for one
   collection; `incompatible_nodes` (`app/services/index_compatibility.py`) is the

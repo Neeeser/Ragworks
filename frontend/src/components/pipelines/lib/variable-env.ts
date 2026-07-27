@@ -276,7 +276,7 @@ export function expressionVariableNames(value: unknown): string[] | null {
   }
 }
 
-/** Mirrors `app/pipelines/index_variables.py::_LEXICAL_NODE_TYPES` — the
+/** Mirrors `app/pipelines/index_identity.py::_LEXICAL_NODE_TYPES` — the
  * BM25/lexical node family, whose index slots need a sparse index. */
 const LEXICAL_NODE_TYPES = new Set(["indexer.bm25", "retriever.bm25", "count.bm25", "facet.bm25"]);
 
