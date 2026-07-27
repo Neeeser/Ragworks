@@ -89,12 +89,12 @@ describe("CollectionOverview", () => {
   it("charts retrieval latency per tool with a legend that carries the numbers", async () => {
     renderOverview();
 
-    await waitFor(() => {
-      expect(screen.getByText("Ingestion latency")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Retrieval latency")).toBeInTheDocument();
+    // Await the legend row, not a card title: the titles render before the
+    // history request resolves, so waiting on one races the series it names.
     // The tool's own name is the series identity, not a generic "Retrieval".
-    expect(screen.getByRole("button", { name: /Search/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Search/ })).toBeInTheDocument();
+    expect(screen.getByText("Ingestion latency")).toBeInTheDocument();
+    expect(screen.getByText("Retrieval latency")).toBeInTheDocument();
 
     // Collapsed, the legend row already carries its headline average.
     expect(screen.getAllByText("40 ms").length).toBeGreaterThan(0);
