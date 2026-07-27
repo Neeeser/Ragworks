@@ -9,6 +9,7 @@ read by the app itself.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,11 +18,33 @@ from sqlalchemy.engine.url import make_url
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-DEFAULT_SANDBOX_DATABASE_URL = "postgresql+psycopg://ragworks:ragworks@localhost:54329/ragworks_sandbox"
+
+def _worktree_suffix() -> str:
+    """Per-worktree isolation suffix, empty in the main checkout.
+
+    A linked git worktree has a `.git` *file* (the main checkout has a
+    directory). Sandboxes in linked worktrees get their own database name and
+    port offset so concurrent agents don't drop each other's sandbox database
+    or race for ports 8010/3010; the main checkout keeps the documented
+    defaults. Everything downstream (CLI output, handoff.json, flows) reads
+    the derived values, never literals.
+    """
+    if not (REPO_ROOT / ".git").is_file():
+        return ""
+    return hashlib.md5(str(REPO_ROOT).encode()).hexdigest()[:8]
+
+
+_SUFFIX = _worktree_suffix()
+_PORT_OFFSET = (int(_SUFFIX, 16) % 400) + 1 if _SUFFIX else 0
+_DB_NAME = f"ragworks_sandbox_{_SUFFIX}" if _SUFFIX else "ragworks_sandbox"
+
+DEFAULT_SANDBOX_DATABASE_URL = (
+    f"postgresql+psycopg://ragworks:ragworks@localhost:54329/{_DB_NAME}"
+)
 
 API_HOST = "127.0.0.1"
-API_PORT = 8010
-FRONTEND_PORT = 3010
+API_PORT = int(os.getenv("SANDBOX_API_PORT", str(8010 + _PORT_OFFSET)))
+FRONTEND_PORT = int(os.getenv("SANDBOX_FRONTEND_PORT", str(3010 + _PORT_OFFSET)))
 API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
 FRONTEND_BASE_URL = f"http://{API_HOST}:{FRONTEND_PORT}"
 

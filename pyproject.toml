@@ -41,6 +41,8 @@ dev = [
     "mypy>=1.10",
     "types-python-jose>=3.3",
     "types-passlib>=1.7",
+    "pytest-xdist>=3.6",
+    "filelock>=3.13",
 ]
 
 [tool.uv]
@@ -92,7 +94,11 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-q", "--strict-markers"]
+# -n auto: pytest-xdist parallelism; each worker owns a private database
+# copied from a schema template (tests/utils/db.py), so test-level
+# distribution is safe (no module/session-scoped fixtures share state). For a
+# quick single-file run during iteration, `-n 0` skips worker startup.
+addopts = ["-q", "--strict-markers", "-n", "auto"]
 norecursedirs = ["live"]
 markers = [
     "live_provider_reranking: opt-in smoke test that contacts a configured provider",

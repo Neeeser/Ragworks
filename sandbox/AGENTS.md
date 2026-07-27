@@ -9,8 +9,10 @@ invariants that keep the harness trustworthy.
 
 `uv run python -m sandbox up <scenario>` puts a fully isolated copy of the
 app (own DB `ragworks_sandbox`, own `.sandbox/` storage/config, ports
-8010/3010) into a named state and prints a handoff (login, JWT, deep links,
-browser-login snippet). `sandbox flows` reruns committed Playwright specs
+8010/3010; a linked git worktree derives its own database name and port
+offset from the worktree path so concurrent agents don't collide — always
+read URLs from the printed handoff, never assume the defaults) into a named
+state and prints a handoff (login, JWT, deep links, browser-login snippet). `sandbox flows` reruns committed Playwright specs
 against those states. The point is token economy: setup an agent doesn't pay
 for, and validated flows that rerun for free.
 

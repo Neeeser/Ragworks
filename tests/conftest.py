@@ -13,13 +13,30 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from sqlalchemy.engine.url import make_url
 from sqlmodel import Session
 
-from tests.utils.db import DEFAULT_TEST_DATABASE_URL, open_session
+from tests.utils.db import DEFAULT_TEST_DATABASE_URL, open_session, worker_database_name
 
 TEST_ROOT = Path(__file__).resolve().parent / ".artifacts"
-STORAGE_PATH = TEST_ROOT / "storage"
-CONFIG_PATH = TEST_ROOT / "config"
+_WORKER = os.getenv("PYTEST_XDIST_WORKER", "solo")
+STORAGE_PATH = TEST_ROOT / "storage" / _WORKER
+CONFIG_PATH = TEST_ROOT / "config" / _WORKER
+
+
+def _worker_database_url() -> str:
+    """Derive this process's private database URL.
+
+    The configured `TEST_DATABASE_URL` names the *base* database; each pytest
+    process (plain run or xdist worker) gets its own database — named per
+    worktree and per worker — created from a schema template in
+    `tests/utils/db.py`, so parallel workers and concurrent worktree runs
+    share one Postgres server without sharing data.
+    """
+    base = os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+    url = make_url(base)
+    database = worker_database_name(url.database or "ragworks_test")
+    return url.set(database=database).render_as_string(hide_password=False)
 
 
 def _prepare_environment() -> None:
@@ -33,7 +50,7 @@ def _prepare_environment() -> None:
     if STORAGE_PATH.exists():
         shutil.rmtree(STORAGE_PATH)
 
-    os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+    os.environ["DATABASE_URL"] = _worker_database_url()
     os.environ["FILE_STORAGE_PATH"] = str(STORAGE_PATH)
     os.environ["CONFIG_PATH"] = str(CONFIG_PATH)
     # debug defaults to False (secure-by-default); the suite runs against the
@@ -91,7 +108,7 @@ def _reset_pg_search_availability() -> Generator[None, None, None]:
 def pg_search_session_fixture(session: Session) -> Session:
     """The regular DB session, skipping the test when pg_search is missing.
 
-    `tests/utils/db.reset_database` installs the extension best-effort; a
+    The schema template (`tests/utils/db.py`) installs the extension best-effort; a
     Postgres server without pg_search (ParadeDB BM25) skips these tests with
     a named reason instead of failing the suite (see app/AGENTS.md).
     """
@@ -109,7 +126,7 @@ def pg_search_session_fixture(session: Session) -> Session:
 def pgvector_session_fixture(session: Session) -> Session:
     """The regular DB session, skipping the test when pgvector is missing.
 
-    `tests/utils/db.reset_database` installs the extension best-effort; a
+    The schema template (`tests/utils/db.py`) installs the extension best-effort; a
     Postgres server without pgvector available skips these tests with a named
     reason instead of failing the suite (see app/AGENTS.md).
     """
