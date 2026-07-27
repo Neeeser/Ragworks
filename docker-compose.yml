@@ -2,7 +2,7 @@ name: ragworks
 
 services:
   postgres:
-    image: paradedb/paradedb:latest-pg17
+    image: paradedb/paradedb:v0.24.3-pg17
     environment:
       POSTGRES_USER: ragworks
       POSTGRES_PASSWORD: ragworks
