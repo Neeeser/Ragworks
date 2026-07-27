@@ -97,13 +97,10 @@ def _load_resolved(
         definition,
         collection,
         registry or default_registry(),
-        binding_values=binding.variable_values,
     )
     static_definition = resolve_static_definition(
         definition,
-        binding=BindingContext(
-            collection=collection_scope(collection), values=binding.variable_values
-        ),
+        binding=BindingContext(collection=collection_scope(collection)),
     )
     return ResolvedPipeline(
         service=service,

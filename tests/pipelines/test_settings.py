@@ -192,6 +192,66 @@ def test_index_targets_union_indexer_and_retriever_sides() -> None:
     }
 
 
+def test_index_targets_include_every_dense_store() -> None:
+    """A graph splitting its corpus across two dense indexes lists both.
+
+    Only the first indexer used to reach the target list, so the second
+    store's vectors survived every purge and the next query re-served
+    documents the user had deleted.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _node(
+                "memories",
+                "indexer.vector",
+                {"backend": "pgvector", "index_name": "memories", "dimension": 768},
+            ),
+            _node(
+                "facts",
+                "indexer.vector",
+                {"backend": "pgvector", "index_name": "facts", "dimension": 768},
+            ),
+        ],
+        edges=[],
+    )
+
+    settings = resolve_pipeline_settings(definition, _collection(), default_registry())
+
+    assert {
+        (target.index_name, target.vector_type) for target in settings.index_targets
+    } == {("memories", "dense"), ("facts", "dense")}
+
+
+def test_index_targets_include_every_lexical_store() -> None:
+    """The same fan-out on the sparse plane: two BM25 indexers, two targets.
+
+    One node per BM25 node type reached the target list, so a graph writing
+    two lexical indexes kept the second one's rows through every purge —
+    the dense failure, on the plane a hybrid pipeline also writes.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _node(
+                "bm25-memories",
+                "indexer.bm25",
+                {"backend": "pgvector", "index_name": "memories-bm25"},
+            ),
+            _node(
+                "bm25-facts",
+                "indexer.bm25",
+                {"backend": "pgvector", "index_name": "facts-bm25"},
+            ),
+        ],
+        edges=[],
+    )
+
+    settings = resolve_pipeline_settings(definition, _collection(), default_registry())
+
+    assert {
+        (target.index_name, target.vector_type) for target in settings.index_targets
+    } == {("memories-bm25", "sparse"), ("facts-bm25", "sparse")}
+
+
 def test_index_targets_dedupe_shared_identity() -> None:
     """An indexer and retriever naming the same index yield one target."""
     definition = PipelineDefinition(

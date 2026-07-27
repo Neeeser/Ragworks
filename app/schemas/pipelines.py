@@ -36,6 +36,16 @@ class PipelineCreate(BaseModel):
     change_summary: str | None = None
 
 
+class PipelineCopyRequest(BaseModel):
+    """Payload for copying a pipeline.
+
+    `name` is optional so the common case is a one-click copy; the service
+    derives "<name> (copy)" when it is omitted.
+    """
+
+    name: str | None = None
+
+
 class PipelineUpdate(BaseModel):
     """Payload for updating a pipeline."""
 

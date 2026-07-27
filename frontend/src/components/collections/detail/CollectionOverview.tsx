@@ -46,9 +46,6 @@ export function CollectionOverview({
     [token, collection.id, range],
   );
 
-  // One tools query for the page: the Indexes card reads each binding's index
-  // choice and the Tools panel curates the same bindings, so two fetches of
-  // the same list would drift the moment one of them mutates.
   const toolsQuery = useApiQuery(
     () => listCollectionTools(token, collection.id),
     [token, collection.id],
@@ -128,13 +125,7 @@ export function CollectionOverview({
         onCollectionUpdated={onCollectionUpdated}
       />
 
-      <IndexesCard
-        collection={collection}
-        token={token}
-        toolPipelines={retrievalPipelines}
-        tools={tools}
-        onToolsChanged={toolsQuery.reload}
-      />
+      <IndexesCard collection={collection} token={token} />
 
       <ToolsPanel
         collection={collection}

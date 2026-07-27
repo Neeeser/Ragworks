@@ -38,7 +38,6 @@ class CollectionToolRead(BaseModel):
     is_primary: bool
     enabled: bool
     position: int
-    variable_values: dict[str, Any] = Field(default_factory=dict)
 
 
 class CollectionToolsResponse(BaseModel):
@@ -71,24 +70,13 @@ class ToolInvocationResponse(BaseModel):
 
 
 class CollectionToolCreate(BaseModel):
-    """Payload for binding a pipeline as a collection tool.
-
-    `variable_values` answers the pipeline's binding-source variables for
-    this collection — chiefly which index it targets. Omitted slots auto-fill
-    from the collection's existing indexes.
-    """
+    """Payload for binding a pipeline as a collection tool."""
 
     pipeline_id: UUID
-    variable_values: dict[str, Any] = Field(default_factory=dict)
 
 
 class CollectionToolUpdate(BaseModel):
-    """Payload for updating one tool binding (primary/enabled/variables).
-
-    `variable_values` is `None` when the caller is not changing it; an empty
-    dict deliberately clears every override back to the pipeline defaults.
-    """
+    """Payload for updating one tool binding (primary/enabled)."""
 
     is_primary: bool | None = None
     enabled: bool | None = None
-    variable_values: dict[str, Any] | None = None

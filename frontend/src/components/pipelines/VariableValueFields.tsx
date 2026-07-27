@@ -258,14 +258,7 @@ export function VariableValueEditor({
   if (variable.type === "index") {
     const selected = indexValueOf(variable.value);
     return (
-      <Field
-        label="Default index"
-        hint={
-          source === "binding"
-            ? "Collections that do not choose one use this."
-            : "Every collection uses this index."
-        }
-      >
+      <Field label="Index" hint="Every node reading this variable uses it.">
         <CustomSelect
           value={selected?.index_id ?? ""}
           options={indexOptions.map((index) => ({

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.pipelines.backend_support import backend_support_issues
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
@@ -68,6 +69,7 @@ class PipelineValidator:
         hook_definition = self._definition_for_node_hooks(definition, issues)
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(self._check_embedding_input_limits(hook_definition))
+        issues.extend(backend_support_issues(hook_definition, self._registry))
         node_errors = [issue.message for issue in issues if issue.severity == "error"]
         warnings = [issue.message for issue in issues if issue.severity == "warning"]
         errors.extend(node_errors)

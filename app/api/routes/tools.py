@@ -73,7 +73,7 @@ def add_collection_tool(
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
         binding = CollectionToolService(session).add_tool(
-            current_user, collection, payload.pipeline_id, payload.variable_values
+            current_user, collection, payload.pipeline_id
         )
         session.commit()
         resolved = resolve_tool_binding(session, current_user, collection, binding.id)
@@ -101,10 +101,6 @@ def update_collection_tool(
         if payload.enabled is not None:
             service.set_enabled(
                 current_user, collection, binding_id, enabled=payload.enabled
-            )
-        if payload.variable_values is not None:
-            service.set_variable_values(
-                current_user, collection, binding_id, payload.variable_values
             )
         session.commit()
         resolved = resolve_tool_binding(session, current_user, collection, binding_id)

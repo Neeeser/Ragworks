@@ -115,8 +115,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     updateBasePrompt: vi.fn(async () => makePromptDetails()),
     createCollection: vi.fn(async () => makeCollection()),
     updateCollection: vi.fn(async () => makeCollection()),
-    fetchCollectionIndexes: vi.fn(async () => ({ slots: [] })),
-    updateCollectionIndexes: vi.fn(async () => ({ slots: [] })),
+    fetchCollectionIndexes: vi.fn(async () => ({ targets: [] })),
     // collection tools
     listApiKeys: vi.fn(async () => ({ keys: [] })),
     createApiKey: vi.fn(async () => ({ key: makeApiKey(), secret: "rw_secret-value" })),

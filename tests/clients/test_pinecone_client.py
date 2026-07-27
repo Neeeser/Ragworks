@@ -11,6 +11,7 @@ from app.clients.pinecone import client as pinecone_client_module
 class _StubPinecone:
     def __init__(self) -> None:
         self.created: dict[str, Any] | None = None
+        self.created_for_model: dict[str, Any] | None = None
         self.deleted: str | None = None
 
     def list_indexes(self) -> list[dict[str, Any]]:
@@ -30,6 +31,9 @@ class _StubPinecone:
 
     def create_index(self, **kwargs: Any) -> None:
         self.created = kwargs
+
+    def create_index_for_model(self, **kwargs: Any) -> None:
+        self.created_for_model = kwargs
 
     def delete_index(self, name: str) -> None:
         self.deleted = name
@@ -147,6 +151,25 @@ def test_create_index_allows_sparse_without_dimension() -> None:
     # installed SDK's request factory drops `None` args before building the
     # request, so this is behaviorally identical to omission (see client.py).
     assert client.created["dimension"] is None
+
+
+def test_create_sparse_text_index_states_its_metric() -> None:
+    """The integrated sparse embed carries an explicit dotproduct metric.
+
+    `IndexEmbed` defaults `metric` to None and serializes its whole
+    `__dict__`, so the SDK's request model rejects the None with a type error
+    before the call leaves the process — sparse index creation fails outright.
+    dotproduct is the only metric a Pinecone sparse index accepts.
+    """
+    client = _StubPinecone()
+    admin = PineconeIndexAdmin(client)
+
+    admin.create_sparse_text_index(name="lex-index", cloud="aws", region="us-east-1")
+
+    assert client.created_for_model is not None
+    embed = client.created_for_model["embed"]
+    assert embed.metric == "dotproduct"
+    assert embed.model == "pinecone-sparse-english-v0"
 
 
 def test_delete_index_delegates_to_client() -> None:

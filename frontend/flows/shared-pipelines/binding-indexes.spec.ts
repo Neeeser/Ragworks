@@ -1,34 +1,47 @@
 /**
- * Flow: two collections share one pipeline pair on different indexes
+ * Flow: two collections on two stores, via copied pipelines
  * (scenario: shared-pipelines).
  *
- * 1. Log in via the API and confirm through the API that both collections
- *    bind the *same* pipeline ids — the state that previously required a
- *    per-collection copy.
- * 2. Confirm each binding resolves to its own index, so the shared definition
- *    is genuinely parameterised rather than merely duplicated.
- * 3. Open the second collection and repoint one tool binding at another index
- *    from its row on the Indexes card — the only surface that mutates a
- *    binding — checking the re-ingest consequence is stated before the change.
- * 4. Confirm the first collection's binding is untouched — the whole point of
- *    per-binding values.
+ * 1. Log in via the API and confirm each collection reports its own index —
+ *    the state that used to need a per-collection override.
+ * 2. Confirm the two collections bind *different* pipelines: a pipeline names
+ *    the index it uses, so two stores is two graphs.
+ * 3. Copy a pipeline from the editor's rail and confirm the copy carries the
+ *    same graph under a new name — the supported way to get the second one.
+ * 4. Confirm the index registry reports which collections use each index,
+ *    read from the definitions rather than any binding selection.
  */
 import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi, seededLink } from "../helpers";
 
-interface ToolBinding {
-  id: string;
+import type { APIRequestContext } from "@playwright/test";
+
+interface IndexTarget {
   name: string;
-  pipeline_id: string;
-  variable_values?: Record<string, { index_id: string; name: string }>;
+  vector_type: string;
+  pipelines: string[];
 }
 
 function collectionIdFrom(url: string): string {
   return new URL(url).pathname.split("/").pop() ?? "";
 }
 
-test("one pipeline serves two collections against different indexes", async ({ page }) => {
+async function denseTargetOf(
+  request: APIRequestContext,
+  backendUrl: string,
+  headers: Record<string, string>,
+  collectionId: string,
+): Promise<IndexTarget | undefined> {
+  const response = await request.get(`${backendUrl}/api/collections/${collectionId}/indexes`, {
+    headers,
+  });
+  expect(response.ok()).toBe(true);
+  const { targets } = (await response.json()) as { targets: IndexTarget[] };
+  return targets.find((target) => target.vector_type === "dense");
+}
+
+test("each collection reports the index its own pipelines name", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
   const api = page.context().request;
@@ -37,75 +50,41 @@ test("one pipeline serves two collections against different indexes", async ({ p
   const firstId = collectionIdFrom(seededLink(handoff, "collection"));
   const secondId = collectionIdFrom(seededLink(handoff, "Second Collection overview"));
 
-  const [first, second] = await Promise.all(
-    [firstId, secondId].map(async (id) => {
-      const response = await api.get(`${handoff.backend_url}/api/collections/${id}/tools`, {
-        headers,
-      });
-      expect(response.ok()).toBe(true);
-      return (await response.json()) as { tools: ToolBinding[] };
-    }),
-  );
+  const [first, second] = await Promise.all([
+    denseTargetOf(api, handoff.backend_url, headers, firstId),
+    denseTargetOf(api, handoff.backend_url, headers, secondId),
+  ]);
 
-  // Same pipeline, both collections — no copy involved.
-  const firstPipelines = first.tools.map((tool) => tool.pipeline_id).sort();
-  const secondPipelines = second.tools.map((tool) => tool.pipeline_id).sort();
-  expect(secondPipelines).toEqual(firstPipelines);
-
-  // ...resolved against different indexes.
-  const indexNameOf = (tools: ToolBinding[]) => tools[0]?.variable_values?.primary_index?.name;
-  expect(indexNameOf(first.tools)).toBeTruthy();
-  expect(indexNameOf(second.tools)).toBeTruthy();
-  expect(indexNameOf(second.tools)).not.toBe(indexNameOf(first.tools));
+  expect(first?.name).toBeTruthy();
+  expect(second?.name).toBeTruthy();
+  expect(second?.name).not.toBe(first?.name);
+  // Two stores means two graphs — the copy is what makes them independent.
+  expect(second?.pipelines).not.toEqual(first?.pipelines);
 });
 
-test("repointing one collection's index leaves the other alone", async ({ page }) => {
+test("copying a pipeline carries its graph under a new name", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
   const api = page.context().request;
   const headers = { Authorization: `Bearer ${handoff.token}` };
 
-  const firstId = collectionIdFrom(seededLink(handoff, "collection"));
-  const secondUrl = seededLink(handoff, "Second Collection overview");
-  const secondId = collectionIdFrom(secondUrl);
+  await page.goto(`${handoff.frontend_url}/pipelines/ingestion`);
+  const original = page.getByRole("button", { name: /^Copy / }).first();
+  await expect(original).toBeVisible();
+  const label = (await original.getAttribute("aria-label")) ?? "";
+  const name = label.replace(/^Copy /, "");
 
-  const before = await api.get(`${handoff.backend_url}/api/collections/${firstId}/tools`, {
-    headers,
-  });
-  const secondTools = await api.get(`${handoff.backend_url}/api/collections/${secondId}/tools`, {
-    headers,
-  });
-  const firstIndexBefore = ((await before.json()) as { tools: ToolBinding[] }).tools[0]
-    ?.variable_values?.primary_index?.name;
-  const toolName = ((await secondTools.json()) as { tools: ToolBinding[] }).tools[0].name;
+  await original.click();
 
-  await page.goto(secondUrl);
+  await expect(page.getByText(`Copied to "${name} (copy)".`)).toBeVisible({ timeout: 15_000 });
 
-  // A binding is repointed from its own row on the Indexes card — the Tools
-  // panel curates bindings, it does not choose their indexes.
-  await page.getByRole("button", { name: `Change indexes for ${toolName}` }).click();
-  const dialog = page.getByRole("dialog", { name: /Indexes for/ });
-
-  // The consequence is stated before the change, because an index swap moves
-  // no data and the resulting empty reads are invisible at query time.
-  await expect(dialog.getByText(/does not move indexed data/i)).toBeVisible();
-
-  await dialog.getByRole("combobox").first().click();
-  await page.getByRole("option").first().click();
-  await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText(/does not move indexed data/i)).toBeHidden({ timeout: 15_000 });
-
-  const after = await api.get(`${handoff.backend_url}/api/collections/${firstId}/tools`, {
-    headers,
-  });
-  const firstIndexAfter = ((await after.json()) as { tools: ToolBinding[] }).tools[0]
-    ?.variable_values?.primary_index?.name;
-  expect(firstIndexAfter).toBe(firstIndexBefore);
-
-  const secondAfter = await api.get(`${handoff.backend_url}/api/collections/${secondId}/tools`, {
-    headers,
-  });
-  expect(secondAfter.ok()).toBe(true);
+  const listed = await api.get(`${handoff.backend_url}/api/pipelines`, { headers });
+  const pipelines = (await listed.json()) as { name: string; is_default: boolean }[];
+  const copy = pipelines.find((pipeline) => pipeline.name === `${name} (copy)`);
+  expect(copy).toBeTruthy();
+  // A copy claims no default role — two pipelines claiming it would make "the
+  // default ingestion pipeline" ambiguous.
+  expect(copy?.is_default).toBe(false);
 });
 
 test("the index registry reports which collections use an index", async ({ page }) => {
@@ -125,12 +104,12 @@ test("the index registry reports which collections use an index", async ({ page 
     }[];
   };
 
-  // Every index a scaffolded pipeline targets is registered, or nothing could
+  // Every index a scaffolded pipeline names is registered, or nothing could
   // point at it.
   const registered = indexes.filter((index) => index.registered);
   expect(registered.length).toBeGreaterThanOrEqual(2);
 
-  // ...and at least one reports the collections behind it.
+  // ...and usage is read from the definitions that name them.
   const used = registered.filter((index) => index.in_use_by.length > 0);
   expect(used.length).toBeGreaterThan(0);
 });

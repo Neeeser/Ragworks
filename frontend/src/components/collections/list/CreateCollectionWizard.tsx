@@ -3,9 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { BindingIndexFields } from "@/components/collections/detail/overview/BindingIndexFields";
 import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
-import { useIndexes } from "@/components/indexes/use-indexes";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Loader } from "@/components/ui/loader";
@@ -56,8 +54,6 @@ export function CreateCollectionWizard({
     retrieval_pipeline_id: "",
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [indexValues, setIndexValues] = useState<Record<string, unknown>>({});
-  const { registeredIndexes, refreshIndexes } = useIndexes(token);
   const [ingestionOverrides, setIngestionOverrides] = useState<
     Record<string, Record<string, unknown>>
   >({});
@@ -100,7 +96,6 @@ export function CreateCollectionWizard({
       setShowAdvanced(false);
       setIngestionOverrides({});
       setRetrievalOverrides({});
-      setIndexValues({});
       setForm({
         name: "",
         description: "",
@@ -115,20 +110,6 @@ export function CreateCollectionWizard({
       retrieval_pipeline_id: prev.retrieval_pipeline_id || defaultRetrieval?.id || "",
     }));
   }, [open, defaultIngestion, defaultRetrieval]);
-
-  const selectedPipelines = useMemo(
-    () =>
-      [
-        ingestionPipelines.find((p) => p.id === form.ingestion_pipeline_id),
-        retrievalPipelines.find((p) => p.id === form.retrieval_pipeline_id),
-      ].filter((pipeline): pipeline is Pipeline => Boolean(pipeline)),
-    [
-      ingestionPipelines,
-      retrievalPipelines,
-      form.ingestion_pipeline_id,
-      form.retrieval_pipeline_id,
-    ],
-  );
 
   const usesDefaultPipelines =
     !!defaultIngestion &&
@@ -204,9 +185,6 @@ export function CreateCollectionWizard({
       }
       if (form.retrieval_pipeline_id) {
         payload.tool_pipeline_ids = [form.retrieval_pipeline_id];
-      }
-      if (Object.keys(indexValues).length > 0) {
-        payload.variable_values = indexValues;
       }
       if (showAdvanced && usesDefaultPipelines) {
         payload.pipeline_overrides = {
@@ -319,14 +297,6 @@ export function CreateCollectionWizard({
               ))}
             </Select>
           </Field>
-          <BindingIndexFields
-            pipelines={selectedPipelines}
-            values={indexValues}
-            indexes={registeredIndexes}
-            token={token}
-            onChange={setIndexValues}
-            onIndexCreated={refreshIndexes}
-          />
         </div>
       )}
 

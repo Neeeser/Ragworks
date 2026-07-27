@@ -65,7 +65,16 @@ def create_test_engine() -> Engine:
 
 
 def _schema_hash() -> str:
-    """Hash the SQLModel metadata so schema changes get their own template."""
+    """Hash the SQLModel metadata so schema changes get their own template.
+
+    Imports the models first: `SQLModel.metadata` is populated by import, so
+    hashing before they are loaded yields the empty-metadata hash. A worker
+    that did would sweep away the real template as "stale" and create an empty
+    one in its place, and every other worker's `CREATE DATABASE … TEMPLATE`
+    then fails on a database that no longer exists.
+    """
+    from app.db import models  # noqa: F401
+
     parts: list[str] = []
     for table in sorted(SQLModel.metadata.tables.values(), key=lambda t: t.name):
         parts.extend(
@@ -173,3 +182,30 @@ def open_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session
     engine.dispose()
+
+
+def drop_stale_templates() -> str:
+    """Drop every schema template except this checkout's; report what went.
+
+    A maintenance command (`make test-clean-templates`), never part of a run:
+    a template belongs to a schema, and a neighbouring worktree on another
+    branch may be copying from one right now.
+    """
+    keep = template_database_name()
+    admin = _admin_engine()
+    dropped: list[str] = []
+    try:
+        with admin.connect() as connection:
+            names = connection.execute(
+                text(
+                    "SELECT datname FROM pg_database "
+                    "WHERE datname LIKE 'ragworks_tmpl_%' AND datname != :name"
+                ),
+                {"name": keep},
+            ).all()
+            for (name,) in names:
+                connection.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
+                dropped.append(name)
+    finally:
+        admin.dispose()
+    return f"kept {keep}; dropped {len(dropped)}: {', '.join(dropped) or 'none'}"

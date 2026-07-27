@@ -8,6 +8,7 @@ its own leaves the user guessing which of a dozen nodes to change.
 
 from __future__ import annotations
 
+from app.pipelines.backend_support import incompatible_nodes
 from app.pipelines.registry import default_registry
 from app.schemas.diagnostics import (
     CollectionDiagnostic,
@@ -22,7 +23,6 @@ from app.services.diagnostics.rules.base import (
     pipeline_builder_route,
     pipeline_resource,
 )
-from app.services.index_compatibility import incompatible_nodes
 from app.services.pipeline_resolution import ResolvedPipeline
 
 

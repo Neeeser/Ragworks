@@ -1,16 +1,15 @@
-"""Two collections sharing one pair of pipelines, on different indexes.
+"""Two collections on two stores, via copied pipelines.
 
-The state first-class index entities exist for. Before binding variables, the
-only way to give a second collection its own index was to copy the pipeline,
-so every later pipeline edit had to be repeated per copy. Here both
-collections resolve from the same stored definitions and differ only in the
-index each binding selects — which is what the Indexes control on a tool
-binding edits, and what the index registry's "used by" list reports.
+A pipeline names the index it uses, and collections are separated inside one
+index by namespace — so most collections need no index decision at all. When
+one genuinely must write elsewhere, the answer is another pipeline: copy the
+graph and repoint its store nodes. This is that state, and what the index
+registry's "used by" list reports against.
 """
 
 from __future__ import annotations
 
-from sandbox.builders import add_second_collection_sharing_pipelines
+from sandbox.builders import add_second_collection_on_copied_pipelines
 from sandbox.context import SeedContext
 from sandbox.registry import scenario
 from sandbox.scenarios import collection_ready
@@ -19,25 +18,25 @@ from sandbox.scenarios import collection_ready
 @scenario(
     name="shared-pipelines",
     description=(
-        "collection-ready plus a second collection bound to the same pipelines on "
-        "its own dense + BM25 indexes: the modular-pipeline state, where one "
-        "definition serves two collections."
+        "collection-ready plus a second collection bound to *copies* of its "
+        "pipelines, writing to its own dense + BM25 indexes — the state a "
+        "pipeline copy exists to produce."
     ),
     requires=("openrouter",),
     state=(
         "everything from collection-ready (admin user, OpenRouter connection, "
         "hybrid pipelines, 3 ingested documents)",
-        'a second collection "Second Collection" bound to the *same* ingest and '
-        "tool pipelines, with no documents of its own",
+        'a second collection "Second Collection" bound to *copies* of the '
+        "ingest and tool pipelines, with no documents of its own",
         "indexes second-index (dense) and second-index-bm25 (sparse), registered "
-        "and selected by the second collection's bindings",
+        "and named by the copied pipelines' store nodes",
         "the index registry lists four registered indexes and reports which "
         "collections use each",
-        "editing either pipeline changes both collections; changing a binding's "
-        "index changes only that collection",
+        "editing the original pipelines changes only the first collection — the "
+        "copies are independent graphs",
     ),
 )
 def seed(ctx: SeedContext) -> None:
-    """Seed collection-ready, then attach a second collection to its pipelines."""
+    """Seed collection-ready, expose index slots, then attach a second collection."""
     collection_ready.seed(ctx)
-    add_second_collection_sharing_pipelines(ctx)
+    add_second_collection_on_copied_pipelines(ctx)

@@ -168,7 +168,6 @@ class IngestionService:
                 vector_stores=vector_stores,
                 storage=self.storage,
                 document=document,
-                binding_values=resolved.binding.variable_values,
             )
             document.ingestion_run_id = handle.run.id
             self.session.add(document)

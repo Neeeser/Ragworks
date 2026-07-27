@@ -51,7 +51,12 @@ the finished PR's CI run must be green — don't loop on mid-work CI failures.
 The backend suite runs parallel (pytest-xdist) against per-process databases
 copied from a schema template (`tests/utils/db.py`), and database names encode the
 git worktree — concurrent agents in different worktrees share the one dev Postgres
-without colliding.
+without colliding. **A run never drops a template it did not build**: a template is
+keyed by schema hash, so a worktree on another branch legitimately owns a different
+one, and Postgres does not refuse the drop while it is only being *copied* from —
+sweeping mid-run makes every `CREATE DATABASE … TEMPLATE` in the neighbouring run
+fail on a database that just vanished. `make test-clean-templates` sweeps on
+purpose, when nothing is running.
 
 # Bug fixes require a regression test
 

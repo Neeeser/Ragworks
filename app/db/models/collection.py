@@ -47,10 +47,10 @@ class CollectionPipelineBinding(SQLModel, TimestampMixin, table=True):
     tool bound but hidden from chat/MCP; `position` is the stable UI and
     tool-listing order.
 
-    `variable_values` holds this binding's answers for the pipeline's
-    binding-source variables — the index it points at, and anything else the
-    pipeline author exposed. It is what lets one pipeline serve many
-    collections rather than being copied per index.
+    A binding says *which* pipeline runs and in what role — never what the
+    pipeline does. Everything a run resolves comes from the definition, so
+    reading a pipeline tells you where its data lands whatever collection is
+    running it.
     """
 
     __tablename__ = "collection_pipeline_bindings"
@@ -70,7 +70,3 @@ class CollectionPipelineBinding(SQLModel, TimestampMixin, table=True):
     is_primary: bool = Field(default=False, nullable=False)
     enabled: bool = Field(default=True, nullable=False)
     position: int = Field(default=0, nullable=False)
-    variable_values: dict[str, Any] = Field(
-        default_factory=dict,
-        sa_column=Column("variable_values", JSON, nullable=False),
-    )

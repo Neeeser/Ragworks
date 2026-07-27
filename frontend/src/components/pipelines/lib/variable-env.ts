@@ -23,7 +23,7 @@ import {
 } from "@/lib/expressions";
 
 import type { ExprType, ExprValue } from "@/lib/expressions";
-import type { PipelineVariable, VariableSource, VariableType } from "@/lib/types";
+import type { PipelineVariable, VariableSource, VariableType, VectorIndex } from "@/lib/types";
 
 export const QUERY_VARIABLE = "query";
 export const RETRIEVAL_INPUT_TYPE = "retrieval.input";
@@ -69,14 +69,16 @@ export function variableSource(variable: PipelineVariable): VariableSource {
   return variable.expression != null ? "expression" : "value";
 }
 
-/** The binding-source variables, in declaration order. */
-export function bindingVariables(variables: PipelineVariable[]): PipelineVariable[] {
-  return variables.filter((variable) => variableSource(variable) === "binding");
-}
-
-/** The binding-source index variables — the index slots a collection fills. */
+/** The definition's index variables, in declaration order.
+ *
+ * A pipeline-level constant naming an index once, so the several nodes that
+ * read and write one store share a single value instead of repeating it. It
+ * lives in the graph, so the graph still fully determines where data lands.
+ */
 export function indexVariables(variables: PipelineVariable[]): PipelineVariable[] {
-  return bindingVariables(variables).filter((variable) => variable.type === "index");
+  return variables.filter(
+    (variable) => variable.type === "index" && variableSource(variable) === "value",
+  );
 }
 
 /** The input-source variables, in declaration order. */
@@ -193,19 +195,10 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
     sources.set(variable.name, "input");
   }
 
-  // Binding variables resolve to their default here: the editor has no
-  // collection, and the default is what every binding starts from.
-  for (const variable of bindingVariables(variables)) {
-    if (types.has(variable.name)) continue;
-    types.set(variable.name, exprTypeOf(variable.type));
-    sources.set(variable.name, "binding");
-    if (variable.value != null) values.set(variable.name, variable.value as ExprValue);
-  }
-
   const declared = new Map<string, PipelineVariable>();
   for (const variable of variables) {
     const source = variableSource(variable);
-    if (source === "input" || source === "binding") continue;
+    if (source === "input") continue;
     if (types.has(variable.name) || declared.has(variable.name)) continue;
     declared.set(variable.name, variable);
     types.set(variable.name, exprTypeOf(variable.type));
@@ -276,7 +269,7 @@ export function expressionVariableNames(value: unknown): string[] | null {
   }
 }
 
-/** Mirrors `app/pipelines/index_variables.py::_LEXICAL_NODE_TYPES` — the
+/** Mirrors `app/pipelines/index_identity.py::_LEXICAL_NODE_TYPES` — the
  * BM25/lexical node family, whose index slots need a sparse index. */
 const LEXICAL_NODE_TYPES = new Set(["indexer.bm25", "retriever.bm25", "count.bm25", "facet.bm25"]);
 
@@ -334,4 +327,39 @@ export function indexSlotConstraints(pipelines: PipelineLike[]): Map<string, Ind
     }
   }
   return constraints;
+}
+
+/** A new binding-source index slot, as declared from a node's index field. */
+export type IndexVariableDeclaration = {
+  name: string;
+  vectorType: string;
+  /** The index it holds — the one the declaring node already named. */
+  index: VectorIndex | null;
+};
+
+/**
+ * Build the index variable a node's field declares.
+ *
+ * It holds the index the declaring node already named, so pulling one out
+ * into a variable changes nothing about where data lands — it only gives the
+ * other nodes reading that store one value to share.
+ */
+export function buildIndexVariable(declaration: IndexVariableDeclaration): PipelineVariable {
+  return {
+    name: declaration.name,
+    type: "index",
+    source: "value",
+    description:
+      declaration.vectorType === "sparse"
+        ? "Lexical index this pipeline uses"
+        : "Semantic index this pipeline uses",
+    value:
+      declaration.index?.index_id != null
+        ? {
+            index_id: declaration.index.index_id,
+            backend: declaration.index.backend,
+            name: declaration.index.name,
+          }
+        : null,
+  };
 }

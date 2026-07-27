@@ -28,15 +28,8 @@ from app.db.repositories import (
     CollectionRepository,
     RegisteredIndexRepository,
 )
-from app.pipelines.definition import PipelineDefinition
-from app.pipelines.expressions import IndexValue
-from app.pipelines.variables import (
-    PipelineVariable,
-    VariableSource,
-    VariableType,
-    VariableValueError,
-    coerce_literal,
-)
+from app.pipelines.index_identity import collect_index_identities
+from app.pipelines.registry import default_registry
 from app.schemas.enums import IndexBackend
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
@@ -50,41 +43,6 @@ class IndexUsage:
     collection: models.Collection
     pipeline: models.Pipeline
     binding: models.CollectionPipelineBinding
-
-
-def index_variables(definition: PipelineDefinition) -> list[PipelineVariable]:
-    """Return the definition's binding-source index variables, in order."""
-    return [
-        variable
-        for variable in definition.variables
-        if variable.source is VariableSource.BINDING
-        and variable.type is VariableType.INDEX
-    ]
-
-
-def selected_indexes(
-    definition: PipelineDefinition,
-    binding_values: dict[str, object] | None,
-) -> dict[str, IndexValue]:
-    """Return `{variable name: index}` a binding resolves to.
-
-    A variable whose override and default are both missing or malformed is
-    skipped: this is a read path (listings, usage, diagnostics), and the
-    validator is what reports the broken declaration.
-    """
-    values = binding_values or {}
-    selected: dict[str, IndexValue] = {}
-    for variable in index_variables(definition):
-        raw = values.get(variable.name, variable.value)
-        if raw is None:
-            continue
-        try:
-            resolved = coerce_literal(VariableType.INDEX, raw)
-        except VariableValueError:
-            continue
-        if isinstance(resolved, IndexValue):
-            selected[variable.name] = resolved
-    return selected
 
 
 class IndexRegistryService:
@@ -140,7 +98,10 @@ class IndexRegistryService:
             collection.id: collection
             for collection in CollectionRepository(self._session).list_for_user(user.id)
         }
-        return list(self._iter_usages(bindings, collections))
+        rows = {
+            (row.backend, row.name): row for row in self._indexes.list_for_user(user.id)
+        }
+        return list(self._iter_usages(bindings, collections, rows))
 
     def usages_by_index(self, user: models.User) -> dict[UUID, list[IndexUsage]]:
         """Group `usages()` by the index each reference points at."""
@@ -198,9 +159,15 @@ class IndexRegistryService:
         self,
         bindings: Iterable[models.CollectionPipelineBinding],
         collections: dict[UUID, models.Collection],
+        rows: dict[tuple[IndexBackend, str], models.RegisteredIndex],
     ) -> Iterator[IndexUsage]:
-        """Yield one usage per binding-declared index reference."""
+        """Yield one usage per index a bound pipeline's graph names.
+
+        Read from the definition, because that is where an index is chosen:
+        a binding contributes only the collection the pipeline runs for.
+        """
         pipelines = PipelineService(self._session)
+        registry = default_registry()
         for binding in bindings:
             collection = collections.get(binding.collection_id)
             if collection is None:
@@ -212,9 +179,12 @@ class IndexRegistryService:
                 definition = pipelines.get_definition(pipeline)
             except ValueError:
                 continue
-            for index in selected_indexes(definition, binding.variable_values).values():
+            for identity in collect_index_identities(definition, registry):
+                row = rows.get((identity.backend, identity.name))
+                if row is None:
+                    continue
                 yield IndexUsage(
-                    index_id=index.index_id,
+                    index_id=row.id,
                     collection=collection,
                     pipeline=pipeline,
                     binding=binding,
