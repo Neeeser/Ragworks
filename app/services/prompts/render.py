@@ -45,6 +45,8 @@ def render_system_prompt(
     base_template = get_base_prompt_template(user)
     base_context = base_prompt_context(user)
     sections = [apply_prompt_template(base_template, base_context)]
-    for tool_context in tool_contexts:
-        sections.append(apply_prompt_template(tool_context.template, tool_context.context))
+    sections.extend(
+        apply_prompt_template(tool_context.template, tool_context.context)
+        for tool_context in tool_contexts
+    )
     return "\n\n".join(section.strip() for section in sections if section.strip())

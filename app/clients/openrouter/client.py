@@ -99,9 +99,7 @@ class OpenRouterClient:
                 continue
             top_provider = item.get("top_provider")
             max_input_tokens = (
-                top_provider.get("context_length")
-                if isinstance(top_provider, dict)
-                else None
+                top_provider.get("context_length") if isinstance(top_provider, dict) else None
             )
             models.append(
                 EmbeddingModelInfo(
@@ -146,9 +144,7 @@ class OpenRouterClient:
         """Return embedding model limits without dimension-probe API calls."""
         return self._catalog.list_embedding_models(force_refresh=force_refresh)
 
-    def list_rerank_models(
-        self, force_refresh: bool = False
-    ) -> CacheSnapshot[list[ModelInfo]]:
+    def list_rerank_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return available reranking models with cache metadata."""
         return self._catalog.list_rerank_models(force_refresh=force_refresh)
 
@@ -240,7 +236,7 @@ class OpenRouterClient:
     # OpenRouter's chat-completion surface has ~8 independent optional knobs
     # (tools, tool_choice, parallel_tool_calls, extra_headers/body, parameters,
     # stream); grouping them into an object would just relocate the same list.
-    def _build_chat_kwargs(
+    def _build_chat_kwargs(  # noqa: PLR0913
         self,
         messages: list[dict[str, Any]],
         model: str,
@@ -267,16 +263,14 @@ class OpenRouterClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
         if parameters:
-            for key, value in parameters.items():
-                if value is not None:
-                    kwargs[key] = value
+            kwargs.update({key: value for key, value in parameters.items() if value is not None})
         if stream:
             kwargs["stream"] = True
         return kwargs
 
     # Mirrors the OpenRouter SDK's chat.completions.create surface one-for-one;
     # see the comment on `_build_chat_kwargs` for why these aren't grouped.
-    def chat(
+    def chat(  # noqa: PLR0913
         self,
         messages: list[dict[str, Any]],
         model: str,
@@ -303,7 +297,7 @@ class OpenRouterClient:
         return OpenRouterChatResponse.model_validate(response.model_dump())
 
     # Streaming twin of `chat`; same surface, see `_build_chat_kwargs` for why.
-    def chat_stream(
+    def chat_stream(  # noqa: PLR0913
         self,
         messages: list[dict[str, Any]],
         model: str,

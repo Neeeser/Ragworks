@@ -171,20 +171,16 @@ def build_environment(
         tainted.add(name)
         if value is not None:
             values[name] = value
-    for name in remaining:
-        errors.append(f"Unknown argument '{name}'.")
+    errors.extend(f"Unknown argument '{name}'." for name in remaining)
 
     _add_binding_variables(definition.variables, overrides, types, values, errors)
-    for name in overrides:
-        errors.append(f"Unknown binding variable '{name}'.")
+    errors.extend(f"Unknown binding variable '{name}'." for name in overrides)
 
     _add_panel_variables(definition.variables, types, values, tainted, errors)
 
     if errors:
         raise VariableResolutionError(errors)
     return VariableEnvironment(types=types, values=values, tainted=frozenset(tainted))
-
-
 
 
 def _argument_value(
@@ -271,9 +267,7 @@ def _add_binding_variables(
         supplied = overrides.pop(variable.name, None)
         raw = supplied if supplied is not None else variable.value
         if raw is None:
-            errors.append(
-                f"Variable '{variable.name}' must be set for this collection."
-            )
+            errors.append(f"Variable '{variable.name}' must be set for this collection.")
             continue
         try:
             values[variable.name] = coerce_literal(

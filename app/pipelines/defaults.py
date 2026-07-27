@@ -92,7 +92,7 @@ def _clamp_chunk_window(
 
 
 # The setup wizard passes the complete explicit scaffold configuration here.
-def build_default_ingestion_pipeline(
+def build_default_ingestion_pipeline(  # noqa: PLR0913
     *,
     embedding_connection_id: UUID,
     embedding_model: str,

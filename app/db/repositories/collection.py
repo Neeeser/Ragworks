@@ -167,4 +167,4 @@ class CollectionRepository(Repository):
             models.Collection.user_id,
             func.count(),
         ).group_by(col(models.Collection.user_id))
-        return {user_id: count for user_id, count in self.session.exec(statement).all()}
+        return dict(self.session.exec(statement).all())

@@ -124,5 +124,4 @@ for setup the harness already did:
 Pure parts (registry, catalog rendering, key preflight with stubbed
 validation) are unit-tested in `tests/sandbox/`. Server lifecycle code is
 tooling verified by live use — don't unit-test process wrangling. The
-package is in the mypy strict + ruff gate (`make verify`); pylint stays
-scoped to `app/`.
+package is in the mypy strict + ruff gate (`make verify`).

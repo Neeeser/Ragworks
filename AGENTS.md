@@ -246,7 +246,7 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
 - `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure);
   `-report` variants are non-blocking, `-open` variants open the HTML report
-- `make typecheck`: `mypy app` (strict); `make lint`: ruff + pylint on `app/`
+- `make typecheck`: `mypy app` (strict); `make lint`: ruff on backend code
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`
 - `make readme-assets`: regenerate the README pipeline animations and posters

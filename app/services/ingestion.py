@@ -278,23 +278,22 @@ class IngestionService:
     ) -> list[models.DocumentChunkRecord]:
         """Persist embedded chunks and update document metadata."""
         token_counter = build_token_counter(resolved.tokenizer, self.settings.storage_path)
-        chunk_records: list[models.DocumentChunkRecord] = []
-        for chunk in enriched_chunks:
-            chunk_records.append(
-                models.DocumentChunkRecord(
-                    document_id=document.id,
-                    collection_id=collection.id,
-                    chunk_index=chunk.order,
-                    text=chunk.text,
-                    token_count=token_counter.count(chunk.text),
-                    embedding=chunk.embedding or [],
-                    chunk_metadata=chunk.metadata.data,
-                    chunk_size=resolved.chunk_size,
-                    chunk_overlap=resolved.chunk_overlap,
-                    chunk_strategy=resolved.chunk_strategy,
-                    embedding_model=resolved.embedding_model,
-                )
+        chunk_records: list[models.DocumentChunkRecord] = [
+            models.DocumentChunkRecord(
+                document_id=document.id,
+                collection_id=collection.id,
+                chunk_index=chunk.order,
+                text=chunk.text,
+                token_count=token_counter.count(chunk.text),
+                embedding=chunk.embedding or [],
+                chunk_metadata=chunk.metadata.data,
+                chunk_size=resolved.chunk_size,
+                chunk_overlap=resolved.chunk_overlap,
+                chunk_strategy=resolved.chunk_strategy,
+                embedding_model=resolved.embedding_model,
             )
+            for chunk in enriched_chunks
+        ]
         self.chunks.add_many(chunk_records)
 
         document.status = models.DocumentStatus.READY

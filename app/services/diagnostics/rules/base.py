@@ -76,7 +76,8 @@ def paired_observation(
     )
 
 
-def build_diagnostic(
+# Keyword-only mirror of CollectionDiagnostic.
+def build_diagnostic(  # noqa: PLR0913
     *,
     code: str,
     severity: DiagnosticSeverity,

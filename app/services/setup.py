@@ -115,7 +115,7 @@ class SetupService:
 
     def _provider_coverage(self, user: models.User) -> dict[ProviderKind, bool]:
         """Which kinds the user's connections (plus built-in pgvector) cover."""
-        coverage = {kind: False for kind in ProviderKind}
+        coverage = dict.fromkeys(ProviderKind, False)
         if pgvector_available():
             coverage[ProviderKind.VECTOR_STORE] = True
         for connection in ProviderConnectionRepository(self.session).list_for_user(user.id):

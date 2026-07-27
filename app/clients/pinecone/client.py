@@ -62,7 +62,8 @@ class PineconeIndexAdmin:
         """Return the typed description for a single index."""
         return IndexDescription.from_sdk(self._client.describe_index(name))
 
-    def create_index(
+    # Mirrors the Pinecone SDK create_index surface one-for-one.
+    def create_index(  # noqa: PLR0913
         self,
         *,
         name: str,

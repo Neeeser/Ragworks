@@ -170,7 +170,8 @@ class ToolInvocationService:
             f"Retrieval failed{where} due to an internal error. See the run trace for details."
         ), 500
 
-    def _record_and_respond(
+    # Carries the full invocation record (tool, args, outcome, trace) explicitly.
+    def _record_and_respond(  # noqa: PLR0913
         self,
         *,
         user: models.User,
@@ -218,7 +219,7 @@ class ToolInvocationService:
             pipeline_run_id=handle.run.id,
         )
 
-    def _start_run(
+    def _start_run(  # noqa: PLR0913
         self,
         runner: PipelineRunner,
         resolved: ResolvedPipeline,
@@ -263,7 +264,7 @@ class ToolInvocationService:
             for scored in payload.response.matches
         ]
 
-    def _record_query_event(
+    def _record_query_event(  # noqa: PLR0913
         self,
         *,
         user: models.User,

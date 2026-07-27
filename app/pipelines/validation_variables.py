@@ -193,18 +193,18 @@ def _accepted_argument_issues(
                     )
                 )
     if input_nodes:
-        for name in sorted(input_names - accepted):
-            issues.append(
-                PipelineValidationIssue(
-                    code="argument_unaccepted",
-                    severity="warning",
-                    message=(
-                        f"Input variable '{name}' is not accepted by the retrieval "
-                        "input node, so callers cannot supply it and its default "
-                        "always applies."
-                    ),
-                )
+        issues.extend(
+            PipelineValidationIssue(
+                code="argument_unaccepted",
+                severity="warning",
+                message=(
+                    f"Input variable '{name}' is not accepted by the retrieval "
+                    "input node, so callers cannot supply it and its default "
+                    "always applies."
+                ),
             )
+            for name in sorted(input_names - accepted)
+        )
     return issues
 
 
@@ -313,9 +313,7 @@ def _node_config_issues(
             source = expression_source(value)
             if source is None:
                 continue
-            issues.extend(
-                _config_expression_issues(node, key, source, schema, types, tainted)
-            )
+            issues.extend(_config_expression_issues(node, key, source, schema, types, tainted))
     return issues
 
 
@@ -374,6 +372,4 @@ def _config_expression_issues(
 
 def _assignable(result: ExprType, expected: ExprType) -> bool:
     """Integer results satisfy number fields; everything else matches exactly."""
-    return result is expected or (
-        result is ExprType.INTEGER and expected is ExprType.NUMBER
-    )
+    return result is expected or (result is ExprType.INTEGER and expected is ExprType.NUMBER)

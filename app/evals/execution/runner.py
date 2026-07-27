@@ -240,7 +240,8 @@ class EvalRunner:
         self.session.commit()
         return result
 
-    def _evaluate_queries(
+    # Threads the run context (session, provider, dataset, budget) explicitly.
+    def _evaluate_queries(  # noqa: PLR0913
         self,
         run: models.EvalRun,
         user: models.User,

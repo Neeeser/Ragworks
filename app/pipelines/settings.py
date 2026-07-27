@@ -278,7 +278,8 @@ def collection_scope(collection: models.Collection) -> CollectionScope:
     )
 
 
-def resolve_pipeline_settings(
+# Resolves every setting domain in one pass; locals mirror the settings shape.
+def resolve_pipeline_settings(  # noqa: PLR0914
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,
