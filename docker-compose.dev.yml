@@ -13,7 +13,7 @@ name: ragworks-dev
 # (`ragworks_test`, created on demand by the app/test bootstrap).
 services:
   postgres:
-    image: paradedb/paradedb:latest-pg17
+    image: paradedb/paradedb:latest-pg17@sha256:a784ffa6471729af6be5178ad39ea607e5cbfec94f81bcaad439de40ecb45834
     environment:
       POSTGRES_USER: ragworks
       POSTGRES_PASSWORD: ragworks
