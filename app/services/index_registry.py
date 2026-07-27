@@ -1,13 +1,9 @@
 """Registered indexes: reading, adopting, and finding who points at one.
 
 An index a pipeline can target is a `RegisteredIndex` row, not a bare string.
-This module owns the two questions that need both the registry and the stored
-pipeline definitions:
-
-- **which index does a binding select?** — every binding-source index variable
-  on the bound pipeline, resolved against the binding's `variable_values`, and
-- **who is using this index?** — the inverse, which deletion consults so an
-  index a pipeline still targets cannot be removed out from under it.
+This module owns the question that needs both the registry and the stored
+pipeline definitions: **who is using this index?** — which deletion consults
+so an index a pipeline still targets cannot be removed out from under it.
 
 `IndexUsage` deliberately reads *declared* references rather than observed
 runs: a pipeline that has not run yet still owns its index, and waiting for a
