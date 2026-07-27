@@ -11,13 +11,13 @@ import { useAppConfig } from "@/providers/config-provider";
 import { ChunkerTokenizerFields } from "./ChunkerTokenizerFields";
 import { ConfigFieldRow } from "./ConfigFieldRow";
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
+import { IndexSourceField } from "./IndexSourceField";
 import {
   ArgumentsPicker,
   OutputsEditor,
   acceptedNamesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
-import { BINDING_INDEX_VALUE } from "./lib/node-signature";
 import { buildPipelineConfigFields, coerceFieldValue } from "./lib/pipeline-config";
 import { CREATE_SENTINEL } from "./lib/pipeline-kinds";
 import { sortIndexesByName } from "./lib/pipeline-utils";
@@ -27,10 +27,12 @@ import {
   RETRIEVAL_OUTPUT_TYPE,
   buildStaticEnvironment,
   expressionVariableNames,
+  indexVariables,
 } from "./lib/variable-env";
 import { NodeModelSelectors } from "./NodeModelSelectors";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
+import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { NodeModelCatalogProps } from "./NodeModelSelectors";
 import type { PipelineNodeData } from "./PipelineNode";
 import type {
@@ -50,25 +52,9 @@ export type NodeConfigSectionsProps = {
   vectorIndexes: VectorIndex[];
   onOpenIndexRegistry?: () => void;
   variables: PipelineVariable[];
+  /** Declares a new pipeline-level index variable on the definition. */
+  onDeclareIndexVariable?: (declaration: IndexVariableDeclaration) => void;
 } & NodeModelCatalogProps;
-
-/**
- * What the index field says about its current state: which variable the
- * binding fills in, the width of the literal index chosen, or that a literal
- * one is still needed.
- */
-function indexHelper(
-  boundVariables: string[] | null,
-  indexValue: string,
-  dimension: number | null | undefined,
-): string {
-  if (boundVariables !== null) {
-    const named = boundVariables.length > 0 ? ` · ${boundVariables.join(", ")}` : "";
-    return `${BINDING_INDEX_VALUE}${named}`;
-  }
-  if (!indexValue) return "Required";
-  return dimension ? `Dimension: ${dimension}` : "Dimension: n/a";
-}
 
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
   { value: "pgvector", label: "pgvector", hint: "Built-in Postgres" },
@@ -90,6 +76,7 @@ export function NodeConfigSections({
   vectorIndexes,
   onOpenIndexRegistry,
   variables,
+  onDeclareIndexVariable,
   ...modelCatalogProps
 }: NodeConfigSectionsProps) {
   const { config: appConfig } = useAppConfig();
@@ -112,7 +99,10 @@ export function NodeConfigSections({
   // it pinned in the type id and get no picker.
   const backendSelectable = nodeType.endsWith(".vector") || isBm25Node;
   const nodeBackend: IndexBackend = backendSelectable
-    ? ((config.backend as IndexBackend) ?? appConfig.indexing.default_backend)
+    ? // A slot-bound node carries an expression here, not a backend name.
+      typeof config.backend === "string"
+      ? (config.backend as IndexBackend)
+      : appConfig.indexing.default_backend
     : nodeType.endsWith(".pgvector")
       ? "pgvector"
       : "pinecone";
@@ -148,8 +138,8 @@ export function NodeConfigSections({
   );
   const indexValue = typeof config.index_name === "string" ? config.index_name : "";
   const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
-  // The index may be supplied by the collection's binding rather than named
-  // here; saying "Required" then reports a correct pipeline as unfinished.
+  // The index may come from a pipeline variable rather than be named here;
+  // saying "Required" then reports a correct pipeline as unfinished.
   const boundIndexVariables = expressionVariableNames(config.index_name);
 
   const setConfigValue = (key: string, value: unknown | undefined) => {
@@ -180,6 +170,11 @@ export function NodeConfigSections({
       return;
     }
     const nextConfig = { ...config };
+    // Coming back from a slot, `backend` still holds its expression; leaving
+    // it there keeps the node reading a variable it no longer names.
+    if ("backend" in nextConfig && typeof nextConfig.backend !== "string") {
+      nextConfig.backend = nodeBackend;
+    }
     if (!value) {
       delete nextConfig.index_name;
       delete nextConfig.dimension;
@@ -194,6 +189,32 @@ export function NodeConfigSections({
       }
     }
     onConfigChange(nextConfig);
+  };
+
+  // Binding writes both identity fields in one move, so the backend travels
+  // with the index and repointing the variable moves the whole node.
+  const handleBindVariable = (name: string) => {
+    if (!name) return;
+    const nextConfig: Record<string, unknown> = {
+      ...config,
+      index_name: { $expr: `${name}.name` },
+    };
+    if ("backend" in nextConfig) nextConfig.backend = { $expr: `${name}.backend` };
+    // The variable's index states its own width; a stale literal one would
+    // contradict it the moment the variable is repointed.
+    delete nextConfig.dimension;
+    onConfigChange(nextConfig);
+  };
+
+  const handleDeclareVariable = (name: string) => {
+    // It holds the index this node already names, so pulling it out into a
+    // variable changes nothing about where data lands.
+    onDeclareIndexVariable?.({
+      name,
+      vectorType: isBm25Node ? "sparse" : "dense",
+      index: selectedIndex ?? backendIndexes[0] ?? null,
+    });
+    handleBindVariable(name);
   };
 
   const modelVariables = variables.filter((variable) => variable.type === "model");
@@ -293,49 +314,18 @@ export function NodeConfigSections({
         </div>
       ) : null}
       {isVectorNode ? (
-        <ParameterFieldCard
-          label="Index"
-          description="The vector index this node reads from or writes to."
-          helper={indexHelper(boundIndexVariables, indexValue, selectedIndex?.dimension)}
-          actionLabel="Manage"
-          actionDisabled={isPreview}
-          onAction={onOpenIndexRegistry}
-        >
-          <CustomSelect
-            value={indexValue}
-            onValueChange={handleIndexChange}
-            disabled={isPreview}
-            aria-label="Vector index"
-            placeholder={boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index"}
-            options={[
-              {
-                value: "",
-                label: boundIndexVariables !== null ? BINDING_INDEX_VALUE : "Select an index",
-              },
-              ...(indexValue && !selectedIndex
-                ? [
-                    {
-                      value: indexValue,
-                      label: `${indexValue} (not created yet)`,
-                      icon: <IndexBackendIcon backend={nodeBackend} />,
-                    },
-                  ]
-                : []),
-              ...backendIndexes.map((index) => ({
-                value: index.name,
-                label: `${index.name}${
-                  typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
-                }`,
-                icon: <IndexBackendIcon backend={index.backend} />,
-              })),
-              {
-                value: CREATE_SENTINEL,
-                label: "+ Add new index...",
-                preventFocusRestore: true,
-              },
-            ]}
-          />
-        </ParameterFieldCard>
+        <IndexSourceField
+          indexes={backendIndexes}
+          backend={nodeBackend}
+          indexValue={indexValue}
+          variableName={boundIndexVariables?.[0] ?? null}
+          variables={indexVariables(variables)}
+          disabled={isPreview}
+          onPickIndex={handleIndexChange}
+          onBindVariable={handleBindVariable}
+          onDeclareVariable={handleDeclareVariable}
+          onOpenIndexRegistry={onOpenIndexRegistry}
+        />
       ) : null}
       {isRetrievalInput ? (
         <ArgumentsPicker

@@ -211,6 +211,33 @@ class PipelineService:
         self._versions.add(version)
         return pipeline
 
+    def copy_pipeline(
+        self,
+        user: models.User,
+        pipeline: models.Pipeline,
+        *,
+        name: str | None = None,
+    ) -> models.Pipeline:
+        """Copy a pipeline's current definition into a new pipeline.
+
+        The way one graph becomes two that differ: a pipeline says which
+        index it uses, so serving a second collection from a different store
+        means a second pipeline, and copying is how you get one without
+        rebuilding the graph by hand.
+
+        The copy carries no `template_slug` — a default is a role the user
+        assigns, and two pipelines claiming it would make "the default
+        ingestion pipeline" ambiguous.
+        """
+        definition = self.get_definition(pipeline)
+        return self.create_pipeline(
+            user=user,
+            name=name or _copy_name(pipeline.name),
+            definition=definition,
+            description=pipeline.description,
+            change_summary=f"Copied from '{pipeline.name}'.",
+        )
+
     def update_pipeline(
         self,
         *,
@@ -326,3 +353,8 @@ class PipelineService:
     ) -> models.Collection:
         """Bind default pipelines onto an unbound collection (see pipeline_defaults)."""
         return ensure_collection_bindings(self.session, collection, defaults)
+
+
+def _copy_name(name: str) -> str:
+    """Return the default name for a copy of `name`."""
+    return f"{name} (copy)"

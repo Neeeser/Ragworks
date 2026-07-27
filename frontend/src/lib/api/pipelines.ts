@@ -145,6 +145,18 @@ export async function updatePipeline(
   });
 }
 
+export async function copyPipeline(
+  token: string,
+  pipelineId: string,
+  name?: string,
+): Promise<Pipeline> {
+  return apiFetch<Pipeline>(`/api/pipelines/${pipelineId}/copy`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ name: name ?? null }),
+  });
+}
+
 export async function deletePipeline(
   token: string,
   pipelineId: string,

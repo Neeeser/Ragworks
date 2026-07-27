@@ -133,7 +133,7 @@ export interface IndexVariableValue {
 export type VariableScalar = number | string | boolean;
 export type VariableValue = VariableScalar | ModelVariableValue | IndexVariableValue;
 
-export type VariableSource = "value" | "expression" | "input" | "binding";
+export type VariableSource = "value" | "expression" | "input";
 
 /** Mirrors `app/pipelines/variables.py::PipelineVariable`.
  *

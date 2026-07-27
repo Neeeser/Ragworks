@@ -8,7 +8,7 @@ import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { VectorIndex } from "@/lib/types";
+import type { PipelineVariable, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 import type { ComponentProps } from "react";
 
@@ -122,6 +122,14 @@ const makeNode = (
     configSchema,
   },
 });
+
+const SEMANTIC_VARIABLE: PipelineVariable = {
+  name: "semantic_index",
+  type: "index",
+  source: "value",
+  description: "Semantic index this pipeline uses",
+  value: { index_id: "row-1", backend: "pinecone", name: "alpha" },
+};
 
 const indexes: VectorIndex[] = [
   { name: "alpha", backend: "pinecone", dimension: 768 },
@@ -325,19 +333,87 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
-  it("reads an index supplied by the binding as set per collection, not Required", () => {
+  it("reads an index held by a pipeline variable, not Required", () => {
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
-        backend: { $expr: "primary_index.backend" },
-        index_name: { $expr: "primary_index.name" },
+        backend: { $expr: "semantic_index.backend" },
+        index_name: { $expr: "semantic_index.name" },
       }),
       vectorIndexes: indexes,
+      variables: [SEMANTIC_VARIABLE],
     });
 
     // The collection's Indexes card fills this in; "Required" would report a
     // correctly configured pipeline as unfinished.
-    expect(screen.getByText("set per collection · primary_index")).toBeInTheDocument();
+    expect(screen.getByText("Named once for this pipeline")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Index variable" })).toBeInTheDocument();
     expect(screen.queryByText("Required")).not.toBeInTheDocument();
+  });
+
+  it("declares a second index variable so one pipeline can hold two stores", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    const onDeclareIndexVariable = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "alpha",
+        dimension: 768,
+      }),
+      onApply,
+      onDeclareIndexVariable,
+      vectorIndexes: indexes,
+      variables: [SEMANTIC_VARIABLE],
+    });
+
+    // A pipeline splitting its corpus needs one variable per store; pointing
+    // every store at the same one merges two corpora into whichever is
+    // written last.
+    await user.click(screen.getByRole("radio", { name: /Pipeline variable/ }));
+    await user.click(screen.getByRole("combobox", { name: "Index variable" }));
+    await user.click(screen.getByRole("option", { name: "+ New variable…" }));
+    await user.type(screen.getByLabelText("Variable name"), "facts_semantic");
+    await user.click(screen.getByRole("button", { name: "Add variable" }));
+
+    expect(onDeclareIndexVariable).toHaveBeenCalledWith({
+      name: "facts_semantic",
+      vectorType: "dense",
+      index: expect.objectContaining({ name: "alpha" }),
+    });
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
+    expect(onApply).toHaveBeenCalledWith("node-1", {
+      label: "Node",
+      config: {
+        backend: { $expr: "facts_semantic.backend" },
+        index_name: { $expr: "facts_semantic.name" },
+      },
+    });
+  });
+
+  it("returning to a named index clears the variable off both identity fields", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: { $expr: "semantic_index.backend" },
+        index_name: { $expr: "semantic_index.name" },
+      }),
+      onApply,
+      vectorIndexes: indexes,
+      variables: [SEMANTIC_VARIABLE],
+    });
+
+    await user.click(screen.getByRole("radio", { name: /This pipeline/ }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /local/ }));
+    await user.click(screen.getByRole("button", { name: SAVE_NODE }));
+
+    // Leaving `backend` as an expression keeps the node reading a variable it
+    // no longer names.
+    expect(onApply).toHaveBeenCalledWith("node-1", {
+      label: "Node",
+      config: { backend: "pgvector", index_name: "local", dimension: 384 },
+    });
   });
 
   it("switching the backend clears the previously selected index in the draft", () => {
@@ -367,7 +443,9 @@ describe("NodeEditorDrawer", () => {
       vectorIndexes: indexes,
     });
 
-    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radiogroup", { name: "Vector store backend" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     expect(screen.getByRole("option", { name: /local/ })).toBeInTheDocument();
   });

@@ -160,6 +160,11 @@ colocate a single file with its consumer.
   in every database that already ran the old model (a branch-only table) or ship
   a real drop step (a released one) — otherwise the tests stay green while every
   insert against an existing DB returns a 500.
+- **`index_targets` lists every dense store the graph touches, not the primary
+  one.** Purges iterate it (`app/pipelines/index_targets.py`), so a graph
+  splitting its corpus across two indexes keeps the second one's vectors through
+  every delete and re-serves removed documents on the next query. The scalar
+  `backend`/`index_name` settings still describe the primary store.
 - **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
   executor collects every inbound edge into a list and the validator rejects
   multiple edges into a non-variadic port (that used to clobber silently). Fusion
@@ -388,9 +393,11 @@ frontend form code — only a new `ConfigFieldKind` would.
   Registration is what makes an index selectable, so *every* path that generates a
   pipeline (setup wizard, default scaffolding, the migration) routes its definition
   through `register_definition_indexes`
-  (`app/services/index_scaffolding.py`) — a path that skips it produces the one
-  pipeline a collection can never repoint, and its indexes stay invisible to the
-  index registry's in-use list. Deleting a registration consults *declared*
+  (`app/services/index_scaffolding.py`) — a path that skips it leaves its indexes
+  invisible to the index registry's in-use list and unselectable in every picker.
+  Registration is *all* it does: the definition comes back unchanged, because
+  making an index an entity and hoisting the choice out of the graph are separate
+  decisions. Deleting a registration consults *declared*
   references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
   that has not run yet still owns its index.
 - **A destructive control-plane call checks `capabilities.shared_across_users`
@@ -422,21 +429,46 @@ frontend form code — only a new `ConfigFieldKind` would.
   shared index otherwise returns their chunks, text included. Namespaces naming
   no collection stay allowed: they carry no ownership to enforce, and refusing
   them would strand a pipeline whose collection was deleted.
-- **A store-bound node's identity is an expression over a binding-source index
-  variable, not a literal.** `app/pipelines/index_variables.py` owns the rewrite,
-  and it is behavior-preserving by construction — each variable defaults to the
-  literal the definition already carried. A migration that changes which index a
-  collection resolves to detaches a corpus from its data and nothing downstream
-  reports it: retrieval simply returns nothing.
-- **Backend compatibility is per binding, and the error names the nodes.** Since an
-  index carries its backend, a graph valid as authored can be invalid for one
-  collection; `incompatible_nodes` (`app/services/index_compatibility.py`) is the
-  one check, read by binding writes, validation, and diagnostics. A bare
-  "incompatible backend" leaves the user guessing which of a dozen nodes to change.
-- **Which plane an index variable feeds is derived from the nodes that read it**
-  (`index_variable_vector_types`), never from its name — a variable called
-  `secondary_index` feeding a BM25 retriever needs a sparse index, and inferring
-  from spelling mispicks the moment an author names one differently.
+- **A store-bound node names its own index, and nothing outside the definition
+  can change it.** An index's width is decided by the embedder beside it, so
+  identity belongs in the graph — and a graph you can read tells you where data
+  lands. `app/pipelines/index_identity.py` only *reads* identity back out (for
+  registration) and converts legacy `{collection_id}` namespace templates. Any
+  rule that folds a definition's store nodes onto one shared value merges two
+  corpora into whichever is written last, silently: the run succeeds and
+  retrieval returns the wrong chunks.
+- **There is no per-collection variable source.** A variable a binding
+  overrode meant the definition no longer described what it did — you needed
+  the pipeline *and* the collection running it — and for an index the cost of
+  getting it wrong is invisible, because retrieval returns nothing rather than
+  failing. A binding says *which* pipeline runs and in what role, never what
+  it does. Input variables are a different thing: they are the tool's public
+  contract, vary per call, and never move where data lives. A pipeline that
+  must differ per collection is a different pipeline — `copy_pipeline` is how
+  you get one.
+- **A user's collections are separated inside one index by `namespace`, not by
+  having their own index.** One pipeline already serves every collection that
+  user owns without interference, which is why per-collection index choice buys
+  so little: it covers only collections on *different* stores, and charges every
+  collection an infrastructure decision to do it. This is a
+  claim about one account's collections and says nothing about accounts: on a
+  shared backend a name is one physical store for the whole deployment, so a
+  default that hands two accounts the same name interleaves their vectors where
+  neither can see the other — which is why index names offered to a user are
+  derived per account.
+- **Backend compatibility is a property of the graph, and the error names the
+  nodes.** Since an index carries its backend, a graph could once be valid as
+  authored and invalid for one
+  collection — no: since a node names its own index, that is a property of the
+  definition and is checked when the pipeline is *saved*.
+  `incompatible_nodes` (`app/pipelines/backend_support.py`) is the one check,
+  read by validation and diagnostics; it lives in the engine because
+  `app/pipelines` may not import from `app.services`. A bare "incompatible
+  backend" leaves the user guessing which of a dozen nodes to change.
+- **Which plane an index serves is derived from the node that reads it**, never
+  from its name — an index called `secondary_index` feeding a BM25 retriever is
+  a sparse index, and inferring from spelling mispicks the moment an author
+  names one differently.
 
 ## Model providers (`app/providers/` + `provider_connections`)
 
@@ -776,6 +808,12 @@ this file in the same PR.
   I/O, taking the transport as injected callables. Before changing these
   integrations, read the local `docs/external-api/` docs first — behavior there
   trumps memory.
+- **An optional SDK-model field left unset is not the same as omitted.** A model
+  that serializes its whole `__dict__` (Pinecone's `IndexEmbed`) turns an unset
+  optional into an explicit `null`, which the request layer then rejects on
+  type — the call fails before it leaves the process, so no amount of reading
+  the HTTP API explains it. State the value: a Pinecone sparse index takes
+  `dotproduct`, the only metric it accepts.
 - **Never send OpenRouter an explicit embeddings `dimensions` unless the user asked
   for one** — most embedding models reject the parameter outright. Set only
   `model_name` and let the model emit its native dimension; the indexer node alone

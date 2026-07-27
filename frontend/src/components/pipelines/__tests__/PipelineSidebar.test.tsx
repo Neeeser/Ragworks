@@ -51,6 +51,7 @@ describe("PipelineSidebar", () => {
         catalog={catalog}
         onSelectPipeline={() => undefined}
         onDeletePipeline={() => undefined}
+        onCopyPipeline={() => undefined}
         pipelineUsage={new Set()}
         onPreviewNode={() => undefined}
         variables={[]}

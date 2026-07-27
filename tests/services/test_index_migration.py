@@ -21,7 +21,7 @@ from app.pipelines.defaults import (
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_pipeline_settings
-from app.pipelines.variables import VariableSource, VariableType
+from app.pipelines.variables import VariableType
 from app.schemas.enums import IndexBackend
 from app.services.index_migration import migrate_index_entities
 
@@ -111,20 +111,62 @@ def test_migration_preserves_every_resolved_index_target(session: Session) -> No
     assert after.index_name == before.index_name
 
 
-def test_migration_declares_binding_index_variables(session: Session) -> None:
+def test_migration_leaves_the_index_named_in_the_graph(session: Session) -> None:
+    """Registering an index makes it selectable; it never hoists the choice.
+
+    A migration that turns every store node into a collection-filled slot
+    hands every existing pipeline a decision its author never exposed, and
+    puts it on a page that should be about the corpus.
+    """
     user = _user(session)
     pipeline = _seed_pipeline(session, user, _ingestion_definition())
 
     migrate_index_entities(session)
 
-    variables = {
-        variable.name: variable
-        for variable in _current_definition(session, pipeline).variables
-        if variable.type is VariableType.INDEX
-    }
-    assert "primary_index" in variables
-    assert variables["primary_index"].source is VariableSource.BINDING
-    assert variables["primary_index"].value is not None
+    migrated = _current_definition(session, pipeline)
+    assert [
+        variable for variable in migrated.variables if variable.type is VariableType.INDEX
+    ] == []
+    indexer = next(node for node in migrated.nodes if node.type.startswith("indexer."))
+    assert indexer.config["index_name"] == "docs-main"
+
+
+def test_two_dense_stores_survive_the_migration(session: Session) -> None:
+    """A pipeline splitting its corpus keeps both indexes.
+
+    Folding every dense node onto one shared slot merges two corpora into
+    whichever name is read last. Nothing downstream reports it: the run
+    succeeds and retrieval returns the wrong chunks.
+    """
+    user = _user(session)
+    collection = _collection(session, user)
+    definition = _ingestion_definition()
+    second = next(
+        node for node in definition.nodes if node.type.startswith("indexer.")
+    ).model_copy(
+        update={
+            "id": "indexer-facts",
+            "name": "Facts",
+            "config": {
+                **next(
+                    node for node in definition.nodes if node.type.startswith("indexer.")
+                ).config,
+                "index_name": "docs-facts",
+            },
+        }
+    )
+    split = definition.model_copy(update={"nodes": [*definition.nodes, second]})
+    pipeline = _seed_pipeline(session, user, split)
+    before = resolve_pipeline_settings(split, collection, default_registry())
+
+    migrate_index_entities(session)
+
+    after = resolve_pipeline_settings(
+        _current_definition(session, pipeline), collection, default_registry()
+    )
+    names = {target.index_name for target in after.index_targets}
+    assert {"docs-main", "docs-facts"} <= names
+    assert after.index_targets == before.index_targets
 
 
 def test_migration_registers_one_index_row_per_identity(session: Session) -> None:

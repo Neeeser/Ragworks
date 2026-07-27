@@ -21,7 +21,6 @@ the ingest pipeline never touched.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypeVar
 from uuid import UUID
@@ -30,31 +29,27 @@ from pydantic import BaseModel
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.index_targets import (
+    IndexTarget,
+    dense_targets,
+    sparse_targets,
+    union_targets,
+)
 from app.pipelines.nodes.chunking import (
     BaseChunkerNode,
     ChunkerConfig,
     ChunkerNode,
     FixedChunkerConfig,
 )
-from app.pipelines.nodes.counting import (
-    Bm25CountConfig,
-    Bm25CountNode,
-    Bm25FacetConfig,
-    Bm25FacetNode,
-)
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.nodes.indexing import (
     BaseIndexerNode,
-    Bm25IndexerConfig,
-    Bm25IndexerNode,
     IndexerConfig,
     VectorIndexerNode,
     default_index_name,
 )
 from app.pipelines.nodes.retrieval import (
     BaseRetrieverNode,
-    Bm25RetrieverConfig,
-    Bm25RetrieverNode,
     RetrieverConfig,
     VectorRetrieverNode,
 )
@@ -67,20 +62,6 @@ from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 
 ConfigModel = TypeVar("ConfigModel", bound=BaseModel)
-
-
-@dataclass(frozen=True)
-class IndexTarget:
-    """One index a pipeline writes to or reads from.
-
-    `vector_type` is "dense" (embedding index) or "sparse" (BM25/lexical).
-    Purge cascades iterate a pipeline's targets so deleting a collection or
-    document clears every index it touched, not just the dense one.
-    """
-
-    backend: IndexBackend
-    index_name: str
-    vector_type: str
 
 
 @dataclass(frozen=True)
@@ -200,18 +181,6 @@ def _resolve_backend_node_config(
     return default_backend, fallback_config, False
 
 
-def _resolve_bm25_config(
-    definition: PipelineDefinition,
-    node_type: str,
-    model: type[ConfigModel],
-) -> ConfigModel | None:
-    """Return the validated BM25 node config, or None when absent."""
-    node = next((candidate for candidate in definition.nodes if candidate.type == node_type), None)
-    if node is None:
-        return None
-    return model.model_validate(node.config or {})
-
-
 def resolve_definition_backend(
     definition: PipelineDefinition,
     registry: NodeRegistry,
@@ -232,43 +201,6 @@ def resolve_definition_backend(
     return retriever_backend if retriever_found else backend
 
 
-def _sparse_target(
-    collection: models.Collection,
-    config: Bm25CountConfig | Bm25FacetConfig | Bm25IndexerConfig | Bm25RetrieverConfig | None,
-) -> IndexTarget | None:
-    """Build the sparse index target for a BM25 node config, if present."""
-    if config is None:
-        return None
-    index_name = (
-        resolve_collection_template(config.index_name, collection) or config.index_name
-    )
-    return IndexTarget(backend=config.backend, index_name=index_name, vector_type="sparse")
-
-
-def _dense_target(
-    collection: models.Collection,
-    backend: IndexBackend,
-    config: IndexerConfig | RetrieverConfig,
-) -> IndexTarget:
-    """Build the dense index target for an indexer/retriever config."""
-    index_name = (
-        resolve_collection_template(config.index_name, collection) or config.index_name
-    )
-    return IndexTarget(backend=backend, index_name=index_name, vector_type="dense")
-
-
-def _union_targets(*candidates: IndexTarget | None) -> tuple[IndexTarget, ...]:
-    """Dedupe targets by identity, preserving first-seen order."""
-    targets: list[IndexTarget] = []
-    seen: set[IndexTarget] = set()
-    for candidate in candidates:
-        if candidate is None or candidate in seen:
-            continue
-        seen.add(candidate)
-        targets.append(candidate)
-    return tuple(targets)
-
-
 def collection_scope(collection: models.Collection) -> CollectionScope:
     """Project a collection onto the expression built-ins it supplies."""
     return CollectionScope(
@@ -283,22 +215,18 @@ def resolve_pipeline_settings(  # noqa: PLR0914
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,
-    *,
-    binding_values: Mapping[str, object] | None = None,
 ) -> PipelineSettings:
     """Resolve settings from any pipeline definition, for one binding.
 
     Expressions resolve against the static default environment first — the
     taint rule guarantees identity fields never depend on runtime input, so
     the static view is the authoritative one for index targets and purges.
-    `binding_values` is what makes those targets per binding: the same stored
-    definition resolves to whichever index this collection selected.
+    A definition's targets are therefore a property of the definition alone,
+    the same for every collection that binds it.
     """
     definition = resolve_static_definition(
         definition,
-        binding=BindingContext(
-            collection=collection_scope(collection), values=binding_values or {}
-        ),
+        binding=BindingContext(collection=collection_scope(collection)),
     )
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)
@@ -327,34 +255,22 @@ def resolve_pipeline_settings(  # noqa: PLR0914
         primary_namespace = resolve_collection_template(retriever.namespace, collection)
         dimension = embedder.dimension
 
-    dense_targets: list[IndexTarget | None] = []
-    if indexer_found:
-        dense_targets.append(_dense_target(collection, indexer_backend, indexer))
-    if retriever_found:
-        dense_targets.append(_dense_target(collection, retriever_backend, retriever))
-    if not indexer_found and not retriever_found:
+    # Every dense store, not just the primary pair: a graph splitting its
+    # corpus across two indexes must have both purged and both validated.
+    dense: list[IndexTarget | None] = []
+    if indexer_found or retriever_found:
+        dense.extend(dense_targets(definition, collection, registry))
+    else:
         # Legacy fallback: no dense node at all still counts as one dense
         # target on the configured default — unless the graph is sparse-only.
-        dense_targets.append(
+        dense.append(
             IndexTarget(backend=primary_backend, index_name=primary_name, vector_type="dense")
         )
 
-    sparse_ingest = _sparse_target(
-        collection, _resolve_bm25_config(definition, Bm25IndexerNode.type, Bm25IndexerConfig)
-    )
-    sparse_query = _sparse_target(
-        collection, _resolve_bm25_config(definition, Bm25RetrieverNode.type, Bm25RetrieverConfig)
-    )
-    sparse_count = _sparse_target(
-        collection, _resolve_bm25_config(definition, Bm25CountNode.type, Bm25CountConfig)
-    )
-    sparse_facet = _sparse_target(
-        collection, _resolve_bm25_config(definition, Bm25FacetNode.type, Bm25FacetConfig)
-    )
-    sparse_targets = (sparse_ingest, sparse_query, sparse_count, sparse_facet)
-    if not indexer_found and not retriever_found and any(sparse_targets):
+    sparse = sparse_targets(definition, collection)
+    if not indexer_found and not retriever_found and sparse:
         # A sparse-only graph gets no phantom dense target.
-        dense_targets = []
+        dense = []
 
     return PipelineSettings(
         chunk_strategy=chunker.strategy,
@@ -368,7 +284,7 @@ def resolve_pipeline_settings(  # noqa: PLR0914
         namespace=primary_namespace,
         dimension=dimension,
         metric=indexer.metric,
-        index_targets=_union_targets(*dense_targets, *sparse_targets),
+        index_targets=union_targets(*dense, *sparse),
     )
 
 

@@ -6,17 +6,15 @@ Before a run (and statically, for editor validation and settings resolution),
 - the built-in `query` string,
 - the built-in collection descriptors (`collection_id`, `collection_name`,
   `user_id`) describing the collection the pipeline is bound to,
-- every declared input argument (caller-supplied value, else default), and
-  every binding-source variable (the binding's override, else its default),
+- every declared input argument (caller-supplied value, else default),
 - every panel variable — constants validated, derived expressions evaluated
   in dependency order.
 
 `tainted` tracks which names derive from *caller* input; the identity-field
-taint rule in `validation_variables.py` reads it. Binding values and
-collection built-ins are deliberately untainted: both are fixed when a
-pipeline is bound to a collection, so an index name derived from them still
-resolves to one deterministic index per binding, which is what purge coverage
-depends on.
+taint rule in `validation_variables.py` reads it. The collection built-ins are
+deliberately untainted: they are fixed when a pipeline is bound to a
+collection, so an index name derived from them still resolves to one
+deterministic index per binding, which is what purge coverage depends on.
 
 Callers that accept user input catch `VariableResolutionError` and translate
 it to their boundary's error type (the retrieval service maps it to
@@ -132,10 +130,9 @@ def build_environment(
     resolution use: required arguments get a constraint-respecting
     placeholder instead of failing.
 
-    `binding` carries the collection descriptors the built-ins expose and the
-    collection binding's overrides for binding-source variables; omitted, both
-    fall back to empty so editor validation still type-checks. Neither is
-    tainted — both are fixed at bind time, not per request.
+    `binding` carries the collection descriptors the built-ins expose;
+    omitted, they fall back to placeholders so editor validation still
+    type-checks. They are untainted — fixed at bind time, not per request.
     """
     errors: list[str] = []
     scope = binding or BindingContext.empty()
@@ -146,7 +143,6 @@ def build_environment(
         values[builtin_name] = builtin_value
     tainted: set[str] = {QUERY_VARIABLE}
 
-    overrides = dict(scope.values)
     remaining = dict(supplied or {})
     accepted = set(accepted_argument_names(definition))
     for name, variable in input_variables(definition).items():
@@ -172,9 +168,6 @@ def build_environment(
         if value is not None:
             values[name] = value
     errors.extend(f"Unknown argument '{name}'." for name in remaining)
-
-    _add_binding_variables(definition.variables, overrides, types, values, errors)
-    errors.extend(f"Unknown binding variable '{name}'." for name in overrides)
 
     _add_panel_variables(definition.variables, types, values, tainted, errors)
 
@@ -244,43 +237,6 @@ def _static_placeholder(argument: PipelineInputArgument) -> ExprValue:
     return ""
 
 
-def _add_binding_variables(
-    variables: list[PipelineVariable],
-    overrides: dict[str, object],
-    types: dict[str, ExprType],
-    values: dict[str, ExprValue],
-    errors: list[str],
-) -> None:
-    """Resolve binding-source variables from their overrides or defaults.
-
-    Values are added *untainted*: a binding's choice is fixed for every run
-    against that collection, so identity fields may depend on it and still
-    resolve to one deterministic index per binding.
-    """
-    for variable in variables:
-        if variable.source is not VariableSource.BINDING:
-            continue
-        if variable.name in types:
-            overrides.pop(variable.name, None)
-            continue  # reserved-name collisions are a validation issue
-        types[variable.name] = EXPR_TYPES[variable.type]
-        supplied = overrides.pop(variable.name, None)
-        raw = supplied if supplied is not None else variable.value
-        if raw is None:
-            errors.append(f"Variable '{variable.name}' must be set for this collection.")
-            continue
-        try:
-            values[variable.name] = coerce_literal(
-                variable.type,
-                raw,
-                minimum=variable.minimum,
-                maximum=variable.maximum,
-                choices=variable.choices,
-            )
-        except VariableValueError as error:
-            errors.append(f"Variable '{variable.name}': {error}.")
-
-
 def _add_panel_variables(
     variables: list[PipelineVariable],
     types: dict[str, ExprType],
@@ -291,8 +247,8 @@ def _add_panel_variables(
     """Validate constants and evaluate derived variables in dependency order."""
     declared: dict[str, PipelineVariable] = {}
     for variable in variables:
-        if variable.source in (VariableSource.INPUT, VariableSource.BINDING):
-            continue  # input and binding variables entered the environment first
+        if variable.source is VariableSource.INPUT:
+            continue  # input variables entered the environment first
         if variable.name in types or variable.name in declared:
             continue  # duplicates are a validation issue; the first wins here
         declared[variable.name] = variable

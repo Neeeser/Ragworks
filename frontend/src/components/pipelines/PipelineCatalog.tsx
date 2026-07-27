@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Copy, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -17,6 +17,7 @@ type PipelineCatalogProps = {
   selectedPipelineId?: string;
   onSelect: (pipeline: Pipeline) => void;
   onDelete: (pipeline: Pipeline) => void;
+  onCopy: (pipeline: Pipeline) => void;
   pipelineUsage: Set<string>;
 };
 
@@ -32,6 +33,7 @@ export function PipelineCatalog({
   selectedPipelineId,
   onSelect,
   onDelete,
+  onCopy,
   pipelineUsage,
 }: PipelineCatalogProps) {
   if (pipelines.length === 0) {
@@ -68,21 +70,36 @@ export function PipelineCatalog({
               </span>,
             ]}
             actions={
-              <Tooltip
-                content={isInUse ? "Pipelines in use cannot be deleted." : "Delete pipeline"}
-                side="left"
-              >
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onDelete(pipeline)}
-                  disabled={isInUse}
-                  aria-label={`Delete ${pipeline.name}`}
-                  className="hover:text-data-neg"
+              <span className="flex items-center gap-1">
+                {/* A pipeline names the index it uses, so serving another
+                    collection from another store means another pipeline —
+                    copying is how you get one without rebuilding the graph. */}
+                <Tooltip content="Copy pipeline" side="left">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onCopy(pipeline)}
+                    aria-label={`Copy ${pipeline.name}`}
+                  >
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+                <Tooltip
+                  content={isInUse ? "Pipelines in use cannot be deleted." : "Delete pipeline"}
+                  side="left"
                 >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </Button>
-              </Tooltip>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onDelete(pipeline)}
+                    disabled={isInUse}
+                    aria-label={`Delete ${pipeline.name}`}
+                    className="hover:text-data-neg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+              </span>
             }
           />
         );

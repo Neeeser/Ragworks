@@ -5,9 +5,8 @@ Three declaration shapes power pipeline variables:
 - `PipelineVariable` — a variable on `PipelineDefinition.variables`, the
   single owner of every declaration: a constant (`source="value"`), derived
   from an expression over other variables (`source="expression"`),
-  caller-supplied (`source="input"` — `value` is the default, `None` meaning
-  the caller must supply it), or set per collection binding
-  (`source="binding"` — `value` is the default a binding overrides).
+  or caller-supplied (`source="input"` — `value` is the default, `None`
+  meaning the caller must supply it).
 - `PipelineInputArgument` — the *derived* caller-facing argument shape: built
   from the input-source variables a `retrieval.input` node accepts (its
   config lists variable names). The search API and the chat tool schema
@@ -28,7 +27,6 @@ Node configs reference variables with a tagged wire value
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -107,20 +105,25 @@ class VariableSource(StrEnum):
     VALUE = "value"
     EXPRESSION = "expression"
     INPUT = "input"
-    BINDING = "binding"
 
 
 class PipelineVariable(BaseModel):
     """A pipeline-level variable declaration.
 
     `source` selects the value's origin: a constant (`value`), a derived
-    `expression`, caller `input`, or per-collection `binding`. For input
-    variables `value` is the default — `None` means the caller must supply
-    one — and `expose_to_llm` publishes it in the chat tool schema. A binding
-    variable's `value` is the default a `CollectionPipelineBinding` overrides,
-    which is what lets one pipeline serve many collections against different
-    indexes. Definitions saved before `source` existed omit it; the normalizer
-    infers expression-vs-value so they parse unchanged.
+    `expression`, or caller `input`. For input variables `value` is the
+    default — `None` means the caller must supply one — and `expose_to_llm`
+    publishes it in the chat tool schema.
+
+    There is deliberately no per-collection source. A variable a binding
+    overrode meant the graph no longer described what it did: you needed the
+    definition *and* the collection running it, and for an index the effect
+    of getting it wrong is invisible (retrieval returns nothing rather than
+    failing). A pipeline that must differ per collection is a different
+    pipeline — copy it.
+
+    Definitions saved before `source` existed omit it; the normalizer infers
+    expression-vs-value so they parse unchanged.
     """
 
     name: str = Field(max_length=64)
@@ -228,16 +231,15 @@ class CollectionScope:
 
 @dataclass(frozen=True)
 class BindingContext:
-    """The collection binding an environment resolves for.
+    """The collection a pipeline is bound to while an environment resolves.
 
-    One object because the two travel together everywhere: a binding names
-    both the collection whose descriptors the built-ins expose and the
-    per-binding variable overrides. `empty()` is the editor's view — no
-    collection, no overrides, defaults throughout.
+    Carries the descriptors the built-ins expose (`collection_id`,
+    `collection_name`, `user_id`) and nothing else: a binding supplies which
+    collection is running, never what the pipeline does. `empty()` is the
+    editor's view — no collection, placeholders throughout.
     """
 
     collection: CollectionScope
-    values: Mapping[str, object] = field(default_factory=dict)
 
     @classmethod
     def empty(cls) -> BindingContext:

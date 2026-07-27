@@ -18,6 +18,7 @@ from app.schemas.pipelines import (
     NodeSpecRead,
     PipelineActivateRequest,
     PipelineChangeRead,
+    PipelineCopyRequest,
     PipelineCreate,
     PipelineDeleteResponse,
     PipelineInterfaceRead,
@@ -229,6 +230,28 @@ def activate_pipeline_version(
     definition = service.get_definition(pipeline)
     validation = service.validate_definition(current_user, definition)
     return _to_pipeline_read(pipeline, definition, validation)
+
+
+@router.post(
+    "/{pipeline_id}/copy", response_model=PipelineRead, status_code=status.HTTP_201_CREATED
+)
+def copy_pipeline(
+    payload: PipelineCopyRequest,
+    pipeline: models.Pipeline = Depends(get_pipeline_or_404),
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> PipelineRead:
+    """Copy a pipeline's current definition into a new pipeline."""
+    service = PipelineService(session)
+    try:
+        copy = service.copy_pipeline(current_user, pipeline, name=payload.name)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    session.commit()
+    session.refresh(copy)
+    definition = service.get_definition(copy)
+    validation = service.validate_definition(current_user, definition)
+    return _to_pipeline_read(copy, definition, validation)
 
 
 @router.delete("/{pipeline_id}", response_model=PipelineDeleteResponse)
