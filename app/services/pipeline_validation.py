@@ -37,7 +37,7 @@ def validate_pipeline_definition(
             connection = resolve_connection(session, user, connection_id)
             adapter = get_provider(connection, ProviderKind.EMBEDDING)
             return adapter.embedding_input_limit(model_name)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             if not isinstance(exc, ServiceError) and not is_external_provider_error(exc):
                 raise
             logger.warning(

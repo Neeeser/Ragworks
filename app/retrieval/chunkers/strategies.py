@@ -12,7 +12,7 @@ from app.retrieval.tokenizers import TokenCounter, WhitespaceTokenCounter
 from .base import DocumentChunker
 
 
-class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
+class _BaseChunker(DocumentChunker):
     """Shared helper for chunkers with size and overlap."""
 
     def __init__(
@@ -68,7 +68,7 @@ class _BaseChunker(DocumentChunker):  # pylint: disable=too-few-public-methods
         ]
 
 
-class TokenChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
+class TokenChunker(_BaseChunker):
     """Whitespace token chunker that supports overlap."""
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
@@ -76,7 +76,7 @@ class TokenChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
         return self._chunk_segments(document, [document.text])
 
 
-class SentenceChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
+class SentenceChunker(_BaseChunker):
     """Splits on sentence boundaries, then packs by whitespace token count.
 
     `chunk_size`/`overlap` are token budgets, not sentence counts: sentences
@@ -94,7 +94,7 @@ class SentenceChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
         return self._chunk_segments(document, sentences)
 
 
-class ParagraphChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
+class ParagraphChunker(_BaseChunker):
     """Splits using blank lines as hard paragraph separators."""
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:
@@ -103,7 +103,7 @@ class ParagraphChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
         return self._chunk_segments(document, paragraphs)
 
 
-class SemanticChunker(_BaseChunker):  # pylint: disable=too-few-public-methods
+class SemanticChunker(_BaseChunker):
     """Heuristic semantic chunker favoring headings and bullet boundaries."""
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:

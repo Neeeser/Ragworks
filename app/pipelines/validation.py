@@ -98,9 +98,11 @@ class PipelineValidator:
         errors: list[str] = []
         if len(node_ids) != len(definition.nodes):
             errors.append("Duplicate node ids detected.")
-        for node in definition.nodes:
-            if node.type not in self._registry.node_types():
-                errors.append(f"Unknown node type '{node.type}' for node '{node.id}'.")
+        errors.extend(
+            f"Unknown node type '{node.type}' for node '{node.id}'."
+            for node in definition.nodes
+            if node.type not in self._registry.node_types()
+        )
         return errors
 
     @staticmethod
@@ -271,13 +273,9 @@ class PipelineValidator:
             )
             if not chunkers:
                 continue
-            published_limit = self._embedding_input_limit(
-                config.connection_id, config.model_name
-            )
+            published_limit = self._embedding_input_limit(config.connection_id, config.model_name)
             if published_limit is None:
-                issues.append(
-                    self._unknown_embedding_limit_issue(embedder.id, config.model_name)
-                )
+                issues.append(self._unknown_embedding_limit_issue(embedder.id, config.model_name))
                 continue
             maximum = effective_embedding_input_limit(published_limit)
             for chunker in chunkers:

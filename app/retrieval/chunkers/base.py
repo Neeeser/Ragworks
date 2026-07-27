@@ -8,7 +8,7 @@ from typing import Protocol
 from ..models import Document, DocumentChunk
 
 
-class DocumentChunker(Protocol):  # pylint: disable=too-few-public-methods
+class DocumentChunker(Protocol):
     """Protocol describing chunker implementations."""
 
     def chunk(self, document: Document) -> Sequence[DocumentChunk]:

@@ -140,23 +140,22 @@ def _edge_changes(
         node = definition.node_map().get(node_id)
         return node.name if node else node_id
 
-    changes: list[DefinitionChange] = []
     old_edges = {_edge_key(edge) for edge in old.edges}
     new_edges = {_edge_key(edge) for edge in new.edges}
-    for key in sorted(new_edges - old_edges, key=str):
-        changes.append(
-            DefinitionChange(
-                kind="edge_added",
-                summary=f"Connected {node_label(new, key[0])} → {node_label(new, key[2])}",
-            )
+    changes: list[DefinitionChange] = [
+        DefinitionChange(
+            kind="edge_added",
+            summary=f"Connected {node_label(new, key[0])} → {node_label(new, key[2])}",
         )
-    for key in sorted(old_edges - new_edges, key=str):
-        changes.append(
-            DefinitionChange(
-                kind="edge_removed",
-                summary=f"Disconnected {node_label(old, key[0])} → {node_label(old, key[2])}",
-            )
+        for key in sorted(new_edges - old_edges, key=str)
+    ]
+    changes.extend(
+        DefinitionChange(
+            kind="edge_removed",
+            summary=f"Disconnected {node_label(old, key[0])} → {node_label(old, key[2])}",
         )
+        for key in sorted(old_edges - new_edges, key=str)
+    )
     return changes
 
 
@@ -167,16 +166,19 @@ def _variable_changes(
     """Describe added/removed/updated pipeline variables (material changes)."""
     old_variables = {variable.name: variable for variable in old.variables}
     new_variables = {variable.name: variable for variable in new.variables}
-    changes: list[DefinitionChange] = []
-    for name in sorted(new_variables.keys() - old_variables.keys()):
-        changes.append(DefinitionChange(kind="variables", summary=f"Added variable {name}"))
-    for name in sorted(old_variables.keys() - new_variables.keys()):
-        changes.append(DefinitionChange(kind="variables", summary=f"Removed variable {name}"))
-    for name in sorted(new_variables.keys() & old_variables.keys()):
-        if old_variables[name] != new_variables[name]:
-            changes.append(
-                DefinitionChange(kind="variables", summary=f"Variable {name} updated")
-            )
+    changes: list[DefinitionChange] = [
+        DefinitionChange(kind="variables", summary=f"Added variable {name}")
+        for name in sorted(new_variables.keys() - old_variables.keys())
+    ]
+    changes.extend(
+        DefinitionChange(kind="variables", summary=f"Removed variable {name}")
+        for name in sorted(old_variables.keys() - new_variables.keys())
+    )
+    changes.extend(
+        DefinitionChange(kind="variables", summary=f"Variable {name} updated")
+        for name in sorted(new_variables.keys() & old_variables.keys())
+        if old_variables[name] != new_variables[name]
+    )
     return changes
 
 

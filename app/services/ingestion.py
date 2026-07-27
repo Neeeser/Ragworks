@@ -66,7 +66,7 @@ def run_document_ingestion(document_id: UUID, request_id: str | None = None) -> 
             IngestionService(session).ingest_document(
                 user=user, collection=collection, document=document
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # Deliberately broad: the outcome is normally already persisted
             # as a FAILED document with an error message; a queue worker has
             # no caller left to re-raise to.
@@ -97,7 +97,7 @@ def _ensure_failure_recorded(document_id: UUID, exc: Exception) -> None:
             document.status = models.DocumentStatus.FAILED
             document.error_message = str(exc) or exc.__class__.__name__
             session.add(document)
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         # Swallowing here is deliberate: this is the recorder of last resort,
         # and raising from it would only kill the worker thread.
         logger.error(
@@ -108,7 +108,7 @@ def _ensure_failure_recorded(document_id: UUID, exc: Exception) -> None:
         )
 
 
-class IngestionService:  # pylint: disable=too-few-public-methods
+class IngestionService:
     """Service for running a document's ingestion pipeline."""
 
     def __init__(self, session: Session) -> None:
@@ -260,7 +260,7 @@ class IngestionService:  # pylint: disable=too-few-public-methods
             try:
                 store = vector_stores.get(target.backend)
                 store.delete_document_vectors(target.index_name, namespace, str(document.id))
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except Exception as exc:
                 logger.warning(
                     log_events.VECTORSTORE_CALL_FAILED,
                     operation="purge_previous_vectors",
@@ -278,23 +278,22 @@ class IngestionService:  # pylint: disable=too-few-public-methods
     ) -> list[models.DocumentChunkRecord]:
         """Persist embedded chunks and update document metadata."""
         token_counter = build_token_counter(resolved.tokenizer, self.settings.storage_path)
-        chunk_records: list[models.DocumentChunkRecord] = []
-        for chunk in enriched_chunks:
-            chunk_records.append(
-                models.DocumentChunkRecord(
-                    document_id=document.id,
-                    collection_id=collection.id,
-                    chunk_index=chunk.order,
-                    text=chunk.text,
-                    token_count=token_counter.count(chunk.text),
-                    embedding=chunk.embedding or [],
-                    chunk_metadata=chunk.metadata.data,
-                    chunk_size=resolved.chunk_size,
-                    chunk_overlap=resolved.chunk_overlap,
-                    chunk_strategy=resolved.chunk_strategy,
-                    embedding_model=resolved.embedding_model,
-                )
+        chunk_records: list[models.DocumentChunkRecord] = [
+            models.DocumentChunkRecord(
+                document_id=document.id,
+                collection_id=collection.id,
+                chunk_index=chunk.order,
+                text=chunk.text,
+                token_count=token_counter.count(chunk.text),
+                embedding=chunk.embedding or [],
+                chunk_metadata=chunk.metadata.data,
+                chunk_size=resolved.chunk_size,
+                chunk_overlap=resolved.chunk_overlap,
+                chunk_strategy=resolved.chunk_strategy,
+                embedding_model=resolved.embedding_model,
             )
+            for chunk in enriched_chunks
+        ]
         self.chunks.add_many(chunk_records)
 
         document.status = models.DocumentStatus.READY

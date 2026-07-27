@@ -21,8 +21,8 @@ from app.schemas.retrieval import CollectionQueryResponse
 from app.utils.ordering import unique_in_order
 
 
-# pylint: disable-next=too-many-arguments
-def score_query(
+# Scoring inputs are independent knobs; grouping would relocate the same list.
+def score_query(  # noqa: PLR0913
     *,
     run_id: UUID,
     query_external_id: str,

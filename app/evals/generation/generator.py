@@ -77,7 +77,7 @@ def run_dataset_generation(dataset_id: UUID) -> None:
         started = time.monotonic()
         try:
             stats = _generate(session, dataset)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # Deliberately broad: the FAILED dataset row is the outcome a
             # background task records; there is no caller left to re-raise to.
             logger.exception("Synthetic generation failed for dataset %s", dataset_id)

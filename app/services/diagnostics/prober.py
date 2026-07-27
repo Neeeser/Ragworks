@@ -75,7 +75,7 @@ class VectorStoreProber:
         try:
             store = self._provider.get(backend)
             stats = store.index_stats(index, namespace)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # Any store/prerequisite failure degrades to an informational
             # finding; the rule must never propagate it to the endpoint.
             raise ProbeUnavailable(str(exc)) from exc

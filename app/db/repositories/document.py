@@ -37,9 +37,7 @@ class DocumentRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
-    def ready_counts_by_collection(
-        self, collection_ids: Iterable[UUID]
-    ) -> dict[UUID, int]:
+    def ready_counts_by_collection(self, collection_ids: Iterable[UUID]) -> dict[UUID, int]:
         """Count READY (indexed) documents per collection, in one query."""
         ids = list(collection_ids)
         if not ids:
@@ -47,7 +45,7 @@ class DocumentRepository(Repository):
         statement = (
             select(
                 col(models.Document.collection_id),
-                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+                func.count(col(models.Document.id)),
             )
             .where(
                 col(models.Document.collection_id).in_(ids),
@@ -143,9 +141,9 @@ class DocumentRepository(Repository):
         """Return a mapping of user id -> number of documents they own."""
         statement = select(
             models.Document.user_id,
-            func.count(),  # pylint: disable=not-callable
+            func.count(),
         ).group_by(col(models.Document.user_id))
-        return {user_id: count for user_id, count in self.session.exec(statement).all()}
+        return dict(self.session.exec(statement).all())
 
 
 class ChunkRepository(Repository):
@@ -208,9 +206,7 @@ class ChunkRepository(Repository):
             if (chunk.document_id, chunk.chunk_index) in requested
         ]
 
-    def list_for_documents(
-        self, document_ids: Iterable[UUID]
-    ) -> list[models.DocumentChunkRecord]:
+    def list_for_documents(self, document_ids: Iterable[UUID]) -> list[models.DocumentChunkRecord]:
         """Return every chunk of the given documents, in document/index order."""
         ids = list(document_ids)
         if not ids:

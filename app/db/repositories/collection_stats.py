@@ -183,7 +183,7 @@ class CollectionStatsRepository(Repository):
         )
         baseline_row = self.session.exec(
             select(
-                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+                func.count(col(models.Document.id)),
                 func.coalesce(func.sum(col(models.Document.num_chunks)), 0),
             ).where(*owned, col(models.Document.created_at) < start)
         ).one()
@@ -192,7 +192,7 @@ class CollectionStatsRepository(Repository):
         doc_rows = self.session.exec(
             select(
                 doc_bucket,
-                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+                func.count(col(models.Document.id)),
                 func.coalesce(func.sum(col(models.Document.num_chunks)), 0),
             )
             .where(*owned, col(models.Document.created_at) >= start)
@@ -215,7 +215,7 @@ class CollectionStatsRepository(Repository):
         statement = (
             sa_select(
                 bucket,
-                func.count(),  # pylint: disable=not-callable
+                func.count(),
                 func.avg(value_expr),
                 func.percentile_cont(0.5).within_group(value_expr),
                 func.percentile_cont(0.95).within_group(value_expr),
@@ -247,7 +247,7 @@ class CollectionStatsRepository(Repository):
         doc_statement = (
             select(
                 col(models.Document.collection_id),
-                func.count(col(models.Document.id)),  # pylint: disable=not-callable
+                func.count(col(models.Document.id)),
                 func.coalesce(func.sum(col(models.Document.num_chunks)), 0),
             )
             .where(

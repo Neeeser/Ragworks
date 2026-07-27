@@ -90,7 +90,6 @@ class CohereClient:
 
     # The Cohere chat endpoint mirrors these knobs directly; grouping them would
     # only move the provider-independent request surface into another object.
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _chat_body(
         self,
         messages: list[dict[str, Any]],
