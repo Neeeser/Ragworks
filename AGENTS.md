@@ -30,15 +30,28 @@ instead of decorating it.
 
 # Verify gates
 
-Nothing ships without its gate passing. Run the gate for every area you changed:
+Nothing ships without its gate passing — but the full gate runs **once per unit of
+work, not once per edit**; re-running the whole suite between micro-edits is the
+slow loop this tiering exists to prevent. The loop:
 
-- Backend: `make verify` (typecheck → lint → test), plus `make coverage` (review
-  `term-missing`)
-- Frontend: `npm run verify` in `frontend/` (typecheck → lint → tests), plus
-  `make format-check-frontend`
+- **Fast tier — per edit/commit:** backend — `uv run ruff check app tests sandbox`
+  + `uv run mypy app` + the test files for the area touched (`uv run pytest
+  tests/<area> -n 0`); frontend — `npm run typecheck` + targeted vitest. Commit and
+  push as you go; an intermediate push may be red in CI, that's expected.
+- **Full gate — once, when the work is done** (before declaring the change done /
+  marking the PR ready): backend `make verify` (typecheck → lint → test) plus
+  `make coverage` (review `term-missing`); frontend `npm run verify` (typecheck →
+  lint → tests) plus `make format-check-frontend`. Re-run only if more commits
+  follow.
 
 If you only changed one side, only that side's gate is required. CI (`ci.yml`) runs
-both gates (plus a frontend `npm run build`) on every PR and push to `main`.
+both gates (plus a frontend `npm run build`) on every PR and push to `main`; only
+the finished PR's CI run must be green — don't loop on mid-work CI failures.
+
+The backend suite runs parallel (pytest-xdist) against per-process databases
+copied from a schema template (`tests/utils/db.py`), and database names encode the
+git worktree — concurrent agents in different worktrees share the one dev Postgres
+without colliding.
 
 # Bug fixes require a regression test
 
