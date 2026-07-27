@@ -1,0 +1,36 @@
+# Mirrors the pinned ParadeDB image into GHCR so CI's service container can
+# pull from the same registry the release images live on — Docker Hub pull
+# timeouts have failed otherwise-green CI runs. `imagetools create` copies the
+# manifest list as-is, so the digest in ci.yml stays valid against the mirror.
+#
+# Run it manually (workflow_dispatch) after bumping the pinned digest in
+# ci.yml/docker-compose.dev.yml; the weekly run keeps the mirror warm.
+name: Mirror ParadeDB image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  packages: write
+  contents: read
+
+env:
+  SOURCE: docker.io/paradedb/paradedb:latest-pg17@sha256:a784ffa6471729af6be5178ad39ea607e5cbfec94f81bcaad439de40ecb45834
+  TARGET: ghcr.io/${{ github.repository_owner }}/paradedb:latest-pg17
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Copy image (digest-preserving)
+        run: |
+          docker buildx imagetools create --tag "${TARGET,,}" "$SOURCE"
+          docker buildx imagetools inspect "${TARGET,,}"
