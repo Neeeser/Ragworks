@@ -16,7 +16,6 @@ poisoning another worktree's.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import os
 import tempfile
@@ -65,7 +64,16 @@ def create_test_engine() -> Engine:
 
 
 def _schema_hash() -> str:
-    """Hash the SQLModel metadata so schema changes get their own template."""
+    """Hash the SQLModel metadata so schema changes get their own template.
+
+    Imports the models first: `SQLModel.metadata` is populated by import, so
+    hashing before they are loaded yields the empty-metadata hash. A worker
+    that did would sweep away the real template as "stale" and create an empty
+    one in its place, and every other worker's `CREATE DATABASE … TEMPLATE`
+    then fails on a database that no longer exists.
+    """
+    from app.db import models  # noqa: F401  pylint: disable=import-outside-toplevel,unused-import
+
     parts: list[str] = []
     for table in sorted(SQLModel.metadata.tables.values(), key=lambda t: t.name):
         for column in table.columns:
@@ -88,9 +96,15 @@ def _ensure_template(admin: Engine) -> None:
     """Build the template database once per schema hash, under a cross-process lock.
 
     The lock file lives in the system temp dir so xdist workers and parallel
-    worktree runs on the same machine serialize template creation. Stale
-    templates from other schema hashes are swept best-effort (an in-use
-    template from another live run refuses the drop and is skipped).
+    worktree runs on the same machine serialize template creation.
+
+    Templates for other schema hashes are deliberately left alone. A hash
+    identifies a schema, not a run, so a neighbouring worktree on a different
+    branch legitimately owns one — and dropping it mid-run makes every
+    `CREATE DATABASE … TEMPLATE` in that run fail on a database that just
+    disappeared. Postgres only refuses the drop while a session is *connected*
+    to it, which a template copy is not, so "in use" is no protection. They
+    are a few MB each; `make test-clean-templates` removes them.
     """
     template = template_database_name()
     lock = FileLock(str(Path(tempfile.gettempdir()) / f"{template}.lock"))
@@ -105,17 +119,6 @@ def _ensure_template(admin: Engine) -> None:
             )
             if exists:
                 return
-            stale = connection.execute(
-                text(
-                    "SELECT datname FROM pg_database "
-                    "WHERE datname LIKE 'ragworks_tmpl_%' AND datname != :name"
-                ),
-                {"name": template},
-            ).all()
-            for (name,) in stale:
-                # In use by another run on a different schema — leave it.
-                with contextlib.suppress(Exception):
-                    connection.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
             connection.execute(text(f'CREATE DATABASE "{template}"'))
         template_url = make_url(get_database_url()).set(database=template)
         template_engine = create_engine(template_url)
@@ -168,3 +171,30 @@ def open_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session
     engine.dispose()
+
+
+def drop_stale_templates() -> str:
+    """Drop every schema template except this checkout's; report what went.
+
+    A maintenance command (`make test-clean-templates`), never part of a run:
+    a template belongs to a schema, and a neighbouring worktree on another
+    branch may be copying from one right now.
+    """
+    keep = template_database_name()
+    admin = _admin_engine()
+    dropped: list[str] = []
+    try:
+        with admin.connect() as connection:
+            names = connection.execute(
+                text(
+                    "SELECT datname FROM pg_database "
+                    "WHERE datname LIKE 'ragworks_tmpl_%' AND datname != :name"
+                ),
+                {"name": keep},
+            ).all()
+            for (name,) in names:
+                connection.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
+                dropped.append(name)
+    finally:
+        admin.dispose()
+    return f"kept {keep}; dropped {len(dropped)}: {', '.join(dropped) or 'none'}"

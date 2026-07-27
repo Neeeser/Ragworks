@@ -102,6 +102,11 @@ run:
 test: postgres-test
 	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest
 
+test-clean-templates: postgres-test
+	@# Schema templates are keyed by schema hash, so branches accumulate them.
+	@# Never swept during a run: another worktree's live run may own one.
+	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run python -c "from tests.utils.db import drop_stale_templates; print(drop_stale_templates())"
+
 test-verbose: postgres-test
 	TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest -vv --durations=0
 
