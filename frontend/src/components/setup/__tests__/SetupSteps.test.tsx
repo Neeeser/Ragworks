@@ -7,7 +7,7 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 
 import { initialSetupWizardState } from "@/components/setup/lib/setup-wizard-reducer";
 import { StepModel, StepProviders } from "@/components/setup/SetupSteps";
-import { StepLaunch } from "@/components/setup/SetupStepsLaunch";
+import { StepCollection } from "@/components/setup/SetupStepsLaunch";
 import {
   makeCatalogModel,
   makeConnection,
@@ -68,6 +68,8 @@ function makeWizard(overrides: Partial<SetupWizardApi> = {}): SetupWizardApi {
     rerankingModelsLoading: false,
     ensureIndex: vi.fn(),
     finish: vi.fn(),
+    openCollection: vi.fn(),
+    completedCollectionId: null,
     busy: false,
     error: null,
     warning: null,
@@ -117,14 +119,14 @@ describe("StepModel", () => {
   });
 });
 
-describe("StepLaunch", () => {
+describe("StepCollection", () => {
   it("warns only when chunk size exceeds the model's effective window", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         embeddingModel: MINILM,
@@ -135,7 +137,7 @@ describe("StepLaunch", () => {
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     expect(
       screen.getByText(
@@ -143,7 +145,7 @@ describe("StepLaunch", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /finish setup/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
   });
 
   it("does not warn when chunk size fits the window even if size plus overlap exceeds it", () => {
@@ -152,7 +154,7 @@ describe("StepLaunch", () => {
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         embeddingModel: MINILM,
@@ -162,16 +164,16 @@ describe("StepLaunch", () => {
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     expect(screen.queryByText(/exceeds this model's effective input limit/i)).toBeNull();
   });
 
   it("offers count and facet tools on a lexical backend, checked by default", async () => {
     const wizard = makeWizard();
-    wizard.state = { ...wizard.state, step: "launch" };
+    wizard.state = { ...wizard.state, step: "collection" };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     const countTool = screen.getByLabelText(/add a count tool/i);
     expect(countTool).toBeChecked();
@@ -184,14 +186,14 @@ describe("StepLaunch", () => {
 
   it("hides the reranker option when no reranking provider is connected", () => {
     const wizard = makeWizard({ hasRerankingProvider: false });
-    wizard.state = { ...wizard.state, step: "launch" };
+    wizard.state = { ...wizard.state, step: "collection" };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     expect(screen.queryByLabelText(/add a reranker/i)).toBeNull();
   });
 
-  it("gates Finish until a reranking model is chosen when the reranker is enabled", () => {
+  it("gates Continue until a reranking model is chosen when the reranker is enabled", () => {
     const wizard = makeWizard({
       hasRerankingProvider: true,
       rerankingModels: [
@@ -200,7 +202,7 @@ describe("StepLaunch", () => {
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         collectionName: "First",
@@ -209,9 +211,9 @@ describe("StepLaunch", () => {
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
-    expect(screen.getByRole("button", { name: /finish setup/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
 });
 

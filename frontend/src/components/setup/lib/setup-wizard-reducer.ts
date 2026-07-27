@@ -1,7 +1,14 @@
 import type { IndexBackend } from "@/lib/types";
 
 /** Ordered wizard steps; `welcome` is always first, `launch` always last. */
-export const SETUP_STEPS = ["welcome", "providers", "model", "index", "launch"] as const;
+export const SETUP_STEPS = [
+  "welcome",
+  "providers",
+  "model",
+  "index",
+  "collection",
+  "launch",
+] as const;
 export type SetupStepId = (typeof SETUP_STEPS)[number];
 
 /** Preferred first-run model: small, stable, fits every backend's caps. */

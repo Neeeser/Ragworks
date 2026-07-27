@@ -67,8 +67,12 @@ export interface SetupWizardApi {
   rerankingModelsLoading: boolean;
   /** Creates (or adopts) the index, then advances. */
   ensureIndex: () => Promise<void>;
-  /** Installs pipelines + first collection, then lands on the collection. */
+  /** Installs pipelines + the first collection. Does not navigate. */
   finish: () => Promise<void>;
+  /** Leaves for the collection `finish` created, once there is one. */
+  openCollection: () => void;
+  /** Set once the bootstrap has succeeded, so it is never run twice. */
+  completedCollectionId: string | null;
   busy: boolean;
   error: string | null;
   warning: string | null;
@@ -220,12 +224,16 @@ export function useSetupWizard(): SetupWizardApi {
     }
   }, [token, state.choices, setChoices]);
 
+  /**
+   * Run the bootstrap. Deliberately does not navigate: the launch step owns
+   * what happens after, so the fade-out and the warning acknowledgement have
+   * somewhere to live between "the call resolved" and "the route changed".
+   */
   const finish = useCallback(async () => {
     if (!token) return;
-    if (completedCollectionId) {
-      router.replace(`/collections/${completedCollectionId}`);
-      return;
-    }
+    // Re-entry after a resolved run (a StrictMode double-mount, or Retry after
+    // warnings) must not bootstrap a second collection.
+    if (completedCollectionId) return;
     const { choices } = state;
     if (!choices.embeddingConnectionId) {
       setError("Pick an embedding model before finishing setup.");
@@ -256,20 +264,23 @@ export function useSetupWizard(): SetupWizardApi {
         reranker,
       });
       markComplete();
+      setCompletedCollectionId(result.collection.id);
       if ((result.warnings ?? []).length > 0) {
-        setCompletedCollectionId(result.collection.id);
         setWarning(
-          `Setup finished with warnings: ${result.warnings.map((issue) => issue.message).join(" ")} Select Finish setup again to continue.`,
+          `Setup finished with warnings: ${result.warnings.map((issue) => issue.message).join(" ")}`,
         );
-        setBusy(false);
-        return;
       }
-      router.replace(`/collections/${result.collection.id}`);
     } catch (err) {
       setError(getErrorMessage(err, "Could not finish setup."));
+    } finally {
       setBusy(false);
     }
-  }, [token, state, markComplete, router, completedCollectionId]);
+  }, [token, state, markComplete, completedCollectionId]);
+
+  /** Leave the wizard for the collection the bootstrap created. */
+  const openCollection = useCallback(() => {
+    if (completedCollectionId) router.replace(`/collections/${completedCollectionId}`);
+  }, [router, completedCollectionId]);
 
   const modelConnectionError =
     (modelsQuery.data?.connection_errors ?? [])
@@ -302,6 +313,8 @@ export function useSetupWizard(): SetupWizardApi {
     rerankingModelsLoading: rerankingModelsQuery.loading,
     ensureIndex,
     finish,
+    openCollection,
+    completedCollectionId,
     busy,
     error,
     warning,

@@ -133,7 +133,7 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
   );
 }
 
-export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
+export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
   const {
     collectionName,
     chunkSize,
@@ -167,7 +167,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
 
   return (
     <SetupStepShell
-      stepKey="launch"
+      stepKey="collection"
       direction={wizard.state.direction}
       kicker={KICKER}
       title="Name your first collection"
@@ -179,20 +179,18 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           <Button
             size="lg"
             glow
-            loading={wizard.busy}
             disabled={!collectionName.trim() || (addReranker && !rerankerModel)}
-            onClick={() => void wizard.finish()}
+            onClick={wizard.next}
           >
-            Finish setup
+            Continue
           </Button>
         </>
       }
     >
       <p className="max-w-[66ch] text-ui text-body">
-        This installs default ingestion and retrieval pipelines around{" "}
+        Default ingestion and retrieval pipelines are built around{" "}
         <span className="font-mono text-primary">{embeddingModel}</span> and{" "}
-        <span className="font-mono text-primary">{indexName}</span> ({backend}), then drops you on
-        the collection ready to upload.
+        <span className="font-mono text-primary">{indexName}</span> ({backend}).
       </p>
       <Field label="Collection name">
         <TextInput
@@ -277,9 +275,6 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           ) : null}
         </div>
       ) : null}
-
-      <SetupNotice message={wizard.warning} tone="warning" />
-      <SetupNotice message={wizard.error} />
     </SetupStepShell>
   );
 }

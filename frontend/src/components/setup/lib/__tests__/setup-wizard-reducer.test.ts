@@ -19,6 +19,13 @@ describe("setupWizardReducer", () => {
     expect(state.direction).toBe(1);
   });
 
+  it("names the collection and launches it as separate steps, in that order", () => {
+    // Launch is a terminal beat with no controls, so the collection it creates
+    // has to be fully described before the user reaches it.
+    expect(SETUP_STEPS.indexOf("collection")).toBeLessThan(SETUP_STEPS.indexOf("launch"));
+    expect(SETUP_STEPS.at(-1)).toBe("launch");
+  });
+
   it("goes back without falling off the first step", () => {
     let state = setupWizardReducer(start(), { type: "NEXT" });
     state = setupWizardReducer(state, { type: "BACK" });

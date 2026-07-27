@@ -198,6 +198,8 @@ describe("useSetupWizard.ensureIndex — embedding dimension resolution", () => 
   });
 });
 
+const BOOTSTRAPPED_COLLECTION_ID = "collection-1";
+
 describe("useSetupWizard.finish — validation warnings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -205,7 +207,7 @@ describe("useSetupWizard.finish — validation warnings", () => {
 
   it("renders returned warnings before continuing to the collection", async () => {
     bootstrapSetup.mockResolvedValue({
-      collection: { id: "collection-1" } as never,
+      collection: { id: BOOTSTRAPPED_COLLECTION_ID } as never,
       warnings: [
         {
           code: "embedding_input_limit_exceeded",
@@ -225,11 +227,34 @@ describe("useSetupWizard.finish — validation warnings", () => {
 
     await act(async () => result.current.finish());
 
+    // finish records the outcome; the launch step decides when to leave, so
+    // warnings can be acknowledged before the wizard disappears.
     expect(result.current.warning).toMatch(/chunking may exceed/i);
+    expect(result.current.completedCollectionId).toBe(BOOTSTRAPPED_COLLECTION_ID);
     expect(routerReplace).not.toHaveBeenCalled();
 
+    act(() => result.current.openCollection());
+    expect(routerReplace).toHaveBeenCalledWith(`/collections/${BOOTSTRAPPED_COLLECTION_ID}`);
+  });
+
+  it("never bootstraps a second collection once one has been created", async () => {
+    bootstrapSetup.mockResolvedValue({
+      collection: { id: BOOTSTRAPPED_COLLECTION_ID } as never,
+      warnings: [],
+    });
+    const { result } = await mountWizard();
+    act(() => {
+      result.current.setChoices({
+        embeddingConnectionId: CONNECTION_ID,
+        embeddingModel: MODEL_ID,
+        collectionName: "First",
+      });
+    });
+
     await act(async () => result.current.finish());
-    expect(routerReplace).toHaveBeenCalledWith("/collections/collection-1");
+    await act(async () => result.current.finish());
+
+    expect(bootstrapSetup).toHaveBeenCalledTimes(1);
   });
 });
 
