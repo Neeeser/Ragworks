@@ -84,7 +84,7 @@ class IndexTarget:
 
 
 @dataclass(frozen=True)
-class PipelineSettings:  # pylint: disable=too-many-instance-attributes
+class PipelineSettings:
     """Resolved settings for a pipeline, whatever its shape.
 
     `backend`/`index_name`/`namespace`/`dimension`/`metric` describe the
@@ -278,7 +278,8 @@ def collection_scope(collection: models.Collection) -> CollectionScope:
     )
 
 
-def resolve_pipeline_settings(  # pylint: disable=too-many-locals
+# Resolves every setting domain in one pass; locals mirror the settings shape.
+def resolve_pipeline_settings(  # noqa: PLR0914
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,

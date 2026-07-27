@@ -172,7 +172,7 @@ def _spawn(pidfile: Path, log: Path, command: list[str], env: dict[str, str]) ->
         )
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("ab") as sink:
-        process = subprocess.Popen(  # pylint: disable=consider-using-with
+        process = subprocess.Popen(
             command,
             stdout=sink,
             stderr=subprocess.STDOUT,

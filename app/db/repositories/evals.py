@@ -70,7 +70,7 @@ class EvalDatasetRepository(Repository):
     ) -> tuple[list[models.EvalDatasetQuery], int]:
         """Page a dataset's queries in stable external-id order, with the total."""
         total_statement = select(
-            func.count(col(models.EvalDatasetQuery.id))  # pylint: disable=not-callable
+            func.count(col(models.EvalDatasetQuery.id))
         ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
         total = int(self.session.exec(total_statement).one())
         statement = (
@@ -85,7 +85,7 @@ class EvalDatasetRepository(Repository):
     def count_queries(self, dataset_id: UUID) -> int:
         """Count a dataset's queries."""
         statement = select(
-            func.count(col(models.EvalDatasetQuery.id))  # pylint: disable=not-callable
+            func.count(col(models.EvalDatasetQuery.id))
         ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
         return int(self.session.exec(statement).one())
 
@@ -202,7 +202,7 @@ class EvalDatasetRepository(Repository):
                 )
             )
         total_statement = select(
-            func.count(col(models.Document.id))  # pylint: disable=not-callable
+            func.count(col(models.Document.id))
         ).where(*clauses)
         total = int(self.session.exec(total_statement).one())
         statement = (
@@ -261,7 +261,7 @@ class EvalRunRepository(Repository):
 
     def count_for_dataset(self, dataset_id: UUID) -> int:
         """Count every run (any status) referencing a dataset."""
-        statement = select(func.count(col(models.EvalRun.id))).where(  # pylint: disable=not-callable
+        statement = select(func.count(col(models.EvalRun.id))).where(
             col(models.EvalRun.dataset_id) == dataset_id
         )
         return int(self.session.exec(statement).one())
@@ -273,7 +273,7 @@ class EvalRunRepository(Repository):
         statement = (
             select(
                 col(models.EvalRunItem.run_id),
-                func.count(col(models.EvalRunItem.id)),  # pylint: disable=not-callable
+                func.count(col(models.EvalRunItem.id)),
             )
             .where(col(models.EvalRunItem.run_id).in_(run_ids))
             .group_by(col(models.EvalRunItem.run_id))

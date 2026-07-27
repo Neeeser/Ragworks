@@ -141,7 +141,7 @@ def stream_chat(
                 if await request.is_disconnected():
                     stream_gen.close()
                     break
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             message = str(exc) or "Streaming request failed."
             yield format_event(ErrorEvent(message=message).model_dump())
         finally:

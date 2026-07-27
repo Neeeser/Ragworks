@@ -56,7 +56,7 @@ def list_models_for_user(
         try:
             if kind not in adapter.kinds:
                 continue
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             if not (
                 is_external_provider_error(exc)
                 or isinstance(exc, ServiceError)
@@ -119,7 +119,7 @@ def _load_one(
 ) -> CatalogResult | Exception:
     try:
         return adapter.list_models(kind, force_refresh=force_refresh)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         return exc
 
 

@@ -99,7 +99,7 @@ class FileDeletionService:
                     store.delete_document_vectors(
                         item.target.index_name, item.namespace, str(document.id)
                     )
-                except Exception as exc:  # pylint: disable=broad-exception-caught
+                except Exception as exc:
                     if item.target.backend is IndexBackend.PINECONE:
                         raise ExternalServiceError(
                             f"Failed to purge Pinecone vectors: {exc}"

@@ -91,7 +91,7 @@ class PipelineNodeBase(Generic[ConfigT]):
     # Abstract signature: kept typed here so concrete nodes' `run` overrides
     # satisfy the interface contract's parameter names; this base raises before
     # touching them.
-    def run(  # pylint: disable=unused-argument
+    def run(
         self,
         inputs: dict[str, object],
         context: PipelineRunContext,

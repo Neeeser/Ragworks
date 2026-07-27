@@ -51,7 +51,7 @@ class StubInvocationService:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def invoke_binding(
         self,
         _user: models.User,
         _collection: models.Collection,

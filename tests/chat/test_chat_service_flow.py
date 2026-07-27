@@ -160,7 +160,7 @@ def test_send_message_handles_tool_calls(
         def __init__(self) -> None:
             self.calls: list[dict[str, Any]] = []
 
-        def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        def invoke_binding(
             self,
             _user: models.User,
             collection: models.Collection,
@@ -322,7 +322,7 @@ def test_stream_message_handles_tool_calls_and_final(
     retrieval_calls: list[dict[str, Any]] = []
 
     class _TrackingRetrievalService(StubInvocationService):
-        def invoke_binding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        def invoke_binding(
             self,
             _user: models.User,
             collection: models.Collection,

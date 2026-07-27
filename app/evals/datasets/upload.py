@@ -67,9 +67,7 @@ def _parse_queries(queries: str) -> list[QueryRecord]:
         external_id = record.get("_id")
         if not isinstance(external_id, str) or not external_id:
             raise InvalidInputError("Every query row needs a non-empty '_id'.")
-        records.append(
-            QueryRecord(external_query_id=external_id, text=str(record.get("text", "")))
-        )
+        records.append(QueryRecord(external_query_id=external_id, text=str(record.get("text", ""))))
     return records
 
 
@@ -83,7 +81,7 @@ def _parse_qrels(qrels: str) -> list[Qrel]:
         columns = stripped.split("\t")
         if len(columns) < 3:
             raise InvalidInputError("Every qrels row needs query-id, corpus-id, and score.")
-        if set(column.strip() for column in columns[:3]) == _QRELS_HEADER:
+        if {column.strip() for column in columns[:3]} == _QRELS_HEADER:
             continue
         judgments.append(_parse_qrel_row(columns))
     return judgments

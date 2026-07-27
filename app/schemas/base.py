@@ -9,7 +9,7 @@ from pydantic import ConfigDict
 from app.utils.time import DEFAULT_DATETIME_ENCODERS
 
 
-class DateTimeConfigMixin:  # pylint: disable=too-few-public-methods
+class DateTimeConfigMixin:
     """Mixin for schemas that need UTC-inclusive datetime serialization."""
 
     # Explicitly a ClassVar: this is a plain mixin (not a BaseModel), and without

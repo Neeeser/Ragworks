@@ -8,9 +8,9 @@ added to, and tested.
 ## The gate
 
 Before declaring any backend change done, run `make verify` — typecheck (`mypy app`,
-`strict = true`, zero errors), lint (`ruff check app tests` + a slim pylint kept for
-the design checks ruff doesn't cover, `--fail-under=10`), then test (`uv run
-pytest`). All three must be green. Run `make coverage` separately and review
+`strict = true`, zero errors), lint (`ruff check app tests sandbox` — including
+the PLR09xx design budgets that replaced pylint), then test (`uv run pytest`).
+All three must be green. Run `make coverage` separately and review
 `term-missing` for untested lines you introduced — `fail_under` in `pyproject.toml`
 sits a few points below the last measured percentage so coverage can't silently
 collapse. Lowering `fail_under` to make a change pass is not a fix; find out why
@@ -34,8 +34,7 @@ single-file run so worker startup doesn't dominate.
 - **Module size: every module under `app/` stays ≤400 lines**, enforced by
   `tests/test_module_size.py` (its `GRANDFATHERED` dict is the single source of
   truth for legacy exceptions, and it's currently empty). Never add an entry for new
-  code, and never silence an oversize module with `# pylint: disable=too-many-lines`
-  — a single disable comment defeats the gate entirely. Split the module.
+  code, and never silence the gate with a suppression — split the module.
 
 ## Layout — where code goes
 
@@ -718,8 +717,8 @@ this file in the same PR.
   `app/chat/tools.py::ToolExecutor.execute`.
 - **Docstrings on modules, classes, and functions** — contract and intent, not a
   restated signature. Comments explain *why* for non-obvious behavior only.
-- **Pylint-clean.** A `# pylint: disable=` needs an adjacent comment saying why,
-  and is never the fix for a design problem.
+- **Lint-clean.** A `# noqa: <rule>` needs an adjacent comment saying why, and is
+  never the fix for a design problem.
 - **Dead code is deleted on sight** — including whole dead layers, not just
   symbols: an unexecuted parallel implementation drifts silently from the one
   actually running, and its tests only assert that it agrees with itself. Grep for

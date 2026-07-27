@@ -13,7 +13,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
-from pinecone import Pinecone, ServerlessSpec  # pylint: disable=no-name-in-module
+from pinecone import Pinecone, ServerlessSpec
 from pinecone.exceptions import NotFoundException as PineconeNotFoundException
 
 from app.clients.pinecone import (
@@ -102,7 +102,7 @@ class PineconeStore(VectorStoreBackend):
         """Return one index's description."""
         try:
             description = self._admin.describe_index(name)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # The SDK raises version-varying error types for a missing index;
             # classify at the boundary instead of leaking them raw.
             raise NotFoundError(f"Pinecone index '{name}' not found.") from exc
@@ -268,7 +268,7 @@ class PineconeStore(VectorStoreBackend):
         """Delete a namespace's vectors, tolerating a missing namespace."""
         try:
             self._get_index(index).delete(namespace=namespace, delete_all=True)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # Pinecone raises provider-specific error types; a missing
             # namespace or index is benign (nothing to purge), anything
             # else is real.
@@ -289,7 +289,7 @@ class PineconeStore(VectorStoreBackend):
                 ids = list(id_batch)
                 if ids:
                     handle.delete(ids=ids, namespace=namespace)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             if not is_benign_purge_error(exc):
                 raise
 

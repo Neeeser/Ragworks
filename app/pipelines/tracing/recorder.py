@@ -58,7 +58,7 @@ class NodeTraceSummary(BaseModel):
     outputs: list[NodeTraceValue] = Field(default_factory=list)
 
 
-class PipelineTraceRecorder:  # pylint: disable=too-few-public-methods
+class PipelineTraceRecorder:
     """Record pipeline execution inputs, outputs, and status."""
 
     def __init__(

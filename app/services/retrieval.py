@@ -7,7 +7,6 @@ tool path. It resolves the collection's *primary search tool* and delegates
 to `ToolInvocationService`, the single pipeline-invocation path.
 """
 
-# pylint: disable=duplicate-code
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ class RetrievalService:
         self.session = session
         self._invocation = ToolInvocationService(session)
 
-    def query_collection(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def query_collection(
         self,
         user: models.User,
         collection: models.Collection,

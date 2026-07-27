@@ -47,7 +47,7 @@ def run_collection_query(
         # the Diagnostics tab is the fix surface there.
         try:
             session.commit()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             session.rollback()
         raise to_http_exception(exc) from exc
     except ServiceError as exc:

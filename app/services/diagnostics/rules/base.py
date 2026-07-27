@@ -76,8 +76,8 @@ def paired_observation(
     )
 
 
-def build_diagnostic(
-    # pylint: disable=too-many-arguments  # keyword-only mirror of CollectionDiagnostic
+# Keyword-only mirror of CollectionDiagnostic.
+def build_diagnostic(  # noqa: PLR0913
     *,
     code: str,
     severity: DiagnosticSeverity,

@@ -10,6 +10,7 @@ from app.pipelines.variables import STATIC_ONLY_EXTRA
 NAMESPACE_COLLECTION_PREFIX = "col-"
 DEFAULT_NAMESPACE_TEMPLATE = f"{NAMESPACE_COLLECTION_PREFIX}{{collection_id}}"
 
+
 def namespace_field() -> str:
     """The `namespace` config field every store-bound node declares.
 
@@ -37,5 +38,4 @@ def resolve_collection_template(
     rendered = value
     rendered = rendered.replace("{collection_id}", str(collection.id))
     rendered = rendered.replace("{collection_name}", collection.name or "")
-    rendered = rendered.replace("{user_id}", str(collection.user_id))
-    return rendered
+    return rendered.replace("{user_id}", str(collection.user_id))

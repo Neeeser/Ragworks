@@ -65,7 +65,7 @@ _cache: tuple[float, AppConfig] | None = None
 
 def invalidate_app_config_cache() -> None:
     """Clear the process-wide cache (called after a PATCH, and by tests)."""
-    global _cache  # pylint: disable=global-statement
+    global _cache
     with _cache_lock:
         _cache = None
 
@@ -77,7 +77,7 @@ def get_app_config() -> AppConfig:
     unreachable, logging a warning rather than raising -- see module
     docstring for why this call can never be allowed to fail the caller.
     """
-    global _cache  # pylint: disable=global-statement
+    global _cache
     with _cache_lock:
         if _cache is not None:
             cached_at, cached_config = _cache
@@ -86,7 +86,7 @@ def get_app_config() -> AppConfig:
         try:
             with session_scope() as session:
                 config = AppConfigService(session).effective_config()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             logger.warning(
                 "Failed to read runtime config from the database; "
                 "falling back to env+defaults.",

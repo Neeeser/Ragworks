@@ -14,7 +14,7 @@ from app.schemas.enums import UserRole
 from app.utils.time import utc_now
 
 
-class TimestampMixin:  # pylint: disable=too-few-public-methods
+class TimestampMixin:
     """Shared timestamp fields for SQLModel tables.
 
     `updated_at` carries an `onupdate` so SQLAlchemy refreshes it on every
