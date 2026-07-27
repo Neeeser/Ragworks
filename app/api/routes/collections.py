@@ -26,7 +26,6 @@ from app.schemas.collections import (
     CollectionCreate,
     CollectionDeleteResponse,
     CollectionIndexesRead,
-    CollectionIndexesUpdate,
     CollectionPromptRead,
     CollectionPromptUpdate,
     CollectionRead,
@@ -152,29 +151,9 @@ def get_collection_indexes(
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionIndexesRead:
-    """Return the collection's index slots with their current selections."""
+    """Report the indexes this collection's bound pipelines name."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
-    try:
-        return CollectionIndexService(session).read(current_user, collection)
-    except ServiceError as exc:
-        raise to_http_exception(exc) from exc
-
-
-@router.put("/{collection_id}/indexes", response_model=CollectionIndexesRead)
-def update_collection_indexes(
-    collection_id: UUID,
-    payload: CollectionIndexesUpdate,
-    current_user: models.User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-) -> CollectionIndexesRead:
-    """Repoint index slots across every binding that declares them."""
-    collection = get_collection_or_404(collection_id, current_user.id, session)
-    try:
-        return CollectionIndexService(session).update(
-            current_user, collection, payload.values
-        )
-    except ServiceError as exc:
-        raise to_http_exception(exc) from exc
+    return CollectionIndexService(session).read(current_user, collection)
 
 
 @router.post("", response_model=CollectionRead, status_code=201)

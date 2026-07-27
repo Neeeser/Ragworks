@@ -85,9 +85,9 @@ def _migrate_collection_columns(session: Session) -> None:
             text(
                 "INSERT INTO collection_pipeline_bindings "
                 "(id, collection_id, pipeline_id, role, is_primary, enabled, position, "
-                "variable_values, created_at, updated_at) "
+                "created_at, updated_at) "
                 "SELECT gen_random_uuid(), c.id, c.ingestion_pipeline_id, 'ingest', "
-                "FALSE, TRUE, 0, '{}', NOW(), NOW() FROM collections c "
+                "FALSE, TRUE, 0, NOW(), NOW() FROM collections c "
                 "WHERE c.ingestion_pipeline_id IS NOT NULL AND NOT EXISTS ("
                 "SELECT 1 FROM collection_pipeline_bindings b "
                 "WHERE b.collection_id = c.id AND b.role = 'ingest')"
@@ -98,9 +98,9 @@ def _migrate_collection_columns(session: Session) -> None:
             text(
                 "INSERT INTO collection_pipeline_bindings "
                 "(id, collection_id, pipeline_id, role, is_primary, enabled, position, "
-                "variable_values, created_at, updated_at) "
+                "created_at, updated_at) "
                 "SELECT gen_random_uuid(), c.id, c.retrieval_pipeline_id, 'tool', "
-                "TRUE, TRUE, 0, '{}', NOW(), NOW() FROM collections c "
+                "TRUE, TRUE, 0, NOW(), NOW() FROM collections c "
                 "WHERE c.retrieval_pipeline_id IS NOT NULL AND NOT EXISTS ("
                 "SELECT 1 FROM collection_pipeline_bindings b "
                 "WHERE b.collection_id = c.id AND b.role = 'tool')"

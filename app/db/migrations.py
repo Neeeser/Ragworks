@@ -31,11 +31,7 @@ _JSON_LIST_DEFAULT_COLUMNS = frozenset(
         ("pipeline_runs", "warnings"),
     }
 )
-_JSON_OBJECT_DEFAULT_COLUMNS = frozenset(
-    {
-        ("collection_pipeline_bindings", "variable_values"),
-    }
-)
+_JSON_OBJECT_DEFAULT_COLUMNS: frozenset[tuple[str, str]] = frozenset()
 _LEGACY_COLUMN_BACKFILLS = {
     (
         "document_chunks",

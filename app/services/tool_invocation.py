@@ -248,7 +248,6 @@ class ToolInvocationService:
             query=query,
             top_k=top_k if top_k is not None else DEFAULT_TOP_K,
             arguments=arguments,
-            binding_values=resolved.binding.variable_values,
         )
 
     @staticmethod

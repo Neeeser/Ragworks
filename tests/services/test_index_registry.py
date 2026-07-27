@@ -9,48 +9,32 @@ with no error.
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 import pytest
 from sqlmodel import Session
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
-from app.pipelines.variables import PipelineVariable, VariableSource, VariableType
 from app.schemas.enums import IndexBackend
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_registry import (
     IndexRegistryService,
-    index_variables,
-    selected_indexes,
 )
 
 
-def _definition(index_id: str, name: str = "docs-main") -> PipelineDefinition:
-    """A retrieval graph whose index comes from a binding variable."""
+def _definition(name: str = "docs-main") -> PipelineDefinition:
+    """A retrieval graph naming its own index."""
     return PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(
                 id="retriever",
                 type=VectorRetrieverNode.type,
                 name="Retriever",
-                config={
-                    "backend": {"$expr": "primary_index.backend"},
-                    "index_name": {"$expr": "primary_index.name"},
-                },
+                config={"backend": "pgvector", "index_name": name},
             ),
             PipelineNodeDefinition(id="in", type="retrieval.input", name="In"),
             PipelineNodeDefinition(id="out", type="retrieval.output", name="Out"),
-        ],
-        variables=[
-            PipelineVariable(
-                name="primary_index",
-                type=VariableType.INDEX,
-                source=VariableSource.BINDING,
-                value={"index_id": index_id, "backend": "pgvector", "name": name},
-            )
-        ],
+        ]
     )
 
 
@@ -84,8 +68,8 @@ class _Fixture:
         session.commit()
         session.refresh(self.collection)
 
-    def bind(self, values: dict[str, object] | None = None) -> models.Pipeline:
-        """Persist a pipeline targeting the index and bind it to the collection."""
+    def bind(self, index_name: str = "docs-main") -> models.Pipeline:
+        """Persist a pipeline naming the index and bind it to the collection."""
         pipeline = models.Pipeline(user_id=self.user.id, name="Search")
         self.session.add(pipeline)
         self.session.commit()
@@ -93,7 +77,7 @@ class _Fixture:
         version = models.PipelineVersion(
             pipeline_id=pipeline.id,
             version=1,
-            definition=_definition(str(self.index.id)).model_dump(mode="json"),
+            definition=_definition(index_name).model_dump(mode="json"),
         )
         self.session.add(version)
         self.session.add(
@@ -102,50 +86,10 @@ class _Fixture:
                 pipeline_id=pipeline.id,
                 role=models.BindingRole.TOOL,
                 is_primary=True,
-                variable_values=values or {},
             )
         )
         self.session.commit()
         return pipeline
-
-
-class TestSelectedIndexes:
-    """Which index a binding resolves to, defaults included."""
-
-    def test_the_declared_default_applies_without_an_override(self) -> None:
-        index_id = str(uuid4())
-
-        selected = selected_indexes(_definition(index_id), None)
-
-        assert selected["primary_index"].index_id.hex == index_id.replace("-", "")
-
-    def test_an_override_wins_over_the_default(self) -> None:
-        other = str(uuid4())
-
-        selected = selected_indexes(
-            _definition(str(uuid4())),
-            {"primary_index": {"index_id": other, "backend": "pinecone", "name": "far"}},
-        )
-
-        assert selected["primary_index"].name == "far"
-
-    def test_a_malformed_value_is_skipped_not_raised(self) -> None:
-        """This is a read path; the validator reports the broken declaration."""
-        selected = selected_indexes(
-            _definition(str(uuid4())), {"primary_index": {"name": "no id"}}
-        )
-
-        assert selected == {}
-
-    def test_only_binding_source_index_variables_are_slots(self) -> None:
-        definition = _definition(str(uuid4()))
-        definition.variables.append(
-            PipelineVariable(name="top_k", type=VariableType.INTEGER, value=5)
-        )
-
-        assert [variable.name for variable in index_variables(definition)] == [
-            "primary_index"
-        ]
 
 
 class TestUsage:
@@ -165,7 +109,8 @@ class TestUsage:
 
         assert IndexRegistryService(session).usages_by_index(fixture.user) == {}
 
-    def test_an_override_moves_the_usage_off_the_default(self, session: Session) -> None:
+    def test_usage_follows_the_index_the_graph_names(self, session: Session) -> None:
+        """Usage is read from the definition, the only place an index is chosen."""
         """Usage follows what the binding actually selected, not the default."""
         fixture = _Fixture(session)
         other = models.RegisteredIndex(
@@ -177,15 +122,7 @@ class TestUsage:
         session.add(other)
         session.commit()
         session.refresh(other)
-        fixture.bind(
-            {
-                "primary_index": {
-                    "index_id": str(other.id),
-                    "backend": "pgvector",
-                    "name": "other-index",
-                }
-            }
-        )
+        fixture.bind(index_name="other-index")
 
         usages = IndexRegistryService(session).usages_by_index(fixture.user)
 

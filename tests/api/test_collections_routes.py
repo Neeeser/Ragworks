@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.api.routes import collections as collections_routes
 from app.db import models
@@ -314,33 +314,9 @@ def test_collection_indexes_reports_the_indexes_its_graph_names(client) -> None:
 
     assert read.status_code == 200
     body = read.json()
-    assert body["slots"] == []
     targets = {target["name"]: target for target in body["targets"]}
     assert targets
     dense = [target for target in targets.values() if target["vector_type"] == "dense"]
     assert dense
     assert dense[0]["pipelines"]
 
-
-def test_collection_indexes_rejects_an_undeclared_slot(client, session: Session) -> None:
-    """A name no bound pipeline declares is a 400, not a silent no-op."""
-    created = client.post("/api/collections", json={"name": "Slots"}).json()
-    owner = session.exec(
-        select(models.User).where(models.User.email == "owner@example.com")
-    ).one()
-    moved = models.RegisteredIndex(
-        user_id=owner.id,
-        backend="pgvector",
-        name="moved-dense",
-        vector_type="dense",
-    )
-    session.add(moved)
-    session.commit()
-    session.refresh(moved)
-
-    rejected = client.put(
-        f"/api/collections/{created['id']}/indexes",
-        json={"values": {"mystery": {"index_id": str(moved.id)}}},
-    )
-
-    assert rejected.status_code == 400

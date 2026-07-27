@@ -21,7 +21,6 @@ the ingest pipeline never touched.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypeVar
 from uuid import UUID
@@ -215,22 +214,18 @@ def resolve_pipeline_settings(  # pylint: disable=too-many-locals
     definition: PipelineDefinition,
     collection: models.Collection,
     registry: NodeRegistry,
-    *,
-    binding_values: Mapping[str, object] | None = None,
 ) -> PipelineSettings:
     """Resolve settings from any pipeline definition, for one binding.
 
     Expressions resolve against the static default environment first — the
     taint rule guarantees identity fields never depend on runtime input, so
     the static view is the authoritative one for index targets and purges.
-    `binding_values` is what makes those targets per binding: the same stored
-    definition resolves to whichever index this collection selected.
+    A definition's targets are therefore a property of the definition alone,
+    the same for every collection that binds it.
     """
     definition = resolve_static_definition(
         definition,
-        binding=BindingContext(
-            collection=collection_scope(collection), values=binding_values or {}
-        ),
+        binding=BindingContext(collection=collection_scope(collection)),
     )
     chunker = _resolve_chunker_config(definition, registry)
     embedder = _resolve_node_config(definition, EmbedderNode.type, EmbedderConfig)

@@ -55,9 +55,6 @@ def variabledeclaration_issues(
     if variable.source is VariableSource.INPUT:
         issues.extend(_input_variable_issues(variable))
         return issues
-    if variable.source is VariableSource.BINDING:
-        issues.extend(_binding_variable_issues(variable))
-        return issues
     if variable.source is VariableSource.EXPRESSION:
         if variable.expression is None:
             issues.append(
@@ -97,42 +94,6 @@ def _enum_choice_issues(variable: PipelineVariable) -> list[PipelineValidationIs
     return []
 
 
-def _binding_variable_issues(variable: PipelineVariable) -> list[PipelineValidationIssue]:
-    """Semantic checks for a binding-source variable declaration.
-
-    `value` is the default a collection binding overrides; `None` means every
-    binding must supply one (flagged when the environment builds, not here).
-    An expression is rejected outright — a binding sets a value, and accepting
-    both would leave two answers for what the binding actually resolves to.
-    """
-    issues: list[PipelineValidationIssue] = []
-    if variable.expression is not None:
-        issues.append(
-            declaration_issue(
-                f"Variable '{variable.name}': binding variables take a value set "
-                "per collection, not an expression."
-            )
-        )
-    enum_missing_choices = variable.type is VariableType.ENUM and not variable.choices
-    if enum_missing_choices:
-        issues.append(
-            declaration_issue(f"Variable '{variable.name}': enum variables need choices.")
-        )
-    if variable.value is not None and not enum_missing_choices:
-        try:
-            coerce_literal(
-                variable.type,
-                variable.value,
-                minimum=variable.minimum,
-                maximum=variable.maximum,
-                choices=variable.choices,
-            )
-        except VariableValueError as error:
-            issues.append(declaration_issue(f"Variable '{variable.name}': default {error}."))
-    issues.extend(bounds_issues(variable.name, variable.minimum, variable.maximum))
-    return issues
-
-
 def _input_variable_issues(variable: PipelineVariable) -> list[PipelineValidationIssue]:
     """Semantic checks for an input-source variable declaration.
 
@@ -146,7 +107,7 @@ def _input_variable_issues(variable: PipelineVariable) -> list[PipelineValidatio
         issues.append(
             declaration_issue(
                 f"Variable '{variable.name}': {variable.type}-typed values cannot be "
-                f"caller-supplied; declare a binding or panel variable instead."
+                f"caller-supplied; declare a panel variable instead."
             )
         )
         return issues

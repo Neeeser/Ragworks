@@ -79,7 +79,6 @@ class PipelineRunner:
         query: str | None = None,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
-        binding_values: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
         """Create a pipeline run row, its trace recorder, and its context.
 
@@ -88,18 +87,17 @@ class PipelineRunner:
         value before the run row is created — invalid caller input raises
         `VariableResolutionError` and never records a failed run.
 
-        `binding_values` are the collection binding's answers for the
-        pipeline's binding-source variables, so the run reads the same index
-        the settings resolver and purge cascade resolved for this collection.
+        The collection supplies only its descriptors (`collection_id` and
+        friends): a binding says which collection is running, never what the
+        pipeline does, so the run reads exactly the index the settings
+        resolver and the purge cascade resolved from the definition.
         """
         environment = build_environment(
             definition,
             query=query,
             supplied=arguments,
             request_top_k=top_k,
-            binding=BindingContext(
-                collection=collection_scope(collection), values=binding_values or {}
-            ),
+            binding=BindingContext(collection=collection_scope(collection)),
         )
         resolved = resolve_definition(definition, environment)
         # The caller-facing result limit becomes the run's effective request

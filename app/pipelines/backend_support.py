@@ -1,16 +1,15 @@
-"""Whether the indexes a binding selects fit the nodes that read them.
+"""Whether a graph's nodes can run on the backends its indexes are on.
 
-Because a binding may point a pipeline at an index on a different backend,
-"is this graph valid?" stops being a property of the definition alone. A
-pipeline holding a `facet.bm25` node is fine on ParadeDB and impossible on
-Pinecone, so the check runs against the resolved `(node, backend)` pairs of
-one binding, and reports *which* nodes are the problem — "incompatible
-backend" without naming them leaves the user to guess which of a dozen nodes
-to remove.
+A pipeline holding a `facet.bm25` node is fine on ParadeDB and impossible on
+Pinecone. Because a node names its own index, that is a property of the
+definition alone — the same answer for every collection that binds it — so
+the check runs at save time and the findings name *which* nodes are the
+problem: "incompatible backend" without naming them leaves the user to guess
+which of a dozen nodes to change.
 
-The findings are plain data so every surface renders the same answer: binding
-create/update rejects them, the pipeline validator shows them per node, and
-collection diagnostics reports them for bindings that already exist.
+The findings are plain data so every surface renders the same answer: the
+validator shows them per node, and collection diagnostics reports them for
+pipelines already bound.
 """
 
 from __future__ import annotations
@@ -19,13 +18,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.pipelines.definition import PipelineDefinition
-from app.pipelines.expressions import ExpressionError, parse, references
-from app.pipelines.index_identity import is_lexical_node
-from app.pipelines.node import PipelineNodeBase
+from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.indexing import BaseIndexerNode
 from app.pipelines.nodes.retrieval import BaseRetrieverNode
 from app.pipelines.registry import NodeRegistry
-from app.pipelines.variables import expression_source
 from app.schemas.enums import IndexBackend
 
 
@@ -105,28 +101,21 @@ def incompatible_nodes(
     return findings
 
 
-def index_variable_vector_types(definition: PipelineDefinition) -> dict[str, str]:
-    """Return `{index variable: "dense" | "sparse"}` from how each is used.
+def backend_support_issues(
+    definition: PipelineDefinition,
+    registry: NodeRegistry,
+) -> list[PipelineValidationIssue]:
+    """Project the findings onto per-node validation issues.
 
-    Read from the nodes that reference the variable, never from its name: a
-    variable called `secondary_index` feeding a BM25 retriever needs a sparse
-    index, and inferring that from spelling would silently mispick whenever
-    an author names a variable differently.
+    Reported when the pipeline is saved, because the index a node uses is
+    named in the graph: a facet node pointed at Pinecone is wrong for
+    everyone, not for one collection.
     """
-    wanted: dict[str, str] = {}
-    for node in definition.nodes:
-        vector_type = "sparse" if is_lexical_node(node.type) else "dense"
-        for value in (node.config or {}).values():
-            source = expression_source(value)
-            if source is None:
-                continue
-            try:
-                names = references(parse(source))
-            except ExpressionError:
-                continue
-            for name in names:
-                # Sparse wins a tie: an index feeding any lexical node must be
-                # sparse, whatever else reads it.
-                if vector_type == "sparse" or name not in wanted:
-                    wanted[name] = vector_type
-    return wanted
+    return [
+        PipelineValidationIssue(
+            code="backend_unsupported",
+            message=finding.message,
+            node_id=finding.node_id,
+        )
+        for finding in incompatible_nodes(definition, registry)
+    ]

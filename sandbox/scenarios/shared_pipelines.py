@@ -11,10 +11,7 @@ control edits and what the index registry's "used by" list reports.
 
 from __future__ import annotations
 
-from sandbox.builders import (
-    add_second_collection_sharing_pipelines,
-    expose_pipeline_index_slots,
-)
+from sandbox.builders import add_second_collection_on_copied_pipelines
 from sandbox.context import SeedContext
 from sandbox.registry import scenario
 from sandbox.scenarios import collection_ready
@@ -46,5 +43,4 @@ from sandbox.scenarios import collection_ready
 def seed(ctx: SeedContext) -> None:
     """Seed collection-ready, expose index slots, then attach a second collection."""
     collection_ready.seed(ctx)
-    expose_pipeline_index_slots(ctx)
-    add_second_collection_sharing_pipelines(ctx)
+    add_second_collection_on_copied_pipelines(ctx)

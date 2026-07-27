@@ -46,18 +46,13 @@ class CollectionCreate(CollectionBase):
 
     `tool_pipeline_ids` bind in order (the first becomes the primary search
     tool); omitted, the user's default search pipeline is bound as primary.
-
-    `variable_values` are the collection's index choices, applied to *every*
-    binding it creates. One set rather than one per binding on purpose:
-    ingestion must write where retrieval reads, and letting the two be chosen
-    separately at creation is how a collection ends up indexing into one store
-    and querying another.
+    A collection chooses which pipelines run, never what they do — the index
+    each one uses is named in its graph.
     """
 
     ingest_pipeline_id: UUID | None = None
     tool_pipeline_ids: list[UUID] | None = None
     pipeline_overrides: CollectionPipelineOverrides | None = None
-    variable_values: dict[str, Any] = Field(default_factory=dict)
 
 
 class CollectionUpdate(BaseModel):
@@ -71,8 +66,6 @@ class CollectionUpdate(BaseModel):
     description: str | None = None
     metadata: dict[str, Any] | None = None
     ingest_pipeline_id: UUID | None = None
-    #: Index choices for the rebound ingest binding; absent leaves them as-is.
-    variable_values: dict[str, Any] | None = None
 
 
 class CollectionToolBindingRead(BaseModel):
@@ -157,34 +150,6 @@ class CollectionStatsHistoryRead(BaseModel):
     points: list[CollectionStatsHistoryPoint]
 
 
-class CollectionIndexRef(BaseModel):
-    """A registered index as referenced by a collection's binding."""
-
-    index_id: UUID
-    name: str
-    backend: IndexBackend
-    vector_type: str
-    dimension: int | None = None
-    metric: str | None = None
-
-
-class CollectionIndexSlot(BaseModel):
-    """One index slot the collection's bound pipelines expose.
-
-    Slots are merged by variable name across bindings — an ingest and a tool
-    pipeline both reading `primary_index` are one slot, because ingestion must
-    write where retrieval reads. `expected_dimension` mirrors the bind-time
-    anchor: the width a compatible dense index must store, when known.
-    """
-
-    name: str
-    vector_type: str
-    description: str | None = None
-    expected_dimension: int | None = None
-    current: CollectionIndexRef | None = None
-    pipelines: list[str] = Field(default_factory=list)
-
-
 class CollectionIndexTarget(BaseModel):
     """An index a bound pipeline names inside its own graph.
 
@@ -202,17 +167,6 @@ class CollectionIndexTarget(BaseModel):
 
 
 class CollectionIndexesRead(BaseModel):
-    """A collection's indexes: the fixed targets, and the fillable slots."""
+    """Every index a collection's bound pipelines name."""
 
-    slots: list[CollectionIndexSlot]
     targets: list[CollectionIndexTarget] = Field(default_factory=list)
-
-
-class CollectionIndexesUpdate(BaseModel):
-    """Repoint index slots across every binding that declares them.
-
-    One value per slot name, fanned out server-side, so ingest and every tool
-    move together — the per-binding endpoints exist for deliberate divergence.
-    """
-
-    values: dict[str, Any]
