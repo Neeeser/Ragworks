@@ -71,7 +71,9 @@ export function MarkerRail({ markers, buckets, bucketSeconds, positionOf }: Mark
   if (groups.length === 0) return null;
 
   return (
-    <div className="relative h-4">
+    // Tall enough for a tick plus its count badge: a shorter rail lets the
+    // badge overflow onto the axis labels directly beneath it.
+    <div className="relative h-6">
       {groups.map((group) => {
         const leftPct = positionOf(group.index) * 100;
         const color = COLOR_VAR[group.markers[0].color ?? "neutral"];
@@ -90,7 +92,7 @@ export function MarkerRail({ markers, buckets, bucketSeconds, positionOf }: Mark
               aria-hidden
             />
             {group.markers.length > 1 && (
-              <span className="mt-0.5 block text-center font-mono text-instrument text-meta">
+              <span className="mt-0.5 block text-center font-mono text-instrument leading-none text-meta">
                 {group.markers.length}
               </span>
             )}

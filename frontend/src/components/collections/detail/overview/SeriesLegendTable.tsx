@@ -85,7 +85,7 @@ export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesL
                 {(expanded ? COLUMNS : COLUMNS.slice(1, 2)).map((column) => (
                   <td
                     key={column.label}
-                    className="py-1 pl-3 text-right font-mono text-ui tabular-nums text-primary"
+                    className="py-1 pl-3 text-right font-mono text-ui whitespace-nowrap tabular-nums text-primary"
                   >
                     {column.read(row.summary)}
                   </td>
