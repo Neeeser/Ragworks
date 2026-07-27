@@ -2,9 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { TabList } from "@/components/ui/tabs";
+import { SectionTabs, TabList } from "@/components/ui/tabs";
 
 import type { TabItem } from "@/components/ui/tabs";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/c/1" }));
 
 const TABS: Array<TabItem<"a" | "b" | "c">> = [
   { id: "a", label: "Alpha" },
@@ -58,5 +60,29 @@ describe("TabList", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Gamma" }));
 
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("c");
+  });
+});
+
+describe("SectionTabs", () => {
+  it("keeps its overflow to itself so the sections cannot widen the page", () => {
+    // Asserted on the classes because jsdom computes no layout: scrollWidth is
+    // always 0 here, so the real symptom — a fixed-height strip that cannot
+    // wrap pushing the whole page wider than the viewport — is not observable.
+    render(
+      <SectionTabs
+        tabs={[
+          { href: "/c/1", label: "Overview", exact: true },
+          { href: "/c/1/files", label: "Files" },
+          { href: "/c/1/visualize", label: "Visualize" },
+        ]}
+      />,
+    );
+
+    const strip = screen.getByRole("navigation", { name: "Sections" });
+    expect(strip).toHaveClass("overflow-x-auto");
+    // Without shrink-0 the labels compress to fit instead of scrolling.
+    for (const label of ["Overview", "Files", "Visualize"]) {
+      expect(screen.getByRole("link", { name: label })).toHaveClass("shrink-0");
+    }
   });
 });

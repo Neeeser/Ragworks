@@ -191,7 +191,10 @@ export function SectionTabs({ tabs, className }: { tabs: SectionTab[]; className
       ref={listRef}
       aria-label="Sections"
       className={cn(
-        "relative flex h-9 shrink-0 items-center gap-1 border-b border-hairline px-4",
+        // The strip scrolls itself once the sections outgrow the width: a
+        // fixed-height row of tabs cannot wrap, so without this the labels
+        // spill past the viewport and take the whole page's width with them.
+        "relative flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-hairline px-4",
         className,
       )}
     >
@@ -204,7 +207,9 @@ export function SectionTabs({ tabs, className }: { tabs: SectionTab[]; className
             data-active={active || undefined}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "rounded-control px-2.5 py-1 text-ui transition-colors duration-80 ease-standard",
+              // shrink-0 so a label keeps its width inside the scroller rather
+              // than being squeezed to fit and truncating the section's name.
+              "shrink-0 rounded-control px-2.5 py-1 text-ui transition-colors duration-80 ease-standard",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
               active ? "font-medium text-primary" : "text-muted hover:text-primary",
             )}
