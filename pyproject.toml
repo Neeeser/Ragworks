@@ -143,12 +143,8 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# A regression ratchet, not a target: it exists to catch a body of new
-# untested code, not to police fractions. Measured branch coverage is ~94%, so
-# a 90 floor leaves enough headroom that an honest PR never fails the gate by
-# hundredths of a point -- a near-miss stall costs more agent time than the
-# handful of lines it protects. Lowering it to make a change pass is still not
-# a fix; find out why coverage dropped.
+# A regression ratchet, not a target: measured coverage is ~94%, and the
+# headroom keeps an honest PR from failing the gate by hundredths of a point.
 fail_under = 90
 exclude_lines = [
     "pragma: no cover",

@@ -39,11 +39,10 @@ slow loop this tiering exists to prevent. The loop:
   tests/<area> -n 0`); frontend — `npm run typecheck` + targeted vitest. Commit and
   push as you go; an intermediate push may be red in CI, that's expected.
 - **Full gate — once, when the work is done** (before declaring the change done /
-  marking the PR ready): backend `make verify` (typecheck → lint → test *with
-  coverage* — one suite execution; never follow it with a separate `make
-  coverage`, that is a second full run), reviewing `term-missing`; frontend
-  `npm run verify` (typecheck → lint → tests) plus `make format-check-frontend`.
-  Re-run only if more commits follow.
+  marking the PR ready): backend `make verify` (typecheck → lint → test with
+  coverage, one suite run), reviewing `term-missing`; frontend `npm run verify`
+  (typecheck → lint → tests) plus `make format-check-frontend`. Re-run only if
+  more commits follow.
 
 If you only changed one side, only that side's gate is required. CI (`ci.yml`) runs
 both gates (plus a frontend `npm run build`) on every PR and push to `main`; only
@@ -244,15 +243,12 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
 
 - `make env`: install backend deps via `uv` and frontend deps via `npm`
 - `make server` / `make frontend` / `make run`: run backend, frontend, or both
-  (dev). The DB-backed targets (`server`, `test`, `coverage`, …) first run
+  (dev). The DB-backed targets (`server`, `test`, `verify`, …) first run
   `scripts/ensure_postgres.py`, which starts the Dockerized ParadeDB dev DB
   (Docker required) or waits on an external `DATABASE_URL` / `TEST_DATABASE_URL`
   when one is set
-- `make verify`: the backend gate — typecheck → lint → test with coverage (one
-  suite run; don't add a separate `make coverage` after it)
+- `make verify`: the backend gate — typecheck → lint → test with coverage
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
-- `make coverage` / `make coverage-frontend`: coverage runs (fail on test failure);
-  `-report` variants are non-blocking, `-open` variants open the HTML report
 - `make typecheck`: `mypy app` (strict); `make lint`: ruff on backend code
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:
   ESLint / Prettier write / Prettier check on `frontend/`
