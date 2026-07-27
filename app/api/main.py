@@ -42,19 +42,9 @@ from app.observability import (
 )
 from app.observability import events as log_events
 from app.providers.registry import close_provider_clients
-from app.services.accounts import ensure_admin_exists
 from app.services.app_config import get_app_config
-from app.services.binding_migration import migrate_pipeline_bindings
-from app.services.file_backfill import backfill_file_nodes
-from app.services.index_migration import migrate_index_entities
 from app.services.ingestion_queue import ingestion_queue
-from app.services.pipelines import (
-    backfill_default_pipelines,
-    upgrade_stored_pipeline_definitions,
-)
-from app.services.provider_migration import migrate_provider_connections
-from app.services.slot_collapse_migration import collapse_index_slots
-from app.services.tokenizer_migration import migrate_tokenizer_nodes
+from app.services.startup_migrations import run_startup_migrations
 from app.telemetry import purge_expired as purge_expired_telemetry
 
 settings = get_settings()
@@ -68,15 +58,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
     logger.info(log_events.DB_BOOTSTRAP_COMPLETED)
     with session_scope() as session:
-        migrate_provider_connections(session)
-        migrate_pipeline_bindings(session)
-        migrate_tokenizer_nodes(session)
-        upgrade_stored_pipeline_definitions(session)
-        migrate_index_entities(session)
-        collapse_index_slots(session)
-        backfill_default_pipelines(session)
-        backfill_file_nodes(session)
-        ensure_admin_exists(session)
+        run_startup_migrations(session)
     purge_expired_telemetry()
     ingestion_queue.start(get_app_config().uploads.ingestion_concurrency)
     ingestion_queue.recover()

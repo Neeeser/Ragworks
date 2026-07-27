@@ -31,12 +31,7 @@ def test_lifespan_closes_provider_clients(monkeypatch) -> None:
     for name in (
         "configure_logging",
         "init_db",
-        "migrate_provider_connections",
-        "migrate_tokenizer_nodes",
-        "upgrade_stored_pipeline_definitions",
-        "backfill_default_pipelines",
-        "backfill_file_nodes",
-        "ensure_admin_exists",
+        "run_startup_migrations",
         "purge_expired_telemetry",
     ):
         monkeypatch.setattr(main_module, name, lambda *_args, **_kwargs: None)

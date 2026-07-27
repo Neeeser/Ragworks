@@ -152,6 +152,16 @@ colocate a single file with its consumer.
   own dev DB rows), never patched with a second version bump — releases migrate
   release-to-release, and stacked steps for shapes no deployment ever ran are
   permanent startup complexity for nothing.
+- **A migration that rewrites a shape the schema can no longer parse runs
+  before every migration that parses.** The order lives in one place,
+  `app/services/startup_migrations.py`. Removing a value from an enum (a
+  `VariableSource`, a node type id) makes every stored row still holding it
+  unparseable, so a step doing `PipelineDefinition.model_validate(raw)` raises
+  in `lifespan` and the process dies before the migration that would have
+  fixed that row ever runs — the app never boots, retrying never helps, and
+  the suite stays green because it builds every row from the current schema.
+  Such a migration works on raw stored JSON for the same reason; say so in its
+  docstring.
 - **Startup migration only *adds* columns, so deleting a model field leaves a
   stale `NOT NULL` column that rejects every later insert.** `create_all` +
   `apply_missing_columns` never drop anything, and the failure is a runtime
