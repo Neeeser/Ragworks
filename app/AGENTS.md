@@ -501,6 +501,16 @@ frontend form code — only a new `ConfigFieldKind` would.
   import cycle). `ChatRequest` is the provider-neutral contract; each provider maps
   normalized options onto its own wire format (OpenRouter → `extra_body`; Ollama →
   `think`/`options`, `max_tokens` → `num_predict`, synthesized uuid tool-call ids).
+- **A config model that rewrites what the user typed must have its result
+  persisted, via `ProviderAdapter.normalized_config()`.** Validation runs through
+  the model but the raw payload is what a caller hands the service, so storing
+  that leaves the row — and every listing built from it — naming an address the
+  provider is not reached at. Self-hosted server URLs normalize on save: a bare
+  host gets `http://`, and an `http` URL with no port gets the provider's own
+  default (`OLLAMA_DEFAULT_PORT`, `TEI_DEFAULT_PORT`), because a URL read off the
+  user's own machine otherwise resolves to port 80 and fails with a bare
+  connection error. An explicit port and any `https` URL are left alone — https
+  implies 443 and a proxied endpoint.
 - **Model identity is a structured pair** — `connection_id` + `model_name` — on the
   embedder node config, `ChatSession`, and `last_used_chat_*`; never a munged
   `"provider:model"` string in persisted data.

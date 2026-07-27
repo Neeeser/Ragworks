@@ -62,6 +62,13 @@ Never: a pulse on an idle row, a pulse as a loading spinner substitute, a pulse 
 a page "feel alive". An idle pulse is a lie, and every false pulse spends the real ones'
 meaning.
 
+**A staged checklist is a claim about progress, so only render one the work reports.**
+An operation that is a single atomic call gets one pulse, not a sequence of ticks timed
+to look like stages — invented stages are motion pretending to be status, and they drift
+silently from what the operation does the moment its internals change. The setup wizard's
+launch step is the reference: one `PulseWire` for one `bootstrapSetup` call, then the
+route-change fade.
+
 ---
 
 ## 3. Data — static on first paint
