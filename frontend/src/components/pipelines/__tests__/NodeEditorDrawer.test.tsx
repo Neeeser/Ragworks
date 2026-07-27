@@ -123,11 +123,12 @@ const makeNode = (
   },
 });
 
-const PRIMARY_SLOT: PipelineVariable = {
-  name: "primary_index",
+const SEMANTIC_VARIABLE: PipelineVariable = {
+  name: "semantic_index",
   type: "index",
-  source: "binding",
-  description: "Vector index this pipeline uses",
+  source: "value",
+  description: "Semantic index this pipeline uses",
+  value: { index_id: "row-1", backend: "pinecone", name: "alpha" },
 };
 
 const indexes: VectorIndex[] = [
@@ -332,27 +333,27 @@ describe("NodeEditorDrawer", () => {
     });
   });
 
-  it("reads an index supplied by the binding as a filled slot, not Required", () => {
+  it("reads an index held by a pipeline variable, not Required", () => {
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
-        backend: { $expr: "primary_index.backend" },
-        index_name: { $expr: "primary_index.name" },
+        backend: { $expr: "semantic_index.backend" },
+        index_name: { $expr: "semantic_index.name" },
       }),
       vectorIndexes: indexes,
-      variables: [PRIMARY_SLOT],
+      variables: [SEMANTIC_VARIABLE],
     });
 
     // The collection's Indexes card fills this in; "Required" would report a
     // correctly configured pipeline as unfinished.
-    expect(screen.getByText("Each collection fills this slot")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Index slot" })).toBeInTheDocument();
+    expect(screen.getByText("Named once for this pipeline")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Index variable" })).toBeInTheDocument();
     expect(screen.queryByText("Required")).not.toBeInTheDocument();
   });
 
-  it("declares a second slot so one pipeline can hold two stores", async () => {
+  it("declares a second index variable so one pipeline can hold two stores", async () => {
     const user = userEvent.setup();
     const onApply = vi.fn();
-    const onDeclareIndexSlot = vi.fn();
+    const onDeclareIndexVariable = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
         backend: "pinecone",
@@ -360,45 +361,46 @@ describe("NodeEditorDrawer", () => {
         dimension: 768,
       }),
       onApply,
-      onDeclareIndexSlot,
+      onDeclareIndexVariable,
       vectorIndexes: indexes,
-      variables: [PRIMARY_SLOT],
+      variables: [SEMANTIC_VARIABLE],
     });
 
-    // A pipeline splitting its corpus needs a slot per store; binding every
-    // store to the same one merges two corpora into whichever is written last.
-    await user.click(screen.getByRole("radio", { name: /Per collection/ }));
-    await user.click(screen.getByRole("combobox", { name: "Index slot" }));
-    await user.click(screen.getByRole("option", { name: "+ New slot…" }));
-    await user.type(screen.getByLabelText("Slot name"), "facts_index");
-    await user.click(screen.getByRole("button", { name: "Add slot" }));
+    // A pipeline splitting its corpus needs one variable per store; pointing
+    // every store at the same one merges two corpora into whichever is
+    // written last.
+    await user.click(screen.getByRole("radio", { name: /Pipeline variable/ }));
+    await user.click(screen.getByRole("combobox", { name: "Index variable" }));
+    await user.click(screen.getByRole("option", { name: "+ New variable…" }));
+    await user.type(screen.getByLabelText("Variable name"), "facts_semantic");
+    await user.click(screen.getByRole("button", { name: "Add variable" }));
 
-    expect(onDeclareIndexSlot).toHaveBeenCalledWith({
-      name: "facts_index",
+    expect(onDeclareIndexVariable).toHaveBeenCalledWith({
+      name: "facts_semantic",
       vectorType: "dense",
-      defaultIndex: expect.objectContaining({ name: "alpha" }),
+      index: expect.objectContaining({ name: "alpha" }),
     });
     await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
       config: {
-        backend: { $expr: "facts_index.backend" },
-        index_name: { $expr: "facts_index.name" },
+        backend: { $expr: "facts_semantic.backend" },
+        index_name: { $expr: "facts_semantic.name" },
       },
     });
   });
 
-  it("returning to a named index clears the slot off both identity fields", async () => {
+  it("returning to a named index clears the variable off both identity fields", async () => {
     const user = userEvent.setup();
     const onApply = vi.fn();
     renderDrawer({
       node: makeNode(NODE_TYPE_INDEXER, {
-        backend: { $expr: "primary_index.backend" },
-        index_name: { $expr: "primary_index.name" },
+        backend: { $expr: "semantic_index.backend" },
+        index_name: { $expr: "semantic_index.name" },
       }),
       onApply,
       vectorIndexes: indexes,
-      variables: [PRIMARY_SLOT],
+      variables: [SEMANTIC_VARIABLE],
     });
 
     await user.click(screen.getByRole("radio", { name: /This pipeline/ }));

@@ -12,8 +12,8 @@ import { ParameterFieldCard } from "@/components/ui/parameter-controls";
 
 import type { IndexBackend, PipelineVariable, VectorIndex } from "@/lib/types";
 
-/** The sentinel the slot select uses to declare a new slot. */
-const NEW_SLOT_SENTINEL = "__new_slot__";
+/** The sentinel the variable select uses to declare a new one. */
+const NEW_VARIABLE_SENTINEL = "__new_variable__";
 
 type IndexSourceFieldProps = {
   /** Registered indexes already filtered to this node's backend and plane. */
@@ -21,14 +21,14 @@ type IndexSourceFieldProps = {
   backend: IndexBackend;
   /** The literal index name in config, empty when the node names none. */
   indexValue: string;
-  /** The slot this node reads, or null when it names an index directly. */
-  slotName: string | null;
-  /** Index slots the definition already declares. */
-  slots: PipelineVariable[];
+  /** The index variable this node reads, or null when it names one directly. */
+  variableName: string | null;
+  /** Index variables the definition already declares. */
+  variables: PipelineVariable[];
   disabled?: boolean;
   onPickIndex: (name: string) => void;
-  onBindSlot: (name: string) => void;
-  onDeclareSlot: (name: string) => void;
+  onBindVariable: (name: string) => void;
+  onDeclareVariable: (name: string) => void;
   onOpenIndexRegistry?: () => void;
 };
 
@@ -37,47 +37,47 @@ type IndexSourceFieldProps = {
  *
  * A node names its index, the same way it names its model — the index's width
  * is decided by the embedder beside it, so the graph is where that choice
- * belongs and reading the graph tells you where data lands. Pointing the node
- * at a slot each collection fills is the deliberate alternative, taken one
- * node at a time: two stores in one pipeline can expose two slots, or one can
- * be fixed while the other varies.
+ * belongs and reading the graph tells you where data lands. Naming it once as
+ * a pipeline variable is the alternative for a graph whose several nodes hit
+ * one store: the value still lives in the definition, so a reader still knows
+ * where the data goes, but it is written down once instead of per node.
  */
 export function IndexSourceField({
   indexes,
   backend,
   indexValue,
-  slotName,
-  slots,
+  variableName,
+  variables,
   disabled,
   onPickIndex,
-  onBindSlot,
-  onDeclareSlot,
+  onBindVariable,
+  onDeclareVariable,
   onOpenIndexRegistry,
 }: IndexSourceFieldProps) {
-  const bound = slotName !== null;
+  const bound = variableName !== null;
   // Choosing the source only *shows* the matching control; nothing is written
-  // until a slot is picked or declared. Rewriting on the toggle would discard
-  // the index the node names before the user has said what replaces it — and
-  // that literal is what a new slot defaults to.
-  const [picked, setPicked] = useState<"named" | "slot" | null>(null);
-  const mode = picked ?? (bound ? "slot" : "named");
+  // until a variable is picked or declared. Rewriting on the toggle would
+  // discard the index the node names before the user has said what replaces
+  // it — and that literal is what a new variable is built from.
+  const [picked, setPicked] = useState<"named" | "variable" | null>(null);
+  const mode = picked ?? (bound ? "variable" : "named");
   const [declaring, setDeclaring] = useState(false);
   const [draftName, setDraftName] = useState("");
 
   const selectedIndex = indexes.find((index) => index.name === indexValue) ?? null;
-  const nameTaken = slots.some((slot) => slot.name === draftName.trim());
+  const nameTaken = variables.some((variable) => variable.name === draftName.trim());
   const nameValid = VARIABLE_NAME_PATTERN.test(draftName.trim()) && !nameTaken;
 
-  const handleSlotChange = (value: string) => {
-    if (value === NEW_SLOT_SENTINEL) {
+  const handleVariableChange = (value: string) => {
+    if (value === NEW_VARIABLE_SENTINEL) {
       setDeclaring(true);
       return;
     }
-    onBindSlot(value);
+    onBindVariable(value);
   };
 
   const declare = () => {
-    onDeclareSlot(draftName.trim());
+    onDeclareVariable(draftName.trim());
     setDraftName("");
     setDeclaring(false);
   };
@@ -87,17 +87,17 @@ export function IndexSourceField({
       label="Index"
       description="The vector index this node reads from or writes to."
       helper={
-        mode === "slot"
-          ? "Each collection fills this slot"
+        mode === "variable"
+          ? "Named once for this pipeline"
           : indexValue
             ? selectedIndex?.dimension
               ? `Dimension: ${selectedIndex.dimension}`
               : "Dimension: n/a"
             : "Required"
       }
-      actionLabel={mode === "slot" ? undefined : "Manage"}
+      actionLabel={mode === "variable" ? undefined : "Manage"}
       actionDisabled={disabled}
-      onAction={mode === "slot" ? undefined : onOpenIndexRegistry}
+      onAction={mode === "variable" ? undefined : onOpenIndexRegistry}
     >
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Index source">
@@ -109,33 +109,37 @@ export function IndexSourceField({
             onSelect={() => {
               setPicked("named");
               setDeclaring(false);
-              // Coming back from a slot is the deliberate unbind: the node
-              // stops reading the variable and names an index again.
+              // Coming back is the deliberate unbind: the node stops reading
+              // the variable and names an index again.
               if (bound) onPickIndex("");
             }}
           />
           <SourceOption
-            label="Per collection"
-            hint="Filled at bind time"
-            active={mode === "slot"}
+            label="Pipeline variable"
+            hint="Named once, shared"
+            active={mode === "variable"}
             disabled={disabled}
             onSelect={() => {
-              setPicked("slot");
-              if (slots.length === 0) setDeclaring(true);
+              setPicked("variable");
+              if (variables.length === 0) setDeclaring(true);
             }}
           />
         </div>
 
-        {mode === "slot" ? (
+        {mode === "variable" ? (
           <CustomSelect
-            value={slotName ?? ""}
-            onValueChange={handleSlotChange}
+            value={variableName ?? ""}
+            onValueChange={handleVariableChange}
             disabled={disabled}
-            aria-label="Index slot"
-            placeholder="Pick a slot"
+            aria-label="Index variable"
+            placeholder="Pick a variable"
             options={[
-              ...slots.map((slot) => ({ value: slot.name, label: slot.name })),
-              { value: NEW_SLOT_SENTINEL, label: "+ New slot…", preventFocusRestore: true },
+              ...variables.map((variable) => ({ value: variable.name, label: variable.name })),
+              {
+                value: NEW_VARIABLE_SENTINEL,
+                label: "+ New variable…",
+                preventFocusRestore: true,
+              },
             ]}
           />
         ) : (
@@ -176,19 +180,19 @@ export function IndexSourceField({
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1">
               <Field
-                label="Slot name"
+                label="Variable name"
                 hint={nameTaken ? "Already declared" : "Lowercase, underscores"}
               >
                 <TextInput
                   value={draftName}
-                  placeholder="memories_index"
+                  placeholder="memories_semantic"
                   disabled={disabled}
                   onChange={(event) => setDraftName(event.target.value)}
                 />
               </Field>
             </div>
             <Button variant="secondary" disabled={disabled || !nameValid} onClick={declare}>
-              Add slot
+              Add variable
             </Button>
           </div>
         ) : null}

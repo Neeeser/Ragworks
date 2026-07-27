@@ -431,34 +431,46 @@ frontend form code — only a new `ConfigFieldKind` would.
   shared index otherwise returns their chunks, text included. Namespaces naming
   no collection stay allowed: they carry no ownership to enforce, and refusing
   them would strand a pipeline whose collection was deleted.
-- **A store-bound node names its own index; pointing one at a collection-filled
-  slot is an authoring choice, never something a scaffolder or migration
-  derives.** An index's width is decided by the embedder beside it, so identity
-  belongs in the graph — and a graph you can read tells you where data lands.
-  `app/pipelines/index_identity.py` only *reads* identity back out (for
+- **A store-bound node names its own index, and nothing outside the definition
+  can change it.** An index's width is decided by the embedder beside it, so
+  identity belongs in the graph — and a graph you can read tells you where data
+  lands. `app/pipelines/index_identity.py` only *reads* identity back out (for
   registration) and converts legacy `{collection_id}` namespace templates. Any
-  rule that folds a definition's store nodes onto one shared variable merges two
+  rule that folds a definition's store nodes onto one shared value merges two
   corpora into whichever is written last, silently: the run succeeds and
   retrieval returns the wrong chunks.
+- **There is no per-collection variable source.** A variable a binding
+  overrode meant the definition no longer described what it did — you needed
+  the pipeline *and* the collection running it — and for an index the cost of
+  getting it wrong is invisible, because retrieval returns nothing rather than
+  failing. A binding says *which* pipeline runs and in what role, never what
+  it does. Input variables are a different thing: they are the tool's public
+  contract, vary per call, and never move where data lives. A pipeline that
+  must differ per collection is a different pipeline — `copy_pipeline` is how
+  you get one.
 - **A user's collections are separated inside one index by `namespace`, not by
   having their own index.** One pipeline already serves every collection that
-  user owns without interference, so exposing a slot buys only the rarer case of
-  collections on *different* stores. Making it the default puts an
-  infrastructure decision on every collection that never needed one. This is a
+  user owns without interference, which is why per-collection index choice buys
+  so little: it covers only collections on *different* stores, and charges every
+  collection an infrastructure decision to do it. This is a
   claim about one account's collections and says nothing about accounts: on a
   shared backend a name is one physical store for the whole deployment, so a
   default that hands two accounts the same name interleaves their vectors where
   neither can see the other — which is why index names offered to a user are
   derived per account.
-- **Backend compatibility is per binding, and the error names the nodes.** Since an
-  index carries its backend, a graph valid as authored can be invalid for one
-  collection; `incompatible_nodes` (`app/services/index_compatibility.py`) is the
-  one check, read by binding writes, validation, and diagnostics. A bare
-  "incompatible backend" leaves the user guessing which of a dozen nodes to change.
-- **Which plane an index variable feeds is derived from the nodes that read it**
-  (`index_variable_vector_types`), never from its name — a variable called
-  `secondary_index` feeding a BM25 retriever needs a sparse index, and inferring
-  from spelling mispicks the moment an author names one differently.
+- **Backend compatibility is a property of the graph, and the error names the
+  nodes.** Since an index carries its backend, a graph could once be valid as
+  authored and invalid for one
+  collection — no: since a node names its own index, that is a property of the
+  definition and is checked when the pipeline is *saved*.
+  `incompatible_nodes` (`app/pipelines/backend_support.py`) is the one check,
+  read by validation and diagnostics; it lives in the engine because
+  `app/pipelines` may not import from `app.services`. A bare "incompatible
+  backend" leaves the user guessing which of a dozen nodes to change.
+- **Which plane an index serves is derived from the node that reads it**, never
+  from its name — an index called `secondary_index` feeding a BM25 retriever is
+  a sparse index, and inferring from spelling mispicks the moment an author
+  names one differently.
 
 ## Model providers (`app/providers/` + `provider_connections`)
 

@@ -28,7 +28,7 @@ import {
   toPipelineDefinition,
 } from "./lib/pipeline-utils";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
-import { buildIndexSlotVariable } from "./lib/variable-env";
+import { buildIndexVariable } from "./lib/variable-env";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
 import { PipelineBuilderWorkspace } from "./PipelineBuilderWorkspace";
 import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
@@ -37,7 +37,7 @@ import { PipelineModals } from "./PipelineModals";
 import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 
 import type { TypedEdgeType } from "./flow/TypedEdge";
-import type { IndexSlotDeclaration } from "./lib/variable-env";
+import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
 import type { NodeSpec, PipelineKind, PipelineVariable } from "@/lib/types";
@@ -83,6 +83,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     deleteTarget,
     handlePipelineCreated,
     handleDeletePipeline,
+    handleCopyPipeline,
     cancelDeletePipeline,
     handleConfirmDelete,
     handleSavePipeline,
@@ -301,14 +302,13 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
     : [];
 
-  // Declaring a slot from a node's index field: the variable defaults to the
-  // index that node already named, so exposing one changes nothing about
-  // where data lands until a collection chooses otherwise.
-  const handleDeclareIndexSlot = useCallback((slot: IndexSlotDeclaration) => {
+  // Declaring an index variable from a node's field: it holds the index that
+  // node already named, so the graph still says exactly where data lands.
+  const handleDeclareIndexVariable = useCallback((declaration: IndexVariableDeclaration) => {
     setVariables((previous) =>
-      previous.some((variable) => variable.name === slot.name)
+      previous.some((variable) => variable.name === declaration.name)
         ? previous
-        : [...previous, buildIndexSlotVariable(slot)],
+        : [...previous, buildIndexVariable(declaration)],
     );
   }, []);
 
@@ -356,6 +356,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           catalog: catalogByFamily,
           onSelectPipeline: handleSelectPipeline,
           onDeletePipeline: handleDeletePipeline,
+          onCopyPipeline: handleCopyPipeline,
           pipelineUsage,
           onPreviewNode: handlePreviewNode,
           variables,
@@ -403,7 +404,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         validationErrors={selectedNodeErrors}
         validationIssues={selectedValidationIssues}
         variables={variables}
-        onDeclareIndexSlot={handleDeclareIndexSlot}
+        onDeclareIndexVariable={handleDeclareIndexVariable}
         vectorIndexes={indexes}
         onOpenIndexRegistry={handleOpenIndexRegistry}
         embeddingModels={embeddingModels}

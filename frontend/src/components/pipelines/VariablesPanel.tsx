@@ -57,25 +57,19 @@ const DEFAULT_VALUES: Record<VariableType, PipelineVariable["value"]> = {
 const PICKED_TYPES = new Set<VariableType>(["model", "index"]);
 
 /** A binding variable's label everywhere it appears: the chip, and both
- * source pickers. One constant so the three can never disagree. */
-const BINDING_SOURCE_LABEL = "Per collection";
-
+ * source pickers. */
 const SOURCE_BADGES: Record<VariableSource, string> = {
   value: "Constant",
   expression: "Expression",
   input: "Input",
-  binding: BINDING_SOURCE_LABEL,
 };
 
-const BINDING_SOURCE_OPTION = { value: "binding", label: BINDING_SOURCE_LABEL };
-
-/** Caller input and per-collection bindings both vary at runtime; constants
- * and expressions are fixed by the definition. */
+/** Caller input varies at runtime; constants and expressions are fixed by the
+ * definition. */
 const SOURCE_TONES: Record<VariableSource, ChipTone> = {
   value: "neutral",
   expression: "neutral",
   input: "accent",
-  binding: "accent",
 };
 
 function nameProblem(name: string, taken: Set<string>): string | null {
@@ -236,10 +230,10 @@ type VariableEditorProps = {
 function typePatch(variable: PipelineVariable, type: VariableType): Partial<PipelineVariable> {
   const source = variableSource(variable);
   const picked = PICKED_TYPES.has(type);
-  // A picked type holds a chosen value, so it can only be a constant or a
-  // per-collection binding — never an expression, and never caller input
-  // (identity from a request would break the static-only rule).
-  const nextSource = picked && source !== "binding" ? "value" : variable.source;
+  // A picked type holds a chosen value, so it can only be a constant — never
+  // an expression, and never caller input (identity from a request would
+  // break the static-only rule).
+  const nextSource = picked ? "value" : variable.source;
   return {
     type,
     value: source === "expression" || source === "input" ? null : DEFAULT_VALUES[type],
@@ -297,20 +291,16 @@ function VariableEditor({
           />
         </Field>
         {variable.type !== "model" ? (
-          <Field
-            label="Source"
-            hint={source === "binding" ? "Each collection sets its own value." : undefined}
-          >
+          <Field label="Source">
             <CustomSelect
               value={source}
               options={
                 variable.type === "index"
-                  ? [{ value: "value", label: "Value" }, BINDING_SOURCE_OPTION]
+                  ? [{ value: "value", label: "Value" }]
                   : [
                       { value: "value", label: "Value" },
                       { value: "expression", label: "Expression" },
                       { value: "input", label: "Input" },
-                      BINDING_SOURCE_OPTION,
                     ]
               }
               placeholder="Source"

@@ -296,21 +296,23 @@ the same PR.
   their vectors interleave where neither can see the other, and the wizard is
   where that starts. Build the name from the account and the backend's own
   `index_name_max_length`, leaving room for the `-bm25` sibling.
-- **A control that changes which index a binding targets states the consequence
+- **A control that changes which index a pipeline targets states the consequence
   before the change.** Switching indexes moves no data, so the collection reads an
   empty store until it is re-ingested — and that outcome is invisible at query
   time, because retrieval just returns nothing.
 - **A store-bound node's index field states where the index comes from — named
-  here, or a slot each collection fills — and picking a source never rewrites
-  config on its own.** Writing on the toggle discards the index the node names
-  before the user has said what replaces it, and that literal is exactly what a
-  newly declared slot defaults to. Leaving a slot must clear the expression off
-  _every_ identity field it wrote (`backend` as well as `index_name`), or the
-  node keeps reading a variable it no longer names.
-- **A collection surface shows an index control only where the pipeline exposed a
-  slot.** Everything else it lists is a statement of where the data lives. An
-  index a graph names is the graph's decision; offering a second place to change
-  it is what makes indexes feel scattered across the app.
+  on the node, or held by a pipeline variable — and picking a source never
+  rewrites config on its own.** Writing on the toggle discards the index the
+  node names before the user has said what replaces it, and that literal is
+  exactly what a new variable is built from. Leaving a variable must clear the
+  expression off _every_ identity field it wrote (`backend` as well as
+  `index_name`), or the node keeps reading a variable it no longer names.
+- **No collection surface changes an index.** A collection page states where its
+  data lives and links to the pipeline that decided it. Which index a pipeline
+  uses is the pipeline's decision, and a second place to make it is what makes
+  indexes feel scattered across the app; a collection that needs a different
+  store needs a different pipeline, which is what the catalog's copy action is
+  for.
 - **Admin settings render from the config catalog, not per-field forms.**
   `AdminSettingsPage` fetches `GET /api/admin/config` and renders one
   `ConfigFieldControl` per entry, dispatched on `field.kind` — a new backend config

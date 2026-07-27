@@ -32,7 +32,7 @@ import {
 import { NodeModelSelectors } from "./NodeModelSelectors";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
-import type { IndexSlotDeclaration } from "./lib/variable-env";
+import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { NodeModelCatalogProps } from "./NodeModelSelectors";
 import type { PipelineNodeData } from "./PipelineNode";
 import type {
@@ -52,8 +52,8 @@ export type NodeConfigSectionsProps = {
   vectorIndexes: VectorIndex[];
   onOpenIndexRegistry?: () => void;
   variables: PipelineVariable[];
-  /** Declares a new binding-source index slot on the definition. */
-  onDeclareIndexSlot?: (slot: IndexSlotDeclaration) => void;
+  /** Declares a new pipeline-level index variable on the definition. */
+  onDeclareIndexVariable?: (declaration: IndexVariableDeclaration) => void;
 } & NodeModelCatalogProps;
 
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
@@ -76,7 +76,7 @@ export function NodeConfigSections({
   vectorIndexes,
   onOpenIndexRegistry,
   variables,
-  onDeclareIndexSlot,
+  onDeclareIndexVariable,
   ...modelCatalogProps
 }: NodeConfigSectionsProps) {
   const { config: appConfig } = useAppConfig();
@@ -138,8 +138,8 @@ export function NodeConfigSections({
   );
   const indexValue = typeof config.index_name === "string" ? config.index_name : "";
   const selectedIndex = backendIndexes.find((index) => index.name === indexValue) ?? null;
-  // The index may be supplied by the collection's binding rather than named
-  // here; saying "Required" then reports a correct pipeline as unfinished.
+  // The index may come from a pipeline variable rather than be named here;
+  // saying "Required" then reports a correct pipeline as unfinished.
   const boundIndexVariables = expressionVariableNames(config.index_name);
 
   const setConfigValue = (key: string, value: unknown | undefined) => {
@@ -191,30 +191,30 @@ export function NodeConfigSections({
     onConfigChange(nextConfig);
   };
 
-  // Binding writes both identity fields in one move, so backend travels with
-  // the index and a collection can repoint onto another store.
-  const handleBindSlot = (name: string) => {
+  // Binding writes both identity fields in one move, so the backend travels
+  // with the index and repointing the variable moves the whole node.
+  const handleBindVariable = (name: string) => {
     if (!name) return;
     const nextConfig: Record<string, unknown> = {
       ...config,
       index_name: { $expr: `${name}.name` },
     };
     if ("backend" in nextConfig) nextConfig.backend = { $expr: `${name}.backend` };
-    // The slot's index states its own width; a stale literal one would
-    // contradict whatever the collection picks.
+    // The variable's index states its own width; a stale literal one would
+    // contradict it the moment the variable is repointed.
     delete nextConfig.dimension;
     onConfigChange(nextConfig);
   };
 
-  const handleDeclareSlot = (name: string) => {
-    // The slot defaults to the index this node already names, so declaring one
-    // changes where nothing lands until a collection chooses otherwise.
-    onDeclareIndexSlot?.({
+  const handleDeclareVariable = (name: string) => {
+    // It holds the index this node already names, so pulling it out into a
+    // variable changes nothing about where data lands.
+    onDeclareIndexVariable?.({
       name,
       vectorType: isBm25Node ? "sparse" : "dense",
-      defaultIndex: selectedIndex ?? backendIndexes[0] ?? null,
+      index: selectedIndex ?? backendIndexes[0] ?? null,
     });
-    handleBindSlot(name);
+    handleBindVariable(name);
   };
 
   const modelVariables = variables.filter((variable) => variable.type === "model");
@@ -318,12 +318,12 @@ export function NodeConfigSections({
           indexes={backendIndexes}
           backend={nodeBackend}
           indexValue={indexValue}
-          slotName={boundIndexVariables?.[0] ?? null}
-          slots={indexVariables(variables)}
+          variableName={boundIndexVariables?.[0] ?? null}
+          variables={indexVariables(variables)}
           disabled={isPreview}
           onPickIndex={handleIndexChange}
-          onBindSlot={handleBindSlot}
-          onDeclareSlot={handleDeclareSlot}
+          onBindVariable={handleBindVariable}
+          onDeclareVariable={handleDeclareVariable}
           onOpenIndexRegistry={onOpenIndexRegistry}
         />
       ) : null}

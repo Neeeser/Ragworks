@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { PipelineCatalog } from "@/components/pipelines/PipelineCatalog";
@@ -39,6 +40,7 @@ describe("PipelineCatalog", () => {
         selectedPipelineId={undefined}
         onSelect={() => undefined}
         onDelete={() => undefined}
+        onCopy={() => undefined}
         pipelineUsage={new Set()}
       />,
     );
@@ -66,6 +68,7 @@ describe("PipelineCatalog", () => {
         selectedPipelineId={undefined}
         onSelect={() => undefined}
         onDelete={() => undefined}
+        onCopy={() => undefined}
         pipelineUsage={new Set()}
       />,
     );
@@ -88,6 +91,7 @@ describe("PipelineCatalog", () => {
         selectedPipelineId={"pipe-1"}
         onSelect={onSelect}
         onDelete={onDelete}
+        onCopy={() => undefined}
         pipelineUsage={pipelineUsage}
       />,
     );
@@ -103,8 +107,31 @@ describe("PipelineCatalog", () => {
     expect(inUseDelete).toBeDisabled();
     // Every icon-only action explains itself; the in-use one says why it can't run.
     expect(screen.getAllByRole("tooltip").map((node) => node.textContent)).toEqual([
+      "Copy pipeline",
       "Delete pipeline",
+      "Copy pipeline",
       "Pipelines in use cannot be deleted.",
     ]);
+  });
+
+  it("offers a copy action on every pipeline, in use or not", async () => {
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    render(
+      <PipelineCatalog
+        pipelines={pipelines}
+        selectedPipelineId={pipelines[0].id}
+        onSelect={() => undefined}
+        onDelete={() => undefined}
+        onCopy={onCopy}
+        pipelineUsage={new Set([pipelines[1].id])}
+      />,
+    );
+
+    // Copying is how one graph becomes two that differ, so a pipeline being
+    // in use is exactly when you are most likely to want it.
+    await user.click(screen.getByRole("button", { name: "Copy Pipeline Two" }));
+
+    expect(onCopy).toHaveBeenCalledWith(pipelines[1]);
   });
 });

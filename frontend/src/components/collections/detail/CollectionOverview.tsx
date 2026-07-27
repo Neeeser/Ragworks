@@ -46,8 +46,6 @@ export function CollectionOverview({
     [token, collection.id, range],
   );
 
-  // One tools query for the page: the Tools panel curates the bindings, and a
-  // slot change repoints them, so the two must read the same list.
   const toolsQuery = useApiQuery(
     () => listCollectionTools(token, collection.id),
     [token, collection.id],
@@ -127,7 +125,7 @@ export function CollectionOverview({
         onCollectionUpdated={onCollectionUpdated}
       />
 
-      <IndexesCard collection={collection} token={token} onIndexesChanged={toolsQuery.reload} />
+      <IndexesCard collection={collection} token={token} />
 
       <ToolsPanel
         collection={collection}

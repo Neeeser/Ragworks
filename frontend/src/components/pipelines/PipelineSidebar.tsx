@@ -26,6 +26,7 @@ type PipelineSidebarProps = {
   catalog: Array<{ family: NodeFamily; specs: NodeSpec[] }>;
   onSelectPipeline: (pipeline: Pipeline) => void;
   onDeletePipeline: (pipeline: Pipeline) => void;
+  onCopyPipeline: (pipeline: Pipeline) => void;
   pipelineUsage: Set<string>;
   onPreviewNode: (spec: NodeSpec) => void;
   variables: PipelineVariable[];
@@ -50,6 +51,7 @@ export function PipelineSidebar({
   catalog,
   onSelectPipeline,
   onDeletePipeline,
+  onCopyPipeline,
   pipelineUsage,
   onPreviewNode,
   variables,
@@ -88,6 +90,7 @@ export function PipelineSidebar({
               selectedPipelineId={selectedPipelineId}
               onSelect={onSelectPipeline}
               onDelete={onDeletePipeline}
+              onCopy={onCopyPipeline}
               pipelineUsage={pipelineUsage}
             />
             <PipelineNodeLibrary

@@ -114,18 +114,6 @@ export async function fetchCollectionIndexes(
   return apiFetch<CollectionIndexesRead>(`/api/collections/${collectionId}/indexes`, { token });
 }
 
-export async function updateCollectionIndexes(
-  token: string,
-  collectionId: string,
-  values: Record<string, unknown>,
-): Promise<CollectionIndexesRead> {
-  return apiFetch<CollectionIndexesRead>(`/api/collections/${collectionId}/indexes`, {
-    method: "PUT",
-    token,
-    body: JSON.stringify({ values }),
-  });
-}
-
 export async function deleteCollection(
   token: string,
   collectionId: string,

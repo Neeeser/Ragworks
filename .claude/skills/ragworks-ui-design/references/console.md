@@ -124,15 +124,17 @@ place. Indexes are the worked example, in three layers:
   belongs, because the index's width is decided by the embedder beside it, and because
   a graph you can read should tell you where data lands.
 - A **collection's Indexes card** *states* the indexes its bound graphs name, read-only,
-  so the page can always answer "where does my data live". It gains a control only for a
-  slot a pipeline author deliberately exposed — a question the graph asks and only a
-  collection can answer.
+  so the page can always answer "where does my data live". It offers no control at all:
+  a collection that needs a different store needs a different pipeline, and the catalog's
+  copy action is how you get one.
 
 A second place to make the same change is what makes a feature read as scattered, and
 the two copies drift into disagreeing. Equally: a control offered where there is no
 decision to make — a picker for something the graph already fixed — reads as a setting
 the user must understand, and every collection then carries an infrastructure choice
-that only a few of them ever needed.
+that only a few of them ever needed. When a capability genuinely needs the entity to
+differ, duplicate the entity rather than parameterising it from outside: a copy is one
+concept a user already has, where an override is a second, invisible one.
 
 Where one decision needs the other, reach across rather than duplicate: the registry
 links to the collection that owns a choice, and a binding flow creates an index inline

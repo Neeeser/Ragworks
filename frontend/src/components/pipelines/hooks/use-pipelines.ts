@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   activatePipelineVersion,
+  copyPipeline,
   deletePipeline,
   fetchCollections,
   fetchPipelineNodes,
@@ -53,6 +54,7 @@ export interface UsePipelinesResult {
   deleteTarget: Pipeline | null;
   handlePipelineCreated: (pipeline: Pipeline) => void;
   handleDeletePipeline: (pipeline: Pipeline) => void;
+  handleCopyPipeline: (pipeline: Pipeline) => Promise<void>;
   cancelDeletePipeline: () => void;
   handleConfirmDelete: () => Promise<void>;
   handleSavePipeline: (definition: PipelineDefinition, fallbackSummary: string) => Promise<boolean>;
@@ -193,6 +195,25 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
         ? `Pipeline created with warnings: ${warnings.map((issue) => issue.message).join(" ")}`
         : "Pipeline created.",
     );
+  };
+
+  // A pipeline names the index it uses, so two collections on two stores are
+  // two pipelines; copying is the supported way to get the second one.
+  const handleCopyPipeline = async (pipeline: Pipeline) => {
+    const authToken = token ?? "";
+    if (!authToken) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const copy = await copyPipeline(authToken, pipeline.id);
+      setPipelines([...pipelines, copy]);
+      setSelectedPipeline(copy);
+      setMessage(`Copied to "${copy.name}".`);
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to copy pipeline."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeletePipeline = (pipeline: Pipeline) => {
@@ -360,6 +381,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     deleteTarget,
     handlePipelineCreated,
     handleDeletePipeline,
+    handleCopyPipeline,
     cancelDeletePipeline,
     handleConfirmDelete,
     handleSavePipeline,
