@@ -22,6 +22,9 @@ SPARSE_TEXT_EMBED_MODEL = "pinecone-sparse-english-v0"
 # The record field integrated embedding reads chunk text from.
 LEXICAL_TEXT_FIELD = "chunk_text"
 
+# The only distance metric a Pinecone sparse index accepts.
+SPARSE_INDEX_METRIC = "dotproduct"
+
 
 def get_pinecone_client(api_key: str) -> Pinecone:
     """Return a Pinecone SDK client for the given API key.
@@ -111,6 +114,11 @@ class PineconeIndexAdmin:
         index accepts raw-text records and text queries (the lexical/BM25
         path); a sparse index created without an integrated model cannot be
         text-searched.
+
+        `metric` is stated rather than left to the model's default: `IndexEmbed`
+        defaults it to `None` and serializes its whole `__dict__`, so the SDK's
+        request model rejects the `None` before the call leaves the process.
+        `dotproduct` is the only metric a Pinecone sparse index accepts.
         """
         self._client.create_index_for_model(
             name=name,
@@ -119,6 +127,7 @@ class PineconeIndexAdmin:
             embed=IndexEmbed(
                 model=SPARSE_TEXT_EMBED_MODEL,
                 field_map={"text": LEXICAL_TEXT_FIELD},
+                metric=SPARSE_INDEX_METRIC,
             ),
             deletion_protection=deletion_protection or "disabled",
             tags=tags,

@@ -518,11 +518,60 @@ def add_pinecone_index(
     index_name: str = "sandbox-remote",
     dimension: int | None = None,
 ) -> None:
-    """Register a Pinecone index alongside the pgvector ones.
+    """Register a dense *and* a sparse Pinecone index beside the pgvector ones.
 
     Gives the sandbox both backends at once, which is what a backend swap
     needs: the capability check only has something to say when an index on a
     *different* backend is actually selectable.
+
+    Both planes, because a slot's vector type is derived from the nodes
+    reading it. A lexical slot offered only a dense Pinecone index is refused
+    for being dense long before any backend capability is consulted, so a
+    scenario with no sparse Pinecone index cannot reach the capability
+    refusal at all.
+    """
+    from app.schemas.enums import IndexBackend
+
+    user = ctx.require_user()
+    if dimension is None:
+        from app.services.index_admin import IndexAdminService
+
+        dimension = next(
+            (
+                index.dimension
+                for index in IndexAdminService(ctx.session).list_indexes(
+                    user, IndexBackend.PGVECTOR
+                )
+                if index.dimension
+            ),
+            None,
+        )
+    if dimension is None:
+        raise SystemExit("No dense index to size the Pinecone index from.")
+
+    sparse_name = f"{index_name}-bm25"
+    _adopt_or_create_pinecone_index(ctx, name=index_name, dimension=dimension)
+    _adopt_or_create_pinecone_index(ctx, name=sparse_name, vector_type="sparse")
+    ctx.session.commit()
+    ctx.facts.append(
+        f"index: {index_name} (pinecone, dense, {dimension}d) and {sparse_name} "
+        "(pinecone, sparse) — registered and selectable, so a binding can be "
+        "swapped onto another backend on either plane"
+    )
+
+
+def _adopt_or_create_pinecone_index(
+    ctx: SeedContext,
+    *,
+    name: str,
+    dimension: int | None = None,
+    vector_type: str = "dense",
+) -> None:
+    """Create the Pinecone index, or adopt it when it already exists.
+
+    A Pinecone index is a real remote resource that outlives a reseed, so a
+    plain create fails on the 409 the second time. This is the same
+    register-or-create path the index registry offers.
     """
     from app.schemas.enums import IndexBackend
     from app.schemas.indexes import IndexCreateRequest, IndexRegisterRequest
@@ -531,28 +580,15 @@ def add_pinecone_index(
 
     user = ctx.require_user()
     admin = IndexAdminService(ctx.session)
-    if dimension is None:
-        dimension = next(
-            (
-                index.dimension
-                for index in admin.list_indexes(user, IndexBackend.PGVECTOR)
-                if index.dimension
-            ),
-            None,
-        )
-    if dimension is None:
-        raise SystemExit("No dense index to size the Pinecone index from.")
-    # A Pinecone index is a real remote resource that outlives a reseed, so
-    # adopt one that is already there instead of failing on the 409. This is
-    # the same register-or-create path the index registry offers.
     try:
-        admin.describe_index(user, IndexBackend.PINECONE, index_name)
+        admin.describe_index(user, IndexBackend.PINECONE, name)
     except NotFoundError:
         admin.create_index(
             user,
             IndexCreateRequest(
                 backend=IndexBackend.PINECONE,
-                name=index_name,
+                name=name,
+                vector_type=vector_type,
                 dimension=dimension,
                 cloud="aws",
                 region="us-east-1",
@@ -560,10 +596,5 @@ def add_pinecone_index(
         )
     else:
         admin.register_index(
-            user, IndexRegisterRequest(backend=IndexBackend.PINECONE, name=index_name)
+            user, IndexRegisterRequest(backend=IndexBackend.PINECONE, name=name)
         )
-    ctx.session.commit()
-    ctx.facts.append(
-        f"index: {index_name} (pinecone, dense, {dimension}d) — registered and "
-        "selectable, so a binding can be swapped onto another backend"
-    )

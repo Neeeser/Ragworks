@@ -7,9 +7,12 @@
  * 2. Point the second collection's search binding at Pinecone. A plain hybrid
  *    graph runs on either backend, so this must succeed — and it leaves the
  *    BM25 slot on pgvector, which is a genuinely cross-backend pipeline.
- * 3. Bind a facet pipeline (ParadeDB-only aggregation) and point it at
- *    Pinecone. That must be refused, naming the node, the backend it cannot
- *    run on, and the backend that would work.
+ * 3. Bind a facet pipeline (ParadeDB-only aggregation) and point it at the
+ *    *sparse* Pinecone index. That must be refused, naming the node, the
+ *    backend it cannot run on, and the backend that would work. Sparse, not
+ *    dense: a slot's plane is derived from the nodes reading it, so a dense
+ *    index in a lexical slot is rejected for being dense long before any
+ *    backend capability is consulted — which tests the wrong guard.
  * 4. Unbind the facet pipeline so the seeded state is restored.
  */
 import { expect, test } from "@playwright/test";
@@ -99,12 +102,18 @@ test("a binding swaps onto another backend, and an unsupported node is refused",
   expect(indexResponse.ok()).toBe(true);
   const { indexes } = (await indexResponse.json()) as { indexes: IndexRead[] };
 
-  const pinecone = indexes.find((index) => index.backend === "pinecone" && index.registered);
+  const pinecone = indexes.find(
+    (index) => index.backend === "pinecone" && index.registered && index.vector_type !== "sparse",
+  );
+  const pineconeSparse = indexes.find(
+    (index) => index.backend === "pinecone" && index.registered && index.vector_type === "sparse",
+  );
   const sparse = indexes.find(
     (index) =>
       index.vector_type === "sparse" && index.registered && index.name.startsWith("second"),
   );
   expect(pinecone?.index_id).toBeTruthy();
+  expect(pineconeSparse?.index_id).toBeTruthy();
   expect(sparse?.index_id).toBeTruthy();
 
   const toolsResponse = await api.get(
@@ -162,9 +171,9 @@ test("a binding swaps onto another backend, and an unsupported node is refused",
         data: {
           variable_values: {
             bm25_index: {
-              index_id: pinecone!.index_id,
+              index_id: pineconeSparse!.index_id,
               backend: "pinecone",
-              name: pinecone!.name,
+              name: pineconeSparse!.name,
             },
           },
         },

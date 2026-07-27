@@ -789,6 +789,12 @@ this file in the same PR.
   I/O, taking the transport as injected callables. Before changing these
   integrations, read the local `docs/external-api/` docs first — behavior there
   trumps memory.
+- **An optional SDK-model field left unset is not the same as omitted.** A model
+  that serializes its whole `__dict__` (Pinecone's `IndexEmbed`) turns an unset
+  optional into an explicit `null`, which the request layer then rejects on
+  type — the call fails before it leaves the process, so no amount of reading
+  the HTTP API explains it. State the value: a Pinecone sparse index takes
+  `dotproduct`, the only metric it accepts.
 - **Never send OpenRouter an explicit embeddings `dimensions` unless the user asked
   for one** — most embedding models reject the parameter outright. Set only
   `model_name` and let the model emit its native dimension; the indexer node alone

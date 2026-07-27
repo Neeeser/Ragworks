@@ -32,7 +32,7 @@ Requires: `OPENROUTER_API_KEY`, `PINECONE_API_KEY` in `.env.sandbox`.
 After seeding:
 - everything from shared-pipelines (two collections sharing one pipeline pair on their own pgvector indexes)
 - a live-validated Pinecone connection
-- a registered Pinecone index sandbox-remote, sized to the embedding model
+- registered Pinecone indexes sandbox-remote (dense, sized to the embedding model) and sandbox-remote-bm25 (sparse) — both planes, so a lexical slot can be pointed at Pinecone and refused on capability rather than on vector type
 - a tool binding can be repointed from pgvector to Pinecone from the collection's Indexes control
 - a count or facet pipeline is refused on Pinecone, naming the nodes that cannot run there
 
