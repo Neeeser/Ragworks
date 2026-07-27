@@ -36,7 +36,6 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=5",
     "coverage[toml]>=7.6",
-    "pylint>=3.2.0",
     "ruff>=0.5",
     "mypy>=1.10",
     "types-python-jose>=3.3",
@@ -56,17 +55,45 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "PT", "C90", "RUF"]
+# The design-budget rules (PLR09xx) replace pylint outright, at the thresholds
+# pylint enforced (max-args=6 below; branches/statements/locals keep the shared
+# 12/50/15 defaults). PLR0914 (too-many-locals) is preview-only, so preview is
+# on with explicit-preview-rules so only explicitly selected preview rules
+# activate. Module length stays owned by tests/test_module_size.py.
+preview = true
+explicit-preview-rules = true
+select = [
+    "E", "F", "W", "I", "B", "UP", "SIM", "PT", "C90", "RUF",
+    "C4",      # comprehensions
+    "PERF",    # perflint (manual list/dict building)
+    "PIE",     # misc lints
+    "ISC",     # implicit string concatenation
+    "PTH",     # pathlib over os.path
+    "RET",     # return statement hygiene
+    "DTZ",     # naive datetimes (app code; tests may construct naive fixtures)
+    "T20",     # no print() in app code (logging goes through app/observability)
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0914", # too-many-locals (preview)
+    "PLR0915", # too-many-statements
+]
 ignore = [
     "E501",  # line length handled by formatter
     "B008",  # FastAPI's Depends()/Query()/Body()/File() as a default is the framework's idiom
 ]
 
+[tool.ruff.lint.pylint]
+max-args = 6
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["C901", "SIM117"]
+# Design budgets apply to app code; test factories legitimately take many
+# keyword arguments and construct naive datetimes as fixture values.
+"tests/**" = ["C901", "SIM117", "DTZ", "PLR0912", "PLR0913", "PLR0914", "PLR0915"]
+# The sandbox CLI's prints are its user interface, not stray debugging.
+"sandbox/**" = ["T201"]
 # Burn-down list: each entry below is owned by the phase that rewrites the module,
 # never a place to park code you don't want to lint. Do not copy this pattern for
 # new code.
@@ -125,31 +152,6 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
-]
-
-[tool.pylint.main]
-jobs = 0
-py-version = "3.11"
-
-[tool.pylint.reports]
-score = true
-
-[tool.pylint.design]
-max-args = 6
-
-[tool.pylint."messages control"]
-# Pylint is kept only as the design checker; ruff (see [tool.ruff]) covers
-# everything else (imports, unused vars, complexity, style, bugbear, pyupgrade,
-# simplify, pytest-style, refactor hints). Module length is NOT enforced here:
-# tests/test_module_size.py owns the 400-line ceiling and its grandfathered
-# burn-down list precisely (an aggregate score can't fail on a single new
-# oversize module without also passing the known grandfathered ones).
-disable = ["all"]
-enable = [
-    "too-many-arguments",
-    "too-many-branches",
-    "too-many-statements",
-    "too-many-locals",
 ]
 
 [tool.setuptools.packages.find]
