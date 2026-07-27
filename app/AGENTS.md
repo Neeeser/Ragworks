@@ -9,12 +9,11 @@ added to, and tested.
 
 Before declaring any backend change done, run `make verify` — typecheck (`mypy app`,
 `strict = true`, zero errors), lint (`ruff check app tests sandbox` — including
-the PLR09xx design budgets that replaced pylint), then test (`uv run pytest`).
-All three must be green. Run `make coverage` separately and review
-`term-missing` for untested lines you introduced — `fail_under` in `pyproject.toml`
-sits a few points below the last measured percentage so coverage can't silently
-collapse. Lowering `fail_under` to make a change pass is not a fix; find out why
-coverage dropped. This is the *full* gate — run it once when the work is done, not
+the PLR09xx design budgets that replaced pylint), then test (`uv run pytest --cov`).
+All three must be green — the test stage carries coverage, so the suite runs
+once. Review `term-missing` for untested lines you introduced; lowering
+`fail_under` to make a change pass is not a fix, find out why coverage dropped.
+This is the *full* gate — run it once when the work is done, not
 per edit; the per-edit fast tier (ruff + mypy + the touched area's tests with
 `-n 0`) lives in the root `AGENTS.md`. The suite is parallel by default
 (pytest-xdist, per-worker template-copied databases); pass `-n 0` for a quick
@@ -281,7 +280,7 @@ The expected shape, in order:
 6. If the frontend consumes it, update the hand-mirrored types in
    `frontend/src/lib/types/` in the same PR.
 
-Then run the gate (`make verify`, `make coverage`).
+Then run the gate (`make verify`).
 
 ## Adding a config setting
 
@@ -363,7 +362,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   `app/db/pgvector_support.py` availability flag instead of failing startup.
   pg_search follows the same pattern (`app/db/pg_search_support.py`, clear
   `InvalidInputError` at sparse-index creation). **Run the suite against the
-  Dockerized ParadeDB DB — `make test`/`make coverage` start it for you
+  Dockerized ParadeDB DB — `make test`/`make verify` start it for you
   (`docker-compose.dev.yml`, loopback-only port 54329); it ships the `pg_search`
   the release image runs.** On a Postgres without `pg_search` (e.g. a bare
   external `TEST_DATABASE_URL` override) the BM25 path is untested —

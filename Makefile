@@ -57,7 +57,7 @@ help:
 	@echo "  make test      - run pytest"
 	@echo "  make test-verbose - run pytest with verbose output and durations"
 	@echo "  make test-frontend - run frontend tests (vitest)"
-	@echo "  make coverage  - pytest + missing lines + html report"
+	@echo "  make coverage  - pytest + missing lines + html report (the gate's test stage)"
 	@echo "  make coverage-report - same, but never fails"
 	@echo "  make coverage-open - open htmlcov/index.html"
 	@echo "  make coverage-frontend - frontend coverage (vitest)"
@@ -69,7 +69,7 @@ help:
 	@echo "  make sandbox-down  - stop the sandbox servers"
 	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
 	@echo "  make sandbox-flows - run saved browser flows against seeded scenarios"
-	@echo "  make verify    - typecheck -> lint -> test (the backend gate)"
+	@echo "  make verify    - typecheck -> lint -> test+coverage (the backend gate, one suite run)"
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
@@ -137,7 +137,9 @@ typecheck: env-backend
 lint: env-backend
 	$(UV) run ruff check app tests sandbox
 
-verify: typecheck lint test
+# The gate's test stage runs *with* coverage so the suite executes once, not
+# twice. `make test` stays plain for the fast tier and targeted runs.
+verify: typecheck lint coverage
 
 # Sandbox scenario harness (docs/sandbox.md). The CLI manages its own
 # database (ragworks_sandbox), storage, and server lifecycle under .sandbox/.

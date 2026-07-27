@@ -26,7 +26,7 @@ from filelock import FileLock
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlmodel import Session, SQLModel, create_engine
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/ragworks_test"
@@ -119,7 +119,15 @@ def _ensure_template(admin: Engine) -> None:
             )
             if exists:
                 return
-            connection.execute(text(f'CREATE DATABASE "{template}"'))
+            try:
+                connection.execute(text(f'CREATE DATABASE "{template}"'))
+            except (ProgrammingError, IntegrityError):
+                # Another run on the same schema created it between the check
+                # and the create. The file lock only serializes processes that
+                # share this lock file — a run started from a different
+                # checkout does not — so treat "already exists" as success
+                # rather than failing a suite over a benign race.
+                return
         template_url = make_url(get_database_url()).set(database=template)
         template_engine = create_engine(template_url)
         try:
@@ -155,7 +163,7 @@ def reset_database(engine: Engine) -> None:
         template = template_database_name()
         try:
             _copy_from_template(admin, database, template)
-        except ProgrammingError:
+        except (ProgrammingError, IntegrityError):
             # Self-heal: another process (an older harness revision, or a
             # manual cleanup) dropped the template between tests. Rebuild it
             # once and retry; a second failure is a real error.
