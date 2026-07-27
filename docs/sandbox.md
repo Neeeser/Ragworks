@@ -101,7 +101,12 @@ Nothing the harness does can affect dev state. It owns:
 - ports 8010 (backend) and 3010 (frontend), so `make run` (8000/3000)
   coexists untouched.
 
-Deleting `.sandbox/` and the `ragworks_sandbox` database is always safe.
+In a linked git worktree the database name and ports carry a
+worktree-derived suffix/offset, so concurrent sandboxes never collide —
+the printed handoff (and `.sandbox/handoff.json`) always carries the real
+URLs.
+
+Deleting `.sandbox/` and the `ragworks_sandbox*` databases is always safe.
 
 ## Provider keys
 
