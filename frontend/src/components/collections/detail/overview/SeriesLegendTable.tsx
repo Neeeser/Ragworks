@@ -42,6 +42,11 @@ type SeriesLegendTableProps = {
 export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesLegendTableProps) {
   if (rows.length === 0) return null;
 
+  // The header is hidden but still announced when collapsed, so it must list
+  // the columns the rows actually carry — heading the lone average with
+  // "Queries" is what a screen reader would otherwise read out.
+  const columns = expanded ? COLUMNS : COLUMNS.slice(1, 2);
+
   return (
     <div className={cn(expanded && "overflow-x-auto")}>
       <table className="w-full border-collapse">
@@ -50,7 +55,7 @@ export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesL
             <th scope="col" className="pb-1 pr-3">
               <InstrumentLabel>Tool</InstrumentLabel>
             </th>
-            {COLUMNS.map((column) => (
+            {columns.map((column) => (
               <th key={column.label} scope="col" className="pb-1 pl-3 text-right">
                 <InstrumentLabel>{column.label}</InstrumentLabel>
               </th>
@@ -62,7 +67,7 @@ export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesL
             const shown = visible.has(row.key);
             return (
               <tr key={row.key} className="border-t border-hairline first:border-t-0">
-                <th scope="row" className="py-1 pr-3 font-normal">
+                <th scope="row" className="w-full py-1 pr-3 font-normal">
                   <button
                     type="button"
                     onClick={() => onToggle(row.key)}
@@ -82,7 +87,7 @@ export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesL
                     </span>
                   </button>
                 </th>
-                {(expanded ? COLUMNS : COLUMNS.slice(1, 2)).map((column) => (
+                {columns.map((column) => (
                   <td
                     key={column.label}
                     className="py-1 pl-3 text-right font-mono text-ui whitespace-nowrap tabular-nums text-primary"
@@ -90,7 +95,6 @@ export function SeriesLegendTable({ rows, visible, onToggle, expanded }: SeriesL
                     {column.read(row.summary)}
                   </td>
                 ))}
-                {!expanded && <td className="w-full" />}
               </tr>
             );
           })}
