@@ -19,8 +19,11 @@ jobs:
       postgres:
         # ParadeDB Postgres (pgvector + pg_search), matching the shipped
         # docker-compose image — so the BM25/lexical tests run instead of
-        # skipping.
-        image: paradedb/paradedb:latest-pg17
+        # skipping. Pinned by digest so every CI run tests against a known
+        # Postgres and an upstream retag can't change results mid-PR; bump
+        # deliberately (docker buildx imagetools inspect paradedb/paradedb:latest-pg17)
+        # together with docker-compose.dev.yml.
+        image: paradedb/paradedb:latest-pg17@sha256:a784ffa6471729af6be5178ad39ea607e5cbfec94f81bcaad439de40ecb45834
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
