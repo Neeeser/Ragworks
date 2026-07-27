@@ -17,6 +17,7 @@ from app.providers.tei import TEIAdapter
 from app.retrieval.embedders.tei_embedder import TEIEmbedder
 from app.retrieval.rerankers.tei import TEIReranker
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.providers import TEI_DEFAULT_PORT
 from app.services.errors import InvalidInputError
 
 
@@ -66,7 +67,11 @@ def test_descriptor_explains_one_model_per_connection() -> None:
         field for field in TEIAdapter.descriptor.config_fields if field.name == "base_url"
     )
 
-    assert base_url.description == "Each TEI connection serves one model and task."
+    assert "one model and task" in (base_url.description or "")
+    # The assumed port is stated where the user types the URL, and comes from
+    # the same constant the validator applies — never a second literal.
+    assert str(TEI_DEFAULT_PORT) in (base_url.description or "")
+    assert base_url.placeholder == f"http://localhost:{TEI_DEFAULT_PORT}"
 
 
 def test_adapter_caches_served_capability_until_a_catalog_refresh(

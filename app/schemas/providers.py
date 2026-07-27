@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -58,6 +59,53 @@ class ProviderTypeRead(BaseModel):
     available: bool = True
 
 
+#: Port assumed for an Ollama server URL that names no port.
+OLLAMA_DEFAULT_PORT = 11434
+#: Port assumed for a Text Embeddings Inference server URL that names no port.
+TEI_DEFAULT_PORT = 8080
+
+
+def normalize_server_url(value: str, default_port: int) -> str:
+    """Normalize a self-hosted server URL into one that actually resolves.
+
+    A host typed without a scheme (``192.168.1.50:11434``) or without a port
+    (``http://192.168.1.50``) is what a user reads off their own machine, but
+    the first is rejected outright and the second silently means port 80 — so
+    the connection fails with a network error that says nothing about the URL.
+    Assume ``http`` for a bare host, and `default_port` when an ``http`` URL
+    names no port; an explicitly typed port (including ``:80``) is always
+    preserved. An ``https`` URL is left alone — https implies 443 and a proxied
+    endpoint, so assuming a self-hosted port there breaks the URL instead of
+    fixing it.
+
+    Parsing goes through `urlsplit` rather than string matching so IPv6
+    literals (``http://[::1]``) and userinfo survive untouched.
+    """
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Server URL must not be empty.")
+    # urlsplit reads a bare "host:port" as scheme "host" with path "port", so
+    # the scheme has to be settled before anything else can be trusted. The
+    # trailing slash is stripped from the parsed path, not from the raw string:
+    # stripping first turns "http://" into "http:", which then reparses as the
+    # host "http".
+    if "://" not in cleaned:
+        cleaned = f"http://{cleaned}"
+    parts = urlsplit(cleaned)
+    parts = parts._replace(path=parts.path.rstrip("/"))
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("Base URL must start with http:// or https://.")
+    if not parts.hostname:
+        raise ValueError("Base URL must include a host.")
+    try:
+        port = parts.port
+    except ValueError as exc:  # non-numeric port — urlsplit raises on access
+        raise ValueError("Base URL port must be a number.") from exc
+    if port is None and parts.scheme == "http":
+        parts = parts._replace(netloc=f"{parts.netloc}:{default_port}")
+    return urlunsplit(parts)
+
+
 class OpenRouterConnectionConfig(BaseModel):
     """Stored config for an OpenRouter connection."""
 
@@ -79,11 +127,8 @@ class OllamaConnectionConfig(BaseModel):
     @field_validator("base_url")
     @classmethod
     def normalize_base_url(cls, value: str) -> str:
-        """Require an http(s) URL and strip the trailing slash."""
-        cleaned = value.strip().rstrip("/")
-        if not cleaned.startswith(("http://", "https://")):
-            raise ValueError("Base URL must start with http:// or https://.")
-        return cleaned
+        """Normalize the server URL, assuming Ollama's default port."""
+        return normalize_server_url(value, OLLAMA_DEFAULT_PORT)
 
 
 class TEIConnectionConfig(BaseModel):
@@ -95,11 +140,8 @@ class TEIConnectionConfig(BaseModel):
     @field_validator("base_url")
     @classmethod
     def normalize_base_url(cls, value: str) -> str:
-        """Require an http(s) URL and strip trailing slashes."""
-        cleaned = value.strip().rstrip("/")
-        if not cleaned.startswith(("http://", "https://")):
-            raise ValueError("Base URL must start with http:// or https://.")
-        return cleaned
+        """Normalize the server URL, assuming TEI's default port."""
+        return normalize_server_url(value, TEI_DEFAULT_PORT)
 
 
 class PineconeConnectionConfig(BaseModel):

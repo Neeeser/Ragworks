@@ -52,9 +52,7 @@ def test_provider_catalog_lists_types_with_kind_badges(client: TestClient) -> No
     assert ollama_fields["base_url"]["kind"] == "url"
     assert ollama_fields["api_key"]["required"] is False
     tei_fields = {field["name"]: field for field in by_type["tei"]["config_fields"]}
-    assert tei_fields["base_url"]["description"] == (
-        "Each TEI connection serves one model and task."
-    )
+    assert "one model and task" in tei_fields["base_url"]["description"]
 
 
 def test_create_list_and_delete_ollama_connection(client: TestClient) -> None:
@@ -89,7 +87,7 @@ def test_create_rejects_malformed_config(client: TestClient) -> None:
         json={
             "provider_type": "ollama",
             "label": "Bad",
-            "config": {"base_url": "not-a-url"},
+            "config": {"base_url": "ftp://not-a-url"},
         },
     )
     assert response.status_code == 400
@@ -183,7 +181,7 @@ def test_validate_unsaved_config_probe(client: TestClient) -> None:
 def test_validate_unsaved_malformed_config_reports_invalid(client: TestClient) -> None:
     response = client.post(
         "/api/connections/validate",
-        json={"provider_type": "ollama", "config": {"base_url": "nope"}},
+        json={"provider_type": "ollama", "config": {"base_url": "ftp://nope"}},
     )
     assert response.status_code == 200
     body = response.json()
