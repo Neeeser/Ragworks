@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CheckboxBox } from "@/components/ui/checkbox";
 import { Field, TextInput } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -152,13 +153,8 @@ export default function SignInPage() {
             </Field>
 
             {isLogin && (
-              <label className="flex cursor-pointer items-center gap-3 text-sm text-body">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(event) => setRememberMe(event.target.checked)}
-                  className="h-4 w-4 rounded border-hairline bg-surface accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-                />
+              <label className="flex cursor-pointer items-center gap-3 text-ui text-body">
+                <CheckboxBox checked={rememberMe} onChange={setRememberMe} />
                 Remember me
               </label>
             )}

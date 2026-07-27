@@ -11,6 +11,7 @@ import {
 } from "@/components/mcp/lib/connection";
 import { McpConnectionInstructions } from "@/components/mcp/McpConnectionInstructions";
 import { Button } from "@/components/ui/button";
+import { CheckboxBox } from "@/components/ui/checkbox";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { cn } from "@/lib/utils";
@@ -135,9 +136,8 @@ export function ConnectAgentDialog({
                         implied ? "cursor-default" : "cursor-pointer hover:border-strong",
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 accent-accent-violet"
+                      <CheckboxBox
+                        className="mt-0.5"
                         checked={implied || capabilities.includes(option.value)}
                         disabled={implied}
                         onChange={() => toggle(option.value)}

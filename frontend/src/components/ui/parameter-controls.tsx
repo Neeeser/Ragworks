@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckboxBox } from "@/components/ui/checkbox";
 import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
@@ -142,15 +143,13 @@ export function ParameterInput({
   if (input === "boolean") {
     return (
       <label className="flex items-center gap-2 text-ui text-body">
-        <input
+        <CheckboxBox
           id={id}
           aria-invalid={ariaInvalid || undefined}
           aria-describedby={ariaDescribedBy}
-          type="checkbox"
-          className="h-4 w-4 rounded-chip border-strong bg-transparent accent-[var(--accent-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
           checked={value === true}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
+          onChange={onChange}
         />
         <span>{booleanLabel}</span>
       </label>
