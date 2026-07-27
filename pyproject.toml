@@ -95,10 +95,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # -n auto: pytest-xdist parallelism; each worker owns a private database
-# copied from a schema template (tests/utils/db.py). --dist loadfile keeps a
-# file's tests on one worker so file-scoped assumptions hold. For a quick
-# single-file run during iteration, `-n 0` skips worker startup.
-addopts = ["-q", "--strict-markers", "-n", "auto", "--dist", "loadfile"]
+# copied from a schema template (tests/utils/db.py), so test-level
+# distribution is safe (no module/session-scoped fixtures share state). For a
+# quick single-file run during iteration, `-n 0` skips worker startup.
+addopts = ["-q", "--strict-markers", "-n", "auto"]
 norecursedirs = ["live"]
 markers = [
     "live_provider_reranking: opt-in smoke test that contacts a configured provider",
