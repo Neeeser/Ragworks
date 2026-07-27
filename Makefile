@@ -64,7 +64,7 @@ help:
 	@echo "  make coverage-report-frontend - frontend coverage, never fails"
 	@echo "  make coverage-open-frontend - open frontend/coverage/index.html"
 	@echo "  make typecheck - run mypy on app/ and sandbox/"
-	@echo "  make lint      - run ruff + pylint on backend code"
+	@echo "  make lint      - run ruff on backend code"
 	@echo "  make sandbox-up    - seed a sandbox scenario + start servers (SCENARIO=collection-ready)"
 	@echo "  make sandbox-down  - stop the sandbox servers"
 	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
@@ -136,7 +136,6 @@ typecheck: env-backend
 
 lint: env-backend
 	$(UV) run ruff check app tests sandbox
-	$(UV) run pylint --score=y --fail-under=10 app
 
 verify: typecheck lint test
 

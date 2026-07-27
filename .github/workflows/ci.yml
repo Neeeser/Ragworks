@@ -54,10 +54,8 @@ jobs:
             mypy-${{ runner.os }}-
       - name: Typecheck (mypy strict)
         run: uv run mypy app
-      - name: Lint (ruff + pylint)
-        run: |
-          uv run ruff check app tests
-          uv run pylint --score=y --fail-under=10 app
+      - name: Lint (ruff)
+        run: uv run ruff check app tests
       - name: Test (pytest, unit suite)
         run: uv run pytest
 

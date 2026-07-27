@@ -74,7 +74,7 @@ class RegisteredIndexRepository(Repository):
         )
         return self.session.exec(statement).first() is not None
 
-    def get_or_create(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def get_or_create(
         self,
         user_id: UUID,
         backend: IndexBackend,

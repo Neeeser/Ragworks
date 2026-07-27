@@ -139,7 +139,7 @@ Key invariants (full detail in the AGENTS.md files):
 Nothing ships without its gate passing:
 
 ```bash
-make verify              # backend gate: mypy strict → ruff + pylint → pytest
+make verify              # backend gate: mypy strict → ruff → pytest
 make coverage            # coverage run (floor enforced; review term-missing)
 cd frontend && npm run verify   # frontend gate: tsc → eslint → vitest
 make format-check-frontend
@@ -170,7 +170,7 @@ make format-check-frontend
 | `make test` / `make test-frontend` | Backend / frontend tests |
 | `make coverage` / `make coverage-frontend` | Coverage (fails on test failure) |
 | `make coverage-open` / `make coverage-open-frontend` | Open HTML coverage reports |
-| `make typecheck` / `make lint` | mypy strict / ruff + pylint |
+| `make typecheck` / `make lint` | mypy strict / ruff |
 | `make lint-frontend` / `make format-frontend` / `make format-check-frontend` | ESLint / Prettier |
 
 ## Known gaps (tracked)

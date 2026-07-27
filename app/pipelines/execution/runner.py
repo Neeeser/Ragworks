@@ -62,7 +62,8 @@ class PipelineRunner:
         self._session = session
         self._executor = PipelineExecutor(registry or default_registry())
 
-    def start(  # pylint: disable=too-many-arguments,too-many-locals
+    # The run context wires every port dependency explicitly by design.
+    def start(  # noqa: PLR0913
         self,
         *,
         pipeline: models.Pipeline,

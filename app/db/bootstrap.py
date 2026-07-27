@@ -34,7 +34,7 @@ def ensure_pgvector_extension(target_engine: Engine) -> bool:
     try:
         with target_engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         # Deliberately broad: any failure (permissions, extension not
         # installed on the server) means the same thing — pgvector is off.
         logger.warning(
@@ -58,7 +58,7 @@ def ensure_pg_search_extension(target_engine: Engine) -> bool:
     try:
         with target_engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_search"))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         # Deliberately broad: any failure (permissions, extension not
         # installed on the server) means the same thing — BM25 on pg is off.
         logger.warning(

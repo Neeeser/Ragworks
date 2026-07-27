@@ -267,3 +267,59 @@ def test_a_malformed_stored_definition_is_skipped(session: Session) -> None:
     session.commit()
 
     assert collapse_index_slots(session) == 0
+
+
+def test_a_definition_whose_variables_are_not_a_list_is_skipped(
+    session: Session,
+) -> None:
+    """Only the shape the old migration wrote is collapsed, nothing else."""
+    user = _user(session)
+    pipeline = models.Pipeline(user_id=user.id, name="Odd")
+    session.add(pipeline)
+    session.commit()
+    session.refresh(pipeline)
+    session.add(
+        models.PipelineVersion(
+            pipeline_id=pipeline.id,
+            version=1,
+            definition={"schema_version": 3, "variables": {}, "nodes": [], "edges": []},
+        )
+    )
+    session.commit()
+
+    assert collapse_index_slots(session) == 0
+
+
+def test_a_node_config_expression_over_an_unknown_name_is_left_alone(
+    session: Session,
+) -> None:
+    """Only the slots being removed are collapsed.
+
+    A config expression over a panel variable or an input argument is
+    ordinary authored behavior; rewriting it to a literal would freeze a
+    value the pipeline is supposed to compute per run.
+    """
+    user = _user(session)
+    collection = _collection(session, user, "Only")
+    definition = _slotted_definition("ragworks")
+    definition["nodes"].append(
+        {
+            "id": "retrieve",
+            "type": "retriever.vector",
+            "name": "Retriever",
+            "config": {
+                "backend": "pgvector",
+                "index_name": "ragworks",
+                "top_k": {"$expr": "result_limit * 2"},
+            },
+        }
+    )
+    pipeline = _pipeline(session, user, definition)
+    _ensure_values_column(session)
+    _bind(session, collection, pipeline)
+
+    assert collapse_index_slots(session) == 1
+
+    collapsed = _definition_of(session, pipeline.id)
+    retriever = next(node for node in collapsed["nodes"] if node["id"] == "retrieve")
+    assert retriever["config"]["top_k"] == {"$expr": "result_limit * 2"}

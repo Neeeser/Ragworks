@@ -46,7 +46,7 @@ _BINDINGS_TABLE = "collection_pipeline_bindings"
 _VALUES_COLUMN = "variable_values"
 
 
-def collapse_index_slots(session: Session) -> int:  # pylint: disable=too-many-locals
+def collapse_index_slots(session: Session) -> int:
     """Collapse binding-source index variables; return the definitions changed.
 
     The local count is the migration's whole job: the stored rows, the
@@ -105,11 +105,9 @@ def _stored_overrides(session: Session) -> dict[UUID, dict[str, Any]]:
     result = session.exec(  # type: ignore[call-overload]
         text(f"SELECT id, {_VALUES_COLUMN} FROM {_BINDINGS_TABLE}")
     )
-    stored: dict[UUID, dict[str, Any]] = {}
-    for binding_id, values in result:
-        if isinstance(values, dict):
-            stored[binding_id] = values
-    return stored
+    return {
+        binding_id: values for binding_id, values in result if isinstance(values, dict)
+    }
 
 
 def _values_column_exists(session: Session) -> bool:
@@ -234,7 +232,7 @@ def _collapsed_node(node: object, selection: dict[str, dict[str, Any]]) -> Any:
     return {**node, "config": updated}
 
 
-def _repoint_to_copy(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def _repoint_to_copy(
     session: Session,
     pipeline: models.Pipeline,
     definition: object,

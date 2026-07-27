@@ -66,7 +66,7 @@ class IndexRegistryService:
             raise NotFoundError("Index not found.")
         return index
 
-    def register(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def register(
         self,
         user: models.User,
         backend: IndexBackend,

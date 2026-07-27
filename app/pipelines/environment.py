@@ -6,17 +6,15 @@ Before a run (and statically, for editor validation and settings resolution),
 - the built-in `query` string,
 - the built-in collection descriptors (`collection_id`, `collection_name`,
   `user_id`) describing the collection the pipeline is bound to,
-- every declared input argument (caller-supplied value, else default), and
-  every binding-source variable (the binding's override, else its default),
+- every declared input argument (caller-supplied value, else default),
 - every panel variable — constants validated, derived expressions evaluated
   in dependency order.
 
 `tainted` tracks which names derive from *caller* input; the identity-field
-taint rule in `validation_variables.py` reads it. Binding values and
-collection built-ins are deliberately untainted: both are fixed when a
-pipeline is bound to a collection, so an index name derived from them still
-resolves to one deterministic index per binding, which is what purge coverage
-depends on.
+taint rule in `validation_variables.py` reads it. The collection built-ins are
+deliberately untainted: they are fixed when a pipeline is bound to a
+collection, so an index name derived from them still resolves to one
+deterministic index per binding, which is what purge coverage depends on.
 
 Callers that accept user input catch `VariableResolutionError` and translate
 it to their boundary's error type (the retrieval service maps it to
@@ -114,7 +112,7 @@ def declared_arguments(definition: PipelineDefinition) -> list[PipelineInputArgu
     ]
 
 
-def build_environment(  # pylint: disable=too-many-locals
+def build_environment(
     definition: PipelineDefinition,
     *,
     query: str | None = None,
@@ -169,16 +167,13 @@ def build_environment(  # pylint: disable=too-many-locals
         tainted.add(name)
         if value is not None:
             values[name] = value
-    for name in remaining:
-        errors.append(f"Unknown argument '{name}'.")
+    errors.extend(f"Unknown argument '{name}'." for name in remaining)
 
     _add_panel_variables(definition.variables, types, values, tainted, errors)
 
     if errors:
         raise VariableResolutionError(errors)
     return VariableEnvironment(types=types, values=values, tainted=frozenset(tainted))
-
-
 
 
 def _argument_value(

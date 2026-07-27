@@ -46,7 +46,7 @@ def run_eval(run_id: UUID) -> None:
             return
         try:
             EvalRunner(session).execute(run)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             # Deliberately broad: the failed status is already persisted on the
             # run row; a background task has no caller left to re-raise to.
             logger.exception("Eval run %s failed", run_id)
@@ -95,7 +95,7 @@ def _evaluate_task(
                 top_k=context.top_k,
                 arguments=context.config.run_inputs or None,
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             # One provider hiccup fails one item, not the whole run.
             logger.warning("Eval query %s failed: %s", task.external_id, exc)
             return (
@@ -195,7 +195,6 @@ class EvalRunner:
             seed=config.seed,
         )
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
     def _provision(
         self,
         run: models.EvalRun,
@@ -241,8 +240,8 @@ class EvalRunner:
         self.session.commit()
         return result
 
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
-    def _evaluate_queries(
+    # Threads the run context (session, provider, dataset, budget) explicitly.
+    def _evaluate_queries(  # noqa: PLR0913
         self,
         run: models.EvalRun,
         user: models.User,

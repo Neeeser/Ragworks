@@ -26,6 +26,7 @@ from filelock import FileLock
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, SQLModel, create_engine
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/ragworks_test"
@@ -72,12 +73,14 @@ def _schema_hash() -> str:
     one in its place, and every other worker's `CREATE DATABASE … TEMPLATE`
     then fails on a database that no longer exists.
     """
-    from app.db import models  # noqa: F401  pylint: disable=import-outside-toplevel,unused-import
+    from app.db import models  # noqa: F401
 
     parts: list[str] = []
     for table in sorted(SQLModel.metadata.tables.values(), key=lambda t: t.name):
-        for column in table.columns:
-            parts.append(f"{table.name}.{column.name}:{column.type!s}:{column.nullable}")
+        parts.extend(
+            f"{table.name}.{column.name}:{column.type!s}:{column.nullable}"
+            for column in table.columns
+        )
     return hashlib.md5("|".join(parts).encode()).hexdigest()[:12]
 
 
@@ -96,15 +99,12 @@ def _ensure_template(admin: Engine) -> None:
     """Build the template database once per schema hash, under a cross-process lock.
 
     The lock file lives in the system temp dir so xdist workers and parallel
-    worktree runs on the same machine serialize template creation.
-
-    Templates for other schema hashes are deliberately left alone. A hash
-    identifies a schema, not a run, so a neighbouring worktree on a different
-    branch legitimately owns one — and dropping it mid-run makes every
-    `CREATE DATABASE … TEMPLATE` in that run fail on a database that just
-    disappeared. Postgres only refuses the drop while a session is *connected*
-    to it, which a template copy is not, so "in use" is no protection. They
-    are a few MB each; `make test-clean-templates` removes them.
+    worktree runs on the same machine serialize template creation. Templates
+    for other schema hashes are deliberately left alone: they are never
+    connected to between copies, so "in use" cannot protect one that a
+    concurrent run on another branch still needs — dropping them here is a
+    cross-run race. Stale `ragworks_tmpl_*` databases are always safe to drop
+    by hand.
     """
     template = template_database_name()
     lock = FileLock(str(Path(tempfile.gettempdir()) / f"{template}.lock"))
@@ -127,7 +127,7 @@ def _ensure_template(admin: Engine) -> None:
                 try:
                     with template_engine.begin() as connection:
                         connection.execute(text(f"CREATE EXTENSION IF NOT EXISTS {extension}"))
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     pass  # extension unavailable on this server; marked tests skip
             SQLModel.metadata.create_all(template_engine)
         finally:
@@ -135,9 +135,16 @@ def _ensure_template(admin: Engine) -> None:
             template_engine.dispose()
 
 
+def _copy_from_template(admin: Engine, database: str | None, template: str) -> None:
+    """Replace this worker's database with a fresh copy of the template."""
+    with admin.connect() as connection:
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'))
+        connection.execute(text(f'CREATE DATABASE "{database}" TEMPLATE "{template}"'))
+
+
 def reset_database(engine: Engine) -> None:
     """Give this worker a fresh database copied from the schema template."""
-    global _template_ready  # pylint: disable=global-statement
+    global _template_ready
     database = make_url(get_database_url()).database
     engine.dispose()  # our own pooled connections would block the drop
     admin = _admin_engine()
@@ -146,16 +153,20 @@ def reset_database(engine: Engine) -> None:
             _ensure_template(admin)
             _template_ready = True
         template = template_database_name()
-        with admin.connect() as connection:
-            connection.execute(text(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'))
-            connection.execute(text(f'CREATE DATABASE "{database}" TEMPLATE "{template}"'))
+        try:
+            _copy_from_template(admin, database, template)
+        except ProgrammingError:
+            # Self-heal: another process (an older harness revision, or a
+            # manual cleanup) dropped the template between tests. Rebuild it
+            # once and retry; a second failure is a real error.
+            _ensure_template(admin)
+            _copy_from_template(admin, database, template)
     finally:
         admin.dispose()
 
 
 def open_session() -> Iterator[Session]:
     """Yield a SQLModel session backed by a freshly reset test database."""
-    # pylint: disable=import-outside-toplevel
     from app.services.app_config import invalidate_app_config_cache
 
     engine = create_test_engine()

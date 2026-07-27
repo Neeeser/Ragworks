@@ -8,9 +8,8 @@ runtime. See `app/AGENTS.md` for the resulting rule.
 
 from __future__ import annotations
 
-# pylint's static import resolver can't see pinecone's dynamic re-exports in
-# its package __init__; all names exist on the installed SDK (see docstring above).
-from pinecone import IndexEmbed, Pinecone, ServerlessSpec  # pylint: disable=no-name-in-module
+# All names exist on the installed SDK's dynamic re-exports (see docstring above).
+from pinecone import IndexEmbed, Pinecone, ServerlessSpec
 
 from app.clients.pinecone.types import IndexDescription
 
@@ -66,8 +65,8 @@ class PineconeIndexAdmin:
         """Return the typed description for a single index."""
         return IndexDescription.from_sdk(self._client.describe_index(name))
 
-    # pylint: disable-next=too-many-arguments
-    def create_index(
+    # Mirrors the Pinecone SDK create_index surface one-for-one.
+    def create_index(  # noqa: PLR0913
         self,
         *,
         name: str,

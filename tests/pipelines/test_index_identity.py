@@ -16,6 +16,7 @@ from app.pipelines.index_identity import (
 )
 from app.pipelines.nodes.counting import Bm25FacetNode
 from app.pipelines.nodes.indexing import Bm25IndexerNode, VectorIndexerNode
+from app.pipelines.nodes.indexing_legacy import PgvectorIndexerNode
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.registry import default_registry
 
@@ -168,6 +169,67 @@ class TestCollectIdentities:
 
         assert collect_index_identities(definition, REGISTRY) == []
 
+    def test_node_naming_no_index_names_nothing(self) -> None:
+        """A half-configured node registers nothing rather than an empty name.
+
+        An index called "" would be registered, offered in every picker, and
+        fail only when a run reaches the store.
+        """
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="indexer",
+                    type=VectorIndexerNode.type,
+                    name="Indexer",
+                    config={"backend": "pgvector", "index_name": ""},
+                ),
+            ]
+        )
+
+        assert collect_index_identities(definition, REGISTRY) == []
+
+    def test_unrecognized_backend_names_nothing(self) -> None:
+        """A backend this build has no adapter for cannot be registered.
+
+        Registering it would put an index in the picker that no run can open.
+        """
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="indexer",
+                    type=VectorIndexerNode.type,
+                    name="Indexer",
+                    config={"backend": "chroma", "index_name": "docs-main"},
+                ),
+            ]
+        )
+
+        assert collect_index_identities(definition, REGISTRY) == []
+
+    def test_a_backend_pinned_node_registers_the_backend_it_is_pinned_to(self) -> None:
+        """A legacy indexer names its backend on the class, not in config.
+
+        Node type ids are permanent, so definitions naming `indexer.pgvector`
+        stay readable — and their index has to reach the registry, or it is
+        unselectable in every picker.
+        """
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="indexer",
+                    type=PgvectorIndexerNode.type,
+                    name="Indexer",
+                    config={"index_name": "legacy-docs", "dimension": 384},
+                ),
+            ]
+        )
+
+        identities = collect_index_identities(definition, REGISTRY)
+
+        assert [(i.backend.value, i.name, i.vector_type) for i in identities] == [
+            ("pgvector", "legacy-docs", "dense")
+        ]
+
 
 class TestTemplateConversion:
     """`{placeholder}` strings become expressions over the built-ins."""
@@ -184,6 +246,31 @@ class TestTemplateConversion:
     def test_plain_literal_is_left_alone(self) -> None:
         """No placeholder means no expression — wrapping it would be noise."""
         assert template_to_expression("docs-main") is None
+
+    def test_text_after_the_last_placeholder_survives(self) -> None:
+        """A trailing literal is part of the namespace, not decoration."""
+        assert (
+            template_to_expression("col-{collection_id}-v2") == "'col-' + collection_id + '-v2'"
+        )
+
+    def test_a_non_string_namespace_is_left_alone(self) -> None:
+        """An expression namespace is already resolved per run, not a template."""
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="indexer",
+                    type=VectorIndexerNode.type,
+                    name="Indexer",
+                    config={
+                        "backend": "pgvector",
+                        "index_name": "docs-main",
+                        "namespace": {"$expr": "collection_id"},
+                    },
+                ),
+            ]
+        )
+
+        assert rewrite_namespace_templates(definition) is definition
 
     def test_converted_namespace_resolves_to_the_same_string(self) -> None:
         rewritten = rewrite_namespace_templates(_hybrid_definition())

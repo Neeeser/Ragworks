@@ -8,7 +8,7 @@ from ..models import Document
 from .base import DocumentParser, DocumentSource, build_document_from_source
 
 
-class TxtDocumentParser(DocumentParser):  # pylint: disable=too-few-public-methods
+class TxtDocumentParser(DocumentParser):
     """Parse plain text files into Document instances."""
 
     def __init__(self, encoding: str = "utf-8") -> None:

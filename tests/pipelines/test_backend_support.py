@@ -70,6 +70,28 @@ class TestIncompatibleNodes:
 
         assert incompatible_nodes(definition, REGISTRY) == []
 
+    def test_an_unresolvable_backend_is_not_reported_as_incompatible(self) -> None:
+        """A node whose backend does not resolve is a different complaint.
+
+        Reporting it here would tell the user to change the backend of a node
+        that has not named one — the config validator is what says so.
+        """
+        definition = PipelineDefinition(
+            nodes=[
+                PipelineNodeDefinition(
+                    id="facet",
+                    type=Bm25FacetNode.type,
+                    name="Facet",
+                    config={"index_name": "docs-bm25", "field": "document_id"},
+                )
+            ]
+        )
+        # Bypass the config model's default so the raw config names no backend,
+        # which is the shape a hand-edited or partially-migrated row arrives in.
+        definition.nodes[0].config.pop("backend", None)
+
+        assert incompatible_nodes(definition, REGISTRY) == []
+
     def test_a_plain_retriever_runs_on_either_backend(self) -> None:
         """Only capability-gated nodes restrict the backend."""
         for backend in ("pgvector", "pinecone"):

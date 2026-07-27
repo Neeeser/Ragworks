@@ -34,9 +34,6 @@ class DatabaseSchema(BaseModel):
 
     def missing_columns(self, expected: DatabaseSchema) -> dict[str, set[str]]:
         """Return missing columns for tables that exist in both schemas."""
-        # pylint: disable=no-member  # false positive: pylint resolves `tables` to
-        # the class-level FieldInfo, not the validated dict pydantic builds per
-        # instance, so `.items()`/`.get()` look like missing members.
         missing: dict[str, set[str]] = {}
         for table_name, expected_table in expected.tables.items():
             actual_table = self.tables.get(table_name)

@@ -29,11 +29,7 @@ def _line_count(path: Path) -> int:
 
 
 def _app_modules() -> list[Path]:
-    return [
-        path
-        for path in sorted(APP_ROOT.rglob("*.py"))
-        if "__pycache__" not in path.parts
-    ]
+    return [path for path in sorted(APP_ROOT.rglob("*.py")) if "__pycache__" not in path.parts]
 
 
 def test_no_module_exceeds_max_lines() -> None:
@@ -47,8 +43,7 @@ def test_no_module_exceeds_max_lines() -> None:
     ]
     assert not offenders, (
         "Modules exceed the 400-line ceiling and are not grandfathered "
-        "(split them -- do NOT add entries to GRANDFATHERED):\n"
-        + "\n".join(offenders)
+        "(split them -- do NOT add entries to GRANDFATHERED):\n" + "\n".join(offenders)
     )
 
 
@@ -59,16 +54,14 @@ def test_grandfathered_modules_never_grow() -> None:
     for rel_path, ceiling in GRANDFATHERED.items():
         path = repo_root / rel_path
         assert path.exists(), (
-            f"GRANDFATHERED lists {rel_path}, which no longer exists -- "
-            "remove the stale entry."
+            f"GRANDFATHERED lists {rel_path}, which no longer exists -- remove the stale entry."
         )
         count = _line_count(path)
         if count > ceiling:
             grown.append(f"{rel_path}: {count} lines (ceiling {ceiling})")
     assert not grown, (
         "Grandfathered modules grew past their recorded ceilings "
-        "(shrink them back or split them -- ceilings never go up):\n"
-        + "\n".join(grown)
+        "(shrink them back or split them -- ceilings never go up):\n" + "\n".join(grown)
     )
 
 
@@ -77,9 +70,8 @@ def test_grandfathered_list_stays_honest() -> None:
     repo_root = APP_ROOT.parent
     satisfied = [
         f"{rel_path}: {count} lines (now within the {MAX_LINES}-line ceiling)"
-        for rel_path, _ceiling in GRANDFATHERED.items()
-        if (path := repo_root / rel_path).exists()
-        and (count := _line_count(path)) <= MAX_LINES
+        for rel_path in GRANDFATHERED
+        if (path := repo_root / rel_path).exists() and (count := _line_count(path)) <= MAX_LINES
     ]
     assert not satisfied, (
         "These modules no longer need grandfathering -- delete their entries "

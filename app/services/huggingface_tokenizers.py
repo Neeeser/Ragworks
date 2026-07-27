@@ -93,7 +93,7 @@ class HuggingFaceTokenizerService:
             Tokenizer.from_str(content.decode("utf-8"))
         # The Rust-backed `tokenizers` binding exposes parse failures as a
         # plain `Exception`, so this boundary must normalize that broad type.
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             raise InvalidInputError(
                 "The downloaded file is not a valid tokenizer.json."
             ) from exc

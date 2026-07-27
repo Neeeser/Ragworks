@@ -19,7 +19,7 @@ class DocumentSource(BaseModel):
     metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
 
 
-class DocumentParser(Protocol):  # pylint: disable=too-few-public-methods
+class DocumentParser(Protocol):
     """Protocol describing how to turn a raw document into indexable text."""
 
     def parse(self, source: DocumentSource) -> Document:

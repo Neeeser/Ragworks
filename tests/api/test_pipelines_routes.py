@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.api.routes import pipelines as pipelines_routes
@@ -346,28 +347,26 @@ def test_create_pipeline_creates_record(session: Session) -> None:
     assert created.validation_issues[0].severity == "warning"
 
 
-def test_copy_pipeline_duplicates_the_graph_under_a_new_name(session: Session) -> None:
+def test_copy_pipeline_duplicates_the_graph_under_a_new_name(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
     """Copying is how one graph becomes two that differ.
 
     A pipeline names the index it uses, so serving another collection from
     another store means another pipeline; the copy has to carry the graph or
     the user is rebuilding it by hand.
     """
-    user = _create_user(session)
-    pipeline = _create_pipeline(session, user)
+    pipeline = _create_pipeline(session, auth_user)
     original = PipelineService(session).get_definition(pipeline)
 
-    response = pipelines_routes.copy_pipeline(
-        pipelines_routes.PipelineCopyRequest(),
-        pipeline=pipeline,
-        current_user=user,
-        session=session,
-    )
+    response = client.post(f"/api/pipelines/{pipeline.id}/copy", json={})
 
-    assert response.id != pipeline.id
-    assert response.name == f"{pipeline.name} (copy)"
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] != str(pipeline.id)
+    assert body["name"] == f"{pipeline.name} (copy)"
     with Session(session.get_bind()) as fresh:
-        copy = fresh.get(models.Pipeline, response.id)
+        copy = fresh.get(models.Pipeline, UUID(body["id"]))
         assert copy is not None
         # A copy claims no default role: two pipelines holding one template
         # slug would make "the default ingestion pipeline" ambiguous.
@@ -375,15 +374,48 @@ def test_copy_pipeline_duplicates_the_graph_under_a_new_name(session: Session) -
         assert PipelineService(fresh).get_definition(copy) == original
 
 
-def test_copy_pipeline_accepts_an_explicit_name(session: Session) -> None:
-    user = _create_user(session)
-    pipeline = _create_pipeline(session, user)
+def test_copy_pipeline_accepts_an_explicit_name(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    pipeline = _create_pipeline(session, auth_user)
 
-    response = pipelines_routes.copy_pipeline(
-        pipelines_routes.PipelineCopyRequest(name="Facts ingestion"),
-        pipeline=pipeline,
-        current_user=user,
-        session=session,
+    response = client.post(
+        f"/api/pipelines/{pipeline.id}/copy", json={"name": "Facts ingestion"}
     )
 
-    assert response.name == "Facts ingestion"
+    assert response.status_code == 201
+    assert response.json()["name"] == "Facts ingestion"
+
+
+def test_copying_a_pipeline_that_no_longer_validates_is_a_400(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """A stored definition can stop validating; the copy must say so.
+
+    Copying re-validates, so a graph that was saved when it was valid and is
+    not any more (a node type retired, an edge left dangling by a migration)
+    reaches the create path and is refused. Untranslated, that domain error
+    surfaces as a 500 and the user has nothing to act on.
+    """
+    pipeline = _create_pipeline(session, auth_user)
+    version = PipelineService(session).get_current_version(pipeline)
+    stored = dict(version.definition)
+    # A dangling edge: valid Pydantic, invalid graph.
+    stored["edges"] = [
+        *stored["edges"],
+        {
+            "id": "dangling",
+            "source": "nowhere",
+            "target": "nothing",
+            "source_port": "documents",
+            "target_port": "documents",
+        },
+    ]
+    version.definition = stored
+    session.add(version)
+    session.commit()
+
+    response = client.post(f"/api/pipelines/{pipeline.id}/copy", json={})
+
+    assert response.status_code == 400
+    assert "errors" in response.json()["detail"]

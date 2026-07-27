@@ -8,7 +8,7 @@ from typing import Protocol
 from ..models import ScoredChunk
 
 
-class Reranker(Protocol):  # pylint: disable=too-few-public-methods
+class Reranker(Protocol):
     """Protocol describing reranking behaviour."""
 
     def rerank(

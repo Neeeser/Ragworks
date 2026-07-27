@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """Pipeline services for managing definitions, versions, and defaults."""
 
 from __future__ import annotations
@@ -181,7 +180,7 @@ class PipelineService:
             return PipelineInterface.model_validate(version.interface)
         return derive_interface(PipelineDefinition.model_validate(version.definition))
 
-    def create_pipeline(  # pylint: disable=too-many-arguments
+    def create_pipeline(
         self,
         *,
         user: models.User,
@@ -239,7 +238,7 @@ class PipelineService:
             change_summary=f"Copied from '{pipeline.name}'.",
         )
 
-    def update_pipeline(  # pylint: disable=too-many-arguments
+    def update_pipeline(
         self,
         *,
         pipeline: models.Pipeline,

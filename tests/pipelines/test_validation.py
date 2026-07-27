@@ -503,7 +503,9 @@ def test_indexer_node_omitted_index_name_resolves_from_default_settings() -> Non
 
 def test_retriever_node_omitted_index_name_resolves_from_default_settings() -> None:
     """Same guarantee as above for the retriever's index-name validation."""
-    node = PipelineNodeDefinition(id="retriever", type="retriever.pinecone", name="Retriever", config={})
+    node = PipelineNodeDefinition(
+        id="retriever", type="retriever.pinecone", name="Retriever", config={}
+    )
     definition = PipelineDefinition(nodes=[node], edges=[])
     registry = NodeRegistry([PineconeRetrieverNode])
 
@@ -537,9 +539,7 @@ class _ManyJoinNode(PipelineNodeBase):
     category = "test"
     description = "Collects any number of inbound results on one port."
     example = "[A, B] -> Output."
-    input_ports = (
-        NodePort(key="items", label="Items", data_type="text", accepts_many=True),
-    )
+    input_ports = (NodePort(key="items", label="Items", data_type="text", accepts_many=True),)
     output_ports = (NodePort(key="out", label="Out", data_type="text"),)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -584,9 +584,7 @@ def test_pipeline_validator_rejects_multiple_edges_into_single_input_port() -> N
     result = validator.validate(_fan_in_definition("test.double", "a"))
 
     assert not result.valid
-    assert any(
-        "target" in error and "'a'" in error and "2" in error for error in result.errors
-    )
+    assert any("target" in error and "'a'" in error and "2" in error for error in result.errors)
 
 
 def test_pipeline_validator_allows_multiple_edges_into_accepts_many_port() -> None:
@@ -673,15 +671,12 @@ def test_embedding_limit_is_an_error_for_real_tokenizers(
         default_registry(),
         embedding_input_limit=lambda resolved_id, model: (
             512
-            if resolved_id == connection_id
-            and model == "sentence-transformers/all-minilm-l6-v2"
+            if resolved_id == connection_id and model == "sentence-transformers/all-minilm-l6-v2"
             else None
         ),
     ).validate(definition)
 
-    issue = next(
-        item for item in result.issues if item.code == "embedding_input_limit_exceeded"
-    )
+    issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
     assert result.valid is False
     assert issue.severity == "error"
     assert issue.allowed_max == 496
@@ -706,9 +701,7 @@ def test_embedding_limit_remains_a_warning_for_whitespace_tokenizer() -> None:
         default_registry(), embedding_input_limit=lambda _connection_id, _model: 512
     ).validate(definition)
 
-    issue = next(
-        item for item in result.issues if item.code == "embedding_input_limit_exceeded"
-    )
+    issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
     assert result.valid is True
     assert issue.severity == "warning"
     assert "whitespace" in issue.message
@@ -764,7 +757,7 @@ def test_unknown_embedding_limit_warns_only_on_confirmed_chunker_path() -> None:
 
     def resolve_limit(resolved_id: UUID, model: str) -> None:
         calls.append((resolved_id, model))
-        return None
+        return
 
     ingestion_result = PipelineValidator(
         default_registry(), embedding_input_limit=resolve_limit
@@ -773,12 +766,8 @@ def test_unknown_embedding_limit_warns_only_on_confirmed_chunker_path() -> None:
         default_registry(), embedding_input_limit=resolve_limit
     ).validate(retrieval)
 
-    assert any(
-        issue.code == "embedding_input_limit_unknown"
-        for issue in ingestion_result.issues
-    )
+    assert any(issue.code == "embedding_input_limit_unknown" for issue in ingestion_result.issues)
     assert not any(
-        issue.code == "embedding_input_limit_unknown"
-        for issue in retrieval_result.issues
+        issue.code == "embedding_input_limit_unknown" for issue in retrieval_result.issues
     )
     assert calls == [(connection_id, "unknown/model")]
