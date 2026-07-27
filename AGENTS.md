@@ -61,7 +61,11 @@ keyed by schema hash, so a worktree on another branch legitimately owns a differ
 one, and Postgres does not refuse the drop while it is only being *copied* from —
 sweeping mid-run makes every `CREATE DATABASE … TEMPLATE` in the neighbouring run
 fail on a database that just vanished. `make test-clean-templates` sweeps on
-purpose, when nothing is running.
+purpose, when nothing is running. **Never hand-name a database for a one-off run**
+(`ragworks_verify_final`, `ragworks_issue76_test`): a name outside the harness's
+worktree-derived scheme belongs to no worktree, so no sweep can ever prove it is
+dead and it survives every cleanup forever — take the database the Makefile targets
+give you.
 
 # Bug fixes require a regression test
 
@@ -98,6 +102,13 @@ failing-then-passing test is incomplete.
 - Every PR carries at least one release-notes label (`breaking`, `feature`, `fix`,
   `docs`, `ci`, `dependencies`, `chore`, or `skip-changelog`) — the `PR labels` check
   fails without one, and `.github/release.yml` uses them to organize release notes.
+- **A merged PR cleans up what it created**: delete its local branch, `git worktree
+  remove` its worktree, and drop the sandbox/test databases that worktree owned.
+  Database names encode the worktree, so once the worktree is gone nothing else can
+  tell its databases from a live one's — they accumulate on the single dev Postgres
+  as dozens of stale copies nobody dares sweep. Drop only your *own* worktree's
+  databases: a name belonging to a worktree that still exists may be mid-run, which
+  is why `make test-clean-templates` sweeps templates only when nothing is running.
 
 # Releases
 
