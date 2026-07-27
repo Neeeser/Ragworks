@@ -64,6 +64,10 @@ class OllamaAdapter(ProviderAdapter):
         super().__init__(connection)
         self._config = self.parse_config(OllamaConnectionConfig, connection.config)
 
+    def normalized_config(self) -> dict[str, object]:
+        """Persist the scheme/port-normalized URL, not the raw typed string."""
+        return self._config.model_dump(exclude_none=True)
+
     def _client(self) -> OllamaClient:
         """Return the (cached) Ollama client for this connection."""
         return get_ollama_client(self._config.base_url, self._config.api_key)

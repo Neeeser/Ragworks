@@ -79,6 +79,10 @@ class TEIAdapter(ProviderAdapter):
         super().__init__(connection)
         self._config = self.parse_config(TEIConnectionConfig, connection.config)
 
+    def normalized_config(self) -> dict[str, object]:
+        """Persist the scheme/port-normalized URL, not the raw typed string."""
+        return self._config.model_dump(exclude_none=True)
+
     def _client(self) -> TEIClient:
         """Return the shared client for this server configuration."""
         return get_tei_client(self._config.base_url, self._config.api_key)

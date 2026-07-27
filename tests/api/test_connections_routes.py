@@ -94,6 +94,24 @@ def test_create_rejects_malformed_config(client: TestClient) -> None:
     assert "http" in response.json()["detail"]
 
 
+def test_create_stores_the_normalized_url_not_the_typed_one(client: TestClient) -> None:
+    """A row showing the raw string names an address nothing answers on."""
+    response = client.post(
+        "/api/connections",
+        json={
+            "provider_type": "ollama",
+            "label": "Homelab",
+            "config": {"base_url": "192.168.1.225"},
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["config"]["base_url"] == "http://192.168.1.225:11434"
+    listed = client.get("/api/connections").json()
+    stored = next(entry for entry in listed if entry["label"] == "Homelab")
+    assert stored["config"]["base_url"] == "http://192.168.1.225:11434"
+
+
 def test_create_rejects_invalid_credentials(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

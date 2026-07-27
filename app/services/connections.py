@@ -198,7 +198,9 @@ class ConnectionService:
             user_id=user.id,
             provider_type=payload.provider_type.value,
             label=payload.label,
-            config=payload.config,
+            # The adapter's model may have rewritten the config (assumed scheme
+            # or port); store what the provider is actually reached at.
+            config=adapter.normalized_config(),
         )
         self.session.commit()
         self.session.refresh(created)
@@ -222,6 +224,7 @@ class ConnectionService:
             result = adapter.validate_connection()
             if not result.valid:
                 raise InvalidInputError(result.message or "Connection validation failed.")
+            connection.config = adapter.normalized_config()
         self.session.add(connection)
         self.session.commit()
         self.session.refresh(connection)
