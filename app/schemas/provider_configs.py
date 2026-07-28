@@ -104,12 +104,13 @@ class TEIConnectionConfig(BaseModel):
 
 
 class ChatDialect(StrEnum):
-    """Wire format a connection's chat calls use.
+    """Wire format a custom connection's chat calls use.
 
-    A property of the *connection*, not the model: one OpenAI key reaches both
-    surfaces, and which one a deployment wants is an operator choice (Responses
-    exposes reasoning summaries; Chat Completions is what every proxy in front
-    of OpenAI understands).
+    A property of the *connection*, not the model: the operator of a
+    self-hosted or gateway server knows which surface it speaks. OpenAI
+    connections don't carry one — the same model answers the two surfaces
+    with *different* capability profiles there, so the provider pins
+    Responses (OpenAI's primary endpoint) and gateways use Custom.
     """
 
     CHAT_COMPLETIONS = "chat_completions"
@@ -120,7 +121,6 @@ class OpenAIConnectionConfig(BaseModel):
     """Stored config for an OpenAI connection."""
 
     api_key: str = Field(min_length=1)
-    api_dialect: ChatDialect = ChatDialect.RESPONSES
     #: Set only to reach an OpenAI-compatible gateway on the account's behalf;
     #: empty means api.openai.com.
     base_url: str | None = None

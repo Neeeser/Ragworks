@@ -11,25 +11,19 @@ from app.db.models import ProviderConnection
 from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
-    CHAT_COMPLETIONS_PARAMETERS,
     RESPONSES_PARAMETERS,
-    ChatCompletionsProvider,
     ResponsesProvider,
 )
 from app.providers.openai_catalog import classify_openai_models
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openai_compat_embedder import OpenAICompatEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.provider_configs import (
-    ChatDialect,
-    OpenAIConnectionConfig,
-)
+from app.schemas.provider_configs import OpenAIConnectionConfig
 from app.schemas.providers import (
     CatalogMetadata,
     ConfigFieldKind,
     ConnectionValidationResult,
     ProviderConfigField,
-    ProviderConfigOption,
 )
 
 #: OpenAI's canonical API root. A constant rather than a setting: it is not a
@@ -48,23 +42,6 @@ OPENAI_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.SECRET,
             required=True,
             placeholder="sk-...",
-        ),
-        ProviderConfigField(
-            name="api_dialect",
-            label="Chat API",
-            kind=ConfigFieldKind.SELECT,
-            required=False,
-            default=ChatDialect.RESPONSES.value,
-            description=(
-                "Responses returns reasoning summaries from reasoning models. "
-                "Chat Completions is what proxies in front of OpenAI understand."
-            ),
-            options=(
-                ProviderConfigOption(value=ChatDialect.RESPONSES.value, label="Responses"),
-                ProviderConfigOption(
-                    value=ChatDialect.CHAT_COMPLETIONS.value, label="Chat Completions"
-                ),
-            ),
         ),
         ProviderConfigField(
             name="base_url",
@@ -93,7 +70,7 @@ class OpenAIAdapter(ProviderAdapter):
         self._config = self.parse_config(OpenAIConnectionConfig, connection.config)
 
     def normalized_config(self) -> dict[str, object]:
-        """Persist the validated config, including the resolved dialect."""
+        """Persist the validated config."""
         return self._config.model_dump(mode="json", exclude_none=True)
 
     def transport_config(self) -> TransportConfig:
@@ -128,10 +105,15 @@ class OpenAIAdapter(ProviderAdapter):
         )
 
     def _chat_parameters(self) -> list[str]:
-        """Return the parameter set this connection's dialect accepts."""
-        if self._config.api_dialect is ChatDialect.RESPONSES:
-            return list(RESPONSES_PARAMETERS)
-        return list(CHAT_COMPLETIONS_PARAMETERS)
+        """Return the Responses parameter floor.
+
+        OpenAI chat always speaks Responses here: the same model answers the
+        two surfaces with different capability profiles (gpt-5.6-luna accepts
+        `temperature` on Responses and rejects it on Chat Completions), so a
+        per-connection dialect would need two capability answers per model.
+        Gateways that only speak Chat Completions use the Custom provider.
+        """
+        return list(RESPONSES_PARAMETERS)
 
     def list_models(
         self, kind: ProviderKind, *, force_refresh: bool = False
@@ -151,12 +133,9 @@ class OpenAIAdapter(ProviderAdapter):
         return CatalogResult(models=models, meta=CatalogMetadata())
 
     def chat_provider(self) -> ChatProvider:
-        """Construct the chat provider for this connection's configured dialect."""
+        """Construct the Responses-dialect chat provider."""
         self.require_kind(ProviderKind.CHAT)
-        client = self._client()
-        if self._config.api_dialect is ChatDialect.RESPONSES:
-            return ResponsesProvider(client, name="openai")
-        return ChatCompletionsProvider(client, name="openai")
+        return ResponsesProvider(self._client(), name="openai")
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an embedder backed by OpenAI's embeddings endpoint."""

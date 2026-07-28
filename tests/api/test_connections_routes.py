@@ -62,15 +62,10 @@ def test_provider_catalog_lists_types_with_kind_badges(client: TestClient) -> No
     assert ollama_fields["api_key"]["required"] is False
     tei_fields = {field["name"]: field for field in by_type["tei"]["config_fields"]}
     assert "one model and task" in tei_fields["base_url"]["description"]
-    # The generic form renders a select from the field's own options, so the
-    # dialect choice needs no per-provider frontend code.
+    # OpenAI is Responses-only: no dialect choice on the connection form —
+    # gateways that only speak Chat Completions use the Custom provider.
     openai_fields = {field["name"]: field for field in by_type["openai"]["config_fields"]}
-    assert openai_fields["api_dialect"]["kind"] == "select"
-    assert [option["value"] for option in openai_fields["api_dialect"]["options"]] == [
-        "responses",
-        "chat_completions",
-    ]
-    assert openai_fields["api_dialect"]["default"] == "responses"
+    assert "api_dialect" not in openai_fields
     assert openai_fields["base_url"]["advanced"] is True
     custom_fields = {field["name"]: field for field in by_type["custom"]["config_fields"]}
     assert custom_fields["serves_chat"]["kind"] == "boolean"
