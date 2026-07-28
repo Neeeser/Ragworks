@@ -19,7 +19,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.chat_completions import ChatCompletionResponse
 from app.schemas.models import ModelInfo
 from app.schemas.tools import ToolInvocationResponse
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError
 from tests.chat.conftest import (
     ModelOnlyOpenRouter,
     SequencedOpenRouter,
@@ -107,6 +107,49 @@ def test_send_message_records_response(
     assert result.messages[-1].content == "Answer"
     assert result.usage["total_tokens"] == 8
     assert openrouter.chat_calls
+
+
+def test_unsupported_parameter_rejection_reaches_the_user_verbatim(
+    session: Session, chat_user, make_collection, install_chat_flow
+) -> None:
+    """A model rejecting a parameter surfaces the provider's own message.
+
+    There is deliberately no strip-and-retry layer: the 400 names the exact
+    field, and that text is the user's fix. Losing it to a generic 'provider
+    request failed' would leave them guessing which of six knobs caused it.
+    """
+    import httpx
+    import openai
+
+    make_collection(chat_user)
+    model_info = ModelInfo(
+        id="test-model",
+        name="Test Model",
+        context_length=2048,
+        supported_parameters=["tools", "temperature"],
+    )
+    detail = "Unsupported parameter: 'temperature' is not supported with this model."
+
+    class _RejectingCompat:
+        def chat(self, call: Any) -> Any:
+            raise openai.BadRequestError(
+                detail,
+                response=httpx.Response(
+                    400, request=httpx.Request("POST", "http://api.test/v1/responses")
+                ),
+                body={"error": {"message": detail, "code": "unsupported_parameter"}},
+            )
+
+    openrouter = StubOpenRouter(model_info=model_info, response={})
+    openrouter.compat = _RejectingCompat()  # type: ignore[assignment]
+    install_chat_flow(openrouter=openrouter, chat_model="test-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hello", parameters={"temperature": 0.2})
+
+    with pytest.raises(ExternalServiceError) as excinfo:
+        service.send_message(user=chat_user, payload=payload)
+    assert "Unsupported parameter: 'temperature'" in excinfo.value.detail
 
 
 def test_send_message_handles_tool_calls(
