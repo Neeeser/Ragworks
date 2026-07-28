@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from uuid import UUID
-
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from app.pipelines.backend_support import backend_support_issues
 from app.pipelines.definition import (
     PipelineDefinition,
-    PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
 from app.pipelines.facets import EdgeRef, NodePorts, facet_issues
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
-from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition, strip_expressions
+from app.pipelines.validation_limits import (
+    EmbeddingInputLimitResolver,
+    check_embedding_input_limits,
+)
 from app.pipelines.validation_variables import collect_variable_issues
-from app.providers.base import effective_embedding_input_limit
-
-EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
 
 
 class PipelineValidationResult(BaseModel):
@@ -71,7 +66,11 @@ class PipelineValidator:
         # expressions when the environment itself is broken.
         hook_definition = self._definition_for_node_hooks(definition, issues)
         issues.extend(self._collect_node_issues(hook_definition))
-        issues.extend(self._check_embedding_input_limits(hook_definition))
+        issues.extend(
+            check_embedding_input_limits(
+                hook_definition, self._registry, self._embedding_input_limit
+            )
+        )
         issues.extend(backend_support_issues(hook_definition, self._registry))
         node_errors = [issue.message for issue in issues if issue.severity == "error"]
         warnings = [issue.message for issue in issues if issue.severity == "warning"]
@@ -276,133 +275,3 @@ class PipelineValidator:
                 continue
             issues.extend(node_cls.validation_issues_for_node(node, definition, self._registry))
         return issues
-
-    def _check_embedding_input_limits(
-        self,
-        definition: PipelineDefinition,
-    ) -> list[PipelineValidationIssue]:
-        """Compare each chunker feeding an embedder with its provider limit."""
-        if self._embedding_input_limit is None:
-            return []
-        node_map = definition.node_map()
-        incoming = definition.incoming_edges()
-        chunk_input = EmbedderNode.input_ports[0].key
-        issues: list[PipelineValidationIssue] = []
-        for embedder in definition.nodes:
-            if embedder.type != EmbedderNode.type:
-                continue
-            config = EmbedderConfig.model_validate(embedder.config or {})
-            if config.connection_id is None or not config.model_name:
-                continue
-            chunkers = self._connected_chunkers(
-                incoming.get(embedder.id, []), node_map, chunk_input
-            )
-            if not chunkers:
-                continue
-            published_limit = self._embedding_input_limit(config.connection_id, config.model_name)
-            if published_limit is None:
-                issues.append(self._unknown_embedding_limit_issue(embedder.id, config.model_name))
-                continue
-            maximum = effective_embedding_input_limit(published_limit)
-            for chunker in chunkers:
-                issue = self._chunk_limit_issue(
-                    chunker,
-                    model=config.model_name,
-                    maximum=maximum,
-                )
-                if issue is not None:
-                    issues.append(issue)
-        return issues
-
-    def _connected_chunkers(
-        self,
-        edges: list[PipelineEdgeDefinition],
-        node_map: dict[str, PipelineNodeDefinition],
-        chunk_input: str,
-    ) -> list[PipelineNodeDefinition]:
-        """Return real chunker nodes connected to an embedder's chunk input."""
-        chunkers: list[PipelineNodeDefinition] = []
-        for edge in edges:
-            if edge.target_port not in (None, chunk_input):
-                continue
-            chunker = node_map.get(edge.source)
-            if chunker is None:
-                continue
-            chunker_cls = self._registry.get_node_class(chunker.type)
-            if chunker_cls is not None and issubclass(chunker_cls, BaseChunkerNode):
-                chunkers.append(chunker)
-        return chunkers
-
-    def _chunk_limit_issue(
-        self,
-        chunker: PipelineNodeDefinition,
-        *,
-        model: str,
-        maximum: int,
-    ) -> PipelineValidationIssue | None:
-        """Build a severity-aware issue for an oversized configured span."""
-        try:
-            config = FixedChunkerConfig.model_validate(chunker.config or {})
-        except ValidationError:
-            return None
-        chunk_size = getattr(config, "chunk_size", None)
-        if not isinstance(chunk_size, int):
-            return None
-        # Each emitted chunk spans at most chunk_size tokens — overlap is a
-        # stride within that window, not extra tokens the embedder ever sees —
-        # so only chunk_size is bounded by the model's input limit. Comparing
-        # chunk_size + overlap here once flagged (and clamped) windows that
-        # actually fit, so the wizard's shown size differed from what ingest
-        # used and a valid default tripped an error.
-        if chunk_size <= maximum:
-            return None
-        tokenizer = config.tokenizer
-        is_whitespace = tokenizer == "whitespace"
-        severity = "warning" if is_whitespace else "error"
-        detail = (
-            "The whitespace counter undercounts model tokens."
-            if is_whitespace
-            else f"The chunker uses {self._tokenizer_label(tokenizer)} token counts."
-        )
-        return PipelineValidationIssue(
-            code="embedding_input_limit_exceeded",
-            message=(
-                f"Chunk size ({chunk_size:,}) on node '{chunker.id}' "
-                f"exceeds embedding model '{model}' effective input limit of {maximum:,}. "
-                f"{detail}"
-            ),
-            severity=severity,
-            node_id=chunker.id,
-            field="chunk_size",
-            configured_value=chunk_size,
-            model=model,
-            allowed_max=maximum,
-        )
-
-    @staticmethod
-    def _tokenizer_label(tokenizer: str) -> str:
-        """Return the established human-readable counter label."""
-        return {
-            "wordpiece": "BERT WordPiece",
-            "cl100k": "cl100k",
-            "huggingface": "HuggingFace tokenizer",
-        }.get(tokenizer, tokenizer)
-
-    @staticmethod
-    def _unknown_embedding_limit_issue(
-        node_id: str,
-        model: str,
-    ) -> PipelineValidationIssue:
-        """Return the documented saveable warning for unpublished model limits."""
-        return PipelineValidationIssue(
-            code="embedding_input_limit_unknown",
-            message=(
-                f"Embedding model '{model}' does not publish an input token limit; "
-                "chunk-size compatibility could not be verified."
-            ),
-            severity="warning",
-            node_id=node_id,
-            field="model_name",
-            configured_value=model,
-            model=model,
-        )

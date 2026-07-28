@@ -9,7 +9,8 @@ from app.db.repositories import (
 )
 from app.pipelines.chunk_window_upgrade import rebase_chunk_windows
 from app.pipelines.definition import PipelineDefinition
-from app.pipelines.upgrades import migrate_variables_definition, upgrade_definition
+from app.pipelines.upgrades import upgrade_definition
+from app.pipelines.variables_migration import migrate_variables_definition
 from app.services.pipeline_validation import (
     log_pipeline_validation_warnings,
     validate_pipeline_definition,

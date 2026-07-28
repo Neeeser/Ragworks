@@ -29,7 +29,8 @@ from app.pipelines.nodes.indexing import (
     default_index_name,
 )
 from app.pipelines.nodes.limiting import ResultLimitNode
-from app.pipelines.nodes.retrieval import Bm25RetrieverNode, VectorRetrieverNode
+from app.pipelines.nodes.retrieval import VectorRetrieverNode
+from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.variables import PipelineVariable, VariableSource, VariableType
 from app.schemas.enums import IndexBackend

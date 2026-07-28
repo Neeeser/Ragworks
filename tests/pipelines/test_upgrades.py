@@ -16,9 +16,10 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.upgrades import migrate_variables_definition, upgrade_definition
+from app.pipelines.upgrades import upgrade_definition
 from app.pipelines.validation import PipelineValidationResult
 from app.pipelines.variables import VariableSource
+from app.pipelines.variables_migration import migrate_variables_definition
 from app.services.pipelines import PipelineService, upgrade_stored_pipeline_definitions
 
 

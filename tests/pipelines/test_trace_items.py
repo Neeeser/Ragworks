@@ -22,10 +22,12 @@ from app.pipelines.nodes.io import (
 )
 from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
 from app.pipelines.nodes.retrieval import (
-    Bm25RetrieverConfig,
-    Bm25RetrieverNode,
     VectorRetrieverConfig,
     VectorRetrieverNode,
+)
+from app.pipelines.nodes.retrieval_bm25 import (
+    Bm25RetrieverConfig,
+    Bm25RetrieverNode,
 )
 from app.pipelines.payloads import (
     Item,

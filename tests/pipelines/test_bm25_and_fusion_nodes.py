@@ -15,10 +15,12 @@ from app.pipelines.nodes.fusion import RRFusionConfig, RRFusionNode
 from app.pipelines.nodes.indexing import Bm25IndexerConfig, Bm25IndexerNode
 from app.pipelines.nodes.io import IngestionOutputConfig, IngestionOutputNode
 from app.pipelines.nodes.retrieval import (
-    Bm25RetrieverConfig,
-    Bm25RetrieverNode,
     VectorRetrieverConfig,
     VectorRetrieverNode,
+)
+from app.pipelines.nodes.retrieval_bm25 import (
+    Bm25RetrieverConfig,
+    Bm25RetrieverNode,
 )
 from app.pipelines.nodes.validators import lexical_support_issue
 from app.pipelines.payloads import IndexingPayload, Item, ItemBatch
