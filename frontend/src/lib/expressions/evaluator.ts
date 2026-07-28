@@ -9,6 +9,7 @@ import { BUILTINS, arityMessage } from "./functions";
 import {
   INDEX_MEMBERS,
   MODEL_MEMBERS,
+  SELF_SCOPE,
   isIndexValue,
   isModelValue,
   valueType,
@@ -19,7 +20,14 @@ import type { Expression } from "./parser";
 
 export type ValueEnvironment = ReadonlyMap<string, ExprValue>;
 
-export function evaluate(expr: Expression, env: ValueEnvironment): ExprValue {
+/** Already-resolved sibling config fields of the node the expression sits on. */
+export type SelfValues = ReadonlyMap<string, ExprValue>;
+
+export function evaluate(
+  expr: Expression,
+  env: ValueEnvironment,
+  selfValues?: SelfValues,
+): ExprValue {
   switch (expr.kind) {
     case "int":
     case "float":
@@ -27,6 +35,9 @@ export function evaluate(expr: Expression, env: ValueEnvironment): ExprValue {
     case "boolean":
       return expr.value;
     case "name": {
+      if (expr.name === SELF_SCOPE) {
+        throw typeError(`'${SELF_SCOPE}' is a scope, not a value`, expr.position);
+      }
       const value = env.get(expr.name);
       if (value === undefined) {
         throw typeError(`Unknown variable '${expr.name}'`, expr.position);
@@ -34,13 +45,13 @@ export function evaluate(expr: Expression, env: ValueEnvironment): ExprValue {
       return value;
     }
     case "member":
-      return evaluateMember(expr, env);
+      return evaluateMember(expr, env, selfValues);
     case "unary":
-      return -requireNumeric(evaluate(expr.operand, env), "Unary '-'", expr.position);
+      return -requireNumeric(evaluate(expr.operand, env, selfValues), "Unary '-'", expr.position);
     case "binary":
-      return evaluateBinary(expr, env);
+      return evaluateBinary(expr, env, selfValues);
     case "call":
-      return evaluateCall(expr, env);
+      return evaluateCall(expr, env, selfValues);
   }
 }
 
@@ -61,8 +72,16 @@ function requireInteger(value: ExprValue, op: string, position: number): number 
 function evaluateMember(
   expr: Extract<Expression, { kind: "member" }>,
   env: ValueEnvironment,
+  selfValues?: SelfValues,
 ): ExprValue {
-  const base = evaluate(expr.base, env);
+  if (expr.base.kind === "name" && expr.base.name === SELF_SCOPE) {
+    const value = selfValues?.get(expr.attribute);
+    if (value === undefined) {
+      throw typeError(`This node has no config field '${expr.attribute}'`, expr.position);
+    }
+    return value;
+  }
+  const base = evaluate(expr.base, env, selfValues);
   if (typeof base === "object" && base !== null) {
     if (isIndexValue(base) && expr.attribute in INDEX_MEMBERS) {
       if (expr.attribute === "id") return base.index_id;
@@ -78,9 +97,10 @@ function evaluateMember(
 function evaluateBinary(
   expr: Extract<Expression, { kind: "binary" }>,
   env: ValueEnvironment,
+  selfValues?: SelfValues,
 ): ExprValue {
-  const left = evaluate(expr.left, env);
-  const right = evaluate(expr.right, env);
+  const left = evaluate(expr.left, env, selfValues);
+  const right = evaluate(expr.right, env, selfValues);
   if (expr.op === "+" && typeof left === "string" && typeof right === "string") {
     return left + right;
   }
@@ -113,6 +133,7 @@ function evaluateBinary(
 function evaluateCall(
   expr: Extract<Expression, { kind: "call" }>,
   env: ValueEnvironment,
+  selfValues?: SelfValues,
 ): ExprValue {
   const spec = BUILTINS[expr.name];
   if (!spec) {
@@ -123,7 +144,7 @@ function evaluateCall(
     throw typeError(arityMessage(spec, received), expr.position);
   }
   const args = expr.args.map((arg) =>
-    requireNumeric(evaluate(arg, env), `${spec.name}()`, arg.position),
+    requireNumeric(evaluate(arg, env, selfValues), `${spec.name}()`, arg.position),
   );
   try {
     return spec.apply(args);

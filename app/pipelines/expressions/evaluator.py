@@ -29,6 +29,7 @@ from app.pipelines.expressions.parser import (
 from app.pipelines.expressions.values import (
     INDEX_MEMBERS,
     MODEL_MEMBERS,
+    SELF_SCOPE,
     ExprValue,
     IndexValue,
     ModelValue,
@@ -36,23 +37,39 @@ from app.pipelines.expressions.values import (
 )
 
 
-def evaluate(expr: Expression, env: Mapping[str, ExprValue]) -> ExprValue:
-    """Evaluate the expression against `{variable name: value}`."""
+def evaluate(
+    expr: Expression,
+    env: Mapping[str, ExprValue],
+    self_values: Mapping[str, ExprValue] | None = None,
+) -> ExprValue:
+    """Evaluate the expression against `{variable name: value}`.
+
+    `self_values` carries the *already resolved* sibling config fields of the
+    node this expression sits on. The caller resolves siblings in dependency
+    order, so a field reached through `self.` is always a literal by the time
+    it is read here.
+    """
     if isinstance(expr, (IntLiteral, NumberLiteral, StringLiteral, BooleanLiteral)):
         return expr.value
     if isinstance(expr, Name):
+        if expr.name == SELF_SCOPE:
+            raise ExpressionTypeError(
+                f"'{SELF_SCOPE}' is a scope, not a value", expr.position
+            )
         if expr.name not in env:
             raise ExpressionTypeError(f"Unknown variable '{expr.name}'", expr.position)
         return env[expr.name]
     if isinstance(expr, Member):
-        return _evaluate_member(expr, env)
+        return _evaluate_member(expr, env, self_values)
     if isinstance(expr, Unary):
-        operand = _require_numeric(evaluate(expr.operand, env), "Unary '-'", expr.position)
+        operand = _require_numeric(
+            evaluate(expr.operand, env, self_values), "Unary '-'", expr.position
+        )
         return -operand
     if isinstance(expr, Binary):
-        return _evaluate_binary(expr, env)
+        return _evaluate_binary(expr, env, self_values)
     if isinstance(expr, Call):
-        return _evaluate_call(expr, env)
+        return _evaluate_call(expr, env, self_values)
     raise ExpressionTypeError("Unsupported expression node", expr.position)
 
 
@@ -78,9 +95,19 @@ def _require_integer(value: ExprValue, op: str, position: int) -> int:
     return value
 
 
-def _evaluate_member(expr: Member, env: Mapping[str, ExprValue]) -> ExprValue:
-    """Evaluate structured member access to its string value."""
-    base = evaluate(expr.base, env)
+def _evaluate_member(
+    expr: Member,
+    env: Mapping[str, ExprValue],
+    self_values: Mapping[str, ExprValue] | None = None,
+) -> ExprValue:
+    """Evaluate `self.<field>`, or structured member access to its string value."""
+    if isinstance(expr.base, Name) and expr.base.name == SELF_SCOPE:
+        if self_values is None or expr.attribute not in self_values:
+            raise ExpressionTypeError(
+                f"This node has no config field '{expr.attribute}'", expr.position
+            )
+        return self_values[expr.attribute]
+    base = evaluate(expr.base, env, self_values)
     if isinstance(base, ModelValue) and expr.attribute in MODEL_MEMBERS:
         if expr.attribute == "connection_id":
             return str(base.connection_id)
@@ -94,10 +121,14 @@ def _evaluate_member(expr: Member, env: Mapping[str, ExprValue]) -> ExprValue:
     )
 
 
-def _evaluate_binary(expr: Binary, env: Mapping[str, ExprValue]) -> ExprValue:
+def _evaluate_binary(
+    expr: Binary,
+    env: Mapping[str, ExprValue],
+    self_values: Mapping[str, ExprValue] | None = None,
+) -> ExprValue:
     """Evaluate a binary operation, mirroring `_check_binary`'s rules."""
-    left = evaluate(expr.left, env)
-    right = evaluate(expr.right, env)
+    left = evaluate(expr.left, env, self_values)
+    right = evaluate(expr.right, env, self_values)
     if expr.op == "+" and isinstance(left, str) and isinstance(right, str):
         return left + right
     if expr.op in ("//", "%"):
@@ -119,7 +150,11 @@ def _evaluate_binary(expr: Binary, env: Mapping[str, ExprValue]) -> ExprValue:
     return left_num / right_num
 
 
-def _evaluate_call(expr: Call, env: Mapping[str, ExprValue]) -> ExprValue:
+def _evaluate_call(
+    expr: Call,
+    env: Mapping[str, ExprValue],
+    self_values: Mapping[str, ExprValue] | None = None,
+) -> ExprValue:
     """Evaluate a builtin call against the shared catalog."""
     spec = BUILTINS.get(expr.name)
     if spec is None:
@@ -128,7 +163,7 @@ def _evaluate_call(expr: Call, env: Mapping[str, ExprValue]) -> ExprValue:
     if received < spec.min_args or (spec.max_args is not None and received > spec.max_args):
         raise ExpressionTypeError(arity_message(spec, received), expr.position)
     args = [
-        _require_numeric(evaluate(arg, env), f"{spec.name}()", arg.position)
+        _require_numeric(evaluate(arg, env, self_values), f"{spec.name}()", arg.position)
         for arg in expr.args
     ]
     try:

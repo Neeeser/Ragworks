@@ -46,6 +46,8 @@ export interface UsePipelinesResult {
   validating: boolean;
   validationIssues: PipelineValidationIssue[];
   clearValidationIssues: () => void;
+  /** Replace the issue list from a live (debounced) validation pass. */
+  applyValidationIssues: (issues: PipelineValidationIssue[]) => void;
   message: string | null;
   setMessage: (message: string | null) => void;
   changeSummary: string;
@@ -373,6 +375,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     validating,
     validationIssues,
     clearValidationIssues: () => setValidationIssues([]),
+    applyValidationIssues: setValidationIssues,
     message,
     setMessage,
     changeSummary,

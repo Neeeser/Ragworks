@@ -12,7 +12,7 @@ spelunking.
 from __future__ import annotations
 
 from app.pipelines.expressions import ExprType
-from app.pipelines.variables import STATIC_ONLY_KEY
+from app.pipelines.variables import EXPR_SEED_KEY, STATIC_ONLY_KEY
 
 _SCHEMA_EXPR_TYPES: dict[str, ExprType] = {
     "integer": ExprType.INTEGER,
@@ -40,6 +40,31 @@ def field_schema(schema: dict[str, object], key: str) -> dict[str, object]:
 def is_static_only(field: dict[str, object]) -> bool:
     """Return True when the resolved field carries the identity marker."""
     return bool(field.get(STATIC_ONLY_KEY))
+
+
+def expr_seed(field: dict[str, object]) -> str | None:
+    """Return the field's seed expression, when it declares one."""
+    value = field.get(EXPR_SEED_KEY)
+    return value if isinstance(value, str) else None
+
+
+def integer_fields(schema: dict[str, object]) -> frozenset[str]:
+    """Names of the node's integer config fields.
+
+    Resolution rounds a number result landing on one: a proportion of an
+    integer is rarely an integer (20% of 512 is 102.4), and rejecting that
+    would make the natural way to write a share unusable on the very fields
+    shares are written for. The rounded value is what the editor previews, so
+    the author sees the stored number rather than inferring it.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return frozenset()
+    return frozenset(
+        key
+        for key in properties
+        if expected_expr_type(field_schema(schema, key)) is ExprType.INTEGER
+    )
 
 
 def expected_expr_type(field: dict[str, object]) -> ExprType | None:

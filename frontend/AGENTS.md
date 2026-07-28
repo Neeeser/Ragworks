@@ -333,6 +333,14 @@ the same PR.
   reload-on-change data. It owns the loading/error/cancellation lifecycle. Don't
   hand-roll the `useEffect` + `cancelled` flag + `setLoading/setError/setData`
   dance — hand-rolled copies drift, and the ones that forget the guard are race bugs.
+- **The pipeline editor validates against the server on a debounce, including
+  the open drawer's uncommitted draft** (`hooks/use-live-validation.ts`). Server
+  rules — embedding input limits, backend compatibility, expression taint — are
+  otherwise reachable only by saving, so a field can be wrong for a whole
+  session without saying so. The draft is held in `useNodeEditing`, never merged
+  into `nodes`: merging re-renders the canvas on every keystroke in a text box.
+  A failed request leaves the previous issues in place rather than reporting an
+  empty list, which would claim the graph became clean.
 - **Never swallow a fetch error.** Every failure surfaces to the user through the
   component's error channel. A `.catch` that only flips a boolean, or a
   `try/finally` with no `catch`, silently hides the failure from the user.

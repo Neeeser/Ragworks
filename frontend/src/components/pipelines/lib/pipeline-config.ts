@@ -1,4 +1,8 @@
+import { evaluate, expressionSource, parse } from "@/lib/expressions";
+import { roundHalfAway } from "@/lib/expressions/functions";
+
 import type { ParameterSelectOption } from "@/components/ui/parameter-controls";
+import type { ExprType, ExprValue } from "@/lib/expressions";
 import type { ParameterInputKind } from "@/lib/types";
 
 export type PipelineConfigField = {
@@ -17,6 +21,8 @@ export type PipelineConfigField = {
   /** Identity field (index name, backend, dimension): expressions on it may
    * not depend on caller input. Mirrors the backend `static_only` marker. */
   staticOnly: boolean;
+  /** Expression the ƒx toggle starts from, when the node declares one. */
+  exprSeed?: string;
   /** Expression type the field accepts in expression mode; null = no ƒx toggle. */
   exprType: "integer" | "number" | "string" | "boolean" | null;
 };
@@ -139,6 +145,7 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
     // json_schema_extra lands on the outer property, even when the type
     // resolves through anyOf/$ref.
     const staticOnly = rawSchema.static_only === true || node.static_only === true;
+    const seed = rawSchema.expr_seed ?? node.expr_seed;
 
     return {
       key,
@@ -154,6 +161,7 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
       nullable,
       required: requiredSet.has(key),
       staticOnly,
+      exprSeed: typeof seed === "string" ? seed : undefined,
       exprType: expressionTypeFor(input),
     };
   });
@@ -210,3 +218,59 @@ export const coerceFieldValue = (field: PipelineConfigField, raw: string | boole
   }
   return raw;
 };
+
+/**
+ * The `self.<field>` scope for one field of a node: sibling types from the
+ * schema, sibling values from the node's config (falling back to each field's
+ * default, which is what the node will actually run with).
+ *
+ * Expression-valued siblings are omitted rather than guessed: their value is
+ * decided during resolution, and showing a preview computed from a placeholder
+ * would state a number the run will not produce.
+ */
+export function buildSelfScope(
+  fields: PipelineConfigField[],
+  config: Record<string, unknown>,
+  key: string,
+): { types: Map<string, ExprType>; values: Map<string, ExprValue>; key: string } {
+  const types = new Map<string, ExprType>();
+  const values = new Map<string, ExprValue>();
+  for (const field of fields) {
+    if (field.exprType !== null) types.set(field.key, field.exprType);
+    const raw = config[field.key] ?? field.defaultValue;
+    if (expressionSource(config[field.key]) !== null) continue;
+    if (typeof raw === "number" || typeof raw === "string" || typeof raw === "boolean") {
+      values.set(field.key, raw);
+    }
+  }
+  return { types, values, key };
+}
+
+/**
+ * A config value as a number, evaluating an expression when it holds one.
+ *
+ * Returns null when the value cannot be known without a run — an expression
+ * over a caller-supplied argument, or one that does not type-check. Callers
+ * state that honestly rather than showing a number the run will not produce.
+ */
+export function resolvedNumber(
+  key: string,
+  fields: PipelineConfigField[],
+  config: Record<string, unknown>,
+  env: { values: ReadonlyMap<string, ExprValue> },
+): number | null {
+  const raw = config[key] ?? fields.find((field) => field.key === key)?.defaultValue;
+  if (typeof raw === "number") return raw;
+  const source = expressionSource(config[key]);
+  if (source === null) return null;
+  try {
+    const scope = buildSelfScope(fields, config, key);
+    const result = evaluate(parse(source), env.values, scope.values);
+    if (typeof result !== "number") return null;
+    // Report the value that will be stored: an integer field rounds.
+    const field = fields.find((candidate) => candidate.key === key);
+    return field?.exprType === "integer" ? roundHalfAway(result) : result;
+  } catch {
+    return null;
+  }
+}

@@ -19,6 +19,9 @@ interface UseNodeEditingParams {
  * read-only library preview) and the mutations that flow out of the drawer:
  * adding a node and applying a saved draft (label + config) to a node.
  */
+/** A node's config as edited in the drawer but not yet applied to the canvas. */
+export type NodeDraft = { nodeId: string; config: Record<string, unknown> };
+
 export function useNodeEditing({ nodes, setNodes }: UseNodeEditingParams) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [previewSpec, setPreviewSpec] = useState<NodeSpec | null>(null);
@@ -50,9 +53,15 @@ export function useNodeEditing({ nodes, setNodes }: UseNodeEditingParams) {
     setSelectedNodeId(null);
   }, []);
 
+  // The open drawer's uncommitted config. Held here rather than merged into
+  // `nodes` so the canvas does not re-render on every keystroke in a text box;
+  // only live validation reads it.
+  const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
+
   const closeEditor = useCallback(() => {
     setSelectedNodeId(null);
     setPreviewSpec(null);
+    setNodeDraft(null);
   }, []);
 
   const addNode = useCallback(
@@ -73,6 +82,7 @@ export function useNodeEditing({ nodes, setNodes }: UseNodeEditingParams) {
 
   const applyNodeEdits = useCallback(
     (nodeId: string, edits: NodeEdits) => {
+      setNodeDraft(null);
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
@@ -94,5 +104,7 @@ export function useNodeEditing({ nodes, setNodes }: UseNodeEditingParams) {
     closeEditor,
     addNode,
     applyNodeEdits,
+    nodeDraft,
+    setNodeDraft,
   };
 }

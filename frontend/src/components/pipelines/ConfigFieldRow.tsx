@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { ExpressionInput } from "./ExpressionInput";
 import { buildSuggestions } from "./lib/expression-suggest";
-import { formatConfigValue, getInputValue } from "./lib/pipeline-config";
+import { buildSelfScope, formatConfigValue, getInputValue } from "./lib/pipeline-config";
 import { SuggestionListbox } from "./SuggestionListbox";
 
 import type { Suggestion } from "./lib/expression-suggest";
@@ -19,6 +19,8 @@ import type { PipelineValidationIssue } from "@/lib/types";
 
 type ConfigFieldRowProps = {
   field: PipelineConfigField;
+  /** Every config field of the node, so this one can read them via `self.`. */
+  siblingFields: PipelineConfigField[];
   nodeId: string;
   config: Record<string, unknown>;
   env: StaticEnvironment;
@@ -76,6 +78,7 @@ function FxToggle({ active, joined, onClick }: FxToggleProps) {
  */
 export function ConfigFieldRow({
   field,
+  siblingFields,
   nodeId,
   config,
   env,
@@ -103,19 +106,30 @@ export function ConfigFieldRow({
   const numericLiteral =
     !isExpression && (field.input === "number" || field.input === "integer") && canToggle;
 
+  // A cleared number box must stay cleared while the user retypes. Writing
+  // `undefined` deletes the key, so the control immediately re-renders showing
+  // the schema default and the field appears to refuse an empty value.
+  const [draft, setDraft] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [convertedFocus, setConvertedFocus] = useState(false);
+  const selfScope = useMemo(
+    () => buildSelfScope(siblingFields, config, field.key),
+    [siblingFields, config, field.key],
+  );
   const suggestions = useMemo(
     () =>
       numericLiteral
         ? buildSuggestions(env, {
             expectedType: field.exprType,
             staticOnly: field.staticOnly,
-          }).filter((suggestion) => suggestion.kind === "variable" && suggestion.name !== "query")
+            selfFields: selfScope.types,
+            selfFieldKey: field.key,
+            selfValues: selfScope.values,
+          }).filter((suggestion) => suggestion.kind !== "function" && suggestion.name !== "query")
         : [],
-    [numericLiteral, env, field.exprType, field.staticOnly],
+    [numericLiteral, env, field.exprType, field.staticOnly, selfScope, field.key],
   );
 
   const convertToExpression = (seed: string) => {
@@ -155,7 +169,10 @@ export function ConfigFieldRow({
 
   const toggleExpression = () => {
     setConvertedFocus(false);
-    onValueChange(field.key, isExpression ? undefined : { $expr: "" });
+    // A field whose natural value is a formula over its siblings starts from
+    // that formula rather than an empty box; the node declares it, so this
+    // needs no per-node knowledge here.
+    onValueChange(field.key, isExpression ? undefined : { $expr: field.exprSeed ?? "" });
   };
   // The checkbox row has no bounding box to weld onto; every other control does.
   const joined = field.input !== "boolean";
@@ -178,6 +195,7 @@ export function ConfigFieldRow({
           env={env}
           expectedType={field.exprType}
           staticOnly={field.staticOnly}
+          self={selfScope}
           autoFocus={convertedFocus}
           addon={canToggle ? <FxToggle active joined onClick={toggleExpression} /> : undefined}
         />
@@ -192,7 +210,12 @@ export function ConfigFieldRow({
                 setSuggestOpen(true);
               }
             }}
-            onBlurCapture={() => setSuggestOpen(false)}
+            onBlurCapture={() => {
+              setSuggestOpen(false);
+              // Leaving an empty box restores whatever the config holds, so a
+              // field is never left displaying a value it does not have.
+              setDraft(null);
+            }}
             onKeyDownCapture={handleLiteralKeyDown}
           >
             <ParameterInput
@@ -200,7 +223,7 @@ export function ConfigFieldRow({
               ariaInvalid={issue?.severity === "error"}
               ariaDescribedBy={issueId}
               input={field.input}
-              value={getInputValue(field, config)}
+              value={draft ?? getInputValue(field, config)}
               min={field.min}
               max={field.max}
               step={field.step}
@@ -208,7 +231,10 @@ export function ConfigFieldRow({
               options={field.options}
               disabled={disabled}
               className={canToggle && joined ? "rounded-r-none" : undefined}
-              onChange={(nextValue) => onLiteralChange(field, nextValue)}
+              onChange={(nextValue) => {
+                setDraft(typeof nextValue === "string" && nextValue === "" ? "" : null);
+                onLiteralChange(field, nextValue);
+              }}
             />
             {suggestOpen && suggestions.length > 0 ? (
               <SuggestionListbox

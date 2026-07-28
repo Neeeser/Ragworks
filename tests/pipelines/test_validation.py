@@ -648,7 +648,7 @@ def test_reranker_validation_accepts_provider_and_model() -> None:
         ("huggingface", {"hf_model_id": "owner/model"}, "HuggingFace"),
     ],
 )
-def test_embedding_limit_is_an_error_for_real_tokenizers(
+def test_embedding_limit_names_the_tokenizer_without_blocking_the_save(
     tokenizer: str,
     tokenizer_config: dict[str, str],
     label: str,
@@ -677,16 +677,18 @@ def test_embedding_limit_is_an_error_for_real_tokenizers(
     ).validate(definition)
 
     issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
-    assert result.valid is False
-    assert issue.severity == "error"
+    # Advisory: the guard splits oversized chunks, so the pipeline still saves.
+    assert result.valid is True
+    assert issue.severity == "warning"
     assert issue.allowed_max == 496
-    assert issue.configured_value == 500
+    # The reported value is the window the embedder receives: 500 + 100.
+    assert issue.configured_value == 600
     assert issue.node_id == "chunk-document"
     assert issue.field == "chunk_size"
     assert label in issue.message
 
 
-def test_embedding_limit_remains_a_warning_for_whitespace_tokenizer() -> None:
+def test_embedding_limit_explains_the_whitespace_counter() -> None:
     connection_id = uuid4()
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=connection_id,
@@ -771,3 +773,54 @@ def test_unknown_embedding_limit_warns_only_on_confirmed_chunker_path() -> None:
         issue.code == "embedding_input_limit_unknown" for issue in retrieval_result.issues
     )
     assert calls == [(connection_id, "unknown/model")]
+
+
+def test_embedding_limit_counts_the_overlap_the_embedder_receives() -> None:
+    """A chunk_size under the limit can still overflow once overlap is added.
+
+    Regression: comparing chunk_size alone let a 400 + 200 window past a
+    496-token model, and the embedding guard then silently re-split chunks the
+    author had sized deliberately.
+    """
+    connection_id = uuid4()
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="m",
+        chunk_size=400,
+        chunk_overlap=200,
+    )
+
+    result = PipelineValidator(
+        default_registry(),
+        embedding_input_limit=lambda _connection, _model: 512,
+    ).validate(definition)
+
+    issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
+    assert issue.configured_value == 600
+    assert issue.allowed_max == 496
+    assert "400 + 200 = 600" in issue.message
+
+
+def test_embedding_limit_reads_an_expression_valued_overlap() -> None:
+    """The shipped overlap default is an expression, so the check must see it."""
+    connection_id = uuid4()
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model="m",
+        chunk_size=400,
+        chunk_overlap=0,
+    )
+    chunker = next(node for node in definition.nodes if node.id == "chunk-document")
+    chunker.config = {
+        **chunker.config,
+        "chunk_overlap": {"$expr": "percent(self.chunk_size, 50)"},
+    }
+
+    result = PipelineValidator(
+        default_registry(),
+        embedding_input_limit=lambda _connection, _model: 512,
+    ).validate(definition)
+
+    # 400 + 200 = 600 once the expression resolves.
+    issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
+    assert issue.configured_value == 600

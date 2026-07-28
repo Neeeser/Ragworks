@@ -10,12 +10,17 @@ export interface BuiltinSpec {
   name: string;
   minArgs: number;
   maxArgs: number | null;
-  result: "preserve_int" | "always_int";
+  result: "preserve_int" | "always_int" | "always_number";
   apply: (args: number[]) => number;
 }
 
-function roundHalfAway(value: number): number {
+export function roundHalfAway(value: number): number {
   return value >= 0 ? Math.floor(value + 0.5) : -Math.floor(-value + 0.5);
+}
+
+/** `args[1]` percent of `args[0]` — a proportion that reads as one. */
+function percent(args: number[]): number {
+  return (args[0] * args[1]) / 100;
 }
 
 function clamp(args: number[]): number {
@@ -62,6 +67,13 @@ export const BUILTINS: Record<string, BuiltinSpec> = {
     maxArgs: 1,
     result: "always_int",
     apply: (args) => roundHalfAway(args[0]),
+  },
+  percent: {
+    name: "percent",
+    minArgs: 2,
+    maxArgs: 2,
+    result: "always_number",
+    apply: percent,
   },
 };
 

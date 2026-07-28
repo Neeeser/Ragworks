@@ -32,7 +32,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validator
 
-from app.pipelines.expressions import ExprType, ExprValue, IndexValue, ModelValue
+from app.pipelines.expressions import (
+    SELF_SCOPE,
+    ExprType,
+    ExprValue,
+    IndexValue,
+    ModelValue,
+)
 from app.pipelines.expressions.functions import BUILTINS
 
 EXPRESSION_KEY = "$expr"
@@ -58,8 +64,14 @@ names from them (`'col-' + collection_id`) without breaking the taint rule.
 
 VARIABLE_NAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
 RESERVED_VARIABLE_NAMES = frozenset(
-    {QUERY_VARIABLE, *COLLECTION_VARIABLES, "true", "false", *BUILTINS}
+    {QUERY_VARIABLE, *COLLECTION_VARIABLES, SELF_SCOPE, "true", "false", *BUILTINS}
 )
+"""Names a pipeline variable may not take.
+
+`self` is reserved so a node's own scope can never be shadowed: with it taken,
+adding a pipeline variable can never change what an existing node's
+expressions compute.
+"""
 
 STATIC_ONLY_KEY = "static_only"
 """json_schema_extra marker for identity config fields (index names, backends,
@@ -69,6 +81,20 @@ marker off the node catalog's config schema."""
 
 STATIC_ONLY_EXTRA: dict[str, JsonValue] = {STATIC_ONLY_KEY: True}
 """Pass as `Field(json_schema_extra=STATIC_ONLY_EXTRA)` on identity fields."""
+
+EXPR_SEED_KEY = "expr_seed"
+"""json_schema_extra marker holding the expression a field starts from.
+
+A field whose natural value is a formula over its siblings (an overlap as a
+share of chunk size) seeds the editor with that formula when the author
+switches it to expression mode, instead of an empty box. The node declares it
+so the knowledge lives with the field; the frontend reads it off the config
+schema and needs no per-node code."""
+
+
+def expr_seed_extra(source: str) -> dict[str, JsonValue]:
+    """Build the `json_schema_extra` carrying a field's seed expression."""
+    return {EXPR_SEED_KEY: source}
 
 ScalarValue = int | float | str | bool
 VariableValue = ScalarValue | ModelValue | IndexValue

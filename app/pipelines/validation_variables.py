@@ -12,8 +12,7 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from app.pipelines.config_fields import expected_expr_type, field_schema, is_static_only
-from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.definition import PipelineDefinition
 from app.pipelines.environment import (
     VariableResolutionError,
     build_environment,
@@ -22,6 +21,7 @@ from app.pipelines.expressions import (
     ExpressionError,
     ExprType,
     check_type,
+    is_assignable,
     parse,
     references,
 )
@@ -37,13 +37,13 @@ from app.pipelines.validation_declarations import (
     name_issues,
     variabledeclaration_issues,
 )
+from app.pipelines.validation_node_config import node_config_issues
 from app.pipelines.variables import (
     COLLECTION_VARIABLES,
     EXPR_TYPES,
     QUERY_VARIABLE,
     PipelineVariable,
     VariableSource,
-    expression_source,
     valid_variable_name,
 )
 
@@ -62,7 +62,7 @@ def collect_variable_issues(
     types, tainted = _static_types(definition)
     issues.extend(_derived_expression_issues(definition.variables, types))
     issues.extend(_environment_issues(definition))
-    issues.extend(_node_config_issues(definition, registry, types, tainted))
+    issues.extend(node_config_issues(definition, registry, types, tainted))
     issues.extend(_output_issues(definition, types))
     return _dedupe(issues)
 
@@ -268,7 +268,7 @@ def _derived_expression_issues(
             )
             continue
         declared = EXPR_TYPES[variable.type]
-        if not _assignable(result, declared):
+        if not is_assignable(result, declared):
             issues.append(
                 PipelineValidationIssue(
                     code="expression_type",
@@ -296,80 +296,3 @@ def _environment_issues(definition: PipelineDefinition) -> list[PipelineValidati
             for message in error.messages
         ]
     return []
-
-
-def _node_config_issues(
-    definition: PipelineDefinition,
-    registry: NodeRegistry,
-    types: dict[str, ExprType],
-    tainted: frozenset[str],
-) -> list[PipelineValidationIssue]:
-    """Check every `$expr` config value: syntax, typing, and the taint rule."""
-    issues: list[PipelineValidationIssue] = []
-    for node in definition.nodes:
-        spec = registry.get_spec(node.type)
-        schema = spec.config_schema if spec else {}
-        for key, value in node.config.items():
-            source = expression_source(value)
-            if source is None:
-                continue
-            issues.extend(_config_expression_issues(node, key, source, schema, types, tainted))
-    return issues
-
-
-def _config_expression_issues(
-    node: PipelineNodeDefinition,
-    key: str,
-    source: str,
-    schema: dict[str, object],
-    types: dict[str, ExprType],
-    tainted: frozenset[str],
-) -> list[PipelineValidationIssue]:
-    """Validate a single config-field expression."""
-    try:
-        expression = parse(source)
-        result = check_type(expression, types)
-    except ExpressionError as error:
-        return [
-            PipelineValidationIssue(
-                code="expression_invalid",
-                message=f"Node '{node.id}' field '{key}': {error.message}.",
-                node_id=node.id,
-                field=key,
-            )
-        ]
-    issues: list[PipelineValidationIssue] = []
-    resolved_field = field_schema(schema, key)
-    expected = expected_expr_type(resolved_field)
-    if expected is not None and not _assignable(result, expected):
-        issues.append(
-            PipelineValidationIssue(
-                code="expression_type",
-                message=(
-                    f"Node '{node.id}' field '{key}' expects {expected} "
-                    f"but the expression evaluates to {result}."
-                ),
-                node_id=node.id,
-                field=key,
-            )
-        )
-    if is_static_only(resolved_field) and references(expression) & tainted:
-        names = ", ".join(sorted(references(expression) & tainted))
-        issues.append(
-            PipelineValidationIssue(
-                code="expression_static_only",
-                message=(
-                    f"Node '{node.id}' field '{key}' identifies infrastructure and "
-                    f"cannot depend on caller input (via: {names}). Use constants "
-                    "or variables derived from constants."
-                ),
-                node_id=node.id,
-                field=key,
-            )
-        )
-    return issues
-
-
-def _assignable(result: ExprType, expected: ExprType) -> bool:
-    """Integer results satisfy number fields; everything else matches exactly."""
-    return result is expected or (result is ExprType.INTEGER and expected is ExprType.NUMBER)

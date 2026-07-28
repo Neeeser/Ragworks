@@ -20,6 +20,16 @@ export interface IndexValue {
 
 export type ExprValue = number | string | boolean | ModelValue | IndexValue;
 
+/**
+ * Qualifier for a node's *own* config fields: `self.chunk_size`.
+ *
+ * A scope, not a value — its members are the config fields of whichever node
+ * the expression sits on, so they vary per node rather than coming from a
+ * fixed member map. Mirrors `SELF_SCOPE` in
+ * `app/pipelines/expressions/values.py`.
+ */
+export const SELF_SCOPE = "self";
+
 export const MODEL_MEMBERS: Record<string, ExprType> = {
   connection_id: "string",
   model_name: "string",
@@ -54,4 +64,13 @@ export function valueType(value: ExprValue): ExprType {
   if (typeof value === "string") return "string";
   if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number";
   return isIndexValue(value) ? "index" : "model";
+}
+
+/**
+ * Whether a result of `result` can be stored in a field expecting `expected`.
+ * Integers satisfy number fields; everything else must match exactly. Mirrors
+ * `is_assignable` in `app/pipelines/expressions/values.py`.
+ */
+export function isAssignableType(result: ExprType, expected: ExprType): boolean {
+  return result === expected || (result === "integer" && expected === "number");
 }
