@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileNavBar } from "@/components/ui/mobile-nav-bar";
 import { NavRail } from "@/components/ui/nav-rail";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +22,9 @@ type AppShellProps = {
 };
 
 /**
- * The console shell: the labeled sidebar plus a full-bleed content column,
- * over the console's single ambient bloom (`.console-bloom` — no page may add
- * another light source).
+ * The console shell: the labeled sidebar (a bottom tab bar below `lg`) plus a
+ * full-bleed content column, over the console's single ambient bloom
+ * (`.console-bloom` — no page may add another light source).
  *
  * There is deliberately no `max-width` here. The old shell centred every page
  * in `max-w-6xl` inside heavy padding, which spent 28% of a 1600px viewport's
@@ -41,11 +42,15 @@ export function AppShell({
   contentClassName,
 }: AppShellProps) {
   return (
-    <div className="console-bloom flex h-screen bg-canvas text-body">
+    // Column below lg so the bottom tab bar sits in flow under the content;
+    // row at lg and up with the sidebar on the left. Exactly one of the two
+    // nav surfaces renders at any width.
+    <div className="console-bloom flex h-dvh flex-col bg-canvas text-body lg:h-screen lg:flex-row">
       <NavRail links={links} activeHref={activeHref} footer={railFooter} />
-      <main className={cn("relative flex min-w-0 flex-1 flex-col", contentClassName)}>
+      <main className={cn("relative flex min-h-0 min-w-0 flex-1 flex-col", contentClassName)}>
         {children}
       </main>
+      <MobileNavBar links={links} activeHref={activeHref} footer={railFooter} />
     </div>
   );
 }

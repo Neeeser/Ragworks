@@ -102,7 +102,9 @@ describe("ConsoleLayout", () => {
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
     expect(await screen.findByRole("link", { name: consoleBrandLabel })).toBeInTheDocument();
-    const avatarButton = screen.getByRole("button", { name: "Account" });
+    // The sidebar and the mobile bottom bar each carry the footer; CSS shows
+    // exactly one per viewport, which jsdom can't see — either instance works.
+    const [avatarButton] = screen.getAllByRole("button", { name: "Account" });
     fireEvent.click(avatarButton);
     expect(screen.getByText(signOutName)).toBeInTheDocument();
 
@@ -132,7 +134,7 @@ describe("ConsoleLayout", () => {
     });
     render(<ConsoleLayout>Child</ConsoleLayout>);
 
-    const avatarButton = await screen.findByRole("button", { name: "Account" });
+    const [avatarButton] = await screen.findAllByRole("button", { name: "Account" });
     expect(avatarButton).toHaveTextContent("S");
 
     // The email moved out of permanent chrome and into the account menu.
