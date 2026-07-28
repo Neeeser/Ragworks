@@ -35,6 +35,7 @@ from app.providers.chat.dialects import (
     ChatCompletionsProvider,
     ResponsesProvider,
 )
+from app.providers.openai_catalog import is_chat_model, is_embedding_model
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openai_compat_embedder import OpenAICompatEmbedder
 from app.retrieval.rerankers.base import Reranker
@@ -226,20 +227,34 @@ class CustomAdapter(ProviderAdapter):
             return list(RESPONSES_PARAMETERS)
         return list(CHAT_COMPLETIONS_PARAMETERS)
 
+    @staticmethod
+    def _ordered_for_kind(model_ids: list[str], kind: ProviderKind) -> list[str]:
+        """Order a listing so the likely matches for a kind come first.
+
+        A custom server publishes ids and no modality, so nothing here can
+        *know* what a model is — which is why this orders rather than filters.
+        Filtering would hide a model the server genuinely serves whenever the
+        naming convention differs, and one-model servers (the common case) have
+        nothing to hide anyway. Ordering costs nothing when the listing is one
+        model and stops a 100-model gateway from burying its embedding models
+        under every chat model it also serves.
+        """
+        if kind is ProviderKind.EMBEDDING:
+            likely = is_embedding_model
+        elif kind is ProviderKind.CHAT:
+            likely = is_chat_model
+        else:
+            return sorted(model_ids)
+        return sorted(model_ids, key=lambda model_id: (not likely(model_id), model_id))
+
     def list_models(
         self, kind: ProviderKind, *, force_refresh: bool = False
     ) -> CatalogResult:
-        """Return every published model for the requested kind.
-
-        A custom server publishes ids with no modality, and one server usually
-        serves one model — so the full listing is offered for whichever kinds
-        the connection declares, rather than guessing a model's purpose from
-        its name and hiding the ones that do not match.
-        """
+        """Return every published model for the requested kind, likely ones first."""
         del force_refresh
         self.require_kind(kind)
         try:
-            model_ids = self._client().list_model_ids()
+            model_ids = self._ordered_for_kind(self._client().list_model_ids(), kind)
         except (httpx.HTTPError, ValueError):
             model_ids = []
         parameters = self._chat_parameters() if kind is ProviderKind.CHAT else []

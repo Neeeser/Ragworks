@@ -557,11 +557,59 @@ frontend form code — only a new `ConfigFieldKind` would.
   `/api/show` capabilities + architecture metadata — probing `/api/embed` would
   load every model into server memory just to list them; the probe is a per-model
   fallback in `embedding_dimension` only.
+- **A wire format is implemented once, in `app/providers/chat/dialects/`, and a
+  provider composes one.** A dialect is a protocol, not a vendor:
+  `ChatCompletionsProvider` is what OpenAI, OpenRouter, vLLM, llama.cpp, and LM
+  Studio all speak. A vendor extension goes through the hook the dialect exposes
+  (`build_extra_body`), never a forked parser — two copies of a stream parser
+  drift, and the drift surfaces as a tool call that silently never runs.
+- **Transport is separate from dialect** (`app/clients/openai_compat/`): one
+  base URL + key + header set + pooled `httpx.Client`, with each surface (chat,
+  Responses, embeddings, rerank, models, probe) a module over it. That split is
+  what lets Responses and Chat Completions share a connection, and what makes a
+  new OpenAI-compatible server cost a descriptor rather than a client.
+- **A dialect declares its own parameter set; a catalog-backed provider stays
+  strict about model ids.** `ModelInfo.supported_parameters` is what
+  `sanitize_parameter_overrides` filters on, so a dialect that declared the
+  wrong set silently drops the user's settings. A provider that supplies a
+  model resolver has an authoritative catalog and must report an unknown id as
+  unknown; one that supplies none (a server publishing bare ids) falls back to
+  the dialect's parameters, or every knob is filtered out as unsupported.
+- **Per-model capability comes from the provider's live catalog, never a shipped
+  table.** Anthropic publishes `capabilities.thinking.types` and `effort` on
+  `GET /v1/models`; the same generation that gained adaptive thinking rejects
+  `temperature`/`top_p`/`top_k` with a 400, so both are derived from that
+  response. A hardcoded family list starts 400-ing the moment the next family
+  ships. Where a provider publishes nothing (OpenAI), infer *lopsidedly*: match
+  the markers that exclude, and let everything unmatched fall through to the
+  permissive bucket, so a model released tomorrow appears rather than vanishes.
+- **A provider requiring `max_tokens` gets an answer-sized default, not the
+  model's ceiling.** A ceiling is a cap (64K–128K); Anthropic's SDK reads a
+  request that large as one that may run over ten minutes and refuses to send it
+  unbuffered — so defaulting to it makes every buffered turn fail before it
+  leaves the process. Clamp an explicit value to the ceiling; default well below.
+- **A capability probe reads the status, never the payload.** POST an empty body
+  and discriminate 404 (absent) from 400/422 (present, rejecting our invalid
+  body) — it costs no tokens, needs no model name, and works before the user has
+  picked one. 401/403 is its own outcome: a gateway rejecting the key answers
+  that way on *every* path, and reporting "this server has no chat endpoint"
+  sends the user to fix the wrong field.
+- **What a connection serves is stored on the row, not re-probed per call.** The
+  probe is a suggestion the user confirms; a server that was briefly slow or
+  down must not silently lose a capability its owner knows it has. For the same
+  reason a guess may *order* a listing but never filter it — filtering hides a
+  model the server actually serves whenever its naming differs.
 - **Adding a provider type is a checklist**: config model in
-  `app/schemas/providers.py`, `ProviderType` enum value, adapter module with its
-  descriptor, `ADAPTERS` registry entry, typed client under
-  `app/clients/<provider>/`. The frontend needs zero new form code — the
-  add-connection dialog renders from the descriptor's `config_fields`.
+  `app/schemas/provider_configs.py`, `ProviderType` enum value, adapter module
+  with its descriptor, `ADAPTERS` registry entry, and either an existing dialect
+  or a typed client under `app/clients/<provider>/`. The frontend needs zero new
+  form code — the add-connection dialog renders from the descriptor's
+  `config_fields`, including `boolean` and `select` kinds.
+- **A config value that is not a string is rendered for the wire, not
+  `str()`-ed.** `ConnectionRead.config` is `dict[str, str]` and the form reads a
+  toggle by comparing to `"true"`; Python's `str(True)` is `"True"`, so a naive
+  stringification round-trips every enabled capability as *off* and the edit
+  dialog offers to disable what is already on.
 
 ## The collection file tree (`file_nodes` + `documents`)
 

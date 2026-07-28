@@ -320,6 +320,17 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
+- **The connection form renders every field kind from the catalog.**
+  `ConnectionConfigFields` dispatches on `field.kind` (`string`/`secret`/`url`/
+  `boolean`/`select`) and hides `advanced` fields behind a disclosure, so a new
+  provider type costs zero form code. A `boolean` stores `"true"`/`"false"` —
+  the JSON spellings the backend round-trips — never `String(bool)`.
+- **A discovery probe pre-fills the form; it never saves on the user's behalf.**
+  The user is the one who knows their server, so a probe that missed a
+  capability is corrected in place. When the probe reports it was refused
+  (`unauthorized`), report that through the _error_ channel and leave the
+  toggles alone: every surface answers 401 on a bad key, so writing that
+  "nothing" into the form clears capabilities over a problem in the key field.
 - **Admin settings render from the config catalog, not per-field forms.**
   `AdminSettingsPage` fetches `GET /api/admin/config` and renders one
   `ConfigFieldControl` per entry, dispatched on `field.kind` — a new backend config

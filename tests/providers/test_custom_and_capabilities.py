@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import httpx
 import pytest
 
+from app.clients.anthropic import DEFAULT_MAX_TOKENS
+from app.clients.anthropic.client import AnthropicClient
 from app.clients.openai_compat import normalize_openai_base_url
 from app.clients.openai_compat.probe import (
     EndpointProbe,
@@ -17,6 +19,8 @@ from app.clients.openai_compat.probe import (
     probe_endpoint,
 )
 from app.db import models
+from app.providers.chat.base import ChatRequest
+from app.providers.chat.dialects import MessagesProvider
 from app.providers.chat.dialects.messages import model_info_from_catalog
 from app.providers.custom import CustomAdapter
 from app.providers.openai_catalog import classify_openai_models
@@ -257,3 +261,112 @@ class TestOpenAIModelClassification:
         )
 
         assert listed == ["text-embedding-3-small"]
+
+
+class TestAnthropicAliasResolution:
+    """A documented alias must resolve even though `/v1/models` omits it."""
+
+    class _StubCatalog:
+        """An Anthropic client stub holding a fixed published listing."""
+
+        def __init__(self, ids: list[str]) -> None:
+            self._models = [AnthropicModel(id=model_id) for model_id in ids]
+
+        def list_models(self, force_refresh: bool = False) -> Any:
+            del force_refresh
+            return SimpleNamespace(value=self._models)
+
+        get_model = AnthropicClient.get_model
+
+    def test_an_undated_alias_resolves_to_its_only_dated_snapshot(self) -> None:
+        """Anthropic serves `claude-haiku-4-5`; the listing names the snapshot."""
+        catalog = self._StubCatalog(["claude-haiku-4-5-20251001", "claude-opus-5"])
+
+        resolved = catalog.get_model("claude-haiku-4-5")
+
+        assert resolved is not None
+        assert resolved.id == "claude-haiku-4-5-20251001"
+
+    def test_an_exact_id_still_wins_over_prefix_matching(self) -> None:
+        catalog = self._StubCatalog(["claude-opus-5", "claude-opus-5-20260101"])
+
+        resolved = catalog.get_model("claude-opus-5")
+
+        assert resolved is not None
+        assert resolved.id == "claude-opus-5"
+
+    def test_an_ambiguous_alias_reports_unknown_rather_than_guessing(self) -> None:
+        """Two snapshots means the user's intent is genuinely undetermined."""
+        catalog = self._StubCatalog(["claude-haiku-4-5-20251001", "claude-haiku-4-5-20260101"])
+
+        assert catalog.get_model("claude-haiku-4-5") is None
+
+
+class TestAnthropicMaxTokens:
+    """Anthropic requires `max_tokens`; the default must be a request size."""
+
+    @staticmethod
+    def _model(max_tokens: int) -> AnthropicModel:
+        return AnthropicModel(id="claude-test", max_tokens=max_tokens)
+
+    @staticmethod
+    def _request(**parameters: Any) -> ChatRequest:
+        return ChatRequest(
+            messages=[], tools=None, model="claude-test", parameters=parameters or None
+        )
+
+    def test_the_default_is_an_answer_size_not_the_model_ceiling(self) -> None:
+        """The SDK refuses a buffered call whose ceiling implies a long run."""
+        resolved = MessagesProvider._max_tokens(self._request(), self._model(128_000))
+
+        assert resolved == DEFAULT_MAX_TOKENS
+
+    def test_an_explicit_value_is_honoured(self) -> None:
+        resolved = MessagesProvider._max_tokens(
+            self._request(max_tokens=2048), self._model(128_000)
+        )
+
+        assert resolved == 2048
+
+    def test_an_explicit_value_is_clamped_to_the_model_ceiling(self) -> None:
+        """Over-large is trimmed rather than 400-ing at the provider."""
+        resolved = MessagesProvider._max_tokens(
+            self._request(max_tokens=200_000), self._model(64_000)
+        )
+
+        assert resolved == 64_000
+
+    def test_a_low_ceiling_caps_the_default(self) -> None:
+        resolved = MessagesProvider._max_tokens(self._request(), self._model(4096))
+
+        assert resolved == 4096
+
+
+class TestCustomModelOrdering:
+    """A guess may reorder a custom server's listing; it may never shorten it."""
+
+    LISTING: ClassVar[list[str]] = [
+        "gpt-4o-mini",
+        "text-embedding-3-small",
+        "whisper-1",
+        "my-local-model",
+    ]
+
+    def test_embedding_models_lead_the_embedding_listing(self) -> None:
+        ordered = CustomAdapter._ordered_for_kind(self.LISTING, ProviderKind.EMBEDDING)
+
+        assert ordered[0] == "text-embedding-3-small"
+
+    def test_every_model_is_still_selectable_for_every_kind(self) -> None:
+        """Filtering would hide a model whose name does not match a convention."""
+        for kind in (ProviderKind.EMBEDDING, ProviderKind.CHAT, ProviderKind.RERANKING):
+            ordered = CustomAdapter._ordered_for_kind(self.LISTING, kind)
+
+            assert sorted(ordered) == sorted(self.LISTING)
+
+    def test_an_unrecognized_model_still_leads_the_chat_listing(self) -> None:
+        """A locally-served model has no naming convention to match."""
+        ordered = CustomAdapter._ordered_for_kind(self.LISTING, ProviderKind.CHAT)
+
+        assert ordered[0] == "gpt-4o-mini"
+        assert ordered.index("my-local-model") < ordered.index("whisper-1")

@@ -1,4 +1,4 @@
-"""Sorting OpenAI's flat model listing into the kinds the app asks for.
+"""Inferring what a model is from a flat OpenAI-compatible listing.
 
 `GET /v1/models` publishes an id and nothing else — no modality, no context
 length, no parameter list. So a kind has to be inferred from the id, and the
@@ -10,6 +10,10 @@ would hide every model OpenAI ships after this file was written; falling
 through to chat means a new model appears in the picker on the day it is
 released, and the worst case is a speech model listed beside chat models rather
 than a chat model that cannot be selected at all.
+
+The custom provider reuses the same two predicates to *order* its listing
+rather than filter it — for a server nobody has integrated, even a wrong guess
+must not remove a model the server actually serves.
 """
 
 from __future__ import annotations

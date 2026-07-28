@@ -3,8 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AddConnectionDialog } from "@/components/connections/AddConnectionDialog";
-import { validateConnectionConfig } from "@/lib/api";
-import { makeConnection, makeProviderType , makeProviderConfigField } from "@/test/fixtures/providers";
+import { probeCustomServer, validateConnectionConfig } from "@/lib/api";
+import {
+  makeConnection,
+  makeProviderConfigField,
+  makeProviderType,
+} from "@/test/fixtures/providers";
+
+const SERVER_URL_LABEL = "Server URL";
+const SERVES_CHAT_LABEL = "Serves chat";
+const SERVES_EMBEDDINGS_LABEL = "Serves embeddings";
+const SERVES_RERANKING_LABEL = "Serves reranking";
+const LOCAL_SERVER_URL = "http://localhost:8000";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");
@@ -19,7 +29,7 @@ const ollamaType = makeProviderType({
   max_connections_per_user: null,
   recommended: false,
   config_fields: [
-    makeProviderConfigField({ name: "base_url", label: "Server URL", kind: "url" }),
+    makeProviderConfigField({ name: "base_url", label: SERVER_URL_LABEL, kind: "url" }),
   ],
 });
 
@@ -74,7 +84,7 @@ describe("AddConnectionDialog", () => {
     renderDialog();
 
     await user.click(screen.getByRole("button", { name: /Ollama/ }));
-    await user.type(screen.getByLabelText("Server URL"), "http://localhost:11434");
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), "http://localhost:11434");
     await user.click(screen.getByRole("button", { name: "Test" }));
 
     const status = await screen.findByText("Connected (ollama 0.5.4).");
@@ -142,5 +152,131 @@ describe("AddConnectionDialog provider picker", () => {
     ]);
     expect(screen.queryByRole("button", { name: /pgvector/i })).not.toBeInTheDocument();
     expect(screen.getByText("No provider types are available.")).toBeInTheDocument();
+  });
+});
+
+const customType = makeProviderType({
+  provider_type: "custom",
+  label: "Custom server",
+  kinds: ["chat", "embedding", "reranking"],
+  recommended: false,
+  config_fields: [
+    makeProviderConfigField({ name: "base_url", label: SERVER_URL_LABEL, kind: "url" }),
+    makeProviderConfigField({
+      name: "api_key",
+      label: "API key (optional)",
+      kind: "secret",
+      required: false,
+    }),
+    makeProviderConfigField({
+      name: "serves_chat",
+      label: SERVES_CHAT_LABEL,
+      kind: "boolean",
+      required: false,
+      default: true,
+    }),
+    makeProviderConfigField({
+      name: "serves_embeddings",
+      label: SERVES_EMBEDDINGS_LABEL,
+      kind: "boolean",
+      required: false,
+      default: true,
+    }),
+    makeProviderConfigField({
+      name: "serves_reranking",
+      label: SERVES_RERANKING_LABEL,
+      kind: "boolean",
+      required: false,
+      default: false,
+    }),
+    makeProviderConfigField({
+      name: "chat_dialect",
+      label: "Chat API",
+      kind: "select",
+      required: false,
+      advanced: true,
+      default: "chat_completions",
+      options: [
+        { value: "chat_completions", label: "Chat Completions", description: null },
+        { value: "responses", label: "Responses", description: null },
+      ],
+    }),
+  ],
+});
+
+async function openCustomForm() {
+  const user = userEvent.setup();
+  render(
+    <AddConnectionDialog
+      open
+      onClose={vi.fn()}
+      authToken="token"
+      providerTypes={[customType]}
+      existingConnections={[]}
+      onCreated={vi.fn()}
+    />,
+  );
+  await user.click(card(/Custom server/));
+  return user;
+}
+
+describe("AddConnectionDialog custom-server detection", () => {
+  it("writes the probed capabilities into the form", async () => {
+    const user = await openCustomForm();
+    vi.mocked(probeCustomServer).mockResolvedValueOnce({
+      reachable: true,
+      serves_chat: true,
+      serves_embeddings: false,
+      serves_reranking: true,
+      serves_responses: false,
+      unauthorized: false,
+      model_ids: ["a", "b"],
+      message: null,
+    });
+
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), LOCAL_SERVER_URL);
+    await user.click(screen.getByRole("button", { name: "Detect" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(SERVES_RERANKING_LABEL)).toBeChecked();
+    });
+    expect(screen.getByLabelText(SERVES_CHAT_LABEL)).toBeChecked();
+    expect(screen.getByLabelText(SERVES_EMBEDDINGS_LABEL)).not.toBeChecked();
+  });
+
+  it("reports a rejected key as an error and leaves the toggles alone", async () => {
+    const user = await openCustomForm();
+    vi.mocked(probeCustomServer).mockResolvedValueOnce({
+      reachable: true,
+      serves_chat: false,
+      serves_embeddings: false,
+      serves_reranking: false,
+      serves_responses: false,
+      unauthorized: true,
+      model_ids: [],
+      message: "The server rejected the API key.",
+    });
+
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), LOCAL_SERVER_URL);
+    await user.click(screen.getByRole("button", { name: "Detect" }));
+
+    // Every surface answers 401 when the key is wrong, so the probe learned
+    // nothing — clearing the toggles would blame the wrong field.
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("rejected the API key");
+    });
+    expect(screen.getByRole("status")).toHaveClass("text-data-neg");
+    expect(screen.getByLabelText(SERVES_CHAT_LABEL)).toBeChecked();
+    expect(screen.getByLabelText(SERVES_EMBEDDINGS_LABEL)).toBeChecked();
+  });
+
+  it("keeps advanced fields behind a disclosure", async () => {
+    const user = await openCustomForm();
+
+    expect(screen.queryByLabelText("Chat API")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(screen.getByText("Chat Completions")).toBeInTheDocument();
   });
 });

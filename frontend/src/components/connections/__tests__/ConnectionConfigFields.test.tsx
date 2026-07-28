@@ -10,9 +10,7 @@ describe("ConnectionConfigFields", () => {
     const user = userEvent.setup();
     render(
       <ConnectionConfigFields
-        fields={[
-          makeProviderConfigField({ name: "api_key", label: "API key", kind: "secret" }),
-        ]}
+        fields={[makeProviderConfigField({ name: "api_key", label: "API key", kind: "secret" })]}
         config={{ api_key: "secret-value" }}
         onChange={vi.fn()}
       />,

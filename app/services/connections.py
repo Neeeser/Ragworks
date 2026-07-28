@@ -94,6 +94,20 @@ def provider_type_catalog() -> list[ProviderTypeRead]:
     return catalog
 
 
+def _config_value(raw: object) -> str:
+    """Render one stored config value for the wire, as a string.
+
+    A boolean is spelled the way JSON spells it, not the way Python's `str`
+    does. `ConnectionRead.config` is `dict[str, str]`, and the form reads a
+    toggle by comparing to `"true"` — so `"True"` round-trips as *off*, and an
+    edit dialog would silently offer to turn off a capability that is already
+    on.
+    """
+    if isinstance(raw, bool):
+        return "true" if raw else "false"
+    return str(raw)
+
+
 def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
     """Build the redacted wire shape for a connection row."""
     descriptor = ADAPTERS[ProviderType(connection.provider_type)].descriptor
@@ -116,7 +130,7 @@ def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
         if field.kind is ConfigFieldKind.SECRET:
             secrets_configured[field.name] = bool(str(raw or "").strip())
         elif raw is not None:
-            public_config[field.name] = str(raw)
+            public_config[field.name] = _config_value(raw)
     return ConnectionRead(
         id=connection.id,
         provider_type=ProviderType(connection.provider_type),

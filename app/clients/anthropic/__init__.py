@@ -1,7 +1,7 @@
 """Typed client for the Anthropic Messages API."""
 
 from app.clients.anthropic.client import (
-    FALLBACK_MAX_TOKENS,
+    DEFAULT_MAX_TOKENS,
     AnthropicClient,
     MessagesCall,
     close_anthropic_clients,
@@ -10,7 +10,7 @@ from app.clients.anthropic.client import (
 )
 
 __all__ = [
-    "FALLBACK_MAX_TOKENS",
+    "DEFAULT_MAX_TOKENS",
     "AnthropicClient",
     "MessagesCall",
     "close_anthropic_clients",

@@ -277,6 +277,16 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     updateConnection: vi.fn(async () => makeConnection()),
     deleteConnection: vi.fn(async () => undefined),
     validateConnectionConfig: vi.fn(async () => ({ valid: true, message: "Connected." })),
+    probeCustomServer: vi.fn(async () => ({
+      reachable: true,
+      serves_chat: true,
+      serves_embeddings: true,
+      serves_reranking: false,
+      serves_responses: false,
+      unauthorized: false,
+      model_ids: ["model-1"],
+      message: null,
+    })),
     validateConnection: vi.fn(async () => ({ valid: true, message: "Connected." })),
     // config
     fetchPublicConfig: vi.fn(async () => makePublicConfig()),

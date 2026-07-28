@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, ClassVar
 
-from app.clients.anthropic import FALLBACK_MAX_TOKENS, AnthropicClient, MessagesCall
+from app.clients.anthropic import DEFAULT_MAX_TOKENS, AnthropicClient, MessagesCall
 from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.providers.chat.dialects import messages_translation as tr
 from app.schemas.anthropic import (
@@ -81,19 +81,21 @@ class MessagesProvider:
             return None
         return model_info_from_catalog(entry)
 
-    def _max_tokens(self, request: ChatRequest, entry: AnthropicModel | None) -> int:
+    @staticmethod
+    def _max_tokens(request: ChatRequest, entry: AnthropicModel | None) -> int:
         """Resolve the required output cap for this call.
 
-        A user-set `max_tokens` wins; otherwise the model's published ceiling
-        is used, because Anthropic has no default and a request without one is
-        rejected before it reaches the model.
+        A user-set value wins, clamped to the model's published ceiling so an
+        over-large request is trimmed rather than 400-ing. With none set the
+        default is a normal answer size — *not* the ceiling, which is a cap the
+        SDK reads as "this turn may run for an hour" and refuses to send
+        unbuffered.
         """
+        ceiling = entry.max_tokens if entry is not None and entry.max_tokens else None
         requested = (request.parameters or {}).get("max_tokens")
         if isinstance(requested, int) and requested > 0:
-            return requested
-        if entry is not None and entry.max_tokens:
-            return entry.max_tokens
-        return FALLBACK_MAX_TOKENS
+            return min(requested, ceiling) if ceiling else requested
+        return min(DEFAULT_MAX_TOKENS, ceiling) if ceiling else DEFAULT_MAX_TOKENS
 
     def _thinking(
         self, request: ChatRequest, entry: AnthropicModel | None, max_tokens: int

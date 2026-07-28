@@ -43,8 +43,10 @@ records node inputs, outputs, duration, and status so you can understand how a
 pipeline behaved and where its results can be improved.
 
 The included Docker Compose stack runs Ragworks with PostgreSQL, pgvector, and
-BM25 search locally. Ragworks uses OpenRouter for embeddings and chat models,
-with Pinecone available as an alternative vector store.
+BM25 search locally. Embedding, chat, and reranking models come from provider
+connections you configure — OpenRouter, OpenAI, Anthropic, Cohere, Ollama, and
+Hugging Face TEI, plus a custom option for any server speaking the standard
+OpenAI-compatible APIs. Pinecone is available as an alternative vector store.
 
 ## ✨ Features
 
@@ -120,10 +122,10 @@ Start the services:
 docker compose up -d
 ```
 
-Open <http://localhost:7247>. The first account becomes the administrator. In
-the current release, the setup flow asks for an OpenRouter API key, selects an
-embedding model, and creates the initial collection. Provider credentials are
-stored per user and can be updated from the settings page.
+Open <http://localhost:7247>. The first account becomes the administrator. The
+setup flow asks for a provider connection, selects an embedding model, and
+creates the initial collection. Provider credentials are stored per user and
+can be updated from the settings page.
 
 To update an existing installation:
 

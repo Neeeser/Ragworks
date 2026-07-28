@@ -12,11 +12,13 @@ from anthropic import Anthropic
 from app.cache import CachePolicy, CacheSnapshot, ResourceCache, ValueCache
 from app.schemas.anthropic import AnthropicModel, MessagesResponse, MessagesStreamEvent
 
-#: Anthropic requires `max_tokens` on every request and publishes no default.
-#: A model's own ceiling is used when the catalog is reachable; this is the
-#: floor for the window where it is not, chosen to fit a full tool-using turn
-#: rather than truncating one mid-sentence.
-FALLBACK_MAX_TOKENS = 8192
+#: Anthropic requires `max_tokens` on every request and publishes no default,
+#: so one has to be chosen. A model's published ceiling is the wrong choice: it
+#: is a cap (64K to 128K), not a request size, and the SDK refuses a non-streaming
+#: request whose `max_tokens` implies a response longer than ten minutes — so
+#: defaulting to the ceiling makes every buffered turn fail before it is sent.
+#: This is sized to finish a full tool-using turn instead.
+DEFAULT_MAX_TOKENS = 8192
 
 INFERENCE_TIMEOUT_SECONDS = 600.0
 CONNECT_TIMEOUT_SECONDS = 5.0
@@ -56,10 +58,18 @@ class AnthropicClient:
                 INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
             )
         )
+        # The explicit timeout is what governs a long turn: the SDK otherwise
+        # substitutes its own ten-minute ceiling for non-streaming calls and
+        # rejects any request whose `max_tokens` implies more. Our transport
+        # policy (600s read, 5s connect) is the same one every other provider
+        # client runs under, so a slow reasoning response behaves alike here.
         self._client = Anthropic(
             api_key=resolved,
             base_url=base_url or None,
             http_client=self._http,
+            timeout=httpx.Timeout(
+                INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
+            ),
             max_retries=1,
         )
         self._catalog: ValueCache[str, list[AnthropicModel]] = ValueCache(_CATALOG_POLICY)
@@ -112,11 +122,26 @@ class AnthropicClient:
         )
 
     def get_model(self, model_id: str) -> AnthropicModel | None:
-        """Find one model in the (cached) catalog."""
-        for model in self.list_models().value:
+        """Find one model in the (cached) catalog, resolving undated aliases.
+
+        Anthropic accepts documented aliases (`claude-haiku-4-5`) that
+        `GET /v1/models` does not publish — it lists the dated snapshot
+        (`claude-haiku-4-5-20251001`). An exact-match-only lookup therefore
+        refuses a model id that works, which reads to the user as the model
+        being unavailable. The alias is resolved against the live listing
+        rather than a shipped table, and only when exactly one published id
+        extends it: two matches mean the alias is ambiguous, and guessing which
+        snapshot the user meant is worse than reporting it unknown.
+        """
+        if not model_id:
+            return None
+        published = self.list_models().value
+        for model in published:
             if model.id == model_id:
                 return model
-        return None
+        prefix = f"{model_id}-"
+        dated = [model for model in published if model.id.startswith(prefix)]
+        return dated[0] if len(dated) == 1 else None
 
     def close(self) -> None:
         """Close the SDK and the HTTP pool it shares."""

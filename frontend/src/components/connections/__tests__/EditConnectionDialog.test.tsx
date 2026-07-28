@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { EditConnectionDialog } from "@/components/connections/EditConnectionDialog";
 import { updateConnection } from "@/lib/api";
-import { makeConnection, makeProviderType , makeProviderConfigField } from "@/test/fixtures/providers";
+import {
+  makeConnection,
+  makeProviderType,
+  makeProviderConfigField,
+} from "@/test/fixtures/providers";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");

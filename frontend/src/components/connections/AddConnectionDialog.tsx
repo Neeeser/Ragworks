@@ -1,11 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId } from "react";
 
-import {
-  ConnectionConfigFields,
-  TRUE_VALUE,
-} from "@/components/connections/ConnectionConfigFields";
+import { ConnectionConfigFields } from "@/components/connections/ConnectionConfigFields";
+import { useAddConnection } from "@/components/connections/hooks/use-add-connection";
 import { toProviderChoices } from "@/components/connections/lib/provider-choices";
 import { ProviderChoiceCard } from "@/components/connections/ProviderChoiceCard";
 import { ProviderIcon } from "@/components/connections/ProviderIcon";
@@ -13,11 +11,9 @@ import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges"
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { createConnection, probeCustomServer, validateConnectionConfig } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
-import type { ProviderConnection, ProviderTypeInfo, ServerProbeResult } from "@/lib/types";
+import type { ProviderConnection, ProviderTypeInfo } from "@/lib/types";
 
 interface AddConnectionDialogProps {
   open: boolean;
@@ -26,19 +22,6 @@ interface AddConnectionDialogProps {
   providerTypes: ProviderTypeInfo[];
   existingConnections: ProviderConnection[];
   onCreated: (connection: ProviderConnection) => void;
-}
-
-/** The config a type's fields start from, so declared defaults are visible and sent. */
-function seedConfig(type: ProviderTypeInfo): Record<string, string> {
-  const seeded: Record<string, string> = {};
-  for (const field of type.config_fields) {
-    if (typeof field.default === "boolean") {
-      seeded[field.name] = field.default ? TRUE_VALUE : "false";
-    } else if (typeof field.default === "string") {
-      seeded[field.name] = field.default;
-    }
-  }
-  return seeded;
 }
 
 /**
@@ -51,13 +34,6 @@ function supportsDetection(type: ProviderTypeInfo): boolean {
   const names = new Set(type.config_fields.map((field) => field.name));
   return names.has("base_url") && type.config_fields.some((field) => field.kind === "boolean");
 }
-
-/** The capability toggles a probe writes, keyed by the config field they set. */
-const DETECTED_CAPABILITIES: Array<[string, keyof ServerProbeResult]> = [
-  ["serves_chat", "serves_chat"],
-  ["serves_embeddings", "serves_embeddings"],
-  ["serves_reranking", "serves_reranking"],
-];
 
 /** Indefinite article for a provider name, by its first sound's spelling. */
 const articleFor = (label: string) =>
@@ -88,144 +64,14 @@ export function AddConnectionDialog({
   onCreated,
 }: AddConnectionDialogProps) {
   const titleId = useId();
-  const [selectedType, setSelectedType] = useState<ProviderTypeInfo | null>(null);
-  const [label, setLabel] = useState("");
-  const [config, setConfig] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [probeMessage, setProbeMessage] = useState<string | null>(null);
-  const [probing, setProbing] = useState(false);
-  const [detecting, setDetecting] = useState(false);
-
-  const reset = () => {
-    setSelectedType(null);
-    setLabel("");
-    setConfig({});
-    setError(null);
-    setProbeMessage(null);
-  };
-
-  const handleClose = () => {
-    reset();
-    onClose();
-  };
-
+  const flow = useAddConnection({ authToken, onCreated, onClose });
+  const { selectedType, config, error, probeMessage, busy, missingRequired } = flow;
   const providerChoices = toProviderChoices(providerTypes, existingConnections);
-
-  const handlePickType = (type: ProviderTypeInfo) => {
-    setSelectedType(type);
-    setLabel(type.label);
-    setConfig(seedConfig(type));
-    setError(null);
-    setProbeMessage(null);
-  };
-
-  const buildConfigPayload = () => {
-    const payload: Record<string, string> = {};
-    for (const field of selectedType?.config_fields ?? []) {
-      const value = (config[field.name] ?? "").trim();
-      if (value) {
-        payload[field.name] = value;
-      }
-    }
-    return payload;
-  };
-
-  const missingRequired = (selectedType?.config_fields ?? []).some(
-    (field) => field.required && !(config[field.name] ?? "").trim(),
-  );
-
-  const handleProbe = async () => {
-    if (!selectedType) return;
-    setProbing(true);
-    setError(null);
-    setProbeMessage(null);
-    try {
-      const result = await validateConnectionConfig(
-        authToken,
-        selectedType.provider_type,
-        buildConfigPayload(),
-      );
-      if (result.valid) {
-        setProbeMessage(result.message ?? "Connected.");
-      } else {
-        setError(result.message ?? "Validation failed.");
-      }
-    } catch (probeError) {
-      setError(getErrorMessage(probeError, "Unable to validate the connection."));
-    } finally {
-      setProbing(false);
-    }
-  };
-
-  /**
-   * Discover what the server serves and pre-fill the toggles with it.
-   *
-   * The result is written into the form rather than saved directly: the user
-   * is the one who knows their server, so a probe that missed a capability (a
-   * slow start-up, a path behind a prefix) is corrected in place instead of
-   * being baked into a connection that quietly cannot do the thing.
-   */
-  const handleDetect = async () => {
-    if (!selectedType) return;
-    setDetecting(true);
-    setError(null);
-    setProbeMessage(null);
-    try {
-      const result = await probeCustomServer(authToken, {
-        base_url: (config.base_url ?? "").trim(),
-        api_key: (config.api_key ?? "").trim() || null,
-      });
-      if (!result.reachable) {
-        setError(result.message ?? "The server is unreachable.");
-        return;
-      }
-      setConfig((prev) => {
-        const next = { ...prev };
-        for (const [fieldName, resultKey] of DETECTED_CAPABILITIES) {
-          next[fieldName] = result[resultKey] ? TRUE_VALUE : "false";
-        }
-        if (result.serves_responses && !result.serves_chat) {
-          next.chat_dialect = "responses";
-        }
-        return next;
-      });
-      const served = DETECTED_CAPABILITIES.filter(([, key]) => result[key]).length;
-      setProbeMessage(
-        result.message ??
-          `Found ${served} of 3 capabilities and ${result.model_ids.length} models.`,
-      );
-    } catch (detectError) {
-      setError(getErrorMessage(detectError, "Unable to reach the server."));
-    } finally {
-      setDetecting(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!selectedType) return;
-    setSubmitting(true);
-    setError(null);
-    setProbeMessage(null);
-    try {
-      const created = await createConnection(authToken, {
-        provider_type: selectedType.provider_type,
-        label: label.trim() || selectedType.label,
-        config: buildConfigPayload(),
-      });
-      onCreated(created);
-      handleClose();
-    } catch (createError) {
-      setError(getErrorMessage(createError, "Unable to add the connection."));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (!open) return null;
 
   return (
-    <ModalOverlay open={open} onClose={handleClose} labelledBy={titleId}>
+    <ModalOverlay open={open} onClose={flow.close} labelledBy={titleId}>
       {/* One fixed frame for both steps so picking a provider never resizes the dialog. */}
       <div className="card-surface flex h-[36rem] max-h-[85vh] w-full max-w-xl flex-col bg-canvas-raised shadow-elevation-2">
         <div className="flex items-center gap-3 border-b border-hairline p-3">
@@ -245,7 +91,7 @@ export function AddConnectionDialog({
               <ProviderChoiceCard
                 key={choice.type.provider_type}
                 choice={choice}
-                onPick={() => handlePickType(choice.type)}
+                onPick={() => flow.pickType(choice.type)}
               />
             ))}
             {providerChoices.length === 0 ? (
@@ -271,12 +117,15 @@ export function AddConnectionDialog({
                 ) : null}
               </div>
               <Field label="Label" hint="A name for this connection (e.g. Homelab Ollama).">
-                <TextInput value={label} onChange={(event) => setLabel(event.target.value)} />
+                <TextInput
+                  value={flow.label}
+                  onChange={(event) => flow.setLabel(event.target.value)}
+                />
               </Field>
               <ConnectionConfigFields
                 fields={selectedType.config_fields}
                 config={config}
-                onChange={(name, value) => setConfig((prev) => ({ ...prev, [name]: value }))}
+                onChange={flow.setField}
               />
             </div>
             {/* The probe result sits outside the scrolling body, next to the
@@ -296,7 +145,7 @@ export function AddConnectionDialog({
               </p>
             ) : null}
             <div className="flex items-center justify-between gap-2 border-t border-hairline p-3">
-              <Button type="button" variant="ghost" onClick={() => setSelectedType(null)}>
+              <Button type="button" variant="ghost" onClick={flow.clearType}>
                 Back
               </Button>
               <div className="flex items-center gap-2">
@@ -304,9 +153,9 @@ export function AddConnectionDialog({
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={handleDetect}
-                    loading={detecting}
-                    disabled={!(config.base_url ?? "").trim() || submitting || probing}
+                    onClick={flow.detect}
+                    loading={busy.detecting}
+                    disabled={!(config.base_url ?? "").trim() || busy.submitting || busy.probing}
                   >
                     Detect
                   </Button>
@@ -314,17 +163,17 @@ export function AddConnectionDialog({
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={handleProbe}
-                  loading={probing}
-                  disabled={missingRequired || submitting || detecting}
+                  onClick={flow.test}
+                  loading={busy.probing}
+                  disabled={missingRequired || busy.submitting || busy.detecting}
                 >
                   Test
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleCreate}
-                  loading={submitting}
-                  disabled={missingRequired || probing || detecting}
+                  onClick={flow.create}
+                  loading={busy.submitting}
+                  disabled={missingRequired || busy.probing || busy.detecting}
                 >
                   Add connection
                 </Button>

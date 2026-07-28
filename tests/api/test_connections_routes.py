@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.db import models
+from app.providers.custom import CustomAdapter
 from app.providers.ollama import OllamaAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.schemas.providers import ConnectionValidationResult
 
-_ADAPTERS = (OpenRouterAdapter, OllamaAdapter, PineconeAdapter)
+_ADAPTERS = (OpenRouterAdapter, OllamaAdapter, PineconeAdapter, CustomAdapter)
 
 
 @pytest.fixture(autouse=True)
@@ -233,3 +234,34 @@ def test_validate_saved_connection(client: TestClient) -> None:
     response = client.post(f"/api/connections/{connection['id']}/validate")
     assert response.status_code == 200
     assert response.json()["valid"] is True
+
+
+def test_custom_connection_round_trips_capability_toggles(client: TestClient) -> None:
+    """A boolean must come back spelled the way the form reads it.
+
+    `ConnectionRead.config` is `dict[str, str]` and the add/edit form treats a
+    toggle as on only when the value is `"true"`. Python's `str(True)` is
+    `"True"`, so a naive stringification round-trips every enabled capability
+    as *off* — the edit dialog would then offer to disable what is already on.
+    """
+    created = client.post(
+        "/api/connections",
+        json={
+            "provider_type": "custom",
+            "label": "Compatible server",
+            "config": {
+                "base_url": "http://localhost:8000",
+                "serves_chat": "true",
+                "serves_embeddings": "false",
+                "serves_reranking": "true",
+            },
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["config"]["serves_chat"] == "true"
+    assert body["config"]["serves_embeddings"] == "false"
+    assert body["config"]["serves_reranking"] == "true"
+    # `kinds` reports only what the connection is configured to serve.
+    assert body["kinds"] == ["chat", "reranking"]
