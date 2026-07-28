@@ -358,6 +358,7 @@ export function NodeConfigSections({
             <ConfigFieldRow
               key={field.key}
               field={field}
+              siblingFields={fields}
               nodeId={node.id}
               config={config}
               env={expressionEnv}

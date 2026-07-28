@@ -8,6 +8,7 @@ import {
 } from "../expression-suggest";
 import { buildStaticEnvironment } from "../variable-env";
 
+import type { ExprType } from "@/lib/expressions";
 import type { PipelineVariable } from "@/lib/types";
 
 const VARIABLES: PipelineVariable[] = [
@@ -95,5 +96,42 @@ describe("applySuggestion", () => {
     const applied = applySuggestion("cla", { start: 0, end: 3, text: "cla" }, clamp!);
     expect(applied.source).toBe("clamp()");
     expect(applied.caret).toBe(6);
+  });
+});
+
+describe("the self scope in suggestions", () => {
+  const selfFields = new Map<string, ExprType>([
+    ["chunk_size", "integer"],
+    ["chunk_overlap", "integer"],
+  ]);
+
+  it("offers a node's other config fields, qualified, ahead of variables", () => {
+    const suggestions = buildSuggestions(env, { selfFields, selfFieldKey: "chunk_overlap" });
+
+    expect(suggestions[0].name).toBe("self.chunk_size");
+    expect(suggestions[0].kind).toBe("field");
+  });
+
+  it("never offers the field being edited, the shortest possible cycle", () => {
+    const suggestions = buildSuggestions(env, { selfFields, selfFieldKey: "chunk_overlap" });
+
+    expect(suggestions.map((s) => s.name)).not.toContain("self.chunk_overlap");
+  });
+
+  it("absorbs a typed self. qualifier so acceptance does not double it", () => {
+    const source = "self.ch";
+    const token = caretToken(source, source.length);
+
+    const applied = applySuggestion(source, token, {
+      name: "self.chunk_size",
+      kind: "field",
+      badge: "field",
+      detail: "integer",
+      preview: null,
+      insertText: "self.chunk_size",
+      caretOffset: "self.chunk_size".length,
+    });
+
+    expect(applied.source).toBe("self.chunk_size");
   });
 });

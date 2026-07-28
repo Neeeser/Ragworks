@@ -12,7 +12,7 @@ import { formatPreviewValue } from "./variable-env";
 import type { StaticEnvironment } from "./variable-env";
 import type { ExprType } from "@/lib/expressions";
 
-export type SuggestionKind = "variable" | "function";
+export type SuggestionKind = "variable" | "function" | "field";
 
 export interface Suggestion {
   name: string;
@@ -46,7 +46,14 @@ const FUNCTION_SIGNATURES: Record<string, string> = {
  */
 export function buildSuggestions(
   env: StaticEnvironment,
-  options: { expectedType?: ExprType | null; staticOnly?: boolean } = {},
+  options: {
+    expectedType?: ExprType | null;
+    staticOnly?: boolean;
+    /** The editing node's other config fields, offered as `self.<field>`. */
+    selfFields?: ReadonlyMap<string, ExprType>;
+    /** The field being edited — never suggested, since it cannot read itself. */
+    selfFieldKey?: string;
+  } = {},
 ): Suggestion[] {
   const variables: Suggestion[] = [];
   for (const [name, type] of env.types) {
@@ -62,11 +69,26 @@ export function buildSuggestions(
       caretOffset: name.length,
     });
   }
+  const fields: Suggestion[] = [];
+  for (const [name, type] of options.selfFields ?? new Map()) {
+    // A field reading itself is the shortest possible cycle.
+    if (name === options.selfFieldKey) continue;
+    fields.push({
+      name: `self.${name}`,
+      kind: "field",
+      badge: "field",
+      detail: type,
+      preview: null,
+      insertText: `self.${name}`,
+      caretOffset: `self.${name}`.length,
+    });
+  }
   const expected = options.expectedType;
   if (expected) {
     const matches = (suggestion: Suggestion) =>
       suggestion.detail === expected || (suggestion.detail === "integer" && expected === "number");
     variables.sort((a, b) => Number(matches(b)) - Number(matches(a)));
+    fields.sort((a, b) => Number(matches(b)) - Number(matches(a)));
   }
   const functions: Suggestion[] = Object.keys(BUILTINS).map((name) => ({
     name,
@@ -77,7 +99,9 @@ export function buildSuggestions(
     insertText: `${name}()`,
     caretOffset: name.length + 1,
   }));
-  return [...variables, ...functions];
+  // Fields first: a value derived from the same node is the common case the
+  // scope exists for, and it is what the author is looking at.
+  return [...fields, ...variables, ...functions];
 }
 
 export interface CaretToken {
@@ -89,13 +113,22 @@ export interface CaretToken {
 const IDENTIFIER_CHAR = /[a-z0-9_]/i;
 const IDENTIFIER_START = /[a-z_]/i;
 
+const SELF_QUALIFIER = "self.";
+
 /** The identifier token the caret sits in or immediately after, else an
- * empty token at the caret (suggestions then insert rather than replace). */
+ * empty token at the caret (suggestions then insert rather than replace).
+ *
+ * A leading `self.` is absorbed into the token, because a `self.<field>`
+ * suggestion inserts the whole qualified name: leaving the qualifier outside
+ * the replaced range turns `self.ch` into `self.self.chunk_size`. */
 export function caretToken(source: string, caret: number): CaretToken {
   let start = caret;
   while (start > 0 && IDENTIFIER_CHAR.test(source[start - 1])) start -= 1;
   let end = caret;
   while (end < source.length && IDENTIFIER_CHAR.test(source[end])) end += 1;
+  if (source.slice(Math.max(0, start - SELF_QUALIFIER.length), start) === SELF_QUALIFIER) {
+    start -= SELF_QUALIFIER.length;
+  }
   const text = source.slice(start, end);
   if (text && !IDENTIFIER_START.test(text[0])) {
     return { start: caret, end: caret, text: "" };

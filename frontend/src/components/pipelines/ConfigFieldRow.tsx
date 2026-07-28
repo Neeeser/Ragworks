@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { ExpressionInput } from "./ExpressionInput";
 import { buildSuggestions } from "./lib/expression-suggest";
-import { formatConfigValue, getInputValue } from "./lib/pipeline-config";
+import { buildSelfScope, formatConfigValue, getInputValue } from "./lib/pipeline-config";
 import { SuggestionListbox } from "./SuggestionListbox";
 
 import type { Suggestion } from "./lib/expression-suggest";
@@ -19,6 +19,8 @@ import type { PipelineValidationIssue } from "@/lib/types";
 
 type ConfigFieldRowProps = {
   field: PipelineConfigField;
+  /** Every config field of the node, so this one can read them via `self.`. */
+  siblingFields: PipelineConfigField[];
   nodeId: string;
   config: Record<string, unknown>;
   env: StaticEnvironment;
@@ -76,6 +78,7 @@ function FxToggle({ active, joined, onClick }: FxToggleProps) {
  */
 export function ConfigFieldRow({
   field,
+  siblingFields,
   nodeId,
   config,
   env,
@@ -107,15 +110,23 @@ export function ConfigFieldRow({
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [convertedFocus, setConvertedFocus] = useState(false);
+  const selfScope = useMemo(
+    () => buildSelfScope(siblingFields, config, field.key),
+    [siblingFields, config, field.key],
+  );
   const suggestions = useMemo(
     () =>
       numericLiteral
         ? buildSuggestions(env, {
             expectedType: field.exprType,
             staticOnly: field.staticOnly,
-          }).filter((suggestion) => suggestion.kind === "variable" && suggestion.name !== "query")
+            selfFields: selfScope.types,
+            selfFieldKey: field.key,
+          }).filter(
+            (suggestion) => suggestion.kind !== "function" && suggestion.name !== "query",
+          )
         : [],
-    [numericLiteral, env, field.exprType, field.staticOnly],
+    [numericLiteral, env, field.exprType, field.staticOnly, selfScope.types, field.key],
   );
 
   const convertToExpression = (seed: string) => {
@@ -178,6 +189,7 @@ export function ConfigFieldRow({
           env={env}
           expectedType={field.exprType}
           staticOnly={field.staticOnly}
+          self={selfScope}
           autoFocus={convertedFocus}
           addon={canToggle ? <FxToggle active joined onClick={toggleExpression} /> : undefined}
         />

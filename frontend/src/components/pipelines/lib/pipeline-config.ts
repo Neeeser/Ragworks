@@ -1,4 +1,7 @@
+import { expressionSource } from "@/lib/expressions";
+
 import type { ParameterSelectOption } from "@/components/ui/parameter-controls";
+import type { ExprType, ExprValue } from "@/lib/expressions";
 import type { ParameterInputKind } from "@/lib/types";
 
 export type PipelineConfigField = {
@@ -210,3 +213,30 @@ export const coerceFieldValue = (field: PipelineConfigField, raw: string | boole
   }
   return raw;
 };
+
+/**
+ * The `self.<field>` scope for one field of a node: sibling types from the
+ * schema, sibling values from the node's config (falling back to each field's
+ * default, which is what the node will actually run with).
+ *
+ * Expression-valued siblings are omitted rather than guessed: their value is
+ * decided during resolution, and showing a preview computed from a placeholder
+ * would state a number the run will not produce.
+ */
+export function buildSelfScope(
+  fields: PipelineConfigField[],
+  config: Record<string, unknown>,
+  key: string,
+): { types: Map<string, ExprType>; values: Map<string, ExprValue>; key: string } {
+  const types = new Map<string, ExprType>();
+  const values = new Map<string, ExprValue>();
+  for (const field of fields) {
+    if (field.exprType !== null) types.set(field.key, field.exprType);
+    const raw = config[field.key] ?? field.defaultValue;
+    if (expressionSource(config[field.key]) !== null) continue;
+    if (typeof raw === "number" || typeof raw === "string" || typeof raw === "boolean") {
+      values.set(field.key, raw);
+    }
+  }
+  return { types, values, key };
+}

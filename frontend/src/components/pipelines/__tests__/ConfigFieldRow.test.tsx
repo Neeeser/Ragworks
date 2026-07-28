@@ -25,10 +25,22 @@ const TOP_N_FIELD: PipelineConfigField = {
   exprType: "integer",
 };
 
+const CHUNK_SIZE_FIELD: PipelineConfigField = {
+  key: "chunk_size",
+  label: "Chunk size",
+  input: "integer",
+  nullable: false,
+  required: false,
+  staticOnly: false,
+  exprType: "integer",
+  defaultValue: 512,
+};
+
 const renderRow = (config: Record<string, unknown>, onValueChange = vi.fn()) => {
   render(
     <ConfigFieldRow
       field={TOP_N_FIELD}
+      siblingFields={[TOP_N_FIELD, CHUNK_SIZE_FIELD]}
       nodeId="limit"
       config={config}
       env={env}
@@ -87,5 +99,58 @@ describe("ConfigFieldRow literal-mode variable awareness", () => {
     await user.click(screen.getByLabelText("Top N"));
     await user.keyboard("t");
     expect(onValueChange).toHaveBeenCalledWith("max_results", { $expr: "t" });
+  });
+});
+
+describe("the self scope in a config field", () => {
+  it("resolves an expression over a sibling and shows the number it produces", async () => {
+    render(
+      <ConfigFieldRow
+        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
+        nodeId="chunk"
+        config={{ chunk_size: 512, chunk_overlap: { $expr: "round(self.chunk_size * 0.2)" } }}
+        env={env}
+        disabled={false}
+        onValueChange={vi.fn()}
+        onLiteralChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("= 102")).toBeInTheDocument();
+  });
+
+  it("reads a sibling's default when the config does not set it", async () => {
+    render(
+      <ConfigFieldRow
+        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
+        nodeId="chunk"
+        config={{ chunk_overlap: { $expr: "round(self.chunk_size * 0.25)" } }}
+        env={env}
+        disabled={false}
+        onValueChange={vi.fn()}
+        onLiteralChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("= 128")).toBeInTheDocument();
+  });
+
+  it("refuses a field that reads itself, the shortest possible cycle", async () => {
+    render(
+      <ConfigFieldRow
+        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
+        nodeId="chunk"
+        config={{ chunk_overlap: { $expr: "self.chunk_overlap + 1" } }}
+        env={env}
+        disabled={false}
+        onValueChange={vi.fn()}
+        onLiteralChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(/cannot read itself/)).toBeInTheDocument();
   });
 });

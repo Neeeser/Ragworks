@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { inputClass } from "@/components/ui/field";
-import { ExpressionError, checkType, evaluate, parse, references } from "@/lib/expressions";
+import {
+  ExpressionError,
+  checkType,
+  evaluate,
+  parse,
+  references,
+  selfReferences,
+} from "@/lib/expressions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -17,7 +24,7 @@ import { SuggestionListbox } from "./SuggestionListbox";
 
 import type { Suggestion } from "./lib/expression-suggest";
 import type { StaticEnvironment } from "./lib/variable-env";
-import type { ExprType } from "@/lib/expressions";
+import type { ExprType, ExprValue } from "@/lib/expressions";
 import type { ReactNode } from "react";
 
 type ExpressionFeedback =
@@ -25,15 +32,33 @@ type ExpressionFeedback =
   | { kind: "error"; message: string }
   | { kind: "ok"; type: ExprType; preview: string };
 
+export interface SelfScope {
+  /** Types of the editing node's config fields, for `self.<field>`. */
+  types: ReadonlyMap<string, ExprType>;
+  /** Current values of those fields, so the preview resolves a real number. */
+  values: ReadonlyMap<string, ExprValue>;
+  /** The field being edited, which cannot read itself. */
+  key: string;
+}
+
 export function evaluateExpressionFeedback(
   source: string,
   env: StaticEnvironment,
-  options: { expectedType?: ExprType | null; staticOnly?: boolean } = {},
+  options: {
+    expectedType?: ExprType | null;
+    staticOnly?: boolean;
+    self?: SelfScope;
+  } = {},
 ): ExpressionFeedback {
   if (!source.trim()) return { kind: "empty" };
   try {
     const expression = parse(source);
-    const type = checkType(expression, env.types);
+    // A field reading itself is the shortest cycle; reject it before the
+    // evaluator recurses on a value that does not exist yet.
+    if (options.self && selfReferences(expression).has(options.self.key)) {
+      return { kind: "error", message: `'self.${options.self.key}' cannot read itself.` };
+    }
+    const type = checkType(expression, env.types, options.self?.types);
     const expected = options.expectedType;
     if (expected && type !== expected && !(type === "integer" && expected === "number")) {
       return { kind: "error", message: `Expected ${expected}, got ${type}.` };
@@ -50,7 +75,11 @@ export function evaluateExpressionFeedback(
         };
       }
     }
-    return { kind: "ok", type, preview: formatPreviewValue(evaluate(expression, env.values)) };
+    return {
+      kind: "ok",
+      type,
+      preview: formatPreviewValue(evaluate(expression, env.values, options.self?.values)),
+    };
   } catch (error) {
     if (error instanceof ExpressionError) {
       return { kind: "error", message: error.message };
@@ -68,6 +97,8 @@ type ExpressionInputProps = {
   expectedType?: ExprType | null;
   /** Identity field: live-reject references to caller input. */
   staticOnly?: boolean;
+  /** The editing node's own config fields, reachable as `self.<field>`. */
+  self?: SelfScope;
   placeholder?: string;
   /** Grab focus on mount (literal fields converting to ƒx keep typing flow). */
   autoFocus?: boolean;
@@ -91,6 +122,7 @@ export function ExpressionInput({
   env,
   expectedType,
   staticOnly,
+  self: selfScope,
   placeholder,
   autoFocus,
   addon,
@@ -103,12 +135,18 @@ export function ExpressionInput({
   const listId = `${id ?? "expression"}-suggestions`;
 
   const feedback = useMemo(
-    () => evaluateExpressionFeedback(value, env, { expectedType, staticOnly }),
-    [value, env, expectedType, staticOnly],
+    () => evaluateExpressionFeedback(value, env, { expectedType, staticOnly, self: selfScope }),
+    [value, env, expectedType, staticOnly, selfScope],
   );
   const allSuggestions = useMemo(
-    () => buildSuggestions(env, { expectedType, staticOnly }),
-    [env, expectedType, staticOnly],
+    () =>
+      buildSuggestions(env, {
+        expectedType,
+        staticOnly,
+        selfFields: selfScope?.types,
+        selfFieldKey: selfScope?.key,
+      }),
+    [env, expectedType, staticOnly, selfScope],
   );
   const token = useMemo(() => caretToken(value, caret), [value, caret]);
   const suggestions = useMemo(
