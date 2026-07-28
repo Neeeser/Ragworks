@@ -34,7 +34,11 @@ class Settings(BaseSettings):
         validation_alias="OPENROUTER_SITE_NAME",
     )
     openrouter_reasoning_effort: str | None = Field(
-        default="medium",
+        # None means "no deployment choice": the chat loop then prefers the
+        # model's own documented default (e.g. OpenAI's `none`) and falls back
+        # to medium. A value set here is an explicit choice and always wins —
+        # which is why the shipped default must not be a value.
+        default=None,
         validation_alias="OPENROUTER_REASONING_EFFORT",
         description="Default reasoning effort (minimal/low/medium/high). Set empty to disable.",
     )

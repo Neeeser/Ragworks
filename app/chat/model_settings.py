@@ -95,8 +95,15 @@ def prepare_model_settings(
     if payload.parameters is not None and payload.parameters.extra_body:
         parameter_overrides["extra_body"] = payload.parameters.extra_body
     reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
+    # When the model's own effort levels include "none", that is its documented
+    # default — forcing "medium" would both change behavior the user never
+    # asked for and 400 any sampling parameter (OpenAI rejects `temperature`
+    # while reasoning is active). An explicit user/session choice still wins.
+    default_effort = reasoning_effort
+    if default_effort is None and "none" in (model_info.reasoning_efforts or []):
+        default_effort = "none"
     reasoning_options = _build_reasoning_request_options(
-        supported_parameters, reasoning_override, reasoning_effort
+        supported_parameters, reasoning_override, default_effort
     )
     provider_preferences = payload.provider.to_request_payload() if payload.provider else None
     context_window = model_info.context_length or DEFAULT_CONTEXT_WINDOW

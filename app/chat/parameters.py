@@ -102,6 +102,7 @@ def build_reasoning_options(
     options: dict[str, Any] = {}
 
     if not supported_parameters:
+        # No catalog at all: send the block and let the server decide.
         options["reasoning"] = {"effort": selected_effort}
         return options
 
@@ -111,7 +112,7 @@ def build_reasoning_options(
         options["reasoning"] = {"effort": selected_effort}
     elif "include_reasoning" in normalized:
         options["include_reasoning"] = True
-    else:
-        options["reasoning"] = {"effort": selected_effort}
-
+    # A catalog that lists parameters but no reasoning marker positively says
+    # the model cannot reason — sending the block anyway 400s on OpenAI
+    # (`reasoning.effort` unsupported on non-reasoning models).
     return options
