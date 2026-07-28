@@ -12,6 +12,7 @@ import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useIndexBackends } from "./hooks/use-index-backends";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
+import { useLiveValidation } from "./hooks/use-live-validation";
 import { useNodeEditing } from "./hooks/use-node-editing";
 import { usePipelineModelCatalogs } from "./hooks/use-pipeline-model-catalogs";
 import { usePipelines } from "./hooks/use-pipelines";
@@ -74,7 +75,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     saving,
     validating,
     validationIssues,
-    clearValidationIssues,
+    applyValidationIssues,
     message,
     setMessage,
     changeSummary,
@@ -92,21 +93,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   } = usePipelines({ token, kind });
   const tokenizerConsent = useTokenizerConsent(token, setMessage);
 
-  const {
-    embeddingModels,
-    embeddingModelsLoading,
-    embeddingModelsError,
-    embeddingCatalog,
-    rerankingModels,
-    rerankingModelsLoading,
-    rerankingModelsError,
-    rerankingCatalog,
-    hasRerankingProvider,
-    rerankingProviderMessage,
-    onEmbeddingCatalogVisible,
-    onRerankingCatalogVisible,
-    onRetryRerankingModels,
-  } = usePipelineModelCatalogs(token, user?.id);
+  // Kept whole: every field is a drawer prop of the same name, so spreading
+  // it there beats restating the list in two places.
+  const modelCatalogs = usePipelineModelCatalogs(token, user?.id);
+  const { hasRerankingProvider, rerankingProviderMessage } = modelCatalogs;
 
   const { indexes, registeredIndexes, indexesLoading, indexesError, refreshIndexes } =
     useIndexes(token);
@@ -115,6 +105,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<TypedEdgeType>([]);
   const [variables, setVariables] = useState<PipelineVariable[]>([]);
+
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
@@ -141,7 +132,19 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     closeEditor,
     addNode,
     applyNodeEdits,
+    nodeDraft,
+    setNodeDraft,
   } = useNodeEditing({ nodes, setNodes });
+
+  useLiveValidation({
+    token,
+    nodes,
+    edges,
+    variables,
+    draft: nodeDraft,
+    enabled: Boolean(selectedPipeline) && !isPreview,
+    onIssues: applyValidationIssues,
+  });
 
   // Every non-hidden node is available in every editor — what a pipeline can
   // do is derived from its graph, so the library never gates by kind (an
@@ -321,11 +324,11 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         indexes={indexes}
         backends={backends}
         nodeSpecs={nodeSpecs}
-        embeddingModels={embeddingModels}
-        embeddingCatalog={embeddingCatalog}
-        embeddingModelsLoading={embeddingModelsLoading}
-        embeddingModelsError={embeddingModelsError}
-        onCatalogVisible={onEmbeddingCatalogVisible}
+        embeddingModels={modelCatalogs.embeddingModels}
+        embeddingCatalog={modelCatalogs.embeddingCatalog}
+        embeddingModelsLoading={modelCatalogs.embeddingModelsLoading}
+        embeddingModelsError={modelCatalogs.embeddingModelsError}
+        onCatalogVisible={modelCatalogs.onEmbeddingCatalogVisible}
         indexesLoading={indexesLoading}
         indexesError={indexesError}
         onRefreshIndexes={refreshIndexes}
@@ -362,7 +365,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           variables,
           onVariablesChange: setVariables,
           variableNodes,
-          modelOptions: embeddingModels,
+          modelOptions: modelCatalogs.embeddingModels,
           indexOptions: registeredIndexes,
           variablesDisabled: !selectedPipeline,
           hasRerankingProvider,
@@ -395,10 +398,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       <NodeEditorDrawer
         node={inspectedNode}
         onClose={closeEditor}
-        onApply={(nodeId, edits) => {
-          clearValidationIssues();
-          applyNodeEdits(nodeId, edits);
-        }}
+        onApply={applyNodeEdits}
+        onDraftChange={(nodeId, config) => setNodeDraft({ nodeId, config })}
         isPreview={isPreview}
         onAddToCanvas={previewSpec ? () => handleAddNode(previewSpec) : undefined}
         validationErrors={selectedNodeErrors}
@@ -407,19 +408,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onDeclareIndexVariable={handleDeclareIndexVariable}
         vectorIndexes={indexes}
         onOpenIndexRegistry={handleOpenIndexRegistry}
-        embeddingModels={embeddingModels}
-        embeddingCatalog={embeddingCatalog}
-        embeddingModelsLoading={embeddingModelsLoading}
-        embeddingModelsError={embeddingModelsError}
-        onCatalogVisible={onEmbeddingCatalogVisible}
-        rerankingModels={rerankingModels}
-        rerankingCatalog={rerankingCatalog}
-        rerankingModelsLoading={rerankingModelsLoading}
-        rerankingModelsError={rerankingModelsError}
-        onRerankingCatalogVisible={onRerankingCatalogVisible}
-        onRetryRerankingModels={onRetryRerankingModels}
-        hasRerankingProvider={hasRerankingProvider}
-        rerankingProviderMessage={rerankingProviderMessage}
+        {...modelCatalogs}
+        onCatalogVisible={modelCatalogs.onEmbeddingCatalogVisible}
       />
 
       <PipelineEditorDialogs

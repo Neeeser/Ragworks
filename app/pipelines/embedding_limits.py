@@ -8,9 +8,14 @@ Chunks are followed through the graph rather than across a single edge. Today
 only chunkers produce `chunk_batch` and only embedders and BM25 indexers
 consume it, so every path is one hop; writing the walk transitively means
 adding a node that forwards chunks cannot silently switch the check off.
-A chunker reaching an embedder *through* another node is reported as a warning
-rather than an error, because a node in between may change chunk sizes and the
-configured window then no longer describes what arrives.
+A chunker reaching an embedder *through* another node says so, because a node
+in between may change chunk sizes and the configured window then no longer
+describes what arrives.
+
+Findings are advisory, never blocking. An oversized window still ingests — the
+embedding guard splits the chunk and the file row carries a warning badge — so
+refusing the save would strand work in progress over a condition the run
+recovers from on its own.
 """
 
 from __future__ import annotations
@@ -125,7 +130,7 @@ def _chunk_limit_issue(
     *,
     indirect: bool,
 ) -> PipelineValidationIssue | None:
-    """Build a severity-aware issue for an oversized configured window."""
+    """Build an advisory issue for a window the downstream model cannot take."""
     try:
         config = FixedChunkerConfig.model_validate(chunker.config or {})
     except ValidationError:
@@ -158,9 +163,11 @@ def _chunk_limit_issue(
             f"{window:,}) on node '{chunker.id}' exceeds embedding model "
             f"'{limit.model}' effective input limit of {limit.maximum:,}. {detail}"
         ),
-        # Only a direct feed is certain; an intermediate node might resize the
-        # chunks, so the finding advises rather than blocking the save.
-        severity="warning" if (is_whitespace or indirect) else "error",
+        # Advisory, never blocking: an oversized window still ingests — the
+        # embedding guard splits the chunk and the file row carries a warning
+        # badge — so refusing the save would strand work in progress over a
+        # condition the run itself recovers from.
+        severity="warning",
         node_id=chunker.id,
         field="chunk_size",
         configured_value=window,

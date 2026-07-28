@@ -35,6 +35,8 @@ type NodeEditorDrawerProps = SectionCatalogProps & {
   onClose: () => void;
   /** Applies the drawer's local draft (label + config) to the canvas node. */
   onApply: (nodeId: string, edits: NodeEdits) => void;
+  /** Reports the uncommitted draft so live validation sees what is on screen. */
+  onDraftChange?: (nodeId: string, config: Record<string, unknown>) => void;
   /** Preview mode only: add the previewed node to the canvas. */
   onAddToCanvas?: () => void;
   hasRerankingProvider: boolean;
@@ -57,6 +59,7 @@ function DrawerContent({
   node,
   onClose,
   onApply,
+  onDraftChange,
   onAddToCanvas,
   isPreview,
   ...catalogProps
@@ -67,6 +70,17 @@ function DrawerContent({
     () => node.data.config ?? {},
   );
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  // Report the draft from the same place it is set, not from an effect: an
+  // effect would cascade a parent render after every keystroke's render.
+  const updateDraftConfig = (
+    next: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>),
+  ) => {
+    setDraftConfig((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      onDraftChange?.(node.id, resolved);
+      return resolved;
+    });
+  };
 
   const dirty =
     !isPreview &&
@@ -102,7 +116,7 @@ function DrawerContent({
     // dimension: an explicit `dimension` is sent to the provider as a
     // `dimensions` override, which most embedding models reject (no
     // matryoshka support). Models emit their native size without it.
-    setDraftConfig((prev) => {
+    updateDraftConfig((prev) => {
       const next: Record<string, unknown> = {
         ...prev,
         connection_id: model.connection_id,
@@ -114,7 +128,7 @@ function DrawerContent({
   };
 
   const handleSelectRerankingModel = (model: CatalogModel) => {
-    setDraftConfig({ connection_id: model.connection_id, model_name: model.id });
+    updateDraftConfig({ connection_id: model.connection_id, model_name: model.id });
   };
 
   const handleSave = () => {
@@ -199,7 +213,7 @@ function DrawerContent({
           <NodeConfigSections
             node={draftNode}
             isPreview={isPreview}
-            onConfigChange={setDraftConfig}
+            onConfigChange={updateDraftConfig}
             onSelectEmbeddingModel={handleSelectEmbeddingModel}
             onSelectRerankingModel={handleSelectRerankingModel}
             {...catalogProps}

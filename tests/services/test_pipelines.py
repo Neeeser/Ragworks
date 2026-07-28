@@ -160,10 +160,14 @@ def test_update_pipeline_creates_new_version(session: Session) -> None:
     assert len(versions) == 2
 
 
-def test_create_pipeline_rejects_embedding_limit_overflow(
+def test_create_pipeline_warns_but_saves_an_oversized_chunk_window(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Real tokenizer counts reject a chunk window above the model limit."""
+    """An oversized window still ingests, so it must not block the save.
+
+    The embedding guard splits the chunk and the file row carries a warning
+    badge, so refusing the save would strand work over a recoverable condition.
+    """
     user = _create_user(session)
     model_id = "sentence-transformers/all-minilm-l6-v2"
     definition = build_default_ingestion_pipeline(
@@ -185,19 +189,24 @@ def test_create_pipeline_rejects_embedding_limit_overflow(
         return result
 
     monkeypatch.setattr(service, "validate_definition", capture_validation)
-    with pytest.raises(InvalidInputError):
-        service.create_pipeline(
-            user=user,
-            name="Overflowing ingestion",
-            definition=definition,
-        )
+    created = service.create_pipeline(
+        user=user,
+        name="Overflowing ingestion",
+        definition=definition,
+    )
 
-    assert validation_results[0].valid is False
-    assert validation_results[0].issues[0].severity == "error"
-    assert validation_results[0].issues[0].field == "chunk_size"
+    assert created is not None
+    assert validation_results[0].valid is True
+    issue = next(
+        item
+        for item in validation_results[0].issues
+        if item.code == "embedding_input_limit_exceeded"
+    )
+    assert issue.severity == "warning"
+    assert issue.field == "chunk_size"
 
 
-def test_update_pipeline_rejects_embedding_limit_overflow(
+def test_update_pipeline_warns_but_saves_an_oversized_chunk_window(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     user = _create_user(session)
@@ -223,22 +232,27 @@ def test_update_pipeline_rejects_embedding_limit_overflow(
         return result
 
     monkeypatch.setattr(validating_service, "validate_definition", capture_validation)
-    with pytest.raises(InvalidInputError):
-        validating_service.update_pipeline(
-            pipeline=defaults.ingestion,
-            definition=overflowing_definition,
-            actor_id=user.id,
-        )
+    validating_service.update_pipeline(
+        pipeline=defaults.ingestion,
+        definition=overflowing_definition,
+        actor_id=user.id,
+    )
 
-    assert validation_results[0].valid is False
-    assert validation_results[0].issues[0].severity == "error"
-    assert defaults.ingestion.current_version == 1
+    assert validation_results[0].valid is True
+    issue = next(
+        item
+        for item in validation_results[0].issues
+        if item.code == "embedding_input_limit_exceeded"
+    )
+    assert issue.severity == "warning"
+    # The advisory finding must not stop the new version being written.
+    assert defaults.ingestion.current_version == 2
     versions = session.exec(
         select(models.PipelineVersion).where(
             models.PipelineVersion.pipeline_id == defaults.ingestion.id
         )
     ).all()
-    assert len(versions) == 1
+    assert len(versions) == 2
 
 
 def test_create_pipeline_remains_available_when_model_catalog_is_unreachable(

@@ -83,7 +83,8 @@ def _edge(source: str, target: str) -> PipelineEdgeDefinition:
     )
 
 
-def test_a_direct_feed_over_the_limit_is_an_error() -> None:
+def test_a_direct_feed_over_the_limit_warns_without_blocking_the_save() -> None:
+    """The guard splits oversized chunks, so this advises rather than blocks."""
     definition = PipelineDefinition(
         nodes=[_chunker(400, 200), _embedder("embed", SMALL, "small-model")],
         edges=[_edge("chunk", "embed")],
@@ -91,7 +92,7 @@ def test_a_direct_feed_over_the_limit_is_an_error() -> None:
 
     issues = embedding_limit_issues(definition, build_default_registry(), _limit)
 
-    assert [issue.severity for issue in issues] == ["error"]
+    assert [issue.severity for issue in issues] == ["warning"]
     assert issues[0].node_id == "chunk"
     assert issues[0].field == "chunk_size"
     assert issues[0].configured_value == 600
@@ -179,7 +180,7 @@ def test_an_indirect_path_is_found_but_only_warns() -> None:
 
 
 def test_a_direct_feed_wins_over_a_longer_path_to_the_same_embedder() -> None:
-    """Shortest path decides, so an extra indirect wire cannot soften an error."""
+    """Shortest path decides which explanation the message carries."""
     definition = PipelineDefinition(
         nodes=[
             _chunker(400, 200),
@@ -193,7 +194,7 @@ def test_a_direct_feed_wins_over_a_longer_path_to_the_same_embedder() -> None:
 
     issues = embedding_limit_issues(definition, _registry_with_passthrough(), _limit)
 
-    assert [issue.severity for issue in issues] == ["error"]
+    assert "through another node" not in issues[0].message
 
 
 def test_an_unpublished_limit_warns_once_for_the_embedder() -> None:

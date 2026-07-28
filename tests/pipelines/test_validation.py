@@ -648,7 +648,7 @@ def test_reranker_validation_accepts_provider_and_model() -> None:
         ("huggingface", {"hf_model_id": "owner/model"}, "HuggingFace"),
     ],
 )
-def test_embedding_limit_is_an_error_for_real_tokenizers(
+def test_embedding_limit_names_the_tokenizer_without_blocking_the_save(
     tokenizer: str,
     tokenizer_config: dict[str, str],
     label: str,
@@ -677,8 +677,9 @@ def test_embedding_limit_is_an_error_for_real_tokenizers(
     ).validate(definition)
 
     issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
-    assert result.valid is False
-    assert issue.severity == "error"
+    # Advisory: the guard splits oversized chunks, so the pipeline still saves.
+    assert result.valid is True
+    assert issue.severity == "warning"
     assert issue.allowed_max == 496
     # The reported value is the window the embedder receives: 500 + 100.
     assert issue.configured_value == 600
@@ -687,7 +688,7 @@ def test_embedding_limit_is_an_error_for_real_tokenizers(
     assert label in issue.message
 
 
-def test_embedding_limit_remains_a_warning_for_whitespace_tokenizer() -> None:
+def test_embedding_limit_explains_the_whitespace_counter() -> None:
     connection_id = uuid4()
     definition = build_default_ingestion_pipeline(
         embedding_connection_id=connection_id,
