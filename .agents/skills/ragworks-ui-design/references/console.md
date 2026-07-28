@@ -32,7 +32,10 @@ marks answer the second. Neither is optional.
   icon + sentence-case label, `rounded-control`, 32px tall. Collapsed, labels return as
   right-side tooltips and the flyouts keep working. Active item:
   `bg-accent-violet/12 text-primary` plus a 2px `.trace-wire` bar on its left edge.
-  Footer pins the account menu and theme control. Width animates 160ms decel (the user
+  Footer pins the account menu, whose popup carries the theme switch, settings, and
+  sign-out — the theme control is a menu item, not permanent chrome. The popup opens to
+  the avatar's right beside the sidebar and upward from the bottom tab bar (a right-edge
+  control opening rightward lands off-screen). Width animates 160ms decel (the user
   moved it), no-op under reduced motion. **Below `lg` the sidebar is hidden and
   `MobileNavBar` renders instead**: a bottom tab bar in flow under the content —
   icon-only items with `aria-label`s, active state keeps the accent fill and carries

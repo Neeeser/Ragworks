@@ -107,6 +107,10 @@ describe("ConsoleLayout", () => {
     const [avatarButton] = screen.getAllByRole("button", { name: "Account" });
     fireEvent.click(avatarButton);
     expect(screen.getByText(signOutName)).toBeInTheDocument();
+    // The theme switch lives inside this menu — it is not permanent chrome.
+    expect(
+      screen.getByRole("button", { name: /Switch to (light|dark) theme/ }),
+    ).toBeInTheDocument();
 
     const settingsLink = screen.getByRole("link", { name: "Settings" });
     settingsLink.addEventListener("click", (event) => event.preventDefault());
