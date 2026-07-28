@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-clean-templates clean-worktree-dbs test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-clean-templates clean-worktree-dbs test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets refresh-openai-bundle sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -175,6 +175,9 @@ format-check-frontend: env-frontend
 
 readme-assets: env-backend env-frontend
 	$(NPM) --prefix frontend run docs:capture-pipeline
+
+refresh-openai-bundle:
+	node scripts/download-openai-model-bundle.mjs
 
 bump-patch:
 	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py patch

@@ -1,0 +1,2187 @@
+{
+  "source": "https://platform.openai.com/docs/models/<id>.md",
+  "generated_at": "2026-07-28",
+  "models": {
+    "babbage-002": {
+      "display_name": "babbage-002",
+      "context_window": null,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 01, 2021",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "babbage-002"
+      ]
+    },
+    "chat-latest": {
+      "display_name": "Chat Latest",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "chat-latest"
+      ]
+    },
+    "chatgpt-image-latest": {
+      "display_name": "chatgpt-image-latest",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "image",
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "chatgpt-image-latest"
+      ]
+    },
+    "computer-use-preview": {
+      "display_name": "computer-use-preview",
+      "context_window": 8192,
+      "max_output_tokens": 1024,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "computer-use-preview-2025-03-11"
+      ]
+    },
+    "davinci-002": {
+      "display_name": "davinci-002",
+      "context_window": null,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 01, 2021",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "davinci-002"
+      ]
+    },
+    "gpt-3.5-turbo": {
+      "display_name": "GPT-3.5 Turbo",
+      "context_window": 16385,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 01, 2021",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-3.5-turbo-0125",
+        "gpt-3.5-turbo-1106",
+        "gpt-3.5-turbo-instruct"
+      ]
+    },
+    "gpt-3.5-turbo-instruct": {
+      "display_name": "gpt-3.5-turbo-instruct",
+      "context_window": 4096,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 01, 2021",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-3.5-turbo-instruct"
+      ]
+    },
+    "gpt-4": {
+      "display_name": "GPT-4",
+      "context_window": 8192,
+      "max_output_tokens": 8192,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Dec 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4-0613",
+        "gpt-4-0314"
+      ]
+    },
+    "gpt-4-turbo": {
+      "display_name": "GPT-4 Turbo",
+      "context_window": 128000,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Dec 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4-turbo-2024-04-09"
+      ]
+    },
+    "gpt-4.1": {
+      "display_name": "GPT-4.1",
+      "context_window": 1047576,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4.1-2025-04-14"
+      ]
+    },
+    "gpt-4.1-mini": {
+      "display_name": "GPT-4.1 mini",
+      "context_window": 1047576,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4.1-mini-2025-04-14"
+      ]
+    },
+    "gpt-4.1-nano": {
+      "display_name": "GPT-4.1 nano",
+      "context_window": 1047576,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4.1-nano-2025-04-14"
+      ]
+    },
+    "gpt-4o": {
+      "display_name": "GPT-4o",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-2024-11-20",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-2024-05-13"
+      ]
+    },
+    "gpt-4o-mini": {
+      "display_name": "GPT-4o mini",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-mini-2024-07-18"
+      ]
+    },
+    "gpt-4o-mini-search-preview": {
+      "display_name": "GPT-4o mini Search Preview",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-mini-search-preview-2025-03-11"
+      ]
+    },
+    "gpt-4o-mini-transcribe": {
+      "display_name": "GPT-4o mini Transcribe",
+      "context_window": 16000,
+      "max_output_tokens": 2000,
+      "input_modalities": [
+        "audio",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-mini-transcribe-2025-03-20",
+        "gpt-4o-mini-transcribe-2025-12-15"
+      ]
+    },
+    "gpt-4o-mini-tts": {
+      "display_name": "GPT-4o mini TTS",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "audio"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-mini-tts-2025-03-20",
+        "gpt-4o-mini-tts-2025-12-15"
+      ]
+    },
+    "gpt-4o-search-preview": {
+      "display_name": "GPT-4o Search Preview",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-search-preview-2025-03-11"
+      ]
+    },
+    "gpt-4o-transcribe": {
+      "display_name": "GPT-4o Transcribe",
+      "context_window": 16000,
+      "max_output_tokens": 2000,
+      "input_modalities": [
+        "audio",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-transcribe"
+      ]
+    },
+    "gpt-4o-transcribe-diarize": {
+      "display_name": "GPT-4o Transcribe Diarize",
+      "context_window": 16000,
+      "max_output_tokens": 2000,
+      "input_modalities": [
+        "text",
+        "audio"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-4o-transcribe-diarize"
+      ]
+    },
+    "gpt-5": {
+      "display_name": "GPT-5",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-2025-08-07"
+      ]
+    },
+    "gpt-5-chat-latest": {
+      "display_name": "GPT-5 Chat",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-chat-latest"
+      ]
+    },
+    "gpt-5-codex": {
+      "display_name": "GPT-5-Codex",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-codex"
+      ]
+    },
+    "gpt-5-mini": {
+      "display_name": "GPT-5 mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "May 31, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-mini-2025-08-07"
+      ]
+    },
+    "gpt-5-nano": {
+      "display_name": "GPT-5 nano",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "May 31, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-nano-2025-08-07"
+      ]
+    },
+    "gpt-5-pro": {
+      "display_name": "GPT-5 Pro",
+      "context_window": 400000,
+      "max_output_tokens": 272000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5-pro-2025-10-06"
+      ]
+    },
+    "gpt-5.1": {
+      "display_name": "GPT-5.1",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.1-2025-11-13"
+      ]
+    },
+    "gpt-5.1-chat-latest": {
+      "display_name": "GPT-5.1 Chat",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.1-chat-latest"
+      ]
+    },
+    "gpt-5.1-codex": {
+      "display_name": "GPT-5.1-Codex",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.1-codex"
+      ]
+    },
+    "gpt-5.1-codex-max": {
+      "display_name": "GPT-5.1-Codex-Max",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.1-codex-max"
+      ]
+    },
+    "gpt-5.1-codex-mini": {
+      "display_name": "GPT-5.1-Codex mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.1-codex-mini"
+      ]
+    },
+    "gpt-5.2": {
+      "display_name": "GPT-5.2",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.2-2025-12-11"
+      ]
+    },
+    "gpt-5.2-chat-latest": {
+      "display_name": "GPT-5.2 Chat",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.2-chat-latest"
+      ]
+    },
+    "gpt-5.2-codex": {
+      "display_name": "GPT-5.2-Codex",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.2-codex"
+      ]
+    },
+    "gpt-5.2-pro": {
+      "display_name": "GPT-5.2 Pro",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.2-pro-2025-12-11"
+      ]
+    },
+    "gpt-5.3-chat-latest": {
+      "display_name": "GPT-5.3 Chat",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.3-chat-latest"
+      ]
+    },
+    "gpt-5.3-codex": {
+      "display_name": "GPT-5.3-Codex",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.3-codex"
+      ]
+    },
+    "gpt-5.4": {
+      "display_name": "GPT-5.4",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.4-2026-03-05"
+      ]
+    },
+    "gpt-5.4-mini": {
+      "display_name": "GPT-5.4 mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.4-mini-2026-03-17"
+      ]
+    },
+    "gpt-5.4-nano": {
+      "display_name": "GPT-5.4 nano",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.4-nano-2026-03-17"
+      ]
+    },
+    "gpt-5.4-pro": {
+      "display_name": "GPT-5.4 Pro",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Aug 31, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.4-pro-2026-03-05"
+      ]
+    },
+    "gpt-5.5": {
+      "display_name": "GPT-5.5",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Dec 01, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.5-2026-04-23"
+      ]
+    },
+    "gpt-5.5-pro": {
+      "display_name": "GPT-5.5 Pro",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Dec 01, 2025",
+      "reasoning": true,
+      "reasoning_efforts": [
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.5-pro-2026-04-23"
+      ]
+    },
+    "gpt-5.6-luna": {
+      "display_name": "GPT-5.6 Luna",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Feb 16, 2026",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.6-luna"
+      ]
+    },
+    "gpt-5.6-sol": {
+      "display_name": "GPT-5.6 Sol",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Feb 16, 2026",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.6-sol"
+      ]
+    },
+    "gpt-5.6-terra": {
+      "display_name": "GPT-5.6 Terra",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Feb 16, 2026",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-5.6-terra"
+      ]
+    },
+    "gpt-audio": {
+      "display_name": "gpt-audio",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "audio"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-audio-2025-08-28"
+      ]
+    },
+    "gpt-audio-1.5": {
+      "display_name": "gpt-audio-1.5",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "audio"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-audio-1.5"
+      ]
+    },
+    "gpt-audio-mini": {
+      "display_name": "gpt-audio-mini",
+      "context_window": 128000,
+      "max_output_tokens": 16384,
+      "input_modalities": [
+        "text",
+        "audio"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-audio-mini-2025-10-06",
+        "gpt-audio-mini-2025-12-15"
+      ]
+    },
+    "gpt-image-1": {
+      "display_name": "GPT Image 1",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "image"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-image-1"
+      ]
+    },
+    "gpt-image-1-mini": {
+      "display_name": "gpt-image-1-mini",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "image"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-image-1-mini"
+      ]
+    },
+    "gpt-image-1.5": {
+      "display_name": "GPT Image 1.5",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "image",
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-image-1.5-2025-12-16"
+      ]
+    },
+    "gpt-image-2": {
+      "display_name": "GPT Image 2",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "image"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-image-2-2026-04-21"
+      ]
+    },
+    "gpt-realtime": {
+      "display_name": "GPT-Realtime",
+      "context_window": 32000,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text",
+        "audio",
+        "image"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-2025-08-28"
+      ]
+    },
+    "gpt-realtime-1.5": {
+      "display_name": "GPT-Realtime-1.5",
+      "context_window": 32000,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text",
+        "audio",
+        "image"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-1.5"
+      ]
+    },
+    "gpt-realtime-2": {
+      "display_name": "GPT-Realtime-2",
+      "context_window": 128000,
+      "max_output_tokens": 32000,
+      "input_modalities": [
+        "text",
+        "audio",
+        "image"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-2"
+      ]
+    },
+    "gpt-realtime-2.1": {
+      "display_name": "GPT-Realtime-2.1",
+      "context_window": 128000,
+      "max_output_tokens": 32000,
+      "input_modalities": [
+        "text",
+        "audio",
+        "image"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-2.1"
+      ]
+    },
+    "gpt-realtime-2.1-mini": {
+      "display_name": "GPT-Realtime-2.1 mini",
+      "context_window": 128000,
+      "max_output_tokens": 32000,
+      "input_modalities": [
+        "text",
+        "audio",
+        "image"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-2.1-mini"
+      ]
+    },
+    "gpt-realtime-mini": {
+      "display_name": "GPT-Realtime mini",
+      "context_window": 32000,
+      "max_output_tokens": 4096,
+      "input_modalities": [
+        "text",
+        "image",
+        "audio"
+      ],
+      "output_modalities": [
+        "text",
+        "audio"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-mini-2025-10-06",
+        "gpt-realtime-mini-2025-12-15"
+      ]
+    },
+    "gpt-realtime-translate": {
+      "display_name": "GPT-Realtime-Translate",
+      "context_window": 16000,
+      "max_output_tokens": 2000,
+      "input_modalities": [
+        "audio"
+      ],
+      "output_modalities": [
+        "audio",
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-translate"
+      ]
+    },
+    "gpt-realtime-whisper": {
+      "display_name": "GPT-Realtime-Whisper",
+      "context_window": 16000,
+      "max_output_tokens": 2000,
+      "input_modalities": [
+        "audio",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Sep 30, 2024",
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-realtime-whisper"
+      ]
+    },
+    "o1": {
+      "display_name": "o1",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o1-2024-12-17"
+      ]
+    },
+    "o1-pro": {
+      "display_name": "o1-pro",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "o1-pro-2025-03-19"
+      ]
+    },
+    "o3": {
+      "display_name": "o3",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o3-2025-04-16"
+      ]
+    },
+    "o3-deep-research": {
+      "display_name": "o3-deep-research",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o3-deep-research-2025-06-26"
+      ]
+    },
+    "o3-mini": {
+      "display_name": "o3-mini",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Oct 01, 2023",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o3-mini-2025-01-31"
+      ]
+    },
+    "o3-pro": {
+      "display_name": "o3-pro",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "o3-pro-2025-06-10"
+      ]
+    },
+    "o4-mini": {
+      "display_name": "o4-mini",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": true,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": true,
+      "structured_outputs": true,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o4-mini-2025-04-16"
+      ]
+    },
+    "o4-mini-deep-research": {
+      "display_name": "o4-mini-deep-research",
+      "context_window": 200000,
+      "max_output_tokens": 100000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": "Jun 01, 2024",
+      "reasoning": true,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": true,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "o4-mini-deep-research-2025-06-26"
+      ]
+    },
+    "omni-moderation-latest": {
+      "display_name": "omni-moderation",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "omni-moderation-2024-09-26"
+      ]
+    },
+    "sora-2": {
+      "display_name": "Sora 2",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "video",
+        "audio"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "sora-2-2025-12-08",
+        "sora-2-2025-10-06",
+        "sora-2"
+      ]
+    },
+    "sora-2-pro": {
+      "display_name": "Sora 2 Pro",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "video",
+        "audio"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "sora-2-pro-2025-10-06",
+        "sora-2-pro"
+      ]
+    },
+    "text-embedding-3-large": {
+      "display_name": "text-embedding-3-large",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": true
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "text-embedding-3-large"
+      ]
+    },
+    "text-embedding-3-small": {
+      "display_name": "text-embedding-3-small",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": true
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "text-embedding-3-small"
+      ]
+    },
+    "text-embedding-ada-002": {
+      "display_name": "text-embedding-ada-002",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": true
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "text-embedding-ada-002"
+      ]
+    },
+    "tts-1": {
+      "display_name": "TTS-1",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "audio"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "tts-1"
+      ]
+    },
+    "tts-1-hd": {
+      "display_name": "TTS-1 HD",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "audio"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "tts-1-hd"
+      ]
+    },
+    "whisper-1": {
+      "display_name": "Whisper",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "audio"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": false,
+      "deprecated": false,
+      "snapshots": [
+        "whisper-1"
+      ]
+    }
+  },
+  "unresolved": [
+    "gpt-3.5-turbo-0125",
+    "gpt-3.5-turbo-1106",
+    "gpt-3.5-turbo-16k",
+    "gpt-3.5-turbo-instruct-0914",
+    "gpt-4-0613",
+    "gpt-5-search-api",
+    "omni-moderation",
+    "tts-1-1106",
+    "tts-1-hd-1106"
+  ]
+}
