@@ -134,15 +134,36 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
 };
 
 /** Port data-type → stage token (Tailwind classes for handles/dots). */
-const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string }> = {
-  document_source: { bg: "bg-stage-parse", ring: "border-stage-parse/60" },
-  document: { bg: "bg-stage-retrieve", ring: "border-stage-retrieve/60" },
-  chunk_batch: { bg: CHUNK_BG, ring: "border-stage-chunk/60" },
-  embedded_batch: { bg: EMBED_BG, ring: "border-stage-embed/60" },
-  indexed_batch: { bg: "bg-stage-index", ring: "border-stage-index/60" },
-  query_request: { bg: "bg-stage-router", ring: "border-stage-router/60" },
-  query_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60" },
-  retrieval_results: { bg: "bg-stage-rerank", ring: "border-stage-rerank/60" },
+// `handle` variants carry the trailing important flag as literals: xyflow's
+// handle stylesheet is unlayered CSS, which beats Tailwind's layered utilities
+// regardless of import order, and Tailwind only generates classes it can see
+// verbatim in source — a runtime-appended "!" produces a class that was never
+// built.
+const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: string }> = {
+  document_source: {
+    bg: "bg-stage-parse",
+    ring: "border-stage-parse/60",
+    handle: "bg-stage-parse!",
+  },
+  document: {
+    bg: "bg-stage-retrieve",
+    ring: "border-stage-retrieve/60",
+    handle: "bg-stage-retrieve!",
+  },
+  chunk_batch: { bg: CHUNK_BG, ring: "border-stage-chunk/60", handle: "bg-stage-chunk!" },
+  embedded_batch: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
+  indexed_batch: { bg: "bg-stage-index", ring: "border-stage-index/60", handle: "bg-stage-index!" },
+  query_request: {
+    bg: "bg-stage-router",
+    ring: "border-stage-router/60",
+    handle: "bg-stage-router!",
+  },
+  query_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
+  retrieval_results: {
+    bg: "bg-stage-rerank",
+    ring: "border-stage-rerank/60",
+    handle: "bg-stage-rerank!",
+  },
 };
 
 /**
@@ -239,7 +260,7 @@ export const getNodeFamilyStyles = (family: NodeFamily) => NODE_FAMILY_STYLES[fa
 export const getPortTypeClasses = (dataType?: string) => {
   const style = dataType ? PORT_TYPE_STYLES[dataType] : undefined;
   return {
-    handle: cn(NEUTRAL_BG, style?.bg, style?.ring),
+    handle: cn("bg-stage-neutral!", style?.handle),
     dot: cn(NEUTRAL_BG, style?.bg),
     ring: cn("border-stage-neutral/60", style?.ring),
   };

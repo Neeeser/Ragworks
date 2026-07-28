@@ -147,7 +147,10 @@ function PortRow({
     >
       <div
         className={cn(
-          "relative flex min-w-0 items-center gap-1.5 py-0.5 text-instrument leading-4",
+          // w-full matters: the tooltip trigger is inline-flex, so without it
+          // this row shrinks to its label and the edge-anchored handles anchor
+          // to the text instead of the card edge.
+          "relative flex w-full min-w-0 items-center gap-1.5 py-0.5 text-instrument leading-4",
           isTargetSide ? "justify-start" : "justify-end",
           incompatible && "opacity-40",
         )}
@@ -198,11 +201,14 @@ function PortRow({
           isConnectable={connectable}
           data-socket={isTargetSide && acceptsMany ? "stacked" : undefined}
           className={cn(
-            "!absolute !top-1/2 !h-3 !w-3 !-translate-y-1/2 !rounded-full !border-2 !border-canvas-raised !transition-all",
+            // transform-none! cancels xyflow's translate(±50%, -50%) — Tailwind
+            // v4 translates via the `translate` property, so without it the two
+            // stack and shift the handle 6px off its anchor.
+            "absolute! top-1/2! h-3! w-3! transform-none! -translate-y-1/2! rounded-full! border-2! border-canvas-raised! transition-all!",
             portClasses.handle,
-            isTargetSide ? "!-left-[19px]" : "!-right-[19px]",
-            compatible && "!h-4 !w-4 animate-pulse !ring-2 !ring-accent-cyan/70",
-            incompatible && "!opacity-30",
+            isTargetSide ? "-left-[19px]!" : "-right-[19px]!",
+            compatible && "h-4! w-4! animate-pulse ring-2! ring-accent-cyan/70!",
+            incompatible && "opacity-30!",
           )}
         />
       </div>
