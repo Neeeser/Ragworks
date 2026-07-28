@@ -106,6 +106,10 @@ export function ConfigFieldRow({
   const numericLiteral =
     !isExpression && (field.input === "number" || field.input === "integer") && canToggle;
 
+  // A cleared number box must stay cleared while the user retypes. Writing
+  // `undefined` deletes the key, so the control immediately re-renders showing
+  // the schema default and the field appears to refuse an empty value.
+  const [draft, setDraft] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -122,9 +126,10 @@ export function ConfigFieldRow({
             staticOnly: field.staticOnly,
             selfFields: selfScope.types,
             selfFieldKey: field.key,
+            selfValues: selfScope.values,
           }).filter((suggestion) => suggestion.kind !== "function" && suggestion.name !== "query")
         : [],
-    [numericLiteral, env, field.exprType, field.staticOnly, selfScope.types, field.key],
+    [numericLiteral, env, field.exprType, field.staticOnly, selfScope, field.key],
   );
 
   const convertToExpression = (seed: string) => {
@@ -205,7 +210,12 @@ export function ConfigFieldRow({
                 setSuggestOpen(true);
               }
             }}
-            onBlurCapture={() => setSuggestOpen(false)}
+            onBlurCapture={() => {
+              setSuggestOpen(false);
+              // Leaving an empty box restores whatever the config holds, so a
+              // field is never left displaying a value it does not have.
+              setDraft(null);
+            }}
             onKeyDownCapture={handleLiteralKeyDown}
           >
             <ParameterInput
@@ -213,7 +223,7 @@ export function ConfigFieldRow({
               ariaInvalid={issue?.severity === "error"}
               ariaDescribedBy={issueId}
               input={field.input}
-              value={getInputValue(field, config)}
+              value={draft ?? getInputValue(field, config)}
               min={field.min}
               max={field.max}
               step={field.step}
@@ -221,7 +231,10 @@ export function ConfigFieldRow({
               options={field.options}
               disabled={disabled}
               className={canToggle && joined ? "rounded-r-none" : undefined}
-              onChange={(nextValue) => onLiteralChange(field, nextValue)}
+              onChange={(nextValue) => {
+                setDraft(typeof nextValue === "string" && nextValue === "" ? "" : null);
+                onLiteralChange(field, nextValue);
+              }}
             />
             {suggestOpen && suggestions.length > 0 ? (
               <SuggestionListbox

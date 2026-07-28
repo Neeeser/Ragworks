@@ -5,12 +5,13 @@
  * token-replacement rules are unit-testable.
  */
 
+import { isAssignableType } from "@/lib/expressions";
 import { BUILTINS } from "@/lib/expressions/functions";
 
 import { formatPreviewValue } from "./variable-env";
 
 import type { StaticEnvironment } from "./variable-env";
-import type { ExprType } from "@/lib/expressions";
+import type { ExprType, ExprValue } from "@/lib/expressions";
 
 export type SuggestionKind = "variable" | "function" | "field";
 
@@ -36,6 +37,7 @@ const FUNCTION_SIGNATURES: Record<string, string> = {
   floor: "floor(x)",
   ceil: "ceil(x)",
   round: "round(x)",
+  percent: "percent(value, percent)",
 };
 
 /** Every suggestion the environment offers, variables first.
@@ -53,12 +55,16 @@ export function buildSuggestions(
     selfFields?: ReadonlyMap<string, ExprType>;
     /** The field being edited — never suggested, since it cannot read itself. */
     selfFieldKey?: string;
+    /** Current sibling values; a field with none is not offered. */
+    selfValues?: ReadonlyMap<string, unknown>;
   } = {},
 ): Suggestion[] {
   const variables: Suggestion[] = [];
   for (const [name, type] of env.types) {
     if (env.problems.has(name)) continue;
     if (options.staticOnly && env.tainted.has(name)) continue;
+    // Same rule as siblings: a variable this field cannot hold is a trap.
+    if (options.expectedType && !isAssignableType(type, options.expectedType)) continue;
     variables.push({
       name,
       kind: "variable",
@@ -70,25 +76,32 @@ export function buildSuggestions(
     });
   }
   const fields: Suggestion[] = [];
+  const expectedType = options.expectedType;
   for (const [name, type] of options.selfFields ?? new Map()) {
     // A field reading itself is the shortest possible cycle.
     if (name === options.selfFieldKey) continue;
+    // Only offer what this field can actually hold. A string sibling in an
+    // integer box is a guaranteed type error, so offering it is a trap.
+    if (expectedType && !isAssignableType(type, expectedType)) continue;
+    // A sibling with no value cannot be read: the expression would type-check
+    // and then fail to resolve, which is worse than never offering it.
+    if (options.selfValues && !options.selfValues.has(name)) continue;
     fields.push({
       name: `self.${name}`,
       kind: "field",
       badge: "field",
       detail: type,
-      preview: null,
+      // Every row states what it resolves to, so a name can be chosen on its
+      // value rather than on guessing what the node currently holds.
+      preview: formatPreviewValue(options.selfValues?.get(name) as ExprValue | undefined),
       insertText: `self.${name}`,
       caretOffset: `self.${name}`.length,
     });
   }
-  const expected = options.expectedType;
-  if (expected) {
+  if (expectedType) {
     const matches = (suggestion: Suggestion) =>
-      suggestion.detail === expected || (suggestion.detail === "integer" && expected === "number");
+      isAssignableType(suggestion.detail as ExprType, expectedType);
     variables.sort((a, b) => Number(matches(b)) - Number(matches(a)));
-    fields.sort((a, b) => Number(matches(b)) - Number(matches(a)));
   }
   const functions: Suggestion[] = Object.keys(BUILTINS).map((name) => ({
     name,

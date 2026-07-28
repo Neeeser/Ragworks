@@ -65,3 +65,12 @@ export function valueType(value: ExprValue): ExprType {
   if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number";
   return isIndexValue(value) ? "index" : "model";
 }
+
+/**
+ * Whether a result of `result` can be stored in a field expecting `expected`.
+ * Integers satisfy number fields; everything else must match exactly. Mirrors
+ * `is_assignable` in `app/pipelines/expressions/values.py`.
+ */
+export function isAssignableType(result: ExprType, expected: ExprType): boolean {
+  return result === expected || (result === "integer" && expected === "number");
+}

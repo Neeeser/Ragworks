@@ -147,7 +147,7 @@ def test_chunk_overlap_declares_the_ratio_expression_as_its_seed() -> None:
     assert spec is not None
     seed = expr_seed(field_schema(spec.config_schema, "chunk_overlap"))
 
-    assert seed == "round(self.chunk_size * 0.2)"
+    assert seed == "percent(self.chunk_size, 20)"
     # The seed must be a valid expression over a real sibling, or the editor
     # would hand the author something that does not type-check.
     definition = _chunker({"chunk_size": 400, "chunk_overlap": {"$expr": seed}})
@@ -156,4 +156,34 @@ def test_chunk_overlap_declares_the_ratio_expression_as_its_seed() -> None:
         for issue in collect_variable_issues(definition, default_registry())
         if issue.node_id == "chunk"
     ]
+    # 20% of 400 is 80 exactly; the integer field stores the rounded value.
     assert resolve_definition(definition, _env()).nodes[0].config["chunk_overlap"] == 80
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # The natural ways to write a share of a token count. Each types as
+        # `number`, which an integer field would once have rejected outright.
+        ("self.chunk_size * 0.2", 102),
+        ("self.chunk_size / 20", 26),
+        ("percent(self.chunk_size, 20)", 102),
+        # An integer-typed result is stored unchanged, not re-rounded.
+        ("round(percent(self.chunk_size, 20))", 102),
+        ("self.chunk_size // 20", 25),
+    ],
+)
+def test_an_integer_field_rounds_a_number_expression(source: str, expected: int) -> None:
+    """Rejecting these would outlaw writing a share on the fields shares suit."""
+    definition = _chunker({"chunk_size": 512, "chunk_overlap": {"$expr": source}})
+
+    assert not collect_variable_issues(definition, default_registry())
+    assert resolve_definition(definition, _env()).nodes[0].config["chunk_overlap"] == expected
+
+
+def test_a_string_expression_on_an_integer_field_is_still_rejected() -> None:
+    """Rounding is for numbers; it must not become a general escape hatch."""
+    definition = _chunker({"chunk_size": 512, "chunk_overlap": {"$expr": "'nope'"}})
+
+    codes = {issue.code for issue in collect_variable_issues(definition, default_registry())}
+    assert "expression_type" in codes

@@ -171,6 +171,8 @@ def _check_call(
             )
     if spec.result == "always_int":
         return ExprType.INTEGER
+    if spec.result == "always_number":
+        return ExprType.NUMBER
     if all(arg_type is ExprType.INTEGER for arg_type in arg_types):
         return ExprType.INTEGER
     return ExprType.NUMBER

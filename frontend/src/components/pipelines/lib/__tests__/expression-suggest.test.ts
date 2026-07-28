@@ -33,15 +33,15 @@ describe("buildSuggestions", () => {
     expect(max).toMatchObject({ kind: "function", insertText: "max()", caretOffset: 4 });
   });
 
-  it("ranks matching-type variables first when an expected type is set", () => {
-    const suggestions = buildSuggestions(env, { expectedType: "integer" });
-    const variables = suggestions.filter((suggestion) => suggestion.kind === "variable");
-    const firstString = variables.findIndex((suggestion) => suggestion.detail === "string");
-    const lastInteger = variables
-      .map((suggestion, index) => (suggestion.detail === "integer" ? index : -1))
-      .filter((index) => index >= 0)
-      .pop();
-    expect(lastInteger).toBeLessThan(firstString);
+  it("offers only variables an expected-type field can hold", () => {
+    // Ranking a string below an integer still left it one keystroke from a
+    // guaranteed type error; an unusable suggestion is worse than none.
+    const variables = buildSuggestions(env, { expectedType: "integer" }).filter(
+      (suggestion) => suggestion.kind === "variable",
+    );
+
+    expect(variables.every((suggestion) => suggestion.detail === "integer")).toBe(true);
+    expect(variables.map((suggestion) => suggestion.name)).toContain("top_k");
   });
 
   it("excludes tainted names on static-only fields", () => {
@@ -112,6 +112,54 @@ describe("the self scope in suggestions", () => {
 
     expect(suggestions[0].name).toBe(SELF_CHUNK_SIZE);
     expect(suggestions[0].kind).toBe("field");
+  });
+
+  it("hides siblings the field cannot hold, rather than offering a type error", () => {
+    const mixed = new Map<string, ExprType>([
+      ["chunk_size", "integer"],
+      ["tokenizer", "string"],
+    ]);
+
+    const names = buildSuggestions(env, {
+      selfFields: mixed,
+      selfFieldKey: "chunk_overlap",
+      expectedType: "integer",
+    }).map((suggestion) => suggestion.name);
+
+    expect(names).toContain(SELF_CHUNK_SIZE);
+    expect(names).not.toContain("self.tokenizer");
+  });
+
+  it("shows what each sibling resolves to, so a row can be chosen on its value", () => {
+    const suggestions = buildSuggestions(env, {
+      selfFields,
+      selfValues: new Map<string, unknown>([["chunk_size", 512]]),
+      selfFieldKey: "chunk_overlap",
+    });
+
+    expect(suggestions.find((s) => s.name === SELF_CHUNK_SIZE)?.preview).toBe("512");
+  });
+
+  it("hides a sibling with no value, which would type-check then fail to resolve", () => {
+    const names = buildSuggestions(env, {
+      selfFields: new Map<string, ExprType>([
+        ["chunk_size", "integer"],
+        ["hf_model_id", "string"],
+      ]),
+      // hf_model_id is null on the node, so it has no entry here.
+      selfValues: new Map<string, unknown>([["chunk_size", 512]]),
+      selfFieldKey: "chunk_overlap",
+    }).map((suggestion) => suggestion.name);
+
+    expect(names).toContain(SELF_CHUNK_SIZE);
+    expect(names).not.toContain("self.hf_model_id");
+  });
+
+  it("hides variables the field cannot hold", () => {
+    const names = buildSuggestions(env, { expectedType: "integer" }).map((s) => s.name);
+
+    expect(names).toContain("top_k");
+    expect(names).not.toContain("label");
   });
 
   it("never offers the field being edited, the shortest possible cycle", () => {

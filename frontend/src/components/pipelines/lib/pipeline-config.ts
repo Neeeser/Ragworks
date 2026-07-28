@@ -1,4 +1,5 @@
 import { evaluate, expressionSource, parse } from "@/lib/expressions";
+import { roundHalfAway } from "@/lib/expressions/functions";
 
 import type { ParameterSelectOption } from "@/components/ui/parameter-controls";
 import type { ExprType, ExprValue } from "@/lib/expressions";
@@ -265,7 +266,10 @@ export function resolvedNumber(
   try {
     const scope = buildSelfScope(fields, config, key);
     const result = evaluate(parse(source), env.values, scope.values);
-    return typeof result === "number" ? result : null;
+    if (typeof result !== "number") return null;
+    // Report the value that will be stored: an integer field rounds.
+    const field = fields.find((candidate) => candidate.key === key);
+    return field?.exprType === "integer" ? roundHalfAway(result) : result;
   } catch {
     return null;
   }

@@ -22,6 +22,7 @@ export { parse, type Expression } from "./parser";
 export {
   MODEL_MEMBERS,
   SELF_SCOPE,
+  isAssignableType,
   isModelValue,
   isNumericType,
   valueType,

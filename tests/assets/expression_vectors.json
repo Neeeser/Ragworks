@@ -868,6 +868,54 @@
         "type": "integer",
         "value": 512
       }
+    },
+    {
+      "name": "percent_of_an_integer",
+      "source": "percent(512, 20)",
+      "env": {},
+      "expect": {
+        "type": "number",
+        "value": 102.4
+      }
+    },
+    {
+      "name": "percent_is_always_number_even_when_exact",
+      "source": "percent(200, 50)",
+      "env": {},
+      "expect": {
+        "type": "number",
+        "value": 100.0
+      }
+    },
+    {
+      "name": "percent_over_a_sibling",
+      "source": "percent(self.chunk_size, 20)",
+      "env": {},
+      "self": {
+        "chunk_size": {
+          "type": "integer",
+          "value": 512
+        }
+      },
+      "expect": {
+        "type": "number",
+        "value": 102.4
+      }
+    },
+    {
+      "name": "percent_rounded_is_an_integer",
+      "source": "round(percent(512, 20))",
+      "env": {},
+      "expect": {
+        "type": "integer",
+        "value": 102
+      }
+    },
+    {
+      "name": "percent_arity_is_exactly_two",
+      "source": "percent(512)",
+      "env": {},
+      "error": "type"
     }
   ]
 }

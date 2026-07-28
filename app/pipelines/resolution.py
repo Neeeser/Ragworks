@@ -15,6 +15,7 @@ collection selected.
 
 from __future__ import annotations
 
+from app.pipelines.config_fields import integer_fields
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.environment import (
     VariableResolutionError,
@@ -28,6 +29,7 @@ from app.pipelines.expressions import (
     evaluate,
     parse,
 )
+from app.pipelines.expressions.functions import round_half_away
 from app.pipelines.node_scope import (
     ConfigCycleError,
     resolution_order,
@@ -50,6 +52,14 @@ def _node_defaults(node_type: str) -> dict[str, object]:
 
     spec = default_registry().get_spec(node_type)
     return dict(spec.default_config) if spec is not None else {}
+
+
+def _integer_fields(node_type: str) -> frozenset[str]:
+    """Return the node type's integer config fields (lazily, as above)."""
+    from app.pipelines.registry import default_registry
+
+    spec = default_registry().get_spec(node_type)
+    return integer_fields(spec.config_schema) if spec is not None else frozenset()
 
 
 def default_environment(
@@ -107,6 +117,7 @@ def resolve_definition(
             errors.append(f"Node '{node.id}': {cycle}")
             nodes.append(node)
             continue
+        integer_targets = _integer_fields(node.type)
         # Siblings already reduced to literals, so `self.<field>` always reads
         # a value rather than another expression. Seeded with the node's config
         # defaults: a field the author never set still has the value the node
@@ -138,6 +149,10 @@ def resolve_definition(
                     "dereferenced with .backend or .name."
                 )
                 continue
+            # A share of an integer is rarely an integer, so an integer field
+            # rounds rather than rejecting the natural way to write one.
+            if key in integer_targets and isinstance(result, float):
+                result = round_half_away(result)
             config[key] = result
             resolved[key] = result
             changed = True

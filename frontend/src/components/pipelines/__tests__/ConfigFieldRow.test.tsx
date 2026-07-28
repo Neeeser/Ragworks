@@ -191,3 +191,28 @@ describe("a field that declares a seed expression", () => {
     });
   });
 });
+
+describe("clearing a number box", () => {
+  it("stays empty while the user retypes instead of snapping back to the default", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConfigFieldRow
+        field={CHUNK_SIZE_FIELD}
+        siblingFields={[CHUNK_SIZE_FIELD]}
+        nodeId={NODE_CHUNK}
+        config={{ [CHUNK_SIZE]: 512 }}
+        env={env}
+        disabled={false}
+        onValueChange={vi.fn()}
+        onLiteralChange={vi.fn()}
+      />,
+    );
+
+    const box = screen.getByLabelText("Chunk size");
+    await user.clear(box);
+
+    // Writing `undefined` deletes the key, so without a draft the control
+    // re-renders showing the schema default and the box refuses to empty.
+    expect(box).toHaveValue(null);
+  });
+});

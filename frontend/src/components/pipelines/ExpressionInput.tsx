@@ -7,10 +7,12 @@ import {
   ExpressionError,
   checkType,
   evaluate,
+  isAssignableType,
   parse,
   references,
   selfReferences,
 } from "@/lib/expressions";
+import { roundHalfAway } from "@/lib/expressions/functions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -60,7 +62,11 @@ export function evaluateExpressionFeedback(
     }
     const type = checkType(expression, env.types, options.self?.types);
     const expected = options.expectedType;
-    if (expected && type !== expected && !(type === "integer" && expected === "number")) {
+    // An integer field also takes a number: resolution rounds it, so the
+    // natural way to write a share (`self.chunk_size * 0.2`, `x / 20`) is
+    // usable on the very fields shares are written for.
+    const rounds = expected === "integer" && type === "number";
+    if (expected && !rounds && !isAssignableType(type, expected)) {
       return { kind: "error", message: `Expected ${expected}, got ${type}.` };
     }
     if (!expected && type === "model") {
@@ -75,11 +81,11 @@ export function evaluateExpressionFeedback(
         };
       }
     }
-    return {
-      kind: "ok",
-      type,
-      preview: formatPreviewValue(evaluate(expression, env.values, options.self?.values)),
-    };
+    // Preview the value that will be stored, rounding included — otherwise
+    // the author reads 102.4 and the run writes 102.
+    const value = evaluate(expression, env.values, options.self?.values);
+    const stored = rounds && typeof value === "number" ? roundHalfAway(value) : value;
+    return { kind: "ok", type, preview: formatPreviewValue(stored) };
   } catch (error) {
     if (error instanceof ExpressionError) {
       return { kind: "error", message: error.message };
@@ -145,6 +151,7 @@ export function ExpressionInput({
         staticOnly,
         selfFields: selfScope?.types,
         selfFieldKey: selfScope?.key,
+        selfValues: selfScope?.values,
       }),
     [env, expectedType, staticOnly, selfScope],
   );

@@ -144,7 +144,11 @@ def _config_expression_issues(  # noqa: PLR0913 - one check, all its inputs
     issues: list[PipelineValidationIssue] = []
     resolved_field = field_schema(schema, key)
     expected = expected_expr_type(resolved_field)
-    if expected is not None and not is_assignable(result, expected):
+    # An integer config field also takes a number: resolution rounds it, so
+    # rejecting `self.chunk_size * 0.2` here would outlaw the natural way to
+    # write a share of a token count.
+    rounds = expected is ExprType.INTEGER and result is ExprType.NUMBER
+    if expected is not None and not rounds and not is_assignable(result, expected):
         issues.append(
             PipelineValidationIssue(
                 code="expression_type",

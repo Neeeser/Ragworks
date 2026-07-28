@@ -81,8 +81,10 @@ class FixedChunkerConfig(BaseModel):
     chunk_overlap: int = Field(
         default=DEFAULT_CHUNK_OVERLAP,
         ge=0,
+        # Seeded with `percent` rather than a bare multiplier: it says what it
+        # means, and it is the form the editor's suggestion list can teach.
         json_schema_extra=expr_seed_extra(
-            f"round(self.chunk_size * {CHUNK_OVERLAP_RATIO})"
+            f"percent(self.chunk_size, {int(CHUNK_OVERLAP_RATIO * 100)})"
         ),
         description=(
             "Tokens repeated from the end of one chunk at the start of the "

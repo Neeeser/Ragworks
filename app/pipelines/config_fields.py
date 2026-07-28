@@ -48,6 +48,25 @@ def expr_seed(field: dict[str, object]) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def integer_fields(schema: dict[str, object]) -> frozenset[str]:
+    """Names of the node's integer config fields.
+
+    Resolution rounds a number result landing on one: a proportion of an
+    integer is rarely an integer (20% of 512 is 102.4), and rejecting that
+    would make the natural way to write a share unusable on the very fields
+    shares are written for. The rounded value is what the editor previews, so
+    the author sees the stored number rather than inferring it.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return frozenset()
+    return frozenset(
+        key
+        for key in properties
+        if expected_expr_type(field_schema(schema, key)) is ExprType.INTEGER
+    )
+
+
 def expected_expr_type(field: dict[str, object]) -> ExprType | None:
     """Map a resolved property schema to the expression type it accepts.
 

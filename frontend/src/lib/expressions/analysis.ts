@@ -144,6 +144,9 @@ function checkCall(
   if (spec.result === "always_int") {
     return "integer";
   }
+  if (spec.result === "always_number") {
+    return "number";
+  }
   return argTypes.every((argType) => argType === "integer") ? "integer" : "number";
 }
 
