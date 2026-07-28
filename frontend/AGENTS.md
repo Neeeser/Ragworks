@@ -386,6 +386,12 @@ the same PR.
   renders at the inherited scale instead of its token's — invisible in tests,
   because the class string still looks plausible. Adding a token to a custom
   scale updates both files.
+- **Important utilities use Tailwind v4's trailing flag (`absolute!`), written as
+  literals in source.** A leading `!absolute` generates no CSS in v4, and a class
+  built at runtime (string-appending `"!"`) is invisible to Tailwind's scanner —
+  either way the style silently never applies, which on third-party unlayered CSS
+  (xyflow's handle styles beat layered utilities regardless of import order) means
+  the library default wins and no test notices.
 - **Accessibility is part of done**, not polish: accessible names on icon buttons,
   `htmlFor` on labels, `aria-expanded` on expandables, and anything
   keyboard-reachable must actually work with a keyboard (test with `user-event`,
