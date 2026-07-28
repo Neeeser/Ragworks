@@ -11,15 +11,21 @@ only constructs the adapters it actually touches.
 from __future__ import annotations
 
 from collections.abc import Callable
-from uuid import UUID
+from functools import partial
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
 from app.cache import CachePolicy, ValueCache
+from app.clients.anthropic import close_anthropic_clients, invalidate_anthropic_client
 from app.clients.cohere import close_cohere_clients, invalidate_cohere_client
 from app.clients.ollama.client import (
     close_ollama_clients,
     invalidate_ollama_client,
+)
+from app.clients.openai_compat import (
+    close_openai_compat_clients,
+    invalidate_openai_compat_client,
 )
 from app.clients.openrouter.client import (
     close_openrouter_clients,
@@ -28,17 +34,21 @@ from app.clients.openrouter.client import (
 from app.clients.tei import close_tei_clients, invalidate_tei_client
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository
+from app.providers.anthropic import AnthropicAdapter
 from app.providers.base import ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
 from app.providers.cohere import CohereAdapter
+from app.providers.custom import CustomAdapter
 from app.providers.ollama import OllamaAdapter
+from app.providers.openai import OpenAIAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.providers.tei import TEIAdapter
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.rerankers.base import Reranker
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.providers import (
+from app.schemas.provider_configs import (
+    AnthropicConnectionConfig,
     CohereConnectionConfig,
     OllamaConnectionConfig,
     OpenRouterConnectionConfig,
@@ -48,9 +58,12 @@ from app.services.errors import InvalidInputError, NotFoundError
 
 ADAPTERS: dict[ProviderType, type[ProviderAdapter]] = {
     ProviderType.OPENROUTER: OpenRouterAdapter,
+    ProviderType.OPENAI: OpenAIAdapter,
+    ProviderType.ANTHROPIC: AnthropicAdapter,
     ProviderType.OLLAMA: OllamaAdapter,
     ProviderType.COHERE: CohereAdapter,
     ProviderType.TEI: TEIAdapter,
+    ProviderType.CUSTOM: CustomAdapter,
     ProviderType.PINECONE: PineconeAdapter,
 }
 
@@ -88,11 +101,37 @@ def _invalidate_tei(config: dict[str, object]) -> None:
     invalidate_tei_client(parsed.base_url, parsed.api_key)
 
 
+def _invalidate_anthropic(config: dict[str, object]) -> None:
+    parsed = AnthropicConnectionConfig.model_validate(config)
+    invalidate_anthropic_client(parsed.api_key, parsed.base_url)
+
+
+def _invalidate_openai_compat(
+    provider_type: ProviderType, config: dict[str, object]
+) -> None:
+    """Drop the shared client keyed by an OpenAI-compatible endpoint identity.
+
+    The key is the transport identity, not the credential, so it is rebuilt
+    from the adapter rather than reconstructed here — a mismatch would leave
+    the old pool serving requests with a credential the user just changed.
+    """
+    connection = models.ProviderConnection(
+        user_id=uuid4(), provider_type=provider_type.value, label="", config=config
+    )
+    adapter = ADAPTERS[provider_type](connection)
+    transport_config = getattr(adapter, "transport_config", None)
+    if transport_config is not None:
+        invalidate_openai_compat_client(transport_config())
+
+
 _CACHE_INVALIDATORS: dict[ProviderType, Callable[[dict[str, object]], None]] = {
     ProviderType.OPENROUTER: _invalidate_openrouter,
     ProviderType.OLLAMA: _invalidate_ollama,
     ProviderType.COHERE: _invalidate_cohere,
     ProviderType.TEI: _invalidate_tei,
+    ProviderType.ANTHROPIC: _invalidate_anthropic,
+    ProviderType.OPENAI: partial(_invalidate_openai_compat, ProviderType.OPENAI),
+    ProviderType.CUSTOM: partial(_invalidate_openai_compat, ProviderType.CUSTOM),
 }
 
 
@@ -183,6 +222,8 @@ def close_provider_clients() -> None:
     close_ollama_clients()
     close_cohere_clients()
     close_tei_clients()
+    close_anthropic_clients()
+    close_openai_compat_clients()
 
 
 class ProviderResolver:

@@ -17,6 +17,8 @@ from app.schemas.providers import (
     ConnectionValidateRequest,
     ConnectionValidationResult,
     ProviderTypeRead,
+    ServerProbeRequest,
+    ServerProbeResult,
 )
 from app.services.connections import ConnectionService, provider_type_catalog
 from app.services.errors import ServiceError
@@ -90,6 +92,19 @@ def validate_unsaved_connection(
     """Probe an unsaved connection config (pre-save check in the UI)."""
     try:
         return ConnectionService(session).validate_unsaved(payload.provider_type, payload.config)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.post("/providers/probe", response_model=ServerProbeResult)
+def probe_custom_server(
+    payload: ServerProbeRequest,
+    session: Session = Depends(get_session),
+    _current_user: models.User = Depends(get_current_user),
+) -> ServerProbeResult:
+    """Discover which standard surfaces a custom server answers on."""
+    try:
+        return ConnectionService(session).probe_server(payload)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 

@@ -11,8 +11,14 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlmodel import Session
 
+from app.clients.openai_compat import (
+    ProbeOutcome,
+    TransportConfig,
+    get_openai_compat_client,
+)
 from app.db import models
 from app.db.pgvector_support import pgvector_available
 from app.db.repositories import ProviderConnectionRepository
@@ -26,6 +32,9 @@ from app.providers.registry import (
     resolve_connection,
 )
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.provider_configs import (
+    CustomConnectionConfig,
+)
 from app.schemas.providers import (
     ConfigFieldKind,
     ConnectionCreate,
@@ -34,6 +43,8 @@ from app.schemas.providers import (
     ConnectionValidationResult,
     ProviderCoverage,
     ProviderTypeRead,
+    ServerProbeRequest,
+    ServerProbeResult,
 )
 from app.services.errors import InvalidInputError, ServiceError, is_external_provider_error
 
@@ -268,6 +279,49 @@ class ConnectionService:
             detail = exc.detail if isinstance(exc.detail, str) else "Invalid configuration."
             return ConnectionValidationResult(valid=False, message=detail)
         return adapter.validate_connection()
+
+    @staticmethod
+    def probe_server(request: ServerProbeRequest) -> ServerProbeResult:
+        """Discover which standard surfaces an unsaved custom server answers on.
+
+        Runs before a connection exists, so it takes the address directly
+        rather than a connection row — this is what fills the add-connection
+        form's capability toggles instead of asking the user to know which
+        endpoints their server mounts.
+        """
+        try:
+            config = CustomConnectionConfig(
+                base_url=request.base_url, api_key=request.api_key
+            )
+        except ValidationError as exc:
+            return ServerProbeResult(
+                reachable=False, message=str(exc.errors()[0]["msg"])
+            )
+        client = get_openai_compat_client(
+            TransportConfig(base_url=config.base_url, api_key=config.api_key)
+        )
+        result = client.probe()
+        if not result.reachable:
+            return ServerProbeResult(reachable=False, message=result.error)
+        unauthorized = any(
+            endpoint.outcome is ProbeOutcome.UNAUTHORIZED
+            for endpoint in (result.chat, result.embeddings, result.rerank)
+        )
+        return ServerProbeResult(
+            reachable=True,
+            serves_chat=result.chat.available,
+            serves_embeddings=result.embeddings.available,
+            serves_reranking=result.rerank.available,
+            serves_responses=result.responses.available,
+            unauthorized=unauthorized,
+            model_ids=list(result.model_ids),
+            message=(
+                "The server rejected the API key. Check the key rather than the "
+                "capabilities below."
+                if unauthorized
+                else result.error
+            ),
+        )
 
     def validate_saved(
         self, user: models.User, connection_id: UUID
