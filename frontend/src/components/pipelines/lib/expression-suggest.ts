@@ -46,6 +46,17 @@ const FUNCTION_SIGNATURES: Record<string, string> = {
  * identity-field rule). When `expectedType` is set, matching-type variables
  * rank before the rest; functions always follow variables.
  */
+/**
+ * Whether a name of `type` is worth offering for a field expecting `expected`.
+ *
+ * Wider than assignability by exactly one case: an integer field also takes a
+ * number, because resolution rounds it. Offering less than the field accepts
+ * hides usable names; offering more hands the author a guaranteed error.
+ */
+function offerable(type: ExprType, expected: ExprType): boolean {
+  return isAssignableType(type, expected) || (expected === "integer" && type === "number");
+}
+
 export function buildSuggestions(
   env: StaticEnvironment,
   options: {
@@ -64,7 +75,7 @@ export function buildSuggestions(
     if (env.problems.has(name)) continue;
     if (options.staticOnly && env.tainted.has(name)) continue;
     // Same rule as siblings: a variable this field cannot hold is a trap.
-    if (options.expectedType && !isAssignableType(type, options.expectedType)) continue;
+    if (options.expectedType && !offerable(type, options.expectedType)) continue;
     variables.push({
       name,
       kind: "variable",
@@ -82,7 +93,7 @@ export function buildSuggestions(
     if (name === options.selfFieldKey) continue;
     // Only offer what this field can actually hold. A string sibling in an
     // integer box is a guaranteed type error, so offering it is a trap.
-    if (expectedType && !isAssignableType(type, expectedType)) continue;
+    if (expectedType && !offerable(type, expectedType)) continue;
     // A sibling with no value cannot be read: the expression would type-check
     // and then fail to resolve, which is worse than never offering it.
     if (options.selfValues && !options.selfValues.has(name)) continue;
@@ -100,7 +111,7 @@ export function buildSuggestions(
   }
   if (expectedType) {
     const matches = (suggestion: Suggestion) =>
-      isAssignableType(suggestion.detail as ExprType, expectedType);
+      offerable(suggestion.detail as ExprType, expectedType);
     variables.sort((a, b) => Number(matches(b)) - Number(matches(a)));
   }
   const functions: Suggestion[] = Object.keys(BUILTINS).map((name) => ({
