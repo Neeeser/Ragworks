@@ -583,6 +583,25 @@ frontend form code — only a new `ConfigFieldKind` would.
   ships. Where a provider publishes nothing (OpenAI), infer *lopsidedly*: match
   the markers that exclude, and let everything unmatched fall through to the
   permissive bucket, so a model released tomorrow appears rather than vanishes.
+- **OpenAI model capabilities come from the shipped bundle, and the bundle
+  refines — it never gates.** `app/providers/openai_model_bundle.json` is
+  generated from OpenAI's own docs pages (`make refresh-openai-bundle`; the
+  `openai-model-bundle` skill has the workflow); an id it has never heard of
+  falls back to the dialect's full parameter floor with no context claim,
+  because a model OpenAI ships tomorrow must keep working from a stale bundle.
+  Never hand-edit the JSON — fix the generator script and regenerate.
+- **A dialect's parameter tuple is spelled in the canonical chat-parameter
+  vocabulary, not the wire spelling.** Supported-parameter filtering runs
+  against the tuple *before* the dialect's alias rename, so listing the wire
+  name (`max_output_tokens`) filters the canonical key out and the rename
+  never fires — the user's cap silently stops reaching the model.
+- **`ChatParameters.extra_body` bypasses supported-parameter filtering by
+  design and merges into the provider body last.** It exists precisely for
+  knobs no catalog knows; filtering it, or letting a provider's own
+  extensions win the merge, deletes the only escape hatch users have when a
+  capability source is wrong. A key the server rejects surfaces the server's
+  own error — there is deliberately no strip-and-retry layer anywhere in the
+  chat path.
 - **A provider requiring `max_tokens` gets an answer-sized default, not the
   model's ceiling.** A ceiling is a cap (64K–128K); Anthropic's SDK reads a
   request that large as one that may run over ten minutes and refuses to send it
