@@ -32,7 +32,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validator
 
-from app.pipelines.expressions import ExprType, ExprValue, IndexValue, ModelValue
+from app.pipelines.expressions import (
+    SELF_SCOPE,
+    ExprType,
+    ExprValue,
+    IndexValue,
+    ModelValue,
+)
 from app.pipelines.expressions.functions import BUILTINS
 
 EXPRESSION_KEY = "$expr"
@@ -58,8 +64,14 @@ names from them (`'col-' + collection_id`) without breaking the taint rule.
 
 VARIABLE_NAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
 RESERVED_VARIABLE_NAMES = frozenset(
-    {QUERY_VARIABLE, *COLLECTION_VARIABLES, "true", "false", *BUILTINS}
+    {QUERY_VARIABLE, *COLLECTION_VARIABLES, SELF_SCOPE, "true", "false", *BUILTINS}
 )
+"""Names a pipeline variable may not take.
+
+`self` is reserved so a node's own scope can never be shadowed: with it taken,
+adding a pipeline variable can never change what an existing node's
+expressions compute.
+"""
 
 STATIC_ONLY_KEY = "static_only"
 """json_schema_extra marker for identity config fields (index names, backends,

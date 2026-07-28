@@ -22,16 +22,34 @@ from app.pipelines.environment import (
 )
 from app.pipelines.expressions import (
     ExpressionError,
+    ExprValue,
     IndexValue,
     ModelValue,
     evaluate,
     parse,
+)
+from app.pipelines.node_scope import (
+    ConfigCycleError,
+    resolution_order,
+    self_dependencies,
 )
 from app.pipelines.variables import (
     BindingContext,
     VariableEnvironment,
     expression_source,
 )
+
+
+def _node_defaults(node_type: str) -> dict[str, object]:
+    """Return a node type's config defaults, or nothing for an unknown type.
+
+    Imported lazily: the registry constructs every node class, and resolution
+    is imported by modules the registry itself reaches.
+    """
+    from app.pipelines.registry import default_registry
+
+    spec = default_registry().get_spec(node_type)
+    return dict(spec.default_config) if spec is not None else {}
 
 
 def default_environment(
@@ -83,12 +101,28 @@ def resolve_definition(
     for node in definition.nodes:
         config = dict(node.config)
         changed = False
-        for key, value in config.items():
+        try:
+            order = resolution_order(self_dependencies(config))
+        except ConfigCycleError as cycle:
+            errors.append(f"Node '{node.id}': {cycle}")
+            nodes.append(node)
+            continue
+        # Siblings already reduced to literals, so `self.<field>` always reads
+        # a value rather than another expression. Seeded with the node's config
+        # defaults: a field the author never set still has the value the node
+        # will run with, so reading it is not a run-time "no such field".
+        resolved: dict[str, ExprValue] = {
+            key: value
+            for key, value in {**_node_defaults(node.type), **config}.items()
+            if expression_source(value) is None and isinstance(value, (int, float, str, bool))
+        }
+        for key in order:
+            value = config[key]
             source = expression_source(value)
             if source is None:
                 continue
             try:
-                result = evaluate(parse(source), environment.values)
+                result = evaluate(parse(source), environment.values, resolved)
             except ExpressionError as error:
                 errors.append(f"Node '{node.id}' field '{key}': {error.message}")
                 continue
@@ -105,6 +139,7 @@ def resolve_definition(
                 )
                 continue
             config[key] = result
+            resolved[key] = result
             changed = True
         nodes.append(node.model_copy(update={"config": config}) if changed else node)
     if errors:
