@@ -7,7 +7,6 @@ import { useEffect } from "react";
 import { AccountMenu } from "@/components/ui/account-menu";
 import { AppShell } from "@/components/ui/app-shell";
 import { CommandPalette } from "@/components/ui/command-palette";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { WorkspaceLoading } from "@/components/ui/workspace-loading";
 import { useAuth } from "@/providers/auth-provider";
 import { SetupStatusProvider } from "@/providers/setup-status-provider";
@@ -62,12 +61,7 @@ function ConsoleLayoutContent({ children }: { children: React.ReactNode }) {
         links={links}
         activeHref={pathname ?? undefined}
         contentClassName={ownsScroll(pathname) ? "overflow-hidden" : undefined}
-        railFooter={
-          <>
-            <ThemeToggle />
-            <AccountMenu user={user} />
-          </>
-        }
+        railFooter={<AccountMenu user={user} />}
       >
         {children}
       </AppShell>

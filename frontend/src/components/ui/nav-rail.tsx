@@ -151,105 +151,94 @@ export function NavRail({ links, activeHref, footer }: NavRailProps) {
   const [collapsed, setCollapsed] = useNavCollapsed();
 
   return (
-    <>
-      {/* Below lg an expanded sidebar leaves the flow and floats over the page,
-          so opening it never reflows the content it navigates; tapping the page
-          through this backdrop puts it away. */}
-      {collapsed ? null : (
-        <div
-          className="fixed inset-0 z-30 bg-canvas/40 lg:hidden"
-          aria-hidden
-          onClick={() => setCollapsed(true)}
-        />
+    // Desktop-only: below lg the shell renders `MobileNavBar` along the bottom
+    // edge instead — a side rail spends a fixed slice of a phone's width on
+    // every page.
+    <nav
+      aria-label="Sections"
+      className={cn(
+        // The user moved it → 160ms decel, per the motion table.
+        "relative flex shrink-0 flex-col gap-1 border-r border-hairline bg-surface py-3 transition-[width] duration-160 ease-decel max-lg:hidden motion-reduce:transition-none",
+        collapsed ? "w-12 px-1.5" : "w-[184px] px-2",
       )}
-      <nav
-        aria-label="Sections"
-        className={cn(
-          // The user moved it → 160ms decel, per the motion table.
-          "relative flex shrink-0 flex-col gap-1 border-r border-hairline bg-surface py-3 transition-[width] duration-160 ease-decel motion-reduce:transition-none",
-          collapsed
-            ? "w-12 px-1.5"
-            : "w-[184px] px-2 max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:bg-canvas-raised max-lg:shadow-elevation-1",
-        )}
-      >
-        <div className={cn("mb-2 flex items-center", collapsed ? "justify-center" : "gap-1 pr-1")}>
-          <Link
-            href="/dashboard"
-            aria-label="Ragworks console"
-            className={cn(
-              "flex min-w-0 items-center gap-2 rounded-control px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-              collapsed && "px-1",
-            )}
-          >
-            <span className="relative block h-5 w-6 shrink-0" aria-hidden>
-              <Image
-                src="/ragworks-mark-dark.svg"
-                alt=""
-                fill
-                className="ragworks-mark-dark object-contain"
-                unoptimized
-              />
-              <Image
-                src="/ragworks-mark-light.svg"
-                alt=""
-                fill
-                className="ragworks-mark-light object-contain"
-                unoptimized
-              />
-            </span>
-            {collapsed ? null : (
-              <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-primary">
-                Ragworks
-              </span>
-            )}
-          </Link>
-          {collapsed ? null : (
-            <Tooltip content="Collapse navigation" side="right">
-              <button
-                type="button"
-                aria-label="Collapse navigation"
-                aria-expanded
-                onClick={() => setCollapsed(true)}
-                className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-              >
-                <PanelLeftClose className="h-4 w-4" aria-hidden />
-              </button>
-            </Tooltip>
+    >
+      <div className={cn("mb-2 flex items-center", collapsed ? "justify-center" : "gap-1 pr-1")}>
+        <Link
+          href="/dashboard"
+          aria-label="Ragworks console"
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-control px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+            collapsed && "px-1",
           )}
-        </div>
-
-        {collapsed ? (
-          <Tooltip content="Expand navigation" side="right">
+        >
+          <span className="relative block h-5 w-6 shrink-0" aria-hidden>
+            <Image
+              src="/ragworks-mark-dark.svg"
+              alt=""
+              fill
+              className="ragworks-mark-dark object-contain"
+              unoptimized
+            />
+            <Image
+              src="/ragworks-mark-light.svg"
+              alt=""
+              fill
+              className="ragworks-mark-light object-contain"
+              unoptimized
+            />
+          </span>
+          {collapsed ? null : (
+            <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-primary">
+              Ragworks
+            </span>
+          )}
+        </Link>
+        {collapsed ? null : (
+          <Tooltip content="Collapse navigation" side="right">
             <button
               type="button"
-              aria-label="Expand navigation"
-              aria-expanded={false}
-              onClick={() => setCollapsed(false)}
-              className="mb-1 flex h-8 w-full items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+              aria-label="Collapse navigation"
+              aria-expanded
+              onClick={() => setCollapsed(true)}
+              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
             >
-              <PanelLeftOpen className="h-4 w-4" aria-hidden />
+              <PanelLeftClose className="h-4 w-4" aria-hidden />
             </button>
           </Tooltip>
-        ) : null}
+        )}
+      </div>
 
-        {links.map((link) => (
-          <RailItem
-            key={link.href}
-            link={link}
-            active={activeHref?.startsWith(link.href) ?? false}
-            collapsed={collapsed}
-            intent={intent}
-          />
-        ))}
-
-        {footer ? (
-          <div
-            className={cn("mt-auto flex items-center gap-1", collapsed ? "flex-col px-0" : "px-1")}
+      {collapsed ? (
+        <Tooltip content="Expand navigation" side="right">
+          <button
+            type="button"
+            aria-label="Expand navigation"
+            aria-expanded={false}
+            onClick={() => setCollapsed(false)}
+            className="mb-1 flex h-8 w-full items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
           >
-            {footer}
-          </div>
-        ) : null}
-      </nav>
-    </>
+            <PanelLeftOpen className="h-4 w-4" aria-hidden />
+          </button>
+        </Tooltip>
+      ) : null}
+
+      {links.map((link) => (
+        <RailItem
+          key={link.href}
+          link={link}
+          active={activeHref?.startsWith(link.href) ?? false}
+          collapsed={collapsed}
+          intent={intent}
+        />
+      ))}
+
+      {footer ? (
+        <div
+          className={cn("mt-auto flex items-center gap-1", collapsed ? "flex-col px-0" : "px-1")}
+        >
+          {footer}
+        </div>
+      ) : null}
+    </nav>
   );
 }

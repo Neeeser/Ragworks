@@ -37,26 +37,6 @@ function railItem(name: string): { link: HTMLElement; wrapper: HTMLElement } {
   return { link, wrapper: link.parentElement as HTMLElement };
 }
 
-const NAV_COLLAPSED_KEY = "ragworks.nav.collapsed";
-
-describe("NavRail narrow-screen overlay", () => {
-  it("floats the expanded rail over the page below lg and collapses it on backdrop tap", () => {
-    // An explicit expand is stored as "0"; on a phone the expanded rail must
-    // overlay the content instead of pushing it, and tapping the page collapses it.
-    window.localStorage.setItem(NAV_COLLAPSED_KEY, "0");
-    render(<NavRail links={links} activeHref="/collections" />);
-
-    const nav = screen.getByRole("navigation", { name: "Sections" });
-    expect(nav.className).toContain("max-lg:fixed");
-
-    const backdrop = document.querySelector(".lg\\:hidden.fixed");
-    expect(backdrop).not.toBeNull();
-    fireEvent.click(backdrop as Element);
-    expect(window.localStorage.getItem(NAV_COLLAPSED_KEY)).toBe("1");
-    window.localStorage.removeItem(NAV_COLLAPSED_KEY);
-  });
-});
-
 describe("NavRail flyouts", () => {
   beforeEach(() => {
     vi.useFakeTimers();

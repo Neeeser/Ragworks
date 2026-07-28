@@ -102,6 +102,13 @@ The expected shape, in order:
 7. **Browser verification** — test in a seeded sandbox scenario, never a
    hand-built state, and harden what you validated into a saved flow
    (`frontend/flows/<scenario>/`) in the same PR — see `sandbox/AGENTS.md`.
+   **Verify every touched surface in both viewports — desktop (≥1280px) and
+   mobile (375×812) — switching and screenshotting one right after the other**
+   so the two states are compared in the same pass, not from memory. This is
+   primarily a desktop app and density decisions are made at desktop width,
+   but a view that is broken or unusable on a phone is a bug: side panes must
+   become overlays, toolbars wrap, nothing needs horizontal page scroll, and
+   navigation is the bottom tab bar (`MobileNavBar`) below `lg`.
 
 Chat Studio (`components/chat-studio/`) is the reference implementation of this
 shape. Then run the gate (`npm run verify`).

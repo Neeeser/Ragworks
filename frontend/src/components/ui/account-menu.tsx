@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Moon, Settings, Sun } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -8,6 +8,7 @@ import { popoverSurfaceClass } from "@/components/ui/panel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+import { useTheme } from "@/providers/theme-provider";
 
 import type { User } from "@/lib/types";
 
@@ -36,7 +37,8 @@ function initials(user: User): string {
 }
 
 /**
- * The rail's account control: a 24px avatar opening settings and sign-out.
+ * The rail's account control: a 24px avatar opening the theme switch,
+ * settings, and sign-out.
  *
  * The old top nav also printed the user's name and email beside it on every
  * page. In a rail that identity is already implied by being signed in, so the
@@ -45,6 +47,8 @@ function initials(user: User): string {
  */
 export function AccountMenu({ user }: { user: User }) {
   const { signOut } = useAuth();
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const avatarStyle = useAvatarStyle(user.id || user.email || "ragworks");
@@ -89,12 +93,30 @@ export function AccountMenu({ user }: { user: User }) {
           // would also strip the implicit link/button roles from the items.
           className={cn(
             popoverSurfaceClass,
-            "absolute bottom-0 left-full z-30 ml-2 w-48 overflow-hidden py-1",
+            // Opens to the right of the sidebar avatar at lg+, and upward from
+            // the bottom tab bar below lg — where "to the right" of a control
+            // at the screen's right edge would land the menu off-screen.
+            "absolute z-30 w-48 overflow-hidden py-1",
+            "max-lg:bottom-full max-lg:right-0 max-lg:mb-2",
+            "lg:bottom-0 lg:left-full lg:ml-2",
           )}
         >
           <Tooltip content={user.email} side="right" triggerClassName="w-full">
             <p className="truncate px-2 py-1 text-ui text-meta">{user.email}</p>
           </Tooltip>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-ui text-body transition-colors duration-80 ease-standard hover:bg-surface"
+            // The menu stays open so the flip is visible where it was made.
+            onClick={toggleTheme}
+          >
+            {isDark ? (
+              <Sun className="h-3.5 w-3.5 text-muted" aria-hidden />
+            ) : (
+              <Moon className="h-3.5 w-3.5 text-muted" aria-hidden />
+            )}
+            {isDark ? "Switch to light theme" : "Switch to dark theme"}
+          </button>
           <Link
             href="/settings"
             className="flex items-center gap-2 px-2 py-1.5 text-ui text-body transition-colors duration-80 ease-standard hover:bg-surface"

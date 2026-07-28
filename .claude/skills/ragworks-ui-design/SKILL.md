@@ -76,7 +76,13 @@ console density still doesn't leak out.
     page must still *work* below `lg`: panes collapse or become overlays, toolbars wrap,
     tables scroll in their own `overflow-x-auto`, touch targets stay ≥32px. Where a
     desktop affordance can't translate (hover flyouts, drag-drop), the click/tap path
-    must exist anyway — which the keyboard rules already require.
+    must exist anyway — which the keyboard rules already require. Below `lg` the
+    sidebar is replaced by `MobileNavBar`, a bottom tab bar — the platform-native
+    place for section switching that costs the content no width; side panes dock to
+    their own edge as drawers over the working surface, never a centered takeover.
+    Verify both viewports back-to-back: resize and screenshot desktop then mobile in
+    the same pass, so a phone regression is seen next to the desktop state it drifted
+    from.
 
 ## Copy voice
 
@@ -160,7 +166,8 @@ scroll · never nest a `<button>` in a clickable row (invalid HTML that hydrates
 unpredictably — use the `role="button"` div pattern).
 
 Finish with `npm run verify` in `frontend/` plus `make format-check-frontend`, then a
-keyboard and reduced-motion pass, and screenshots in both modes from a seeded sandbox.
+keyboard and reduced-motion pass, and screenshots from a seeded sandbox in both themes
+*and* both viewports — desktop (≥1280px) and mobile (375×812), taken back-to-back.
 
 ## Editing this skill
 
