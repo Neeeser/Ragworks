@@ -14,10 +14,12 @@ from app.providers.chat.dialects import (
     RESPONSES_PARAMETERS,
     ResponsesProvider,
 )
-from app.providers.openai_catalog import classify_openai_models
+from app.providers.openai_bundle import load_openai_bundle
+from app.providers.openai_catalog import CatalogConnection, classify_openai_models
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openai_compat_embedder import OpenAICompatEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import ModelInfo
 from app.schemas.provider_configs import OpenAIConnectionConfig
 from app.schemas.providers import (
     CatalogMetadata,
@@ -125,17 +127,49 @@ class OpenAIAdapter(ProviderAdapter):
         models = classify_openai_models(
             model_ids,
             kind=kind,
-            connection_id=self.connection.id,
-            connection_label=self.connection.label,
-            provider_type=self.provider_type,
+            connection=CatalogConnection(
+                id=self.connection.id,
+                label=self.connection.label,
+                provider_type=self.provider_type,
+            ),
             chat_parameters=self._chat_parameters(),
+            bundle=load_openai_bundle(),
         )
         return CatalogResult(models=models, meta=CatalogMetadata())
+
+    def _resolve_model(self, model_id: str) -> ModelInfo:
+        """Resolve chat-model metadata from the shipped capability bundle.
+
+        The bundle is not the account catalog — `/v1/models` is — so an id it
+        has never heard of still resolves, to the full Responses floor and no
+        context claim (the chat loop applies its conservative default). A
+        model OpenAI ships after the bundle was generated must keep working;
+        a retired id fails at inference with OpenAI's own message.
+        """
+        entry = load_openai_bundle().lookup(model_id)
+        if entry is None:
+            return ModelInfo(
+                id=model_id,
+                name=model_id,
+                supported_parameters=self._chat_parameters(),
+            )
+        parameters = [
+            p for p in self._chat_parameters() if p != "reasoning" or entry.reasoning
+        ]
+        return ModelInfo(
+            id=model_id,
+            name=entry.display_name or model_id,
+            context_length=entry.context_window,
+            supported_parameters=parameters,
+            reasoning_efforts=entry.effort_options() or None,
+        )
 
     def chat_provider(self) -> ChatProvider:
         """Construct the Responses-dialect chat provider."""
         self.require_kind(ProviderKind.CHAT)
-        return ResponsesProvider(self._client(), name="openai")
+        return ResponsesProvider(
+            self._client(), name="openai", model_resolver=self._resolve_model
+        )
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an embedder backed by OpenAI's embeddings endpoint."""

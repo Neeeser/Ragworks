@@ -18,8 +18,10 @@ must not remove a model the server actually serves.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
+from app.providers.openai_bundle import OpenAIModelBundle
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import CatalogModel
 
@@ -56,34 +58,61 @@ def is_chat_model(model_id: str) -> bool:
     return not any(marker in normalized for marker in NON_CHAT_MARKERS)
 
 
+@dataclass(frozen=True)
+class CatalogConnection:
+    """The connection identity stamped onto every listed model."""
+
+    id: UUID
+    label: str
+    provider_type: ProviderType
+
+
 def classify_openai_models(
     model_ids: list[str],
     *,
     kind: ProviderKind,
-    connection_id: UUID,
-    connection_label: str,
-    provider_type: ProviderType,
+    connection: CatalogConnection,
     chat_parameters: list[str],
+    bundle: OpenAIModelBundle | None = None,
 ) -> list[CatalogModel]:
-    """Return the connection's models of one kind, qualified by the connection."""
+    """Return the connection's models of one kind, qualified by the connection.
+
+    The bundle refines what it provably knows — context window, the
+    `reasoning` knob, effort levels, deprecation — and never subtracts more:
+    a model the bundle has never heard of keeps the full `chat_parameters`
+    floor, so a model OpenAI ships tomorrow appears with working parameters
+    rather than a blank panel.
+    """
     if kind is ProviderKind.EMBEDDING:
         selected = [model_id for model_id in model_ids if is_embedding_model(model_id)]
-        parameters: list[str] = []
         output_modalities = ["embedding"]
     else:
         selected = [model_id for model_id in model_ids if is_chat_model(model_id)]
-        parameters = chat_parameters
         output_modalities = ["text"]
-    return [
-        CatalogModel(
-            connection_id=connection_id,
-            connection_label=connection_label,
-            provider_type=provider_type,
-            id=model_id,
-            name=model_id,
-            input_modalities=["text"],
-            output_modalities=output_modalities,
-            supported_parameters=parameters,
+    models = []
+    for model_id in sorted(selected):
+        entry = bundle.lookup(model_id) if bundle else None
+        if kind is ProviderKind.EMBEDDING or entry is None:
+            parameters = [] if kind is ProviderKind.EMBEDDING else list(chat_parameters)
+            efforts = None
+        else:
+            parameters = [p for p in chat_parameters if p != "reasoning" or entry.reasoning]
+            efforts = entry.effort_options() or None
+        models.append(
+            CatalogModel(
+                connection_id=connection.id,
+                connection_label=connection.label,
+                provider_type=connection.provider_type,
+                id=model_id,
+                name=model_id,
+                context_length=entry.context_window if entry else None,
+                input_modalities=list(entry.input_modalities) if entry else ["text"],
+                output_modalities=output_modalities,
+                supported_parameters=parameters,
+                reasoning_efforts=efforts,
+                deprecated=entry.deprecated if entry else False,
+            )
         )
-        for model_id in sorted(selected)
-    ]
+    # Deprecated models stay listed (order-don't-filter) but sink to the end.
+    models.sort(key=lambda m: (m.deprecated, m.id))
+    return models

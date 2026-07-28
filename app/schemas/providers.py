@@ -175,6 +175,12 @@ class CatalogModel(BaseModel):
     output_modalities: list[str] = Field(default_factory=list)
     supported_parameters: list[str] = Field(default_factory=list)
     default_parameters: dict[str, Any] | None = None
+    #: Effort levels the model's reasoning accepts, where the provider
+    #: publishes them; None keeps the UI's generic effort list.
+    reasoning_efforts: list[str] | None = None
+    #: True when the provider's own catalog marks the model deprecated —
+    #: ordered last in pickers, never filtered out.
+    deprecated: bool = False
 
 
 class ConnectionCatalogError(BaseModel):

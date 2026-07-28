@@ -28,6 +28,10 @@ class ModelInfo(BaseModel):
     supported_parameters: list[str] = Field(default_factory=list)
     top_provider: dict[str, Any] | None = None
     default_parameters: dict[str, Any] | None = None
+    #: Effort levels the model's reasoning accepts, where the provider
+    #: publishes them (OpenAI bundle, Anthropic catalog); None means the
+    #: UI keeps its generic effort list.
+    reasoning_efforts: list[str] | None = None
 
 
 class EmbeddingModelInfo(BaseModel):

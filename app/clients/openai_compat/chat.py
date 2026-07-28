@@ -52,6 +52,11 @@ def _build_kwargs(
         )
     if stream:
         kwargs["stream"] = True
+        # Part of the Chat Completions spec, and without it OpenAI-compatible
+        # servers emit no usage chunk at all — the turn's token accounting
+        # silently reads zero. OpenRouter ignores it (its own `usage` block in
+        # extra_body governs) and the self-hosted servers honor it.
+        kwargs["stream_options"] = {"include_usage": True}
     return kwargs
 
 

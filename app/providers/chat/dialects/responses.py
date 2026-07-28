@@ -30,15 +30,20 @@ from app.schemas.openai_responses import (
     ResponsesResponse,
     ResponsesStreamEvent,
 )
+from app.services.errors import ExternalServiceError
 
-#: Parameters the Responses wire format accepts. It drops several Chat
-#: Completions knobs outright (`frequency_penalty`, `presence_penalty`,
-#: `logit_bias`, `seed`, `stop`) and renames the output cap, so declaring the
-#: Chat Completions set here would offer users parameters that 400.
+#: Parameters the Responses wire format accepts, spelled in the *canonical*
+#: chat-parameter vocabulary (`max_tokens`): supported-parameter filtering
+#: runs against these names before the wire call, so listing the wire
+#: spelling (`max_output_tokens`) would filter the canonical key out and the
+#: alias rename below would never see it. It drops several Chat Completions
+#: knobs outright (`frequency_penalty`, `presence_penalty`, `logit_bias`,
+#: `seed`, `stop`), so declaring the Chat Completions set here would offer
+#: users parameters that 400.
 RESPONSES_PARAMETERS: tuple[str, ...] = (
     "temperature",
     "top_p",
-    "max_output_tokens",
+    "max_tokens",
     "top_logprobs",
     "response_format",
     "reasoning",
@@ -83,13 +88,32 @@ class ResponsesProvider:
 
     @staticmethod
     def _parameters(request: ChatRequest) -> dict[str, Any] | None:
-        """Rename Chat Completions parameter keys onto their Responses spelling."""
+        """Rename Chat Completions parameter keys onto their Responses spelling.
+
+        `response_format` moves under `text.format`, flattening the nested
+        `json_schema` envelope the Chat Completions shape wraps around the
+        schema — `responses.create` has no `response_format` kwarg at all, so
+        passing it through unrenamed is a `TypeError` before the request
+        leaves the process.
+        """
         if not request.parameters:
             return None
-        return {
+        parameters = {
             _PARAMETER_ALIASES.get(key, key): value
             for key, value in request.parameters.items()
         }
+        response_format = parameters.pop("response_format", None)
+        if isinstance(response_format, dict):
+            schema_envelope = response_format.get("json_schema")
+            if response_format.get("type") == "json_schema" and isinstance(
+                schema_envelope, dict
+            ):
+                parameters["text"] = {
+                    "format": {"type": "json_schema", **schema_envelope}
+                }
+            else:
+                parameters["text"] = {"format": response_format}
+        return parameters
 
     @staticmethod
     def _reasoning(request: ChatRequest) -> dict[str, Any] | None:
@@ -134,8 +158,17 @@ class ResponsesProvider:
             yield event.model_dump(exclude_none=True)
 
     def parse_chat_response(self, response: dict[str, Any]) -> ParsedChatResponse:
-        """Normalize a finished Responses payload into the shared parsed shape."""
+        """Normalize a finished Responses payload into the shared parsed shape.
+
+        A `failed` response carries its reason in `error`, not in output —
+        parsing it as a message hands the user an empty answer with no
+        explanation, so it surfaces as the provider failure it is.
+        """
         parsed = ResponsesResponse.model_validate(response)
+        if parsed.status == "failed":
+            raise ExternalServiceError(
+                tr.response_error_text(parsed) or "OpenAI reported the response failed."
+            )
         return ParsedChatResponse(
             message=tr.response_to_message(parsed),
             usage=tr.usage_to_chat_shape(parsed.usage),
@@ -216,12 +249,22 @@ class ResponsesProvider:
         )
 
     def _terminal(self, event: ResponsesStreamEvent) -> ParsedStreamChunk:
-        """Emit the closing snapshot carrying finish reason and usage."""
+        """Emit the closing snapshot carrying finish reason and usage.
+
+        A `response.failed` raises instead: the run loop persists whatever
+        streamed and the route emits an error event with the provider's own
+        message — a bare `finish_reason` would end the turn looking complete.
+        """
         response = event.response
         finish_reason = "stop"
         if event.type == "response.failed":
-            finish_reason = "error"
-        elif event.type == "response.incomplete":
+            message = (
+                tr.response_error_text(response) if response is not None else None
+            )
+            raise ExternalServiceError(
+                message or "OpenAI reported the response failed."
+            )
+        if event.type == "response.incomplete":
             finish_reason = "length"
         elif response is not None and any(
             item.type == "function_call" for item in response.output

@@ -23,7 +23,7 @@ from app.providers.chat.base import ChatRequest
 from app.providers.chat.dialects import MessagesProvider
 from app.providers.chat.dialects.messages import model_info_from_catalog
 from app.providers.custom import CustomAdapter
-from app.providers.openai_catalog import classify_openai_models
+from app.providers.openai_catalog import CatalogConnection, classify_openai_models
 from app.schemas.anthropic import AnthropicModel
 from app.schemas.enums import ProviderKind, ProviderType
 from app.services.errors import InvalidInputError
@@ -235,9 +235,9 @@ class TestOpenAIModelClassification:
             for model in classify_openai_models(
                 ids,
                 kind=kind,
-                connection_id=uuid4(),
-                connection_label="OpenAI",
-                provider_type=ProviderType.OPENAI,
+                connection=CatalogConnection(
+                    id=uuid4(), label="OpenAI", provider_type=ProviderType.OPENAI
+                ),
                 chat_parameters=["temperature"],
             )
         ]
