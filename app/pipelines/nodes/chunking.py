@@ -14,6 +14,7 @@ from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload, Tokenize
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_chunks, summarize_text, trace_chunk_items
+from app.pipelines.variables import expr_seed_extra
 from app.retrieval.chunkers import build_chunker
 from app.retrieval.tokenizers.huggingface import validate_hf_model_id
 from app.retrieval.tokenizers.resources import build_token_counter
@@ -80,6 +81,9 @@ class FixedChunkerConfig(BaseModel):
     chunk_overlap: int = Field(
         default=DEFAULT_CHUNK_OVERLAP,
         ge=0,
+        json_schema_extra=expr_seed_extra(
+            f"round(self.chunk_size * {CHUNK_OVERLAP_RATIO})"
+        ),
         description=(
             "Tokens repeated from the end of one chunk at the start of the "
             "next, so text straddling a boundary stays retrievable from both "

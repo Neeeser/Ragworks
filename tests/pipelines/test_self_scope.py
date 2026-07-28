@@ -137,3 +137,23 @@ def test_validation_reports_an_unknown_sibling_field(session) -> None:
 
 def test_evaluate_reads_a_resolved_sibling() -> None:
     assert evaluate(parse("self.chunk_size + 1"), {}, {"chunk_size": 512}) == 513
+
+
+def test_chunk_overlap_declares_the_ratio_expression_as_its_seed() -> None:
+    """The formula lives on the node, so the editor needs no per-node code."""
+    from app.pipelines.config_fields import expr_seed, field_schema
+
+    spec = default_registry().get_spec("chunker.token")
+    assert spec is not None
+    seed = expr_seed(field_schema(spec.config_schema, "chunk_overlap"))
+
+    assert seed == "round(self.chunk_size * 0.2)"
+    # The seed must be a valid expression over a real sibling, or the editor
+    # would hand the author something that does not type-check.
+    definition = _chunker({"chunk_size": 400, "chunk_overlap": {"$expr": seed}})
+    assert not [
+        issue
+        for issue in collect_variable_issues(definition, default_registry())
+        if issue.node_id == "chunk"
+    ]
+    assert resolve_definition(definition, _env()).nodes[0].config["chunk_overlap"] == 80

@@ -25,8 +25,14 @@ const TOP_N_FIELD: PipelineConfigField = {
   exprType: "integer",
 };
 
+const CHUNK_OVERLAP = "chunk_overlap";
+const NODE_CHUNK = "chunk";
+const CHUNK_SIZE = "chunk_size";
+const OVERLAP_RATIO_EXPR = "round(self.chunk_size * 0.2)";
+const OVERLAP_LABEL = "Chunk overlap";
+
 const CHUNK_SIZE_FIELD: PipelineConfigField = {
-  key: "chunk_size",
+  key: CHUNK_SIZE,
   label: "Chunk size",
   input: "integer",
   nullable: false,
@@ -106,10 +112,10 @@ describe("the self scope in a config field", () => {
   it("resolves an expression over a sibling and shows the number it produces", async () => {
     render(
       <ConfigFieldRow
-        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
-        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
-        nodeId="chunk"
-        config={{ chunk_size: 512, chunk_overlap: { $expr: "round(self.chunk_size * 0.2)" } }}
+        field={{ ...TOP_N_FIELD, key: CHUNK_OVERLAP, label: OVERLAP_LABEL }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: CHUNK_OVERLAP }]}
+        nodeId={NODE_CHUNK}
+        config={{ [CHUNK_SIZE]: 512, [CHUNK_OVERLAP]: { $expr: OVERLAP_RATIO_EXPR } }}
         env={env}
         disabled={false}
         onValueChange={vi.fn()}
@@ -123,10 +129,10 @@ describe("the self scope in a config field", () => {
   it("reads a sibling's default when the config does not set it", async () => {
     render(
       <ConfigFieldRow
-        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
-        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
-        nodeId="chunk"
-        config={{ chunk_overlap: { $expr: "round(self.chunk_size * 0.25)" } }}
+        field={{ ...TOP_N_FIELD, key: CHUNK_OVERLAP, label: OVERLAP_LABEL }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: CHUNK_OVERLAP }]}
+        nodeId={NODE_CHUNK}
+        config={{ [CHUNK_OVERLAP]: { $expr: "round(self.chunk_size * 0.25)" } }}
         env={env}
         disabled={false}
         onValueChange={vi.fn()}
@@ -140,10 +146,10 @@ describe("the self scope in a config field", () => {
   it("refuses a field that reads itself, the shortest possible cycle", async () => {
     render(
       <ConfigFieldRow
-        field={{ ...TOP_N_FIELD, key: "chunk_overlap", label: "Chunk overlap" }}
-        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: "chunk_overlap" }]}
-        nodeId="chunk"
-        config={{ chunk_overlap: { $expr: "self.chunk_overlap + 1" } }}
+        field={{ ...TOP_N_FIELD, key: CHUNK_OVERLAP, label: OVERLAP_LABEL }}
+        siblingFields={[CHUNK_SIZE_FIELD, { ...TOP_N_FIELD, key: CHUNK_OVERLAP }]}
+        nodeId={NODE_CHUNK}
+        config={{ [CHUNK_OVERLAP]: { $expr: "self.chunk_overlap + 1" } }}
         env={env}
         disabled={false}
         onValueChange={vi.fn()}
@@ -152,5 +158,36 @@ describe("the self scope in a config field", () => {
     );
 
     expect(await screen.findByText(/cannot read itself/)).toBeInTheDocument();
+  });
+});
+
+describe("a field that declares a seed expression", () => {
+  it("starts the fx toggle from the node's formula instead of an empty box", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    const seeded: PipelineConfigField = {
+      ...TOP_N_FIELD,
+      key: CHUNK_OVERLAP,
+      label: OVERLAP_LABEL,
+      exprSeed: OVERLAP_RATIO_EXPR,
+    };
+    render(
+      <ConfigFieldRow
+        field={seeded}
+        siblingFields={[CHUNK_SIZE_FIELD, seeded]}
+        nodeId={NODE_CHUNK}
+        config={{ [CHUNK_SIZE]: 512, [CHUNK_OVERLAP]: 102 }}
+        env={env}
+        disabled={false}
+        onValueChange={onValueChange}
+        onLiteralChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /toggle expression mode/i }));
+
+    expect(onValueChange).toHaveBeenCalledWith(CHUNK_OVERLAP, {
+      $expr: OVERLAP_RATIO_EXPR,
+    });
   });
 });

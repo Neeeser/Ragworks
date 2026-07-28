@@ -122,9 +122,7 @@ export function ConfigFieldRow({
             staticOnly: field.staticOnly,
             selfFields: selfScope.types,
             selfFieldKey: field.key,
-          }).filter(
-            (suggestion) => suggestion.kind !== "function" && suggestion.name !== "query",
-          )
+          }).filter((suggestion) => suggestion.kind !== "function" && suggestion.name !== "query")
         : [],
     [numericLiteral, env, field.exprType, field.staticOnly, selfScope.types, field.key],
   );
@@ -166,7 +164,10 @@ export function ConfigFieldRow({
 
   const toggleExpression = () => {
     setConvertedFocus(false);
-    onValueChange(field.key, isExpression ? undefined : { $expr: "" });
+    // A field whose natural value is a formula over its siblings starts from
+    // that formula rather than an empty box; the node declares it, so this
+    // needs no per-node knowledge here.
+    onValueChange(field.key, isExpression ? undefined : { $expr: field.exprSeed ?? "" });
   };
   // The checkbox row has no bounding box to weld onto; every other control does.
   const joined = field.input !== "boolean";

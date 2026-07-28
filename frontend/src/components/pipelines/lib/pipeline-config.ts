@@ -20,6 +20,8 @@ export type PipelineConfigField = {
   /** Identity field (index name, backend, dimension): expressions on it may
    * not depend on caller input. Mirrors the backend `static_only` marker. */
   staticOnly: boolean;
+  /** Expression the ƒx toggle starts from, when the node declares one. */
+  exprSeed?: string;
   /** Expression type the field accepts in expression mode; null = no ƒx toggle. */
   exprType: "integer" | "number" | "string" | "boolean" | null;
 };
@@ -142,6 +144,7 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
     // json_schema_extra lands on the outer property, even when the type
     // resolves through anyOf/$ref.
     const staticOnly = rawSchema.static_only === true || node.static_only === true;
+    const seed = rawSchema.expr_seed ?? node.expr_seed;
 
     return {
       key,
@@ -157,6 +160,7 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
       nullable,
       required: requiredSet.has(key),
       staticOnly,
+      exprSeed: typeof seed === "string" ? seed : undefined,
       exprType: expressionTypeFor(input),
     };
   });

@@ -99,6 +99,8 @@ describe("applySuggestion", () => {
   });
 });
 
+const SELF_CHUNK_SIZE = "self.chunk_size";
+
 describe("the self scope in suggestions", () => {
   const selfFields = new Map<string, ExprType>([
     ["chunk_size", "integer"],
@@ -108,7 +110,7 @@ describe("the self scope in suggestions", () => {
   it("offers a node's other config fields, qualified, ahead of variables", () => {
     const suggestions = buildSuggestions(env, { selfFields, selfFieldKey: "chunk_overlap" });
 
-    expect(suggestions[0].name).toBe("self.chunk_size");
+    expect(suggestions[0].name).toBe(SELF_CHUNK_SIZE);
     expect(suggestions[0].kind).toBe("field");
   });
 
@@ -123,15 +125,15 @@ describe("the self scope in suggestions", () => {
     const token = caretToken(source, source.length);
 
     const applied = applySuggestion(source, token, {
-      name: "self.chunk_size",
+      name: SELF_CHUNK_SIZE,
       kind: "field",
       badge: "field",
       detail: "integer",
       preview: null,
-      insertText: "self.chunk_size",
-      caretOffset: "self.chunk_size".length,
+      insertText: SELF_CHUNK_SIZE,
+      caretOffset: SELF_CHUNK_SIZE.length,
     });
 
-    expect(applied.source).toBe("self.chunk_size");
+    expect(applied.source).toBe(SELF_CHUNK_SIZE);
   });
 });

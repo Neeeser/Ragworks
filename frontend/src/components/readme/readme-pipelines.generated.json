@@ -417,6 +417,7 @@
           "chunk_overlap": {
             "default": 102,
             "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. Added on top of chunk size, not taken out of it, so the embedder receives chunk_size + chunk_overlap tokens and it is that sum which must fit the model's input limit. Defaults to 20% of chunk size. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
+            "expr_seed": "round(self.chunk_size * 0.2)",
             "minimum": 0,
             "title": "Chunk Overlap",
             "type": "integer"

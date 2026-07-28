@@ -82,6 +82,20 @@ marker off the node catalog's config schema."""
 STATIC_ONLY_EXTRA: dict[str, JsonValue] = {STATIC_ONLY_KEY: True}
 """Pass as `Field(json_schema_extra=STATIC_ONLY_EXTRA)` on identity fields."""
 
+EXPR_SEED_KEY = "expr_seed"
+"""json_schema_extra marker holding the expression a field starts from.
+
+A field whose natural value is a formula over its siblings (an overlap as a
+share of chunk size) seeds the editor with that formula when the author
+switches it to expression mode, instead of an empty box. The node declares it
+so the knowledge lives with the field; the frontend reads it off the config
+schema and needs no per-node code."""
+
+
+def expr_seed_extra(source: str) -> dict[str, JsonValue]:
+    """Build the `json_schema_extra` carrying a field's seed expression."""
+    return {EXPR_SEED_KEY: source}
+
 ScalarValue = int | float | str | bool
 VariableValue = ScalarValue | ModelValue | IndexValue
 

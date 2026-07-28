@@ -136,6 +136,25 @@ colocate a single file with its consumer.
   crashes the moment a field holds an expression. Identity fields (backend, index name,
   namespace, dimension, embedder model) carry the `static_only` marker so the
   taint rule keeps them independent of caller input — purge coverage depends on it.
+- **A config field may read its siblings as `self.<field>`, and `self` is a
+  reserved variable name.** Reserving it is what makes shadowing impossible:
+  adding a pipeline variable can never change what an existing node computes.
+  Resolution orders a node's fields by their dependency graph
+  (`app/pipelines/node_scope.py`), never by config key order — key order is a
+  serialization artifact, so a definition round-tripped through a different
+  JSON writer would otherwise resolve to different values. Absent siblings are
+  seeded from the node's own `default_config`, so reading an unset field gives
+  the value the node will actually run with rather than a run-time error.
+  Cycles raise instead of recursing.
+- **Taint follows `self.` chains.** An identity (`static_only`) field reading a
+  sibling that reads caller input is exactly as request-dependent as reading
+  the input directly, and a per-request index name returns nothing rather than
+  failing — nothing downstream would ever surface it.
+  `validation_node_config.tainted_config_fields` closes over the chain.
+- **A field whose natural value is a formula over its siblings declares it as
+  `expr_seed`** (`Field(json_schema_extra=expr_seed_extra(...))`), so the
+  editor's ƒx toggle starts from that formula. The knowledge lives on the node;
+  the frontend reads it off the config schema and needs no per-node code.
 - **The expression grammar lives twice** (`app/pipelines/expressions/` is the
   source of truth; `frontend/src/lib/expressions/` mirrors it for live editor
   feedback), pinned by the shared vectors in `tests/assets/expression_vectors.json`
