@@ -319,3 +319,31 @@ def test_count_node_registers_its_sparse_index_target() -> None:
     assert {
         (target.index_name, target.vector_type) for target in settings.index_targets
     } == {("docs-dense-bm25", "sparse")}
+
+
+def test_settings_resolve_a_chunk_field_written_as_a_sibling_expression() -> None:
+    """Settings validate through the config model, which rejects a raw $expr.
+
+    They are safe only because `resolve_pipeline_settings` resolves the
+    definition first; this pins that ordering, since the shipped chunk-overlap
+    seed makes an expression-valued chunker config the ordinary case.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(
+                id="chunk",
+                type="chunker.token",
+                name="Token Chunker",
+                config={
+                    "chunk_size": 400,
+                    "chunk_overlap": {"$expr": "round(self.chunk_size * 0.2)"},
+                },
+            )
+        ],
+        edges=[],
+    )
+
+    settings = resolve_pipeline_settings(definition, _collection(), default_registry())
+
+    assert settings.chunk_size == 400
+    assert settings.chunk_overlap == 80
