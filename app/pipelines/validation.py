@@ -322,15 +322,14 @@ class PipelineValidator:
         except ValidationError:
             return None
         chunk_size = getattr(config, "chunk_size", None)
-        if not isinstance(chunk_size, int):
+        chunk_overlap = getattr(config, "chunk_overlap", None)
+        if not isinstance(chunk_size, int) or not isinstance(chunk_overlap, int):
             return None
-        # Each emitted chunk spans at most chunk_size tokens — overlap is a
-        # stride within that window, not extra tokens the embedder ever sees —
-        # so only chunk_size is bounded by the model's input limit. Comparing
-        # chunk_size + overlap here once flagged (and clamped) windows that
-        # actually fit, so the wizard's shown size differed from what ingest
-        # used and a valid default tripped an error.
-        if chunk_size <= maximum:
+        # Overlap is added to chunk_size, so the emitted chunk — and what the
+        # embedder receives — is their sum. Comparing chunk_size alone misses
+        # every window that overflows only once the repeated tail is counted.
+        window = chunk_size + chunk_overlap
+        if window <= maximum:
             return None
         tokenizer = config.tokenizer
         is_whitespace = tokenizer == "whitespace"
@@ -343,14 +342,14 @@ class PipelineValidator:
         return PipelineValidationIssue(
             code="embedding_input_limit_exceeded",
             message=(
-                f"Chunk size ({chunk_size:,}) on node '{chunker.id}' "
-                f"exceeds embedding model '{model}' effective input limit of {maximum:,}. "
-                f"{detail}"
+                f"Chunk size plus overlap ({chunk_size:,} + {chunk_overlap:,} = "
+                f"{window:,}) on node '{chunker.id}' exceeds embedding model "
+                f"'{model}' effective input limit of {maximum:,}. {detail}"
             ),
             severity=severity,
             node_id=chunker.id,
             field="chunk_size",
-            configured_value=chunk_size,
+            configured_value=window,
             model=model,
             allowed_max=maximum,
         )
