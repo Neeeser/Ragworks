@@ -597,6 +597,9 @@ describe("PipelineBuilder", () => {
           data_type: "document",
           required: true,
           accepts_many: false,
+          requires: [],
+          adds: [],
+          preserves: false,
         },
       ],
       output_ports: [
@@ -606,6 +609,9 @@ describe("PipelineBuilder", () => {
           data_type: "chunk_batch",
           required: true,
           accepts_many: false,
+          requires: [],
+          adds: [],
+          preserves: false,
         },
       ],
     });

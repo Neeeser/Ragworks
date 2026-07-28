@@ -13,7 +13,7 @@ import {
 
 import type { Node, NodeProps } from "@xyflow/react";
 
-const RETRIEVAL_RESULTS = "retrieval_results";
+const RETRIEVAL_RESULTS = "items";
 const TARGET_RESULTS_TESTID = "target-results";
 const STACKED_SOCKET_SELECTOR = '[data-socket="stacked"]';
 
@@ -61,6 +61,9 @@ describe("PipelineNode", () => {
               data_type: "chunk_batch",
               required: false,
               accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
             },
             {
               key: "request",
@@ -68,6 +71,9 @@ describe("PipelineNode", () => {
               data_type: "query_request",
               required: false,
               accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
             },
           ],
           outputs: [
@@ -77,6 +83,9 @@ describe("PipelineNode", () => {
               data_type: "embedded_batch",
               required: false,
               accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
             },
           ],
           config: { model_name: "openai/text-embedding-3-small" },
@@ -108,6 +117,9 @@ describe("PipelineNode", () => {
               data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: true,
+              requires: ["score"],
+              adds: [],
+              preserves: false,
             },
           ],
           outputs: [
@@ -117,6 +129,9 @@ describe("PipelineNode", () => {
               data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
             },
           ],
           config: {},
@@ -132,8 +147,8 @@ describe("PipelineNode", () => {
     expect(variadicRow?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(3);
     // Every port row explains itself; only the variadic one names the fan-in.
     const [variadicTooltip, outputTooltip] = screen.getAllByRole("tooltip");
-    expect(variadicTooltip).toHaveTextContent("Accepts multiple retrieval result connections");
-    expect(outputTooltip).toHaveTextContent("Results · Results");
+    expect(variadicTooltip).toHaveTextContent("Accepts multiple scored items connections");
+    expect(outputTooltip).toHaveTextContent("Results · Items");
     expect(variadicTooltip.parentElement?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(
       3,
     );
@@ -151,6 +166,9 @@ describe("PipelineNode", () => {
                 data_type: RETRIEVAL_RESULTS,
                 required: true,
                 accepts_many: false,
+                requires: [],
+                adds: [],
+                preserves: false,
               },
             ],
             outputs: [],
@@ -185,6 +203,9 @@ describe("PipelineNode", () => {
               data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: true,
+              requires: ["score"],
+              adds: [],
+              preserves: false,
             },
           ],
           outputs: [
@@ -194,6 +215,9 @@ describe("PipelineNode", () => {
               data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
             },
           ],
           config: {},

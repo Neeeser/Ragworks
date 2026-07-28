@@ -3,6 +3,7 @@
 import { addEdge } from "@xyflow/react";
 import { useCallback, useState } from "react";
 
+import { ITEMS_KIND, facetsToken, inferOutputFacets } from "../lib/facet-inference";
 import { validatePipelineConnection } from "../lib/pipeline-io";
 import { createId } from "../lib/pipeline-utils";
 
@@ -31,6 +32,20 @@ type UseConnectionTypingResult = {
  * valid edges colored by the data type they carry, and tracks the in-flight
  * drag so the canvas can light up compatible handles and dim the rest.
  */
+const inferGuarantees = (nodes: Node<PipelineNodeData>[], edges: TypedEdgeType[]) =>
+  inferOutputFacets(
+    new Map(
+      nodes.map((node) => [node.id, { inputs: node.data.inputs, outputs: node.data.outputs }]),
+    ),
+    edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      sourcePort: edge.sourceHandle,
+      target: edge.target,
+      targetPort: edge.targetHandle,
+    })),
+  );
+
 export function useConnectionTyping({
   nodes,
   edges,
@@ -55,9 +70,17 @@ export function useConnectionTyping({
       }
       setEdges((prev) => {
         const sourceNode = nodes.find((node) => node.id === connection.source);
-        const dataType = sourceNode?.data.outputs.find(
-          (port) => port.key === connection.sourceHandle,
-        )?.data_type;
+        const port = sourceNode?.data.outputs.find(
+          (entry) => entry.key === connection.sourceHandle,
+        );
+        const dataType = port
+          ? facetsToken(
+              port.data_type,
+              inferGuarantees(nodes, prev).get(`${connection.source}.${port.key}`) ??
+                port.adds ??
+                [],
+            )
+          : undefined;
         return addEdge<TypedEdgeType>(
           { ...connection, id: createId(), type: "typed", data: { dataType } },
           prev,
@@ -73,11 +96,24 @@ export function useConnectionTyping({
       const node = nodes.find((entry) => entry.id === params.nodeId);
       if (!node) return;
       const ports = params.handleType === "source" ? node.data.outputs : node.data.inputs;
-      const dataType = ports.find((port) => port.key === params.handleId)?.data_type;
-      if (!dataType) return;
-      setConnecting({ dataType, from: params.handleType, nodeId: params.nodeId });
+      const port = ports.find((entry) => entry.key === params.handleId);
+      if (!port) return;
+      const facets =
+        params.handleType === "source" && port.data_type === ITEMS_KIND
+          ? [
+              ...(inferGuarantees(nodes, edges).get(`${params.nodeId}.${port.key}`) ??
+                new Set(port.adds ?? [])),
+            ]
+          : null;
+      setConnecting({
+        kind: port.data_type,
+        facets,
+        requires: params.handleType === "target" ? [...(port.requires ?? [])] : null,
+        from: params.handleType,
+        nodeId: params.nodeId,
+      });
     },
-    [nodes],
+    [nodes, edges],
   );
 
   const handleConnectEnd = useCallback(() => setConnecting(null), []);

@@ -29,6 +29,9 @@ const makePort = (key: string) => ({
   data_type: "document",
   required: true,
   accepts_many: false,
+  requires: [],
+  adds: [],
+  preserves: false,
 });
 
 const makeNode = (

@@ -11,6 +11,7 @@ import { useFlowNodeActive, useFlowPlaybackTiming } from "./flow/active-nodes-co
 import { BEAM_CORNER_RADIUS } from "./flow/flow-timing";
 import { PineconeIcon } from "./icons/PineconeIcon";
 import { PostgresIcon } from "./icons/PostgresIcon";
+import { connectionHintCompatible, portToken } from "./lib/facet-inference";
 import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
 import { buildPipelineConfigFields } from "./lib/pipeline-config";
 import {
@@ -21,6 +22,7 @@ import {
   resolveNodeFamily,
 } from "./lib/pipeline-theme";
 
+import type { ConnectingContext } from "./lib/facet-inference";
 import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
 import type { Node, NodeProps } from "@xyflow/react";
 
@@ -33,14 +35,7 @@ export type DropPreviewNodeData = {
   label?: string;
 };
 
-/** Live connection-drag context injected into every node while a wire is dragged. */
-export type ConnectingContext = {
-  /** Data type flowing from the picked-up handle. */
-  dataType: string;
-  /** Which side was picked up: a source handle looks for targets, and vice versa. */
-  from: "source" | "target";
-  nodeId: string;
-};
+export type { ConnectingContext } from "./lib/facet-inference";
 
 export type PipelineNodeData = {
   label: string;
@@ -87,11 +82,7 @@ const statusBadge = (status: PipelineRunStatus) => {
 };
 
 type PortRowProps = {
-  portKey: string;
-  label: string;
-  dataType: string;
-  required: boolean;
-  acceptsMany: boolean;
+  port: NodeSpec["input_ports"][number];
   side: "input" | "output";
   connecting?: ConnectingContext | null;
   nodeId: string;
@@ -106,37 +97,32 @@ type PortRowProps = {
  * While a wire is dragged, compatible handles swell and pulse; incompatible
  * ones fade so valid drop targets are obvious.
  */
-function PortRow({
-  portKey,
-  label,
-  dataType,
-  required,
-  acceptsMany,
-  side,
-  connecting,
-  nodeId,
-  connectable,
-}: PortRowProps) {
-  const portClasses = getPortTypeClasses(dataType);
+function PortRow({ port, side, connecting, nodeId, connectable }: PortRowProps) {
+  const portKey = port.key;
+  const label = port.label;
+  const required = port.required;
+  const acceptsMany = side === "input" && port.accepts_many;
+  const token = portToken(port, side);
+  const portClasses = getPortTypeClasses(token);
   const isTargetSide = side === "input";
   const wanted =
     connecting &&
     connecting.nodeId !== nodeId &&
     ((connecting.from === "source" && isTargetSide) ||
       (connecting.from === "target" && !isTargetSide));
-  const compatible = wanted && connecting.dataType === dataType;
+  const compatible = wanted && connectionHintCompatible(connecting, port, side);
   const incompatible = Boolean(connecting) && !compatible;
   const manyTooltip =
     isTargetSide && acceptsMany
-      ? `Accepts multiple ${dataType.replace(/s$/, "").replaceAll("_", " ")} connections`
+      ? `Accepts multiple ${getPortTypeLabel(token).toLowerCase()} connections`
       : "";
   // One themed tooltip per port row rather than a native `title` per label: it
   // carries the fan-in note where there is one, and the port's type otherwise.
   const portTooltip =
     manyTooltip ||
     (isTargetSide
-      ? `${label} · ${getPortTypeLabel(dataType)} · accepts one connection`
-      : `${label} · ${getPortTypeLabel(dataType)}`);
+      ? `${label} · ${getPortTypeLabel(token)} · accepts one connection`
+      : `${label} · ${getPortTypeLabel(token)}`);
 
   return (
     <Tooltip
@@ -317,8 +303,8 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
     connecting !== null &&
     connecting.nodeId !== id &&
     !(connecting.from === "source"
-      ? data.inputs.some((port) => port.data_type === connecting.dataType)
-      : data.outputs.some((port) => port.data_type === connecting.dataType));
+      ? data.inputs.some((port) => connectionHintCompatible(connecting, port, "input"))
+      : data.outputs.some((port) => connectionHintCompatible(connecting, port, "output")));
 
   return (
     <div
@@ -360,11 +346,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
             {data.inputs.map((port) => (
               <PortRow
                 key={`in-${port.key}`}
-                portKey={port.key}
-                label={port.label}
-                dataType={port.data_type}
-                required={port.required}
-                acceptsMany={port.accepts_many}
+                port={port}
                 side="input"
                 connecting={connecting}
                 nodeId={id}
@@ -376,11 +358,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
             {data.outputs.map((port) => (
               <PortRow
                 key={`out-${port.key}`}
-                portKey={port.key}
-                label={port.label}
-                dataType={port.data_type}
-                required={port.required}
-                acceptsMany={false}
+                port={port}
                 side="output"
                 connecting={connecting}
                 nodeId={id}

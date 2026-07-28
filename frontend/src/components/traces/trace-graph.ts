@@ -259,7 +259,7 @@ export const buildTraceGraph = (
         target: storeId,
         targetHandle: "write",
         type: "typed",
-        data: { dataType: "indexed_batch", visited: true },
+        data: { dataType: "items_embedding", visited: true },
         style: { strokeDasharray: "6 5" },
       });
     });
@@ -274,7 +274,7 @@ export const buildTraceGraph = (
         target: retriever.id,
         targetHandle: retriever.data.inputs[0]?.key,
         type: "typed",
-        data: { dataType: "indexed_batch", visited: true },
+        data: { dataType: "items_embedding", visited: true },
         style: { strokeDasharray: "6 5" },
       });
     });
