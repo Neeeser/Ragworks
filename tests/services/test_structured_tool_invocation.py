@@ -53,8 +53,8 @@ def _count_definition(index_name: str) -> PipelineDefinition:
                 id="e1",
                 source="query-input",
                 target="count",
-                source_port="request",
-                target_port="request",
+                source_port="items",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="e2",
@@ -92,8 +92,8 @@ def _facet_definition(index_name: str) -> PipelineDefinition:
                 id="e1",
                 source="query-input",
                 target="facet",
-                source_port="request",
-                target_port="request",
+                source_port="items",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="e2",

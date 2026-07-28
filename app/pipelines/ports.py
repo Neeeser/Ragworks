@@ -1,4 +1,13 @@
-"""Port types and connection compatibility rules for pipeline nodes."""
+"""Port kinds, item facets, and connection compatibility for pipeline nodes.
+
+Ports are typed by *data shape*, not pipeline stage. The unified `items`
+kind carries every list-of-items value (chunks, embedded chunks, the query,
+retrieval matches); what a particular stream guarantees about its items is
+expressed as facets (`text`, `embedding`, `score`) declared on ports and
+inferred through the graph (`app/pipelines/facets.py`). The remaining kinds
+are genuinely distinct planes: document sources, parsed documents, named
+structured values, and the terminal result.
+"""
 
 from __future__ import annotations
 
@@ -7,22 +16,32 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 
-class PortType(StrEnum):
-    """Data types that flow between pipeline node input/output ports.
+class PortKind(StrEnum):
+    """Data kinds that flow between pipeline node input/output ports.
 
-    Node port declarations (see `app/pipelines/nodes/`) still use the raw string
-    values today; this enum exists as the single catalog of valid values so a
-    future pass can switch node declarations to reference it directly.
+    Node port declarations use the raw string values; this enum is the
+    single catalog of valid kinds.
     """
 
     DOCUMENT_SOURCE = "document_source"
     DOCUMENT = "document"
-    CHUNK_BATCH = "chunk_batch"
-    EMBEDDED_BATCH = "embedded_batch"
-    INDEXED_BATCH = "indexed_batch"
-    QUERY_REQUEST = "query_request"
-    QUERY_EMBEDDING = "query_embedding"
-    RETRIEVAL_RESULTS = "retrieval_results"
+    ITEMS = "items"
+    STRUCTURED_VALUES = "structured_values"
+    RESULT = "result"
+
+
+class Facet(StrEnum):
+    """Per-item guarantees an `items` stream can carry.
+
+    A stream guarantees a facet when every item in it carries that field:
+    `text` for textual content, `embedding` for a dense vector, `score` for
+    a ranking score. Ports require facets on input and add/preserve them on
+    output; `app/pipelines/facets.py` infers the guarantees through a graph.
+    """
+
+    TEXT = "text"
+    EMBEDDING = "embedding"
+    SCORE = "score"
 
 
 class NodePort(BaseModel):
@@ -31,8 +50,15 @@ class NodePort(BaseModel):
     An input port with `accepts_many=True` is variadic: any number of edges
     may target it, the executor collects every inbound value into a list
     (always a list, even for a single edge), and the node runs only once all
-    wired edges have delivered. Fusion-style nodes (take many result streams,
-    emit one) declare their input this way. Output ports never set it.
+    wired edges have delivered. Output ports never set it.
+
+    Facet fields apply to `items`-kind ports only:
+
+    - `requires` (inputs): facets every inbound stream must guarantee.
+    - `adds` (outputs): facets this node stamps onto every emitted item.
+    - `preserves` (outputs): the output keeps the facets its items input
+      guaranteed (intersection across inbound edges), plus `adds`. A
+      non-preserving output guarantees exactly `adds` — its items are new.
     """
 
     key: str
@@ -40,14 +66,16 @@ class NodePort(BaseModel):
     data_type: str
     required: bool = True
     accepts_many: bool = False
+    requires: tuple[str, ...] = ()
+    adds: tuple[str, ...] = ()
+    preserves: bool = False
 
 
-def compatible(source_type: str, target_type: str) -> bool:
-    """Return True when a source port's data type may connect to a target port's.
+def compatible_kinds(source_type: str, target_type: str) -> bool:
+    """Return True when a source port's data kind may connect to a target's.
 
-    Port compatibility is an identity relation today: a port only connects to
-    another port carrying the exact same data type. This function (rather than
-    an inline `==` at each call site) exists so a future non-identity rule --
-    e.g. a port accepting several related types -- has one place to land.
+    Kind compatibility is identity; facet compatibility is a graph property
+    checked by `app/pipelines/facets.py` (an edge's guarantees depend on
+    everything upstream, not on the two ports alone).
     """
     return source_type == target_type

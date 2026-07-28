@@ -104,4 +104,4 @@ def test_chunker_run_builds_counter_from_its_config(
     )
 
     assert resolved == [TokenizerSpec(kind="huggingface", hf_model_id="owner/model")]
-    assert result["chunks"].tokenizer == resolved[0]
+    assert result["items"].tokenizer == resolved[0]

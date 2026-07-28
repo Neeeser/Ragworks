@@ -21,21 +21,12 @@ from app.pipelines.nodes.retrieval import (
     VectorRetrieverNode,
 )
 from app.pipelines.nodes.validators import lexical_support_issue
-from app.pipelines.payloads import (
-    ChunkPayload,
-    IndexingPayload,
-    QueryEmbeddingPayload,
-    RetrievalPayload,
-    RetrievalRequestPayload,
-)
+from app.pipelines.payloads import IndexingPayload, Item, ItemBatch
 from app.pipelines.registry import default_registry
 from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
-    Document,
     DocumentChunk,
     DocumentMetadata,
-    QueryRequest,
-    RetrievalResponse,
     ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
@@ -98,9 +89,9 @@ def _scored(chunk_id: str, score: float = 1.0) -> ScoredChunk:
     )
 
 
-def _retrieval_payload(*chunk_ids: str, usage: TokenUsage | None = None) -> RetrievalPayload:
-    return RetrievalPayload(
-        response=RetrievalResponse(matches=[_scored(chunk_id) for chunk_id in chunk_ids]),
+def _match_batch(*chunk_ids: str, usage: TokenUsage | None = None) -> ItemBatch:
+    return ItemBatch.from_matches(
+        [_scored(chunk_id) for chunk_id in chunk_ids],
         usage=usage or TokenUsage(),
     )
 
@@ -111,12 +102,9 @@ def test_bm25_indexer_ensures_sparse_index_and_upserts_text(session: Session) ->
     node = Bm25IndexerNode(
         Bm25IndexerConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
     )
-    payload = ChunkPayload(
-        document=Document(document_id="doc", text="x", metadata=DocumentMetadata()),
-        chunks=_text_chunks(3),
-    )
+    batch = ItemBatch.from_chunks(_text_chunks(3))
 
-    outputs = node.run({"chunks": payload}, context)
+    outputs = node.run({"items": batch}, context)
 
     assert len(store.ensure_calls) == 1
     assert store.ensure_calls[0].vector_type == "sparse"
@@ -124,8 +112,8 @@ def test_bm25_indexer_ensures_sparse_index_and_upserts_text(session: Session) ->
     assert store.ensure_calls[0].dimension is None
     assert [len(call["chunks"]) for call in store.upsert_lexical_calls] == [3]
     assert store.upsert_calls == []  # never touches the dense plane
-    result = IndexingPayload.model_validate(outputs["indexed"])
-    assert len(result.chunks) == 3
+    result = ItemBatch.model_validate(outputs["items"])
+    assert len(result.items) == 3
 
 
 def test_bm25_indexer_batches_at_lexical_limit(session: Session) -> None:
@@ -141,12 +129,9 @@ def test_bm25_indexer_batches_at_lexical_limit(session: Session) -> None:
     store = _SmallBatchStore()
     context = _context(session, store)
     node = Bm25IndexerNode(Bm25IndexerConfig(index_name="docs-bm25"))
-    payload = ChunkPayload(
-        document=Document(document_id="doc", text="x", metadata=DocumentMetadata()),
-        chunks=_text_chunks(200),
-    )
+    batch = ItemBatch.from_chunks(_text_chunks(200))
 
-    node.run({"chunks": payload}, context)
+    node.run({"items": batch}, context)
 
     assert [len(call["chunks"]) for call in store.upsert_lexical_calls] == [96, 96, 8]
 
@@ -192,19 +177,16 @@ def test_retriever_run_refuses_unset_top_k(session: Session) -> None:
     dense = VectorRetrieverNode(
         VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs")
     )
-    payload = QueryEmbeddingPayload(
-        request=QueryRequest(text="q", top_k=4), embedding=[0.1, 0.2]
-    )
+    batch = ItemBatch(items=[Item(id="query", text="q", embedding=[0.1, 0.2])])
     with pytest.raises(InvalidInputError, match="top_k"):
-        dense.run({"query_embedding": payload}, context)
+        dense.run({"items": batch}, context)
     assert store.query_calls == []
 
     sparse = Bm25RetrieverNode(
         Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
     )
-    request_payload = RetrievalRequestPayload(request=QueryRequest(text="q", top_k=4))
     with pytest.raises(InvalidInputError, match="top_k"):
-        sparse.run({"request": request_payload}, context)
+        sparse.run({"items": batch}, context)
     assert store.lexical_query_calls == []
 
 
@@ -225,10 +207,10 @@ def test_bm25_retriever_queries_lexically_with_raw_text(session: Session) -> Non
     node = Bm25RetrieverNode(
         Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25", top_k=4)
     )
-    # The request's depth is never consulted — the config is the only source.
-    payload = RetrievalRequestPayload(request=QueryRequest(text="error E1042", top_k=9))
+    # Only the node's own config sets the fetch depth.
+    batch = ItemBatch(items=[Item(id="query", text="error E1042")])
 
-    outputs = node.run({"request": payload}, context)
+    outputs = node.run({"items": batch}, context)
 
     assert store.lexical_query_calls == [
         {
@@ -240,8 +222,8 @@ def test_bm25_retriever_queries_lexically_with_raw_text(session: Session) -> Non
         }
     ]
     assert store.query_calls == []  # never touches the dense plane
-    result = RetrievalPayload.model_validate(outputs["results"])
-    assert [match.chunk.chunk_id for match in result.response.matches] == ["doc:1"]
+    result = ItemBatch.model_validate(outputs["items"])
+    assert [item.id for item in result.items] == ["doc:1"]
 
 
 def test_bm25_retriever_degrades_to_empty_when_index_is_wrong_type(session: Session) -> None:
@@ -254,12 +236,12 @@ def test_bm25_retriever_degrades_to_empty_when_index_is_wrong_type(session: Sess
     node = Bm25RetrieverNode(
         Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs", top_k=4)
     )
-    payload = RetrievalRequestPayload(request=QueryRequest(text="q", top_k=4))
+    batch = ItemBatch(items=[Item(id="query", text="q")])
 
-    outputs = node.run({"request": payload}, context)
+    outputs = node.run({"items": batch}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
-    assert result.response.matches == []
+    result = ItemBatch.model_validate(outputs["items"])
+    assert result.items == []
 
 
 def test_vector_retriever_degrades_to_empty_when_index_not_created_yet(
@@ -272,14 +254,12 @@ def test_vector_retriever_degrades_to_empty_when_index_not_created_yet(
     node = VectorRetrieverNode(
         VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs", top_k=4)
     )
-    payload = QueryEmbeddingPayload(
-        request=QueryRequest(text="q", top_k=4), embedding=[0.1, 0.2]
-    )
+    batch = ItemBatch(items=[Item(id="query", text="q", embedding=[0.1, 0.2])])
 
-    outputs = node.run({"query_embedding": payload}, context)
+    outputs = node.run({"items": batch}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
-    assert result.response.matches == []
+    result = ItemBatch.model_validate(outputs["items"])
+    assert result.items == []
 
 
 def test_rrf_fusion_accumulates_rank_scores_across_branches(session: Session) -> None:
@@ -287,44 +267,44 @@ def test_rrf_fusion_accumulates_rank_scores_across_branches(session: Session) ->
     node = RRFusionNode(RRFusionConfig())
     context = _context(session, StubVectorStore(), query="q", top_k=10)
     branches = [
-        _retrieval_payload("a", "b", "c"),
-        _retrieval_payload("b", "d"),
+        _match_batch("a", "b", "c"),
+        _match_batch("b", "d"),
     ]
 
-    outputs = node.run({"results": branches}, context)
+    outputs = node.run({"items": branches}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
-    ordered = [match.chunk.chunk_id for match in result.response.matches]
+    result = ItemBatch.model_validate(outputs["items"])
+    ordered = [item.id for item in result.items]
     assert ordered == ["b", "a", "d", "c"]
-    scores = [match.score for match in result.response.matches]
+    scores = [item.score for item in result.items]
     assert scores == sorted(scores, reverse=True)
     # b appears at rank 2 and rank 1: 1/62 + 1/61
-    assert result.response.matches[0].score == 1 / 62 + 1 / 61
+    assert result.items[0].score == 1 / 62 + 1 / 61
 
 
 def test_rrf_fusion_never_cuts(session: Session) -> None:
     """Fusion emits every fused candidate; cutting is the Top-N node's job."""
     node = RRFusionNode(RRFusionConfig())
     context = _context(session, StubVectorStore(), query="q", top_k=2)
-    branches = [_retrieval_payload("a", "b", "c"), _retrieval_payload("d")]
+    branches = [_match_batch("a", "b", "c"), _match_batch("d")]
 
-    outputs = node.run({"results": branches}, context)
+    outputs = node.run({"items": branches}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
-    assert len(result.response.matches) == 4
+    result = ItemBatch.model_validate(outputs["items"])
+    assert len(result.items) == 4
 
 
 def test_rrf_fusion_sums_usage_across_branches(session: Session) -> None:
     node = RRFusionNode(RRFusionConfig())
     context = _context(session, StubVectorStore(), query="q", top_k=5)
     branches = [
-        _retrieval_payload("a", usage=TokenUsage(prompt_tokens=7, total_tokens=7)),
-        _retrieval_payload("b"),  # lexical branch: no usage
+        _match_batch("a", usage=TokenUsage(prompt_tokens=7, total_tokens=7)),
+        _match_batch("b"),  # lexical branch: no usage
     ]
 
-    outputs = node.run({"results": branches}, context)
+    outputs = node.run({"items": branches}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
+    result = ItemBatch.model_validate(outputs["items"])
     assert result.usage.prompt_tokens == 7
     assert result.usage.total_tokens == 7
 
@@ -332,7 +312,6 @@ def test_rrf_fusion_sums_usage_across_branches(session: Session) -> None:
 def test_ingestion_output_merges_branches_preferring_embedded_chunks(
     session: Session,
 ) -> None:
-    document = Document(document_id="doc", text="x", metadata=DocumentMetadata())
     embedded_chunks = [
         DocumentChunk(
             document_id="doc",
@@ -343,16 +322,14 @@ def test_ingestion_output_merges_branches_preferring_embedded_chunks(
             embedding=[0.1, 0.2],
         )
     ]
-    dense = IndexingPayload(
-        document=document,
-        chunks=embedded_chunks,
-        usage=TokenUsage(prompt_tokens=11, total_tokens=11),
+    dense = ItemBatch.from_chunks(
+        embedded_chunks, usage=TokenUsage(prompt_tokens=11, total_tokens=11)
     )
-    lexical = IndexingPayload(document=document, chunks=_text_chunks(1))
+    lexical = ItemBatch.from_chunks(_text_chunks(1))
     node = IngestionOutputNode(IngestionOutputConfig())
     context = _context(session, StubVectorStore())
 
-    outputs = node.run({"indexed": [lexical, dense]}, context)
+    outputs = node.run({"items": [lexical, dense]}, context)
 
     result = IndexingPayload.model_validate(outputs["result"])
     assert result.chunks[0].embedding == [0.1, 0.2]
@@ -363,27 +340,26 @@ def test_rrf_fusion_config_rejects_removed_top_k_silently(session: Session) -> N
     """A legacy `top_k` config key is ignored (extra keys don't parse), never a cut."""
     node = RRFusionNode(RRFusionConfig.model_validate({"k": 60, "top_k": 1}))
     context = _context(session, StubVectorStore(), query="q", top_k=1)
-    branches = [_retrieval_payload("a", "b"), _retrieval_payload("c")]
+    branches = [_match_batch("a", "b"), _match_batch("c")]
 
-    outputs = node.run({"results": branches}, context)
+    outputs = node.run({"items": branches}, context)
 
-    result = RetrievalPayload.model_validate(outputs["results"])
-    assert len(result.response.matches) == 3
+    result = ItemBatch.model_validate(outputs["items"])
+    assert len(result.items) == 3
 
 
 def test_ingestion_output_merge_is_not_fooled_by_unembedded_first_chunk(
     session: Session,
 ) -> None:
     """Branch selection counts embedded chunks; it never keys off chunk[0] alone."""
-    document = Document(document_id="doc", text="x", metadata=DocumentMetadata())
     dense_chunks = _text_chunks(2)
     dense_chunks[1] = dense_chunks[1].model_copy(update={"embedding": [0.1, 0.2]})
-    dense = IndexingPayload(document=document, chunks=dense_chunks)
-    lexical = IndexingPayload(document=document, chunks=_text_chunks(2))
+    dense = ItemBatch.from_chunks(dense_chunks)
+    lexical = ItemBatch.from_chunks(_text_chunks(2))
     node = IngestionOutputNode(IngestionOutputConfig())
     context = _context(session, StubVectorStore())
 
-    outputs = node.run({"indexed": [lexical, dense]}, context)
+    outputs = node.run({"items": [lexical, dense]}, context)
 
     result = IndexingPayload.model_validate(outputs["result"])
     assert result.chunks[1].embedding == [0.1, 0.2]

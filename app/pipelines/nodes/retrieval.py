@@ -23,21 +23,16 @@ from app.pipelines.nodes.validators import (
     missing_index_issue,
     missing_top_k_issue,
 )
-from app.pipelines.payloads import (
-    QueryEmbeddingPayload,
-    RetrievalPayload,
-    RetrievalRequestPayload,
-)
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import ItemBatch, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     summarize_matches,
     summarize_text,
-    trace_match_items,
 )
 from app.pipelines.variables import STATIC_ONLY_EXTRA
-from app.retrieval.models import RetrievalResponse
+from app.retrieval.models import RetrievalResponse, ScoredChunk
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
@@ -50,6 +45,26 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def merge_query_matches(per_query: list[list[ScoredChunk]]) -> list[ScoredChunk]:
+    """Merge per-query-item match lists into one ordered list.
+
+    The common single-query case passes through untouched, preserving the
+    store's exact order. Multi-query streams union by chunk id, keep each
+    chunk's best score, and order by score descending — a chunk matching
+    several query items surfaces once, at its strongest.
+    """
+    if len(per_query) == 1:
+        return per_query[0]
+    best: dict[str, ScoredChunk] = {}
+    for matches in per_query:
+        for match in matches:
+            chunk_id = match.chunk.chunk_id
+            current = best.get(chunk_id)
+            if current is None or match.score > current.score:
+                best[chunk_id] = match
+    return sorted(best.values(), key=lambda match: match.score, reverse=True)
 
 
 class RetrieverConfig(BaseModel):
@@ -110,9 +125,21 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
     backend: ClassVar[IndexBackend | None] = None
     category = "retrieval"
     input_ports = (
-        NodePort(key="query_embedding", label="Query Embedding", data_type="query_embedding"),
+        NodePort(
+            key="items",
+            label="Query Embedding",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.EMBEDDING,),
+        ),
     )
-    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    output_ports = (
+        NodePort(
+            key="items",
+            label="Results",
+            data_type=PortKind.ITEMS,
+            adds=(Facet.TEXT, Facet.SCORE),
+        ),
+    )
     # Narrowed from the base's `type[BaseModel]` so validation reads typed fields.
     config_model: builtins.type[RetrieverConfig] = RetrieverConfig
 
@@ -148,10 +175,8 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         return [issue for issue in issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Retrieve chunks for the query request."""
-        payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
-        request = payload.request
-        embedding = payload.embedding
+        """Retrieve chunks for every query item and merge the matches."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
         if self.config.top_k is None:  # validation blocks this; honest error if reached
             raise InvalidInputError(
                 "Retriever node has no top_k configured. Set how many chunks "
@@ -167,24 +192,33 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
-        try:
-            response = store.query(
-                index_name,
-                namespace or "",
-                embedding=embedding,
-                top_k=self.config.top_k,
-                filter=request.filter,
-            )
-        except NotFoundError:
-            # The index is created by the first ingest; querying before then
-            # is an honest empty result, not an error.
-            logger.info("Index '%s' does not exist yet; returning no matches.", index_name)
-            response = RetrievalResponse(matches=[])
+        per_query: list[list[ScoredChunk]] = []
+        for item in batch.items:
+            if item.embedding is None:
+                raise InvalidInputError(
+                    f"Retriever received item '{item.id}' without an embedding."
+                )
+            try:
+                response = store.query(
+                    index_name,
+                    namespace or "",
+                    embedding=item.embedding,
+                    top_k=self.config.top_k,
+                    filter=None,
+                )
+            except NotFoundError:
+                # The index is created by the first ingest; querying before then
+                # is an honest empty result, not an error.
+                logger.info("Index '%s' does not exist yet; returning no matches.", index_name)
+                response = RetrievalResponse(matches=[])
+            per_query.append(list(response.matches))
+        merged = merge_query_matches(per_query)
         logger.info(
-            "Pipeline retrieval returned %s matches for query.",
-            len(response.matches),
+            "Pipeline retrieval returned %s matches for %s query item(s).",
+            len(merged),
+            len(batch.items),
         )
-        return {"results": RetrievalPayload(response=response, usage=payload.usage)}
+        return {"items": ItemBatch.from_matches(merged, usage=batch.usage)}
 
     def summarize_io(
         self,
@@ -192,21 +226,24 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize retrieval inputs and outputs."""
-        input_payload = QueryEmbeddingPayload.model_validate(inputs.get("query_embedding"))
-        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
-        item_trace = trace_match_items(output_payload.response.matches)
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(input_payload.request.text, 200), kind="text"
+                    label="Query",
+                    value=summarize_text(input_batch.query_text() or "", 200),
+                    kind="text",
                 ),
-                NodeTraceValue(label="Top K", value=input_payload.request.top_k),
+                NodeTraceValue(label="Top K", value=self.config.top_k),
             ],
             outputs=[
                 NodeTraceValue(
-                    label="Matches", value=summarize_matches(output_payload.response.matches)
+                    label="Matches", value=summarize_matches(output_batch.preview_matches())
                 ),
-                NodeTraceValue(label="Match items", value=item_trace, kind="items"),
+                NodeTraceValue(
+                    label="Match items", value=trace_items(output_batch.items), kind="items"
+                ),
             ],
         )
 
@@ -218,8 +255,7 @@ class VectorRetrieverNode(BaseRetrieverNode):
     label = "Retriever"
     description = "Query a vector index (pgvector or Pinecone) for matching chunks."
     example = (
-        "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
-        "RetrievalPayload(matches=[chunk_a, chunk_b])."
+        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     )
     config_model: builtins.type[RetrieverConfig] = VectorRetrieverConfig
 
@@ -236,8 +272,7 @@ class PineconeRetrieverNode(BaseRetrieverNode):
     label = "Pinecone Retriever"
     description = "Retrieve chunks from Pinecone using embeddings."
     example = (
-        "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
-        "RetrievalPayload(matches=[chunk_a, chunk_b])."
+        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     )
     hidden = True
 
@@ -254,8 +289,7 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
     label = "pgvector Retriever"
     description = "Retrieve chunks from the built-in Postgres (pgvector) using embeddings."
     example = (
-        "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> "
-        "RetrievalPayload(matches=[chunk_a, chunk_b])."
+        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     )
     config_model: builtins.type[RetrieverConfig] = PgvectorRetrieverConfig
     hidden = True
@@ -298,9 +332,23 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         "Query a sparse BM25 index with the raw query text for exact-term "
         "(lexical) matches — no embeddings involved."
     )
-    example = "QueryRequest(text='error E1042') -> RetrievalPayload(matches=[chunk_a])."
-    input_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
-    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    example = "Items(text='error E1042') -> Items(matches=[chunk_a])."
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Query",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+        ),
+    )
+    output_ports = (
+        NodePort(
+            key="items",
+            label="Results",
+            data_type=PortKind.ITEMS,
+            adds=(Facet.TEXT, Facet.SCORE),
+        ),
+    )
     config_model = Bm25RetrieverConfig
 
     @classmethod
@@ -327,9 +375,8 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         return [issue for issue in maybe_issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Retrieve lexically matching chunks for the query request."""
-        payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
-        request = payload.request
+        """Retrieve lexically matching chunks for every query item and merge."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
         if self.config.top_k is None:  # validation blocks this; honest error if reached
             raise InvalidInputError(
                 "BM25 retriever node has no top_k configured. Set how many "
@@ -345,30 +392,41 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.config.backend)
-        try:
-            response = store.lexical_query(
-                index_name,
-                namespace or "",
-                text=request.text,
-                top_k=self.config.top_k,
-                filter=request.filter,
-            )
-        except NotFoundError:
-            # The sparse index is created by the first ingest (ensure_index on
-            # the BM25 indexer); querying before then means nothing has been
-            # lexically indexed yet — an honest empty branch, not an error.
-            logger.info("BM25 index '%s' does not exist yet; returning no matches.", index_name)
-            response = RetrievalResponse(matches=[])
-        except InvalidInputError as exc:
-            # A misconfigured branch (e.g. the name resolves to a dense index)
-            # degrades to empty rather than failing the whole fused query.
-            logger.warning("BM25 branch on index '%s' skipped: %s", index_name, exc)
-            response = RetrievalResponse(matches=[])
+        per_query: list[list[ScoredChunk]] = []
+        for item in batch.items:
+            if item.text is None:
+                raise InvalidInputError(
+                    f"BM25 retriever received item '{item.id}' without text."
+                )
+            try:
+                response = store.lexical_query(
+                    index_name,
+                    namespace or "",
+                    text=item.text,
+                    top_k=self.config.top_k,
+                    filter=None,
+                )
+            except NotFoundError:
+                # The sparse index is created by the first ingest (ensure_index on
+                # the BM25 indexer); querying before then means nothing has been
+                # lexically indexed yet — an honest empty branch, not an error.
+                logger.info(
+                    "BM25 index '%s' does not exist yet; returning no matches.", index_name
+                )
+                response = RetrievalResponse(matches=[])
+            except InvalidInputError as exc:
+                # A misconfigured branch (e.g. the name resolves to a dense index)
+                # degrades to empty rather than failing the whole fused query.
+                logger.warning("BM25 branch on index '%s' skipped: %s", index_name, exc)
+                response = RetrievalResponse(matches=[])
+            per_query.append(list(response.matches))
+        merged = merge_query_matches(per_query) if per_query else []
         logger.info(
-            "Pipeline BM25 retrieval returned %s matches for query.",
-            len(response.matches),
+            "Pipeline BM25 retrieval returned %s matches for %s query item(s).",
+            len(merged),
+            len(batch.items),
         )
-        return {"results": RetrievalPayload(response=response)}
+        return {"items": ItemBatch.from_matches(merged, usage=batch.usage)}
 
     def summarize_io(
         self,
@@ -376,20 +434,23 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize BM25 retrieval inputs and outputs."""
-        input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
-        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
-        item_trace = trace_match_items(output_payload.response.matches)
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(input_payload.request.text, 200), kind="text"
+                    label="Query",
+                    value=summarize_text(input_batch.query_text() or "", 200),
+                    kind="text",
                 ),
-                NodeTraceValue(label="Top K", value=input_payload.request.top_k),
+                NodeTraceValue(label="Top K", value=self.config.top_k),
             ],
             outputs=[
                 NodeTraceValue(
-                    label="Matches", value=summarize_matches(output_payload.response.matches)
+                    label="Matches", value=summarize_matches(output_batch.preview_matches())
                 ),
-                NodeTraceValue(label="Match items", value=item_trace, kind="items"),
+                NodeTraceValue(
+                    label="Match items", value=trace_items(output_batch.items), kind="items"
+                ),
             ],
         )

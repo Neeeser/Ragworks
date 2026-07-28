@@ -14,10 +14,10 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.indexing import PgvectorIndexerConfig
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
-from app.pipelines.payloads import EmbeddingPayload
+from app.pipelines.payloads import ItemBatch
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_pipeline_settings
-from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
+from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.schemas.enums import IndexBackend
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import (
@@ -102,14 +102,10 @@ def test_indexer_splits_upserts_at_backend_batch_limit(session: Session) -> None
         )
         for i in range(2500)
     ]
-    payload = EmbeddingPayload(
-        document=Document(document_id="doc", text="x", metadata=DocumentMetadata()),
-        chunks=chunks,
-        usage={},
-    )
+    batch = ItemBatch.from_chunks(chunks)
     node = PgvectorIndexerNode(PgvectorIndexerConfig(index_name="docs", dimension=2))
 
-    node.run({"embedded": payload}, context)
+    node.run({"items": batch}, context)
 
     assert [len(call["chunks"]) for call in store.upsert_calls] == [1000, 1000, 500]
 

@@ -31,7 +31,7 @@ def _definition() -> PipelineDefinition:
         ],
         edges=[
             PipelineEdgeDefinition(
-                id="e1", source="a", target="b", source_port="chunks", target_port="chunks"
+                id="e1", source="a", target="b", source_port="items", target_port="items"
             )
         ],
     )

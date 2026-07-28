@@ -1,8 +1,8 @@
 """Fusion nodes: combine several retrieval result streams into one.
 
 `BaseFusionNode` owns the take-many-emit-one shape — a single variadic
-`results` input port (`accepts_many`) that the executor delivers as a list of
-`RetrievalPayload`s, one per inbound edge — so every fusion strategy (RRF
+`items` input port (`accepts_many`) that the executor delivers as a list of
+`ItemBatch`es, one per inbound edge — so every fusion strategy (RRF
 today; weighted/alpha blending later) only implements `fuse()` over the
 collected match lists. Usage is summed across branches.
 """
@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.payloads import RetrievalPayload
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import ItemBatch, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     RankingEvidence,
@@ -26,9 +26,8 @@ from app.pipelines.tracing.summaries import (
     combine_usage,
     summarize_match_order,
     summarize_matches,
-    trace_match_items,
 )
-from app.retrieval.models import RetrievalResponse, ScoredChunk
+from app.retrieval.models import ScoredChunk
 
 
 class FusionConfig(BaseModel):
@@ -41,13 +40,22 @@ class BaseFusionNode(PipelineNodeBase[FusionConfig]):
     category = "retrieval"
     input_ports = (
         NodePort(
-            key="results",
+            key="items",
             label="Results",
-            data_type="retrieval_results",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.SCORE,),
             accepts_many=True,
         ),
     )
-    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    output_ports = (
+        NodePort(
+            key="items",
+            label="Results",
+            data_type=PortKind.ITEMS,
+            adds=(Facet.SCORE,),
+            preserves=True,
+        ),
+    )
     config_model: builtins.type[FusionConfig] = FusionConfig
 
     @abstractmethod
@@ -59,13 +67,13 @@ class BaseFusionNode(PipelineNodeBase[FusionConfig]):
         """Combine per-branch match lists into one fused, ordered list."""
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Fuse every inbound result stream into a single response."""
-        payloads = self._collect_payloads(inputs)
-        fused = self.fuse([list(payload.response.matches) for payload in payloads], context)
+        """Fuse every inbound result stream into a single stream."""
+        batches = self._collect_batches(inputs)
+        fused = self.fuse([batch.preview_matches() for batch in batches], context)
         return {
-            "results": RetrievalPayload(
-                response=RetrievalResponse(matches=fused),
-                usage=combine_usage([payload.usage for payload in payloads]),
+            "items": ItemBatch.from_matches(
+                fused,
+                usage=combine_usage([batch.usage for batch in batches]),
             )
         }
 
@@ -75,43 +83,43 @@ class BaseFusionNode(PipelineNodeBase[FusionConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize per-branch orders and the fused order."""
-        payloads = self._collect_payloads(inputs)
-        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
+        batches = self._collect_batches(inputs)
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
                     label=f"Branch {index} order",
-                    value=summarize_match_order(payload.response.matches),
+                    value=summarize_match_order(batch.preview_matches()),
                 )
-                for index, payload in enumerate(payloads, start=1)
+                for index, batch in enumerate(batches, start=1)
             ]
             + [
                 NodeTraceValue(
                     label=f"Branch {index} items",
-                    value=trace_match_items(payload.response.matches),
+                    value=trace_items(batch.items),
                     kind="items",
                 )
-                for index, payload in enumerate(payloads, start=1)
+                for index, batch in enumerate(batches, start=1)
             ],
             outputs=[
                 NodeTraceValue(
                     label="Matches",
-                    value=summarize_matches(output_payload.response.matches, limit=10),
+                    value=summarize_matches(output_batch.preview_matches(), limit=10),
                 ),
                 NodeTraceValue(
                     label="Fused order",
-                    value=summarize_match_order(output_payload.response.matches),
+                    value=summarize_match_order(output_batch.preview_matches()),
                 ),
                 NodeTraceValue(
                     label="Fused items",
-                    value=trace_match_items(output_payload.response.matches),
+                    value=trace_items(output_batch.items),
                     kind="items",
                 ),
                 NodeTraceValue(
                     label="Ranking evidence",
                     value=self._ranking_evidence(
-                        [list(payload.response.matches) for payload in payloads],
-                        list(output_payload.response.matches),
+                        [batch.preview_matches() for batch in batches],
+                        output_batch.preview_matches(),
                     ),
                     kind="ranking",
                 ),
@@ -133,15 +141,15 @@ class BaseFusionNode(PipelineNodeBase[FusionConfig]):
         )
 
     @staticmethod
-    def _collect_payloads(inputs: dict[str, object]) -> list[RetrievalPayload]:
-        """Validate the variadic `results` input into typed payloads.
+    def _collect_batches(inputs: dict[str, object]) -> list[ItemBatch]:
+        """Validate the variadic `items` input into typed batches.
 
         The executor always delivers an `accepts_many` port as a list; a bare
-        payload is tolerated for direct node-level callers (tests).
+        batch is tolerated for direct node-level callers (tests).
         """
-        raw = inputs.get("results")
-        items = raw if isinstance(raw, list) else [raw]
-        return [RetrievalPayload.model_validate(item) for item in items]
+        raw = inputs.get("items")
+        values = raw if isinstance(raw, list) else [raw]
+        return [ItemBatch.model_validate(value) for value in values]
 
 
 class RRFusionConfig(FusionConfig):
@@ -177,7 +185,7 @@ class RRFusionNode(BaseFusionNode):
         "Combine results from multiple retrievers by reciprocal rank — "
         "robust fusion without comparable scores (e.g. semantic + BM25)."
     )
-    example = "[semantic: (a, b), bm25: (b, c)] -> RetrievalPayload(b, a, c)."
+    example = "[semantic: (a, b), bm25: (b, c)] -> Items(b, a, c)."
     config_model = RRFusionConfig
 
     # Narrowed for typed access; the base declares `FusionConfig`.

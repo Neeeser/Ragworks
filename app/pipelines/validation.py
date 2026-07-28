@@ -13,10 +13,11 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.facets import EdgeRef, NodePorts, facet_issues
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.ports import compatible
+from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition, strip_expressions
 from app.pipelines.validation_variables import collect_variable_issues
@@ -60,6 +61,8 @@ class PipelineValidator:
         errors.extend(self._check_required_inputs(definition))
         if self._has_cycle(definition):
             errors.append("Pipeline contains at least one cycle.")
+        else:
+            errors.extend(self._check_facets(definition))
 
         issues = collect_variable_issues(definition, self._registry)
         # Per-node hooks validate configs through their config models, which
@@ -158,13 +161,36 @@ class PipelineValidator:
             if (
                 source_port
                 and target_port
-                and not compatible(source_port.data_type, target_port.data_type)
+                and not compatible_kinds(source_port.data_type, target_port.data_type)
             ):
                 errors.append(
                     f"Edge '{edge.id}' connects incompatible port types "
                     f"'{source_port.data_type}' -> '{target_port.data_type}'."
                 )
         return errors
+
+    def _check_facets(self, definition: PipelineDefinition) -> list[str]:
+        """Flag edges whose item stream misses facets the target requires.
+
+        Facet guarantees are inferred through the whole (acyclic) graph, so
+        this runs only when no cycle was detected.
+        """
+        node_ports: NodePorts = {
+            node.id: (list(spec.input_ports), list(spec.output_ports))
+            for node in definition.nodes
+            if (spec := self._registry.get_spec(node.type)) is not None
+        }
+        edges = [
+            EdgeRef(
+                id=edge.id,
+                source=edge.source,
+                source_port=edge.source_port,
+                target=edge.target,
+                target_port=edge.target_port,
+            )
+            for edge in definition.edges
+        ]
+        return [issue.message for issue in facet_issues(node_ports, edges)]
 
     def _check_port_fanin(
         self,
@@ -260,9 +286,7 @@ class PipelineValidator:
             return []
         node_map = definition.node_map()
         incoming = definition.incoming_edges()
-        chunk_input = next(
-            port.key for port in EmbedderNode.input_ports if port.data_type == "chunk_batch"
-        )
+        chunk_input = EmbedderNode.input_ports[0].key
         issues: list[PipelineValidationIssue] = []
         for embedder in definition.nodes:
             if embedder.type != EmbedderNode.type:

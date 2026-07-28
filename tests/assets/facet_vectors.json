@@ -1,0 +1,241 @@
+{
+  "description": "Shared facet-inference vectors executed by pytest (tests/pipelines/test_facets.py) and vitest (frontend facet-inference tests). A semantics change to facet inference lands in app/pipelines/facets.py, frontend/src/components/pipelines/lib/facet-inference.ts, and these vectors together.",
+  "cases": [
+    {
+      "name": "chunker-embedder-indexer chain propagates guarantees",
+      "nodes": {
+        "chunker": {
+          "inputs": [],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+        },
+        "embed": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+          ]
+        },
+        "index": {
+          "inputs": [
+            { "key": "items", "data_type": "items", "requires": ["text", "embedding"] }
+          ],
+          "outputs": [{ "key": "items", "data_type": "items", "preserves": true }]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "chunker", "source_port": "items", "target": "embed", "target_port": "items" },
+        { "id": "e2", "source": "embed", "source_port": "items", "target": "index", "target_port": "items" }
+      ],
+      "guarantees": {
+        "chunker.items": ["text"],
+        "embed.items": ["embedding", "text"],
+        "index.items": ["embedding", "text"]
+      },
+      "issues": []
+    },
+    {
+      "name": "text-only stream into an embedding-requiring retriever is rejected",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+        },
+        "retrieve": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+          ]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "query", "source_port": "items", "target": "retrieve", "target_port": "items" }
+      ],
+      "guarantees": {
+        "query.items": ["text"],
+        "retrieve.items": ["score", "text"]
+      },
+      "issues": [{ "edge_id": "e1", "missing": ["embedding"] }]
+    },
+    {
+      "name": "re-embedding a result set is a direct edge",
+      "nodes": {
+        "retrieve": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+          ]
+        },
+        "embed": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+          ]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "retrieve", "source_port": "items", "target": "embed", "target_port": "items" }
+      ],
+      "guarantees": {
+        "retrieve.items": ["score", "text"],
+        "embed.items": ["embedding", "score", "text"]
+      },
+      "issues": []
+    },
+    {
+      "name": "variadic fusion guarantees the intersection of its branches",
+      "nodes": {
+        "dense": {
+          "inputs": [],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["text", "score", "embedding"] }
+          ]
+        },
+        "sparse": {
+          "inputs": [],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text", "score"] }]
+        },
+        "fuse": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["score"],
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["score"], "preserves": true }
+          ]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "dense", "source_port": "items", "target": "fuse", "target_port": "items" },
+        { "id": "e2", "source": "sparse", "source_port": "items", "target": "fuse", "target_port": "items" }
+      ],
+      "guarantees": {
+        "dense.items": ["embedding", "score", "text"],
+        "sparse.items": ["score", "text"],
+        "fuse.items": ["score", "text"]
+      },
+      "issues": []
+    },
+    {
+      "name": "a preserving output with no inbound stream guarantees only its adds",
+      "nodes": {
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"],
+              "required": false
+            }
+          ],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+          ]
+        }
+      },
+      "edges": [],
+      "guarantees": { "embed.items": ["embedding"] },
+      "issues": []
+    },
+    {
+      "name": "a non-items plane edge carries no facet requirements",
+      "nodes": {
+        "parse": {
+          "inputs": [{ "key": "source", "data_type": "document_source" }],
+          "outputs": [{ "key": "document", "data_type": "document" }]
+        },
+        "chunk": {
+          "inputs": [{ "key": "document", "data_type": "document" }],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "parse", "source_port": "document", "target": "chunk", "target_port": "document" }
+      ],
+      "guarantees": { "chunk.items": ["text"] },
+      "issues": []
+    },
+    {
+      "name": "an edge naming an unknown port is skipped, not crashed on",
+      "nodes": {
+        "a": {
+          "inputs": [],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+        },
+        "b": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "outputs": []
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "a", "source_port": "missing", "target": "b", "target_port": "items" }
+      ],
+      "guarantees": { "a.items": ["text"] },
+      "issues": []
+    },
+    {
+      "name": "guarantees flow through a whole hybrid retrieval graph",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+        },
+        "embed": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+          ]
+        },
+        "dense": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+          ]
+        },
+        "sparse": {
+          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+          ]
+        },
+        "fuse": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["score"],
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            { "key": "items", "data_type": "items", "adds": ["score"], "preserves": true }
+          ]
+        },
+        "out": {
+          "inputs": [
+            { "key": "items", "data_type": "items", "requires": ["text", "score"] }
+          ],
+          "outputs": [{ "key": "result", "data_type": "result" }]
+        }
+      },
+      "edges": [
+        { "id": "e1", "source": "query", "source_port": "items", "target": "embed", "target_port": "items" },
+        { "id": "e2", "source": "embed", "source_port": "items", "target": "dense", "target_port": "items" },
+        { "id": "e3", "source": "query", "source_port": "items", "target": "sparse", "target_port": "items" },
+        { "id": "e4", "source": "dense", "source_port": "items", "target": "fuse", "target_port": "items" },
+        { "id": "e5", "source": "sparse", "source_port": "items", "target": "fuse", "target_port": "items" },
+        { "id": "e6", "source": "fuse", "source_port": "items", "target": "out", "target_port": "items" }
+      ],
+      "guarantees": {
+        "query.items": ["text"],
+        "embed.items": ["embedding", "text"],
+        "dense.items": ["score", "text"],
+        "sparse.items": ["score", "text"],
+        "fuse.items": ["score", "text"]
+      },
+      "issues": []
+    }
+  ]
+}

@@ -11,11 +11,13 @@ from app.pipelines.node import PipelineNodeBase
 from app.pipelines.nodes.tool_output import evaluate_output_fields
 from app.pipelines.payloads import (
     IndexingPayload,
+    Item,
+    ItemBatch,
     RetrievalPayload,
-    RetrievalRequestPayload,
     SourcePayload,
+    trace_items,
 )
-from app.pipelines.ports import NodePort
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     combine_usage,
@@ -26,7 +28,7 @@ from app.pipelines.tracing.summaries import (
     trace_match_items,
 )
 from app.pipelines.variables import PipelineOutputField
-from app.retrieval.models import DocumentMetadata, QueryRequest
+from app.retrieval.models import DocumentMetadata, RetrievalResponse
 from app.retrieval.parsers.base import DocumentSource
 from app.services.files import FileSystemService
 
@@ -48,7 +50,7 @@ class IngestionInputNode(PipelineNodeBase[IngestionInputConfig]):
         "content_type='application/pdf')."
     )
     input_ports = ()
-    output_ports = (NodePort(key="source", label="Source", data_type="document_source"),)
+    output_ports = (NodePort(key="source", label="Source", data_type=PortKind.DOCUMENT_SOURCE),)
     config_model = IngestionInputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
@@ -103,9 +105,9 @@ class IngestionOutputConfig(BaseModel):
 class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
     """Terminal node for ingestion pipelines.
 
-    `indexed` is variadic: a pipeline may index the same chunks into several
+    `items` is variadic: a pipeline may index the same chunks into several
     indexes (dense + BM25) and every indexer wires into this one port. The
-    merged result keeps the richest chunk list (the embedded one, when
+    merged result keeps the richest item list (the embedded one, when
     present) and sums usage across branches.
     """
 
@@ -113,15 +115,21 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
     label = "Ingestion Output"
     category = "ingestion"
     description = "Emit the indexed chunks for persistence."
-    example = "IndexingPayload(chunks=2) -> Result(IndexingPayload(chunks=2))."
+    example = "Items(2 indexed) -> Result(chunks=2)."
     input_ports = (
-        NodePort(key="indexed", label="Indexed", data_type="indexed_batch", accepts_many=True),
+        NodePort(
+            key="items",
+            label="Indexed",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+            accepts_many=True,
+        ),
     )
-    output_ports = (NodePort(key="result", label="Result", data_type="indexed_batch"),)
+    output_ports = (NodePort(key="result", label="Result", data_type=PortKind.RESULT),)
     config_model = IngestionOutputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Merge indexed payloads from every inbound indexer branch."""
+        """Merge indexed item streams from every inbound indexer branch."""
         return {"result": self._merge(inputs)}
 
     def summarize_io(
@@ -130,23 +138,23 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize ingestion output payloads."""
-        payloads = self._collect(inputs)
+        batches = self._collect(inputs)
         merged = IndexingPayload.model_validate(outputs.get("result"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
                     label=f"Indexed chunks (branch {index})",
-                    value={"count": len(payload.chunks)},
+                    value={"count": len(batch.items)},
                 )
-                for index, payload in enumerate(payloads, start=1)
+                for index, batch in enumerate(batches, start=1)
             ]
             + [
                 NodeTraceValue(
                     label=f"Indexed items (branch {index})",
-                    value=trace_chunk_items(payload.chunks),
+                    value=trace_items(batch.items),
                     kind="items",
                 )
-                for index, payload in enumerate(payloads, start=1)
+                for index, batch in enumerate(batches, start=1)
             ],
             outputs=[
                 NodeTraceValue(
@@ -163,33 +171,30 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
 
     @classmethod
     def _merge(cls, inputs: dict[str, object]) -> IndexingPayload:
-        """Merge branch payloads: embedded chunks win, usage sums."""
-        payloads = cls._collect(inputs)
-        # The persisted branch is the one carrying the most embedded chunks
+        """Merge branch streams: embedded items win, usage sums."""
+        batches = cls._collect(inputs)
+        # The persisted branch is the one carrying the most embedded items
         # (the dense branch in a hybrid pipeline); ties keep the first, so a
         # single-branch pipeline is a passthrough.
         primary = max(
-            payloads,
-            key=lambda payload: sum(
-                1 for chunk in payload.chunks if chunk.embedding is not None
-            ),
+            batches,
+            key=lambda batch: sum(1 for item in batch.items if item.embedding is not None),
         )
         return IndexingPayload(
-            document=primary.document,
-            chunks=primary.chunks,
-            usage=combine_usage([payload.usage for payload in payloads]),
+            chunks=primary.to_chunks(),
+            usage=combine_usage([batch.usage for batch in batches]),
         )
 
     @staticmethod
-    def _collect(inputs: dict[str, object]) -> list[IndexingPayload]:
-        """Validate the variadic `indexed` input into typed payloads.
+    def _collect(inputs: dict[str, object]) -> list[ItemBatch]:
+        """Validate the variadic `items` input into typed batches.
 
         The executor always delivers an `accepts_many` port as a list; a bare
-        payload is tolerated for direct node-level callers (tests).
+        batch is tolerated for direct node-level callers (tests).
         """
-        raw = inputs.get("indexed")
-        items = raw if isinstance(raw, list) else [raw]
-        return [IndexingPayload.model_validate(item) for item in items]
+        raw = inputs.get("items")
+        values = raw if isinstance(raw, list) else [raw]
+        return [ItemBatch.model_validate(value) for value in values]
 
 
 class RetrievalInputConfig(BaseModel):
@@ -221,46 +226,37 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
     label = "Retrieval Input"
     category = "retrieval"
     description = "Provide the query payload for retrieval."
-    example = "Query='coffee', top_k=3 -> QueryRequest(text='coffee', top_k=3)."
+    example = "Query='coffee' -> Items(text='coffee')."
     input_ports = ()
-    output_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
+    output_ports = (
+        NodePort(key="items", label="Query", data_type=PortKind.ITEMS, adds=(Facet.TEXT,)),
+    )
     config_model = RetrievalInputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Create a QueryRequest from context.
+        """Emit the run's query as a single-item stream.
 
-        `context.top_k` is the run's effective depth: `PipelineRunner.start`
-        already replaced the legacy value with a declared `top_k` argument or
-        variable when one exists, so this node (and the fusion fallback) read
-        one agreed value.
+        The fetch depth is node config (retrievers' `top_k`, the Result
+        Limit's `max_results`), not part of the data plane; `context.top_k`
+        remains the run-level fallback those nodes read.
         """
         if context.query is None:
             raise ValueError("Retrieval context is missing a query string.")
-        request = QueryRequest(
-            text=context.query,
-            top_k=context.top_k or 5,
-            namespace=None,
-        )
-        return {"request": RetrievalRequestPayload(request=request)}
+        return {"items": ItemBatch(items=[Item(id="query", text=context.query)])}
 
     def summarize_io(
         self,
         inputs: dict[str, object],
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
-        """Summarize the query request inputs and outputs."""
-        payload = RetrievalRequestPayload.model_validate(outputs.get("request"))
-        request = payload.request
+        """Summarize the emitted query stream."""
+        batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             outputs=[
                 NodeTraceValue(
                     label="Query",
-                    value=summarize_text(request.text, 200),
+                    value=summarize_text(batch.query_text() or "", 200),
                     kind="text",
-                ),
-                NodeTraceValue(
-                    label="Top K",
-                    value=request.top_k,
                 ),
             ]
         )
@@ -284,17 +280,26 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
     label = "Retrieval Output"
     category = "retrieval"
     description = "Emit retrieval results for the API."
-    example = "RetrievalPayload(matches=2) -> Result(RetrievalPayload(matches=2))."
-    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
-    output_ports = (NodePort(key="result", label="Result", data_type="retrieval_results"),)
+    example = "Items(matches=2) -> Result(matches=2)."
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Results",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT, Facet.SCORE),
+        ),
+    )
+    output_ports = (NodePort(key="result", label="Result", data_type=PortKind.RESULT),)
     config_model = RetrievalOutputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Return the retrieval payload, with declared outputs evaluated."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
-        outputs = self._evaluate_outputs(context)
-        if outputs:
-            payload = payload.model_copy(update={"outputs": outputs})
+        """Build the terminal retrieval result, with declared outputs evaluated."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        payload = RetrievalPayload(
+            response=RetrievalResponse(matches=batch.to_matches()),
+            usage=batch.usage,
+            outputs=self._evaluate_outputs(context),
+        )
         return {"result": payload}
 
     def _evaluate_outputs(
@@ -309,7 +314,7 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize retrieval output payloads."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
         result_payload = RetrievalPayload.model_validate(outputs.get("result"))
         output_values = [
             NodeTraceValue(
@@ -330,11 +335,11 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
             inputs=[
                 NodeTraceValue(
                     label="Matches",
-                    value=summarize_matches(payload.response.matches),
+                    value=summarize_matches(input_batch.preview_matches()),
                 ),
                 NodeTraceValue(
                     label="Match items",
-                    value=trace_match_items(payload.response.matches),
+                    value=trace_items(input_batch.items),
                     kind="items",
                 ),
             ],

@@ -62,6 +62,24 @@ REMOVED_NODE_TYPES = frozenset({"chat.settings"})
 LEGACY_RERANKER_TYPE = "reranker.cross_encoder"
 LEGACY_RESULT_LIMIT_TYPE = "limit.top_n"
 
+# Stage-named port keys from before the unified `items` streams. Every one of
+# them named an items-typed port (the embedder's dual `chunks`/`request`
+# inputs, its `embedded`/`query_embedding` outputs, chunker/indexer/retriever
+# stream ports, and the `results` ranking ports); the current vocabulary uses
+# the single key `items`, so the rename is unambiguous and idempotent.
+LEGACY_ITEM_PORT_KEYS = frozenset(
+    {"chunks", "embedded", "indexed", "request", "query_embedding", "results"}
+)
+
+
+def _upgrade_edge_ports(edge: PipelineEdgeDefinition) -> tuple[PipelineEdgeDefinition, bool]:
+    """Rename legacy stage-named ports on an edge to the `items` vocabulary."""
+    source_port = "items" if edge.source_port in LEGACY_ITEM_PORT_KEYS else edge.source_port
+    target_port = "items" if edge.target_port in LEGACY_ITEM_PORT_KEYS else edge.target_port
+    if source_port == edge.source_port and target_port == edge.target_port:
+        return edge, False
+    return edge.model_copy(update={"source_port": source_port, "target_port": target_port}), True
+
 
 def _upgrade_node(node: PipelineNodeDefinition) -> tuple[PipelineNodeDefinition, bool]:
     """Return the node rewritten to the unified vocabulary, and whether it changed."""
@@ -129,7 +147,9 @@ def upgrade_definition(definition: PipelineDefinition) -> PipelineDefinition | N
         if edge.source in removed_ids or edge.target in removed_ids:
             changed = True
             continue
-        kept_edges.append(edge)
+        upgraded_edge, edge_changed = _upgrade_edge_ports(edge)
+        changed = changed or edge_changed
+        kept_edges.append(upgraded_edge)
     if not changed:
         return None
     return definition.model_copy(
@@ -370,8 +390,8 @@ def _insert_fusion_limits(
                 id=_unique_edge_id(f"edge-{node.id}-limit", edges),
                 source=node.id,
                 target=limit_id,
-                source_port="results",
-                target_port="results",
+                source_port="items",
+                target_port="items",
             )
         )
     return result_nodes, edges
