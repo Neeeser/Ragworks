@@ -202,6 +202,11 @@ export function usePanelControls(params: UsePanelControlsParams): UsePanelContro
         return;
       }
       const scrollToSection = () => {
+        // Re-checked here because this runs from a timeout: in tests the jsdom
+        // globals can be torn down between scheduling and firing.
+        if (typeof document === "undefined") {
+          return;
+        }
         const target = document.getElementById(sectionId);
         if (target) {
           target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -213,6 +218,9 @@ export function usePanelControls(params: UsePanelControlsParams): UsePanelContro
       // Runs only on the settled pass: a section expanded by this same call has
       // only just mounted its content.
       const focusSectionSearch = () => {
+        if (typeof document === "undefined") {
+          return;
+        }
         const target = document.getElementById(sectionId);
         target
           ?.querySelector<HTMLInputElement>('input[type="search"]')
