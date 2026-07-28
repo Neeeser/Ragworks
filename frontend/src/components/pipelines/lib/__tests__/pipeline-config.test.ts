@@ -6,6 +6,7 @@ import {
   buildPipelineConfigFields,
   coerceFieldValue,
   formatConfigValue,
+  resolvedNumber,
   getInputValue,
 } from "@/components/pipelines/lib/pipeline-config";
 
@@ -153,5 +154,30 @@ describe("pipeline-config", () => {
     expect(coerceFieldValue(nullableTextField, "")).toBeUndefined();
     expect(coerceFieldValue(textField, "")).toBe("");
     expect(coerceFieldValue(textField, "hello")).toBe("hello");
+  });
+});
+
+describe("resolvedNumber", () => {
+  const fields = [
+    { key: "chunk_size", exprType: "integer", defaultValue: 512 },
+    { key: "chunk_overlap", exprType: "integer", defaultValue: 102 },
+  ] as unknown as PipelineConfigField[];
+  const env = { values: new Map() };
+
+  it("evaluates a sibling expression so the window is still knowable", () => {
+    const config = { chunk_size: 512, chunk_overlap: { $expr: "round(self.chunk_size * 0.2)" } };
+
+    expect(resolvedNumber("chunk_overlap", fields, config, env)).toBe(102);
+  });
+
+  it("falls back to the field default when the config omits the key", () => {
+    expect(resolvedNumber("chunk_size", fields, {}, env)).toBe(512);
+  });
+
+  it("returns null when the value cannot be known without a run", () => {
+    // `top_k` is a caller argument, absent from the static environment.
+    const config = { chunk_overlap: { $expr: "top_k * 2" } };
+
+    expect(resolvedNumber("chunk_overlap", fields, config, env)).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ import {
   acceptedNamesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
-import { buildPipelineConfigFields, coerceFieldValue } from "./lib/pipeline-config";
+import { buildPipelineConfigFields, coerceFieldValue, resolvedNumber } from "./lib/pipeline-config";
 import { CREATE_SENTINEL } from "./lib/pipeline-kinds";
 import { sortIndexesByName } from "./lib/pipeline-utils";
 import { RERANKER_NODE_TYPE } from "./lib/reranking";
@@ -108,15 +108,17 @@ export function NodeConfigSections({
       ? "pgvector"
       : "pinecone";
 
-  // Either value may hold an expression rather than a literal, in which case
-  // the window is only known at run time and there is no math to state.
-  const chunkWindow = {
-    size: typeof config.chunk_size === "number" ? config.chunk_size : 0,
-    overlap: typeof config.chunk_overlap === "number" ? config.chunk_overlap : 0,
-    expression: typeof config.chunk_size !== "number" || typeof config.chunk_overlap !== "number",
-  };
-
   const fields = node.data.configSchema ? buildPipelineConfigFields(node.data.configSchema) : [];
+  // An expression over siblings still has a knowable window, so resolve it
+  // rather than declining to state the math; only a value that genuinely
+  // depends on the run (a caller argument) is left unstated.
+  const chunkSize = resolvedNumber("chunk_size", fields, config, expressionEnv);
+  const chunkOverlap = resolvedNumber("chunk_overlap", fields, config, expressionEnv);
+  const chunkWindow = {
+    size: chunkSize ?? 0,
+    overlap: chunkOverlap ?? 0,
+    expression: chunkSize === null || chunkOverlap === null,
+  };
   const filteredFields = fields.filter((field) => {
     const embedderHidden =
       isEmbedder && ["connection_id", "model_name", "dimension"].includes(field.key);

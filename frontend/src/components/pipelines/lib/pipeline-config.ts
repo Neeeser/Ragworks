@@ -1,4 +1,4 @@
-import { expressionSource } from "@/lib/expressions";
+import { evaluate, expressionSource, parse } from "@/lib/expressions";
 
 import type { ParameterSelectOption } from "@/components/ui/parameter-controls";
 import type { ExprType, ExprValue } from "@/lib/expressions";
@@ -243,4 +243,30 @@ export function buildSelfScope(
     }
   }
   return { types, values, key };
+}
+
+/**
+ * A config value as a number, evaluating an expression when it holds one.
+ *
+ * Returns null when the value cannot be known without a run — an expression
+ * over a caller-supplied argument, or one that does not type-check. Callers
+ * state that honestly rather than showing a number the run will not produce.
+ */
+export function resolvedNumber(
+  key: string,
+  fields: PipelineConfigField[],
+  config: Record<string, unknown>,
+  env: { values: ReadonlyMap<string, ExprValue> },
+): number | null {
+  const raw = config[key] ?? fields.find((field) => field.key === key)?.defaultValue;
+  if (typeof raw === "number") return raw;
+  const source = expressionSource(config[key]);
+  if (source === null) return null;
+  try {
+    const scope = buildSelfScope(fields, config, key);
+    const result = evaluate(parse(source), env.values, scope.values);
+    return typeof result === "number" ? result : null;
+  } catch {
+    return null;
+  }
 }
