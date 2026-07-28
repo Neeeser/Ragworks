@@ -93,3 +93,4 @@ docs/superpowers/
 !.env.sandbox.example
 frontend/test-results/
 frontend/playwright-report/
+.claude/specs/
