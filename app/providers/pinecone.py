@@ -16,10 +16,12 @@ from app.clients.pinecone import get_pinecone_client
 from app.db.models import ProviderConnection
 from app.providers.base import ProviderAdapter, ProviderDescriptor
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.provider_configs import (
+    PineconeConnectionConfig,
+)
 from app.schemas.providers import (
     ConfigFieldKind,
     ConnectionValidationResult,
-    PineconeConnectionConfig,
     ProviderConfigField,
 )
 

@@ -17,10 +17,12 @@ from app.retrieval.embedders.cohere_embedder import CohereEmbedder
 from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.cohere import CohereReranker
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.provider_configs import (
+    CohereConnectionConfig,
+)
 from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
-    CohereConnectionConfig,
     ConfigFieldKind,
     ConnectionValidationResult,
     ProviderConfigField,

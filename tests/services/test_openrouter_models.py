@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.schemas.openrouter import (
-    OpenRouterChatResponse,
-    OpenRouterEmbeddingsResponse,
-    OpenRouterRerankResponse,
-    OpenRouterStreamChunk,
+from app.schemas.chat_completions import (
+    ChatCompletionChunk,
+    ChatCompletionResponse,
+    EmbeddingsResponse,
+    RerankResponse,
 )
 
 
@@ -30,7 +30,7 @@ def test_openrouter_chat_response_preserves_extra_fields() -> None:
         "extra_top": "preserve-me",
     }
 
-    response = OpenRouterChatResponse.model_validate(payload)
+    response = ChatCompletionResponse.model_validate(payload)
     dumped = response.model_dump(exclude_none=True)
 
     assert dumped["provider"] == "openrouter"
@@ -62,7 +62,7 @@ def test_openrouter_stream_chunk_parses_tool_calls_and_usage() -> None:
         "usage": {"total_tokens": 3},
     }
 
-    parsed = OpenRouterStreamChunk.model_validate(payload)
+    parsed = ChatCompletionChunk.model_validate(payload)
     assert parsed.choices[0].delta
     assert parsed.choices[0].delta.tool_calls
     tool_call = parsed.choices[0].delta.tool_calls[0]
@@ -82,7 +82,7 @@ def test_openrouter_embeddings_response_allows_extra_fields() -> None:
         "new_field": {"nested": True},
     }
 
-    parsed = OpenRouterEmbeddingsResponse.model_validate(payload)
+    parsed = EmbeddingsResponse.model_validate(payload)
     dumped = parsed.model_dump(exclude_none=True)
 
     assert dumped["new_field"]["nested"] is True
@@ -91,7 +91,7 @@ def test_openrouter_embeddings_response_allows_extra_fields() -> None:
 
 
 def test_openrouter_rerank_response_parses_ranked_indexes() -> None:
-    parsed = OpenRouterRerankResponse.model_validate(
+    parsed = RerankResponse.model_validate(
         {
             "id": "rank-1",
             "model": "cohere/rerank-v3.5",

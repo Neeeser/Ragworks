@@ -8,7 +8,7 @@ from collections.abc import Iterable, Sequence
 from app.clients.openrouter import OpenRouterClient
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
+from app.schemas.chat_completions import EmbeddingsResponse
 from app.services.errors import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class OpenRouterEmbedder(Embedder):
         """Return the most recent usage payload, if available."""
         return self._last_usage
 
-    def _extract_vectors(self, response: OpenRouterEmbeddingsResponse) -> list[EmbeddingVector]:
+    def _extract_vectors(self, response: EmbeddingsResponse) -> list[EmbeddingVector]:
         """Parse embedding vectors from a validated OpenRouter embeddings response.
 
         `response` is already schema-validated by `OpenRouterClient.embed` — no

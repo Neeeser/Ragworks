@@ -14,14 +14,16 @@ from app.retrieval.embedders.tei_embedder import TEIEmbedder
 from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.tei import TEIReranker
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.providers import (
+from app.schemas.provider_configs import (
     TEI_DEFAULT_PORT,
+    TEIConnectionConfig,
+)
+from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
     ConnectionValidationResult,
     ProviderConfigField,
-    TEIConnectionConfig,
 )
 from app.services.errors import InvalidInputError
 

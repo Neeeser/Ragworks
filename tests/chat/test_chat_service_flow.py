@@ -16,8 +16,8 @@ from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.chat_completions import ChatCompletionResponse
 from app.schemas.models import ModelInfo
-from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.tools import ToolInvocationResponse
 from app.services.errors import InvalidInputError
 from tests.chat.conftest import (
@@ -476,12 +476,15 @@ def test_send_message_raises_when_model_never_stops_calling_tools(
         "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
     }
 
+    class _AlwaysToolCompat:
+        def chat(self, _call: object) -> ChatCompletionResponse:
+            return ChatCompletionResponse.model_validate(tool_response)
+
     class _AlwaysToolOpenRouter:
+        compat = _AlwaysToolCompat()
+
         def get_model(self, _model_id: str) -> ModelInfo:
             return tool_model_info()
-
-        def chat(self, **_kwargs: Any) -> OpenRouterChatResponse:
-            return OpenRouterChatResponse.model_validate(tool_response)
 
     install_chat_flow(openrouter=_AlwaysToolOpenRouter(), chat_model="tool-model")
     monkeypatch.setattr(chat_run_loop, "MAX_TOOL_ITERATIONS", 3)

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.enums import ProviderType
-from app.schemas.providers import (
+from app.schemas.provider_configs import (
     OLLAMA_DEFAULT_PORT,
     TEI_DEFAULT_PORT,
     CohereConnectionConfig,
