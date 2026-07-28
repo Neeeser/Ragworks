@@ -20,6 +20,16 @@ export interface IndexValue {
 
 export type ExprValue = number | string | boolean | ModelValue | IndexValue;
 
+/**
+ * Qualifier for a node's *own* config fields: `self.chunk_size`.
+ *
+ * A scope, not a value — its members are the config fields of whichever node
+ * the expression sits on, so they vary per node rather than coming from a
+ * fixed member map. Mirrors `SELF_SCOPE` in
+ * `app/pipelines/expressions/values.py`.
+ */
+export const SELF_SCOPE = "self";
+
 export const MODEL_MEMBERS: Record<string, ExprType> = {
   connection_id: "string",
   model_name: "string",

@@ -23,6 +23,8 @@ interface VectorCase {
   name: string;
   source: string;
   env: Record<string, VectorEnvEntry>;
+  /** Config fields of the node the expression sits on, read via `self.`. */
+  self?: Record<string, VectorEnvEntry>;
   expect?: { type: ExprType; value: unknown };
   error?: "syntax" | "type" | "eval";
 }
@@ -58,19 +60,21 @@ describe("expression conformance vectors", () => {
         return;
       }
       const expr = parse(vector.source);
+      const selfTypes = vector.self === undefined ? undefined : typeEnv(vector.self);
+      const selfValues = vector.self === undefined ? undefined : valueEnv(vector.self);
       if (vector.error === "type") {
-        expectKind(() => checkType(expr, typeEnv(vector.env)), "type");
+        expectKind(() => checkType(expr, typeEnv(vector.env), selfTypes), "type");
         return;
       }
-      const resultType = checkType(expr, typeEnv(vector.env));
+      const resultType = checkType(expr, typeEnv(vector.env), selfTypes);
       if (vector.error === "eval") {
-        expectKind(() => evaluate(expr, valueEnv(vector.env)), "eval");
+        expectKind(() => evaluate(expr, valueEnv(vector.env), selfValues), "eval");
         return;
       }
       const expected = vector.expect;
       if (!expected) throw new Error(`Vector ${vector.name} has no expectation`);
       expect(resultType).toBe(expected.type);
-      const result = evaluate(expr, valueEnv(vector.env));
+      const result = evaluate(expr, valueEnv(vector.env), selfValues);
       if (resultType === "integer" || resultType === "number") {
         expect(typeof result).toBe("number");
         expect(result as number).toBeCloseTo(expected.value as number, 9);

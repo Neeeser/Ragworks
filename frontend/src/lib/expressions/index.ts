@@ -10,11 +10,18 @@
  */
 
 export { ExpressionError, type ExpressionErrorKind } from "./errors";
-export { checkType, references, type TypeEnvironment } from "./analysis";
-export { evaluate, type ValueEnvironment } from "./evaluator";
+export {
+  checkType,
+  references,
+  selfReferences,
+  type SelfTypes,
+  type TypeEnvironment,
+} from "./analysis";
+export { evaluate, type SelfValues, type ValueEnvironment } from "./evaluator";
 export { parse, type Expression } from "./parser";
 export {
   MODEL_MEMBERS,
+  SELF_SCOPE,
   isModelValue,
   isNumericType,
   valueType,

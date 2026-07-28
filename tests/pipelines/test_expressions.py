@@ -75,19 +75,23 @@ def test_expression_vectors(case: dict[str, Any]) -> None:
         return
     expr = parse(case["source"])
     type_env = _env_types(case["env"])
+    # `self` is a per-node scope, absent unless the case declares one.
+    self_scope = case.get("self")
+    self_types = _env_types(self_scope) if self_scope is not None else None
+    self_values = _env_values(self_scope) if self_scope is not None else None
     if error == "type":
         with pytest.raises(ExpressionTypeError):
-            check_type(expr, type_env)
+            check_type(expr, type_env, self_types)
         return
-    result_type = check_type(expr, type_env)
+    result_type = check_type(expr, type_env, self_types)
     value_env = _env_values(case["env"])
     if error == "eval":
         with pytest.raises(ExpressionEvalError):
-            evaluate(expr, value_env)
+            evaluate(expr, value_env, self_values)
         return
     expected = case["expect"]
     assert result_type is ExprType(expected["type"])
-    result = evaluate(expr, value_env)
+    result = evaluate(expr, value_env, self_values)
     if result_type in (ExprType.INTEGER, ExprType.NUMBER):
         assert isinstance(result, (int, float))
         assert not isinstance(result, bool)
