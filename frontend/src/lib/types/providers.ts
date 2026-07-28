@@ -2,13 +2,28 @@ import type { ModelPricing } from "@/lib/types/chat";
 import type { UUID } from "@/lib/types/common";
 
 /** Mirrors `app/schemas/enums.py::ProviderType`. */
-export type ProviderType = "openrouter" | "ollama" | "cohere" | "tei" | "pinecone";
+export type ProviderType =
+  | "openrouter"
+  | "openai"
+  | "anthropic"
+  | "ollama"
+  | "cohere"
+  | "tei"
+  | "custom"
+  | "pinecone";
 
 /** Mirrors `app/schemas/enums.py::ProviderKind`. */
 export type ProviderKind = "embedding" | "chat" | "reranking" | "vector_store";
 
 /** Mirrors `app/schemas/providers.py::ConfigFieldKind`. */
-export type ProviderConfigFieldKind = "string" | "secret" | "url";
+export type ProviderConfigFieldKind = "string" | "secret" | "url" | "boolean" | "select";
+
+/** Mirrors `app/schemas/providers.py::ProviderConfigOption`. */
+export interface ProviderConfigOption {
+  value: string;
+  label: string;
+  description?: string | null;
+}
 
 /** Mirrors `app/schemas/providers.py::ProviderConfigField`. */
 export interface ProviderConfigField {
@@ -18,6 +33,10 @@ export interface ProviderConfigField {
   required: boolean;
   placeholder?: string | null;
   description?: string | null;
+  options: ProviderConfigOption[];
+  default?: string | boolean | null;
+  /** Shown behind a disclosure so the common case stays URL + key. */
+  advanced: boolean;
 }
 
 /** Mirrors `app/schemas/providers.py::ProviderTypeRead` (`GET /api/providers`). */
@@ -63,6 +82,24 @@ export interface ConnectionUpdateRequest {
 /** Mirrors `app/schemas/providers.py::ConnectionValidationResult`. */
 export interface ConnectionValidationResult {
   valid: boolean;
+  message?: string | null;
+}
+
+/** Mirrors `app/schemas/providers.py::ServerProbeRequest`. */
+export interface ServerProbeRequest {
+  base_url: string;
+  api_key?: string | null;
+}
+
+/** Mirrors `app/schemas/providers.py::ServerProbeResult` (`POST /api/providers/probe`). */
+export interface ServerProbeResult {
+  reachable: boolean;
+  serves_chat: boolean;
+  serves_embeddings: boolean;
+  serves_reranking: boolean;
+  serves_responses: boolean;
+  unauthorized: boolean;
+  model_ids: string[];
   message?: string | null;
 }
 

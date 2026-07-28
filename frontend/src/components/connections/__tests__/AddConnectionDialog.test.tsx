@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AddConnectionDialog } from "@/components/connections/AddConnectionDialog";
 import { validateConnectionConfig } from "@/lib/api";
-import { makeConnection, makeProviderType } from "@/test/fixtures/providers";
+import { makeConnection, makeProviderType , makeProviderConfigField } from "@/test/fixtures/providers";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");
@@ -19,7 +19,7 @@ const ollamaType = makeProviderType({
   max_connections_per_user: null,
   recommended: false,
   config_fields: [
-    { name: "base_url", label: "Server URL", kind: "url", required: true, placeholder: null },
+    makeProviderConfigField({ name: "base_url", label: "Server URL", kind: "url" }),
   ],
 });
 

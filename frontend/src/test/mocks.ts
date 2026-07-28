@@ -60,6 +60,7 @@ import {
   makeUmapVisualization,
   makeConnection,
   makeModelCatalog,
+  makeProviderConfigField,
   makeProviderType,
   makeUser,
   makeValidation,
@@ -224,20 +225,22 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
         recommended: false,
         docs_url: "https://ollama.com/download",
         config_fields: [
-          { name: "base_url", label: "Server URL", kind: "url", required: true },
-          {
+          makeProviderConfigField({ name: "base_url", label: "Server URL", kind: "url" }),
+          makeProviderConfigField({
             name: "api_key",
             label: "API key (optional, for proxied servers)",
             kind: "secret",
             required: false,
-          },
+          }),
         ],
       }),
       makeProviderType({
         provider_type: "cohere",
         label: "Cohere",
         kinds: ["embedding", "chat", "reranking"],
-        config_fields: [{ name: "api_key", label: "API key", kind: "secret", required: true }],
+        config_fields: [
+          makeProviderConfigField({ name: "api_key", label: "API key", kind: "secret" }),
+        ],
         docs_url: "https://dashboard.cohere.com/api-keys",
       }),
       makeProviderType({
@@ -245,19 +248,18 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
         label: "Hugging Face TEI",
         kinds: ["embedding", "reranking"],
         config_fields: [
-          {
+          makeProviderConfigField({
             name: "base_url",
             label: "Server URL",
             kind: "url",
-            required: true,
             description: "Each TEI connection serves one model and task.",
-          },
-          {
+          }),
+          makeProviderConfigField({
             name: "api_key",
             label: "API key (optional, for proxied servers)",
             kind: "secret",
             required: false,
-          },
+          }),
         ],
         docs_url: "https://huggingface.co/docs/text-embeddings-inference",
       }),

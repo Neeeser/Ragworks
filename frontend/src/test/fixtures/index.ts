@@ -407,6 +407,7 @@ export {
   makeCatalogModel,
   makeConnection,
   makeModelCatalog,
+  makeProviderConfigField,
   makeProviderType,
 } from "@/test/fixtures/providers";
 

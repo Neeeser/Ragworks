@@ -3,11 +3,33 @@ import type {
   CatalogMetadata,
   ConnectionCatalogError,
   ModelCatalogResponse,
+  ProviderConfigField,
   ProviderConnection,
   ProviderTypeInfo,
 } from "@/lib/types";
 
 const OPENROUTER_CONNECTION_ID = "conn-openrouter-1";
+
+/**
+ * One provider config field, with the catalog's own defaults filled in.
+ *
+ * Every caller goes through this rather than an inline literal, so adding a
+ * field to the wire contract is one edit here instead of a sweep through every
+ * test that happens to render a form.
+ */
+export function makeProviderConfigField(
+  overrides: Partial<ProviderConfigField> & Pick<ProviderConfigField, "name" | "label" | "kind">,
+): ProviderConfigField {
+  return {
+    required: true,
+    placeholder: null,
+    description: null,
+    options: [],
+    default: null,
+    advanced: false,
+    ...overrides,
+  };
+}
 
 export function makeConnection(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
   return {
@@ -30,13 +52,12 @@ export function makeProviderType(overrides: Partial<ProviderTypeInfo> = {}): Pro
     label: "OpenRouter",
     kinds: ["embedding", "chat"],
     config_fields: [
-      {
+      makeProviderConfigField({
         name: "api_key",
         label: "API key",
         kind: "secret",
-        required: true,
         placeholder: "sk-or-...",
-      },
+      }),
     ],
     docs_url: "https://openrouter.ai/settings/keys",
     max_connections_per_user: null,

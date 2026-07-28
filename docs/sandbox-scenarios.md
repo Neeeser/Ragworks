@@ -20,6 +20,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
 | `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
+| `multi-provider` | Admin user with live OpenRouter, OpenAI, and Anthropic connections — three chat dialects available at once for cross-provider comparison. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
 | `shared-pipelines` | collection-ready plus a second collection bound to *copies* of its pipelines, writing to its own dense + BM25 indexes — the state a pipeline copy exists to produce. | `OPENROUTER_API_KEY` |
 
@@ -124,6 +125,19 @@ After seeding:
 - API key "Sandbox agent" scoped to the seeded collection with tools:invoke, files:read, and files:write
 - the key (printed in the handoff as an `mcp key` fact) is the only way to reach the endpoint; it is unrecoverable afterwards
 - pointing any MCP client at the printed endpoint with `Authorization: Bearer <key>` is the remaining action under test
+
+## `multi-provider`
+
+Admin user with live OpenRouter, OpenAI, and Anthropic connections — three chat dialects available at once for cross-provider comparison.
+
+Requires: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- one admin user (the standard sandbox login)
+- a live-validated OpenRouter connection (embeddings + chat + reranking)
+- a live-validated OpenAI connection (embeddings + chat, Responses dialect)
+- a live-validated Anthropic connection (chat only)
+- pgvector is available as the vector store; no index or collection yet
 
 ## `ollama-connected`
 

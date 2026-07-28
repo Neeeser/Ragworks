@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConnectionConfigFields } from "@/components/connections/ConnectionConfigFields";
+import { makeProviderConfigField } from "@/test/fixtures/providers";
 
 describe("ConnectionConfigFields", () => {
   it("lets users reveal and hide a secret without changing its value", async () => {
@@ -10,12 +11,7 @@ describe("ConnectionConfigFields", () => {
     render(
       <ConnectionConfigFields
         fields={[
-          {
-            name: "api_key",
-            label: "API key",
-            kind: "secret",
-            required: true,
-          },
+          makeProviderConfigField({ name: "api_key", label: "API key", kind: "secret" }),
         ]}
         config={{ api_key: "secret-value" }}
         onChange={vi.fn()}
@@ -35,13 +31,12 @@ describe("ConnectionConfigFields", () => {
     render(
       <ConnectionConfigFields
         fields={[
-          {
+          makeProviderConfigField({
             name: "base_url",
             label: "Server URL",
             kind: "url",
-            required: true,
             description: "Each TEI connection serves one model and task.",
-          },
+          }),
         ]}
         config={{}}
         onChange={vi.fn()}

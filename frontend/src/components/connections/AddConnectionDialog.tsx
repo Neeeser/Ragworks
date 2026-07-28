@@ -2,7 +2,10 @@
 
 import { useId, useState } from "react";
 
-import { ConnectionConfigFields } from "@/components/connections/ConnectionConfigFields";
+import {
+  ConnectionConfigFields,
+  TRUE_VALUE,
+} from "@/components/connections/ConnectionConfigFields";
 import { toProviderChoices } from "@/components/connections/lib/provider-choices";
 import { ProviderChoiceCard } from "@/components/connections/ProviderChoiceCard";
 import { ProviderIcon } from "@/components/connections/ProviderIcon";
@@ -10,11 +13,11 @@ import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges"
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { createConnection, validateConnectionConfig } from "@/lib/api";
+import { createConnection, probeCustomServer, validateConnectionConfig } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
-import type { ProviderConnection, ProviderTypeInfo } from "@/lib/types";
+import type { ProviderConnection, ProviderTypeInfo, ServerProbeResult } from "@/lib/types";
 
 interface AddConnectionDialogProps {
   open: boolean;
@@ -24,6 +27,37 @@ interface AddConnectionDialogProps {
   existingConnections: ProviderConnection[];
   onCreated: (connection: ProviderConnection) => void;
 }
+
+/** The config a type's fields start from, so declared defaults are visible and sent. */
+function seedConfig(type: ProviderTypeInfo): Record<string, string> {
+  const seeded: Record<string, string> = {};
+  for (const field of type.config_fields) {
+    if (typeof field.default === "boolean") {
+      seeded[field.name] = field.default ? TRUE_VALUE : "false";
+    } else if (typeof field.default === "string") {
+      seeded[field.name] = field.default;
+    }
+  }
+  return seeded;
+}
+
+/**
+ * True when a type is discoverable: it is addressed by URL and declares its
+ * capabilities as toggles. Derived from the field catalog rather than a
+ * provider-type check, so a future type that works the same way gets the
+ * detect step without a change here.
+ */
+function supportsDetection(type: ProviderTypeInfo): boolean {
+  const names = new Set(type.config_fields.map((field) => field.name));
+  return names.has("base_url") && type.config_fields.some((field) => field.kind === "boolean");
+}
+
+/** The capability toggles a probe writes, keyed by the config field they set. */
+const DETECTED_CAPABILITIES: Array<[string, keyof ServerProbeResult]> = [
+  ["serves_chat", "serves_chat"],
+  ["serves_embeddings", "serves_embeddings"],
+  ["serves_reranking", "serves_reranking"],
+];
 
 /** Indefinite article for a provider name, by its first sound's spelling. */
 const articleFor = (label: string) =>
@@ -61,6 +95,7 @@ export function AddConnectionDialog({
   const [error, setError] = useState<string | null>(null);
   const [probeMessage, setProbeMessage] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
   const reset = () => {
     setSelectedType(null);
@@ -80,7 +115,7 @@ export function AddConnectionDialog({
   const handlePickType = (type: ProviderTypeInfo) => {
     setSelectedType(type);
     setLabel(type.label);
-    setConfig({});
+    setConfig(seedConfig(type));
     setError(null);
     setProbeMessage(null);
   };
@@ -120,6 +155,50 @@ export function AddConnectionDialog({
       setError(getErrorMessage(probeError, "Unable to validate the connection."));
     } finally {
       setProbing(false);
+    }
+  };
+
+  /**
+   * Discover what the server serves and pre-fill the toggles with it.
+   *
+   * The result is written into the form rather than saved directly: the user
+   * is the one who knows their server, so a probe that missed a capability (a
+   * slow start-up, a path behind a prefix) is corrected in place instead of
+   * being baked into a connection that quietly cannot do the thing.
+   */
+  const handleDetect = async () => {
+    if (!selectedType) return;
+    setDetecting(true);
+    setError(null);
+    setProbeMessage(null);
+    try {
+      const result = await probeCustomServer(authToken, {
+        base_url: (config.base_url ?? "").trim(),
+        api_key: (config.api_key ?? "").trim() || null,
+      });
+      if (!result.reachable) {
+        setError(result.message ?? "The server is unreachable.");
+        return;
+      }
+      setConfig((prev) => {
+        const next = { ...prev };
+        for (const [fieldName, resultKey] of DETECTED_CAPABILITIES) {
+          next[fieldName] = result[resultKey] ? TRUE_VALUE : "false";
+        }
+        if (result.serves_responses && !result.serves_chat) {
+          next.chat_dialect = "responses";
+        }
+        return next;
+      });
+      const served = DETECTED_CAPABILITIES.filter(([, key]) => result[key]).length;
+      setProbeMessage(
+        result.message ??
+          `Found ${served} of 3 capabilities and ${result.model_ids.length} models.`,
+      );
+    } catch (detectError) {
+      setError(getErrorMessage(detectError, "Unable to reach the server."));
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -221,12 +300,23 @@ export function AddConnectionDialog({
                 Back
               </Button>
               <div className="flex items-center gap-2">
+                {supportsDetection(selectedType) ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleDetect}
+                    loading={detecting}
+                    disabled={!(config.base_url ?? "").trim() || submitting || probing}
+                  >
+                    Detect
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
                   onClick={handleProbe}
                   loading={probing}
-                  disabled={missingRequired || submitting}
+                  disabled={missingRequired || submitting || detecting}
                 >
                   Test
                 </Button>
@@ -234,7 +324,7 @@ export function AddConnectionDialog({
                   type="button"
                   onClick={handleCreate}
                   loading={submitting}
-                  disabled={missingRequired || probing}
+                  disabled={missingRequired || probing || detecting}
                 >
                   Add connection
                 </Button>
