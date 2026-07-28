@@ -26,7 +26,7 @@
             "name": "Token Chunker",
             "config": {
               "chunk_size": 512,
-              "chunk_overlap": 200
+              "chunk_overlap": 102
             },
             "position": null,
             "ui": {}
@@ -415,8 +415,8 @@
             "type": "integer"
           },
           "chunk_overlap": {
-            "default": 200,
-            "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
+            "default": 102,
+            "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. Counted inside chunk size, not added to it: a chunk spans chunk_size tokens of which this many repeat the previous one. Defaults to 20% of chunk size. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
             "minimum": 0,
             "title": "Chunk Overlap",
             "type": "integer"
@@ -447,7 +447,7 @@
       },
       "default_config": {
         "chunk_size": 512,
-        "chunk_overlap": 200,
+        "chunk_overlap": 102,
         "tokenizer": "wordpiece",
         "hf_model_id": null
       },

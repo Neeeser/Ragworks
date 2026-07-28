@@ -23,6 +23,7 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.nodes.chunking import DEFAULT_CHUNK_OVERLAP
 from app.pipelines.resolution import resolve_static_definition
 from app.schemas.collections import (
     CollectionCreate,
@@ -133,7 +134,7 @@ def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
     )
     # Merged, not replaced: the untouched sibling field survives the override.
     assert updated_chunker.config["chunk_size"] == 2048
-    assert updated_chunker.config["chunk_overlap"] == 200
+    assert updated_chunker.config["chunk_overlap"] == DEFAULT_CHUNK_OVERLAP
     assert updated_retriever.config["namespace"] == "custom-ns"
     assert updated_retriever.config["backend"] == "pgvector"
 

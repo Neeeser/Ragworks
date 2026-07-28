@@ -5,6 +5,8 @@
  * holds one responsibility (and stays under the size cap).
  */
 
+import { DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE } from "@/lib/chunk-defaults";
+
 import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable } from "@/lib/types";
 
 const PORT_SOURCE = "source";
@@ -271,8 +273,8 @@ export const buildDefaultDefinition = (
       type: "chunker.token",
       name: "Token Chunker",
       config: {
-        chunk_size: options.chunkSize ?? 512,
-        chunk_overlap: options.chunkOverlap ?? 200,
+        chunk_size: options.chunkSize ?? DEFAULT_CHUNK_SIZE,
+        chunk_overlap: options.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
       },
     },
     {

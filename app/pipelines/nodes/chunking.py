@@ -25,11 +25,24 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 
+#: Starting chunk size when nothing narrows it (recursive-512 benchmarks well).
+DEFAULT_CHUNK_SIZE = 512
+#: Overlap as a fraction of chunk size — the conventional ~20% recommendation.
+#: The default overlap is derived from it rather than written as a literal, so
+#: one number does not silently become a different proportion when the size
+#: default moves, and the wizard and the node agree on what "default" means.
+#: Mirrored by `CHUNK_OVERLAP_RATIO` in `frontend/src/lib/chunk-defaults.ts`.
+CHUNK_OVERLAP_RATIO = 0.2
+#: Default overlap in tokens. Overlap is stored and configured as a token
+#: count everywhere; only the default is expressed as a proportion.
+DEFAULT_CHUNK_OVERLAP = round(DEFAULT_CHUNK_SIZE * CHUNK_OVERLAP_RATIO)
+
+
 class FixedChunkerConfig(BaseModel):
     """Configuration for fixed-strategy chunking nodes."""
 
     chunk_size: int = Field(
-        default=512,
+        default=DEFAULT_CHUNK_SIZE,
         gt=0,
         description=(
             "Maximum tokens per chunk, counted by the selected tokenizer. "
@@ -39,13 +52,16 @@ class FixedChunkerConfig(BaseModel):
         ),
     )
     chunk_overlap: int = Field(
-        default=200,
+        default=DEFAULT_CHUNK_OVERLAP,
         ge=0,
         description=(
             "Tokens repeated from the end of one chunk at the start of the "
             "next, so text straddling a boundary stays retrievable from both "
-            "sides. The cost is index size — overlapped tokens are stored and "
-            "embedded twice."
+            "sides. Counted inside chunk size, not added to it: a chunk spans "
+            f"chunk_size tokens of which this many repeat the previous one. "
+            f"Defaults to {int(CHUNK_OVERLAP_RATIO * 100)}% of chunk size. The "
+            "cost is index size — overlapped tokens are stored and embedded "
+            "twice."
         ),
     )
     tokenizer: Literal["wordpiece", "cl100k", "whitespace", "huggingface"] = Field(

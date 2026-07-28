@@ -16,6 +16,7 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.nodes.chunking import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE
 from app.pipelines.nodes.fusion import RRFusionNode
 from app.pipelines.nodes.indexing import (
     BM25_INDEX_SUFFIX,
@@ -98,8 +99,8 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
     embedding_model: str,
     backend: IndexBackend | None = None,
     index_name: str | None = None,
-    chunk_size: int = 512,
-    chunk_overlap: int = 200,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     embedding_input_limit: int | None = None,
 ) -> PipelineDefinition:
     """Return the default (hybrid) ingestion pipeline definition.

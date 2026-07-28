@@ -13,7 +13,7 @@ describe("ChunkWindowSummary", () => {
     render(<ChunkWindowSummary chunkSize={496} chunkOverlap={99} />);
 
     expect(summaryText()).toBe(
-      "Each chunk is 496 tokens: 397 of new text plus 99 repeated from the previous chunk.",
+      "Each chunk is 496 tokens: 397 of new text plus 99 repeated from the previous chunk (20% of chunk size).",
     );
   });
 
@@ -27,6 +27,22 @@ describe("ChunkWindowSummary", () => {
     );
 
     expect(summaryText()).toContain("all-MiniLM-L6-v2 accepts 496 (512 less 16 reserved).");
+  });
+
+  it("states the overlap as a share of chunk size, since the default is a ratio", () => {
+    render(<ChunkWindowSummary chunkSize={1024} chunkOverlap={256} />);
+
+    expect(summaryText()).toContain("256 repeated from the previous chunk (25% of chunk size)");
+  });
+
+  it("says the window is a run-time fact when an expression sets it", () => {
+    // Placeholder zeros would otherwise render a confident, false breakdown.
+    render(<ChunkWindowSummary chunkSize={0} chunkOverlap={0} expression />);
+
+    expect(
+      screen.getByText("An expression sets the window, so its size is decided per run."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Each chunk is/)).toBeNull();
   });
 
   it("drops the repetition clause when there is no overlap", () => {

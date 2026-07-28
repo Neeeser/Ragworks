@@ -18,6 +18,15 @@ export const DEFAULT_CHUNK_SIZE = 512;
 export const CHUNK_OVERLAP_RATIO = 0.2;
 
 /**
+ * Default overlap in tokens, derived from the ratio rather than written as a
+ * literal — a hardcoded number silently becomes a different proportion when
+ * the size default moves, which is how the node and the wizard came to
+ * disagree about what a default overlap is. Mirrors `DEFAULT_CHUNK_OVERLAP`
+ * in `app/pipelines/nodes/chunking.py`.
+ */
+export const DEFAULT_CHUNK_OVERLAP = Math.round(DEFAULT_CHUNK_SIZE * CHUNK_OVERLAP_RATIO);
+
+/**
  * Tokens reserved for the model's special tokens (CLS/SEP, etc.). Mirrors the
  * backend's `EMBEDDING_INPUT_MARGIN_TOKENS` so the wizard's cap matches the
  * limit ingestion enforces.

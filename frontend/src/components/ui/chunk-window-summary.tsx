@@ -10,6 +10,8 @@ type ChunkWindowSummaryProps = {
   unit?: "tokens" | "words";
   /** The embedding model's usable window, when one is known. */
   limit?: { value: number; modelName: string; published: number } | null;
+  /** True when a value is an expression, so the window is a run-time fact. */
+  expression?: boolean;
   className?: string;
 };
 
@@ -27,9 +29,20 @@ export function ChunkWindowSummary({
   chunkOverlap,
   unit = "tokens",
   limit,
+  expression,
   className,
 }: ChunkWindowSummaryProps) {
   const { perChunk, newText, repeated, invalid } = describeChunkWindow(chunkSize, chunkOverlap);
+
+  if (expression) {
+    // Stating a window computed from placeholder zeros would be a false fact
+    // about what the run produces.
+    return (
+      <p className={cn("text-instrument text-muted", className)}>
+        An expression sets the window, so its size is decided per run.
+      </p>
+    );
+  }
 
   if (invalid) {
     return (
@@ -39,6 +52,7 @@ export function ChunkWindowSummary({
     );
   }
 
+  const percent = Math.round((repeated / perChunk) * 100);
   const num = (value: number) => (
     <span className="font-mono tabular-nums text-primary">{value.toLocaleString()}</span>
   );
@@ -46,7 +60,13 @@ export function ChunkWindowSummary({
   return (
     <p className={cn("text-instrument text-muted", className)}>
       Each chunk is {num(perChunk)} {unit}: {num(newText)} of new text
-      {repeated > 0 ? <> plus {num(repeated)} repeated from the previous chunk</> : null}.
+      {repeated > 0 ? (
+        <>
+          {" "}
+          plus {num(repeated)} repeated from the previous chunk ({percent}% of chunk size)
+        </>
+      ) : null}
+      .
       {limit ? (
         <>
           {" "}

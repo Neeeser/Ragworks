@@ -23,6 +23,12 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.pipelines.nodes.chunking import (
+    CHUNK_OVERLAP_RATIO,
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    FixedChunkerConfig,
+)
 from app.pipelines.nodes.embedding import EmbedderConfig
 from app.pipelines.nodes.indexing import VectorIndexerConfig
 from app.pipelines.nodes.retrieval import VectorRetrieverConfig
@@ -260,3 +266,30 @@ def test_default_retrieval_pipeline_uses_result_limit_for_fetch_and_final_cut() 
     assert limit.type == "limit.results"
     assert limit.name == "Result Limit"
     assert limit.config == {"max_results": {"$expr": "result_limit"}}
+
+
+def test_default_overlap_is_derived_from_the_ratio_not_a_literal() -> None:
+    """A literal default silently becomes a different proportion over time.
+
+    The node and the setup wizard both call their default "the default", so
+    they have to mean the same proportion of chunk size — a hardcoded token
+    count stops matching the moment the size default moves.
+    """
+    assert round(DEFAULT_CHUNK_SIZE * CHUNK_OVERLAP_RATIO) == DEFAULT_CHUNK_OVERLAP
+    assert FixedChunkerConfig().chunk_overlap == DEFAULT_CHUNK_OVERLAP
+    assert FixedChunkerConfig().chunk_size == DEFAULT_CHUNK_SIZE
+    # The wizard's ratio, mirrored in frontend/src/lib/chunk-defaults.ts.
+    assert CHUNK_OVERLAP_RATIO == 0.2
+
+
+def test_scaffolded_chunker_uses_the_ratio_derived_default() -> None:
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=uuid4(),
+        embedding_model="all-minilm",
+    )
+    chunker = next(node for node in definition.nodes if node.type == "chunker.token")
+
+    assert chunker.config == {
+        "chunk_size": DEFAULT_CHUNK_SIZE,
+        "chunk_overlap": DEFAULT_CHUNK_OVERLAP,
+    }
