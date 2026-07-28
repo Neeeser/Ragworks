@@ -159,9 +159,16 @@ wizard, the ingestion pipeline wizard, and the node editor drawer). Overlap is *
 to the size, so a 413/83 pair sends 496 tokens to the embedder — and it is that sum, not
 either field, which has to fit the model's input limit. Two number fields cannot show
 that, so the summary states the arithmetic and turns red with the consequence
-("split before indexing") when the sum goes over. When an expression sets either value
-it says the window is decided per run rather than rendering a breakdown of placeholder
-zeros: a confident false number is worse than none.
+("split before indexing") when the sum goes over.
+
+**A computed value shows the number it produces, not just the formula.** A config field
+in expression mode renders its resolved value beneath the input (`= 102`), and any
+summary over that field resolves it too — a field that reads a sibling
+(`round(self.chunk_size * 0.2)`) is still knowable while editing, so declining to state
+it would hide arithmetic the UI can do. Only a value that genuinely depends on the run —
+one reading a caller argument, or one that does not type-check — is left unstated, and
+then say so rather than rendering a breakdown of placeholder zeros: a confident false
+number is worse than none.
 
 ---
 
