@@ -178,6 +178,15 @@ export function ParameterInput({
 
   const useTextarea = input === "list" || input === "json" || (rows && rows > 1);
   if (useTextarea) {
+    // A restored session hands JSON fields back as objects (the server
+    // round-trips parameter_overrides), so an object must render as its JSON
+    // text — rendering "" silently hides an override that is still active.
+    const textValue =
+      typeof value === "string"
+        ? value
+        : value != null && typeof value === "object"
+          ? JSON.stringify(value)
+          : "";
     return (
       <textarea
         id={id}
@@ -186,7 +195,7 @@ export function ParameterInput({
         className={cn(inputClasses, "h-auto", className)}
         rows={rows ?? 2}
         placeholder={placeholder}
-        value={typeof value === "string" ? value : ""}
+        value={textValue}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />

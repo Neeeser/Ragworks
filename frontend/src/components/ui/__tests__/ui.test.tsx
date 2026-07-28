@@ -184,6 +184,16 @@ describe("ui components", () => {
     expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
   });
 
+  it("renders a restored object value in a json textarea as its JSON text", () => {
+    // The server round-trips parameter_overrides, so a restored session hands
+    // json fields (extra_body, response_format) back as objects — rendering
+    // "" would hide an override that is still active.
+    render(<ParameterInput input="json" value={{ truncation: "auto" }} onChange={vi.fn()} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
+      '{"truncation":"auto"}',
+    );
+  });
+
   it("renders tooltips", () => {
     render(
       <div>
