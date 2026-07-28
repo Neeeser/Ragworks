@@ -109,13 +109,19 @@ colocate a single file with its consumer.
   (`nodes/embedding.py`) may split an oversized chunk into several re-keyed,
   independently-indexed chunks, so its output list legitimately differs from the
   chunker's — the journey shows that split honestly rather than hiding it.
-- **Only `chunk_size` is bounded by the embedding model's input limit, never
-  `chunk_size + overlap`.** Each emitted chunk spans at most `chunk_size` tokens;
-  overlap is a stride *within* that window (window `chunk_size`, step
-  `chunk_size - overlap`), not extra tokens the embedder ever sees. Comparing the
-  sum against the limit shrinks and flags windows that actually fit, so the size
-  the wizard shows silently differs from the one ingest uses. Bound `chunk_size`
-  alone; on shrink, preserve the overlap ratio.
+- **Overlap is *added* to `chunk_size`, so `chunk_size + overlap` is what the
+  embedder receives and what every limit bounds.** `chunk_size` is the new
+  document text per chunk and the stride between chunks; a chunk spans
+  `chunk_size + overlap` tokens. Bounding `chunk_size` alone lets a configured
+  window overflow the model's input limit, and the embedding guard then splits
+  chunks the author sized deliberately. Bound the sum (`clamp_chunk_window`);
+  on shrink, scale both parts so the sum lands on the limit and the overlap
+  ratio survives. The guard in `nodes/embedding.py` must likewise pass
+  `chunk_size = limit - overlap`, or it emits parts over the limit it enforces.
+  `overlap` is *not* bounded by `chunk_size` — above it a chunk repeats more
+  than it advances, which is wasteful but well-defined, so the editor warns
+  rather than the chunker refusing. This deliberately differs from
+  LangChain/LlamaIndex, where `chunk_size` is the whole window.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants

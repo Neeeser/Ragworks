@@ -73,8 +73,10 @@ def test_tokenizer_json_counter_splits_at_token_boundaries_with_overlap(
     )
     text = "playing other playing"
 
-    chunks = counter.split(text, max_tokens=3, overlap=1)
+    chunks = counter.split(text, chunk_size=2, overlap=1)
 
+    # size 2 + overlap 1 = a 3-token window, the same one this asserted when
+    # chunk_size meant the whole window.
     assert chunks == ["playing other", "other playing"]
     assert all(counter.count(chunk) <= 3 for chunk in chunks)
 
@@ -87,7 +89,7 @@ def test_wordpiece_split_prefers_whitespace_boundaries(tmp_path: Path) -> None:
     # A nearby boundary is available after ``other`` and must be preferred.
     text = "other playing"
 
-    chunks = counter.split(text, max_tokens=2)
+    chunks = counter.split(text, chunk_size=2)
 
     assert chunks == ["other", "playing"]
     assert all(counter.count(chunk) <= 2 for chunk in chunks)
@@ -99,7 +101,7 @@ def test_wordpiece_split_cuts_giant_word_when_no_boundary_exists(tmp_path: Path)
     )
     text = "before longwordpiece after"
 
-    chunks = counter.split(text, max_tokens=2)
+    chunks = counter.split(text, chunk_size=2)
 
     assert chunks == ["before", "longword", "piece after"]
     assert "before" in chunks
@@ -111,7 +113,7 @@ def test_whitespace_counter_preserves_legacy_split_semantics() -> None:
     counter = WhitespaceTokenCounter()
 
     assert counter.count(" alpha\n beta  gamma ") == 3
-    assert counter.split("alpha beta gamma delta", max_tokens=3, overlap=1) == [
+    assert counter.split("alpha beta gamma delta", chunk_size=2, overlap=1) == [
         "alpha beta gamma",
         "gamma delta",
     ]
@@ -121,12 +123,10 @@ def test_offset_split_validates_window_arguments() -> None:
     counter = WhitespaceTokenCounter()
 
     with pytest.raises(ValueError, match="positive"):
-        counter.split("hello", max_tokens=0)
+        counter.split("hello", chunk_size=0)
     with pytest.raises(ValueError, match=">= 0"):
-        counter.split("hello", max_tokens=2, overlap=-1)
-    with pytest.raises(ValueError, match="smaller"):
-        counter.split("hello", max_tokens=2, overlap=2)
-    assert counter.split("", max_tokens=2) == []
+        counter.split("hello", chunk_size=2, overlap=-1)
+    assert counter.split("", chunk_size=2) == []
 
 
 def test_resource_factory_resolves_whitespace_and_cached_huggingface(
@@ -179,7 +179,7 @@ def test_cl100k_split_keeps_multitoken_unicode_characters_within_budget() -> Non
     )
     counter = Cl100kTokenCounter(byte_encoding)
 
-    chunks = counter.split("😀" * 20, max_tokens=5)
+    chunks = counter.split("😀" * 20, chunk_size=5)
 
     assert "".join(chunks) == "😀" * 20
     assert all(counter.count(chunk) <= 5 for chunk in chunks)
@@ -201,7 +201,38 @@ def test_cl100k_split_prefers_whitespace_boundaries(tmp_path: Path) -> None:
     counter = build_token_counter(TokenizerSpec(kind="cl100k"), tmp_path)
     text = "token-105 token-106 token-107 token-108"
 
-    chunks = counter.split(text, max_tokens=4)
+    chunks = counter.split(text, chunk_size=4)
 
     assert all("token-" in chunk for chunk in chunks)
     assert all(counter.count(chunk) <= 4 for chunk in chunks)
+
+
+def test_overlap_is_added_to_chunk_size_not_carved_out_of_it() -> None:
+    """A chunk spans chunk_size + overlap tokens and advances by chunk_size.
+
+    Reading chunk_size as the whole window silently shrinks what the embedder
+    receives; the emitted length is the contract this pins.
+    """
+    counter = WhitespaceTokenCounter()
+    text = " ".join(f"w{index}" for index in range(30))
+
+    parts = counter.split(text, chunk_size=10, overlap=4)
+
+    # Every full part carries size + overlap tokens, and consecutive parts
+    # repeat exactly `overlap` of them.
+    assert len(parts[0].split()) == 14
+    first, second = parts[0].split(), parts[1].split()
+    assert first[-4:] == second[:4]
+    # Advancing by chunk_size means the second part starts 10 tokens in.
+    assert second[0] == "w10"
+
+
+def test_overlap_may_exceed_chunk_size() -> None:
+    """Wasteful but well-defined once overlap is additive, so it must not raise."""
+    counter = WhitespaceTokenCounter()
+    text = " ".join(f"w{index}" for index in range(20))
+
+    parts = counter.split(text, chunk_size=2, overlap=5)
+
+    assert parts
+    assert len(parts[0].split()) == 7

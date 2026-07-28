@@ -148,13 +148,10 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
     rerankerModel,
   } = wizard.state.choices;
   const selectedModel = wizard.models?.find((model) => model.id === embeddingModel);
-  // Each chunk spans at most chunk_size tokens (overlap is a stride within the
-  // window), so the model's effective window bounds chunk_size, not the sum.
+  // Overlap is added to chunk size, so the sum is what reaches the embedder
+  // and the sum is what the model's effective window bounds. ChunkWindowSummary
+  // states that arithmetic and owns the over-limit warning.
   const effectiveLimit = effectiveInputLimit(selectedModel?.max_input_tokens);
-  const chunkSizeWarning =
-    effectiveLimit != null && chunkSize > effectiveLimit
-      ? `Chunk size (${chunkSize.toLocaleString()}) exceeds this model's effective input limit of ${effectiveLimit.toLocaleString()} tokens; oversized chunks are split before indexing.`
-      : null;
 
   const chosenBackend = wizard.backends?.find((info) => info.backend === backend);
   const supportsCount = chosenBackend?.capabilities.supports_lexical_count ?? false;
@@ -230,7 +227,6 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
             : null
         }
       />
-      <SetupNotice message={chunkSizeWarning} tone="warning" />
 
       {showAggregateTools ? (
         <fieldset className="space-y-2">

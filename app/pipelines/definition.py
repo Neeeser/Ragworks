@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.variables import PipelineVariable
 
-CURRENT_DEFINITION_SCHEMA_VERSION = 3
+CURRENT_DEFINITION_SCHEMA_VERSION = 4
 """Bumped when a stored definition's shape changes (see `app/pipelines/upgrades.py`).
 
 Version 2: variables own input declarations (`source="input"`); the
@@ -26,6 +26,11 @@ Version 3: index identity is a binding-source index variable rather than a
 literal on each store-bound node, so one pipeline serves many collections;
 collection placeholders (`{collection_id}`) become ordinary expressions over
 the built-in descriptors.
+
+Version 4: chunk overlap is added to `chunk_size` rather than carved out of
+it, so the same stored pair now describes a larger emitted chunk. Sizes are
+rebased (`chunk_size -= chunk_overlap`) to keep every existing pipeline
+emitting the window its indexed vectors were produced with.
 """
 
 

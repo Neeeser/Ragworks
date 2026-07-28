@@ -120,7 +120,7 @@ describe("StepModel", () => {
 });
 
 describe("StepCollection", () => {
-  it("warns only when chunk size exceeds the model's effective window", () => {
+  it("warns only when size plus overlap exceeds the model's effective window", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
@@ -131,7 +131,7 @@ describe("StepCollection", () => {
         ...wizard.state.choices,
         embeddingModel: MINILM,
         collectionName: "First",
-        // 500 > effective 496; overlap does not count toward the window.
+        // 500 + 100 = 600 > effective 496.
         chunkSize: 500,
         chunkOverlap: 100,
       },
@@ -139,16 +139,14 @@ describe("StepCollection", () => {
 
     render(<StepCollection wizard={wizard} />);
 
-    expect(
-      screen.getByText(
-        "Chunk size (500) exceeds this model's effective input limit of 496 tokens; oversized chunks are split before indexing.",
-      ),
-    ).toBeInTheDocument();
+    const warning = screen.getByText(/Over the limit/).textContent?.replace(/\s+/g, " ");
+    expect(warning).toContain("Over the limit by 104 tokens.");
+    expect(warning).toContain("split before indexing");
     expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
   });
 
-  it("states what reaches the embedder so chunk size is not read as new-text-plus-overlap", () => {
+  it("states the sum that reaches the embedder, since overlap is added to the size", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
@@ -159,20 +157,18 @@ describe("StepCollection", () => {
         ...wizard.state.choices,
         embeddingModel: MINILM,
         collectionName: "First",
-        chunkSize: 496,
-        chunkOverlap: 99,
+        chunkSize: 413,
+        chunkOverlap: 83,
       },
     };
 
     render(<StepCollection wizard={wizard} />);
 
     const summary = screen.getByText(/Each chunk is/).textContent?.replace(/\s+/g, " ");
-    expect(summary).toContain("Each chunk is 496 tokens: 397 of new text");
-    // 595 is the sum a reader infers when overlap looks additive.
-    expect(summary).not.toContain("595");
+    expect(summary).toContain("413 tokens of new text plus 83 of overlap = 496");
   });
 
-  it("does not warn when chunk size fits the window even if size plus overlap exceeds it", () => {
+  it("does not warn when size plus overlap fits the window", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
@@ -183,14 +179,15 @@ describe("StepCollection", () => {
         ...wizard.state.choices,
         embeddingModel: MINILM,
         collectionName: "First",
-        chunkSize: 400,
-        chunkOverlap: 200,
+        // 396 + 100 = 496, exactly the effective window.
+        chunkSize: 396,
+        chunkOverlap: 100,
       },
     };
 
     render(<StepCollection wizard={wizard} />);
 
-    expect(screen.queryByText(/exceeds this model's effective input limit/i)).toBeNull();
+    expect(screen.queryByText(/Over the limit/i)).toBeNull();
   });
 
   it("offers count and facet tools on a lexical backend, checked by default", async () => {

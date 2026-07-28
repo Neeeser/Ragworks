@@ -7,32 +7,41 @@ import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 const summaryText = () => screen.getByText(/Each chunk is/).textContent?.replace(/\s+/g, " ");
 
 describe("ChunkWindowSummary", () => {
-  it("states the tokens per chunk, not the size-plus-overlap sum", () => {
-    // The misreading this exists to prevent is "496 of new text + 99 on top";
-    // 595 must never appear, and 496 must be named as what the embedder sees.
-    render(<ChunkWindowSummary chunkSize={496} chunkOverlap={99} />);
+  it("states the sum the embedder receives, since overlap is added to the size", () => {
+    render(<ChunkWindowSummary chunkSize={413} chunkOverlap={83} />);
 
     expect(summaryText()).toBe(
-      "Each chunk is 496 tokens: 397 of new text plus 99 repeated from the previous chunk (20% of chunk size).",
+      "Each chunk is 413 tokens of new text plus 83 of overlap = 496 tokens sent to the embedder.",
     );
   });
 
   it("names the model's usable window against its published limit", () => {
     render(
       <ChunkWindowSummary
-        chunkSize={496}
-        chunkOverlap={99}
+        chunkSize={413}
+        chunkOverlap={83}
         limit={{ value: 496, modelName: "all-MiniLM-L6-v2", published: 512 }}
       />,
     );
 
     expect(summaryText()).toContain("all-MiniLM-L6-v2 accepts 496 (512 less 16 reserved).");
+    expect(screen.queryByText(/Over the limit/)).toBeNull();
   });
 
-  it("states the overlap as a share of chunk size, since the default is a ratio", () => {
-    render(<ChunkWindowSummary chunkSize={1024} chunkOverlap={256} />);
+  it("warns, with the consequence, when the sum exceeds the model limit", () => {
+    // 512 + 102 = 614 against a 496 window: the old semantics would have
+    // called this a fitting 512, which is exactly the trap being closed.
+    render(
+      <ChunkWindowSummary
+        chunkSize={512}
+        chunkOverlap={102}
+        limit={{ value: 496, modelName: "all-MiniLM-L6-v2", published: 512 }}
+      />,
+    );
 
-    expect(summaryText()).toContain("256 repeated from the previous chunk (25% of chunk size)");
+    const warning = screen.getByText(/Over the limit/).textContent?.replace(/\s+/g, " ");
+    expect(warning).toContain("Over the limit by 118 tokens.");
+    expect(warning).toContain("split before indexing");
   });
 
   it("says the window is a run-time fact when an expression sets it", () => {
@@ -48,7 +57,7 @@ describe("ChunkWindowSummary", () => {
   it("drops the repetition clause when there is no overlap", () => {
     render(<ChunkWindowSummary chunkSize={512} chunkOverlap={0} />);
 
-    expect(summaryText()).toBe("Each chunk is 512 tokens: 512 of new text.");
+    expect(summaryText()).toBe("Each chunk is 512 tokens of new text sent to the embedder.");
   });
 
   it("counts words for a word-based chunker", () => {
@@ -57,10 +66,15 @@ describe("ChunkWindowSummary", () => {
     expect(summaryText()).toContain("512 words");
   });
 
-  it("replaces the breakdown with the rule when overlap is not smaller than the size", () => {
-    render(<ChunkWindowSummary chunkSize={256} chunkOverlap={256} />);
+  it("allows an overlap larger than the size, which is wasteful but well-defined", () => {
+    render(<ChunkWindowSummary chunkSize={100} chunkOverlap={200} />);
 
-    expect(screen.getByText("Overlap must be smaller than chunk size.")).toBeInTheDocument();
-    expect(screen.queryByText(/Each chunk is/)).toBeNull();
+    expect(summaryText()).toContain("100 tokens of new text plus 200 of overlap = 300");
+  });
+
+  it("rejects a non-positive chunk size", () => {
+    render(<ChunkWindowSummary chunkSize={0} chunkOverlap={50} />);
+
+    expect(screen.getByText("Chunk size must be greater than zero.")).toBeInTheDocument();
   });
 });

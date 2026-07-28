@@ -16,13 +16,12 @@ type ChunkWindowSummaryProps = {
 };
 
 /**
- * States what a chunk size and overlap actually produce.
+ * States what a chunk size and overlap actually send to the embedder.
  *
- * Two numbers and a model limit leave the reader to infer the relationship,
- * and the intuitive inference is wrong: chunk size reads as "new text per
- * chunk, with overlap added on top", which would send `size + overlap` to the
- * embedder. It sends `size`. Naming all three numbers is cheaper than letting
- * someone size their chunks against a limit that was never the constraint.
+ * Chunk size is the new document text per chunk and overlap is added on top,
+ * so the emitted chunk is their sum — the number that has to fit the model's
+ * input limit. Showing the sum next to the fields is what makes that limit
+ * checkable while editing, rather than a surprise at ingest time.
  */
 export function ChunkWindowSummary({
   chunkSize,
@@ -47,34 +46,53 @@ export function ChunkWindowSummary({
   if (invalid) {
     return (
       <p className={cn("text-instrument text-data-warn", className)}>
-        Overlap must be smaller than chunk size.
+        Chunk size must be greater than zero.
       </p>
     );
   }
 
-  const percent = Math.round((repeated / perChunk) * 100);
+  const over = limit != null && perChunk > limit.value;
   const num = (value: number) => (
     <span className="font-mono tabular-nums text-primary">{value.toLocaleString()}</span>
   );
 
   return (
-    <p className={cn("text-instrument text-muted", className)}>
-      Each chunk is {num(perChunk)} {unit}: {num(newText)} of new text
-      {repeated > 0 ? (
-        <>
-          {" "}
-          plus {num(repeated)} repeated from the previous chunk ({percent}% of chunk size)
-        </>
+    <div className={cn("space-y-1", className)}>
+      <p className="text-instrument text-muted">
+        Each chunk is {num(newText)} {unit} of new text
+        {repeated > 0 ? (
+          <>
+            {" "}
+            plus {num(repeated)} of overlap ={" "}
+            <span className={cn("font-mono tabular-nums", over ? "text-data-neg" : "text-primary")}>
+              {perChunk.toLocaleString()}
+            </span>{" "}
+            {unit} sent to the embedder
+          </>
+        ) : (
+          <> sent to the embedder</>
+        )}
+        .
+        {limit && !over ? (
+          <>
+            {" "}
+            <span className="font-mono text-primary">{limit.modelName}</span> accepts{" "}
+            {num(limit.value)} ({limit.published.toLocaleString()} less{" "}
+            {(limit.published - limit.value).toLocaleString()} reserved).
+          </>
+        ) : null}
+      </p>
+      {over && limit ? (
+        // The consequence, not just the arithmetic: oversized chunks are split
+        // before indexing, so the boundaries stop being the ones configured.
+        <p className="rounded-control border border-data-neg/40 bg-data-neg/10 px-2 py-1.5 text-instrument text-data-neg">
+          Over the limit by {(perChunk - limit.value).toLocaleString()} {unit}.{" "}
+          <span className="font-mono">{limit.modelName}</span> accepts{" "}
+          {limit.value.toLocaleString()} ({limit.published.toLocaleString()} less{" "}
+          {(limit.published - limit.value).toLocaleString()} reserved), so chunks this size are
+          split before indexing.
+        </p>
       ) : null}
-      .
-      {limit ? (
-        <>
-          {" "}
-          <span className="font-mono text-primary">{limit.modelName}</span> accepts{" "}
-          {num(limit.value)} ({limit.published.toLocaleString()} less{" "}
-          {(limit.published - limit.value).toLocaleString()} reserved).
-        </>
-      ) : null}
-    </p>
+    </div>
   );
 }

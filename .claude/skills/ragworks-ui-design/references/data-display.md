@@ -155,12 +155,13 @@ where they are edited — the reader otherwise infers the relationship, and the 
 inference can be the wrong one.
 
 The worked case is chunk size and overlap (`ChunkWindowSummary`, used by the setup
-wizard and the ingestion pipeline wizard). Overlap is a stride *within* the window: the
-chunker takes windows of `chunk_size` and steps forward by `chunk_size - overlap`, so a
-496/99 pair emits chunks of 496 tokens, 99 of which repeat the previous chunk's tail.
-Reading it as "496 of new text, plus 99 on top" gives 595 and sizes chunks against a
-limit that was never the constraint. The summary states all three numbers, recomputed as
-the fields change, so the sum a reader would infer never has to be guessed at.
+wizard, the ingestion pipeline wizard, and the node editor drawer). Overlap is *added*
+to the size, so a 413/83 pair sends 496 tokens to the embedder — and it is that sum, not
+either field, which has to fit the model's input limit. Two number fields cannot show
+that, so the summary states the arithmetic and turns red with the consequence
+("split before indexing") when the sum goes over. When an expression sets either value
+it says the window is decided per run rather than rendering a breakdown of placeholder
+zeros: a confident false number is worse than none.
 
 ---
 

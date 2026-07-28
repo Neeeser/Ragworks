@@ -22,12 +22,13 @@ class _BaseChunker(DocumentChunker):
         counter: TokenCounter | None = None,
     ) -> None:
         """Initialize shared chunking parameters."""
+        # Overlap is added to chunk_size rather than carved out of it, so it is
+        # not bounded by it: an overlap larger than the size repeats more than
+        # it advances, which is wasteful but well-defined.
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")
         if overlap < 0:
             raise ValueError("chunk overlap must be >= 0")
-        if overlap >= chunk_size:
-            raise ValueError("chunk overlap must be smaller than chunk size")
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.counter = counter or WhitespaceTokenCounter()

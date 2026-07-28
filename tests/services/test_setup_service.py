@@ -228,10 +228,12 @@ def test_bootstrap_writes_wizard_choices_into_pipelines(
         if node["id"] == "chunk-document"
     ]
     # all-MiniLM's published limit is 512 tokens; effective limit 496 after the
-    # special-token margin. chunk_size 512 > 496 shrinks to 496, preserving the
-    # 200/512 overlap ratio (round(496 * 0.39) = 194) — the size no longer
-    # over-shrinks by also counting overlap against the budget.
-    assert chunkers[0]["config"] == {"chunk_size": 496, "chunk_overlap": 194}
+    # special-token margin. Overlap is added to the size, so the wizard's
+    # 512 + 200 = 712 exceeds it and both parts scale down until the sum lands
+    # on 496, keeping the 200/512 overlap ratio: 357 + 139.
+    assert chunkers[0]["config"] == {"chunk_size": 357, "chunk_overlap": 139}
+    window = chunkers[0]["config"]
+    assert window["chunk_size"] + window["chunk_overlap"] == 496
 
 
 def test_bootstrap_adds_count_and_facet_tools_when_requested(

@@ -4,11 +4,11 @@
  * A good starting chunk size for retrieval is ~512 tokens (recursive-512
  * benchmarks well and larger windows lose precision), with overlap at ~20% of
  * the chunk size — the conventional recommendation. The only hard constraint is
- * that a chunk fits the embedding model's context window: each emitted chunk
- * spans at most `chunkSize` tokens (overlap is a stride *within* the window, not
- * extra tokens the embedder sees), so `chunkSize` is capped at the model's
- * effective window and never the size-plus-overlap sum. These are only the
- * defaults the wizard fills in — the user can still raise either value.
+ * that a chunk fits the embedding model's context window. Overlap is added on
+ * top of `chunkSize` rather than carved out of it, so what the embedder receives
+ * is `chunkSize + chunkOverlap` and it is that sum which the model's effective
+ * window bounds. These are only the defaults the wizard fills in — the user can
+ * still raise either value.
  */
 
 /** Preferred starting chunk size when the model's window allows it. */
@@ -53,39 +53,42 @@ export function effectiveInputLimit(maxInputTokens: number | null | undefined): 
  */
 export function chunkDefaultsFor(maxInputTokens: number | null | undefined): ChunkDefaults {
   const window = effectiveInputLimit(maxInputTokens);
-  const chunkSize = window != null ? Math.min(DEFAULT_CHUNK_SIZE, window) : DEFAULT_CHUNK_SIZE;
-  const chunkOverlap = Math.min(Math.round(chunkSize * CHUNK_OVERLAP_RATIO), chunkSize - 1);
-  return { chunkSize, chunkOverlap: Math.max(0, chunkOverlap) };
+  const preferred = DEFAULT_CHUNK_SIZE;
+  const preferredOverlap = Math.round(preferred * CHUNK_OVERLAP_RATIO);
+  if (window == null || preferred + preferredOverlap <= window) {
+    return { chunkSize: preferred, chunkOverlap: preferredOverlap };
+  }
+  // Scale both parts so size + overlap lands on the window exactly, keeping
+  // the overlap ratio rather than spending the whole budget on new text.
+  const chunkSize = Math.max(1, Math.round(window / (1 + CHUNK_OVERLAP_RATIO)));
+  return { chunkSize, chunkOverlap: Math.max(0, window - chunkSize) };
 }
 
 export interface ChunkWindow {
   /** Tokens in each emitted chunk — the number the embedder actually sees. */
   perChunk: number;
-  /** Tokens of document text each chunk advances by (`chunkSize - overlap`). */
+  /** Tokens of new document text each chunk advances by (`chunkSize`). */
   newText: number;
-  /** Tokens repeated from the tail of the previous chunk. */
+  /** Tokens repeated from the tail of the previous chunk, added on top. */
   repeated: number;
-  /** True when overlap is not smaller than the size, which the chunker rejects. */
+  /** True when the size is not a usable positive number. */
   invalid: boolean;
 }
 
 /**
  * Break a chunk size and overlap into the three numbers a reader needs.
  *
- * Overlap is a stride *within* the window, not extra tokens on top of it: the
- * chunker takes windows of `chunkSize` and steps forward by
- * `chunkSize - overlap`, so each emitted chunk is `chunkSize` tokens of which
- * `overlap` repeat the previous chunk's tail. Reading `chunkSize` as "new text
- * per chunk, plus overlap on top" is the intuitive misreading, and it is what
- * this breakdown exists to prevent.
+ * `chunkSize` is the new document text each chunk advances by, and `overlap`
+ * is repeated on top of it, so the embedder receives `chunkSize + overlap`
+ * tokens. That sum is the number to compare against a model's input limit.
  */
 export function describeChunkWindow(chunkSize: number, overlap: number): ChunkWindow {
   const size = Math.max(0, Math.trunc(chunkSize));
   const repeated = Math.max(0, Math.trunc(overlap));
   return {
-    perChunk: size,
-    newText: Math.max(0, size - repeated),
+    perChunk: size + repeated,
+    newText: size,
     repeated,
-    invalid: size <= 0 || repeated >= size,
+    invalid: size <= 0,
   };
 }

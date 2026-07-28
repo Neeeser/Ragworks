@@ -164,9 +164,10 @@ def test_builders_stamp_the_explicit_embedding_choice(session: Session) -> None:
     assert retriever.config["index_name"] == "first-index"
 
 
-def test_ingestion_builder_clamps_oversized_chunk_size_to_embedding_limit() -> None:
-    # chunk_size exceeds the limit: shrink to the limit, preserving the
-    # overlap ratio (200/512 ≈ 0.39 → round(496 * 0.39) = 194).
+def test_ingestion_builder_clamps_the_emitted_window_to_the_embedding_limit() -> None:
+    # Overlap is added to the size, so 512 + 200 = 712 must shrink to 496.
+    # Both parts scale so the sum lands on the limit and the overlap ratio
+    # (200/512 ≈ 0.39) survives: 357 + 139 = 496.
     ingestion = _build_ingestion(
         chunk_size=512,
         chunk_overlap=200,
@@ -174,18 +175,17 @@ def test_ingestion_builder_clamps_oversized_chunk_size_to_embedding_limit() -> N
     )
 
     chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
-    assert chunker.config == {"chunk_size": 496, "chunk_overlap": 194}
+    assert chunker.config == {"chunk_size": 357, "chunk_overlap": 139}
+    config = chunker.config
+    assert config["chunk_size"] + config["chunk_overlap"] == 496
 
 
-def test_ingestion_builder_preserves_chunk_window_that_fits_the_limit() -> None:
-    # Regression: a chunk_size within the limit must be left untouched even
-    # when chunk_size + overlap exceeds it — overlap is a stride within the
-    # window, not tokens the embedder sees. Comparing the sum once shrank a
-    # window that fit, so the wizard's shown size differed from ingest's.
+def test_ingestion_builder_preserves_a_window_whose_sum_fits_the_limit() -> None:
+    # 200 + 100 = 300 against a 300 limit: it fits exactly, so nothing moves.
     ingestion = _build_ingestion(
         chunk_size=200,
         chunk_overlap=100,
-        embedding_input_limit=250,
+        embedding_input_limit=300,
     )
 
     chunker = next(node for node in ingestion.nodes if node.id == "chunk-document")
