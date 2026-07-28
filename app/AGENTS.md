@@ -122,6 +122,16 @@ colocate a single file with its consumer.
   than it advances, which is wasteful but well-defined, so the editor warns
   rather than the chunker refusing. This deliberately differs from
   LangChain/LlamaIndex, where `chunk_size` is the whole window.
+- **A constraint one node imposes on another is checked from the node that owns
+  it, and reported on the field that fixes it.** The embedding input limit
+  belongs to the embedder, but `chunk_size` is what a user changes, so
+  `app/pipelines/embedding_limits.py` walks chunks forward and addresses its
+  finding to the chunker while naming the model. Chunks are followed
+  transitively, not across one edge: adding a node that forwards `chunk_batch`
+  must not silently switch the check off. A chunker fanning out to several
+  embedders yields **one** finding bound by the smallest limit — the editor
+  renders a single issue per field, so several would hide each other and could
+  leave the least restrictive one showing.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants
