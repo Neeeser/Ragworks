@@ -101,8 +101,10 @@ export const ModelParametersCard = ({
         actionLabel="Clear"
         actionDisabled={!hasOverride}
         onAction={() => handleClearParameter(definition.key)}
+        controlId={`chat-param-${definition.key}`}
       >
         <ParameterInput
+          id={`chat-param-${definition.key}`}
           input={definition.input}
           value={currentValue}
           min={"min" in definition ? definition.min : undefined}
