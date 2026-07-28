@@ -7,8 +7,7 @@ tools or `MAX_TOOL_ITERATIONS` is hit. The streaming and non-streaming variants
 are the same loop parameterized by a single `stream` flag: the flag selects the
 provider call (`chat_stream` vs `chat`), whether reasoning-derived tool calls
 are combined with structured ones, and whether intermediate events are yielded
-to the caller or drained. There is deliberately no second copy — two hand-synced
-loops (and two copies of `MAX_TOOL_ITERATIONS`) were the bug this module retires.
+to the caller or drained. Deliberately no second copy — hand-synced loops drift.
 """
 
 from __future__ import annotations
@@ -222,16 +221,15 @@ def finalize_response(
 
 def _build_request(run: ChatRun) -> ChatRequest:
     """Build the provider request for the current message history (shared by both modes)."""
-    parameters = dict(run.setup.model.parameter_overrides)
-    extra_body = parameters.pop("extra_body", None)
+    parameters, extra_body = run.setup.model.request_parameters()
     return ChatRequest(
         messages=serialize_messages(run.setup.messages),
         tools=run.setup.tools or None,
         model=run.setup.model.active_model_name,
-        parameters=parameters or None,
+        parameters=parameters,
         reasoning_options=run.setup.model.reasoning_options or None,
         provider_preferences=run.setup.model.provider_preferences,
-        extra_body=extra_body if isinstance(extra_body, dict) else None,
+        extra_body=extra_body,
     )
 
 
@@ -292,8 +290,8 @@ def _provider_turn(
         try:
             outcome = yield from _stream_iteration(run, state)
         # Persist partial content on client disconnect (GeneratorExit) AND on a
-        # mid-stream provider failure, then re-raise so the route surfaces an
-        # error event. Not swallowed — always re-raised.
+        # mid-stream provider failure, then always re-raise (never swallowed)
+        # so the route surfaces an error event.
         except (GeneratorExit, Exception):
             _record_partial(run, state)
             raise

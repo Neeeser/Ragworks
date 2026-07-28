@@ -18,6 +18,8 @@ export interface ParameterDefinitionShape {
   rows?: number;
 }
 
+const MODEL_DEFAULT_OPTION = { label: "Model default", value: "" } as const;
+
 export const PARAMETER_DEFINITIONS = [
   {
     key: "temperature",
@@ -114,7 +116,7 @@ export const PARAMETER_DEFINITIONS = [
       "Control how much thinking budget the model should spend when reasoning tokens are available.",
     input: "select",
     options: [
-      { label: "Model default", value: "" },
+      MODEL_DEFAULT_OPTION,
       { label: "Minimal", value: "minimal" },
       { label: "Low", value: "low" },
       { label: "Medium", value: "medium" },
@@ -158,7 +160,7 @@ export const PARAMETER_DEFINITIONS = [
     description: "Control response detail level.",
     input: "select",
     options: [
-      { label: "Model default", value: "" },
+      MODEL_DEFAULT_OPTION,
       { label: "Low", value: "low" },
       { label: "Medium", value: "medium" },
       { label: "High", value: "high" },
@@ -230,10 +232,9 @@ export function resolveParameterDefinitions(
     return {
       ...definition,
       options: [
-        { label: "Model default", value: "" },
+        MODEL_DEFAULT_OPTION,
         ...reasoningEfforts.map((effort) => ({
-          label:
-            EFFORT_LABELS[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1),
+          label: EFFORT_LABELS[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1),
           value: effort,
         })),
       ],

@@ -26,11 +26,9 @@ describe("resolveParameterDefinitions", () => {
   });
 
   it("swaps in the model's published reasoning-effort levels", () => {
-    const reasoning = resolveParameterDefinitions(supported, [
-      "none",
-      "low",
-      "xhigh",
-    ]).find((d) => d.key === "reasoning");
+    const reasoning = resolveParameterDefinitions(supported, ["none", "low", "xhigh"]).find(
+      (d) => d.key === "reasoning",
+    );
     expect(reasoning?.options).toEqual([
       { label: "Model default", value: "" },
       { label: "None", value: "none" },
@@ -40,9 +38,7 @@ describe("resolveParameterDefinitions", () => {
   });
 
   it("keeps the generic effort list when the provider publishes none", () => {
-    const reasoning = resolveParameterDefinitions(supported).find(
-      (d) => d.key === "reasoning",
-    );
+    const reasoning = resolveParameterDefinitions(supported).find((d) => d.key === "reasoning");
     expect(reasoning?.options?.some((o) => o.value === "medium")).toBe(true);
   });
 });

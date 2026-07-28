@@ -162,8 +162,7 @@ export function useModelCatalog({
   }, [currentModelInfo]);
 
   const visibleParameterDefinitions = useMemo(
-    () =>
-      resolveParameterDefinitions(supportedParameterKeys, currentModelInfo?.reasoning_efforts),
+    () => resolveParameterDefinitions(supportedParameterKeys, currentModelInfo?.reasoning_efforts),
     [supportedParameterKeys, currentModelInfo?.reasoning_efforts],
   );
 
