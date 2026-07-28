@@ -9,6 +9,7 @@ import { Notification } from "@/components/ui/notification";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
@@ -68,6 +69,40 @@ function PaneReopenStrip({
         </button>
       </Tooltip>
     </div>
+  );
+}
+
+/**
+ * The overlay-mode reopen affordance: a single floating icon over the
+ * transcript's corner instead of a full-height strip — two 36px bars on a
+ * phone cost a fifth of the viewport for two buttons.
+ */
+function PaneFloatingButton({
+  side,
+  label,
+  icon: Icon,
+  onOpen,
+}: {
+  side: "left" | "right";
+  label: string;
+  icon: LucideIcon;
+  onOpen: () => void;
+}) {
+  return (
+    <Tooltip content={label} side={side === "left" ? "right" : "left"}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={false}
+        onClick={onOpen}
+        className={cn(
+          "absolute top-2 z-10 flex h-8 w-8 items-center justify-center rounded-control border border-hairline bg-surface text-muted shadow-elevation-1 transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+          side === "left" ? "left-2" : "right-2",
+        )}
+      >
+        <Icon className="h-4 w-4" aria-hidden />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -138,59 +173,90 @@ export function ChatStudioView({
         </div>
       )}
 
-      <PageBody className="flex flex-col">
+      {/* Below lg the page padding and card frame go: on a phone every border
+          pixel comes out of the transcript's line length. */}
+      <PageBody className="flex flex-col max-lg:p-0">
         {loading ? (
           <StudioSkeleton />
         ) : (
           // The ref sits on a wrapper rather than the card because the overlay
           // breakpoint is measured from the width the panes actually share.
           <div ref={chatPanelRef} className="flex min-h-0 flex-1">
-            <Panel className="flex min-h-0 flex-1 overflow-hidden">
+            <Panel className="flex min-h-0 flex-1 overflow-hidden max-lg:rounded-none max-lg:border-x-0">
               {/* The side panes take `bg-surface`: the transcript is the pane
                   being worked in, so it keeps the card's own material and the
                   two supporting panes sit a shade back from it. A seam alone
                   reads flat at this width. */}
-              {!isOverlayMode && historyOpen ? (
-                <aside
-                  aria-label="Chat history"
-                  className="min-h-0 w-72 shrink-0 border-r border-hairline bg-surface"
-                >
-                  {historyPanel}
-                </aside>
-              ) : (
-                <PaneReopenStrip
-                  side="left"
-                  label="Chat history"
-                  icon={PanelLeftOpen}
-                  onOpen={onOpenHistory}
-                />
-              )}
+              {!isOverlayMode &&
+                (historyOpen ? (
+                  <aside
+                    aria-label="Chat history"
+                    className="min-h-0 w-72 shrink-0 border-r border-hairline bg-surface"
+                  >
+                    {historyPanel}
+                  </aside>
+                ) : (
+                  <PaneReopenStrip
+                    side="left"
+                    label="Chat history"
+                    icon={PanelLeftOpen}
+                    onOpen={onOpenHistory}
+                  />
+                ))}
 
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{messagesPanel}</div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                {isOverlayMode && (
+                  <>
+                    <PaneFloatingButton
+                      side="left"
+                      label="Chat history"
+                      icon={PanelLeftOpen}
+                      onOpen={onOpenHistory}
+                    />
+                    <PaneFloatingButton
+                      side="right"
+                      label="Run settings"
+                      icon={PanelRightOpen}
+                      onOpen={onOpenTelemetry}
+                    />
+                  </>
+                )}
+                {messagesPanel}
+              </div>
 
-              {!isOverlayMode && telemetryOpen ? (
-                <aside
-                  aria-label="Run settings"
-                  className="min-h-0 w-[26rem] shrink-0 border-l border-hairline bg-surface"
-                >
-                  {telemetryPanel}
-                </aside>
-              ) : (
-                <PaneReopenStrip
-                  side="right"
-                  label="Run settings"
-                  icon={PanelRightOpen}
-                  onOpen={onOpenTelemetry}
-                />
-              )}
+              {!isOverlayMode &&
+                (telemetryOpen ? (
+                  <aside
+                    aria-label="Run settings"
+                    className="min-h-0 w-[26rem] shrink-0 border-l border-hairline bg-surface"
+                  >
+                    {telemetryPanel}
+                  </aside>
+                ) : (
+                  <PaneReopenStrip
+                    side="right"
+                    label="Run settings"
+                    icon={PanelRightOpen}
+                    onOpen={onOpenTelemetry}
+                  />
+                ))}
             </Panel>
           </div>
         )}
       </PageBody>
 
+      {/* Below the three-pane width, the side panes dock to their own edge as
+          drawers over the transcript — never a centered takeover: a visible
+          sliver of chat stays tappable, and that backdrop is the way out. */}
       {isOverlayMode && historyOpen && (
-        <ModalOverlay open onClose={onCloseHistory} labelledBy="chat-history-overlay-title">
-          <div className="flex h-[100dvh] w-80 max-w-[90vw] flex-col bg-canvas-raised">
+        <ModalOverlay
+          open
+          onClose={onCloseHistory}
+          labelledBy="chat-history-overlay-title"
+          backdropClassName="justify-start p-0"
+          dialogClassName="h-full w-auto max-w-full"
+        >
+          <div className="flex h-full w-80 max-w-[85vw] flex-col border-r border-hairline bg-canvas-raised shadow-elevation-1">
             <h2 id="chat-history-overlay-title" className="sr-only">
               Chat history
             </h2>
@@ -199,8 +265,14 @@ export function ChatStudioView({
         </ModalOverlay>
       )}
       {isOverlayMode && telemetryOpen && (
-        <ModalOverlay open onClose={onCloseTelemetry} labelledBy="run-settings-overlay-title">
-          <div className="flex h-[100dvh] w-[26rem] max-w-[95vw] flex-col bg-canvas-raised">
+        <ModalOverlay
+          open
+          onClose={onCloseTelemetry}
+          labelledBy="run-settings-overlay-title"
+          backdropClassName="justify-end p-0"
+          dialogClassName="h-full w-auto max-w-full"
+        >
+          <div className="flex h-full w-[26rem] max-w-[85vw] flex-col border-l border-hairline bg-canvas-raised shadow-elevation-1">
             <h2 id="run-settings-overlay-title" className="sr-only">
               Run settings
             </h2>

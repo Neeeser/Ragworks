@@ -13,6 +13,11 @@ type ModalOverlayProps = {
   labelledBy?: string;
   children: ReactNode;
   backdropClassName?: string;
+  /**
+   * Overrides the dialog wrapper's centering, for edge-anchored drawers that
+   * dock to a side of the viewport instead of floating in the middle.
+   */
+  dialogClassName?: string;
   closeOnBackdrop?: boolean;
 };
 
@@ -30,6 +35,7 @@ export function ModalOverlay({
   labelledBy,
   children,
   backdropClassName,
+  dialogClassName,
   closeOnBackdrop = true,
 }: ModalOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -137,7 +143,10 @@ export function ModalOverlay({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className="flex max-h-full w-full items-center justify-center outline-none"
+        className={cn(
+          "flex max-h-full w-full items-center justify-center outline-none",
+          dialogClassName,
+        )}
         onClick={(event) => event.stopPropagation()}
       >
         {children}

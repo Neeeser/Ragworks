@@ -188,6 +188,27 @@ describe("ModalOverlay", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("lets a drawer override the centered dialog layout via dialogClassName", () => {
+    render(
+      <ModalOverlay
+        open
+        onClose={() => {}}
+        backdropClassName="justify-end p-0"
+        dialogClassName="h-full w-auto"
+      >
+        <div>drawer content</div>
+      </ModalOverlay>,
+    );
+
+    // The default layout centers a full-width dialog; an edge-anchored drawer
+    // must be able to replace both, or it renders as a screen-wide takeover.
+    expect(screen.getByRole("presentation")).toHaveClass("justify-end");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("w-auto");
+    expect(dialog).toHaveClass("h-full");
+    expect(dialog).not.toHaveClass("w-full");
+  });
+
   it("moves focus into the dialog on open and restores it on close", async () => {
     const user = userEvent.setup();
     render(<FocusRestoreHarness />);
