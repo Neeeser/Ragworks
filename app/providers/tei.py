@@ -15,6 +15,7 @@ from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.tei import TEIReranker
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
+    TEI_DEFAULT_PORT,
     CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
@@ -36,8 +37,11 @@ TEI_DESCRIPTOR = ProviderDescriptor(
             label="Server URL",
             kind=ConfigFieldKind.URL,
             required=True,
-            placeholder="http://localhost:8080",
-            description="Each TEI connection serves one model and task.",
+            placeholder=f"http://localhost:{TEI_DEFAULT_PORT}",
+            description=(
+                "Each TEI connection serves one model and task. A URL without "
+                f"a port is read as port {TEI_DEFAULT_PORT}."
+            ),
         ),
         ProviderConfigField(
             name="api_key",
@@ -74,6 +78,10 @@ class TEIAdapter(ProviderAdapter):
         """Parse stored connection configuration and defer the live `/info` probe."""
         super().__init__(connection)
         self._config = self.parse_config(TEIConnectionConfig, connection.config)
+
+    def normalized_config(self) -> dict[str, object]:
+        """Persist the scheme/port-normalized URL, not the raw typed string."""
+        return self._config.model_dump(exclude_none=True)
 
     def _client(self) -> TEIClient:
         """Return the shared client for this server configuration."""

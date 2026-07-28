@@ -59,11 +59,19 @@ const SETUP_NODES: SetupNode[] = [
     output: { key: "indexed", label: "Index", dataType: "indexed_batch" },
   },
   {
+    id: "collection",
+    nodeType: "ingestion.chunker",
+    label: "Collection",
+    description: "Name the collection and size its chunks.",
+    input: { key: "indexed", label: "Index", dataType: "indexed_batch" },
+    output: { key: "collection", label: "Collection", dataType: "document" },
+  },
+  {
     id: "launch",
     nodeType: "chat.completion",
     label: "Launch",
     description: "Scaffold defaults and start chatting.",
-    input: { key: "indexed", label: "Index", dataType: "indexed_batch" },
+    input: { key: "collection", label: "Collection", dataType: "document" },
   },
 ];
 

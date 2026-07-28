@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { CheckboxBox } from "@/components/ui/checkbox";
 import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
@@ -13,9 +14,6 @@ import type { ConfigFieldRead } from "@/lib/types";
  * unreadably far from its value.
  */
 const FIELD_WIDTH = "max-w-xl";
-
-const CHECKBOX_CLASS =
-  "h-4 w-4 rounded-chip border border-hairline bg-surface accent-accent-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 function toStringList(value: unknown): string[] {
   return Array.isArray(value)
@@ -77,13 +75,7 @@ export function ConfigFieldControl({
         labelEnd={labelEnd}
         className={FIELD_WIDTH}
       >
-        <input
-          type="checkbox"
-          className={CHECKBOX_CLASS}
-          checked={value === true}
-          disabled={locked}
-          onChange={(event) => onChange(event.target.checked)}
-        />
+        <CheckboxBox checked={value === true} disabled={locked} onChange={onChange} />
       </Field>
     );
   }
@@ -153,14 +145,12 @@ export function ConfigFieldControl({
             const checked = selected.has(option.value);
             return (
               <label key={option.value} className="flex items-center gap-2 text-ui text-body">
-                <input
-                  type="checkbox"
-                  className={CHECKBOX_CLASS}
+                <CheckboxBox
                   checked={checked}
                   disabled={locked}
-                  onChange={(event) => {
+                  onChange={(isChecked) => {
                     const next = new Set(selected);
-                    if (event.target.checked) {
+                    if (isChecked) {
                       next.add(option.value);
                     } else {
                       next.delete(option.value);

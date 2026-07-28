@@ -31,7 +31,8 @@ def test_paragraph_chunker_falls_back_to_token_chunks_when_no_blank_lines() -> N
     chunks = chunker.chunk(_document(text))
 
     assert len(chunks) >= 5
-    assert all(length <= 50 for length in _chunk_lengths(chunks))
+    # Overlap rides on top of the size, so the emitted bound is 50 + 10.
+    assert all(length <= 60 for length in _chunk_lengths(chunks))
 
 
 def test_paragraph_chunker_trims_long_paragraphs_that_exceed_chunk_size() -> None:
@@ -44,9 +45,9 @@ def test_paragraph_chunker_trims_long_paragraphs_that_exceed_chunk_size() -> Non
 
     assert len(chunks) >= 2
     lengths = _chunk_lengths(chunks)
-    assert all(length <= 64 for length in lengths)
+    assert all(length <= 80 for length in lengths)
     # ensure the long paragraph was split rather than dropped
-    assert lengths[0] == 64
+    assert lengths[0] == 80
 
 
 def test_sentence_chunker_respects_chunk_size_even_for_single_sentence() -> None:
@@ -57,7 +58,7 @@ def test_sentence_chunker_respects_chunk_size_even_for_single_sentence() -> None
     chunks = chunker.chunk(_document(text))
 
     assert len(chunks) >= 2
-    assert all(length <= 32 for length in _chunk_lengths(chunks))
+    assert all(length <= 40 for length in _chunk_lengths(chunks))
 
 
 def test_token_chunker_rejects_invalid_configuration() -> None:
@@ -67,8 +68,15 @@ def test_token_chunker_rejects_invalid_configuration() -> None:
     with pytest.raises(ValueError, match="chunk overlap must be >= 0"):
         build_chunker(ChunkStrategy.TOKEN, 10, -1)
 
-    with pytest.raises(ValueError, match="chunk overlap must be smaller"):
-        build_chunker(ChunkStrategy.TOKEN, 5, 5)
+
+def test_token_chunker_allows_overlap_at_or_above_the_chunk_size() -> None:
+    """Additive overlap is not bounded by the size, only wasteful above it."""
+    chunker = build_chunker(ChunkStrategy.TOKEN, 5, 5)
+
+    chunks = chunker.chunk(_document(" ".join(f"token{i}" for i in range(20))))
+
+    assert chunks
+    assert len(chunks[0].text.split()) == 10
 
 
 def test_token_chunker_returns_empty_for_blank_document() -> None:
@@ -85,9 +93,10 @@ def test_token_chunker_emits_overlap_chunks() -> None:
 
     chunks = chunker.chunk(_document(text))
 
+    # size 4 + overlap 1 = a 5-token chunk that advances 4 tokens each step.
     assert len(chunks) >= 3
-    assert chunks[0].text.split() == ["token0", "token1", "token2", "token3"]
-    assert chunks[1].text.split()[0] == "token3"
+    assert chunks[0].text.split() == ["token0", "token1", "token2", "token3", "token4"]
+    assert chunks[1].text.split()[0] == "token4"
 
 
 def test_token_chunker_enforces_wordpiece_token_budgets(tmp_path) -> None:
@@ -106,7 +115,7 @@ def test_token_chunker_enforces_wordpiece_token_budgets(tmp_path) -> None:
     )
 
     assert len(chunks) > 1
-    assert all(counter.count(chunk.text) <= 512 for chunk in chunks)
+    assert all(counter.count(chunk.text) <= 512 + 32 for chunk in chunks)
 
 
 def test_token_chunker_produces_one_giant_chunk_for_whitespace_free_cjk_text() -> None:

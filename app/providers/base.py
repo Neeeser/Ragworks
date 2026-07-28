@@ -87,6 +87,17 @@ class ProviderAdapter(ABC):
                 f"Invalid {cls.descriptor.label} connection configuration: {exc.errors()[0]['msg']}"
             ) from exc
 
+    def normalized_config(self) -> dict[str, object]:
+        """Config as this provider's own model validated it, for persistence.
+
+        A config model may rewrite what the user typed (assuming a scheme or a
+        default port). Storing the raw dict instead leaves the row — and every
+        listing built from it — showing an address that is not the one the
+        provider is actually reached at. Adapters whose model normalizes
+        override this; the rest store what they were given.
+        """
+        return dict(self.connection.config)
+
     def require_kind(self, kind: ProviderKind) -> None:
         """Raise `InvalidInputError` when this provider type lacks a kind."""
         if kind not in self.kinds:

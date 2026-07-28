@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ParameterFieldCard } from "@/components/ui/parameter-controls";
@@ -106,6 +107,14 @@ export function NodeConfigSections({
     : nodeType.endsWith(".pgvector")
       ? "pgvector"
       : "pinecone";
+
+  // Either value may hold an expression rather than a literal, in which case
+  // the window is only known at run time and there is no math to state.
+  const chunkWindow = {
+    size: typeof config.chunk_size === "number" ? config.chunk_size : 0,
+    overlap: typeof config.chunk_overlap === "number" ? config.chunk_overlap : 0,
+    expression: typeof config.chunk_size !== "number" || typeof config.chunk_overlap !== "number",
+  };
 
   const fields = node.data.configSchema ? buildPipelineConfigFields(node.data.configSchema) : [];
   const filteredFields = fields.filter((field) => {
@@ -358,6 +367,13 @@ export function NodeConfigSections({
               onLiteralChange={handleConfigChange}
             />
           ))}
+          {isChunker ? (
+            <ChunkWindowSummary
+              chunkSize={chunkWindow.size}
+              chunkOverlap={chunkWindow.overlap}
+              expression={chunkWindow.expression}
+            />
+          ) : null}
         </div>
       ) : !isEmbedder && !isReranker && !isVectorNode && !isRetrievalInput && !isRetrievalOutput ? (
         <p className="p-8 text-center text-ui text-muted">

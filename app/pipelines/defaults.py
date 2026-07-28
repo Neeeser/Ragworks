@@ -16,6 +16,11 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.nodes.chunking import (
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    clamp_chunk_window,
+)
 from app.pipelines.nodes.fusion import RRFusionNode
 from app.pipelines.nodes.indexing import (
     BM25_INDEX_SUFFIX,
@@ -71,35 +76,14 @@ def bm25_sibling_index_name(index_name: str, backend: IndexBackend) -> str:
     return candidate
 
 
-def _clamp_chunk_window(
-    chunk_size: int, chunk_overlap: int, embedding_input_limit: int | None
-) -> tuple[int, int]:
-    """Fit the chunk size within a known embedding token budget.
-
-    Each emitted chunk spans at most ``chunk_size`` tokens (overlap is a stride
-    within the window, not extra tokens the embedder sees), so the only bound is
-    ``chunk_size <= embedding_input_limit``. A fitting window is left untouched
-    (the size-plus-overlap sum once shrank it); on shrink the ratio is preserved.
-    """
-    if embedding_input_limit is None or chunk_size <= embedding_input_limit:
-        return chunk_size, chunk_overlap
-    if embedding_input_limit <= 1:
-        return 1, 0
-    overlap_ratio = chunk_overlap / chunk_size
-    clamped_size = embedding_input_limit
-    clamped_overlap = min(round(clamped_size * overlap_ratio), clamped_size - 1)
-    return clamped_size, max(0, clamped_overlap)
-
-
-# The setup wizard passes the complete explicit scaffold configuration here.
 def build_default_ingestion_pipeline(  # noqa: PLR0913
     *,
     embedding_connection_id: UUID,
     embedding_model: str,
     backend: IndexBackend | None = None,
     index_name: str | None = None,
-    chunk_size: int = 512,
-    chunk_overlap: int = 200,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     embedding_input_limit: int | None = None,
 ) -> PipelineDefinition:
     """Return the default (hybrid) ingestion pipeline definition.
@@ -114,7 +98,7 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
     backend = backend or _default_backend()
     index_name = index_name or default_index_name(backend)
     include_bm25 = lexical_available(backend)
-    chunk_size, chunk_overlap = _clamp_chunk_window(
+    chunk_size, chunk_overlap = clamp_chunk_window(
         chunk_size, chunk_overlap, embedding_input_limit
     )
     nodes = [

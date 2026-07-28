@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
+from app.pipelines.nodes.chunking import DEFAULT_CHUNK_OVERLAP
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import resolve_pipeline_settings
@@ -64,7 +65,7 @@ def test_settings_fall_back_to_configurable_chunker_when_no_fixed_node() -> None
 
     assert settings.chunk_strategy == models.ChunkStrategy.TOKEN
     assert settings.chunk_size == 512
-    assert settings.chunk_overlap == 200
+    assert settings.chunk_overlap == DEFAULT_CHUNK_OVERLAP
     assert settings.tokenizer == TokenizerSpec(kind="wordpiece")
 
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { resolveNodeSignature } from "@/components/pipelines/lib/node-signature";
 import { buildSetupFlow } from "@/components/setup/lib/setup-flow";
+import { SETUP_STEPS } from "@/components/setup/lib/setup-wizard-reducer";
 
 const signatureOf = (id: string, choices = {}) => {
   const node = buildSetupFlow(choices).nodes.find((candidate) => candidate.id === id);
@@ -10,6 +11,14 @@ const signatureOf = (id: string, choices = {}) => {
 };
 
 describe("buildSetupFlow", () => {
+  it("gives every wizard step a backdrop node to fly the camera to", () => {
+    // Node ids double as step ids. A step with no node leaves the camera
+    // parked on the previous one, so the backdrop stops tracking the wizard.
+    const ids = buildSetupFlow({}).nodes.map((node) => node.id);
+
+    expect(ids).toEqual([...SETUP_STEPS]);
+  });
+
   it("reads out the model and index the wizard has chosen", () => {
     const choices = {
       embeddingModel: "sentence-transformers/all-minilm-l6-v2",

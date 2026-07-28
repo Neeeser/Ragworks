@@ -26,7 +26,7 @@
             "name": "Token Chunker",
             "config": {
               "chunk_size": 512,
-              "chunk_overlap": 200
+              "chunk_overlap": 102
             },
             "position": null,
             "ui": {}
@@ -138,7 +138,7 @@
         ],
         "viewport": {},
         "variables": [],
-        "schema_version": 3
+        "schema_version": 4
       }
     },
     {
@@ -300,7 +300,7 @@
             "expose_to_llm": true
           }
         ],
-        "schema_version": 3
+        "schema_version": 4
       }
     }
   ],
@@ -409,14 +409,14 @@
         "properties": {
           "chunk_size": {
             "default": 512,
-            "description": "Maximum tokens per chunk, counted by the selected tokenizer. Larger chunks keep more context around each match but dilute the embedding and eat into the model's input limit; smaller chunks match more precisely but fragment context.",
+            "description": "New document text per chunk, counted by the selected tokenizer. Overlap is added on top, so each chunk sent to the embedder spans chunk_size + chunk_overlap tokens. Larger chunks keep more context around each match but dilute the embedding and eat into the model's input limit; smaller chunks match more precisely but fragment context.",
             "exclusiveMinimum": 0,
             "title": "Chunk Size",
             "type": "integer"
           },
           "chunk_overlap": {
-            "default": 200,
-            "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
+            "default": 102,
+            "description": "Tokens repeated from the end of one chunk at the start of the next, so text straddling a boundary stays retrievable from both sides. Added on top of chunk size, not taken out of it, so the embedder receives chunk_size + chunk_overlap tokens and it is that sum which must fit the model's input limit. Defaults to 20% of chunk size. The cost is index size \u2014 overlapped tokens are stored and embedded twice.",
             "minimum": 0,
             "title": "Chunk Overlap",
             "type": "integer"
@@ -447,7 +447,7 @@
       },
       "default_config": {
         "chunk_size": 512,
-        "chunk_overlap": 200,
+        "chunk_overlap": 102,
         "tokenizer": "wordpiece",
         "hf_model_id": null
       },

@@ -3,6 +3,7 @@
 import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CheckboxBox } from "@/components/ui/checkbox";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
@@ -84,11 +85,10 @@ export function ArgumentsPicker({
             <li key={variable.name}>
               <label className="flex items-center justify-between gap-2 rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-body">
                 <span className="flex min-w-0 items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <CheckboxBox
                     checked={acceptedNames.includes(variable.name)}
                     disabled={disabled}
-                    onChange={(event) => toggle(variable.name, event.target.checked)}
+                    onChange={(checked) => toggle(variable.name, checked)}
                   />
                   <span className="truncate font-mono text-ui">{variable.name}</span>
                 </span>

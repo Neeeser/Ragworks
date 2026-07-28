@@ -60,7 +60,7 @@ def test_build_adapter_rejects_malformed_config() -> None:
         user_id=uuid4(),
         provider_type=ProviderType.OLLAMA.value,
         label="x",
-        config={"base_url": "not-a-url"},
+        config={"base_url": "ftp://not-a-url"},
     )
     with pytest.raises(InvalidInputError, match="Ollama connection configuration"):
         build_adapter(connection)

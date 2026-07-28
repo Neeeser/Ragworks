@@ -42,9 +42,9 @@ class WhitespaceTokenCounter:
         """Count non-whitespace runs."""
         return len(self._offsets(text))
 
-    def split(self, text: str, max_tokens: int, overlap: int = 0) -> list[str]:
+    def split(self, text: str, chunk_size: int, overlap: int = 0) -> list[str]:
         """Split at whitespace-token boundaries."""
-        return split_at_offsets(text, self._offsets(text), max_tokens, overlap)
+        return split_at_offsets(text, self._offsets(text), chunk_size, overlap)
 
 
 class TokenizerJsonCounter:
@@ -67,9 +67,9 @@ class TokenizerJsonCounter:
         """Count tokens without adding model special tokens."""
         return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
-    def split(self, text: str, max_tokens: int, overlap: int = 0) -> list[str]:
+    def split(self, text: str, chunk_size: int, overlap: int = 0) -> list[str]:
         """Split at the tokenizer's reported character offsets."""
-        return split_at_offsets(text, self._offsets(text), max_tokens, overlap)
+        return split_at_offsets(text, self._offsets(text), chunk_size, overlap)
 
 
 class Cl100kTokenCounter:
@@ -122,9 +122,13 @@ class Cl100kTokenCounter:
         """Count cl100k tokens."""
         return len(self._tokens(text))
 
-    def split(self, text: str, max_tokens: int, overlap: int = 0) -> list[str]:
+    def split(self, text: str, chunk_size: int, overlap: int = 0) -> list[str]:
         """Split at cl100k token boundaries."""
-        validate_token_window(max_tokens, overlap)
+        validate_token_window(chunk_size, overlap)
+        # Overlap rides on top of the size, so the window the loop fills is
+        # their sum; stepping back `overlap` from its end then advances by
+        # exactly `chunk_size`.
+        window = chunk_size + overlap
         spans = self._weighted_offsets(text)
         chunks: list[str] = []
         start_index = 0
@@ -133,11 +137,11 @@ class Cl100kTokenCounter:
             token_count = 0
             while end_index < len(spans):
                 weight = spans[end_index][2]
-                if token_count and token_count + weight > max_tokens:
+                if token_count and token_count + weight > window:
                     break
                 token_count += weight
                 end_index += 1
-                if token_count >= max_tokens:
+                if token_count >= window:
                     break
             end_index = whitespace_aligned_end(
                 text,

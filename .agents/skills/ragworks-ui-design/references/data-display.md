@@ -148,6 +148,23 @@ they need normalising before `.value`.
 
 ---
 
+## Paired settings state what they produce, not just their values
+
+Two numbers whose relationship is not obvious need a line naming the result, next to
+where they are edited — the reader otherwise infers the relationship, and the intuitive
+inference can be the wrong one.
+
+The worked case is chunk size and overlap (`ChunkWindowSummary`, used by the setup
+wizard, the ingestion pipeline wizard, and the node editor drawer). Overlap is *added*
+to the size, so a 413/83 pair sends 496 tokens to the embedder — and it is that sum, not
+either field, which has to fit the model's input limit. Two number fields cannot show
+that, so the summary states the arithmetic and turns red with the consequence
+("split before indexing") when the sum goes over. When an expression sets either value
+it says the window is decided per run rather than rendering a breakdown of placeholder
+zeros: a confident false number is worse than none.
+
+---
+
 ## Identifiers are not labels
 
 A model id, index name, uuid, or file path is a **literal** — render it verbatim in

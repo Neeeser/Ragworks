@@ -225,11 +225,15 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         guarded: list[DocumentChunk] = []
         for original_index, chunk in enumerate(payload.chunks):
             token_count = counter.count(chunk.text)
+            # Overlap is added to chunk_size, so the size passed here has to
+            # leave room for it — splitting at the full limit plus an overlap
+            # would emit parts over the very limit this guard enforces.
+            guard_overlap = min(32, max(0, limit - 1))
             parts = (
                 counter.split(
                     chunk.text,
-                    max_tokens=limit,
-                    overlap=min(32, limit - 1),
+                    chunk_size=max(1, limit - guard_overlap),
+                    overlap=guard_overlap,
                 )
                 if token_count > limit
                 else [chunk.text]

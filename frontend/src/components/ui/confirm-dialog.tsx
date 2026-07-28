@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { cn } from "@/lib/utils";
@@ -77,15 +78,7 @@ export function ConfirmDialog({
             </Field>
           ) : null}
           {rememberLabel && onRememberChange ? (
-            <label className="flex items-center gap-2 text-ui text-body">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded-chip border-strong bg-transparent accent-[var(--accent-violet)]"
-                checked={rememberChecked}
-                onChange={(event) => onRememberChange(event.target.checked)}
-              />
-              <span>{rememberLabel}</span>
-            </label>
+            <Checkbox checked={rememberChecked} onChange={onRememberChange} label={rememberLabel} />
           ) : null}
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2">

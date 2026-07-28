@@ -15,6 +15,7 @@ from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
+    OLLAMA_DEFAULT_PORT,
     CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
@@ -33,11 +34,12 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
             label="Server URL",
             kind=ConfigFieldKind.URL,
             required=True,
-            placeholder="http://localhost:11434",
+            placeholder=f"http://localhost:{OLLAMA_DEFAULT_PORT}",
             description=(
                 "When Ragworks runs in Docker, use your machine's LAN IP or "
-                "http://host.docker.internal:11434 — localhost points at the "
-                "container itself."
+                f"http://host.docker.internal:{OLLAMA_DEFAULT_PORT} — localhost "
+                "points at the container itself. A URL without a port is read "
+                f"as port {OLLAMA_DEFAULT_PORT}."
             ),
         ),
         ProviderConfigField(
@@ -61,6 +63,10 @@ class OllamaAdapter(ProviderAdapter):
         """Parse the connection config and bind the adapter."""
         super().__init__(connection)
         self._config = self.parse_config(OllamaConnectionConfig, connection.config)
+
+    def normalized_config(self) -> dict[str, object]:
+        """Persist the scheme/port-normalized URL, not the raw typed string."""
+        return self._config.model_dump(exclude_none=True)
 
     def _client(self) -> OllamaClient:
         """Return the (cached) Ollama client for this connection."""

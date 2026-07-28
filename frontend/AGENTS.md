@@ -346,6 +346,13 @@ the same PR.
   and ARIA wiring; dialogs pass `labelledBy`. It portals to `document.body`: an
   ancestor's transform creates a stacking context, and a non-portaled overlay's
   `z-50` loses to the sticky `z-30` navbar.
+- **Every checkbox is `Checkbox` (labelled) or `CheckboxBox` (the control alone,
+  when the caller owns its row markup)** — `components/ui/checkbox.tsx`, swept by
+  its own test. A bare `<input type="checkbox">` styled with `accent-color` plus
+  any custom background or border loses the browser's own paint path, and with it
+  the checkmark: the box then looks identical checked and unchecked. The primitive
+  draws the glyph itself and keeps it at full contrast when disabled, so a
+  checked-but-locked option doesn't read as unset.
 - **Every form control goes through `Field`/`TextInput`/`Select`/`TextArea`**
   (`components/ui/field.tsx`) — Field wires `htmlFor`/`id` and `aria-describedby`.
   Canonical input styling is the exported `inputClass` constant; if you type

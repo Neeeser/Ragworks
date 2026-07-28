@@ -25,27 +25,69 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 
+#: Starting chunk size when nothing narrows it (recursive-512 benchmarks well).
+DEFAULT_CHUNK_SIZE = 512
+#: Overlap as a fraction of chunk size — the conventional ~20% recommendation.
+#: Overlap is *added* to the size, so a chunk spans size * (1 + ratio) tokens.
+#: The default overlap is derived from it rather than written as a literal, so
+#: one number does not silently become a different proportion when the size
+#: default moves, and the wizard and the node agree on what "default" means.
+#: Mirrored by `CHUNK_OVERLAP_RATIO` in `frontend/src/lib/chunk-defaults.ts`.
+CHUNK_OVERLAP_RATIO = 0.2
+#: Default overlap in tokens. Overlap is stored and configured as a token
+#: count everywhere; only the default is expressed as a proportion.
+DEFAULT_CHUNK_OVERLAP = round(DEFAULT_CHUNK_SIZE * CHUNK_OVERLAP_RATIO)
+
+
+def clamp_chunk_window(
+    chunk_size: int, chunk_overlap: int, embedding_input_limit: int | None
+) -> tuple[int, int]:
+    """Fit the emitted chunk within a known embedding token budget.
+
+    Overlap is added to `chunk_size`, so what reaches the embedder is their
+    sum and the bound is ``chunk_size + chunk_overlap <= embedding_input_limit``.
+    A window that already fits is left untouched; on shrink the overlap ratio
+    is preserved, so a scaled-down window keeps the same proportion of repeated
+    context rather than collapsing to none.
+    """
+    window = chunk_size + chunk_overlap
+    if embedding_input_limit is None or window <= embedding_input_limit:
+        return chunk_size, chunk_overlap
+    if embedding_input_limit <= 1:
+        return 1, 0
+    # Scale both parts so size + overlap lands on the limit exactly.
+    overlap_ratio = chunk_overlap / chunk_size if chunk_size else 0.0
+    clamped_size = max(1, round(embedding_input_limit / (1 + overlap_ratio)))
+    clamped_overlap = max(0, embedding_input_limit - clamped_size)
+    return clamped_size, clamped_overlap
+
+
 class FixedChunkerConfig(BaseModel):
     """Configuration for fixed-strategy chunking nodes."""
 
     chunk_size: int = Field(
-        default=512,
+        default=DEFAULT_CHUNK_SIZE,
         gt=0,
         description=(
-            "Maximum tokens per chunk, counted by the selected tokenizer. "
-            "Larger chunks keep more context around each match but dilute the "
-            "embedding and eat into the model's input limit; smaller chunks "
-            "match more precisely but fragment context."
+            "New document text per chunk, counted by the selected tokenizer. "
+            "Overlap is added on top, so each chunk sent to the embedder spans "
+            "chunk_size + chunk_overlap tokens. Larger chunks keep more context "
+            "around each match but dilute the embedding and eat into the "
+            "model's input limit; smaller chunks match more precisely but "
+            "fragment context."
         ),
     )
     chunk_overlap: int = Field(
-        default=200,
+        default=DEFAULT_CHUNK_OVERLAP,
         ge=0,
         description=(
             "Tokens repeated from the end of one chunk at the start of the "
             "next, so text straddling a boundary stays retrievable from both "
-            "sides. The cost is index size — overlapped tokens are stored and "
-            "embedded twice."
+            "sides. Added on top of chunk size, not taken out of it, so the "
+            "embedder receives chunk_size + chunk_overlap tokens and it is "
+            f"that sum which must fit the model's input limit. Defaults to "
+            f"{int(CHUNK_OVERLAP_RATIO * 100)}% of chunk size. The cost is "
+            "index size — overlapped tokens are stored and embedded twice."
         ),
     )
     tokenizer: Literal["wordpiece", "cl100k", "whitespace", "huggingface"] = Field(

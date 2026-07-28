@@ -4,6 +4,7 @@ import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -133,7 +134,7 @@ export function StepIndex({ wizard }: { wizard: SetupWizardApi }) {
   );
 }
 
-export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
+export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
   const {
     collectionName,
     chunkSize,
@@ -147,13 +148,10 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
     rerankerModel,
   } = wizard.state.choices;
   const selectedModel = wizard.models?.find((model) => model.id === embeddingModel);
-  // Each chunk spans at most chunk_size tokens (overlap is a stride within the
-  // window), so the model's effective window bounds chunk_size, not the sum.
+  // Overlap is added to chunk size, so the sum is what reaches the embedder
+  // and the sum is what the model's effective window bounds. ChunkWindowSummary
+  // states that arithmetic and owns the over-limit warning.
   const effectiveLimit = effectiveInputLimit(selectedModel?.max_input_tokens);
-  const chunkSizeWarning =
-    effectiveLimit != null && chunkSize > effectiveLimit
-      ? `Chunk size (${chunkSize.toLocaleString()}) exceeds this model's effective input limit of ${effectiveLimit.toLocaleString()} tokens; oversized chunks are split before indexing.`
-      : null;
 
   const chosenBackend = wizard.backends?.find((info) => info.backend === backend);
   const supportsCount = chosenBackend?.capabilities.supports_lexical_count ?? false;
@@ -167,7 +165,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
 
   return (
     <SetupStepShell
-      stepKey="launch"
+      stepKey="collection"
       direction={wizard.state.direction}
       kicker={KICKER}
       title="Name your first collection"
@@ -179,20 +177,18 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           <Button
             size="lg"
             glow
-            loading={wizard.busy}
             disabled={!collectionName.trim() || (addReranker && !rerankerModel)}
-            onClick={() => void wizard.finish()}
+            onClick={wizard.next}
           >
-            Finish setup
+            Continue
           </Button>
         </>
       }
     >
       <p className="max-w-[66ch] text-ui text-body">
-        This installs default ingestion and retrieval pipelines around{" "}
+        Default ingestion and retrieval pipelines are built around{" "}
         <span className="font-mono text-primary">{embeddingModel}</span> and{" "}
-        <span className="font-mono text-primary">{indexName}</span> ({backend}), then drops you on
-        the collection ready to upload.
+        <span className="font-mono text-primary">{indexName}</span> ({backend}).
       </p>
       <Field label="Collection name">
         <TextInput
@@ -218,7 +214,19 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           />
         </Field>
       </div>
-      <SetupNotice message={chunkSizeWarning} tone="warning" />
+      <ChunkWindowSummary
+        chunkSize={chunkSize}
+        chunkOverlap={chunkOverlap}
+        limit={
+          effectiveLimit != null && selectedModel?.max_input_tokens != null
+            ? {
+                value: effectiveLimit,
+                modelName: embeddingModel,
+                published: selectedModel.max_input_tokens,
+              }
+            : null
+        }
+      />
 
       {showAggregateTools ? (
         <fieldset className="space-y-2">
@@ -277,9 +285,6 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
           ) : null}
         </div>
       ) : null}
-
-      <SetupNotice message={wizard.warning} tone="warning" />
-      <SetupNotice message={wizard.error} />
     </SetupStepShell>
   );
 }

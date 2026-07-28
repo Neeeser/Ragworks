@@ -1,5 +1,6 @@
 "use client";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 
@@ -62,15 +63,12 @@ export function InputVariableFields({ variable, disabled, onPatch }: PatchProps)
           </>
         ) : null}
       </div>
-      <label className="flex items-center gap-2 text-ui text-body">
-        <input
-          type="checkbox"
-          checked={variable.expose_to_llm ?? false}
-          disabled={disabled}
-          onChange={(event) => onPatch({ expose_to_llm: event.target.checked })}
-        />
-        Expose to model
-      </label>
+      <Checkbox
+        checked={variable.expose_to_llm ?? false}
+        disabled={disabled}
+        onChange={(expose_to_llm) => onPatch({ expose_to_llm })}
+        label="Expose to model"
+      />
     </div>
   );
 }

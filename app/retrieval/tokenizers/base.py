@@ -24,14 +24,20 @@ def whitespace_aligned_end(
     return candidate_end
 
 
-def validate_token_window(max_tokens: int, overlap: int) -> None:
-    """Validate the shared token-window constraints."""
-    if max_tokens <= 0:
-        raise ValueError("max_tokens must be positive")
+def validate_token_window(chunk_size: int, overlap: int) -> None:
+    """Validate the shared token-window constraints.
+
+    Overlap is added to `chunk_size` rather than carved out of it, so it is
+    not bounded by the size: a chunk spans ``chunk_size + overlap`` tokens and
+    advances by `chunk_size`. Only a non-positive size or a negative overlap
+    is incoherent — an overlap larger than the size repeats more than it
+    advances, which is wasteful but well-defined, and the editor warns rather
+    than refusing to run it.
+    """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
     if overlap < 0:
         raise ValueError("token overlap must be >= 0")
-    if overlap >= max_tokens:
-        raise ValueError("token overlap must be smaller than max_tokens")
 
 
 class TokenCounter(Protocol):
@@ -41,7 +47,7 @@ class TokenCounter(Protocol):
         """Return the number of model-facing tokens in ``text``."""
         ...
 
-    def split(self, text: str, max_tokens: int, overlap: int = 0) -> list[str]:
+    def split(self, text: str, chunk_size: int, overlap: int = 0) -> list[str]:
         """Split text into token-bounded parts with a token overlap."""
         ...
 
@@ -49,18 +55,24 @@ class TokenCounter(Protocol):
 def split_at_offsets(
     text: str,
     offsets: Sequence[TokenOffset],
-    max_tokens: int,
+    chunk_size: int,
     overlap: int = 0,
 ) -> list[str]:
-    """Slice ``text`` into windows described by tokenizer character offsets."""
-    validate_token_window(max_tokens, overlap)
+    """Slice ``text`` into windows described by tokenizer character offsets.
+
+    `chunk_size` is the document text each chunk advances by, and `overlap` is
+    repeated on top of it, so a chunk spans ``chunk_size + overlap`` tokens —
+    the number the embedder actually receives.
+    """
+    validate_token_window(chunk_size, overlap)
     if not offsets:
         return []
 
+    window = chunk_size + overlap
     chunks: list[str] = []
     start_index = 0
     while start_index < len(offsets):
-        candidate_end = min(start_index + max_tokens, len(offsets))
+        candidate_end = min(start_index + window, len(offsets))
         end_index = whitespace_aligned_end(text, offsets, start_index, candidate_end)
         start = offsets[start_index][0]
         end = offsets[end_index - 1][1]
@@ -69,6 +81,10 @@ def split_at_offsets(
             chunks.append(chunk)
         if end_index == len(offsets):
             break
+        # Step back `overlap` tokens from the window's end so exactly that
+        # many repeat — measuring from the end rather than striding a fixed
+        # `chunk_size` keeps the overlap intact when whitespace alignment pulls
+        # the end back short of a full window.
         next_start = max(start_index, end_index - overlap)
         if next_start == start_index:
             next_start = end_index

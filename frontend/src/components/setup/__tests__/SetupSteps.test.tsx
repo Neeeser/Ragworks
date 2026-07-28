@@ -7,7 +7,7 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 
 import { initialSetupWizardState } from "@/components/setup/lib/setup-wizard-reducer";
 import { StepModel, StepProviders } from "@/components/setup/SetupSteps";
-import { StepLaunch } from "@/components/setup/SetupStepsLaunch";
+import { StepCollection } from "@/components/setup/SetupStepsLaunch";
 import {
   makeCatalogModel,
   makeConnection,
@@ -68,6 +68,8 @@ function makeWizard(overrides: Partial<SetupWizardApi> = {}): SetupWizardApi {
     rerankingModelsLoading: false,
     ensureIndex: vi.fn(),
     finish: vi.fn(),
+    openCollection: vi.fn(),
+    completedCollectionId: null,
     busy: false,
     error: null,
     warning: null,
@@ -117,61 +119,82 @@ describe("StepModel", () => {
   });
 });
 
-describe("StepLaunch", () => {
-  it("warns only when chunk size exceeds the model's effective window", () => {
+describe("StepCollection", () => {
+  it("warns only when size plus overlap exceeds the model's effective window", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         embeddingModel: MINILM,
         collectionName: "First",
-        // 500 > effective 496; overlap does not count toward the window.
+        // 500 + 100 = 600 > effective 496.
         chunkSize: 500,
         chunkOverlap: 100,
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
-    expect(
-      screen.getByText(
-        "Chunk size (500) exceeds this model's effective input limit of 496 tokens; oversized chunks are split before indexing.",
-      ),
-    ).toBeInTheDocument();
+    const warning = screen.getByText(/Over the limit/).textContent?.replace(/\s+/g, " ");
+    expect(warning).toContain("Over the limit by 104 tokens.");
+    expect(warning).toContain("split before indexing");
     expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /finish setup/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
   });
 
-  it("does not warn when chunk size fits the window even if size plus overlap exceeds it", () => {
+  it("states the sum that reaches the embedder, since overlap is added to the size", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         embeddingModel: MINILM,
         collectionName: "First",
-        chunkSize: 400,
-        chunkOverlap: 200,
+        chunkSize: 413,
+        chunkOverlap: 83,
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
-    expect(screen.queryByText(/exceeds this model's effective input limit/i)).toBeNull();
+    const summary = screen.getByText(/Each chunk is/).textContent?.replace(/\s+/g, " ");
+    expect(summary).toContain("413 tokens of new text plus 83 of overlap = 496");
+  });
+
+  it("does not warn when size plus overlap fits the window", () => {
+    const wizard = makeWizard({
+      models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
+    });
+    wizard.state = {
+      ...wizard.state,
+      step: "collection",
+      choices: {
+        ...wizard.state.choices,
+        embeddingModel: MINILM,
+        collectionName: "First",
+        // 396 + 100 = 496, exactly the effective window.
+        chunkSize: 396,
+        chunkOverlap: 100,
+      },
+    };
+
+    render(<StepCollection wizard={wizard} />);
+
+    expect(screen.queryByText(/Over the limit/i)).toBeNull();
   });
 
   it("offers count and facet tools on a lexical backend, checked by default", async () => {
     const wizard = makeWizard();
-    wizard.state = { ...wizard.state, step: "launch" };
+    wizard.state = { ...wizard.state, step: "collection" };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     const countTool = screen.getByLabelText(/add a count tool/i);
     expect(countTool).toBeChecked();
@@ -184,14 +207,14 @@ describe("StepLaunch", () => {
 
   it("hides the reranker option when no reranking provider is connected", () => {
     const wizard = makeWizard({ hasRerankingProvider: false });
-    wizard.state = { ...wizard.state, step: "launch" };
+    wizard.state = { ...wizard.state, step: "collection" };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
     expect(screen.queryByLabelText(/add a reranker/i)).toBeNull();
   });
 
-  it("gates Finish until a reranking model is chosen when the reranker is enabled", () => {
+  it("gates Continue until a reranking model is chosen when the reranker is enabled", () => {
     const wizard = makeWizard({
       hasRerankingProvider: true,
       rerankingModels: [
@@ -200,7 +223,7 @@ describe("StepLaunch", () => {
     });
     wizard.state = {
       ...wizard.state,
-      step: "launch",
+      step: "collection",
       choices: {
         ...wizard.state.choices,
         collectionName: "First",
@@ -209,9 +232,9 @@ describe("StepLaunch", () => {
       },
     };
 
-    render(<StepLaunch wizard={wizard} />);
+    render(<StepCollection wizard={wizard} />);
 
-    expect(screen.getByRole("button", { name: /finish setup/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
 });
 
