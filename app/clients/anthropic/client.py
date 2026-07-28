@@ -42,6 +42,7 @@ class MessagesCall:
     tools: list[dict[str, Any]] | None = None
     thinking: dict[str, Any] | None = None
     parameters: dict[str, Any] | None = None
+    extra_body: dict[str, Any] | None = None
 
 
 class AnthropicClient:
@@ -91,6 +92,8 @@ class AnthropicClient:
             kwargs.update(
                 {key: value for key, value in call.parameters.items() if value is not None}
             )
+        if call.extra_body:
+            kwargs["extra_body"] = call.extra_body
         if stream:
             kwargs["stream"] = True
         return kwargs

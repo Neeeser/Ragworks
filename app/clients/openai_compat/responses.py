@@ -32,6 +32,7 @@ class ResponsesCall:
     reasoning: dict[str, Any] | None = None
     parameters: dict[str, Any] | None = None
     extra_headers: dict[str, str] | None = None
+    extra_body: dict[str, Any] | None = None
 
 
 def _build_kwargs(
@@ -50,6 +51,8 @@ def _build_kwargs(
     headers = transport.merge_headers(call.extra_headers)
     if headers:
         kwargs["extra_headers"] = headers
+    if call.extra_body:
+        kwargs["extra_body"] = call.extra_body
     if call.parameters:
         kwargs.update(
             {key: value for key, value in call.parameters.items() if value is not None}

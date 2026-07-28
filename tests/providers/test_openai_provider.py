@@ -128,12 +128,15 @@ class TestAdapterModelResolver:
         assert "temperature" in info.supported_parameters
 
 
-def _request(parameters: dict[str, Any] | None) -> ChatRequest:
+def _request(
+    parameters: dict[str, Any] | None, extra_body: dict[str, Any] | None = None
+) -> ChatRequest:
     return ChatRequest(
         messages=[{"role": "user", "content": "hi"}],
         tools=None,
         model="gpt-4.1",
         parameters=parameters,
+        extra_body=extra_body,
     )
 
 
@@ -168,6 +171,13 @@ class TestResponsesParameterMapping:
                 }
             }
         }
+
+
+def test_responses_call_carries_the_user_extra_body() -> None:
+    provider = ResponsesProvider(object(), name="openai")  # type: ignore[arg-type]
+    call = provider._call(_request({"max_tokens": 64}, extra_body={"service_tier": "flex"}))
+    assert call.extra_body == {"service_tier": "flex"}
+    assert call.parameters == {"max_output_tokens": 64}
 
 
 class TestChatCompletionsStreamUsage:

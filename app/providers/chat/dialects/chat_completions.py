@@ -83,13 +83,22 @@ class ChatCompletionsProvider:
         return None
 
     def _call(self, request: ChatRequest) -> ChatCall:
-        """Map the normalized request onto a client-level call."""
+        """Map the normalized request onto a client-level call.
+
+        The user's `extra_body` merges over the provider's own extensions —
+        it is the escape hatch for fields no catalog knows, so on a key
+        collision the user's value wins.
+        """
+        extra_body = {
+            **(self.build_extra_body(request) or {}),
+            **(request.extra_body or {}),
+        }
         return ChatCall(
             messages=request.messages,
             model=request.model,
             tools=request.tools,
             parallel_tool_calls=True if request.tools else None,
-            extra_body=self.build_extra_body(request),
+            extra_body=extra_body or None,
             parameters=request.parameters or None,
         )
 

@@ -46,8 +46,8 @@ export function useModelParameters({
   const [parameterOverrides, setParameterOverrides] = useState<ParameterOverrides>({});
 
   const activeParameterCount = useMemo(() => {
-    return Object.keys(parameterOverrides).filter((key) =>
-      supportedParameterKeys.has(key as ModelParameterKey),
+    return Object.keys(parameterOverrides).filter(
+      (key) => key === "extra_body" || supportedParameterKeys.has(key as ModelParameterKey),
     ).length;
   }, [parameterOverrides, supportedParameterKeys]);
 
@@ -154,7 +154,9 @@ export function useModelParameters({
       const payload: Record<string, unknown> = {};
       Object.entries(overrides).forEach(([key, rawValue]) => {
         const normalizedKey = key.toLowerCase();
-        if (!supportedSet.has(normalizedKey)) {
+        // extra_body bypasses the supported filter by design: it exists for
+        // parameters the catalog does not know about.
+        if (normalizedKey !== "extra_body" && !supportedSet.has(normalizedKey)) {
           return;
         }
         if (rawValue === undefined || rawValue === null) {

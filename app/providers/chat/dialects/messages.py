@@ -160,6 +160,7 @@ class MessagesProvider:
             tools=tr.tools_to_anthropic(request.tools),
             thinking=self._thinking(request, entry, max_tokens),
             parameters=self._parameters(request, entry),
+            extra_body=request.extra_body or None,
         )
 
     def chat(self, request: ChatRequest) -> dict[str, Any]:

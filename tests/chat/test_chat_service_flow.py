@@ -109,6 +109,51 @@ def test_send_message_records_response(
     assert openrouter.chat_calls
 
 
+def test_extra_body_reaches_the_wire_past_the_supported_parameter_filter(
+    session: Session, chat_user, make_collection, install_chat_flow
+) -> None:
+    """`extra_body` is the escape hatch for knobs no catalog knows.
+
+    It must survive sanitization (which drops unknown keys), land in the
+    provider's extra_body — not among sampling parameters — and win a key
+    collision against the provider's own extensions.
+    """
+    make_collection(chat_user)
+    model_info = ModelInfo(
+        id="test-model",
+        name="Test Model",
+        context_length=2048,
+        supported_parameters=["tools", "temperature"],
+    )
+    response = {
+        "id": "resp-1",
+        "provider": "openrouter",
+        "model": "test-model",
+        "choices": [
+            {"index": 0, "message": {"content": "Answer"}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    openrouter = StubOpenRouter(model_info=model_info, response=response)
+    install_chat_flow(openrouter=openrouter, chat_model="test-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(
+        content="hello",
+        parameters={
+            "temperature": 0.2,
+            "extra_body": {"custom_sampler_flag": True, "usage": {"include": False}},
+        },
+    )
+    service.send_message(user=chat_user, payload=payload)
+
+    call = openrouter.chat_calls[0]
+    assert call["parameters"] == {"temperature": 0.2}
+    assert call["extra_body"]["custom_sampler_flag"] is True
+    # The user's key overrides OpenRouter's own usage-accounting block.
+    assert call["extra_body"]["usage"] == {"include": False}
+
+
 def test_unsupported_parameter_rejection_reaches_the_user_verbatim(
     session: Session, chat_user, make_collection, install_chat_flow
 ) -> None:

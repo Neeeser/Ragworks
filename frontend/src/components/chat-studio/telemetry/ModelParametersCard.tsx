@@ -6,14 +6,14 @@ import { Readout } from "@/components/ui/readout";
 
 import type {
   ModelParameterKey,
-  ParameterDefinition,
   ParameterOverrides,
+  ResolvedParameterDefinition,
 } from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 interface ModelParametersCardProps {
   currentModelInfo: ModelInfo | null;
-  visibleParameterDefinitions: ParameterDefinition[];
+  visibleParameterDefinitions: ResolvedParameterDefinition[];
   parameterOverrides: ParameterOverrides;
   activeParameterCount: number;
   resetAllParameters: () => void;
@@ -70,7 +70,7 @@ export const ModelParametersCard = ({
     );
   }
 
-  const renderParameterControl = (definition: ParameterDefinition) => {
+  const renderParameterControl = (definition: ResolvedParameterDefinition) => {
     const hasOverride = Object.prototype.hasOwnProperty.call(parameterOverrides, definition.key);
     const currentValue = parameterOverrides[definition.key];
     const defaultDisplay = formatDefaultParameter(definition.key);

@@ -227,6 +227,11 @@ class ChatParameters(BaseModel):
     stop: list[str] | None = None
     verbosity: Literal["low", "medium", "high"] | None = None
     reasoning: dict[str, Any] | None = None
+    #: Raw request-body fields merged into the provider call *last*, past the
+    #: supported-parameter filter — the escape hatch for knobs the catalog
+    #: doesn't know (a brand-new OpenAI field, a vLLM sampler flag). The
+    #: server's own rejection is the contract; nothing validates the keys.
+    extra_body: dict[str, Any] | None = None
 
     @field_validator(
         "temperature",
@@ -247,7 +252,7 @@ class ChatParameters(BaseModel):
     def _validate_int(cls, value: Any) -> int | None:
         return _coerce_int_parameter(value)
 
-    @field_validator("logit_bias", "response_format", "reasoning", mode="before")
+    @field_validator("logit_bias", "response_format", "reasoning", "extra_body", mode="before")
     @classmethod
     def _validate_dict(cls, value: Any) -> dict[str, Any] | None:
         return coerce_dict_parameter(value)

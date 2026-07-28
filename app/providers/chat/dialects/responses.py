@@ -144,6 +144,7 @@ class ResponsesProvider:
             parallel_tool_calls=True if request.tools else None,
             reasoning=self._reasoning(request),
             parameters=self._parameters(request),
+            extra_body=request.extra_body or None,
         )
 
     def chat(self, request: ChatRequest) -> dict[str, Any]:

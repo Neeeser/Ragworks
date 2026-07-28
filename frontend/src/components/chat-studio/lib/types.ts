@@ -1,7 +1,7 @@
 import type { ConnectionOption } from "@/components/chat-studio/hooks/settings/use-model-catalog";
 import type {
   ModelParameterKey,
-  ParameterDefinition,
+  ResolvedParameterDefinition,
   ParameterOverrides,
 } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
@@ -132,7 +132,7 @@ export interface TelemetryProviderProps {
 export interface TelemetryParametersProps {
   modelParametersOpen: boolean;
   onModelParametersToggle: () => void;
-  visibleParameterDefinitions: ParameterDefinition[];
+  visibleParameterDefinitions: ResolvedParameterDefinition[];
   parameterOverrides: ParameterOverrides;
   activeParameterCount: number;
   resetAllParameters: () => void;

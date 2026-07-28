@@ -222,13 +222,16 @@ def finalize_response(
 
 def _build_request(run: ChatRun) -> ChatRequest:
     """Build the provider request for the current message history (shared by both modes)."""
+    parameters = dict(run.setup.model.parameter_overrides)
+    extra_body = parameters.pop("extra_body", None)
     return ChatRequest(
         messages=serialize_messages(run.setup.messages),
         tools=run.setup.tools or None,
         model=run.setup.model.active_model_name,
-        parameters=run.setup.model.parameter_overrides or None,
+        parameters=parameters or None,
         reasoning_options=run.setup.model.reasoning_options or None,
         provider_preferences=run.setup.model.provider_preferences,
+        extra_body=extra_body if isinstance(extra_body, dict) else None,
     )
 
 

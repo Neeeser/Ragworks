@@ -69,7 +69,7 @@ export interface UsageBreakdown {
   [key: string]: number | Record<string, number | undefined> | undefined;
 }
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface ReasoningConfig {
   effort?: ReasoningEffort;
@@ -101,6 +101,7 @@ export interface ModelInfo {
   pricing?: ModelPricing | null;
   supported_parameters: string[];
   default_parameters?: Record<string, unknown> | null;
+  reasoning_efforts?: string[] | null;
 }
 
 export interface ProviderEndpointPricing {

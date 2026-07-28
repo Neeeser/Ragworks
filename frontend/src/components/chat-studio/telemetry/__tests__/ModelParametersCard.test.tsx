@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ModelParametersCard } from "@/components/chat-studio/telemetry/ModelParametersCard";
 
-import type { ParameterDefinition } from "@/lib/chat-parameters";
+import type { ResolvedParameterDefinition } from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 vi.mock("@/components/ui/parameter-controls", () => ({
@@ -165,7 +165,7 @@ describe("ModelParametersCard", () => {
         required: false,
       },
       { key: "prompt", label: "Prompt", input: "text", required: false },
-    ] as unknown as ParameterDefinition[];
+    ] as unknown as ResolvedParameterDefinition[];
 
     render(
       <ModelParametersCard

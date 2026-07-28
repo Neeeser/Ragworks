@@ -89,6 +89,11 @@ def prepare_model_settings(
             "Selected model does not support tool calls required for retrieval."
         )
     parameter_overrides = sanitize_parameter_overrides(payload.parameters, supported_parameters)
+    # The pass-through rides inside the overrides dict so session persistence
+    # round-trips it like any other setting; `_build_request` splits it back
+    # out before providers read the sampling parameters.
+    if payload.parameters is not None and payload.parameters.extra_body:
+        parameter_overrides["extra_body"] = payload.parameters.extra_body
     reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
     reasoning_options = _build_reasoning_request_options(
         supported_parameters, reasoning_override, reasoning_effort

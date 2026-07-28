@@ -21,7 +21,11 @@ from app.schemas.chat_parameters import (
     coerce_numeric_parameter,
 )
 
-REASONING_EFFORT_OPTIONS = {"minimal", "low", "medium", "high"}
+#: Every effort level any provider accepts: OpenAI's newer reasoning models
+#: add `none` and `xhigh` (published per model in the capability bundle's
+#: `reasoning_efforts`). Dropping an unknown level here would silently
+#: discard the user's picker choice on models that genuinely accept it.
+REASONING_EFFORT_OPTIONS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 
 
 def normalize_reasoning_effort(value: Any) -> str | None:

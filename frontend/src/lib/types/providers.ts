@@ -119,6 +119,8 @@ export interface CatalogModel {
   output_modalities: string[];
   supported_parameters: string[];
   default_parameters?: Record<string, unknown> | null;
+  reasoning_efforts?: string[] | null;
+  deprecated?: boolean;
 }
 
 /** Mirrors `app/schemas/providers.py::ProviderCoverage`. */

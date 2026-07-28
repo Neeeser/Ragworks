@@ -188,9 +188,55 @@ export const PARAMETER_DEFINITIONS = [
     placeholder: '{ "318": -100 }',
     rows: 3,
   },
+  {
+    key: "extra_body",
+    label: "Additional parameters",
+    description:
+      "JSON merged into the request body last, for fields not listed above. Keys the server rejects fail with its own error.",
+    input: "json",
+    placeholder: '{ "service_tier": "flex" }',
+    rows: 3,
+  },
 ] as const satisfies readonly ParameterDefinitionShape[];
 
 export type ParameterDefinition = (typeof PARAMETER_DEFINITIONS)[number];
 export type ModelParameterKey = ParameterDefinition["key"];
 export type ParameterValue = number | string | boolean | Record<string, unknown>;
 export type ParameterOverrides = Partial<Record<ModelParameterKey, ParameterValue>>;
+
+/** A definition as rendered for one model — options may be model-specific. */
+export type ResolvedParameterDefinition = ParameterDefinitionShape & {
+  key: ModelParameterKey;
+};
+
+const EFFORT_LABELS: Record<string, string> = { xhigh: "Extra high" };
+
+/**
+ * Filter the definitions down to one model's supported set and swap in the
+ * model's own reasoning-effort levels where the provider publishes them.
+ * `extra_body` is always visible: it exists precisely for parameters the
+ * catalog does not know about.
+ */
+export function resolveParameterDefinitions(
+  supportedKeys: ReadonlySet<ModelParameterKey>,
+  reasoningEfforts?: readonly string[] | null,
+): ResolvedParameterDefinition[] {
+  return PARAMETER_DEFINITIONS.filter(
+    (definition) => definition.key === "extra_body" || supportedKeys.has(definition.key),
+  ).map((definition) => {
+    if (definition.key !== "reasoning" || !reasoningEfforts?.length) {
+      return definition;
+    }
+    return {
+      ...definition,
+      options: [
+        { label: "Model default", value: "" },
+        ...reasoningEfforts.map((effort) => ({
+          label:
+            EFFORT_LABELS[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1),
+          value: effort,
+        })),
+      ],
+    };
+  });
+}
