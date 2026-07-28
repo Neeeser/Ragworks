@@ -13,18 +13,22 @@ import {
 
 import type { Node, NodeProps } from "@xyflow/react";
 
+const RETRIEVAL_RESULTS = "retrieval_results";
+const TARGET_RESULTS_TESTID = "target-results";
 const STACKED_SOCKET_SELECTOR = '[data-socket="stacked"]';
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({
     id,
     type,
+    className,
     "data-socket": dataSocket,
   }: {
     id: string;
     type: string;
+    className?: string;
     "data-socket"?: string;
-  }) => <div data-testid={`${type}-${id}`} data-socket={dataSocket} />,
+  }) => <div data-testid={`${type}-${id}`} data-socket={dataSocket} className={className} />,
   Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
 }));
 
@@ -101,7 +105,7 @@ describe("PipelineNode", () => {
             {
               key: "results",
               label: "Results",
-              data_type: "retrieval_results",
+              data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: true,
             },
@@ -110,7 +114,7 @@ describe("PipelineNode", () => {
             {
               key: "results",
               label: "Results",
-              data_type: "retrieval_results",
+              data_type: RETRIEVAL_RESULTS,
               required: true,
               accepts_many: false,
             },
@@ -124,7 +128,7 @@ describe("PipelineNode", () => {
     expect(variadic).toHaveAttribute("tabindex", "0");
     expect(variadic).toHaveTextContent("Results");
     expect(variadic).not.toHaveTextContent("(many)");
-    const variadicRow = screen.getByTestId("target-results").parentElement;
+    const variadicRow = screen.getByTestId(TARGET_RESULTS_TESTID).parentElement;
     expect(variadicRow?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(3);
     // Every port row explains itself; only the variadic one names the fan-in.
     const [variadicTooltip, outputTooltip] = screen.getAllByRole("tooltip");
@@ -144,7 +148,7 @@ describe("PipelineNode", () => {
               {
                 key: "results",
                 label: "Results",
-                data_type: "retrieval_results",
+                data_type: RETRIEVAL_RESULTS,
                 required: true,
                 accepts_many: false,
               },
@@ -161,8 +165,59 @@ describe("PipelineNode", () => {
       .getAllByRole("tooltip")
       .find((node) => /accepts one connection/.test(node.textContent ?? ""));
     expect(single).toHaveTextContent("Results");
-    const singleRow = screen.getAllByTestId("target-results")[1].parentElement;
+    const singleRow = screen.getAllByTestId(TARGET_RESULTS_TESTID)[1].parentElement;
     expect(singleRow?.querySelector(STACKED_SOCKET_SELECTOR)).not.toBeInTheDocument();
+  });
+
+  it("positions port handles with live Tailwind v4 important utilities", () => {
+    // Tailwind v4 only supports the trailing important flag (`absolute!`);
+    // a leading `!absolute` generates no CSS, so the handle silently falls
+    // back to xyflow's default black dot floating off the port row.
+    render(
+      <PipelineNode
+        {...nodeProps({
+          label: "RRF Fusion",
+          nodeType: "fusion.rrf",
+          inputs: [
+            {
+              key: "results",
+              label: "Results",
+              data_type: RETRIEVAL_RESULTS,
+              required: true,
+              accepts_many: true,
+            },
+          ],
+          outputs: [
+            {
+              key: "out",
+              label: "Results",
+              data_type: RETRIEVAL_RESULTS,
+              required: true,
+              accepts_many: false,
+            },
+          ],
+          config: {},
+        })}
+      />,
+    );
+
+    const input = screen.getByTestId(TARGET_RESULTS_TESTID);
+    const output = screen.getByTestId("source-out");
+    for (const handle of [input, output]) {
+      const tokens = (handle.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+      expect(tokens.some((token) => token.startsWith("!"))).toBe(false);
+      // Positioning and color must override xyflow's unlayered stylesheet.
+      expect(tokens).toContain("absolute!");
+      // xyflow's translate(±50%, -50%) must be cancelled or handles sit 6px
+      // off their anchor (Tailwind v4 translate is a separate CSS property).
+      expect(tokens).toContain("transform-none!");
+      // The row must span the full column (the tooltip trigger is inline-flex,
+      // which otherwise shrinks it to the label) so edge anchoring works.
+      expect(handle.parentElement?.className).toContain("w-full");
+      expect(tokens.some((token) => token.startsWith("bg-") && token.endsWith("!"))).toBe(true);
+    }
+    expect(input.getAttribute("class")).toContain("-left-[19px]!");
+    expect(output.getAttribute("class")).toContain("-right-[19px]!");
   });
 
   it("hides at-default settings but counts edited ones", () => {
