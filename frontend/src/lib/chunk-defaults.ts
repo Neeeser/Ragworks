@@ -48,3 +48,35 @@ export function chunkDefaultsFor(maxInputTokens: number | null | undefined): Chu
   const chunkOverlap = Math.min(Math.round(chunkSize * CHUNK_OVERLAP_RATIO), chunkSize - 1);
   return { chunkSize, chunkOverlap: Math.max(0, chunkOverlap) };
 }
+
+export interface ChunkWindow {
+  /** Tokens in each emitted chunk — the number the embedder actually sees. */
+  perChunk: number;
+  /** Tokens of document text each chunk advances by (`chunkSize - overlap`). */
+  newText: number;
+  /** Tokens repeated from the tail of the previous chunk. */
+  repeated: number;
+  /** True when overlap is not smaller than the size, which the chunker rejects. */
+  invalid: boolean;
+}
+
+/**
+ * Break a chunk size and overlap into the three numbers a reader needs.
+ *
+ * Overlap is a stride *within* the window, not extra tokens on top of it: the
+ * chunker takes windows of `chunkSize` and steps forward by
+ * `chunkSize - overlap`, so each emitted chunk is `chunkSize` tokens of which
+ * `overlap` repeat the previous chunk's tail. Reading `chunkSize` as "new text
+ * per chunk, plus overlap on top" is the intuitive misreading, and it is what
+ * this breakdown exists to prevent.
+ */
+export function describeChunkWindow(chunkSize: number, overlap: number): ChunkWindow {
+  const size = Math.max(0, Math.trunc(chunkSize));
+  const repeated = Math.max(0, Math.trunc(overlap));
+  return {
+    perChunk: size,
+    newText: Math.max(0, size - repeated),
+    repeated,
+    invalid: size <= 0 || repeated >= size,
+  };
+}

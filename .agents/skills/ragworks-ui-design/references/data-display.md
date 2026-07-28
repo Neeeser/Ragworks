@@ -148,6 +148,22 @@ they need normalising before `.value`.
 
 ---
 
+## Paired settings state what they produce, not just their values
+
+Two numbers whose relationship is not obvious need a line naming the result, next to
+where they are edited — the reader otherwise infers the relationship, and the intuitive
+inference can be the wrong one.
+
+The worked case is chunk size and overlap (`ChunkWindowSummary`, used by the setup
+wizard and the ingestion pipeline wizard). Overlap is a stride *within* the window: the
+chunker takes windows of `chunk_size` and steps forward by `chunk_size - overlap`, so a
+496/99 pair emits chunks of 496 tokens, 99 of which repeat the previous chunk's tail.
+Reading it as "496 of new text, plus 99 on top" gives 595 and sizes chunks against a
+limit that was never the constraint. The summary states all three numbers, recomputed as
+the fields change, so the sum a reader would infer never has to be guessed at.
+
+---
+
 ## Identifiers are not labels
 
 A model id, index name, uuid, or file path is a **literal** — render it verbatim in

@@ -4,6 +4,7 @@ import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -216,6 +217,19 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
           />
         </Field>
       </div>
+      <ChunkWindowSummary
+        chunkSize={chunkSize}
+        chunkOverlap={chunkOverlap}
+        limit={
+          effectiveLimit != null && selectedModel?.max_input_tokens != null
+            ? {
+                value: effectiveLimit,
+                modelName: embeddingModel,
+                published: selectedModel.max_input_tokens,
+              }
+            : null
+        }
+      />
       <SetupNotice message={chunkSizeWarning} tone="warning" />
 
       {showAggregateTools ? (

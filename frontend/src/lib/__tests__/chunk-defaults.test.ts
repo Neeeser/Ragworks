@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chunkDefaultsFor, effectiveInputLimit } from "@/lib/chunk-defaults";
+import { chunkDefaultsFor, describeChunkWindow, effectiveInputLimit } from "@/lib/chunk-defaults";
 
 describe("chunkDefaultsFor", () => {
   it("falls back to 512/102 when the model window is unknown", () => {
@@ -36,5 +36,33 @@ describe("effectiveInputLimit", () => {
     expect(effectiveInputLimit(null)).toBeNull();
     expect(effectiveInputLimit(undefined)).toBeNull();
     expect(effectiveInputLimit(-5)).toBeNull();
+  });
+});
+
+describe("describeChunkWindow", () => {
+  it("splits the window into new text and the repeated tail", () => {
+    // The wizard's MiniLM defaults: 496 tokens reach the embedder, not 595.
+    expect(describeChunkWindow(496, 99)).toEqual({
+      perChunk: 496,
+      newText: 397,
+      repeated: 99,
+      invalid: false,
+    });
+  });
+
+  it("reports no repetition when there is no overlap", () => {
+    expect(describeChunkWindow(512, 0)).toEqual({
+      perChunk: 512,
+      newText: 512,
+      repeated: 0,
+      invalid: false,
+    });
+  });
+
+  it("flags an overlap the chunker would reject", () => {
+    // strategies.py raises when overlap >= chunk_size.
+    expect(describeChunkWindow(256, 256).invalid).toBe(true);
+    expect(describeChunkWindow(256, 300).invalid).toBe(true);
+    expect(describeChunkWindow(0, 0).invalid).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
@@ -146,6 +147,12 @@ export function WizardProcessingStep({
               );
             })}
           </div>
+          <ChunkWindowSummary
+            chunkSize={chunkSize}
+            chunkOverlap={chunkOverlap}
+            unit="words"
+            className="mt-2"
+          />
           <button
             type="button"
             onClick={onToggleAdvancedChunking}

@@ -148,6 +148,30 @@ describe("StepCollection", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
   });
 
+  it("states what reaches the embedder so chunk size is not read as new-text-plus-overlap", () => {
+    const wizard = makeWizard({
+      models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
+    });
+    wizard.state = {
+      ...wizard.state,
+      step: "collection",
+      choices: {
+        ...wizard.state.choices,
+        embeddingModel: MINILM,
+        collectionName: "First",
+        chunkSize: 496,
+        chunkOverlap: 99,
+      },
+    };
+
+    render(<StepCollection wizard={wizard} />);
+
+    const summary = screen.getByText(/Each chunk is/).textContent?.replace(/\s+/g, " ");
+    expect(summary).toContain("Each chunk is 496 tokens: 397 of new text");
+    // 595 is the sum a reader infers when overlap looks additive.
+    expect(summary).not.toContain("595");
+  });
+
   it("does not warn when chunk size fits the window even if size plus overlap exceeds it", () => {
     const wizard = makeWizard({
       models: [makeCatalogModel({ id: MINILM, max_input_tokens: 512 })],
