@@ -30,10 +30,16 @@ const SNAPSHOT_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
 /**
  * Price ceiling for the sampling probe, in USD per million tokens.
  *
- * Set just above the cheap tier of each generation — the nano/mini/luna-class
- * models, plus the base `gpt-5`, `gpt-5.1`, `o3` and `o4-mini`. The tier above
- * that jumps to $14–30 per million output and buys nothing: what is being
- * measured is a per-model API behavior, not a quality difference.
+ * Set at the top of the standard tier, which excludes the research and `-pro`
+ * models (from $40 to $600 per million output). The spend it admits is
+ * fractions of a cent: a rejected probe bills nothing at all, and an accepted
+ * one is 16 output tokens — under $0.0005 even at the ceiling.
+ *
+ * Reaching the whole standard tier matters because the probe answers two
+ * questions, and the second one is load-bearing. `gpt-5.6-terra` and
+ * `gpt-5.6-sol` accept `reasoning.effort: none` without their docs pages
+ * saying so; unmeasured, the app leaves them reasoning and every sampling
+ * knob it offers them fails.
  *
  * A model priced above this, or one whose page states no price, is left
  * unprobed and records `sampling: null` — read as unknown and treated
@@ -41,8 +47,8 @@ const SNAPSHOT_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
  * gets. Permissive is the safe direction: a knob the model rejects comes back
  * naming the field, where hiding one the model accepts cannot be undone.
  */
-const MAX_PROBE_INPUT_USD_PER_M = 2;
-const MAX_PROBE_OUTPUT_USD_PER_M = 10;
+const MAX_PROBE_INPUT_USD_PER_M = 5;
+const MAX_PROBE_OUTPUT_USD_PER_M = 30;
 
 /** A model that has not answered by now is not worth waiting on. */
 const PROBE_TIMEOUT_MS = 30_000;
