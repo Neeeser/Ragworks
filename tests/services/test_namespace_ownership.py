@@ -18,8 +18,8 @@ from app.db import models
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.indexing import PgvectorIndexerConfig
 from app.pipelines.nodes.indexing_legacy import PgvectorIndexerNode
-from app.pipelines.payloads import EmbeddingPayload
-from app.retrieval.models import Document, DocumentChunk, DocumentMetadata
+from app.pipelines.payloads import ItemBatch
+from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.services.errors import InvalidInputError
 from app.services.namespace_ownership import resolve_owned_namespace
 from app.utils.file_storage import FileStorage
@@ -110,9 +110,8 @@ def test_an_indexer_never_reaches_the_store_with_a_foreign_namespace(
         storage=FileStorage(),
         settings=get_settings(),
     )
-    payload = EmbeddingPayload(
-        document=Document(document_id="doc", text="x", metadata=DocumentMetadata()),
-        chunks=[
+    batch = ItemBatch.from_chunks(
+        [
             DocumentChunk(
                 document_id="doc",
                 chunk_id="doc:0",
@@ -121,8 +120,7 @@ def test_an_indexer_never_reaches_the_store_with_a_foreign_namespace(
                 metadata=DocumentMetadata(),
                 embedding=[0.1, 0.2],
             )
-        ],
-        usage={},
+        ]
     )
     node = PgvectorIndexerNode(
         PgvectorIndexerConfig(
@@ -131,6 +129,6 @@ def test_an_indexer_never_reaches_the_store_with_a_foreign_namespace(
     )
 
     with pytest.raises(InvalidInputError, match="another account"):
-        node.run({"embedded": payload}, context)
+        node.run({"items": batch}, context)
 
     assert store.upsert_calls == []

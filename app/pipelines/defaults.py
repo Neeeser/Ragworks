@@ -29,7 +29,8 @@ from app.pipelines.nodes.indexing import (
     default_index_name,
 )
 from app.pipelines.nodes.limiting import ResultLimitNode
-from app.pipelines.nodes.retrieval import Bm25RetrieverNode, VectorRetrieverNode
+from app.pipelines.nodes.retrieval import VectorRetrieverNode
+from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.variables import PipelineVariable, VariableSource, VariableType
 from app.schemas.enums import IndexBackend
@@ -167,22 +168,22 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
             id="edge-chunker-embedder",
             source="chunk-document",
             target="embed-chunks",
-            source_port="chunks",
-            target_port="chunks",
+            source_port="items",
+            target_port="items",
         ),
         PipelineEdgeDefinition(
             id="edge-embedder-indexer",
             source="embed-chunks",
             target="index-chunks",
-            source_port="embedded",
-            target_port="embedded",
+            source_port="items",
+            target_port="items",
         ),
         PipelineEdgeDefinition(
             id="edge-indexer-output",
             source="index-chunks",
             target="ingest-output",
-            source_port="indexed",
-            target_port="indexed",
+            source_port="items",
+            target_port="items",
         ),
     ]
     if include_bm25:
@@ -205,15 +206,15 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
                     id="edge-chunker-bm25-indexer",
                     source="chunk-document",
                     target="index-bm25",
-                    source_port="chunks",
-                    target_port="chunks",
+                    source_port="items",
+                    target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="edge-bm25-indexer-output",
                     source="index-bm25",
                     target="ingest-output",
-                    source_port="indexed",
-                    target_port="indexed",
+                    source_port="items",
+                    target_port="items",
                 ),
             ]
         )
@@ -286,15 +287,15 @@ def build_default_retrieval_pipeline(
             id="edge-retrieval-input",
             source="query-input",
             target="embed-query",
-            source_port="request",
-            target_port="request",
+            source_port="items",
+            target_port="items",
         ),
         PipelineEdgeDefinition(
             id="edge-retrieval-embedder",
             source="embed-query",
             target="vector-retriever",
-            source_port="query_embedding",
-            target_port="query_embedding",
+            source_port="items",
+            target_port="items",
         ),
     ]
     if include_bm25:
@@ -331,36 +332,36 @@ def build_default_retrieval_pipeline(
                     id="edge-input-bm25-retriever",
                     source="query-input",
                     target="bm25-retriever",
-                    source_port="request",
-                    target_port="request",
+                    source_port="items",
+                    target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="edge-semantic-fusion",
                     source="vector-retriever",
                     target="fuse-results",
-                    source_port="results",
-                    target_port="results",
+                    source_port="items",
+                    target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="edge-bm25-fusion",
                     source="bm25-retriever",
                     target="fuse-results",
-                    source_port="results",
-                    target_port="results",
+                    source_port="items",
+                    target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="edge-fusion-limit",
                     source="fuse-results",
                     target="limit-results",
-                    source_port="results",
-                    target_port="results",
+                    source_port="items",
+                    target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="edge-limit-output",
                     source="limit-results",
                     target="retrieval-output",
-                    source_port="results",
-                    target_port="results",
+                    source_port="items",
+                    target_port="items",
                 ),
             ]
         )
@@ -370,8 +371,8 @@ def build_default_retrieval_pipeline(
                 id="edge-retrieval-output",
                 source="vector-retriever",
                 target="retrieval-output",
-                source_port="results",
-                target_port="results",
+                source_port="items",
+                target_port="items",
             )
         )
     return PipelineDefinition(

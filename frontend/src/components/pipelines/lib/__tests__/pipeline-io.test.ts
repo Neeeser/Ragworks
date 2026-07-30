@@ -58,13 +58,31 @@ describe("pipeline-io", () => {
       buildNode({
         nodeType: parserNodeType,
         outputs: [
-          { key: "out", label: "Out", data_type: "document", required: true, accepts_many: false },
+          {
+            key: "out",
+            label: "Out",
+            data_type: "document",
+            required: true,
+            accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
+          },
         ],
       }),
       buildNode({
         nodeType: chunkerNodeType,
         inputs: [
-          { key: "in", label: "In", data_type: "chunk_batch", required: true, accepts_many: false },
+          {
+            key: "in",
+            label: "In",
+            data_type: "chunk_batch",
+            required: true,
+            accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
+          },
         ],
       }),
     ];
@@ -98,6 +116,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: { dimension: 768 },
@@ -111,6 +132,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: { dimension: 384 },
@@ -144,6 +168,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: {},
@@ -157,6 +184,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: {},
@@ -187,6 +217,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: { dimension: Number.POSITIVE_INFINITY },
@@ -200,6 +233,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config: { dimension: 384 },
@@ -225,6 +261,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
       }),
@@ -237,6 +276,9 @@ describe("pipeline-io", () => {
             data_type: "embedded_batch",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
       }),
@@ -262,13 +304,31 @@ describe("pipeline-io", () => {
       buildNode({
         nodeType: "custom.source",
         outputs: [
-          { key: "out", label: "Out", data_type: "custom", required: true, accepts_many: false },
+          {
+            key: "out",
+            label: "Out",
+            data_type: "custom",
+            required: true,
+            accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
+          },
         ],
       }),
       buildNode({
         nodeType: "custom.target",
         inputs: [
-          { key: "in", label: "In", data_type: "other", required: true, accepts_many: false },
+          {
+            key: "in",
+            label: "In",
+            data_type: "other",
+            required: true,
+            accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
+          },
         ],
       }),
     ];
@@ -288,14 +348,32 @@ describe("pipeline-io", () => {
       buildNode({
         nodeType: parserNodeType,
         outputs: [
-          { key: "out", label: "Out", data_type: "document", required: true, accepts_many: false },
+          {
+            key: "out",
+            label: "Out",
+            data_type: "document",
+            required: true,
+            accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
+          },
         ],
       }),
       buildNode(
         {
           nodeType: parserNodeType,
           inputs: [
-            { key: "in", label: "In", data_type: "document", required: true, accepts_many: false },
+            {
+              key: "in",
+              label: "In",
+              data_type: "document",
+              required: true,
+              accepts_many: false,
+              requires: [],
+              adds: [],
+              preserves: false,
+            },
           ],
         },
         `${parserNodeType}.2`,
@@ -380,6 +458,9 @@ describe("port fan-in", () => {
     data_type: "retrieval_results",
     required: true,
     accepts_many: acceptsMany,
+    requires: [],
+    adds: [],
+    preserves: false,
   });
   const sourceA = buildNode(
     { nodeType: "retriever.vector", outputs: [resultsPort(false)] },
@@ -400,7 +481,9 @@ describe("port fan-in", () => {
 
   it("rejects a second edge into a single-value input port", () => {
     const nodes = [sourceA, sourceB, singleTarget];
-    const existingEdges = [{ id: "edge-1", target: SINGLE_TARGET, targetHandle: "results" }];
+    const existingEdges = [
+      { id: "edge-1", source: "source-a", target: SINGLE_TARGET, targetHandle: "results" },
+    ];
     const connection: Connection = {
       source: "source-b",
       target: SINGLE_TARGET,
@@ -416,7 +499,9 @@ describe("port fan-in", () => {
 
   it("allows any number of edges into an accepts_many port", () => {
     const nodes = [sourceA, sourceB, fusionTarget];
-    const existingEdges = [{ id: "edge-1", target: FUSION_TARGET, targetHandle: "results" }];
+    const existingEdges = [
+      { id: "edge-1", source: "source-a", target: FUSION_TARGET, targetHandle: "results" },
+    ];
     const connection: Connection = {
       source: "source-b",
       target: FUSION_TARGET,

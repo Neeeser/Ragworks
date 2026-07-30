@@ -9,34 +9,35 @@
    is no hydration mismatch and no flash of the wrong theme.
    ===================================================================== */
 
-/* Palette: deep-space — the dark-mode default. `data-theme` carries the
+/* Palette: graphite — the dark-mode default. `data-theme` carries the
    resolved structural mode (dark/light), stamped pre-paint by the theme
    script; `data-palette` (blocks further down) carries the user's palette for
    that mode. The mode defaults ARE these two base blocks, so they need no
    override block of their own. */
 :root,
 :root[data-theme="dark"] {
-  /* Canvas & chrome. The dark palettes carry an accent cast in these values —
-     that cast is the only place "lit by the brand" lives, so components stay
-     palette-blind and a future accent swap keeps the whole look. */
-  --canvas: #0a0910;
-  --canvas-raised: #14121d;
-  --surface: rgba(167, 139, 250, 0.055);
-  --surface-strong: rgba(167, 139, 250, 0.1);
-  --border-hairline: rgba(167, 139, 250, 0.13);
-  --border-strong: rgba(167, 139, 250, 0.34);
+  /* Canvas & chrome. Graphite's cast is near-neutral (lifted base, lower
+     contrast) rather than the accent-tinted cast the other dark palettes
+     carry — components still read these as plain semantic tokens, so a
+     future accent swap keeps the whole look regardless of cast. */
+  --canvas: #15161d;
+  --canvas-raised: #1d1f28;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --border-hairline: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.26);
 
   /* Card material — the console's depth device (.card-surface). Opaque so
      stacked content never bleeds through; lighter at the top like a plate
      under a light source. */
-  --panel-from: #171420;
-  --panel-to: #110f18;
-  --panel-highlight: rgba(255, 255, 255, 0.055);
+  --panel-from: #1e2029;
+  --panel-to: #191b23;
+  --panel-highlight: rgba(255, 255, 255, 0.05);
 
   /* Text ramp */
   --text-primary: #ffffff;
-  --text-body: #cbd5e1;
-  --text-muted: #94a3b8;
+  --text-body: #d3dae4;
+  --text-muted: #9aa5b5;
   --text-meta: #64748b;
   --text-faint: #334155;
 
@@ -69,12 +70,10 @@
   /* Port data-types (edges/handles across editor + trace + demo flow). */
   --port-document-source: #38bdf8;
   --port-document: #34d399;
-  --port-chunk-batch: #2dd4bf;
-  --port-embedded-batch: #fbbf24;
-  --port-indexed-batch: #22d3ee;
-  --port-query-request: #818cf8;
-  --port-query-embedding: #fbbf24;
-  --port-retrieval-results: #e879f9;
+  --port-items-text: #2dd4bf;
+  --port-items-embedding: #fbbf24;
+  --port-items-scored: #e879f9;
+  --port-structured-values: #818cf8;
   --port-default: #64748b;
 
   /* Semantic status */
@@ -150,12 +149,10 @@
 
   --port-document-source: #0284c7;
   --port-document: #059669;
-  --port-chunk-batch: #0d9488;
-  --port-embedded-batch: #d97706;
-  --port-indexed-batch: #0e7490;
-  --port-query-request: #4f46e5;
-  --port-query-embedding: #d97706;
-  --port-retrieval-results: #c026d3;
+  --port-items-text: #0d9488;
+  --port-items-embedding: #d97706;
+  --port-items-scored: #c026d3;
+  --port-structured-values: #4f46e5;
   --port-default: #64748b;
 
   --data-pos: #059669;
@@ -180,6 +177,21 @@
    picker renders from is src/lib/palettes.ts — a new palette is one block
    here plus one catalog entry. These blocks sit AFTER both mode bases on
    purpose: equal specificity, so source order is what lets a palette win. */
+
+/* Palette: deep-space — violet-cast dark, the original default. */
+:root[data-palette="deep-space"] {
+  --canvas: #0a0910;
+  --canvas-raised: #14121d;
+  --surface: rgba(167, 139, 250, 0.055);
+  --surface-strong: rgba(167, 139, 250, 0.1);
+  --border-hairline: rgba(167, 139, 250, 0.13);
+  --border-strong: rgba(167, 139, 250, 0.34);
+  --panel-from: #171420;
+  --panel-to: #110f18;
+  --panel-highlight: rgba(255, 255, 255, 0.055);
+  --text-body: #cbd5e1;
+  --text-muted: #94a3b8;
+}
 
 /* Palette: true-black — OLED, maximum contrast. Cast nearly neutral. */
 :root[data-palette="true-black"] {
@@ -206,21 +218,6 @@
   --panel-from: #121a2e;
   --panel-to: #0d1322;
   --panel-highlight: rgba(255, 255, 255, 0.055);
-}
-
-/* Palette: graphite — lifted base, lower contrast for long sessions. */
-:root[data-palette="graphite"] {
-  --canvas: #15161d;
-  --canvas-raised: #1d1f28;
-  --surface: rgba(255, 255, 255, 0.04);
-  --surface-strong: rgba(255, 255, 255, 0.07);
-  --border-hairline: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.26);
-  --panel-from: #1e2029;
-  --panel-to: #191b23;
-  --panel-highlight: rgba(255, 255, 255, 0.05);
-  --text-body: #d3dae4;
-  --text-muted: #9aa5b5;
 }
 
 /* Palette: high-contrast — accessibility. Text is pushed to AAA and structure

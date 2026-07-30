@@ -22,7 +22,7 @@ from app.pipelines.nodes.io import (
 )
 from app.pipelines.nodes.limiting import ResultLimitConfig, ResultLimitNode
 from app.pipelines.nodes.retrieval import VectorRetrieverConfig, VectorRetrieverNode
-from app.pipelines.payloads import RetrievalPayload, RetrievalRequestPayload
+from app.pipelines.payloads import Item, ItemBatch, RetrievalPayload
 from app.pipelines.registry import build_default_registry
 from app.pipelines.resolution import resolve_definition
 from app.pipelines.variables import (
@@ -34,8 +34,6 @@ from app.pipelines.variables import (
 from app.retrieval.models import (
     DocumentChunk,
     DocumentMetadata,
-    QueryRequest,
-    RetrievalResponse,
     ScoredChunk,
 )
 from app.utils.file_storage import FileStorage
@@ -122,19 +120,13 @@ def _input_definition(arguments: list[PipelineInputArgument]) -> PipelineDefinit
 
 
 class TestRetrievalInputNode:
-    """The input node reads the run's effective top_k off the context."""
+    """The input node emits the run's query as a single-item stream."""
 
-    def test_uses_context_top_k(self, session: Session) -> None:
+    def test_emits_query_item(self, session: Session) -> None:
         context = _context(session, top_k=3)
         node = RetrievalInputNode(RetrievalInputConfig())
-        payload = RetrievalRequestPayload.model_validate(node.run({}, context)["request"])
-        assert payload.request.top_k == 3
-
-    def test_legacy_default_is_five(self, session: Session) -> None:
-        context = _context(session)
-        node = RetrievalInputNode(RetrievalInputConfig())
-        payload = RetrievalRequestPayload.model_validate(node.run({}, context)["request"])
-        assert payload.request.top_k == 5
+        batch = ItemBatch.model_validate(node.run({}, context)["items"])
+        assert [(item.id, item.text) for item in batch.items] == [("query", "hello")]
 
 
 class TestRunnerEffectiveTopK:
@@ -207,14 +199,8 @@ class TestRetrieverTopKOverride:
         node = VectorRetrieverNode(
             VectorRetrieverConfig(backend="pgvector", index_name="docs", top_k=20)
         )
-        request = QueryRequest(text="hello", top_k=5)
         node.run(
-            {
-                "query_embedding": {
-                    "request": request.model_dump(),
-                    "embedding": [0.1, 0.2],
-                }
-            },
+            {"items": ItemBatch(items=[Item(id="query", text="hello", embedding=[0.1, 0.2])])},
             context,
         )
         assert store.query_calls[0]["top_k"] == 20
@@ -225,55 +211,52 @@ class TestResultLimitNode:
 
     def test_truncates_to_max_results(self, session: Session) -> None:
         matches = [_chunk(order) for order in range(5)]
-        payload = RetrievalPayload(response=RetrievalResponse(matches=matches))
+        batch = ItemBatch.from_matches(matches)
         node = ResultLimitNode(ResultLimitConfig(max_results=2))
-        outputs = node.run({"results": payload}, _context(session))
-        result = RetrievalPayload.model_validate(outputs["results"])
-        assert [match.chunk.chunk_id for match in result.response.matches] == [
-            "doc:0",
-            "doc:1",
-        ]
+        outputs = node.run({"items": batch}, _context(session))
+        result = ItemBatch.model_validate(outputs["items"])
+        assert [item.id for item in result.items] == ["doc:0", "doc:1"]
 
     def test_short_input_passes_through(self, session: Session) -> None:
-        payload = RetrievalPayload(response=RetrievalResponse(matches=[_chunk(0)]))
+        batch = ItemBatch.from_matches([_chunk(0)])
         node = ResultLimitNode(ResultLimitConfig(max_results=10))
-        outputs = node.run({"results": payload}, _context(session))
-        result = RetrievalPayload.model_validate(outputs["results"])
-        assert len(result.response.matches) == 1
+        outputs = node.run({"items": batch}, _context(session))
+        result = ItemBatch.model_validate(outputs["items"])
+        assert len(result.items) == 1
 
     def test_unset_max_results_falls_back_to_requested_top_k(self, session: Session) -> None:
         matches = [_chunk(order) for order in range(5)]
-        payload = RetrievalPayload(response=RetrievalResponse(matches=matches))
+        batch = ItemBatch.from_matches(matches)
         node = ResultLimitNode(ResultLimitConfig())
-        outputs = node.run({"results": payload}, _context(session, top_k=2))
-        result = RetrievalPayload.model_validate(outputs["results"])
-        assert len(result.response.matches) == 2
-        summary = node.summarize_io({"results": payload}, outputs)
+        outputs = node.run({"items": batch}, _context(session, top_k=2))
+        result = ItemBatch.model_validate(outputs["items"])
+        assert len(result.items) == 2
+        summary = node.summarize_io({"items": batch}, outputs)
         kept = next(value.value for value in summary.outputs if value.label == "Kept")
         assert kept == {"max_results": 2, "kept": 2, "dropped": 3}
 
     def test_zero_requested_top_k_keeps_nothing(self, session: Session) -> None:
         """A falsy requested top_k is honored, not treated as 'unset'."""
-        payload = RetrievalPayload(response=RetrievalResponse(matches=[_chunk(0), _chunk(1)]))
+        batch = ItemBatch.from_matches([_chunk(0), _chunk(1)])
         node = ResultLimitNode(ResultLimitConfig())
-        outputs = node.run({"results": payload}, _context(session, top_k=0))
-        result = RetrievalPayload.model_validate(outputs["results"])
-        assert result.response.matches == []
+        outputs = node.run({"items": batch}, _context(session, top_k=0))
+        result = ItemBatch.model_validate(outputs["items"])
+        assert result.items == []
 
     def test_no_config_and_no_request_keeps_everything(self, session: Session) -> None:
         matches = [_chunk(order) for order in range(3)]
-        payload = RetrievalPayload(response=RetrievalResponse(matches=matches))
+        batch = ItemBatch.from_matches(matches)
         node = ResultLimitNode(ResultLimitConfig())
-        outputs = node.run({"results": payload}, _context(session, top_k=None))
-        result = RetrievalPayload.model_validate(outputs["results"])
-        assert len(result.response.matches) == 3
+        outputs = node.run({"items": batch}, _context(session, top_k=None))
+        result = ItemBatch.model_validate(outputs["items"])
+        assert len(result.items) == 3
 
     def test_trace_shows_full_input_and_kept_counts(self, session: Session) -> None:
         matches = [_chunk(order) for order in range(4)]
-        payload = RetrievalPayload(response=RetrievalResponse(matches=matches))
+        batch = ItemBatch.from_matches(matches)
         node = ResultLimitNode(ResultLimitConfig(max_results=3))
-        outputs = node.run({"results": payload}, _context(session))
-        summary = node.summarize_io({"results": payload}, outputs)
+        outputs = node.run({"items": batch}, _context(session))
+        summary = node.summarize_io({"items": batch}, outputs)
         kept = next(value.value for value in summary.outputs if value.label == "Kept")
         assert kept == {"max_results": 3, "kept": 3, "dropped": 1}
         candidate_items = next(
@@ -295,15 +278,17 @@ class TestRetrievalOutputNode:
                 {"outputs": [{"name": "candidates", "expression": "top_k * 2"}]}
             )
         )
-        payload = RetrievalPayload(response=RetrievalResponse(matches=[]))
-        result = RetrievalPayload.model_validate(node.run({"results": payload}, context)["result"])
+        result = RetrievalPayload.model_validate(
+            node.run({"items": ItemBatch()}, context)["result"]
+        )
         assert result.outputs == {"candidates": 8}
 
     def test_no_outputs_declared_is_passthrough(self, session: Session) -> None:
         context = _context(session)
         node = RetrievalOutputNode(RetrievalOutputConfig())
-        payload = RetrievalPayload(response=RetrievalResponse(matches=[]))
-        result = RetrievalPayload.model_validate(node.run({"results": payload}, context)["result"])
+        result = RetrievalPayload.model_validate(
+            node.run({"items": ItemBatch()}, context)["result"]
+        )
         assert result.outputs == {}
 
     def test_broken_output_expression_fails_the_run(self, session: Session) -> None:
@@ -314,9 +299,8 @@ class TestRetrievalOutputNode:
                 {"outputs": [{"name": "bad", "expression": "missing_var"}]}
             )
         )
-        payload = RetrievalPayload(response=RetrievalResponse(matches=[]))
         with pytest.raises(ValueError, match="Output 'bad'"):
-            node.run({"results": payload}, context)
+            node.run({"items": ItemBatch()}, context)
 
 
 def test_end_to_end_over_retrieve_and_clamp(session: Session) -> None:
@@ -363,29 +347,29 @@ def test_end_to_end_over_retrieve_and_clamp(session: Session) -> None:
                 "id": "e1",
                 "source": "input",
                 "target": "embed",
-                "source_port": "request",
-                "target_port": "request",
+                "source_port": "items",
+                "target_port": "items",
             },
             {
                 "id": "e2",
                 "source": "embed",
                 "target": "retrieve",
-                "source_port": "query_embedding",
-                "target_port": "query_embedding",
+                "source_port": "items",
+                "target_port": "items",
             },
             {
                 "id": "e3",
                 "source": "retrieve",
                 "target": "limit",
-                "source_port": "results",
-                "target_port": "results",
+                "source_port": "items",
+                "target_port": "items",
             },
             {
                 "id": "e4",
                 "source": "limit",
                 "target": "output",
-                "source_port": "results",
-                "target_port": "results",
+                "source_port": "items",
+                "target_port": "items",
             },
         ],
         variables=[

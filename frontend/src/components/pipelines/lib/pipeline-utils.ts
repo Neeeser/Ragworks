@@ -1,7 +1,9 @@
+import { facetsToken, inferOutputFacets } from "./facet-inference";
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import { ESTIMATED_NODE_WIDTH, LAYER_GAP_X } from "./pipeline-layout";
 import { getNodeFamilyOrder, resolveNodeFamily, type NodeFamily } from "./pipeline-theme";
 
+import type { FacetNodePorts } from "./facet-inference";
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { NodeSpec, PipelineDefinition, PipelineVariable, VectorIndex } from "@/lib/types";
@@ -39,13 +41,36 @@ export const toFlowNodes = (
 
 /**
  * Convert definition edges to typed flow edges. The wire's color comes from
- * the data type leaving the source port, resolved via the node specs.
+ * the stream leaving the source port — its kind plus the facet guarantees
+ * inferred through the graph, so a preserving node's outgoing wire keeps the
+ * color of what actually flows through it.
  */
-export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): TypedEdgeType[] =>
-  definition.edges.map((edge) => {
+export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): TypedEdgeType[] => {
+  const specByType = new Map(specs.map((spec) => [spec.type, spec]));
+  const nodePorts: FacetNodePorts = new Map(
+    definition.nodes.map((node) => {
+      const spec = specByType.get(node.type);
+      return [node.id, { inputs: spec?.input_ports ?? [], outputs: spec?.output_ports ?? [] }];
+    }),
+  );
+  const guarantees = inferOutputFacets(
+    nodePorts,
+    definition.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      sourcePort: edge.source_port,
+      target: edge.target,
+      targetPort: edge.target_port,
+    })),
+  );
+  return definition.edges.map((edge) => {
     const sourceNode = definition.nodes.find((node) => node.id === edge.source);
-    const spec = sourceNode ? specs.find((item) => item.type === sourceNode.type) : undefined;
-    const port = spec?.output_ports.find((entry) => entry.key === edge.source_port);
+    const spec = sourceNode ? specByType.get(sourceNode.type) : undefined;
+    const port =
+      spec?.output_ports.find((entry) => entry.key === edge.source_port) ?? spec?.output_ports[0];
+    const dataType = port
+      ? facetsToken(port.data_type, guarantees.get(`${edge.source}.${port.key}`) ?? port.adds ?? [])
+      : undefined;
     return {
       id: edge.id,
       source: edge.source,
@@ -53,9 +78,10 @@ export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): 
       sourceHandle: edge.source_port ?? undefined,
       targetHandle: edge.target_port ?? undefined,
       type: "typed" as const,
-      data: { dataType: port?.data_type ?? spec?.output_ports[0]?.data_type },
+      data: { dataType },
     };
   });
+};
 
 export const toPipelineDefinition = (
   nodes: Node<PipelineNodeData>[],

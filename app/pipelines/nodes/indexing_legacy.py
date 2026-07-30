@@ -21,7 +21,7 @@ class IndexerNode(BaseIndexerNode):
     type = "indexer.pinecone"
     label = "Pinecone Indexer"
     description = "Upsert embeddings into Pinecone."
-    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pinecone')."
+    example = "Items(2 embedded) -> Items(2 embedded, indexed into 'pinecone')."
     hidden = True
 
 
@@ -32,6 +32,6 @@ class PgvectorIndexerNode(BaseIndexerNode):
     type = "indexer.pgvector"
     label = "pgvector Indexer"
     description = "Upsert embeddings into the built-in Postgres (pgvector)."
-    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='pgvector')."
+    example = "Items(2 embedded) -> Items(2 embedded, indexed into 'pgvector')."
     config_model = PgvectorIndexerConfig
     hidden = True

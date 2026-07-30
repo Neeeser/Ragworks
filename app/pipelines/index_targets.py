@@ -29,9 +29,11 @@ from app.pipelines.nodes.indexing import (
 )
 from app.pipelines.nodes.retrieval import (
     BaseRetrieverNode,
+    RetrieverConfig,
+)
+from app.pipelines.nodes.retrieval_bm25 import (
     Bm25RetrieverConfig,
     Bm25RetrieverNode,
-    RetrieverConfig,
 )
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.template import resolve_collection_template

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
@@ -15,9 +16,10 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.upgrades import migrate_variables_definition, upgrade_definition
+from app.pipelines.upgrades import upgrade_definition
 from app.pipelines.validation import PipelineValidationResult
 from app.pipelines.variables import VariableSource
+from app.pipelines.variables_migration import migrate_variables_definition
 from app.services.pipelines import PipelineService, upgrade_stored_pipeline_definitions
 
 
@@ -125,8 +127,8 @@ def test_upgrade_definition_bypasses_legacy_reranker_and_keeps_result_limit() ->
     assert any(
         edge.source == "retriever"
         and edge.target == "limit"
-        and edge.source_port == "results"
-        and edge.target_port == "results"
+        and edge.source_port == "items"
+        and edge.target_port == "items"
         for edge in upgraded.edges
     )
     assert upgraded.node_map()["retriever"].config.get("top_k") is None
@@ -252,7 +254,7 @@ def test_upgrade_definition_never_duplicates_an_existing_spliced_edge() -> None:
         (edge.source, edge.target, edge.source_port, edge.target_port)
         for edge in upgraded.edges
     ]
-    assert identities == [("source", "fuse", "results", "results")]
+    assert identities == [("source", "fuse", "items", "items")]
 
 
 def test_upgrade_definition_contracts_adjacent_legacy_rerankers() -> None:
@@ -390,7 +392,10 @@ def test_upgrade_definition_renames_result_limit_in_place_and_preserves_edges() 
     assert limit.config == {"max_results": {"$expr": "result_limit"}}
     assert upgraded.node_map()["in"].config["arguments"] == ["result_limit"]
     assert [variable.name for variable in upgraded.variables] == ["result_limit"]
-    assert upgraded.edges == definition.edges
+    assert upgraded.edges == [
+        edge.model_copy(update={"source_port": "items", "target_port": "items"})
+        for edge in definition.edges
+    ]
     assert upgrade_definition(upgraded) is None
 
 
@@ -731,3 +736,85 @@ def test_upgrade_stored_pipeline_definitions_rewrites_versions_in_place(
     assert warning in caplog.text
     # Idempotent on the second run.
     assert upgrade_stored_pipeline_definitions(session) == 0
+
+
+def test_upgrade_definition_renames_legacy_stage_ports_to_items() -> None:
+    """Stored edges naming the embedder's old dual ports (and every other
+    stage-named stream port) rewire to the unified `items` vocabulary, and
+    the result passes port validation against the current registry."""
+    definition = PipelineDefinition.model_validate(
+        {
+            "schema_version": 2,
+            "nodes": [
+                {"id": "in", "type": "retrieval.input", "name": "Input", "config": {}},
+                {
+                    "id": "embed",
+                    "type": "embedder.text",
+                    "name": "Embedder",
+                    "config": {"connection_id": str(uuid4()), "model_name": "m"},
+                },
+                {
+                    "id": "retrieve",
+                    "type": "retriever.vector",
+                    "name": "Retriever",
+                    "config": {"backend": "pgvector", "index_name": "docs", "top_k": 5},
+                },
+                {"id": "out", "type": "retrieval.output", "name": "Out", "config": {}},
+            ],
+            "edges": [
+                {
+                    "id": "e1",
+                    "source": "in",
+                    "target": "embed",
+                    "source_port": "request",
+                    "target_port": "request",
+                },
+                {
+                    "id": "e2",
+                    "source": "embed",
+                    "target": "retrieve",
+                    "source_port": "query_embedding",
+                    "target_port": "query_embedding",
+                },
+                {
+                    "id": "e3",
+                    "source": "retrieve",
+                    "target": "out",
+                    "source_port": "results",
+                    "target_port": "results",
+                },
+            ],
+        }
+    )
+
+    upgraded = upgrade_definition(definition)
+
+    assert upgraded is not None
+    assert [(edge.source_port, edge.target_port) for edge in upgraded.edges] == [
+        ("items", "items")
+    ] * 3
+    from app.pipelines.registry import default_registry
+    from app.pipelines.validation import PipelineValidator
+
+    result = PipelineValidator(default_registry()).validate(upgraded)
+    assert not any("missing output port" in error for error in result.errors)
+    assert not any("missing input port" in error for error in result.errors)
+    # Idempotent: a second pass sees nothing left to rename.
+    assert upgrade_definition(upgraded) is None
+
+
+def test_legacy_item_port_keys_stay_reserved() -> None:
+    """The startup upgrade renames these edge port keys to `items` on every
+    stored definition, unconditionally — a registered node declaring one as a
+    real port key would have its edges silently rewired on next boot."""
+    from app.pipelines.registry import default_registry
+    from app.pipelines.upgrades import LEGACY_ITEM_PORT_KEYS
+
+    registry = default_registry()
+    for node_type in registry.node_types():
+        node_cls = registry.get_node_class(node_type)
+        assert node_cls is not None
+        for port in (*node_cls.input_ports, *node_cls.output_ports):
+            assert port.key not in LEGACY_ITEM_PORT_KEYS, (
+                f"{node_type} declares reserved legacy port key '{port.key}'"
+            )

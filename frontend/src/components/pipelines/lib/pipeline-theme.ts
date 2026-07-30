@@ -150,19 +150,22 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: strin
     ring: "border-stage-retrieve/60",
     handle: "bg-stage-retrieve!",
   },
-  chunk_batch: { bg: CHUNK_BG, ring: "border-stage-chunk/60", handle: "bg-stage-chunk!" },
-  embedded_batch: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
-  indexed_batch: { bg: "bg-stage-index", ring: "border-stage-index/60", handle: "bg-stage-index!" },
-  query_request: {
-    bg: "bg-stage-router",
-    ring: "border-stage-router/60",
-    handle: "bg-stage-router!",
-  },
-  query_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
-  retrieval_results: {
+  items_text: { bg: CHUNK_BG, ring: "border-stage-chunk/60", handle: "bg-stage-chunk!" },
+  items_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
+  items_scored: {
     bg: "bg-stage-rerank",
     ring: "border-stage-rerank/60",
     handle: "bg-stage-rerank!",
+  },
+  items: {
+    bg: "bg-stage-neutral",
+    ring: "border-stage-neutral/60",
+    handle: "bg-stage-neutral!",
+  },
+  structured_values: {
+    bg: "bg-stage-router",
+    ring: "border-stage-router/60",
+    handle: "bg-stage-router!",
   },
 };
 
@@ -176,23 +179,22 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: strin
 const PORT_TYPE_VAR: Record<string, string> = {
   document_source: "var(--port-document-source)",
   document: "var(--port-document)",
-  chunk_batch: "var(--port-chunk-batch)",
-  embedded_batch: "var(--port-embedded-batch)",
-  indexed_batch: "var(--port-indexed-batch)",
-  query_request: "var(--port-query-request)",
-  query_embedding: "var(--port-query-embedding)",
-  retrieval_results: "var(--port-retrieval-results)",
+  items_text: "var(--port-items-text)",
+  items_embedding: "var(--port-items-embedding)",
+  items_scored: "var(--port-items-scored)",
+  items: "var(--port-default)",
+  structured_values: "var(--port-structured-values)",
 };
 
 const PORT_TYPE_LABELS: Record<string, string> = {
   document_source: "Source file",
   document: "Parsed document",
-  chunk_batch: "Chunks",
-  embedded_batch: "Embedded chunks",
-  indexed_batch: "Indexed chunks",
-  query_request: "Query",
-  query_embedding: "Query embedding",
-  retrieval_results: "Results",
+  items_text: "Text items",
+  items_embedding: "Embedded items",
+  items_scored: "Scored items",
+  items: "Items",
+  structured_values: "Structured values",
+  result: "Result",
 };
 
 /**

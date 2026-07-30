@@ -25,11 +25,11 @@ from app.pipelines.nodes.validators import (
     lexical_support_issue,
     missing_index_issue,
 )
-from app.pipelines.payloads import ChunkPayload, EmbeddingPayload, IndexingPayload
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import ItemBatch, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import summarize_embeddings, trace_chunk_items
+from app.pipelines.tracing.summaries import summarize_embeddings
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.schemas.enums import IndexBackend
 from app.services.app_config import get_app_config
@@ -127,8 +127,22 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
 
     backend: ClassVar[IndexBackend | None] = None
     category = "ingestion"
-    input_ports = (NodePort(key="embedded", label="Embedded", data_type="embedded_batch"),)
-    output_ports = (NodePort(key="indexed", label="Indexed", data_type="indexed_batch"),)
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Embedded",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT, Facet.EMBEDDING),
+        ),
+    )
+    output_ports = (
+        NodePort(
+            key="items",
+            label="Indexed",
+            data_type=PortKind.ITEMS,
+            preserves=True,
+        ),
+    )
     # Narrowed from the base's `type[BaseModel]` so validation reads typed fields.
     config_model: builtins.type[IndexerConfig] = IndexerConfig
 
@@ -190,10 +204,9 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Upsert embedded chunks into the backend's index."""
-        payload = EmbeddingPayload.model_validate(inputs.get("embedded"))
-        document = payload.document
-        chunks = payload.chunks
+        """Upsert embedded items into the backend's index."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        chunks = batch.to_chunks()
 
         dimension = self.config.dimension
         if dimension is None:
@@ -215,13 +228,7 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         batch_size = store.capabilities.max_upsert_batch
         for start in range(0, len(chunks), batch_size):
             store.upsert(index_name, namespace or "", chunks[start : start + batch_size])
-        return {
-            "indexed": IndexingPayload(
-                document=document,
-                chunks=chunks,
-                usage=payload.usage,
-            )
-        }
+        return {"items": batch}
 
     def summarize_io(
         self,
@@ -229,26 +236,30 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize indexer inputs and outputs."""
-        input_payload = EmbeddingPayload.model_validate(inputs.get("embedded"))
-        output_payload = IndexingPayload.model_validate(outputs.get("indexed"))
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
                     label="Embeddings",
-                    value=summarize_embeddings(input_payload.chunks),
+                    value=summarize_embeddings(input_batch.preview_chunks()),
                     kind="embedding",
                 ),
-                NodeTraceValue(label="Embedded items", value=trace_chunk_items(input_payload.chunks), kind="items"),
+                NodeTraceValue(
+                    label="Embedded items", value=trace_items(input_batch.items), kind="items"
+                ),
             ],
             outputs=[
                 NodeTraceValue(
                     label="Indexed chunks",
                     value={
-                        "count": len(output_payload.chunks),
+                        "count": len(output_batch.items),
                         "backend": self.resolve_backend(self.config).value,
                     },
                 ),
-                NodeTraceValue(label="Indexed items", value=trace_chunk_items(output_payload.chunks), kind="items"),
+                NodeTraceValue(
+                    label="Indexed items", value=trace_items(output_batch.items), kind="items"
+                ),
             ],
         )
 
@@ -259,7 +270,7 @@ class VectorIndexerNode(BaseIndexerNode):
     type = "indexer.vector"
     label = "Indexer"
     description = "Write embeddings into a vector index (pgvector or Pinecone)."
-    example = "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs')."
+    example = "Items(2 embedded) -> Items(2 embedded, indexed into 'docs')."
     config_model = VectorIndexerConfig
 
 
@@ -294,9 +305,18 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
         "Write chunk text into a sparse BM25 index for exact-term (lexical) "
         "search — no embeddings involved."
     )
-    example = "ChunkPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs-bm25')."
-    input_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
-    output_ports = (NodePort(key="indexed", label="Indexed", data_type="indexed_batch"),)
+    example = "Items(2 chunks) -> Items(2 chunks, indexed into 'docs-bm25')."
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Chunks",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+        ),
+    )
+    output_ports = (
+        NodePort(key="items", label="Indexed", data_type=PortKind.ITEMS, preserves=True),
+    )
     config_model = Bm25IndexerConfig
 
     @classmethod
@@ -325,8 +345,9 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
         return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Upsert chunk texts into the backend's sparse index."""
-        payload = ChunkPayload.model_validate(inputs.get("chunks"))
+        """Upsert item texts into the backend's sparse index."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        chunks = batch.to_chunks()
         namespace = resolve_owned_namespace(
             self.config.namespace, context.collection, context.session
         )
@@ -339,10 +360,9 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
         if self.config.ensure_index:
             store.ensure_index(IndexSpec(name=index_name, vector_type="sparse"))
         batch_size = store.capabilities.max_lexical_upsert_batch
-        chunks = payload.chunks
         for start in range(0, len(chunks), batch_size):
             store.upsert_lexical(index_name, namespace or "", chunks[start : start + batch_size])
-        return {"indexed": IndexingPayload(document=payload.document, chunks=chunks)}
+        return {"items": batch}
 
     def summarize_io(
         self,
@@ -350,29 +370,29 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize BM25 indexer inputs and outputs."""
-        input_payload = ChunkPayload.model_validate(inputs.get("chunks"))
-        output_payload = IndexingPayload.model_validate(outputs.get("indexed"))
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
                     label="Chunks",
-                    value={"count": len(input_payload.chunks)},
+                    value={"count": len(input_batch.items)},
                 ),
                 NodeTraceValue(
-                    label="Chunk items", value=trace_chunk_items(input_payload.chunks), kind="items"
+                    label="Chunk items", value=trace_items(input_batch.items), kind="items"
                 ),
             ],
             outputs=[
                 NodeTraceValue(
                     label="Indexed chunks",
                     value={
-                        "count": len(output_payload.chunks),
+                        "count": len(output_batch.items),
                         "backend": self.config.backend.value,
                         "index_type": "bm25",
                     },
                 ),
                 NodeTraceValue(
-                    label="Indexed items", value=trace_chunk_items(output_payload.chunks), kind="items"
+                    label="Indexed items", value=trace_items(output_batch.items), kind="items"
                 ),
             ],
         )

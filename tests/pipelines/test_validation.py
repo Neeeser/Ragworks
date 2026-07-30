@@ -87,7 +87,9 @@ class _ChunkSourceNode(PipelineNodeBase):
     description = "Outputs a chunk batch."
     example = "Input -> Chunks."
     input_ports = ()
-    output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
+    output_ports = (
+        NodePort(key="chunks", label="Chunks", data_type="items", adds=("text",)),
+    )
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"chunks": []}
@@ -103,7 +105,14 @@ class _EmbeddedSourceNode(PipelineNodeBase):
     description = "Outputs an embedded batch."
     example = "Input -> Embedded."
     input_ports = ()
-    output_ports = (NodePort(key="embedded", label="Embedded", data_type="embedded_batch"),)
+    output_ports = (
+        NodePort(
+            key="embedded",
+            label="Embedded",
+            data_type="items",
+            adds=("text", "embedding"),
+        ),
+    )
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         return {"embedded": []}
@@ -288,14 +297,14 @@ def test_pipeline_validator_reports_dimension_mismatch() -> None:
                 source="source",
                 target="embedder",
                 source_port="chunks",
-                target_port="chunks",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="edge-embedder-indexer",
                 source="embedder",
                 target="indexer",
-                source_port="embedded",
-                target_port="embedded",
+                source_port="items",
+                target_port="items",
             ),
         ],
     )
@@ -333,14 +342,14 @@ def test_pipeline_validator_warns_when_dimension_missing() -> None:
                 source="source",
                 target="embedder",
                 source_port="chunks",
-                target_port="chunks",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="edge-embedder-indexer",
                 source="embedder",
                 target="indexer",
-                source_port="embedded",
-                target_port="embedded",
+                source_port="items",
+                target_port="items",
             ),
         ],
     )
@@ -388,7 +397,7 @@ def test_pipeline_validator_skips_dimension_for_non_embedder_edge() -> None:
                 source="source",
                 target="indexer",
                 source_port="embedded",
-                target_port="embedded",
+                target_port="items",
             )
         ],
     )
@@ -424,14 +433,14 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
                 source="source",
                 target="embedder",
                 source_port="chunks",
-                target_port="chunks",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="edge-embedder-indexer",
                 source="embedder",
                 target="indexer",
-                source_port="embedded",
-                target_port="embedded",
+                source_port="items",
+                target_port="items",
             ),
         ],
     )
@@ -467,15 +476,15 @@ def test_pipeline_validator_requires_retriever_index() -> None:
                 id="edge-input-retriever",
                 source="input",
                 target="embedder",
-                source_port="request",
-                target_port="request",
+                source_port="items",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="edge-embedder-retriever",
                 source="embedder",
                 target="retriever",
-                source_port="query_embedding",
-                target_port="query_embedding",
+                source_port="items",
+                target_port="items",
             ),
         ],
     )

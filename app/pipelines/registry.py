@@ -29,11 +29,11 @@ from app.pipelines.nodes.limiting import ResultLimitNode
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import (
-    Bm25RetrieverNode,
     PgvectorRetrieverNode,
     PineconeRetrieverNode,
     VectorRetrieverNode,
 )
+from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 from app.pipelines.nodes.tool_output import ToolOutputNode
 
 

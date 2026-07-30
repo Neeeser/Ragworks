@@ -35,12 +35,12 @@ const DENSE_INDEX_CONFIG = {
 const PORT = {
   file: { key: "file", label: "Source file", dataType: "document_source" },
   document: { key: "document", label: "Parsed document", dataType: "document" },
-  chunks: { key: "chunks", label: "Chunks", dataType: "chunk_batch" },
-  embedded: { key: "embedded", label: "Embedded chunks", dataType: "embedded_batch" },
-  indexed: { key: "indexed", label: "Indexed chunks", dataType: "indexed_batch" },
-  query: { key: "query", label: "Query", dataType: "query_request" },
-  queryEmbedding: { key: "embedding", label: "Query embedding", dataType: "query_embedding" },
-  results: { key: "results", label: "Results", dataType: "retrieval_results" },
+  chunks: { key: "items", label: "Chunks", dataType: "items_text" },
+  embedded: { key: "items", label: "Embedded chunks", dataType: "items_embedding" },
+  indexed: { key: "items", label: "Indexed chunks", dataType: "items_embedding" },
+  query: { key: "items", label: "Query", dataType: "items_text" },
+  queryEmbedding: { key: "items", label: "Query embedding", dataType: "items_embedding" },
+  results: { key: "items", label: "Results", dataType: "items_scored" },
 } as const;
 
 const source = (): DemoNode => ({

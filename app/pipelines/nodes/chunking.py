@@ -10,10 +10,10 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from app.db.models import ChunkStrategy
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.payloads import ChunkPayload, ParsedDocumentPayload, TokenizerSpec
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import ItemBatch, ParsedDocumentPayload, TokenizerSpec, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
-from app.pipelines.tracing.summaries import summarize_chunks, summarize_text, trace_chunk_items
+from app.pipelines.tracing.summaries import summarize_chunks, summarize_text
 from app.pipelines.variables import expr_seed_extra
 from app.retrieval.chunkers import build_chunker
 from app.retrieval.tokenizers.huggingface import validate_hf_model_id
@@ -139,8 +139,10 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
     the only method either needs to override.
     """
 
-    input_ports = (NodePort(key="document", label="Document", data_type="document"),)
-    output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
+    input_ports = (NodePort(key="document", label="Document", data_type=PortKind.DOCUMENT),)
+    output_ports = (
+        NodePort(key="items", label="Chunks", data_type=PortKind.ITEMS, adds=(Facet.TEXT,)),
+    )
     config_model = FixedChunkerConfig
     strategy: ChunkStrategy = ChunkStrategy.TOKEN
 
@@ -204,13 +206,7 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
             len(chunks),
             document.document_id,
         )
-        return {
-            "chunks": ChunkPayload(
-                document=document,
-                chunks=chunks,
-                tokenizer=tokenizer,
-            )
-        }
+        return {"items": ItemBatch.from_chunks(chunks, tokenizer=tokenizer)}
 
     def summarize_io(
         self,
@@ -219,7 +215,7 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
     ) -> NodeTraceSummary:
         """Summarize chunking inputs and outputs."""
         input_payload = ParsedDocumentPayload.model_validate(inputs.get("document"))
-        output_payload = ChunkPayload.model_validate(outputs.get("chunks"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
@@ -231,10 +227,10 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
             outputs=[
                 NodeTraceValue(
                     label="Chunks",
-                    value=summarize_chunks(output_payload.chunks),
+                    value=summarize_chunks(output_batch.preview_chunks()),
                 ),
                 NodeTraceValue(
-                    label="Chunk items", value=trace_chunk_items(output_payload.chunks), kind="items"
+                    label="Chunk items", value=trace_items(output_batch.items), kind="items"
                 ),
             ],
         )
@@ -247,7 +243,7 @@ class TokenChunkerNode(BaseChunkerNode[FixedChunkerConfig]):
     label = "Token Chunker"
     category = "ingestion"
     description = "Chunk documents based on token counts."
-    example = "ParsedDocumentPayload(text='Hello world') -> ChunkPayload(chunks=['Hello', 'world'])."
+    example = "ParsedDocumentPayload(text='Hello world') -> Items(['Hello', 'world'])."
     strategy = ChunkStrategy.TOKEN
 
 
@@ -260,7 +256,7 @@ class SentenceChunkerNode(BaseChunkerNode[FixedChunkerConfig]):
     description = "Chunk documents using sentence boundaries."
     example = (
         "ParsedDocumentPayload(text='Hello world. Another sentence.') -> "
-        "ChunkPayload(chunks=['Hello world.', 'Another sentence.'])."
+        "Items(['Hello world.', 'Another sentence.'])."
     )
     strategy = ChunkStrategy.SENTENCE
 
@@ -274,7 +270,7 @@ class ParagraphChunkerNode(BaseChunkerNode[FixedChunkerConfig]):
     description = "Chunk documents using paragraph boundaries."
     example = (
         "ParsedDocumentPayload(text='Para 1.\\n\\nPara 2.') -> "
-        "ChunkPayload(chunks=['Para 1.', 'Para 2.'])."
+        "Items(['Para 1.', 'Para 2.'])."
     )
     strategy = ChunkStrategy.PARAGRAPH
 
@@ -288,7 +284,7 @@ class SemanticChunkerNode(BaseChunkerNode[FixedChunkerConfig]):
     description = "Chunk documents using semantic similarity."
     example = (
         "ParsedDocumentPayload(text='Topic A... Topic B...') -> "
-        "ChunkPayload(chunks=['Topic A...', 'Topic B...'])."
+        "Items(['Topic A...', 'Topic B...'])."
     )
     strategy = ChunkStrategy.SEMANTIC
 
@@ -306,7 +302,7 @@ class ChunkerNode(BaseChunkerNode[ChunkerConfig]):
     label = "Chunker"
     category = "ingestion"
     description = "Chunk documents using the node configuration."
-    example = "ParsedDocumentPayload(text='Hello world') -> ChunkPayload(chunks=['Hello', 'world'])."
+    example = "ParsedDocumentPayload(text='Hello world') -> Items(['Hello', 'world'])."
     config_model = ChunkerConfig
     # Internal configurable variant; the editor catalog offers the fixed-strategy
     # chunkers instead.
