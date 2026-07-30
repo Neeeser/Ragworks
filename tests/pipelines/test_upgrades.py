@@ -801,3 +801,20 @@ def test_upgrade_definition_renames_legacy_stage_ports_to_items() -> None:
     assert not any("missing input port" in error for error in result.errors)
     # Idempotent: a second pass sees nothing left to rename.
     assert upgrade_definition(upgraded) is None
+
+
+def test_legacy_item_port_keys_stay_reserved() -> None:
+    """The startup upgrade renames these edge port keys to `items` on every
+    stored definition, unconditionally — a registered node declaring one as a
+    real port key would have its edges silently rewired on next boot."""
+    from app.pipelines.registry import default_registry
+    from app.pipelines.upgrades import LEGACY_ITEM_PORT_KEYS
+
+    registry = default_registry()
+    for node_type in registry.node_types():
+        node_cls = registry.get_node_class(node_type)
+        assert node_cls is not None
+        for port in (*node_cls.input_ports, *node_cls.output_ports):
+            assert port.key not in LEGACY_ITEM_PORT_KEYS, (
+                f"{node_type} declares reserved legacy port key '{port.key}'"
+            )
