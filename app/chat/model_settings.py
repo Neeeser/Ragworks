@@ -109,7 +109,12 @@ def prepare_model_settings(
     # out before providers read the sampling parameters.
     if payload.parameters is not None and payload.parameters.extra_body:
         parameter_overrides["extra_body"] = payload.parameters.extra_body
-    reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
+    # Read the reasoning request from the payload, not from the sanitized
+    # overrides: reasoning is a capability, so it is not in the knob list the
+    # filter keeps — routing it through that filter drops the user's choice.
+    reasoning_override = prepare_reasoning_override(
+        payload.parameters.reasoning if payload.parameters else None
+    )
     reasoning_options = _build_reasoning_request_options(
         capabilities, reasoning_override, _default_effort(capabilities, reasoning_effort)
     )

@@ -595,6 +595,21 @@ frontend form code — only a new `ConfigFieldKind` would.
   against the tuple *before* the dialect's alias rename, so listing the wire
   name (`max_output_tokens`) filters the canonical key out and the rename
   never fires — the user's cap silently stops reaching the model.
+- **A capability is a typed claim (`ChatCapabilities`), never a string in the
+  sampling-knob list, and it never routes through the knob filter.** The two
+  fail differently: a knob the model rejects comes back with the provider
+  naming the field, so the permissive dialect floor is right, while a
+  capability guessed wrong makes the request itself malformed — a reasoning
+  block sent to a model that has none is a 400 the user cannot clear. For the
+  same reason a capability *request* (the user's chosen reasoning effort) is
+  read from the payload, not from the sanitized overrides: the filter keeps
+  only knobs, so passing it through drops the choice silently and the turn
+  runs at the model's default while the panel still shows the setting.
+- **Where a floor must guess a capability, the guess follows the cost of being
+  wrong** (`DIALECT_FLOOR_CAPABILITIES`): `tools` on, because a wrong guess is
+  a named error and refusing it would lock retrieval out of a server that
+  supports it; `reasoning` off, because a wrong guess breaks every turn and no
+  setting undoes it.
 - **`ChatParameters.extra_body` bypasses supported-parameter filtering by
   design and merges into the provider body last.** It exists precisely for
   knobs no catalog knows; filtering it, or letting a provider's own

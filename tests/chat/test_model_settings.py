@@ -20,11 +20,16 @@ class _Provider:
         return self._info
 
 
-def _settings(info: ModelInfo, *, reasoning_effort: str | None = None):
+def _settings(
+    info: ModelInfo,
+    *,
+    reasoning_effort: str | None = None,
+    payload: ChatMessageCreate | None = None,
+):
     return prepare_model_settings(
         provider=_Provider(info),  # type: ignore[arg-type]
         connection_label="OpenAI",
-        payload=ChatMessageCreate(content="hi"),
+        payload=payload or ChatMessageCreate(content="hi"),
         session_model=models.ChatSession(user_id=uuid4(), chat_model=info.id),
         reasoning_effort=reasoning_effort,
         tools_enabled=False,
@@ -90,3 +95,17 @@ def test_a_model_with_no_published_efforts_still_reasons_when_asked() -> None:
     )
     settings = _settings(info, reasoning_effort=None)
     assert settings.reasoning_options == {"reasoning": {}}
+
+
+def test_a_requested_effort_survives_the_knob_filter() -> None:
+    """Reasoning is a capability, so it is absent from `supported_parameters`.
+    Reading the request through that filter dropped the user's chosen effort
+    silently — the turn ran at the model's default and the panel still showed
+    the choice."""
+    settings = _settings(
+        _info(["none", "low", "medium", "high"]),
+        payload=ChatMessageCreate(
+            content="hi", parameters={"reasoning": {"effort": "high"}}
+        ),
+    )
+    assert settings.reasoning_options == {"reasoning": {"effort": "high"}}
