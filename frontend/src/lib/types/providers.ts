@@ -1,4 +1,4 @@
-import type { ModelPricing } from "@/lib/types/chat";
+import type { ChatCapabilities, ModelPricing } from "@/lib/types/chat";
 import type { UUID } from "@/lib/types/common";
 
 /** Mirrors `app/schemas/enums.py::ProviderType`. */
@@ -119,7 +119,7 @@ export interface CatalogModel {
   output_modalities: string[];
   supported_parameters: string[];
   default_parameters?: Record<string, unknown> | null;
-  reasoning_efforts?: string[] | null;
+  capabilities?: ChatCapabilities;
   deprecated?: boolean;
 }
 

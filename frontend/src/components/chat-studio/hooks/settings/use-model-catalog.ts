@@ -162,17 +162,16 @@ export function useModelCatalog({
   }, [currentModelInfo]);
 
   const visibleParameterDefinitions = useMemo(
-    () => resolveParameterDefinitions(supportedParameterKeys, currentModelInfo?.reasoning_efforts),
-    [supportedParameterKeys, currentModelInfo?.reasoning_efforts],
+    () => resolveParameterDefinitions(supportedParameterKeys, currentModelInfo?.capabilities),
+    [supportedParameterKeys, currentModelInfo?.capabilities],
   );
 
   const toolReadyModels = useMemo(() => {
     if (!toolsEnabled) {
       return modelCatalog;
     }
-    return modelCatalog.filter((model) =>
-      (model.supported_parameters || []).some((param) => param.toLowerCase() === "tools"),
-    );
+    // Tool support is a capability the provider states, not a knob.
+    return modelCatalog.filter((model) => model.capabilities?.tools);
   }, [modelCatalog, toolsEnabled]);
 
   const connectionOptions = useMemo(() => {

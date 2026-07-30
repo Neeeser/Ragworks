@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { pruneUnsupportedEffort } from "@/lib/chat-parameters";
+
 import type { ModelParameterKey, ParameterOverrides, ParameterValue } from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
@@ -47,7 +49,10 @@ export function useModelParameters({
 
   const activeParameterCount = useMemo(() => {
     return Object.keys(parameterOverrides).filter(
-      (key) => key === "extra_body" || supportedParameterKeys.has(key as ModelParameterKey),
+      (key) =>
+        key === "extra_body" ||
+        key === "reasoning" ||
+        supportedParameterKeys.has(key as ModelParameterKey),
     ).length;
   }, [parameterOverrides, supportedParameterKeys]);
 
@@ -151,6 +156,14 @@ export function useModelParameters({
       const supportedSet = new Set(
         (modelInfo.supported_parameters || []).map((param) => param.toLowerCase()),
       );
+      // A reasoning control only exists where the provider claimed reasoning,
+      // and effort domains are per-model — so a value carried over from
+      // another model is dropped rather than sent for it to reject.
+      const capabilities = modelInfo.capabilities;
+      if (capabilities && capabilities.reasoning !== "none") {
+        supportedSet.add("reasoning");
+      }
+      overrides = pruneUnsupportedEffort(overrides, capabilities);
       const payload: Record<string, unknown> = {};
       Object.entries(overrides).forEach(([key, rawValue]) => {
         const normalizedKey = key.toLowerCase();
@@ -163,6 +176,11 @@ export function useModelParameters({
           return;
         }
         if (normalizedKey === "reasoning") {
+          if (typeof rawValue === "boolean") {
+            // A model with no published effort levels takes thinking on/off.
+            if (rawValue) payload[normalizedKey] = { enabled: true };
+            return;
+          }
           if (typeof rawValue === "string") {
             const trimmedReasoning = rawValue.trim().toLowerCase();
             if (!trimmedReasoning) {

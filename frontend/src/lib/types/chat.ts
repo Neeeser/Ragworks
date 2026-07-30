@@ -69,7 +69,24 @@ export interface UsageBreakdown {
   [key: string]: number | Record<string, number | undefined> | undefined;
 }
 
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** Mirrors `app/schemas/models.py::ReasoningStyle`. */
+export type ReasoningStyle = "none" | "block" | "include_flag";
+
+/**
+ * Mirrors `app/schemas/models.py::ChatCapabilities` — what a model can *do*,
+ * kept apart from the sampling knobs in `supported_parameters`. Capability
+ * flags are only ever true when the provider said so, because a wrong guess
+ * is a request the provider rejects outright rather than a knob the user can
+ * clear.
+ */
+export interface ChatCapabilities {
+  tools: boolean;
+  reasoning: ReasoningStyle;
+  /** Effort levels the provider publishes; empty means it names none. */
+  reasoning_efforts: string[];
+}
 
 export interface ReasoningConfig {
   effort?: ReasoningEffort;
@@ -101,7 +118,7 @@ export interface ModelInfo {
   pricing?: ModelPricing | null;
   supported_parameters: string[];
   default_parameters?: Record<string, unknown> | null;
-  reasoning_efforts?: string[] | null;
+  capabilities?: ChatCapabilities;
 }
 
 export interface ProviderEndpointPricing {

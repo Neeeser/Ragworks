@@ -279,7 +279,12 @@ export function makeModelInfo(overrides: Partial<ModelInfo> = {}): ModelInfo {
     canonical_slug: "openrouter/model-1",
     name: "Model One",
     description: "Primary model",
-    supported_parameters: ["temperature", "reasoning", "tools"],
+    supported_parameters: ["temperature"],
+    capabilities: {
+      tools: true,
+      reasoning: "block",
+      reasoning_efforts: ["low", "medium", "high"],
+    },
     default_parameters: { temperature: 0.2 },
     ...overrides,
   };

@@ -1,4 +1,11 @@
-import type { ParameterInputKind } from "@/lib/types";
+import type { ChatCapabilities, ParameterInputKind } from "@/lib/types";
+
+/** A model whose provider published nothing: no capability may be assumed. */
+export const DEFAULT_CAPABILITIES: ChatCapabilities = {
+  tools: false,
+  reasoning: "none",
+  reasoning_efforts: [],
+};
 
 export interface ParameterOption {
   label: string;
@@ -213,31 +220,72 @@ export type ResolvedParameterDefinition = ParameterDefinitionShape & {
 
 const EFFORT_LABELS: Record<string, string> = { xhigh: "Extra high" };
 
+const effortOption = (effort: string) => ({
+  label: EFFORT_LABELS[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1),
+  value: effort,
+});
+
+/** The reasoning control for a model, or null when it cannot reason. */
+function reasoningDefinition(
+  definition: ResolvedParameterDefinition,
+  capabilities: ChatCapabilities,
+): ResolvedParameterDefinition | null {
+  if (capabilities.reasoning === "none") return null;
+  const efforts = capabilities.reasoning_efforts;
+  if (!efforts.length) {
+    // The provider takes no effort level (Anthropic's budget-thinking models,
+    // Ollama's `think`), so the only honest control is on/off.
+    return {
+      ...definition,
+      label: "Extended thinking",
+      description: "Let the model reason before answering.",
+      input: "boolean",
+      options: undefined,
+    };
+  }
+  return { ...definition, options: [MODEL_DEFAULT_OPTION, ...efforts.map(effortOption)] };
+}
+
 /**
- * Filter the definitions down to one model's supported set and swap in the
- * model's own reasoning-effort levels where the provider publishes them.
- * `extra_body` is always visible: it exists precisely for parameters the
- * catalog does not know about.
+ * Filter the definitions down to what this model actually offers: its own
+ * sampling knobs, plus a reasoning control shaped by what the provider
+ * published about it. `extra_body` is always visible — it exists precisely
+ * for parameters no catalog knows about.
  */
 export function resolveParameterDefinitions(
   supportedKeys: ReadonlySet<ModelParameterKey>,
-  reasoningEfforts?: readonly string[] | null,
+  capabilities: ChatCapabilities = DEFAULT_CAPABILITIES,
 ): ResolvedParameterDefinition[] {
-  return PARAMETER_DEFINITIONS.filter(
-    (definition) => definition.key === "extra_body" || supportedKeys.has(definition.key),
-  ).map((definition) => {
-    if (definition.key !== "reasoning" || !reasoningEfforts?.length) {
-      return definition;
+  const resolved: ResolvedParameterDefinition[] = [];
+  for (const definition of PARAMETER_DEFINITIONS) {
+    if (definition.key === "reasoning") {
+      const reasoning = reasoningDefinition(definition, capabilities);
+      if (reasoning) resolved.push(reasoning);
+      continue;
     }
-    return {
-      ...definition,
-      options: [
-        MODEL_DEFAULT_OPTION,
-        ...reasoningEfforts.map((effort) => ({
-          label: EFFORT_LABELS[effort] ?? effort.charAt(0).toUpperCase() + effort.slice(1),
-          value: effort,
-        })),
-      ],
-    };
-  });
+    if (definition.key === "extra_body" || supportedKeys.has(definition.key)) {
+      resolved.push(definition);
+    }
+  }
+  return resolved;
+}
+
+/**
+ * Drop a stored reasoning effort the target model does not publish.
+ *
+ * Effort domains are per-model, so switching models can strand a value: the
+ * select renders blank (no matching option) while the stale value is still
+ * sent, and the provider rejects a level the user cannot see is set.
+ */
+export function pruneUnsupportedEffort(
+  overrides: ParameterOverrides,
+  capabilities: ChatCapabilities | undefined,
+): ParameterOverrides {
+  const stored = overrides.reasoning;
+  if (typeof stored !== "string" || !stored) return overrides;
+  const efforts = capabilities?.reasoning_efforts ?? [];
+  if (!efforts.length || efforts.includes(stored)) return overrides;
+  const next = { ...overrides };
+  delete next.reasoning;
+  return next;
 }

@@ -184,6 +184,14 @@ describe("ui components", () => {
     expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
   });
 
+  it("renders a restored list value as comma text, not JSON", () => {
+    // `stop` round-trips from the server as an array. Rendered as JSON its own
+    // parser splits the brackets on commas, so an edit corrupts the value into
+    // literal stop strings like `["###"`.
+    render(<ParameterInput input="list" value={["###", "END"]} onChange={vi.fn()} rows={2} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("###, END");
+  });
+
   it("renders a restored object value in a json textarea as its JSON text", () => {
     // The server round-trips parameter_overrides, so a restored session hands
     // json fields (extra_body, response_format) back as objects — rendering

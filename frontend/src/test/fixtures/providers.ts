@@ -81,7 +81,8 @@ export function makeCatalogModel(overrides: Partial<CatalogModel> = {}): Catalog
     dimension: null,
     input_modalities: ["text"],
     output_modalities: ["text"],
-    supported_parameters: ["tools", "temperature"],
+    supported_parameters: ["temperature"],
+    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [] },
     ...overrides,
   };
 }
