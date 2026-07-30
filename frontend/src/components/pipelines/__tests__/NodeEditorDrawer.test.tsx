@@ -201,6 +201,39 @@ function DrawerWithIndexRegistry() {
   );
 }
 
+function DrawerWithDraftParent() {
+  const [draft, setDraft] = React.useState<Record<string, unknown> | null>(null);
+  return (
+    <>
+      <NodeEditorDrawer
+        node={makeNode(
+          NODE_TYPE_PARSER,
+          { chunk_size: 512 },
+          { properties: { chunk_size: { type: "integer" } } },
+        )}
+        onClose={() => undefined}
+        onApply={() => undefined}
+        onDraftChange={(_nodeId, config) => setDraft(config)}
+        isPreview={false}
+        variables={[]}
+        validationErrors={[]}
+        vectorIndexes={[]}
+        embeddingModels={[]}
+        embeddingCatalog={null}
+        embeddingModelsLoading={false}
+        embeddingModelsError={null}
+        rerankingModels={[]}
+        rerankingCatalog={null}
+        rerankingModelsLoading={false}
+        rerankingModelsError={null}
+        onRetryRerankingModels={() => undefined}
+        hasRerankingProvider
+      />
+      <span data-testid="draft">{JSON.stringify(draft)}</span>
+    </>
+  );
+}
+
 describe("NodeEditorDrawer", () => {
   beforeEach(() => {
     parameterInputMock.mockClear();
@@ -688,6 +721,36 @@ describe("NodeEditorDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Add to canvas/ }));
     expect(onAddToCanvas).toHaveBeenCalled();
+  });
+
+  it("reports every draft change without updating the parent mid-render", async () => {
+    const user = userEvent.setup();
+    const consoleErrors: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      consoleErrors.push(args.map(String).join(" "));
+    });
+
+    try {
+      // StrictMode as the dev server runs it: React double-invokes state
+      // updaters during render there, so an impure one reports every time.
+      render(
+        <React.StrictMode>
+          <DrawerWithDraftParent />
+        </React.StrictMode>,
+      );
+      const toggle = () => screen.getByRole("button", { name: "Toggle expression mode" });
+      // Repeated literal <-> expression switching: React only evaluates the
+      // first state updater outside the render phase, so a side effect inside
+      // one shows up from the second toggle on.
+      await user.click(toggle());
+      await user.click(toggle());
+      await user.click(toggle());
+
+      expect(consoleErrors.join("\n")).not.toContain("while rendering a different component");
+      expect(screen.getByTestId("draft")).toHaveTextContent('{"chunk_size":{"$expr":""}}');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("disables the index selector in preview mode", () => {

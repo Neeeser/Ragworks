@@ -190,6 +190,11 @@ the same PR.
   server render uses different values and hydration mismatches. Initialize with the
   default, hydrate in a mount effect, and gate any effect that reacts to the
   hydrated value behind a `hydrated` flag.
+- **A `setState` updater function is pure — never notify a parent from inside one.**
+  React invokes updaters during the render phase whenever it can't evaluate them
+  eagerly, and under StrictMode (the dev server's default) it does so on every
+  update — so a parent `setState` in there is a set-state-in-render error and fires
+  more than once. Compute the next value in the handler, set it, then report it.
 - **Effects must not write state they derive.** Computing a value in `useMemo` and
   copying it into `useState` via an effect adds a render per change and a stale
   window. Derive it where you use it.

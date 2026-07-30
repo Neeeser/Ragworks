@@ -72,14 +72,13 @@ function DrawerContent({
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   // Report the draft from the same place it is set, not from an effect: an
   // effect would cascade a parent render after every keystroke's render.
-  const updateDraftConfig = (
-    next: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>),
-  ) => {
-    setDraftConfig((prev) => {
-      const resolved = typeof next === "function" ? next(prev) : next;
-      onDraftChange?.(node.id, resolved);
-      return resolved;
-    });
+  // Reporting from inside the `setDraftConfig` updater instead would put a
+  // parent setState in a state updater, which React may invoke during this
+  // component's render (it does on every update under StrictMode) — a
+  // set-state-in-render error, and one extra parent update per invocation.
+  const updateDraftConfig = (next: Record<string, unknown>) => {
+    setDraftConfig(next);
+    onDraftChange?.(node.id, next);
   };
 
   const dirty =
@@ -116,15 +115,13 @@ function DrawerContent({
     // dimension: an explicit `dimension` is sent to the provider as a
     // `dimensions` override, which most embedding models reject (no
     // matryoshka support). Models emit their native size without it.
-    updateDraftConfig((prev) => {
-      const next: Record<string, unknown> = {
-        ...prev,
-        connection_id: model.connection_id,
-        model_name: model.id,
-      };
-      delete next.dimension;
-      return next;
-    });
+    const next: Record<string, unknown> = {
+      ...draftConfig,
+      connection_id: model.connection_id,
+      model_name: model.id,
+    };
+    delete next.dimension;
+    updateDraftConfig(next);
   };
 
   const handleSelectRerankingModel = (model: CatalogModel) => {
