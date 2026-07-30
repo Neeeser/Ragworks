@@ -450,8 +450,10 @@ returned id onto `ApiError.requestId` (present even on 500s); error surfaces sho
 it via `getRequestId(err)` so a user can quote a support reference. The package is
 correlation only — **never add browser analytics, automatic user-action tracking,
 remote error shipping, or request/response payload capture** (the issue that
-created it forbids them). The client error buffer records request IDs and error
-messages, never bodies or tokens; the user diagnostics report
+created it forbids them). The client error buffer records request IDs, error
+messages, and the failing script's `path:line:column` with the query string
+stripped — a parse error's message names no script, so without the source a
+downloaded report is an unattributable string — never bodies or tokens; the user diagnostics report
 (`downloadDiagnosticsReport`) and the admin "Download diagnostics" bundle are the
 only ways anything leaves the browser, and only on an explicit click. The header
 name is pinned by `tests/assets/observability_contract.json` (asserted here and

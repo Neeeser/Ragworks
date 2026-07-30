@@ -18,6 +18,14 @@ export interface ObservabilityEntry {
   path?: string;
   status?: number;
   requestId?: string;
+  /**
+   * For a client error: which script failed, as `path:line:column`.
+   *
+   * A parse error's message names no script, so without this a report reads
+   * as an unattributable string and cannot be traced to a bundle chunk. The
+   * query string is stripped like every other recorded path.
+   */
+  source?: string;
   message: string;
 }
 
@@ -59,9 +67,18 @@ export function recordApiError(input: {
   });
 }
 
-/** Record an uncaught client-side error (message + optional stack only). */
-export function recordClientError(message: string): void {
-  push({ timestamp: new Date().toISOString(), kind: "client_error", message });
+/** Record an uncaught client-side error (message + optional source only). */
+export function recordClientError(message: string, source?: string): void {
+  push({ timestamp: new Date().toISOString(), kind: "client_error", message, source });
+}
+
+/** Format an error event's origin as `path:line:column`, query string stripped. */
+function errorSource(event: ErrorEvent): string | undefined {
+  if (!event.filename) {
+    return undefined;
+  }
+  const path = sanitizePath(event.filename);
+  return `${path}:${event.lineno ?? 0}:${event.colno ?? 0}`;
 }
 
 /** Return a copy of the buffered entries, oldest first. */
@@ -86,7 +103,7 @@ export function installClientErrorCapture(): void {
   }
   captureInstalled = true;
   window.addEventListener("error", (event) => {
-    recordClientError(event.message || String(event.error ?? "Unknown error"));
+    recordClientError(event.message || String(event.error ?? "Unknown error"), errorSource(event));
   });
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;

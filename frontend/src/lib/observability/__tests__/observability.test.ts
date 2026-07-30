@@ -4,6 +4,7 @@ import {
   buildDiagnosticsReport,
   clearObservabilityEntries,
   getObservabilityEntries,
+  installClientErrorCapture,
   recordApiError,
   recordClientError,
 } from "@/lib/observability";
@@ -46,6 +47,24 @@ describe("error buffer", () => {
     recordClientError("render exploded");
     const [entry] = getObservabilityEntries();
     expect(entry).toMatchObject({ kind: "client_error", message: "render exploded" });
+  });
+
+  it("records where an uncaught error came from, not just its message", () => {
+    // A bare parse-error message ("`` literal not terminated before end of
+    // script") names no script, so a downloaded report cannot say which
+    // bundle chunk failed — the source is the whole diagnostic value.
+    installClientErrorCapture();
+    window.dispatchEvent(
+      new ErrorEvent("error", {
+        message: "`` literal not terminated before end of script",
+        filename: "http://localhost:3000/_next/static/chunks/app/page.js?v=123",
+        lineno: 42,
+        colno: 7,
+      }),
+    );
+    const [entry] = getObservabilityEntries();
+    expect(entry.kind).toBe("client_error");
+    expect(entry.source).toBe("/_next/static/chunks/app/page.js:42:7");
   });
 
   it("caps the buffer at 50 entries, keeping the newest", () => {
