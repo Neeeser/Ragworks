@@ -72,13 +72,38 @@ export function recordClientError(message: string, source?: string): void {
   push({ timestamp: new Date().toISOString(), kind: "client_error", message, source });
 }
 
+/** Split a `url:line:column` frame into a sanitized path plus its position. */
+function formatFrame(raw: string): string {
+  const positioned = raw.match(/^(.*?):(\d+):(\d+)$/);
+  const url = positioned ? positioned[1] : raw;
+  const position = positioned ? `:${positioned[2]}:${positioned[3]}` : "";
+  return `${sanitizePath(url)}${position}`;
+}
+
+/**
+ * Return the first script frame in an error's stack, or undefined.
+ *
+ * A rejected promise carries no `filename` the way an `ErrorEvent` does, so
+ * its stack is the only thing naming the script — without it a SyntaxError
+ * surfacing through `unhandledrejection` is unattributable.
+ */
+function stackSource(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !error.stack) {
+    return undefined;
+  }
+  // Firefox frames read `fn@url:line:col`, Chromium `at fn (url:line:col)`.
+  const frame = error.stack.match(/https?:\/\/[^\s)]+/);
+  return frame ? formatFrame(frame[0]) : undefined;
+}
+
 /** Format an error event's origin as `path:line:column`, query string stripped. */
 function errorSource(event: ErrorEvent): string | undefined {
   if (!event.filename) {
-    return undefined;
+    // A cross-origin or runtime-parsed script reports no filename; its stack
+    // is then the only attribution left.
+    return stackSource(event.error);
   }
-  const path = sanitizePath(event.filename);
-  return `${path}:${event.lineno ?? 0}:${event.colno ?? 0}`;
+  return `${sanitizePath(event.filename)}:${event.lineno ?? 0}:${event.colno ?? 0}`;
 }
 
 /** Return a copy of the buffered entries, oldest first. */
@@ -107,6 +132,9 @@ export function installClientErrorCapture(): void {
   });
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
-    recordClientError(reason instanceof Error ? reason.message : String(reason));
+    recordClientError(
+      reason instanceof Error ? reason.message : String(reason),
+      stackSource(reason),
+    );
   });
 }
