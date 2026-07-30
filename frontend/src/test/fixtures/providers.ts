@@ -82,7 +82,7 @@ export function makeCatalogModel(overrides: Partial<CatalogModel> = {}): Catalog
     input_modalities: ["text"],
     output_modalities: ["text"],
     supported_parameters: ["temperature"],
-    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [] },
+    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [], sampling: "always" },
     ...overrides,
   };
 }

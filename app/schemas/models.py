@@ -31,6 +31,22 @@ class ReasoningStyle(StrEnum):
     INCLUDE_FLAG = "include_flag"
 
 
+class SamplingSupport(StrEnum):
+    """When a model accepts sampling knobs (`temperature`, `top_p`, …).
+
+    OpenAI's reasoning generations reject them while the model is reasoning,
+    and the reasoning-always models reject them outright — so a knob the panel
+    offers can be one the model can never take. The three states are measured
+    per model, not inferred from a version: `gpt-5.4` accepts `temperature`
+    where `gpt-5.5` does not, and `gpt-5` never does.
+    """
+
+    ALWAYS = "always"
+    #: Accepted only while reasoning is off (`effort: none`).
+    WITHOUT_REASONING = "without_reasoning"
+    NEVER = "never"
+
+
 class ChatCapabilities(BaseModel):
     """What a chat model can *do*, kept apart from the knobs it accepts.
 
@@ -54,6 +70,9 @@ class ChatCapabilities(BaseModel):
     #: provider names none — either it takes no effort level at all, or it
     #: never says — so no caller may invent one.
     reasoning_efforts: list[str] = Field(default_factory=list)
+    #: Defaults permissive, like the knob floor: an unmeasured model keeps its
+    #: knobs and the provider's error names any it rejects.
+    sampling: SamplingSupport = SamplingSupport.ALWAYS
 
 
 #: Names providers mix into a flat parameter list that are capability claims

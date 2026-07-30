@@ -27,6 +27,43 @@ const FETCH_HEADERS = {
 /** A dated snapshot id maps onto its base model's docs page. */
 const SNAPSHOT_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Price ceiling for the sampling probe, in USD per million tokens.
+ *
+ * The probe is one request at the API's minimum size (a one-token input and
+ * 16 output tokens), so the spend is fractions of a cent either way — but a
+ * refresh should never be a reason to think about cost, and the docs publish
+ * each model's price, so the guard reads that rather than guessing from the
+ * name. A model priced above this, or one whose page states no price, is left
+ * unprobed and records `sampling: null` — which callers read as unknown and
+ * treat permissively, the same fallback any model OpenAI ships after this
+ * bundle gets.
+ */
+const MAX_PROBE_INPUT_USD_PER_M = 10;
+const MAX_PROBE_OUTPUT_USD_PER_M = 50;
+
+/** A model that has not answered by now is not worth waiting on. */
+const PROBE_TIMEOUT_MS = 30_000;
+
+function parsePricing(text) {
+    const section = text.match(/### Text tokens\n([\s\S]*?)(\n### |\n## |$)/);
+    if (!section) return { input: null, output: null };
+    const price = (metric) => {
+        const match = section[1].match(new RegExp(`\\| ${metric} \\| \\$([\\d.]+) \\|`));
+        return match ? Number(match[1]) : null;
+    };
+    return { input: price("Input"), output: price("Output") };
+}
+
+/** True when the probe may call this model without meaningful spend. */
+function affordableToProbe(pricing) {
+    if (pricing.input === null || pricing.output === null) return false;
+    return (
+        pricing.input <= MAX_PROBE_INPUT_USD_PER_M &&
+        pricing.output <= MAX_PROBE_OUTPUT_USD_PER_M
+    );
+}
+
 async function apiKey() {
     if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
     try {
@@ -126,6 +163,58 @@ function parsePage(text) {
         streaming: features.includes("streaming"),
         deprecated: /^> Deprecated\b/m.test(text) || /^Deprecated\b/m.test(text),
         snapshots: parseSnapshots(text),
+        pricing: parsePricing(text),
+    };
+}
+
+/**
+ * Measure whether a reasoning model still accepts sampling knobs.
+ *
+ * The docs never state this, and it is not derivable from the model's name:
+ * gpt-5.4 accepts `temperature` while gpt-5.5 does not, and gpt-5 never does.
+ * What does predict it is whether the model accepts `reasoning.effort: none`
+ * — a model that can be asked not to reason takes the knobs while it isn't,
+ * and a model that always reasons never takes them.
+ *
+ * One request answers both questions, because the rejection names the field
+ * it rejected: `reasoning.effort` means `none` is unavailable (so the model
+ * always reasons), `temperature` means it reasons anyway. `temperature`,
+ * `top_p`, and `top_logprobs` were verified to move as one group, so probing
+ * one covers all three.
+ */
+async function probeSampling(key, modelId) {
+    let response;
+    try {
+        response = await fetch(`${API_BASE}/responses`, {
+            method: "POST",
+            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+            headers: {
+                authorization: `Bearer ${key}`,
+                "content-type": "application/json",
+                ...FETCH_HEADERS,
+            },
+            body: JSON.stringify({
+                model: modelId,
+                input: "hi",
+                max_output_tokens: 16,
+                store: false,
+                temperature: 0.3,
+                reasoning: { effort: "none" },
+            }),
+        });
+    } catch {
+        return { sampling: null, supportsNoEffort: false };
+    }
+    if (response.ok) return { sampling: "without_reasoning", supportsNoEffort: true };
+    if (response.status !== 400) {
+        // 404 (no access), 429, or an outage: record nothing rather than a guess.
+        return { sampling: null, supportsNoEffort: false };
+    }
+    const body = await response.json().catch(() => ({}));
+    const param = body?.error?.param ?? "";
+    return {
+        sampling: "never",
+        supportsNoEffort: !param.startsWith("reasoning"),
     };
 }
 
@@ -146,8 +235,30 @@ async function main() {
             console.log(`  ?? ${baseId} (no docs page)`);
             continue;
         }
-        models[baseId] = parsePage(page);
-        console.log(`  ok ${baseId}`);
+        const parsed = parsePage(page);
+        // A non-reasoning model always takes the knobs, so it needs no probe.
+        if (!parsed.reasoning || !parsed.endpoints.responses) {
+            parsed.sampling = parsed.reasoning ? null : "always";
+        } else if (!affordableToProbe(parsed.pricing)) {
+            parsed.sampling = null;
+            const { input, output } = parsed.pricing;
+            const price = input === null ? "no published price" : `$${input}/$${output} per 1M`;
+            console.log(`  ok ${baseId} [sampling=unprobed: ${price}]`);
+            delete parsed.pricing;
+            models[baseId] = parsed;
+            continue;
+        } else {
+            const probe = await probeSampling(key, baseId);
+            parsed.sampling = probe.sampling;
+            // Kept beside the parsed list rather than merged into it: several
+            // models accept `none` without the docs ever saying so, and
+            // overwriting the documented levels with the probe's single fact
+            // would drop low/medium/high for exactly those models.
+            parsed.supports_effort_none = probe.supportsNoEffort;
+        }
+        delete parsed.pricing;
+        models[baseId] = parsed;
+        console.log(`  ok ${baseId}${parsed.sampling ? ` [sampling=${parsed.sampling}]` : ""}`);
     }
 
     const bundle = {

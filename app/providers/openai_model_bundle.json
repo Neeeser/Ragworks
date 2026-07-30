@@ -1,6 +1,6 @@
 {
   "source": "https://platform.openai.com/docs/models/<id>.md",
-  "generated_at": "2026-07-28",
+  "generated_at": "2026-07-30",
   "models": {
     "babbage-002": {
       "display_name": "babbage-002",
@@ -26,7 +26,12 @@
       "deprecated": false,
       "snapshots": [
         "babbage-002"
-      ]
+      ],
+      "pricing": {
+        "input": 0.4,
+        "output": 0.4
+      },
+      "sampling": "always"
     },
     "chat-latest": {
       "display_name": "Chat Latest",
@@ -53,7 +58,12 @@
       "deprecated": false,
       "snapshots": [
         "chat-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": 30
+      },
+      "sampling": "always"
     },
     "chatgpt-image-latest": {
       "display_name": "chatgpt-image-latest",
@@ -81,7 +91,12 @@
       "deprecated": false,
       "snapshots": [
         "chatgpt-image-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "computer-use-preview": {
       "display_name": "computer-use-preview",
@@ -108,7 +123,13 @@
       "deprecated": false,
       "snapshots": [
         "computer-use-preview-2025-03-11"
-      ]
+      ],
+      "pricing": {
+        "input": 3,
+        "output": 12
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "davinci-002": {
       "display_name": "davinci-002",
@@ -134,7 +155,12 @@
       "deprecated": false,
       "snapshots": [
         "davinci-002"
-      ]
+      ],
+      "pricing": {
+        "input": 2,
+        "output": 2
+      },
+      "sampling": "always"
     },
     "gpt-3.5-turbo": {
       "display_name": "GPT-3.5 Turbo",
@@ -162,7 +188,12 @@
         "gpt-3.5-turbo-0125",
         "gpt-3.5-turbo-1106",
         "gpt-3.5-turbo-instruct"
-      ]
+      ],
+      "pricing": {
+        "input": 0.5,
+        "output": 1.5
+      },
+      "sampling": "always"
     },
     "gpt-3.5-turbo-instruct": {
       "display_name": "gpt-3.5-turbo-instruct",
@@ -188,7 +219,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-3.5-turbo-instruct"
-      ]
+      ],
+      "pricing": {
+        "input": 1.5,
+        "output": 2
+      },
+      "sampling": "always"
     },
     "gpt-4": {
       "display_name": "GPT-4",
@@ -215,7 +251,12 @@
       "snapshots": [
         "gpt-4-0613",
         "gpt-4-0314"
-      ]
+      ],
+      "pricing": {
+        "input": 30,
+        "output": 60
+      },
+      "sampling": "always"
     },
     "gpt-4-turbo": {
       "display_name": "GPT-4 Turbo",
@@ -242,7 +283,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4-turbo-2024-04-09"
-      ]
+      ],
+      "pricing": {
+        "input": 10,
+        "output": 30
+      },
+      "sampling": "always"
     },
     "gpt-4.1": {
       "display_name": "GPT-4.1",
@@ -269,7 +315,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4.1-2025-04-14"
-      ]
+      ],
+      "pricing": {
+        "input": 2,
+        "output": 8
+      },
+      "sampling": "always"
     },
     "gpt-4.1-mini": {
       "display_name": "GPT-4.1 mini",
@@ -296,7 +347,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4.1-mini-2025-04-14"
-      ]
+      ],
+      "pricing": {
+        "input": 0.4,
+        "output": 1.6
+      },
+      "sampling": "always"
     },
     "gpt-4.1-nano": {
       "display_name": "GPT-4.1 nano",
@@ -323,7 +379,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4.1-nano-2025-04-14"
-      ]
+      ],
+      "pricing": {
+        "input": 0.1,
+        "output": 0.4
+      },
+      "sampling": "always"
     },
     "gpt-4o": {
       "display_name": "GPT-4o",
@@ -352,7 +413,12 @@
         "gpt-4o-2024-11-20",
         "gpt-4o-2024-08-06",
         "gpt-4o-2024-05-13"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-4o-mini": {
       "display_name": "GPT-4o mini",
@@ -379,7 +445,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4o-mini-2024-07-18"
-      ]
+      ],
+      "pricing": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "sampling": "always"
     },
     "gpt-4o-mini-search-preview": {
       "display_name": "GPT-4o mini Search Preview",
@@ -405,7 +476,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4o-mini-search-preview-2025-03-11"
-      ]
+      ],
+      "pricing": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "sampling": "always"
     },
     "gpt-4o-mini-transcribe": {
       "display_name": "GPT-4o mini Transcribe",
@@ -433,7 +509,12 @@
       "snapshots": [
         "gpt-4o-mini-transcribe-2025-03-20",
         "gpt-4o-mini-transcribe-2025-12-15"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-4o-mini-tts": {
       "display_name": "GPT-4o mini TTS",
@@ -460,7 +541,12 @@
       "snapshots": [
         "gpt-4o-mini-tts-2025-03-20",
         "gpt-4o-mini-tts-2025-12-15"
-      ]
+      ],
+      "pricing": {
+        "input": 0.6,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-4o-search-preview": {
       "display_name": "GPT-4o Search Preview",
@@ -486,7 +572,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4o-search-preview-2025-03-11"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-4o-transcribe": {
       "display_name": "GPT-4o Transcribe",
@@ -513,7 +604,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4o-transcribe"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-4o-transcribe-diarize": {
       "display_name": "GPT-4o Transcribe Diarize",
@@ -540,7 +636,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-4o-transcribe-diarize"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-5": {
       "display_name": "GPT-5",
@@ -572,7 +673,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-2025-08-07"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "gpt-5-chat-latest": {
       "display_name": "GPT-5 Chat",
@@ -599,7 +706,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-chat-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-5-codex": {
       "display_name": "GPT-5-Codex",
@@ -626,7 +738,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-codex"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "gpt-5-mini": {
       "display_name": "GPT-5 mini",
@@ -653,7 +771,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-mini-2025-08-07"
-      ]
+      ],
+      "pricing": {
+        "input": 0.25,
+        "output": 2
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "gpt-5-nano": {
       "display_name": "GPT-5 nano",
@@ -680,7 +804,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-nano-2025-08-07"
-      ]
+      ],
+      "pricing": {
+        "input": 0.05,
+        "output": 0.4
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "gpt-5-pro": {
       "display_name": "GPT-5 Pro",
@@ -707,7 +837,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5-pro-2025-10-06"
-      ]
+      ],
+      "pricing": {
+        "input": 15,
+        "output": 120
+      },
+      "sampling": null
     },
     "gpt-5.1": {
       "display_name": "GPT-5.1",
@@ -739,7 +874,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.1-2025-11-13"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.1-chat-latest": {
       "display_name": "GPT-5.1 Chat",
@@ -766,7 +907,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.1-chat-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-5.1-codex": {
       "display_name": "GPT-5.1-Codex",
@@ -793,7 +939,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.1-codex"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "gpt-5.1-codex-max": {
       "display_name": "GPT-5.1-Codex-Max",
@@ -820,7 +972,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.1-codex-max"
-      ]
+      ],
+      "pricing": {
+        "input": 1.25,
+        "output": 10
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "gpt-5.1-codex-mini": {
       "display_name": "GPT-5.1-Codex mini",
@@ -847,7 +1005,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.1-codex-mini"
-      ]
+      ],
+      "pricing": {
+        "input": 0.25,
+        "output": 2
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "gpt-5.2": {
       "display_name": "GPT-5.2",
@@ -880,7 +1044,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.2-2025-12-11"
-      ]
+      ],
+      "pricing": {
+        "input": 1.75,
+        "output": 14
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.2-chat-latest": {
       "display_name": "GPT-5.2 Chat",
@@ -907,7 +1077,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.2-chat-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 1.75,
+        "output": 14
+      },
+      "sampling": "always"
     },
     "gpt-5.2-codex": {
       "display_name": "GPT-5.2-Codex",
@@ -934,7 +1109,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.2-codex"
-      ]
+      ],
+      "pricing": {
+        "input": 1.75,
+        "output": 14
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "gpt-5.2-pro": {
       "display_name": "GPT-5.2 Pro",
@@ -961,7 +1142,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.2-pro-2025-12-11"
-      ]
+      ],
+      "pricing": {
+        "input": 21,
+        "output": 168
+      },
+      "sampling": null
     },
     "gpt-5.3-chat-latest": {
       "display_name": "GPT-5.3 Chat",
@@ -988,7 +1174,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.3-chat-latest"
-      ]
+      ],
+      "pricing": {
+        "input": 1.75,
+        "output": 14
+      },
+      "sampling": "always"
     },
     "gpt-5.3-codex": {
       "display_name": "GPT-5.3-Codex",
@@ -1015,7 +1206,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.3-codex"
-      ]
+      ],
+      "pricing": {
+        "input": 1.75,
+        "output": 14
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.4": {
       "display_name": "GPT-5.4",
@@ -1048,7 +1245,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.4-2026-03-05"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 15
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.4-mini": {
       "display_name": "GPT-5.4 mini",
@@ -1081,7 +1284,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.4-mini-2026-03-17"
-      ]
+      ],
+      "pricing": {
+        "input": 0.75,
+        "output": 4.5
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.4-nano": {
       "display_name": "GPT-5.4 nano",
@@ -1114,7 +1323,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.4-nano-2026-03-17"
-      ]
+      ],
+      "pricing": {
+        "input": 0.2,
+        "output": 1.25
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.4-pro": {
       "display_name": "GPT-5.4 Pro",
@@ -1145,7 +1360,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.4-pro-2026-03-05"
-      ]
+      ],
+      "pricing": {
+        "input": 30,
+        "output": 180
+      },
+      "sampling": null
     },
     "gpt-5.5": {
       "display_name": "GPT-5.5",
@@ -1178,7 +1398,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.5-2026-04-23"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": 30
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.5-pro": {
       "display_name": "GPT-5.5 Pro",
@@ -1209,7 +1435,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.5-pro-2026-04-23"
-      ]
+      ],
+      "pricing": {
+        "input": 30,
+        "output": 180
+      },
+      "sampling": null
     },
     "gpt-5.6-luna": {
       "display_name": "GPT-5.6 Luna",
@@ -1236,7 +1467,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.6-luna"
-      ]
+      ],
+      "pricing": {
+        "input": 1,
+        "output": 6
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.6-sol": {
       "display_name": "GPT-5.6 Sol",
@@ -1263,7 +1500,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.6-sol"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": 30
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-5.6-terra": {
       "display_name": "GPT-5.6 Terra",
@@ -1290,7 +1533,13 @@
       "deprecated": false,
       "snapshots": [
         "gpt-5.6-terra"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 15
+      },
+      "sampling": "without_reasoning",
+      "supports_effort_none": true
     },
     "gpt-audio": {
       "display_name": "gpt-audio",
@@ -1318,7 +1567,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-audio-2025-08-28"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-audio-1.5": {
       "display_name": "gpt-audio-1.5",
@@ -1346,7 +1600,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-audio-1.5"
-      ]
+      ],
+      "pricing": {
+        "input": 2.5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-audio-mini": {
       "display_name": "gpt-audio-mini",
@@ -1375,7 +1634,12 @@
       "snapshots": [
         "gpt-audio-mini-2025-10-06",
         "gpt-audio-mini-2025-12-15"
-      ]
+      ],
+      "pricing": {
+        "input": 0.6,
+        "output": 2.4
+      },
+      "sampling": "always"
     },
     "gpt-image-1": {
       "display_name": "GPT Image 1",
@@ -1402,7 +1666,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-image-1"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-image-1-mini": {
       "display_name": "gpt-image-1-mini",
@@ -1429,7 +1698,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-image-1-mini"
-      ]
+      ],
+      "pricing": {
+        "input": 2,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-image-1.5": {
       "display_name": "GPT Image 1.5",
@@ -1457,7 +1731,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-image-1.5-2025-12-16"
-      ]
+      ],
+      "pricing": {
+        "input": 5,
+        "output": 10
+      },
+      "sampling": "always"
     },
     "gpt-image-2": {
       "display_name": "GPT Image 2",
@@ -1484,7 +1763,44 @@
       "deprecated": false,
       "snapshots": [
         "gpt-image-2-2026-04-21"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
+    },
+    "gpt-live-transcribe": {
+      "display_name": "GPT Live Transcribe",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "audio",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-live-transcribe"
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-realtime": {
       "display_name": "GPT-Realtime",
@@ -1513,7 +1829,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-2025-08-28"
-      ]
+      ],
+      "pricing": {
+        "input": 4,
+        "output": 16
+      },
+      "sampling": "always"
     },
     "gpt-realtime-1.5": {
       "display_name": "GPT-Realtime-1.5",
@@ -1542,7 +1863,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-1.5"
-      ]
+      ],
+      "pricing": {
+        "input": 4,
+        "output": 16
+      },
+      "sampling": "always"
     },
     "gpt-realtime-2": {
       "display_name": "GPT-Realtime-2",
@@ -1571,7 +1897,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-2"
-      ]
+      ],
+      "pricing": {
+        "input": 4,
+        "output": 24
+      },
+      "sampling": null
     },
     "gpt-realtime-2.1": {
       "display_name": "GPT-Realtime-2.1",
@@ -1600,7 +1931,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-2.1"
-      ]
+      ],
+      "pricing": {
+        "input": 4,
+        "output": 24
+      },
+      "sampling": null
     },
     "gpt-realtime-2.1-mini": {
       "display_name": "GPT-Realtime-2.1 mini",
@@ -1629,7 +1965,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-2.1-mini"
-      ]
+      ],
+      "pricing": {
+        "input": 0.6,
+        "output": 2.4
+      },
+      "sampling": null
     },
     "gpt-realtime-mini": {
       "display_name": "GPT-Realtime mini",
@@ -1659,7 +2000,12 @@
       "snapshots": [
         "gpt-realtime-mini-2025-10-06",
         "gpt-realtime-mini-2025-12-15"
-      ]
+      ],
+      "pricing": {
+        "input": 0.6,
+        "output": 2.4
+      },
+      "sampling": "always"
     },
     "gpt-realtime-translate": {
       "display_name": "GPT-Realtime-Translate",
@@ -1686,7 +2032,12 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-translate"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "gpt-realtime-whisper": {
       "display_name": "GPT-Realtime-Whisper",
@@ -1713,7 +2064,44 @@
       "deprecated": false,
       "snapshots": [
         "gpt-realtime-whisper"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
+    },
+    "gpt-transcribe": {
+      "display_name": "GPT Transcribe",
+      "context_window": null,
+      "max_output_tokens": null,
+      "input_modalities": [
+        "audio",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "knowledge_cutoff": null,
+      "reasoning": false,
+      "reasoning_efforts": null,
+      "endpoints": {
+        "chat_completions": false,
+        "responses": false,
+        "embeddings": false
+      },
+      "function_calling": false,
+      "structured_outputs": false,
+      "streaming": true,
+      "deprecated": false,
+      "snapshots": [
+        "gpt-transcribe"
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "o1": {
       "display_name": "o1",
@@ -1740,7 +2128,12 @@
       "deprecated": false,
       "snapshots": [
         "o1-2024-12-17"
-      ]
+      ],
+      "pricing": {
+        "input": 15,
+        "output": 60
+      },
+      "sampling": null
     },
     "o1-pro": {
       "display_name": "o1-pro",
@@ -1767,7 +2160,12 @@
       "deprecated": false,
       "snapshots": [
         "o1-pro-2025-03-19"
-      ]
+      ],
+      "pricing": {
+        "input": 150,
+        "output": 600
+      },
+      "sampling": null
     },
     "o3": {
       "display_name": "o3",
@@ -1794,7 +2192,13 @@
       "deprecated": false,
       "snapshots": [
         "o3-2025-04-16"
-      ]
+      ],
+      "pricing": {
+        "input": 2,
+        "output": 8
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "o3-deep-research": {
       "display_name": "o3-deep-research",
@@ -1821,7 +2225,13 @@
       "deprecated": false,
       "snapshots": [
         "o3-deep-research-2025-06-26"
-      ]
+      ],
+      "pricing": {
+        "input": 10,
+        "output": 40
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "o3-mini": {
       "display_name": "o3-mini",
@@ -1847,7 +2257,13 @@
       "deprecated": false,
       "snapshots": [
         "o3-mini-2025-01-31"
-      ]
+      ],
+      "pricing": {
+        "input": 1.1,
+        "output": 4.4
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "o3-pro": {
       "display_name": "o3-pro",
@@ -1874,7 +2290,12 @@
       "deprecated": false,
       "snapshots": [
         "o3-pro-2025-06-10"
-      ]
+      ],
+      "pricing": {
+        "input": 20,
+        "output": 80
+      },
+      "sampling": null
     },
     "o4-mini": {
       "display_name": "o4-mini",
@@ -1901,7 +2322,13 @@
       "deprecated": false,
       "snapshots": [
         "o4-mini-2025-04-16"
-      ]
+      ],
+      "pricing": {
+        "input": 1.1,
+        "output": 4.4
+      },
+      "sampling": "never",
+      "supports_effort_none": false
     },
     "o4-mini-deep-research": {
       "display_name": "o4-mini-deep-research",
@@ -1928,7 +2355,13 @@
       "deprecated": false,
       "snapshots": [
         "o4-mini-deep-research-2025-06-26"
-      ]
+      ],
+      "pricing": {
+        "input": 2,
+        "output": 8
+      },
+      "sampling": null,
+      "supports_effort_none": false
     },
     "omni-moderation-latest": {
       "display_name": "omni-moderation",
@@ -1955,7 +2388,12 @@
       "deprecated": false,
       "snapshots": [
         "omni-moderation-2024-09-26"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "sora-2": {
       "display_name": "Sora 2",
@@ -1985,7 +2423,12 @@
         "sora-2-2025-12-08",
         "sora-2-2025-10-06",
         "sora-2"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "sora-2-pro": {
       "display_name": "Sora 2 Pro",
@@ -2014,7 +2457,12 @@
       "snapshots": [
         "sora-2-pro-2025-10-06",
         "sora-2-pro"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "text-embedding-3-large": {
       "display_name": "text-embedding-3-large",
@@ -2040,7 +2488,12 @@
       "deprecated": false,
       "snapshots": [
         "text-embedding-3-large"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "text-embedding-3-small": {
       "display_name": "text-embedding-3-small",
@@ -2066,7 +2519,12 @@
       "deprecated": false,
       "snapshots": [
         "text-embedding-3-small"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "text-embedding-ada-002": {
       "display_name": "text-embedding-ada-002",
@@ -2092,7 +2550,12 @@
       "deprecated": false,
       "snapshots": [
         "text-embedding-ada-002"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "tts-1": {
       "display_name": "TTS-1",
@@ -2118,7 +2581,12 @@
       "deprecated": false,
       "snapshots": [
         "tts-1"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "tts-1-hd": {
       "display_name": "TTS-1 HD",
@@ -2144,7 +2612,12 @@
       "deprecated": false,
       "snapshots": [
         "tts-1-hd"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     },
     "whisper-1": {
       "display_name": "Whisper",
@@ -2170,7 +2643,12 @@
       "deprecated": false,
       "snapshots": [
         "whisper-1"
-      ]
+      ],
+      "pricing": {
+        "input": null,
+        "output": null
+      },
+      "sampling": "always"
     }
   },
   "unresolved": [
@@ -2181,6 +2659,7 @@
     "gpt-4-0613",
     "gpt-5-search-api",
     "omni-moderation",
+    "ra-gpt-5.6-sol",
     "tts-1-1106",
     "tts-1-hd-1106"
   ]

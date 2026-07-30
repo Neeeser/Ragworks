@@ -284,6 +284,7 @@ export function makeModelInfo(overrides: Partial<ModelInfo> = {}): ModelInfo {
       tools: true,
       reasoning: "block",
       reasoning_efforts: ["low", "medium", "high"],
+      sampling: "without_reasoning",
     },
     default_parameters: { temperature: 0.2 },
     ...overrides,

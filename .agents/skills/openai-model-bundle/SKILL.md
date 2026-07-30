@@ -37,12 +37,22 @@ make refresh-openai-bundle
 ```
 
 (`scripts/download-openai-model-bundle.mjs`; needs `OPENAI_API_KEY` in the
-environment or `.env.sandbox`.) Then:
+environment or `.env.sandbox`.)
+
+The refresh makes a small number of **live inference calls**: one
+minimum-size request (a one-token input, 16 output tokens) per reasoning
+model, to measure what no docs page states — whether the model still accepts
+`temperature`/`top_p`/`top_logprobs`, and whether it accepts
+`reasoning.effort: none`. Models priced above the generator's ceiling
+(`MAX_PROBE_INPUT_USD_PER_M` / `MAX_PROBE_OUTPUT_USD_PER_M`) are skipped and
+recorded as unmeasured, which callers treat permissively. Then:
 
 1. Review the diff — new families, changed context windows, new effort
    levels, models flagged `unresolved` (no docs page; recorded, not dropped).
 2. Run the guard test: `uv run pytest tests/providers/test_openai_bundle.py
-   tests/providers/test_openai_provider.py -n 0`. It pins the parse shape and
+   tests/providers/test_openai_provider.py -n 0`. It pins one model per
+   sampling class, so a refresh that lost the probe fails rather than
+   silently making every knob permissive again. It pins the parse shape and
    known values, so a shifted docs format fails here instead of shipping a
    bundle full of nulls. If it fails, fix the *parser* in the script, not the
    pinned values (unless OpenAI genuinely changed the value — verify against

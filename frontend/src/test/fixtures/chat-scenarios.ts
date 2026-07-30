@@ -184,6 +184,7 @@ export const modelCatalog: CatalogModel[] = [
       tools: true,
       reasoning: "block",
       reasoning_efforts: ["low", "medium", "high"],
+      sampling: "without_reasoning",
     },
     default_parameters: {
       temperature: 0.2,
@@ -202,7 +203,7 @@ export const modelCatalog: CatalogModel[] = [
     input_modalities: ["text"],
     output_modalities: ["text"],
     supported_parameters: ["temperature"],
-    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [] },
+    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [], sampling: "always" },
     default_parameters: {
       temperature: 0.1,
     },

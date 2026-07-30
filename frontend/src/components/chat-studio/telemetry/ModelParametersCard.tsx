@@ -96,7 +96,9 @@ export const ModelParametersCard = ({
         key={definition.key}
         label={definition.label}
         description={definition.description}
-        helper={defaultDisplay ? `Default: ${defaultDisplay}` : null}
+        helper={
+          definition.unavailableReason ?? (defaultDisplay ? `Default: ${defaultDisplay}` : null)
+        }
         overrideActive={hasOverride}
         actionLabel="Clear"
         actionDisabled={!hasOverride}
@@ -113,6 +115,7 @@ export const ModelParametersCard = ({
           placeholder={"placeholder" in definition ? definition.placeholder : undefined}
           options={"options" in definition ? definition.options : undefined}
           rows={"rows" in definition ? definition.rows : undefined}
+          disabled={Boolean(definition.unavailableReason)}
           onChange={handleValueChange}
         />
       </ParameterFieldCard>

@@ -67,7 +67,6 @@ export function useTelemetryModelGroups(
     selectedModelKey,
     currentModelInfo,
     providerModelSlug,
-    visibleParameterDefinitions,
   } = modelCatalog;
 
   const {
@@ -83,6 +82,7 @@ export function useTelemetryModelGroups(
 
   const {
     parameterOverrides,
+    visibleParameterDefinitions,
     activeParameterCount,
     resetAllParameters,
     handleNumberParameterChange,

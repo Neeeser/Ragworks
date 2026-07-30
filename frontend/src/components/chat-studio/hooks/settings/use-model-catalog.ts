@@ -2,17 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { PARAMETER_DEFINITIONS, resolveParameterDefinitions } from "@/lib/chat-parameters";
+import { PARAMETER_DEFINITIONS } from "@/lib/chat-parameters";
 import { modelAvailability, useSharedModelCatalog } from "@/lib/model-catalog-cache";
 import { sortChatModels } from "@/lib/model-sorting";
 
 import { sanitizeModelSlug } from "../../lib/chat-utils";
 
-import type {
-  ModelParameterKey,
-  ParameterDefinition,
-  ResolvedParameterDefinition,
-} from "@/lib/chat-parameters";
+import type { ModelParameterKey, ParameterDefinition } from "@/lib/chat-parameters";
 import type { ChatModelSortOption } from "@/lib/model-sorting";
 import type { CatalogModel, ConnectionCatalogError, ProviderConnection, UUID } from "@/lib/types";
 
@@ -65,7 +61,6 @@ interface UseModelCatalogResult {
   currentModelInfo: CatalogModel | null;
   providerModelSlug: string | null;
   supportedParameterKeys: Set<ModelParameterKey>;
-  visibleParameterDefinitions: ResolvedParameterDefinition[];
   toolReadyModels: CatalogModel[];
   sortedModelCatalog: CatalogModel[];
   selectedModelKey: string;
@@ -161,11 +156,6 @@ export function useModelCatalog({
     return supported;
   }, [currentModelInfo]);
 
-  const visibleParameterDefinitions = useMemo(
-    () => resolveParameterDefinitions(supportedParameterKeys, currentModelInfo?.capabilities),
-    [supportedParameterKeys, currentModelInfo?.capabilities],
-  );
-
   const toolReadyModels = useMemo(() => {
     if (!toolsEnabled) {
       return modelCatalog;
@@ -232,7 +222,6 @@ export function useModelCatalog({
     currentModelInfo,
     providerModelSlug,
     supportedParameterKeys,
-    visibleParameterDefinitions,
     toolReadyModels,
     sortedModelCatalog,
     selectedModelKey,

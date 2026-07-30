@@ -583,6 +583,15 @@ frontend form code — only a new `ConfigFieldKind` would.
   ships. Where a provider publishes nothing (OpenAI), infer *lopsidedly*: match
   the markers that exclude, and let everything unmatched fall through to the
   permissive bucket, so a model released tomorrow appears rather than vanishes.
+- **A capability the provider documents nowhere is *measured* at bundle
+  generation, never inferred from a version.** Whether an OpenAI model still
+  accepts `temperature`/`top_p`/`top_logprobs` is published on no page and
+  does not follow the version — gpt-5.4 accepts them, gpt-5.5 needs reasoning
+  off, gpt-5 never does — so `make refresh-openai-bundle` probes it with one
+  minimum-size request per reasoning model and records the answer. The probe
+  skips models priced above the generator's ceiling, and anything unmeasured
+  stays permissive; a version cutoff would be wrong in both directions on the
+  day it was written.
 - **OpenAI model capabilities come from the shipped bundle, and the bundle
   refines — it never gates.** `app/providers/openai_model_bundle.json` is
   generated from OpenAI's own docs pages (`make refresh-openai-bundle`; the

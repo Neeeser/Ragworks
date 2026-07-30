@@ -15,7 +15,7 @@ from pathlib import Path
 
 from app.chat.parameters import REASONING_EFFORT_OPTIONS
 from app.schemas.chat_parameters import ChatParameters
-from app.schemas.models import CAPABILITY_MARKERS, ReasoningStyle
+from app.schemas.models import CAPABILITY_MARKERS, ReasoningStyle, SamplingSupport
 
 _CONTRACT = json.loads(
     (Path(__file__).resolve().parents[1] / "assets" / "chat_parameter_contract.json").read_text()
@@ -46,3 +46,14 @@ def test_reasoning_effort_vocabulary_matches_the_contract() -> None:
 
 def test_reasoning_styles_match_the_contract() -> None:
     assert {style.value for style in ReasoningStyle} == set(_CONTRACT["reasoning_styles"])
+
+
+def test_sampling_support_states_match_the_contract() -> None:
+    assert {state.value for state in SamplingSupport} == set(_CONTRACT["sampling_support"])
+
+
+def test_sampling_knobs_are_real_chat_parameters() -> None:
+    """The knobs a reasoning model refuses must be fields the wire carries —
+    a renamed one would leave the panel gating a control nothing sends."""
+    for knob in _CONTRACT["sampling_knobs"]:
+        assert knob in ChatParameters.model_fields

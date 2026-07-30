@@ -2,9 +2,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import { pruneUnsupportedEffort } from "@/lib/chat-parameters";
+import {
+  pruneBlockedSamplingKnobs,
+  pruneUnsupportedEffort,
+  resolveParameterDefinitions,
+} from "@/lib/chat-parameters";
 
-import type { ModelParameterKey, ParameterOverrides, ParameterValue } from "@/lib/chat-parameters";
+import type {
+  ModelParameterKey,
+  ParameterOverrides,
+  ParameterValue,
+  ResolvedParameterDefinition,
+} from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 interface UseModelParametersParams {
@@ -15,6 +24,8 @@ interface UseModelParametersParams {
 
 interface UseModelParametersResult {
   parameterOverrides: ParameterOverrides;
+  /** What the panel renders for this model, given this turn's choices. */
+  visibleParameterDefinitions: ResolvedParameterDefinition[];
   setParameterOverrides: React.Dispatch<React.SetStateAction<ParameterOverrides>>;
   activeParameterCount: number;
   updateParameterValue: (key: ModelParameterKey, value?: ParameterValue | null) => void;
@@ -46,6 +57,19 @@ export function useModelParameters({
   supportedParameterKeys,
 }: UseModelParametersParams): UseModelParametersResult {
   const [parameterOverrides, setParameterOverrides] = useState<ParameterOverrides>({});
+
+  // Derived here rather than beside the catalog because it depends on this
+  // turn's chosen effort: a model may take sampling knobs only while it is
+  // not reasoning, and the panel says so instead of letting the send 400.
+  const visibleParameterDefinitions = useMemo(
+    () =>
+      resolveParameterDefinitions(
+        supportedParameterKeys,
+        currentModelInfo?.capabilities,
+        parameterOverrides.reasoning,
+      ),
+    [supportedParameterKeys, currentModelInfo?.capabilities, parameterOverrides.reasoning],
+  );
 
   const activeParameterCount = useMemo(() => {
     return Object.keys(parameterOverrides).filter(
@@ -164,6 +188,9 @@ export function useModelParameters({
         supportedSet.add("reasoning");
       }
       overrides = pruneUnsupportedEffort(overrides, capabilities);
+      // The panel shows these greyed out with the reason; sending them anyway
+      // would trade a visible explanation for a provider 400.
+      overrides = pruneBlockedSamplingKnobs(overrides, capabilities);
       const payload: Record<string, unknown> = {};
       Object.entries(overrides).forEach(([key, rawValue]) => {
         const normalizedKey = key.toLowerCase();
@@ -211,6 +238,7 @@ export function useModelParameters({
 
   return {
     parameterOverrides,
+    visibleParameterDefinitions,
     setParameterOverrides,
     activeParameterCount,
     updateParameterValue,

@@ -75,6 +75,13 @@ export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "
 export type ReasoningStyle = "none" | "block" | "include_flag";
 
 /**
+ * Mirrors `app/schemas/models.py::SamplingSupport` — when a model accepts
+ * sampling knobs. Measured per model, because it does not follow the version:
+ * gpt-5.4 accepts `temperature` where gpt-5.5 does not, and gpt-5 never does.
+ */
+export type SamplingSupport = "always" | "without_reasoning" | "never";
+
+/**
  * Mirrors `app/schemas/models.py::ChatCapabilities` — what a model can *do*,
  * kept apart from the sampling knobs in `supported_parameters`. Capability
  * flags are only ever true when the provider said so, because a wrong guess
@@ -86,6 +93,7 @@ export interface ChatCapabilities {
   reasoning: ReasoningStyle;
   /** Effort levels the provider publishes; empty means it names none. */
   reasoning_efforts: string[];
+  sampling: SamplingSupport;
 }
 
 export interface ReasoningConfig {

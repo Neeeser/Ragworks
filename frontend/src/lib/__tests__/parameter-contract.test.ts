@@ -11,7 +11,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { PARAMETER_DEFINITIONS, resolveParameterDefinitions } from "@/lib/chat-parameters";
+import {
+  PARAMETER_DEFINITIONS,
+  SAMPLING_KNOBS,
+  resolveParameterDefinitions,
+} from "@/lib/chat-parameters";
 
 import type { ModelParameterKey } from "@/lib/chat-parameters";
 
@@ -22,6 +26,8 @@ const contract = JSON.parse(fs.readFileSync(CONTRACT_PATH, "utf-8")) as {
   passthrough_parameter: string;
   reasoning_efforts: string[];
   reasoning_styles: string[];
+  sampling_support: string[];
+  sampling_knobs: string[];
 };
 
 describe("chat parameter contract", () => {
@@ -41,11 +47,26 @@ describe("chat parameter contract", () => {
       tools: false,
       reasoning: "block",
       reasoning_efforts: efforts,
+      sampling: "always",
     }).find((definition) => definition.key === "reasoning");
     const offered = (reasoning?.options ?? [])
       .map((option) => option.value)
       .filter((value) => value !== "");
     expect(offered).toEqual(efforts);
+  });
+
+  it("gates exactly the sampling knobs the contract names", () => {
+    expect([...SAMPLING_KNOBS]).toEqual(contract.sampling_knobs);
+  });
+
+  it("hides every contract sampling knob on a model that never takes them", () => {
+    const keys = resolveParameterDefinitions(
+      new Set(contract.sampling_knobs as ModelParameterKey[]),
+      { tools: false, reasoning: "none", reasoning_efforts: [], sampling: "never" },
+    ).map((definition) => definition.key);
+    for (const knob of contract.sampling_knobs) {
+      expect(keys).not.toContain(knob);
+    }
   });
 
   it("treats every contract reasoning style as a known value", () => {
@@ -54,6 +75,7 @@ describe("chat parameter contract", () => {
         tools: false,
         reasoning: style as "none" | "block" | "include_flag",
         reasoning_efforts: [],
+        sampling: "always",
       });
       const hasReasoningControl = definitions.some((definition) => definition.key === "reasoning");
       // Only "none" hides the control; every positive style shows one.

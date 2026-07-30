@@ -23,7 +23,7 @@ from re import sub
 
 from pydantic import BaseModel
 
-from app.schemas.models import ChatCapabilities, ReasoningStyle
+from app.schemas.models import ChatCapabilities, ReasoningStyle, SamplingSupport
 
 _BUNDLE_PATH = Path(__file__).parent / "openai_model_bundle.json"
 
@@ -56,12 +56,27 @@ class BundleModel(BaseModel):
     streaming: bool
     deprecated: bool
     snapshots: list[str]
+    #: Measured at generation time; None where the probe was skipped (a
+    #: premium-priced model) or could not answer.
+    sampling: SamplingSupport | None = None
+    #: Whether the model accepts `reasoning.effort: none`, measured rather
+    #: than read: several models accept it without their docs page saying so,
+    #: and it is the level that keeps their sampling knobs usable.
+    supports_effort_none: bool | None = None
 
     def effort_options(self) -> list[str]:
-        """Effort levels for a reasoning model; empty for a non-reasoning one."""
+        """Effort levels for a reasoning model; empty for a non-reasoning one.
+
+        Composed from the two sources rather than one overwriting the other:
+        the docs page names the levels it documents, and the probe answers
+        `none` — which several models accept without documenting it.
+        """
         if not self.reasoning:
             return []
-        return self.reasoning_efforts or list(DEFAULT_REASONING_EFFORTS)
+        levels = list(self.reasoning_efforts or DEFAULT_REASONING_EFFORTS)
+        if self.supports_effort_none and "none" not in levels:
+            levels.insert(0, "none")
+        return levels
 
     def capabilities(self) -> ChatCapabilities:
         """State this model's capabilities from what the docs page published.
@@ -74,6 +89,8 @@ class BundleModel(BaseModel):
             tools=self.function_calling,
             reasoning=ReasoningStyle.BLOCK if self.reasoning else ReasoningStyle.NONE,
             reasoning_efforts=self.effort_options(),
+            # Unmeasured stays permissive, like the knob floor.
+            sampling=self.sampling or SamplingSupport.ALWAYS,
         )
 
 
