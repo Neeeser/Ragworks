@@ -394,4 +394,5 @@ def test_retrievers_reject_an_oversized_query_stream(session: Session) -> None:
     with pytest.raises(InvalidInputError, match="query items"):
         bm25.run({"items": oversized}, context)
 
-    assert store.query_calls == [] and store.lexical_query_calls == []
+    assert store.query_calls == []
+    assert store.lexical_query_calls == []
