@@ -143,10 +143,13 @@ gradient + highlight, never glass.
 
 ### The accent cast
 
-Dark palettes tint their canvas, surfaces, and hairlines *toward the accent* in the token
-values themselves (deep-space's hairline is violet-tinted, not white/10). This is how the
-whole app reads as "lit by the brand" with zero per-component colour. Components stay
-palette-blind: the cast lives only in this file's values.
+Most dark palettes tint their canvas, surfaces, and hairlines *toward the accent* in the
+token values themselves (deep-space's hairline is violet-tinted, not white/10) — that is
+how they read as "lit by the brand" with zero per-component colour. The default,
+`graphite`, deliberately casts near-neutral instead (white-tinted surfaces, lower
+contrast) for long sessions; the bloom, wire, and glow still carry the accent, so the
+identity survives even on a palette whose base tokens don't. Components stay
+palette-blind either way: the cast lives only in this file's values.
 
 ### The bloom — exactly one, shell-owned
 
@@ -246,10 +249,10 @@ Seven shipped palettes, each a values-only block:
 
 | Palette | Structural mode | Note |
 |---|---|---|
-| `deep-space` | dark | default — violet cast |
+| `graphite` | dark | default — lifted, lower contrast, cast nearly neutral |
+| `deep-space` | dark | violet cast |
 | `midnight` | dark | indigo cast |
 | `true-black` | dark | OLED; cast nearly neutral |
-| `graphite` | dark | lifted, lower contrast |
 | `high-contrast` | dark | WCAG AAA text |
 | `paper` | light | default — white cards, grey shadows |
 | `linen` | light | warm canvas |
