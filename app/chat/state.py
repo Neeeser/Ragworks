@@ -74,6 +74,17 @@ class ModelSettings:
     provider_preferences: dict[str, Any] | None
     context_window: int
 
+    def request_parameters(self) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Split the overrides into (sampling parameters, extra_body).
+
+        The extra_body pass-through rides inside `parameter_overrides` so
+        session persistence round-trips it; providers must never see it among
+        sampling parameters, where an unknown key is a TypeError at the SDK.
+        """
+        parameters = dict(self.parameter_overrides)
+        extra_body = parameters.pop("extra_body", None)
+        return parameters or None, extra_body if isinstance(extra_body, dict) else None
+
 
 @dataclass(frozen=True)
 class ChatSetup:

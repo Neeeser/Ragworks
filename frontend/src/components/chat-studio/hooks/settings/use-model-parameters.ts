@@ -2,7 +2,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import type { ModelParameterKey, ParameterOverrides, ParameterValue } from "@/lib/chat-parameters";
+import {
+  pruneBlockedSamplingKnobs,
+  pruneUnsupportedEffort,
+  resolveParameterDefinitions,
+} from "@/lib/chat-parameters";
+
+import type {
+  ModelParameterKey,
+  ParameterOverrides,
+  ParameterValue,
+  ResolvedParameterDefinition,
+} from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 interface UseModelParametersParams {
@@ -13,6 +24,8 @@ interface UseModelParametersParams {
 
 interface UseModelParametersResult {
   parameterOverrides: ParameterOverrides;
+  /** What the panel renders for this model, given this turn's choices. */
+  visibleParameterDefinitions: ResolvedParameterDefinition[];
   setParameterOverrides: React.Dispatch<React.SetStateAction<ParameterOverrides>>;
   activeParameterCount: number;
   updateParameterValue: (key: ModelParameterKey, value?: ParameterValue | null) => void;
@@ -45,9 +58,25 @@ export function useModelParameters({
 }: UseModelParametersParams): UseModelParametersResult {
   const [parameterOverrides, setParameterOverrides] = useState<ParameterOverrides>({});
 
+  // Derived here rather than beside the catalog because it depends on this
+  // turn's chosen effort: a model may take sampling knobs only while it is
+  // not reasoning, and the panel says so instead of letting the send 400.
+  const visibleParameterDefinitions = useMemo(
+    () =>
+      resolveParameterDefinitions(
+        supportedParameterKeys,
+        currentModelInfo?.capabilities,
+        parameterOverrides.reasoning,
+      ),
+    [supportedParameterKeys, currentModelInfo?.capabilities, parameterOverrides.reasoning],
+  );
+
   const activeParameterCount = useMemo(() => {
-    return Object.keys(parameterOverrides).filter((key) =>
-      supportedParameterKeys.has(key as ModelParameterKey),
+    return Object.keys(parameterOverrides).filter(
+      (key) =>
+        key === "extra_body" ||
+        key === "reasoning" ||
+        supportedParameterKeys.has(key as ModelParameterKey),
     ).length;
   }, [parameterOverrides, supportedParameterKeys]);
 
@@ -151,16 +180,34 @@ export function useModelParameters({
       const supportedSet = new Set(
         (modelInfo.supported_parameters || []).map((param) => param.toLowerCase()),
       );
+      // A reasoning control only exists where the provider claimed reasoning,
+      // and effort domains are per-model — so a value carried over from
+      // another model is dropped rather than sent for it to reject.
+      const capabilities = modelInfo.capabilities;
+      if (capabilities && capabilities.reasoning !== "none") {
+        supportedSet.add("reasoning");
+      }
+      overrides = pruneUnsupportedEffort(overrides, capabilities);
+      // The panel shows these greyed out with the reason; sending them anyway
+      // would trade a visible explanation for a provider 400.
+      overrides = pruneBlockedSamplingKnobs(overrides, capabilities);
       const payload: Record<string, unknown> = {};
       Object.entries(overrides).forEach(([key, rawValue]) => {
         const normalizedKey = key.toLowerCase();
-        if (!supportedSet.has(normalizedKey)) {
+        // extra_body bypasses the supported filter by design: it exists for
+        // parameters the catalog does not know about.
+        if (normalizedKey !== "extra_body" && !supportedSet.has(normalizedKey)) {
           return;
         }
         if (rawValue === undefined || rawValue === null) {
           return;
         }
         if (normalizedKey === "reasoning") {
+          if (typeof rawValue === "boolean") {
+            // A model with no published effort levels takes thinking on/off.
+            if (rawValue) payload[normalizedKey] = { enabled: true };
+            return;
+          }
           if (typeof rawValue === "string") {
             const trimmedReasoning = rawValue.trim().toLowerCase();
             if (!trimmedReasoning) {
@@ -191,6 +238,7 @@ export function useModelParameters({
 
   return {
     parameterOverrides,
+    visibleParameterDefinitions,
     setParameterOverrides,
     activeParameterCount,
     updateParameterValue,

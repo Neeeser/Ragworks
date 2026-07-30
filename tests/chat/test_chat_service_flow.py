@@ -16,10 +16,10 @@ from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatMessageCreate
+from app.schemas.chat_completions import ChatCompletionResponse
 from app.schemas.models import ModelInfo
-from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.tools import ToolInvocationResponse
-from app.services.errors import InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError
 from tests.chat.conftest import (
     ModelOnlyOpenRouter,
     SequencedOpenRouter,
@@ -107,6 +107,94 @@ def test_send_message_records_response(
     assert result.messages[-1].content == "Answer"
     assert result.usage["total_tokens"] == 8
     assert openrouter.chat_calls
+
+
+def test_extra_body_reaches_the_wire_past_the_supported_parameter_filter(
+    session: Session, chat_user, make_collection, install_chat_flow
+) -> None:
+    """`extra_body` is the escape hatch for knobs no catalog knows.
+
+    It must survive sanitization (which drops unknown keys), land in the
+    provider's extra_body — not among sampling parameters — and win a key
+    collision against the provider's own extensions.
+    """
+    make_collection(chat_user)
+    model_info = ModelInfo(
+        id="test-model",
+        name="Test Model",
+        context_length=2048,
+        supported_parameters=["tools", "temperature"],
+    )
+    response = {
+        "id": "resp-1",
+        "provider": "openrouter",
+        "model": "test-model",
+        "choices": [
+            {"index": 0, "message": {"content": "Answer"}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    openrouter = StubOpenRouter(model_info=model_info, response=response)
+    install_chat_flow(openrouter=openrouter, chat_model="test-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(
+        content="hello",
+        parameters={
+            "temperature": 0.2,
+            "extra_body": {"custom_sampler_flag": True, "usage": {"include": False}},
+        },
+    )
+    service.send_message(user=chat_user, payload=payload)
+
+    call = openrouter.chat_calls[0]
+    assert call["parameters"] == {"temperature": 0.2}
+    assert call["extra_body"]["custom_sampler_flag"] is True
+    # The user's key overrides OpenRouter's own usage-accounting block.
+    assert call["extra_body"]["usage"] == {"include": False}
+
+
+def test_unsupported_parameter_rejection_reaches_the_user_verbatim(
+    session: Session, chat_user, make_collection, install_chat_flow
+) -> None:
+    """A model rejecting a parameter surfaces the provider's own message.
+
+    There is deliberately no strip-and-retry layer: the 400 names the exact
+    field, and that text is the user's fix. Losing it to a generic 'provider
+    request failed' would leave them guessing which of six knobs caused it.
+    """
+    import httpx
+    import openai
+
+    make_collection(chat_user)
+    model_info = ModelInfo(
+        id="test-model",
+        name="Test Model",
+        context_length=2048,
+        supported_parameters=["tools", "temperature"],
+    )
+    detail = "Unsupported parameter: 'temperature' is not supported with this model."
+
+    class _RejectingCompat:
+        def chat(self, call: Any) -> Any:
+            raise openai.BadRequestError(
+                detail,
+                response=httpx.Response(
+                    400, request=httpx.Request("POST", "http://api.test/v1/responses")
+                ),
+                body={"error": {"message": detail, "code": "unsupported_parameter"}},
+            )
+
+    openrouter = StubOpenRouter(model_info=model_info, response={})
+    openrouter.compat = _RejectingCompat()  # type: ignore[assignment]
+    install_chat_flow(openrouter=openrouter, chat_model="test-model")
+
+    service = ChatService(session)
+    payload = ChatMessageCreate(content="hello", parameters={"temperature": 0.2})
+
+    with pytest.raises(ExternalServiceError) as excinfo:
+        service.send_message(user=chat_user, payload=payload)
+    assert "Unsupported parameter: 'temperature'" in excinfo.value.detail
 
 
 def test_send_message_handles_tool_calls(
@@ -476,12 +564,15 @@ def test_send_message_raises_when_model_never_stops_calling_tools(
         "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
     }
 
+    class _AlwaysToolCompat:
+        def chat(self, _call: object) -> ChatCompletionResponse:
+            return ChatCompletionResponse.model_validate(tool_response)
+
     class _AlwaysToolOpenRouter:
+        compat = _AlwaysToolCompat()
+
         def get_model(self, _model_id: str) -> ModelInfo:
             return tool_model_info()
-
-        def chat(self, **_kwargs: Any) -> OpenRouterChatResponse:
-            return OpenRouterChatResponse.model_validate(tool_response)
 
     install_chat_flow(openrouter=_AlwaysToolOpenRouter(), chat_model="tool-model")
     monkeypatch.setattr(chat_run_loop, "MAX_TOOL_ITERATIONS", 3)

@@ -17,7 +17,9 @@ from app.providers.tei import TEIAdapter
 from app.retrieval.embedders.tei_embedder import TEIEmbedder
 from app.retrieval.rerankers.tei import TEIReranker
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.providers import TEI_DEFAULT_PORT
+from app.schemas.provider_configs import (
+    TEI_DEFAULT_PORT,
+)
 from app.services.errors import InvalidInputError
 
 

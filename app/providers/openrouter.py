@@ -18,12 +18,14 @@ from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.openrouter import OpenRouterReranker
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.models import EndpointsListResponse
+from app.schemas.provider_configs import (
+    OpenRouterConnectionConfig,
+)
 from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
     ConnectionValidationResult,
-    OpenRouterConnectionConfig,
     ProviderConfigField,
 )
 
@@ -100,6 +102,7 @@ class OpenRouterAdapter(ProviderAdapter):
                     pricing=model.pricing,
                     supported_parameters=model.supported_parameters,
                     default_parameters=model.default_parameters,
+                    capabilities=model.capabilities,
                 )
                 for model in snapshot.value
             ]

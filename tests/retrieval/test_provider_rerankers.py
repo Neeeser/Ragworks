@@ -8,7 +8,7 @@ import pytest
 
 from app.retrieval.models import DocumentChunk, ScoredChunk
 from app.retrieval.rerankers.openrouter import OpenRouterReranker
-from app.schemas.openrouter import OpenRouterRerankResponse
+from app.schemas.chat_completions import RerankResponse
 
 
 def _candidate(text: str, index: int) -> ScoredChunk:
@@ -30,9 +30,9 @@ class _OpenRouterClient:
 
     def rerank(
         self, *, model: str, query: str, documents: list[str]
-    ) -> OpenRouterRerankResponse:
+    ) -> RerankResponse:
         self.calls.append({"model": model, "query": query, "documents": documents})
-        return OpenRouterRerankResponse.model_validate(self.payload)
+        return RerankResponse.model_validate(self.payload)
 
 
 def test_openrouter_reranker_reorders_and_rescores_every_candidate() -> None:

@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { EditConnectionDialog } from "@/components/connections/EditConnectionDialog";
 import { updateConnection } from "@/lib/api";
-import { makeConnection, makeProviderType } from "@/test/fixtures/providers";
+import {
+  makeConnection,
+  makeProviderType,
+  makeProviderConfigField,
+} from "@/test/fixtures/providers";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");
@@ -20,8 +24,8 @@ const ollamaType = makeProviderType({
   provider_type: "ollama",
   label: "Ollama",
   config_fields: [
-    { name: "base_url", label: SERVER_URL_LABEL, kind: "url", required: true, placeholder: null },
-    { name: "api_key", label: "API key", kind: "secret", required: false, placeholder: null },
+    makeProviderConfigField({ name: "base_url", label: SERVER_URL_LABEL, kind: "url" }),
+    makeProviderConfigField({ name: "api_key", label: "API key", kind: "secret", required: false }),
   ],
 });
 

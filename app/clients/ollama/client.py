@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -40,6 +41,23 @@ def _raise_for_status(response: httpx.Response) -> None:
     if isinstance(payload, dict) and payload.get("error"):
         message = str(payload["error"])
     raise OllamaApiError(message, status_code=response.status_code)
+
+
+@dataclass(frozen=True)
+class _ChatBody:
+    """The per-call inputs of one `/api/chat` request.
+
+    Grouped because the streaming and buffered entry points take the identical
+    set — two long signatures drift the moment one grows a field the other
+    does not.
+    """
+
+    messages: list[dict[str, Any]]
+    model: str
+    tools: list[dict[str, Any]] | None
+    options: dict[str, Any] | None
+    think: bool | str | None
+    extra_body: dict[str, Any] | None
 
 
 class OllamaClient:
@@ -105,21 +123,28 @@ class OllamaClient:
     # tools, options, think, stream); grouping them would just relocate the list.
     def _build_chat_body(
         self,
-        messages: list[dict[str, Any]],
-        model: str,
-        tools: list[dict[str, Any]] | None,
-        options: dict[str, Any] | None,
-        think: bool | str | None,
+        call: _ChatBody,
+        *,
         stream: bool,
     ) -> dict[str, Any]:
-        """Assemble the `/api/chat` request body shared by both chat modes."""
-        body: dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
-        if tools:
-            body["tools"] = tools
-        if options:
-            body["options"] = options
-        if think is not None:
-            body["think"] = think
+        """Assemble the `/api/chat` request body shared by both chat modes.
+
+        `extra_body` merges last, at the top level: the fields users reach
+        for (`format`, `keep_alive`, `template`) are body fields, so nesting
+        them under `options` would leave them silently ignored.
+        """
+        body: dict[str, Any] = {
+            "model": call.model,
+            "messages": call.messages,
+            "stream": stream,
+        }
+        if call.tools:
+            body["tools"] = call.tools
+        if call.options:
+            body["options"] = call.options
+        if call.think is not None:
+            body["think"] = call.think
+        body.update(call.extra_body or {})
         return body
 
     def chat(
@@ -129,9 +154,12 @@ class OllamaClient:
         tools: list[dict[str, Any]] | None = None,
         options: dict[str, Any] | None = None,
         think: bool | str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> OllamaChatResponse:
         """Request a non-streaming chat completion."""
-        body = self._build_chat_body(messages, model, tools, options, think, stream=False)
+        body = self._build_chat_body(
+            _ChatBody(messages, model, tools, options, think, extra_body), stream=False
+        )
         response = self._http.post("/api/chat", json=body)
         _raise_for_status(response)
         parsed = OllamaChatResponse.model_validate(response.json())
@@ -146,9 +174,12 @@ class OllamaClient:
         tools: list[dict[str, Any]] | None = None,
         options: dict[str, Any] | None = None,
         think: bool | str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Iterator[OllamaChatResponse]:
         """Yield streaming chat chunks parsed from NDJSON lines."""
-        body = self._build_chat_body(messages, model, tools, options, think, stream=True)
+        body = self._build_chat_body(
+            _ChatBody(messages, model, tools, options, think, extra_body), stream=True
+        )
         with self._http.stream("POST", "/api/chat", json=body) as response:
             if not response.is_success:
                 response.read()

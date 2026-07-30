@@ -13,6 +13,7 @@ from app.providers.chat.ollama import (
     convert_messages_to_ollama,
     model_info_from_description,
 )
+from app.schemas.models import ReasoningStyle
 from app.schemas.ollama import OllamaModelDescription
 
 THINKING_TOOL_MODEL = OllamaModelDescription(
@@ -63,16 +64,17 @@ def _request(**overrides: Any) -> ChatRequest:
     return ChatRequest(**defaults)
 
 
-def test_model_info_maps_capabilities_to_supported_parameters() -> None:
+def test_model_info_maps_ollama_capabilities_onto_typed_capabilities() -> None:
+    """Ollama publishes them per model, so they are claims — not knobs."""
     info = model_info_from_description(THINKING_TOOL_MODEL)
-    assert "tools" in info.supported_parameters
-    assert "reasoning" in info.supported_parameters
+    assert info.capabilities.tools is True
+    assert info.capabilities.reasoning is ReasoningStyle.BLOCK
     assert "temperature" in info.supported_parameters
     assert info.context_length == 40960
 
     plain = model_info_from_description(PLAIN_MODEL)
-    assert "tools" not in plain.supported_parameters
-    assert "reasoning" not in plain.supported_parameters
+    assert plain.capabilities.tools is False
+    assert plain.capabilities.reasoning is ReasoningStyle.NONE
 
 
 def test_convert_messages_resolves_tool_names_and_decodes_arguments() -> None:
@@ -193,3 +195,24 @@ def test_stream_final_chunk_carries_finish_reason_and_usage() -> None:
     assert parsed is not None
     assert parsed.finish_reason == "stop"
     assert parsed.usage == {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+
+
+def test_extra_body_lands_at_the_top_level_not_under_options() -> None:
+    """The fields users reach for (`format`, `keep_alive`) are body fields;
+    nested under `options` Ollama ignores them silently."""
+    client = _StubOllamaClient(descriptions=[THINKING_TOOL_MODEL])
+    provider = OllamaChatProvider(client)  # type: ignore[arg-type]
+
+    provider.chat(
+        ChatRequest(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=None,
+            model=THINKING_TOOL_MODEL.name,
+            parameters={"temperature": 0.4},
+            extra_body={"format": "json", "keep_alive": "10m"},
+        )
+    )
+
+    call = client.chat_calls[0]
+    assert call["extra_body"] == {"format": "json", "keep_alive": "10m"}
+    assert call["options"] == {"temperature": 0.4}

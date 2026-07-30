@@ -174,7 +174,7 @@ def test_live_smoke_proves_expected_candidate_ranks_first_through_node_path(
 ) -> None:
     """The production adapter, resolver, context, and nodes retain provider ranking."""
     from app.clients.openrouter import OpenRouterClient
-    from app.schemas.openrouter import OpenRouterRerankResponse
+    from app.schemas.chat_completions import RerankResponse
     from scripts import smoke_provider_reranking as smoke
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "not-a-real-secret")
@@ -185,11 +185,11 @@ def test_live_smoke_proves_expected_candidate_ranks_first_through_node_path(
         model: str,
         query: str,
         documents: list[str],
-    ) -> OpenRouterRerankResponse:
+    ) -> RerankResponse:
         assert model == "test-reranker"
         assert query == "What is the capital of France?"
         assert len(documents) == 4
-        return OpenRouterRerankResponse.model_validate(
+        return RerankResponse.model_validate(
             {
                 "results": [
                     {"index": 1, "relevance_score": 0.99},
@@ -214,7 +214,7 @@ def test_live_smoke_proves_expected_candidate_ranks_first_through_node_path(
 def test_live_smoke_rejects_an_incorrect_top_ranking(monkeypatch) -> None:
     """Candidate preservation alone cannot pass when the semantic winner is wrong."""
     from app.clients.openrouter import OpenRouterClient
-    from app.schemas.openrouter import OpenRouterRerankResponse
+    from app.schemas.chat_completions import RerankResponse
     from scripts import smoke_provider_reranking as smoke
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "not-a-real-secret")
@@ -225,9 +225,9 @@ def test_live_smoke_rejects_an_incorrect_top_ranking(monkeypatch) -> None:
         model: str,
         query: str,
         documents: list[str],
-    ) -> OpenRouterRerankResponse:
+    ) -> RerankResponse:
         del model, query, documents
-        return OpenRouterRerankResponse.model_validate(
+        return RerankResponse.model_validate(
             {
                 "results": [
                     {"index": 0, "relevance_score": 0.99},

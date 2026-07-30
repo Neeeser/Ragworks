@@ -11,8 +11,14 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlmodel import Session
 
+from app.clients.openai_compat import (
+    ProbeOutcome,
+    TransportConfig,
+    get_openai_compat_client,
+)
 from app.db import models
 from app.db.pgvector_support import pgvector_available
 from app.db.repositories import ProviderConnectionRepository
@@ -26,6 +32,9 @@ from app.providers.registry import (
     resolve_connection,
 )
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.provider_configs import (
+    CustomConnectionConfig,
+)
 from app.schemas.providers import (
     ConfigFieldKind,
     ConnectionCreate,
@@ -34,6 +43,8 @@ from app.schemas.providers import (
     ConnectionValidationResult,
     ProviderCoverage,
     ProviderTypeRead,
+    ServerProbeRequest,
+    ServerProbeResult,
 )
 from app.services.errors import InvalidInputError, ServiceError, is_external_provider_error
 
@@ -41,8 +52,14 @@ PGVECTOR_BUILTIN_TYPE = "pgvector"
 logger = logging.getLogger(__name__)
 
 
-def _connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
-    """Return actual capabilities, retaining Settings access during outages."""
+def connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
+    """Return actual capabilities, retaining Settings access during outages.
+
+    The one answer to "what does this connection serve". A caller reading the
+    *descriptor* instead gets what the provider type could serve, which for a
+    custom server is every kind it might be configured for — so an
+    embeddings-only server reads as a chat provider too.
+    """
     try:
         return adapter.kinds
     except Exception as exc:
@@ -83,6 +100,20 @@ def provider_type_catalog() -> list[ProviderTypeRead]:
     return catalog
 
 
+def _config_value(raw: object) -> str:
+    """Render one stored config value for the wire, as a string.
+
+    A boolean is spelled the way JSON spells it, not the way Python's `str`
+    does. `ConnectionRead.config` is `dict[str, str]`, and the form reads a
+    toggle by comparing to `"true"` — so `"True"` round-trips as *off*, and an
+    edit dialog would silently offer to turn off a capability that is already
+    on.
+    """
+    if isinstance(raw, bool):
+        return "true" if raw else "false"
+    return str(raw)
+
+
 def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
     """Build the redacted wire shape for a connection row."""
     descriptor = ADAPTERS[ProviderType(connection.provider_type)].descriptor
@@ -105,12 +136,12 @@ def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
         if field.kind is ConfigFieldKind.SECRET:
             secrets_configured[field.name] = bool(str(raw or "").strip())
         elif raw is not None:
-            public_config[field.name] = str(raw)
+            public_config[field.name] = _config_value(raw)
     return ConnectionRead(
         id=connection.id,
         provider_type=ProviderType(connection.provider_type),
         label=connection.label,
-        kinds=list(descriptor.kinds if adapter is None else _connection_kinds(adapter)),
+        kinds=list(descriptor.kinds if adapter is None else connection_kinds(adapter)),
         config_valid=adapter is not None,
         config=public_config,
         secrets_configured=secrets_configured,
@@ -151,7 +182,7 @@ class ConnectionService:
                 adapter = build_adapter(row)
             except InvalidInputError:
                 continue
-            kinds.update(_connection_kinds(adapter))
+            kinds.update(connection_kinds(adapter))
         return ProviderCoverage(
             has_embedding=ProviderKind.EMBEDDING in kinds,
             has_chat=ProviderKind.CHAT in kinds,
@@ -268,6 +299,49 @@ class ConnectionService:
             detail = exc.detail if isinstance(exc.detail, str) else "Invalid configuration."
             return ConnectionValidationResult(valid=False, message=detail)
         return adapter.validate_connection()
+
+    @staticmethod
+    def probe_server(request: ServerProbeRequest) -> ServerProbeResult:
+        """Discover which standard surfaces an unsaved custom server answers on.
+
+        Runs before a connection exists, so it takes the address directly
+        rather than a connection row — this is what fills the add-connection
+        form's capability toggles instead of asking the user to know which
+        endpoints their server mounts.
+        """
+        try:
+            config = CustomConnectionConfig(
+                base_url=request.base_url, api_key=request.api_key
+            )
+        except ValidationError as exc:
+            return ServerProbeResult(
+                reachable=False, message=str(exc.errors()[0]["msg"])
+            )
+        client = get_openai_compat_client(
+            TransportConfig(base_url=config.base_url, api_key=config.api_key)
+        )
+        result = client.probe()
+        if not result.reachable:
+            return ServerProbeResult(reachable=False, message=result.error)
+        unauthorized = any(
+            endpoint.outcome is ProbeOutcome.UNAUTHORIZED
+            for endpoint in (result.chat, result.embeddings, result.rerank)
+        )
+        return ServerProbeResult(
+            reachable=True,
+            serves_chat=result.chat.available,
+            serves_embeddings=result.embeddings.available,
+            serves_reranking=result.rerank.available,
+            serves_responses=result.responses.available,
+            unauthorized=unauthorized,
+            model_ids=list(result.model_ids),
+            message=(
+                "The server rejected the API key. Check the key rather than the "
+                "capabilities below."
+                if unauthorized
+                else result.error
+            ),
+        )
 
     def validate_saved(
         self, user: models.User, connection_id: UUID

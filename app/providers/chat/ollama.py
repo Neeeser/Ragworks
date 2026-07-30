@@ -170,11 +170,9 @@ class OllamaChatProvider:
     @staticmethod
     def _build_options(request: ChatRequest) -> dict[str, Any] | None:
         """Map sanitized parameter overrides onto Ollama `options`."""
-        if not request.parameters:
-            return None
         options = {
             _OPTION_KEY_MAP.get(key, key): value
-            for key, value in request.parameters.items()
+            for key, value in (request.parameters or {}).items()
             if key in OLLAMA_SAMPLER_PARAMETERS
         }
         return options or None
@@ -187,6 +185,7 @@ class OllamaChatProvider:
             tools=request.tools,
             options=self._build_options(request),
             think=self._resolve_think(request),
+            extra_body=request.extra_body or None,
         )
         return response.model_dump(exclude_none=True)
 
@@ -198,6 +197,7 @@ class OllamaChatProvider:
             tools=request.tools,
             options=self._build_options(request),
             think=self._resolve_think(request),
+            extra_body=request.extra_body or None,
         ):
             yield chunk.model_dump(exclude_none=True)
 

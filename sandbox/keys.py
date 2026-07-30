@@ -45,6 +45,15 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
     "openrouter": ProviderSpec(
         "OpenRouter", (EnvField("api_key", "OPENROUTER_API_KEY"),)
     ),
+    "openai": ProviderSpec("OpenAI", (EnvField("api_key", "OPENAI_API_KEY"),)),
+    "anthropic": ProviderSpec("Anthropic", (EnvField("api_key", "ANTHROPIC_API_KEY"),)),
+    "custom": ProviderSpec(
+        "Custom server",
+        (
+            EnvField("base_url", "CUSTOM_SERVER_BASE_URL"),
+            EnvField("api_key", "CUSTOM_SERVER_API_KEY", required=False),
+        ),
+    ),
     "cohere": ProviderSpec("Cohere", (EnvField("api_key", "COHERE_API_KEY"),)),
     "pinecone": ProviderSpec("Pinecone", (EnvField("api_key", "PINECONE_API_KEY"),)),
     "ollama": ProviderSpec(

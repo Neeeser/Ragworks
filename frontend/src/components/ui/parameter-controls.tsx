@@ -178,6 +178,18 @@ export function ParameterInput({
 
   const useTextarea = input === "list" || input === "json" || (rows && rows > 1);
   if (useTextarea) {
+    // A restored session hands these back in their stored shape (the server
+    // round-trips parameter_overrides), so rendering "" would hide an
+    // override that is still active. A list is comma text, not JSON — its own
+    // parser splits on commas, so JSON brackets would corrupt it on edit.
+    const textValue =
+      typeof value === "string"
+        ? value
+        : Array.isArray(value)
+          ? value.join(", ")
+          : value != null && typeof value === "object"
+            ? JSON.stringify(value)
+            : "";
     return (
       <textarea
         id={id}
@@ -186,7 +198,7 @@ export function ParameterInput({
         className={cn(inputClasses, "h-auto", className)}
         rows={rows ?? 2}
         placeholder={placeholder}
-        value={typeof value === "string" ? value : ""}
+        value={textValue}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />

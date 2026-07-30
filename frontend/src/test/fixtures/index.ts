@@ -3,6 +3,7 @@
  * object each call and accepts a partial override. Prefer builders over inline
  * object literals in tests so the canonical shape lives in one place.
  */
+import { RETRIEVER_LABEL, RETRIEVER_TYPE, USER_EMAIL, USER_ID } from "./constants";
 import { TIMESTAMP } from "./files";
 
 import type {
@@ -19,27 +20,21 @@ import type {
   Document,
   ModelEndpointDirectory,
   ModelInfo,
-  NodeSpec,
-  Pipeline,
   PipelineNodeRunTrace,
   PipelineTraceResponse,
-  PipelineValidationResult,
-  PipelineVersion,
   PromptDetails,
   ToolCallTrace,
   User,
 } from "@/lib/types";
 
+export { USER_EMAIL, USER_ID } from "./constants";
+export * from "./pipelines";
 export * from "./files";
 export * from "./api-keys";
 export * from "./visualization";
 
-export const USER_ID = "user-1";
-export const USER_EMAIL = "user@example.com";
 const USER_ROLE = "user";
 const PROVIDER_A = "provider-a";
-const RETRIEVER_TYPE = "retriever.vector";
-const RETRIEVER_LABEL = "Retriever";
 
 export function makeUser(overrides: Partial<User> = {}): User {
   return {
@@ -164,92 +159,6 @@ export function makeChunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDeta
   return { document: makeDocument(), chunk: makeChunk(), ...overrides };
 }
 
-export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
-  return {
-    id: "pipe-1",
-    user_id: USER_ID,
-    name: "Retrieval",
-    description: null,
-    kind: "retrieval",
-    current_version: 1,
-    is_default: false,
-    created_at: TIMESTAMP,
-    updated_at: TIMESTAMP,
-    validation_issues: [],
-    definition: {
-      nodes: [
-        {
-          id: "node-1",
-          type: RETRIEVER_TYPE,
-          name: RETRIEVER_LABEL,
-          config: { backend: "pgvector", index_name: "ragworks" },
-        },
-      ],
-      edges: [],
-    },
-    ...overrides,
-  };
-}
-
-export function makePipelineVersion(overrides: Partial<PipelineVersion> = {}): PipelineVersion {
-  return {
-    id: "ver-1",
-    pipeline_id: "pipe-1",
-    version: 1,
-    created_at: TIMESTAMP,
-    updated_at: TIMESTAMP,
-    change_summary: null,
-    created_by: USER_ID,
-    changes: [],
-    ...overrides,
-  };
-}
-
-export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
-  return {
-    type: RETRIEVER_TYPE,
-    label: RETRIEVER_LABEL,
-    category: "retrieval",
-    description: "Query a vector index",
-    example: "",
-    input_ports: [
-      {
-        key: "in",
-        label: "In",
-        data_type: "any",
-        required: false,
-        accepts_many: false,
-        requires: [],
-        adds: [],
-        preserves: false,
-      },
-    ],
-    output_ports: [
-      {
-        key: "out",
-        label: "Out",
-        data_type: "any",
-        required: false,
-        accepts_many: false,
-        requires: [],
-        adds: [],
-        preserves: false,
-      },
-    ],
-    config_schema: {},
-    default_config: {},
-    hidden: false,
-    supported_backends: null,
-    ...overrides,
-  };
-}
-
-export function makeValidation(
-  overrides: Partial<PipelineValidationResult> = {},
-): PipelineValidationResult {
-  return { valid: true, errors: [], warnings: [], issues: [], ...overrides };
-}
-
 export function makeChatSession(overrides: Partial<ChatSession> = {}): ChatSession {
   return {
     id: "session-1",
@@ -297,7 +206,13 @@ export function makeModelInfo(overrides: Partial<ModelInfo> = {}): ModelInfo {
     canonical_slug: "openrouter/model-1",
     name: "Model One",
     description: "Primary model",
-    supported_parameters: ["temperature", "reasoning", "tools"],
+    supported_parameters: ["temperature"],
+    capabilities: {
+      tools: true,
+      reasoning: "block",
+      reasoning_efforts: ["low", "medium", "high"],
+      sampling: "without_reasoning",
+    },
     default_parameters: { temperature: 0.2 },
     ...overrides,
   };
@@ -425,6 +340,7 @@ export {
   makeCatalogModel,
   makeConnection,
   makeModelCatalog,
+  makeProviderConfigField,
   makeProviderType,
 } from "@/test/fixtures/providers";
 

@@ -11,7 +11,8 @@ in `app.services.pipeline_resolution`) live in `app.chat.setup`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -23,13 +24,14 @@ from app.chat import model_settings as model_settings_module
 from app.chat import service as service_module
 from app.chat import setup as setup_module
 from app.chat import tool_contexts as tool_contexts_module
+from app.clients.openai_compat import ChatCall
 from app.db import models
 from app.pipelines.interface import PipelineInterface, ToolOutputKind
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import PipelineSettings
+from app.schemas.chat_completions import ChatCompletionChunk, ChatCompletionResponse
 from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
-from app.schemas.openrouter import OpenRouterChatResponse
 from app.schemas.tools import ToolInvocationResponse
 from app.services.tool_projection import build_parameter_schema, tool_description
 
@@ -71,20 +73,66 @@ class StubInvocationService:
         )
 
 
+class StubCompatClient:
+    """Stub of the shared OpenAI-compatible client, at the real boundary.
+
+    Chat providers now go through `OpenAICompatClient`, so that is what a
+    provider-level test stubs. Calls are recorded as plain dicts so assertions
+    read the request the way the wire carries it (`messages`, `extra_body`,
+    `parameters`) rather than through a dataclass attribute chain.
+    """
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    def chat(self, call: ChatCall) -> ChatCompletionResponse:
+        """Record the call and return the next queued response.
+
+        The last queued response repeats, so a test driving a loop that never
+        terminates (the tool-iteration guard) exercises the guard instead of
+        failing on an exhausted queue.
+        """
+        self.calls.append(asdict(call))
+        payload = self._responses.pop(0) if len(self._responses) > 1 else self._responses[0]
+        return ChatCompletionResponse.model_validate(payload)
+
+    def chat_stream(self, call: ChatCall) -> Iterator[ChatCompletionChunk]:
+        """Yield the queued response as a single terminal chunk."""
+        self.calls.append(asdict(call))
+        payload = self._responses.pop(0) if len(self._responses) > 1 else self._responses[0]
+        choices = payload.get("choices") or []
+        message = choices[0].get("message", {}) if choices else {}
+        yield ChatCompletionChunk.model_validate(
+            {
+                "model": payload.get("model"),
+                "provider": payload.get("provider"),
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": message,
+                        "finish_reason": choices[0].get("finish_reason") if choices else "stop",
+                    }
+                ],
+                "usage": payload.get("usage"),
+            }
+        )
+
+
 class StubOpenRouter:
     """OpenRouter client stub returning a fixed model + single chat response."""
 
     def __init__(self, model_info: ModelInfo | None, response: dict[str, Any]) -> None:
         self._model_info = model_info
-        self._response = response
-        self.chat_calls: list[dict[str, Any]] = []
+        self.compat = StubCompatClient([response])
+
+    @property
+    def chat_calls(self) -> list[dict[str, Any]]:
+        """Requests the provider sent, in wire shape."""
+        return self.compat.calls
 
     def get_model(self, _model_id: str) -> ModelInfo | None:
         return self._model_info
-
-    def chat(self, **kwargs: Any) -> OpenRouterChatResponse:
-        self.chat_calls.append(kwargs)
-        return OpenRouterChatResponse.model_validate(self._response)
 
 
 class SequencedOpenRouter:
@@ -92,15 +140,15 @@ class SequencedOpenRouter:
 
     def __init__(self, model_info: ModelInfo, responses: list[dict[str, Any]]) -> None:
         self._model_info = model_info
-        self._responses = list(responses)
-        self.chat_calls: list[dict[str, Any]] = []
+        self.compat = StubCompatClient(responses)
+
+    @property
+    def chat_calls(self) -> list[dict[str, Any]]:
+        """Requests the provider sent, in wire shape."""
+        return self.compat.calls
 
     def get_model(self, _model_id: str) -> ModelInfo:
         return self._model_info
-
-    def chat(self, **kwargs: Any) -> OpenRouterChatResponse:
-        self.chat_calls.append(kwargs)
-        return OpenRouterChatResponse.model_validate(self._responses.pop(0))
 
 
 class ModelOnlyOpenRouter:
@@ -108,6 +156,7 @@ class ModelOnlyOpenRouter:
 
     def __init__(self, model_info: ModelInfo) -> None:
         self._model_info = model_info
+        self.compat = StubCompatClient([])
 
     def get_model(self, _model_id: str) -> ModelInfo:
         return self._model_info

@@ -1,10 +1,10 @@
 """Wire contract for provider connections and the provider-type catalog.
 
-The per-type connection config models (`OpenRouterConnectionConfig`, ...) are
-the single validation point for what lands in `provider_connections.config`;
-the connections service validates through them before writing, and adapters
-read through them at construction time. `ConnectionRead` never carries secret
-values — secret fields are echoed as `secrets_configured` booleans only.
+The per-type stored-config models live in `app/schemas/provider_configs.py`;
+this module owns the shapes that cross the API — the provider-type catalog the
+add-connection form renders from, and the connection read/write payloads.
+`ConnectionRead` never carries secret values — secret fields are echoed as
+`secrets_configured` booleans only.
 """
 
 from __future__ import annotations
@@ -12,14 +12,17 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
-from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.models import ModelPricing
+from app.schemas.models import (
+    ChatCapabilities,
+    ModelPricing,
+    normalize_capability_markers,
+)
 
 
 class ConfigFieldKind(StrEnum):
@@ -28,6 +31,16 @@ class ConfigFieldKind(StrEnum):
     STRING = "string"
     SECRET = "secret"
     URL = "url"
+    BOOLEAN = "boolean"
+    SELECT = "select"
+
+
+class ProviderConfigOption(BaseModel):
+    """One choice of a `select` config field."""
+
+    value: str
+    label: str
+    description: str | None = None
 
 
 class ProviderConfigField(BaseModel):
@@ -39,6 +52,22 @@ class ProviderConfigField(BaseModel):
     required: bool = True
     placeholder: str | None = None
     description: str | None = None
+    #: The longer explanation, shown in a tooltip beside the label. Keeps
+    #: `description` to what the field *is* — a field whose whole explanation
+    #: sits under the input pushes the next field off the dialog, and the user
+    #: who needs the detail is the one who already stopped to read.
+    help: str | None = None
+    #: Choices for a `select` field. The same set must be enforced by the
+    #: config model's validator — a form-only constraint is bypassed by any
+    #: caller that PATCHes the connection directly.
+    options: tuple[ProviderConfigOption, ...] = ()
+    #: Value the form starts from, so a probe-driven default is visible and
+    #: editable rather than applied invisibly at save time.
+    default: str | bool | None = None
+    #: Fields a user only reaches after the probe disagrees with them. The
+    #: add-connection form keeps them behind a disclosure so the common case
+    #: stays one URL and one key.
+    advanced: bool = False
 
 
 class ProviderTypeRead(BaseModel):
@@ -57,97 +86,6 @@ class ProviderTypeRead(BaseModel):
     recommended: bool = False
     builtin: bool = False
     available: bool = True
-
-
-#: Port assumed for an Ollama server URL that names no port.
-OLLAMA_DEFAULT_PORT = 11434
-#: Port assumed for a Text Embeddings Inference server URL that names no port.
-TEI_DEFAULT_PORT = 8080
-
-
-def normalize_server_url(value: str, default_port: int) -> str:
-    """Normalize a self-hosted server URL into one that actually resolves.
-
-    A host typed without a scheme (``192.168.1.50:11434``) or without a port
-    (``http://192.168.1.50``) is what a user reads off their own machine, but
-    the first is rejected outright and the second silently means port 80 — so
-    the connection fails with a network error that says nothing about the URL.
-    Assume ``http`` for a bare host, and `default_port` when an ``http`` URL
-    names no port; an explicitly typed port (including ``:80``) is always
-    preserved. An ``https`` URL is left alone — https implies 443 and a proxied
-    endpoint, so assuming a self-hosted port there breaks the URL instead of
-    fixing it.
-
-    Parsing goes through `urlsplit` rather than string matching so IPv6
-    literals (``http://[::1]``) and userinfo survive untouched.
-    """
-    cleaned = value.strip()
-    if not cleaned:
-        raise ValueError("Server URL must not be empty.")
-    # urlsplit reads a bare "host:port" as scheme "host" with path "port", so
-    # the scheme has to be settled before anything else can be trusted. The
-    # trailing slash is stripped from the parsed path, not from the raw string:
-    # stripping first turns "http://" into "http:", which then reparses as the
-    # host "http".
-    if "://" not in cleaned:
-        cleaned = f"http://{cleaned}"
-    parts = urlsplit(cleaned)
-    parts = parts._replace(path=parts.path.rstrip("/"))
-    if parts.scheme not in ("http", "https"):
-        raise ValueError("Base URL must start with http:// or https://.")
-    if not parts.hostname:
-        raise ValueError("Base URL must include a host.")
-    try:
-        port = parts.port
-    except ValueError as exc:  # non-numeric port — urlsplit raises on access
-        raise ValueError("Base URL port must be a number.") from exc
-    if port is None and parts.scheme == "http":
-        parts = parts._replace(netloc=f"{parts.netloc}:{default_port}")
-    return urlunsplit(parts)
-
-
-class OpenRouterConnectionConfig(BaseModel):
-    """Stored config for an OpenRouter connection."""
-
-    api_key: str = Field(min_length=1)
-
-
-class CohereConnectionConfig(BaseModel):
-    """Stored config for a Cohere connection."""
-
-    api_key: str = Field(min_length=1)
-
-
-class OllamaConnectionConfig(BaseModel):
-    """Stored config for an Ollama connection."""
-
-    base_url: str = Field(min_length=1)
-    api_key: str | None = None
-
-    @field_validator("base_url")
-    @classmethod
-    def normalize_base_url(cls, value: str) -> str:
-        """Normalize the server URL, assuming Ollama's default port."""
-        return normalize_server_url(value, OLLAMA_DEFAULT_PORT)
-
-
-class TEIConnectionConfig(BaseModel):
-    """Stored config for a Text Embeddings Inference connection."""
-
-    base_url: str = Field(min_length=1)
-    api_key: str | None = None
-
-    @field_validator("base_url")
-    @classmethod
-    def normalize_base_url(cls, value: str) -> str:
-        """Normalize the server URL, assuming TEI's default port."""
-        return normalize_server_url(value, TEI_DEFAULT_PORT)
-
-
-class PineconeConnectionConfig(BaseModel):
-    """Stored config for a Pinecone connection."""
-
-    api_key: str = Field(min_length=1)
 
 
 class ConnectionCreate(BaseModel):
@@ -201,6 +139,34 @@ class ConnectionValidationResult(BaseModel):
     message: str | None = None
 
 
+class ServerProbeRequest(BaseModel):
+    """An unsaved custom-server address to discover capabilities for."""
+
+    base_url: str = Field(min_length=1)
+    api_key: str | None = None
+
+
+class ServerProbeResult(BaseModel):
+    """What a discovery pass found on a custom server.
+
+    Returned as a *suggestion*: the add-connection form pre-fills the
+    capability toggles from it and the user confirms or corrects them. The
+    stored connection records what the user confirmed, so a server that was
+    briefly slow or down never silently loses a capability it has.
+    """
+
+    reachable: bool
+    serves_chat: bool = False
+    serves_embeddings: bool = False
+    serves_reranking: bool = False
+    serves_responses: bool = False
+    #: True when a surface answered 401/403 rather than 404 — the key is the
+    #: thing to fix, not the capability checkboxes.
+    unauthorized: bool = False
+    model_ids: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
 class CatalogModel(BaseModel):
     """One selectable model qualified by the connection that serves it."""
 
@@ -216,8 +182,19 @@ class CatalogModel(BaseModel):
     dimension: int | None = None
     input_modalities: list[str] = Field(default_factory=list)
     output_modalities: list[str] = Field(default_factory=list)
+    #: Sampling knobs only — capability markers are split out on construction.
     supported_parameters: list[str] = Field(default_factory=list)
     default_parameters: dict[str, Any] | None = None
+    capabilities: ChatCapabilities = Field(default_factory=ChatCapabilities)
+    #: True when the provider's own catalog marks the model deprecated —
+    #: ordered last in pickers, never filtered out.
+    deprecated: bool = False
+
+    @model_validator(mode="after")
+    def _split_markers(self) -> CatalogModel:
+        """Keep capability claims out of the sampling-knob list."""
+        normalize_capability_markers(self)
+        return self
 
 
 class ConnectionCatalogError(BaseModel):

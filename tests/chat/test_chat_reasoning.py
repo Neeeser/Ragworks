@@ -8,6 +8,11 @@ from app.chat.reasoning import (
     normalize_reasoning_segments,
 )
 from app.chat.tool_calls import decode_tool_arguments, extract_reasoning_tool_calls
+from app.schemas.models import (
+    ChatCapabilities,
+    ReasoningStyle,
+    split_capability_markers,
+)
 
 
 def test_normalize_reasoning_segments_parses_json_string() -> None:
@@ -40,22 +45,37 @@ def test_extract_reasoning_tool_calls_creates_openai_payload() -> None:
     assert residual == [{"type": "reasoning", "text": "Thinking"}]
 
 
-def test_build_reasoning_options_honors_supported_parameters() -> None:
-    supported = ["temperature", "include_reasoning", "reasoning"]
-    options = build_reasoning_options(supported, "high")
+def test_build_reasoning_options_prefers_the_structured_block() -> None:
+    """A model advertising both wire shapes takes the structured block."""
+    _, capabilities = split_capability_markers(
+        ["temperature", "include_reasoning", "reasoning"]
+    )
+    options = build_reasoning_options(capabilities, "high")
 
     assert "include_reasoning" not in options
     assert options["reasoning"] == {"effort": "high"}
 
 
-def test_build_reasoning_options_defaults_when_missing_supported_params() -> None:
-    options = build_reasoning_options(None, None)
+def test_build_reasoning_options_is_empty_without_the_capability() -> None:
+    """No provider claimed reasoning, so nothing may request it: the block is
+    a capability claim, and a model without one rejects the whole request."""
+    assert build_reasoning_options(ChatCapabilities(), None) == {}
 
-    assert options["reasoning"]["effort"] == "medium"
+
+def test_build_reasoning_options_omits_an_unchosen_effort() -> None:
+    """Defaulting a level would override the model's own default — and on
+    OpenAI switch reasoning on for a turn meant to use `temperature`."""
+    capabilities = ChatCapabilities(reasoning=ReasoningStyle.BLOCK)
+
+    assert build_reasoning_options(capabilities, None) == {"reasoning": {}}
+    assert build_reasoning_options(capabilities, "high") == {
+        "reasoning": {"effort": "high"}
+    }
 
 
 def test_build_reasoning_options_uses_include_reasoning_when_supported() -> None:
-    options = build_reasoning_options(["include_reasoning"], "low")
+    capabilities = ChatCapabilities(reasoning=ReasoningStyle.INCLUDE_FLAG)
+    options = build_reasoning_options(capabilities, "low")
 
     assert options == {"include_reasoning": True}
 

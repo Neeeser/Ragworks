@@ -6,14 +6,14 @@ import { Readout } from "@/components/ui/readout";
 
 import type {
   ModelParameterKey,
-  ParameterDefinition,
   ParameterOverrides,
+  ResolvedParameterDefinition,
 } from "@/lib/chat-parameters";
 import type { ModelInfo } from "@/lib/types";
 
 interface ModelParametersCardProps {
   currentModelInfo: ModelInfo | null;
-  visibleParameterDefinitions: ParameterDefinition[];
+  visibleParameterDefinitions: ResolvedParameterDefinition[];
   parameterOverrides: ParameterOverrides;
   activeParameterCount: number;
   resetAllParameters: () => void;
@@ -70,7 +70,7 @@ export const ModelParametersCard = ({
     );
   }
 
-  const renderParameterControl = (definition: ParameterDefinition) => {
+  const renderParameterControl = (definition: ResolvedParameterDefinition) => {
     const hasOverride = Object.prototype.hasOwnProperty.call(parameterOverrides, definition.key);
     const currentValue = parameterOverrides[definition.key];
     const defaultDisplay = formatDefaultParameter(definition.key);
@@ -96,13 +96,17 @@ export const ModelParametersCard = ({
         key={definition.key}
         label={definition.label}
         description={definition.description}
-        helper={defaultDisplay ? `Default: ${defaultDisplay}` : null}
+        helper={
+          definition.unavailableReason ?? (defaultDisplay ? `Default: ${defaultDisplay}` : null)
+        }
         overrideActive={hasOverride}
         actionLabel="Clear"
         actionDisabled={!hasOverride}
         onAction={() => handleClearParameter(definition.key)}
+        controlId={`chat-param-${definition.key}`}
       >
         <ParameterInput
+          id={`chat-param-${definition.key}`}
           input={definition.input}
           value={currentValue}
           min={"min" in definition ? definition.min : undefined}
@@ -111,6 +115,7 @@ export const ModelParametersCard = ({
           placeholder={"placeholder" in definition ? definition.placeholder : undefined}
           options={"options" in definition ? definition.options : undefined}
           rows={"rows" in definition ? definition.rows : undefined}
+          disabled={Boolean(definition.unavailableReason)}
           onChange={handleValueChange}
         />
       </ParameterFieldCard>

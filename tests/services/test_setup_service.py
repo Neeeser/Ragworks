@@ -91,6 +91,33 @@ def test_status_reports_missing_pieces(session: Session) -> None:
     assert status.setup_complete is False
 
 
+def test_an_embeddings_only_custom_server_does_not_satisfy_the_chat_gate(
+    session: Session,
+) -> None:
+    """The custom provider type advertises every kind so the connection form
+    can render before the probe runs. Reading the *descriptor* instead of what
+    the saved connection serves marked setup complete for a user with no chat
+    provider at all, and dropped them into a console with an empty picker."""
+    user = _create_user(session)
+    add_connection(
+        session,
+        user,
+        "custom",
+        {
+            "base_url": "http://localhost:7997",
+            "serves_chat": False,
+            "serves_embeddings": True,
+            "serves_reranking": False,
+        },
+    )
+
+    status = SetupService(session).status(user)
+
+    assert status.has_embedding_provider is True
+    assert status.has_chat_provider is False
+    assert status.setup_complete is False
+
+
 def test_another_users_index_does_not_count_as_this_users_readiness(
     pgvector_session: Session,
 ) -> None:

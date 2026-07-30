@@ -179,14 +179,13 @@ export const modelCatalog: CatalogModel[] = [
     description: "Primary model",
     input_modalities: ["text"],
     output_modalities: ["text"],
-    supported_parameters: [
-      "temperature",
-      "reasoning",
-      "tools",
-      "logprobs",
-      "stop",
-      "response_format",
-    ],
+    supported_parameters: ["temperature", "logprobs", "stop", "response_format"],
+    capabilities: {
+      tools: true,
+      reasoning: "block",
+      reasoning_efforts: ["low", "medium", "high"],
+      sampling: "without_reasoning",
+    },
     default_parameters: {
       temperature: 0.2,
       reasoning: {
@@ -204,6 +203,7 @@ export const modelCatalog: CatalogModel[] = [
     input_modalities: ["text"],
     output_modalities: ["text"],
     supported_parameters: ["temperature"],
+    capabilities: { tools: true, reasoning: "none", reasoning_efforts: [], sampling: "always" },
     default_parameters: {
       temperature: 0.1,
     },

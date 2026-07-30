@@ -1,4 +1,12 @@
-"""Typed OpenRouter HTTP + OpenAI-compatible SDK client."""
+"""OpenRouter client built on the shared OpenAI-compatible transport.
+
+OpenRouter speaks the Chat Completions dialect, so chat, embeddings, and
+reranking are the shared implementations in `app/clients/openai_compat/` rather
+than a second copy. What is genuinely OpenRouter's own lives here: the
+attribution headers it asks integrators to send, its far richer `/models`
+metadata (per-model `supported_parameters` and pricing, which no other
+OpenAI-compatible server publishes), and the `/key` account endpoint.
+"""
 
 from __future__ import annotations
 
@@ -6,52 +14,36 @@ from collections.abc import Iterable, Iterator
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-from openai import OpenAI
-
 from app.cache import CacheSnapshot, ResourceCache
+from app.clients.openai_compat import ChatCall, OpenAICompatClient, TransportConfig
 from app.clients.openrouter.catalog import ModelCatalog
 from app.core.config import get_settings
-from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
-from app.schemas.openrouter import (
-    OpenRouterChatResponse,
-    OpenRouterEmbeddingsResponse,
-    OpenRouterKeyInfo,
-    OpenRouterRerankResponse,
-    OpenRouterStreamChunk,
+from app.schemas.chat_completions import (
+    ChatCompletionChunk,
+    ChatCompletionResponse,
+    EmbeddingsResponse,
+    RerankResponse,
 )
+from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
+from app.schemas.openrouter import OpenRouterKeyInfo
 
 
 class OpenRouterClient:
-    """Wrapper around the OpenRouter HTTP + OpenAI-compatible SDK."""
+    """Typed access to one OpenRouter account."""
 
     def __init__(self, api_key: str) -> None:
-        """Initialize HTTP and SDK clients for OpenRouter."""
+        """Open the shared transport with OpenRouter's attribution headers."""
         resolved_key = (api_key or "").strip()
         if not resolved_key:
             raise ValueError("OpenRouter API key must be provided.")
         self.api_key = resolved_key
         self.settings = get_settings()
-        self._app_headers = self._build_app_headers()
-        default_headers = {"Authorization": f"Bearer {self.api_key}"}
-        default_headers.update(self._app_headers)
-
-        self._http = httpx.Client(
-            base_url=self.settings.openrouter_base_url,
-            headers=default_headers,
-            timeout=60.0,
-        )
-        # Share the httpx client with the SDK: without `http_client=` the OpenAI
-        # SDK builds its own internal httpx.Client, which `close()` would miss —
-        # leaking the pool that carries the main chat/chat_stream traffic.
-        # The explicit timeout preserves the SDK default (600s, 5s connect) —
-        # without it the SDK would inherit `_http`'s flat 60s REST timeout, and
-        # long reasoning-model chat responses could time out.
-        self._client = OpenAI(
-            base_url=self.settings.openrouter_base_url,
-            api_key=self.api_key,
-            http_client=self._http,
-            timeout=httpx.Timeout(600.0, connect=5.0),
+        self.compat = OpenAICompatClient(
+            TransportConfig(
+                base_url=self.settings.openrouter_base_url,
+                api_key=resolved_key,
+                headers=self._app_headers(),
+            )
         )
         self._catalog = ModelCatalog(
             fetch_models=self._fetch_models,
@@ -60,33 +52,29 @@ class OpenRouterClient:
             probe_embedding=self._probe_embedding_dimension,
         )
 
-    def _build_app_headers(self) -> dict[str, str]:
-        """Build static headers required by OpenRouter."""
-        headers = {"X-Title": self.settings.openrouter_site_name or "Ragworks"}
+    def _app_headers(self) -> tuple[tuple[str, str], ...]:
+        """Build the static attribution headers OpenRouter asks for."""
+        headers = [("X-Title", self.settings.openrouter_site_name or "Ragworks")]
         if self.settings.openrouter_site_url:
-            headers["HTTP-Referer"] = self.settings.openrouter_site_url
-        return headers
+            headers.append(("HTTP-Referer", self.settings.openrouter_site_url))
+        return tuple(headers)
 
-    def _merge_extra_headers(self, extra_headers: dict[str, str] | None) -> dict[str, str]:
-        """Merge dynamic headers with the default app headers."""
-        if extra_headers:
-            merged = dict(self._app_headers)
-            merged.update(extra_headers)
-            return merged
-        return dict(self._app_headers)
+    def _get_json(self, path: str) -> dict[str, Any]:
+        """GET an OpenRouter REST path and return its decoded object body."""
+        payload = self.compat.request_json("GET", path)
+        return payload if isinstance(payload, dict) else {}
 
     def _fetch_models(self) -> list[ModelInfo]:
-        """Fetch the full model list from OpenRouter (no caching)."""
-        response = self._http.get("/models")
-        response.raise_for_status()
-        payload = response.json()
-        return [ModelInfo(**item) for item in payload.get("data", [])]
+        """Fetch the full chat-model list with OpenRouter's per-model metadata."""
+        payload = self._get_json("/models")
+        raw = payload.get("data")
+        if not isinstance(raw, list):
+            return []
+        return [ModelInfo(**item) for item in raw if isinstance(item, dict)]
 
     def _fetch_embedding_models(self) -> list[EmbeddingModelInfo]:
-        """Fetch the embedding model list from OpenRouter (no caching, no dimensions)."""
-        response = self._http.get("/embeddings/models")
-        response.raise_for_status()
-        payload = response.json()
+        """Fetch the embedding-model list (no dimensions — those need a probe)."""
+        payload = self._get_json("/embeddings/models")
         raw = payload.get("data")
         if not isinstance(raw, list):
             return []
@@ -115,17 +103,36 @@ class OpenRouterClient:
 
     def _fetch_rerank_models(self) -> list[ModelInfo]:
         """Fetch reranking models from the filtered unified catalog."""
-        response = self._http.get("/models?output_modalities=rerank")
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._get_json("/models?output_modalities=rerank")
         raw = payload.get("data")
         if not isinstance(raw, list):
             return []
         return [ModelInfo.model_validate(item) for item in raw if isinstance(item, dict)]
 
-    def _probe_embedding_dimension(self, model_id: str) -> OpenRouterEmbeddingsResponse:
+    def _probe_embedding_dimension(self, model_id: str) -> EmbeddingsResponse:
         """Issue a single-input embeddings call used to measure vector length."""
         return self.embed(["dimension_probe"], model=model_id)
+
+    def chat(self, call: ChatCall) -> ChatCompletionResponse:
+        """Request a buffered chat completion."""
+        return self.compat.chat(call)
+
+    def chat_stream(self, call: ChatCall) -> Iterator[ChatCompletionChunk]:
+        """Yield streaming chat-completion chunks."""
+        return self.compat.chat_stream(call)
+
+    def embed(
+        self,
+        texts: Iterable[str],
+        model: str,
+        dimensions: int | None = None,
+    ) -> EmbeddingsResponse:
+        """Create embeddings for the provided texts."""
+        return self.compat.embed(texts, model=model, dimensions=dimensions)
+
+    def rerank(self, *, model: str, query: str, documents: list[str]) -> RerankResponse:
+        """Score every supplied document against a query."""
+        return self.compat.rerank(model=model, query=query, documents=documents)
 
     def list_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return available models, caching for a short period."""
@@ -154,9 +161,7 @@ class OpenRouterClient:
 
     def get_current_key(self) -> OpenRouterKeyInfo:
         """Return metadata for the currently authenticated API key."""
-        response = self._http.get("/key")
-        response.raise_for_status()
-        return OpenRouterKeyInfo.model_validate(response.json())
+        return OpenRouterKeyInfo.model_validate(self._get_json("/key"))
 
     def get_model(self, model_id: str) -> ModelInfo | None:
         """Find a model by id or canonical slug."""
@@ -177,162 +182,22 @@ class OpenRouterClient:
                     return model
             return None
 
-        cached = self.list_models().value
-        match = _match(cached)
+        match = _match(self.list_models().value)
         if match:
             return match
-        refreshed = self.list_models(force_refresh=True).value
-        return _match(refreshed)
+        return _match(self.list_models(force_refresh=True).value)
 
     def list_model_endpoints(self, author: str, slug: str) -> EndpointsListResponse:
         """Return endpoint listings for a given model author/slug."""
         author_segment = quote(author, safe="")
         slug_segment = quote(slug, safe="")
-        response = self._http.get(f"/models/{author_segment}/{slug_segment}/endpoints")
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._get_json(f"/models/{author_segment}/{slug_segment}/endpoints")
         return EndpointsListResponse(**payload)
 
-    def embed(
-        self,
-        texts: Iterable[str],
-        model: str,
-        extra_headers: dict[str, str] | None = None,
-        dimensions: int | None = None,
-    ) -> OpenRouterEmbeddingsResponse:
-        """Create embeddings for the provided texts."""
-        headers = self._merge_extra_headers(extra_headers)
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "input": list(texts),
-            "encoding_format": "float",
-            "extra_headers": headers,
-        }
-        if dimensions is not None:
-            kwargs["dimensions"] = dimensions
-        embeddings = self._client.embeddings.create(**kwargs)
-        return OpenRouterEmbeddingsResponse.model_validate(embeddings.model_dump())
-
-    def rerank(
-        self,
-        *,
-        model: str,
-        query: str,
-        documents: list[str],
-    ) -> OpenRouterRerankResponse:
-        """Score every supplied document against a query."""
-        response = self._http.post(
-            "/rerank",
-            json={
-                "model": model,
-                "query": query,
-                "documents": documents,
-                "top_n": len(documents),
-            },
-        )
-        response.raise_for_status()
-        return OpenRouterRerankResponse.model_validate(response.json())
-
-    # OpenRouter's chat-completion surface has ~8 independent optional knobs
-    # (tools, tool_choice, parallel_tool_calls, extra_headers/body, parameters,
-    # stream); grouping them into an object would just relocate the same list.
-    def _build_chat_kwargs(  # noqa: PLR0913
-        self,
-        messages: list[dict[str, Any]],
-        model: str,
-        tools: list[dict[str, Any]] | None,
-        tool_choice: dict[str, Any] | None,
-        parallel_tool_calls: bool | None,
-        extra_headers: dict[str, str] | None,
-        extra_body: dict[str, Any] | None,
-        parameters: dict[str, Any] | None,
-        stream: bool,
-    ) -> dict[str, Any]:
-        """Assemble the SDK kwargs shared by `chat` and `chat_stream`."""
-        kwargs: dict[str, Any] = {
-            "messages": messages,
-            "model": model,
-        }
-        if tools:
-            kwargs["tools"] = tools
-        if tool_choice:
-            kwargs["tool_choice"] = tool_choice
-        if parallel_tool_calls is not None:
-            kwargs["parallel_tool_calls"] = parallel_tool_calls
-        kwargs["extra_headers"] = self._merge_extra_headers(extra_headers)
-        if extra_body:
-            kwargs["extra_body"] = extra_body
-        if parameters:
-            kwargs.update({key: value for key, value in parameters.items() if value is not None})
-        if stream:
-            kwargs["stream"] = True
-        return kwargs
-
-    # Mirrors the OpenRouter SDK's chat.completions.create surface one-for-one;
-    # see the comment on `_build_chat_kwargs` for why these aren't grouped.
-    def chat(  # noqa: PLR0913
-        self,
-        messages: list[dict[str, Any]],
-        model: str,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: dict[str, Any] | None = None,
-        parallel_tool_calls: bool | None = None,
-        extra_headers: dict[str, str] | None = None,
-        extra_body: dict[str, Any] | None = None,
-        parameters: dict[str, Any] | None = None,
-    ) -> OpenRouterChatResponse:
-        """Create a chat completion with optional tools and parameters."""
-        kwargs = self._build_chat_kwargs(
-            messages,
-            model,
-            tools,
-            tool_choice,
-            parallel_tool_calls,
-            extra_headers,
-            extra_body,
-            parameters,
-            stream=False,
-        )
-        response = self._client.chat.completions.create(**kwargs)
-        return OpenRouterChatResponse.model_validate(response.model_dump())
-
-    # Streaming twin of `chat`; same surface, see `_build_chat_kwargs` for why.
-    def chat_stream(  # noqa: PLR0913
-        self,
-        messages: list[dict[str, Any]],
-        model: str,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: dict[str, Any] | None = None,
-        parallel_tool_calls: bool | None = None,
-        extra_headers: dict[str, str] | None = None,
-        extra_body: dict[str, Any] | None = None,
-        parameters: dict[str, Any] | None = None,
-    ) -> Iterator[OpenRouterStreamChunk]:
-        """Yield streaming chat completion chunks."""
-        kwargs = self._build_chat_kwargs(
-            messages,
-            model,
-            tools,
-            tool_choice,
-            parallel_tool_calls,
-            extra_headers,
-            extra_body,
-            parameters,
-            stream=True,
-        )
-        stream = self._client.chat.completions.create(**kwargs)
-        for chunk in stream:
-            yield OpenRouterStreamChunk.model_validate(chunk.model_dump())
-
     def close(self) -> None:
-        """Close the HTTP transport, releasing its connection pool.
-
-        The SDK shares `self._http` (see `__init__`), so closing either would
-        suffice; both are closed defensively in case they ever diverge again.
-        """
+        """Close the catalog refreshers and the shared transport."""
         self._catalog.close()
-        self._client.close()
-        self._http.close()
+        self.compat.close()
 
 
 _client_cache: ResourceCache[str, OpenRouterClient] = ResourceCache(

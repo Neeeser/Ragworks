@@ -23,9 +23,12 @@ type RerankingModelSelectorCardProps = {
 
 const PROVIDER_LABELS: Record<ProviderType, string> = {
   openrouter: "OpenRouter",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
   ollama: "Ollama",
   cohere: "Cohere",
   tei: "TEI",
+  custom: "Custom",
   pinecone: "Pinecone",
 };
 

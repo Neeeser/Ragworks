@@ -3,13 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+import httpx
 import pytest
 
 from app.cache import ResourceCache
+from app.clients.openai_compat import ChatCall
+from app.clients.openai_compat import transport as transport_module
 from app.clients.openrouter import OpenRouterClient
 from app.clients.openrouter import client as openrouter_module
+from app.schemas.chat_completions import EmbeddingsResponse
 from app.schemas.models import EndpointsListResponse, ListEndpointsResponse, ModelInfo
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 
 
 @dataclass
@@ -36,26 +39,35 @@ class _StubResponse:
 class _StubHttpClient:
     responses: ClassVar[dict[str, list[dict[str, Any]]]] = {}
 
-    def __init__(self, base_url: str, headers: dict[str, str], timeout: float) -> None:
-        self.base_url = base_url
-        self.headers = headers
-        self.timeout = timeout
+    def __init__(self, **kwargs: Any) -> None:
+        self.base_url = kwargs.get("base_url")
+        self.headers = kwargs.get("headers", {})
+        self.timeout = kwargs.get("timeout")
         self.get_calls: list[str] = []
         self.post_calls: list[tuple[str, dict[str, Any]]] = []
+        self.is_closed = False
+
+    def _serve(self, path: str) -> _StubResponse:
+        payloads = self.responses.get(path)
+        if not payloads:
+            raise AssertionError(f"No response queued for {path}")
+        return _StubResponse(payloads.pop(0))
 
     def get(self, path: str) -> _StubResponse:
         self.get_calls.append(path)
-        payloads = self.responses.get(path)
-        if not payloads:
-            raise AssertionError(f"No response queued for {path}")
-        return _StubResponse(payloads.pop(0))
+        return self._serve(path)
 
     def post(self, path: str, json: dict[str, Any]) -> _StubResponse:
         self.post_calls.append((path, json))
-        payloads = self.responses.get(path)
-        if not payloads:
-            raise AssertionError(f"No response queued for {path}")
-        return _StubResponse(payloads.pop(0))
+        return self._serve(path)
+
+    def request(self, method: str, path: str, json: Any = None) -> _StubResponse:
+        if method.upper() == "POST":
+            return self.post(path, json or {})
+        return self.get(path)
+
+    def close(self) -> None:
+        self.is_closed = True
 
 
 class _StubModelDump:
@@ -92,27 +104,37 @@ class _StubChat:
 
 
 class _StubOpenAI:
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        http_client: Any = None,
-        timeout: Any = None,
-    ) -> None:
-        self.base_url = base_url
-        self.api_key = api_key
-        self.http_client = http_client
-        self.timeout = timeout
+    def __init__(self, **kwargs: Any) -> None:
+        self.base_url = kwargs.get("base_url")
+        self.api_key = kwargs.get("api_key")
+        self.http_client = kwargs.get("http_client")
+        self._client = kwargs.get("http_client")
+        self.timeout = kwargs.get("timeout")
         self.embeddings = _StubEmbeddings()
         self.chat = _StubChat()
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _install_stub_transport(monkeypatch) -> None:
+    """Stub the shared transport's HTTP and SDK clients.
+
+    OpenRouter runs on `app/clients/openai_compat`, so the boundary a client
+    test owns is that transport — patching here keeps these tests pointed at
+    the real seam rather than at OpenRouter-specific plumbing that no longer
+    exists.
+    """
+    _StubHttpClient.responses = {}
+    monkeypatch.setattr(openrouter_module, "get_settings", lambda: _StubSettings())
+    monkeypatch.setattr(transport_module.httpx, "Client", _StubHttpClient)
+    monkeypatch.setattr(transport_module, "OpenAI", _StubOpenAI)
 
 
 @pytest.fixture
 def client(monkeypatch) -> OpenRouterClient:
-    _StubHttpClient.responses = {}
-    monkeypatch.setattr(openrouter_module, "get_settings", lambda: _StubSettings())
-    monkeypatch.setattr(openrouter_module.httpx, "Client", _StubHttpClient)
-    monkeypatch.setattr(openrouter_module, "OpenAI", _StubOpenAI)
+    _install_stub_transport(monkeypatch)
     return OpenRouterClient("test-key")
 
 
@@ -132,7 +154,7 @@ def test_list_models_caches_and_refreshes(client: OpenRouterClient) -> None:
     assert first.freshness == "fresh"
     assert [model.id for model in second.value] == ["model-a"]
     assert [model.id for model in refreshed.value] == ["model-b"]
-    assert client._http.get_calls.count("/models") == 2
+    assert client.compat._transport.http.get_calls.count("/models") == 2
 
 
 def test_get_model_refreshes_when_missing(client: OpenRouterClient) -> None:
@@ -147,7 +169,7 @@ def test_get_model_refreshes_when_missing(client: OpenRouterClient) -> None:
 
     assert isinstance(model, ModelInfo)
     assert model.id == "provider/model"
-    assert client._http.get_calls.count("/models") == 2
+    assert client.compat._transport.http.get_calls.count("/models") == 2
 
 
 def test_get_model_returns_none_for_empty_id(client: OpenRouterClient) -> None:
@@ -299,7 +321,7 @@ def test_get_current_key_returns_parsed_metadata(client: OpenRouterClient) -> No
     assert key_info.data.limit_remaining == 8.5
     assert key_info.data.rate_limit
     assert key_info.data.rate_limit.interval == "10s"
-    assert client._http.get_calls == ["/key"]
+    assert client.compat._transport.http.get_calls == ["/key"]
 
 
 def test_list_model_endpoints_encodes_path(client: OpenRouterClient) -> None:
@@ -311,7 +333,7 @@ def test_list_model_endpoints_encodes_path(client: OpenRouterClient) -> None:
     payload = client.list_model_endpoints("open ai", "gpt/4")
 
     assert payload.data.id == "model"
-    assert client._http.get_calls == ["/models/open%20ai/gpt%2F4/endpoints"]
+    assert client.compat._transport.http.get_calls == ["/models/open%20ai/gpt%2F4/endpoints"]
 
 
 def test_list_embedding_models_caches_and_refreshes(client: OpenRouterClient) -> None:
@@ -329,7 +351,7 @@ def test_list_embedding_models_caches_and_refreshes(client: OpenRouterClient) ->
     assert first.value[0].id == "embed-a"
     assert second.value[0].id == "embed-a"
     assert refreshed.value[0].id == "embed-b"
-    assert client._http.get_calls.count("/embeddings/models") == 2
+    assert client.compat._transport.http.get_calls.count("/embeddings/models") == 2
 
 
 def test_list_rerank_models_preserves_context_and_modalities(
@@ -357,7 +379,7 @@ def test_list_rerank_models_preserves_context_and_modalities(
 
     assert model.context_length == 10240
     assert model.architecture["input_modalities"] == ["text", "image"]
-    assert client._http.get_calls == ["/models?output_modalities=rerank"]
+    assert client.compat._transport.http.get_calls == ["/models?output_modalities=rerank"]
 
 
 def test_rerank_requests_every_document(client: OpenRouterClient) -> None:
@@ -379,7 +401,7 @@ def test_rerank_requests_every_document(client: OpenRouterClient) -> None:
     )
 
     assert response.results[0].index == 1
-    assert client._http.post_calls == [
+    assert client.compat._transport.http.post_calls == [
         (
             "/rerank",
             {
@@ -414,7 +436,7 @@ def test_list_embedding_model_metadata_preserves_limits_without_dimension_probes
 
     assert models.value[0].context_length == 8192
     assert models.value[0].max_input_tokens == 512
-    assert client._client.embeddings.calls == []
+    assert client.compat._transport.sdk.embeddings.calls == []
 
 
 def test_embedding_metadata_never_falls_back_to_top_level_context_length(
@@ -468,7 +490,7 @@ def test_list_embedding_models_skips_invalid_entries(client: OpenRouterClient) -
     assert len(models.value) == 1
     assert models.value[0].id == "embed-a"
     assert models.value[0].dimension is None
-    assert client._client.embeddings.calls == []
+    assert client.compat._transport.sdk.embeddings.calls == []
 
 
 def test_list_embedding_models_never_eagerly_probes_dimensions(
@@ -480,7 +502,7 @@ def test_list_embedding_models_never_eagerly_probes_dimensions(
     models = client.list_embedding_models(force_refresh=True)
 
     assert models.value[0].dimension is None
-    assert client._client.embeddings.calls == []
+    assert client.compat._transport.sdk.embeddings.calls == []
 
 
 def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> None:
@@ -489,19 +511,25 @@ def test_get_embedding_dimension_returns_length(client: OpenRouterClient) -> Non
     assert dimension == 1
 
 
-def test_embed_merges_extra_headers(client: OpenRouterClient) -> None:
-    result = client.embed(["hello"], model="test-embed", extra_headers={"X-Extra": "value"})
+def test_embed_sends_openrouter_attribution_headers(client: OpenRouterClient) -> None:
+    """Every call carries the attribution headers, not just chat.
 
-    call = client._client.embeddings.calls[0]
-    assert call["extra_headers"]["X-Extra"] == "value"
+    The shared transport merges them, so an embeddings call made through it
+    must carry them too — OpenRouter attributes usage by these headers, and an
+    unattributed embeddings call is invisible on the user's dashboard.
+    """
+    result = client.embed(["hello"], model="test-embed")
+
+    call = client.compat._transport.sdk.embeddings.calls[0]
     assert call["extra_headers"]["X-Title"] == "Ragworks"
+    assert call["extra_headers"]["HTTP-Referer"] == "https://ragworks.ai"
     assert result.data[0].embedding == [0.1]
 
 
 def test_embed_includes_dimensions(client: OpenRouterClient) -> None:
     client.embed(["hello"], model="test-embed", dimensions=1536)
 
-    call = client._client.embeddings.calls[0]
+    call = client.compat._transport.sdk.embeddings.calls[0]
     assert call["dimensions"] == 1536
 
 
@@ -512,7 +540,7 @@ def test_get_embedding_dimension_raises_on_missing_model_id(client: OpenRouterCl
 
 def test_get_embedding_dimension_raises_on_invalid_payload(client: OpenRouterClient) -> None:
     def _stub_embed(*_args, **_kwargs):
-        return OpenRouterEmbeddingsResponse(data=[])
+        return EmbeddingsResponse(data=[])
 
     client.embed = _stub_embed  # type: ignore[assignment]
 
@@ -522,7 +550,7 @@ def test_get_embedding_dimension_raises_on_invalid_payload(client: OpenRouterCli
 
 def test_get_embedding_dimension_raises_on_missing_embedding(client: OpenRouterClient) -> None:
     def _stub_embed(*_args, **_kwargs):
-        return OpenRouterEmbeddingsResponse(data=[{"embedding": "bad"}])
+        return EmbeddingsResponse(data=[{"embedding": "bad"}])
 
     client.embed = _stub_embed  # type: ignore[assignment]
 
@@ -532,13 +560,15 @@ def test_get_embedding_dimension_raises_on_missing_embedding(client: OpenRouterC
 
 def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> None:
     payload = client.chat(
-        messages=[{"role": "user", "content": "hi"}],
-        model="test-chat",
-        extra_body={"usage": {"include": True}},
-        parameters={"temperature": 0.2, "top_p": None},
+        ChatCall(
+            messages=[{"role": "user", "content": "hi"}],
+            model="test-chat",
+            extra_body={"usage": {"include": True}},
+            parameters={"temperature": 0.2, "top_p": None},
+        )
     )
 
-    call = client._client.chat.completions.calls[0]
+    call = client.compat._transport.sdk.chat.completions.calls[0]
     assert call["temperature"] == 0.2
     assert "top_p" not in call
     assert call["extra_body"] == {"usage": {"include": True}}
@@ -547,14 +577,16 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
 
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
     client.chat(
-        messages=[{"role": "user", "content": "hi"}],
-        model="test-chat",
-        tools=[{"type": "function", "function": {"name": "tool"}}],
-        tool_choice={"type": "function", "function": {"name": "tool"}},
-        parallel_tool_calls=True,
+        ChatCall(
+            messages=[{"role": "user", "content": "hi"}],
+            model="test-chat",
+            tools=[{"type": "function", "function": {"name": "tool"}}],
+            tool_choice={"type": "function", "function": {"name": "tool"}},
+            parallel_tool_calls=True,
+        )
     )
 
-    call = client._client.chat.completions.calls[0]
+    call = client.compat._transport.sdk.chat.completions.calls[0]
     assert call["tools"]
     assert call["tool_choice"]["function"]["name"] == "tool"
     assert call["parallel_tool_calls"] is True
@@ -562,11 +594,16 @@ def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
 
 def test_chat_stream_yields_chunks(client: OpenRouterClient) -> None:
     chunks = list(
-        client.chat_stream(messages=[{"role": "user", "content": "hi"}],
-        model="test-chat", parameters={"top_p": 0.9})
+        client.chat_stream(
+            ChatCall(
+                messages=[{"role": "user", "content": "hi"}],
+                model="test-chat",
+                parameters={"top_p": 0.9},
+            )
+        )
     )
 
-    call = client._client.chat.completions.calls[0]
+    call = client.compat._transport.sdk.chat.completions.calls[0]
     assert call["stream"] is True
     assert call["top_p"] == 0.9
     assert [chunk.model_extra for chunk in chunks] == [{"chunk": 1}, {"chunk": 2}]
@@ -575,13 +612,15 @@ def test_chat_stream_yields_chunks(client: OpenRouterClient) -> None:
 def test_chat_stream_skips_none_parameters(client: OpenRouterClient) -> None:
     list(
         client.chat_stream(
-            messages=[{"role": "user", "content": "hi"}],
-        model="test-chat",
-            parameters={"top_p": None, "temperature": 0.1},
+            ChatCall(
+                messages=[{"role": "user", "content": "hi"}],
+                model="test-chat",
+                parameters={"top_p": None, "temperature": 0.1},
+            )
         )
     )
 
-    call = client._client.chat.completions.calls[0]
+    call = client.compat._transport.sdk.chat.completions.calls[0]
     assert call["temperature"] == 0.1
     assert "top_p" not in call
 
@@ -598,27 +637,30 @@ def test_build_app_headers_skips_referer(monkeypatch) -> None:
 
     _StubHttpClient.responses = {}
     monkeypatch.setattr(openrouter_module, "get_settings", lambda: _NoRefererSettings())
-    monkeypatch.setattr(openrouter_module.httpx, "Client", _StubHttpClient)
-    monkeypatch.setattr(openrouter_module, "OpenAI", _StubOpenAI)
+    monkeypatch.setattr(transport_module.httpx, "Client", _StubHttpClient)
+    monkeypatch.setattr(transport_module, "OpenAI", _StubOpenAI)
 
     client = OpenRouterClient("test-key")
 
-    assert "HTTP-Referer" not in client._app_headers
+    assert "HTTP-Referer" not in client.compat._transport.static_headers
+    assert client.compat._transport.static_headers["X-Title"] == "Ragworks"
 
 
 def test_chat_stream_includes_tool_settings(client: OpenRouterClient) -> None:
     chunks = list(
         client.chat_stream(
-            messages=[{"role": "user", "content": "hi"}],
-        model="test-chat",
-            tools=[{"type": "function", "function": {"name": "tool"}}],
-            tool_choice={"type": "function", "function": {"name": "tool"}},
-            parallel_tool_calls=True,
-            extra_body={"usage": {"include": True}},
+            ChatCall(
+                messages=[{"role": "user", "content": "hi"}],
+                model="test-chat",
+                tools=[{"type": "function", "function": {"name": "tool"}}],
+                tool_choice={"type": "function", "function": {"name": "tool"}},
+                parallel_tool_calls=True,
+                extra_body={"usage": {"include": True}},
+            )
         )
     )
 
-    call = client._client.chat.completions.calls[0]
+    call = client.compat._transport.sdk.chat.completions.calls[0]
     assert call["tools"]
     assert call["tool_choice"]["function"]["name"] == "tool"
     assert call["parallel_tool_calls"] is True
@@ -683,18 +725,20 @@ def test_close_closes_shared_http_transport(monkeypatch) -> None:
     monkeypatch.setattr(openrouter_module, "get_settings", lambda: _StubSettings())
 
     client = OpenRouterClient("close-test-key")
+    transport = client.compat._transport
 
-    # The SDK's underlying httpx client is the very same object as `_http`.
-    assert client._client._client is client._http
+    # The SDK's underlying httpx client is the very same object as the pool
+    # raw REST calls use.
+    assert transport.sdk._client is transport.http
 
     # Sharing must not shrink chat/chat_stream timeouts: without an explicit
-    # timeout the SDK inherits `_http`'s flat 60s, a silent 10x cut from the
-    # SDK default 600s that long reasoning-model responses rely on.
-    sdk_timeout = client._client.timeout
-    assert isinstance(sdk_timeout, openrouter_module.httpx.Timeout)
+    # timeout the SDK inherits the REST client's flat 60s, a silent 10x cut
+    # from the 600s that long reasoning-model responses rely on.
+    sdk_timeout = transport.sdk.timeout
+    assert isinstance(sdk_timeout, httpx.Timeout)
     assert sdk_timeout.read == 600.0
     assert sdk_timeout.connect == 5.0
 
     client.close()
 
-    assert client._http.is_closed
+    assert transport.http.is_closed

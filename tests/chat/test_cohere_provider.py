@@ -133,7 +133,7 @@ def test_get_model_matches_case_insensitively_and_returns_none_when_absent() -> 
 
     assert model is not None
     assert model.context_length == 8192
-    assert "tools" in model.supported_parameters
+    assert model.capabilities.tools is True
     assert provider.get_model("missing") is None
 
 

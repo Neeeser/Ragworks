@@ -50,6 +50,11 @@ class ChatRequest:
     parameters: dict[str, Any] | None
     reasoning_options: dict[str, Any] | None = None
     provider_preferences: dict[str, Any] | None = None
+    #: User-supplied raw body fields, merged into the provider request *last*
+    #: (past parameter filtering, over anything the provider set) — the
+    #: escape hatch for knobs no catalog knows. The provider's own rejection
+    #: is the contract for a key the server refuses.
+    extra_body: dict[str, Any] | None = None
 
 
 class ChatProvider(Protocol):

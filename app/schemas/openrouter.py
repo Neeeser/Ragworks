@@ -1,156 +1,16 @@
-"""Schema models for OpenRouter chat and embeddings responses."""
+"""Wire shapes unique to OpenRouter.
+
+OpenRouter speaks the shared Chat Completions dialect for chat, embeddings, and
+reranking — those payloads live in `app/schemas/chat_completions.py`. What
+remains here is the account metadata OpenRouter publishes at `GET /key`, which
+has no counterpart at any other provider.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict, Field
-
-NumberLike = int | float | str
-
-
-class OpenRouterUsage(BaseModel):
-    """Usage details returned by OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    prompt_tokens: NumberLike | None = None
-    completion_tokens: NumberLike | None = None
-    total_tokens: NumberLike | None = None
-    completion_tokens_details: dict[str, Any] | None = None
-    prompt_tokens_details: dict[str, Any] | None = None
-    reasoning_tokens: NumberLike | None = None
-    cost: NumberLike | None = None
-
-
-class OpenRouterFunctionCall(BaseModel):
-    """Function call data returned by OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    name: str | None = None
-    arguments: str | None = None
-    id: str | None = None
-
-
-class OpenRouterToolCall(BaseModel):
-    """Tool call entry returned by OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    id: str | None = None
-    type: str | None = None
-    function: OpenRouterFunctionCall | None = None
-    index: int | None = None
-
-
-class OpenRouterAssistantMessage(BaseModel):
-    """Assistant message in chat responses."""
-
-    model_config = ConfigDict(extra="allow")
-
-    content: Any | None = None
-    tool_calls: list[OpenRouterToolCall] | None = None
-    reasoning: Any | None = None
-    reasoning_content: Any | None = None
-
-
-class OpenRouterChatChoice(BaseModel):
-    """Choice entry in chat responses."""
-
-    model_config = ConfigDict(extra="allow")
-
-    index: int | None = None
-    message: OpenRouterAssistantMessage | None = None
-    finish_reason: str | None = None
-
-
-class OpenRouterChatResponse(BaseModel):
-    """Top-level chat response from OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    id: str | None = None
-    choices: list[OpenRouterChatChoice] = Field(default_factory=list)
-    model: str | None = None
-    provider: str | None = None
-    usage: OpenRouterUsage | None = None
-
-
-class OpenRouterStreamDelta(BaseModel):
-    """Stream delta message from OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    content: Any | None = None
-    tool_calls: list[OpenRouterToolCall] | None = None
-    reasoning: Any | None = None
-
-
-class OpenRouterStreamChoice(BaseModel):
-    """Choice item for streaming responses."""
-
-    model_config = ConfigDict(extra="allow")
-
-    index: int | None = None
-    delta: OpenRouterStreamDelta | None = None
-    finish_reason: str | None = None
-
-
-class OpenRouterStreamChunk(BaseModel):
-    """Stream chunk payload for chat responses."""
-
-    model_config = ConfigDict(extra="allow")
-
-    choices: list[OpenRouterStreamChoice] = Field(default_factory=list)
-    provider: str | None = None
-    model: str | None = None
-    usage: OpenRouterUsage | None = None
-
-
-class OpenRouterEmbeddingItem(BaseModel):
-    """Embedding item in embeddings response."""
-
-    model_config = ConfigDict(extra="allow")
-
-    object: str | None = None
-    embedding: Any | None = None
-    index: int | None = None
-
-
-class OpenRouterEmbeddingsResponse(BaseModel):
-    """Top-level embeddings response from OpenRouter."""
-
-    model_config = ConfigDict(extra="allow")
-
-    id: str | None = None
-    object: str | None = None
-    data: list[OpenRouterEmbeddingItem] | None = None
-    model: str | None = None
-    usage: OpenRouterUsage | None = None
-    # Provider error envelope returned in place of `data` on failed requests.
-    error: dict[str, Any] | None = None
-
-
-class OpenRouterRerankResult(BaseModel):
-    """One scored original-document index from the rerank endpoint."""
-
-    model_config = ConfigDict(extra="allow")
-
-    index: int
-    relevance_score: float
-
-
-class OpenRouterRerankResponse(BaseModel):
-    """Top-level response from OpenRouter's rerank endpoint."""
-
-    model_config = ConfigDict(extra="allow")
-
-    id: str | None = None
-    model: str | None = None
-    provider: str | None = None
-    results: list[OpenRouterRerankResult] = Field(default_factory=list)
-    usage: OpenRouterUsage | None = None
+from app.schemas.chat_completions import NumberLike
 
 
 class OpenRouterKeyRateLimit(BaseModel):

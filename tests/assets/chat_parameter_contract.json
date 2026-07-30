@@ -1,0 +1,55 @@
+{
+  "_comment": "Shared chat-parameter contract pinned by both pytest and vitest so the backend ChatParameters model and the frontend parameter panel cannot drift. A key present on one side only is silently dropped by the other \u2014 Pydantic ignores unknown keys, and the panel renders only keys it knows \u2014 so the loss is invisible without this pin.",
+  "sampling_parameters": [
+    "temperature",
+    "top_p",
+    "top_k",
+    "min_p",
+    "top_a",
+    "frequency_penalty",
+    "presence_penalty",
+    "repetition_penalty",
+    "max_tokens",
+    "seed",
+    "logit_bias",
+    "logprobs",
+    "top_logprobs",
+    "response_format",
+    "structured_outputs",
+    "stop",
+    "verbosity"
+  ],
+  "_capability_comment": "Rendered as controls like a knob, but each is a capability claim the provider states per model rather than a value the wire format accepts.",
+  "capability_controls": [
+    "reasoning"
+  ],
+  "_passthrough_comment": "Bypasses supported-parameter filtering by design and merges into the provider body last \u2014 the escape hatch when a capability source is wrong.",
+  "passthrough_parameter": "extra_body",
+  "_reasoning_comment": "Every effort level any provider accepts. Which levels a given model takes is published per model in ChatCapabilities.reasoning_efforts; this is only the gate against nonsense.",
+  "reasoning_efforts": [
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+  ],
+  "_styles_comment": "ReasoningStyle \u2014 how a provider is asked to let a model reason.",
+  "reasoning_styles": [
+    "none",
+    "block",
+    "include_flag"
+  ],
+  "_sampling_comment": "SamplingSupport \u2014 when a model accepts temperature/top_p/top_logprobs. Measured per model at bundle generation, never inferred from a version: gpt-5.4 accepts temperature where gpt-5.5 needs reasoning off, and gpt-5 never accepts it.",
+  "sampling_support": [
+    "always",
+    "without_reasoning",
+    "never"
+  ],
+  "sampling_knobs": [
+    "temperature",
+    "top_p",
+    "top_logprobs"
+  ]
+}

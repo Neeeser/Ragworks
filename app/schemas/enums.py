@@ -109,9 +109,12 @@ class ProviderType(str, Enum):
     """
 
     OPENROUTER = "openrouter"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
     COHERE = "cohere"
     TEI = "tei"
+    CUSTOM = "custom"
     PINECONE = "pinecone"
 
 

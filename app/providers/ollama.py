@@ -14,13 +14,15 @@ from app.providers.chat.ollama import OllamaChatProvider, model_info_from_descri
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.providers import (
+from app.schemas.provider_configs import (
     OLLAMA_DEFAULT_PORT,
+    OllamaConnectionConfig,
+)
+from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
     ConfigFieldKind,
     ConnectionValidationResult,
-    OllamaConnectionConfig,
     ProviderConfigField,
 )
 

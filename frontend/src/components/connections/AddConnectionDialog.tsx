@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import { ConnectionConfigFields } from "@/components/connections/ConnectionConfigFields";
+import { useAddConnection } from "@/components/connections/hooks/use-add-connection";
 import { toProviderChoices } from "@/components/connections/lib/provider-choices";
 import { ProviderChoiceCard } from "@/components/connections/ProviderChoiceCard";
 import { ProviderIcon } from "@/components/connections/ProviderIcon";
@@ -10,8 +11,6 @@ import { ProviderKindBadges } from "@/components/connections/ProviderKindBadges"
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { createConnection, validateConnectionConfig } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 import type { ProviderConnection, ProviderTypeInfo } from "@/lib/types";
@@ -23,6 +22,17 @@ interface AddConnectionDialogProps {
   providerTypes: ProviderTypeInfo[];
   existingConnections: ProviderConnection[];
   onCreated: (connection: ProviderConnection) => void;
+}
+
+/**
+ * True when a type is discoverable: it is addressed by URL and declares its
+ * capabilities as toggles. Derived from the field catalog rather than a
+ * provider-type check, so a future type that works the same way gets the
+ * detect step without a change here.
+ */
+function supportsDetection(type: ProviderTypeInfo): boolean {
+  const names = new Set(type.config_fields.map((field) => field.name));
+  return names.has("base_url") && type.config_fields.some((field) => field.kind === "boolean");
 }
 
 /** Indefinite article for a provider name, by its first sound's spelling. */
@@ -54,99 +64,14 @@ export function AddConnectionDialog({
   onCreated,
 }: AddConnectionDialogProps) {
   const titleId = useId();
-  const [selectedType, setSelectedType] = useState<ProviderTypeInfo | null>(null);
-  const [label, setLabel] = useState("");
-  const [config, setConfig] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [probeMessage, setProbeMessage] = useState<string | null>(null);
-  const [probing, setProbing] = useState(false);
-
-  const reset = () => {
-    setSelectedType(null);
-    setLabel("");
-    setConfig({});
-    setError(null);
-    setProbeMessage(null);
-  };
-
-  const handleClose = () => {
-    reset();
-    onClose();
-  };
-
+  const flow = useAddConnection({ authToken, onCreated, onClose });
+  const { selectedType, config, error, probeMessage, busy, missingRequired } = flow;
   const providerChoices = toProviderChoices(providerTypes, existingConnections);
-
-  const handlePickType = (type: ProviderTypeInfo) => {
-    setSelectedType(type);
-    setLabel(type.label);
-    setConfig({});
-    setError(null);
-    setProbeMessage(null);
-  };
-
-  const buildConfigPayload = () => {
-    const payload: Record<string, string> = {};
-    for (const field of selectedType?.config_fields ?? []) {
-      const value = (config[field.name] ?? "").trim();
-      if (value) {
-        payload[field.name] = value;
-      }
-    }
-    return payload;
-  };
-
-  const missingRequired = (selectedType?.config_fields ?? []).some(
-    (field) => field.required && !(config[field.name] ?? "").trim(),
-  );
-
-  const handleProbe = async () => {
-    if (!selectedType) return;
-    setProbing(true);
-    setError(null);
-    setProbeMessage(null);
-    try {
-      const result = await validateConnectionConfig(
-        authToken,
-        selectedType.provider_type,
-        buildConfigPayload(),
-      );
-      if (result.valid) {
-        setProbeMessage(result.message ?? "Connected.");
-      } else {
-        setError(result.message ?? "Validation failed.");
-      }
-    } catch (probeError) {
-      setError(getErrorMessage(probeError, "Unable to validate the connection."));
-    } finally {
-      setProbing(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!selectedType) return;
-    setSubmitting(true);
-    setError(null);
-    setProbeMessage(null);
-    try {
-      const created = await createConnection(authToken, {
-        provider_type: selectedType.provider_type,
-        label: label.trim() || selectedType.label,
-        config: buildConfigPayload(),
-      });
-      onCreated(created);
-      handleClose();
-    } catch (createError) {
-      setError(getErrorMessage(createError, "Unable to add the connection."));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (!open) return null;
 
   return (
-    <ModalOverlay open={open} onClose={handleClose} labelledBy={titleId}>
+    <ModalOverlay open={open} onClose={flow.close} labelledBy={titleId}>
       {/* One fixed frame for both steps so picking a provider never resizes the dialog. */}
       <div className="card-surface flex h-[36rem] max-h-[85vh] w-full max-w-xl flex-col bg-canvas-raised shadow-elevation-2">
         <div className="flex items-center gap-3 border-b border-hairline p-3">
@@ -166,7 +91,7 @@ export function AddConnectionDialog({
               <ProviderChoiceCard
                 key={choice.type.provider_type}
                 choice={choice}
-                onPick={() => handlePickType(choice.type)}
+                onPick={() => flow.pickType(choice.type)}
               />
             ))}
             {providerChoices.length === 0 ? (
@@ -192,12 +117,15 @@ export function AddConnectionDialog({
                 ) : null}
               </div>
               <Field label="Label" hint="A name for this connection (e.g. Homelab Ollama).">
-                <TextInput value={label} onChange={(event) => setLabel(event.target.value)} />
+                <TextInput
+                  value={flow.label}
+                  onChange={(event) => flow.setLabel(event.target.value)}
+                />
               </Field>
               <ConnectionConfigFields
                 fields={selectedType.config_fields}
                 config={config}
-                onChange={(name, value) => setConfig((prev) => ({ ...prev, [name]: value }))}
+                onChange={flow.setField}
               />
             </div>
             {/* The probe result sits outside the scrolling body, next to the
@@ -217,24 +145,35 @@ export function AddConnectionDialog({
               </p>
             ) : null}
             <div className="flex items-center justify-between gap-2 border-t border-hairline p-3">
-              <Button type="button" variant="ghost" onClick={() => setSelectedType(null)}>
+              <Button type="button" variant="ghost" onClick={flow.clearType}>
                 Back
               </Button>
               <div className="flex items-center gap-2">
+                {supportsDetection(selectedType) ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={flow.detect}
+                    loading={busy.detecting}
+                    disabled={!(config.base_url ?? "").trim() || busy.submitting || busy.probing}
+                  >
+                    Detect
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={handleProbe}
-                  loading={probing}
-                  disabled={missingRequired || submitting}
+                  onClick={flow.test}
+                  loading={busy.probing}
+                  disabled={missingRequired || busy.submitting || busy.detecting}
                 >
                   Test
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleCreate}
-                  loading={submitting}
-                  disabled={missingRequired || probing}
+                  onClick={flow.create}
+                  loading={busy.submitting}
+                  disabled={missingRequired || busy.probing || busy.detecting}
                 >
                   Add connection
                 </Button>

@@ -34,20 +34,25 @@ def _drive(service: ChatService, user: models.User, payload: ChatMessageCreate, 
     return service.send_message(user=user, payload=payload)
 
 
-class _RateLimitedOpenRouter:
-    """Stand-in for `OpenRouterClient` whose `chat()` call hits an OpenRouter 429."""
+class _RateLimitedCompat:
+    """Stand-in for the shared client whose `chat()` call hits a 429."""
 
-    def __init__(self, model_info: ModelInfo) -> None:
-        self._model_info = model_info
-
-    def get_model(self, _model_id: str) -> ModelInfo:
-        return self._model_info
-
-    def chat(self, **_kwargs):
+    def chat(self, _call):
         response = httpx.Response(
             status_code=429, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat")
         )
         raise RateLimitError("Rate limit exceeded", response=response, body=None)
+
+
+class _RateLimitedOpenRouter:
+    """Stand-in for `OpenRouterClient` whose chat call hits an OpenRouter 429."""
+
+    def __init__(self, model_info: ModelInfo) -> None:
+        self._model_info = model_info
+        self.compat = _RateLimitedCompat()
+
+    def get_model(self, _model_id: str) -> ModelInfo:
+        return self._model_info
 
 
 def test_send_message_maps_openrouter_rate_limit_to_external_service_error(

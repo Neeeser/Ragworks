@@ -12,8 +12,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from app.cache import CachePolicy, CacheSnapshot, ValueCache
+from app.schemas.chat_completions import EmbeddingsResponse
 from app.schemas.models import EmbeddingModelInfo, ModelInfo
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
 
 _CATALOG_POLICY = CachePolicy(
     fresh_seconds=300,
@@ -31,7 +31,7 @@ class ModelCatalog:
         fetch_models: Callable[[], list[ModelInfo]],
         fetch_embedding_models: Callable[[], list[EmbeddingModelInfo]],
         fetch_rerank_models: Callable[[], list[ModelInfo]],
-        probe_embedding: Callable[[str], OpenRouterEmbeddingsResponse],
+        probe_embedding: Callable[[str], EmbeddingsResponse],
     ) -> None:
         """Store the injected fetch/probe callables and initialize empty caches."""
         self._fetch_models = fetch_models

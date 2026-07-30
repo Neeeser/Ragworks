@@ -8,7 +8,7 @@ import pytest
 
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.models import DocumentChunk
-from app.schemas.openrouter import OpenRouterEmbeddingsResponse
+from app.schemas.chat_completions import EmbeddingsResponse
 from app.services.errors import ExternalServiceError
 
 
@@ -23,7 +23,7 @@ class StubOpenRouterClient:
         model: str | None = None,
         extra_headers: dict[str, str] | None = None,
         dimensions: int | None = None,
-    ) -> OpenRouterEmbeddingsResponse:
+    ) -> EmbeddingsResponse:
         self.calls.append(
             {
                 "texts": list(texts),
@@ -34,7 +34,7 @@ class StubOpenRouterClient:
         )
         if not self.responses:
             raise AssertionError("No stub responses remaining for embed call.")
-        return OpenRouterEmbeddingsResponse.model_validate(self.responses.pop(0))
+        return EmbeddingsResponse.model_validate(self.responses.pop(0))
 
 
 def _chunk(text: str, chunk_id: str) -> DocumentChunk:

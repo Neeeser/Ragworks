@@ -6,6 +6,8 @@ import type {
   ConnectionValidationResult,
   ProviderConnection,
   ProviderTypeInfo,
+  ServerProbeRequest,
+  ServerProbeResult,
   UUID,
 } from "@/lib/types";
 
@@ -63,5 +65,16 @@ export async function validateConnection(
   return apiFetch<ConnectionValidationResult>(`/api/connections/${connectionId}/validate`, {
     method: "POST",
     token,
+  });
+}
+
+export async function probeCustomServer(
+  token: string,
+  payload: ServerProbeRequest,
+): Promise<ServerProbeResult> {
+  return apiFetch<ServerProbeResult>("/api/providers/probe", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
   });
 }

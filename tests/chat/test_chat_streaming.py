@@ -1,48 +1,47 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any
 
 from pydantic import ValidationError
 
 from app.chat.streaming import StreamOutcome, stream_model_completion
+from app.clients.openai_compat import ChatCall
 from app.providers.chat.base import ChatRequest, ParsedStreamChunk
 from app.providers.chat.openrouter import OpenRouterProvider
-from app.schemas.openrouter import OpenRouterStreamChunk
+from app.schemas.chat_completions import ChatCompletionChunk
 
 
-class _StubOpenRouter:
+class _StubCompat:
+    """Stub of the shared client's streaming surface."""
+
     def __init__(self, chunks: list[dict[str, Any]]) -> None:
         self._chunks = chunks
         self.calls: list[dict[str, Any]] = []
 
-    def chat_stream(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        model: str,
-        parallel_tool_calls: bool,
-        extra_body: dict[str, Any],
-        parameters: dict[str, Any] | None,
-    ) -> Generator[OpenRouterStreamChunk, None, None]:
-        self.calls.append(
-            {
-                "messages": messages,
-                "tools": tools,
-                "model": model,
-                "parallel_tool_calls": parallel_tool_calls,
-                "extra_body": extra_body,
-                "parameters": parameters,
-            }
-        )
+    def chat_stream(self, call: ChatCall) -> Generator[ChatCompletionChunk, None, None]:
+        self.calls.append(asdict(call))
         # `__init__` (not `model_validate`) so tests that monkeypatch
-        # `OpenRouterStreamChunk.model_validate` to simulate the *provider's*
+        # `ChatCompletionChunk.model_validate` to simulate the *provider's*
         # own re-validation failing don't also break this stub's simulation of
         # the (already-validated) client boundary.
         for chunk in self._chunks:
-            yield OpenRouterStreamChunk(**chunk)
+            yield ChatCompletionChunk(**chunk)
+
+
+class _StubOpenRouter:
+    def __init__(self, chunks: list[dict[str, Any]]) -> None:
+        self.compat = _StubCompat(chunks)
+
+    @property
+    def calls(self) -> list[dict[str, Any]]:
+        """Requests the provider sent, in wire shape."""
+        return self.compat.calls
+
+    def get_model(self, _model_id: str) -> None:
+        return None
 
 
 def _collect_stream_results(
@@ -199,7 +198,10 @@ def test_stream_model_completion_orders_tool_calls_by_index() -> None:
 
 
 def test_openrouter_provider_ignores_non_dict_chunks() -> None:
-    stub = SimpleNamespace(chat_stream=lambda **_kwargs: iter([]), get_model=lambda *_args: None)
+    stub = SimpleNamespace(
+        compat=SimpleNamespace(chat_stream=lambda _call: iter([])),
+        get_model=lambda *_args: None,
+    )
     provider = OpenRouterProvider(stub)
 
     assert provider.parse_stream_chunk("bad") is None
@@ -273,12 +275,12 @@ def test_stream_model_completion_skips_empty_reasoning_updates() -> None:
 
 def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> None:
     def _raise_validation(_chunk: object):
-        raise ValidationError.from_exception_data("OpenRouterStreamChunk", [])
+        raise ValidationError.from_exception_data("ChatCompletionChunk", [])
 
-    monkeypatch.setattr(OpenRouterStreamChunk, "model_validate", _raise_validation)
+    monkeypatch.setattr(ChatCompletionChunk, "model_validate", _raise_validation)
 
     # `_StubOpenRouter.chat_stream` now simulates the typed client boundary (it
-    # always yields `OpenRouterStreamChunk` instances, never a bare string) --
+    # always yields `ChatCompletionChunk` instances, never a bare string) --
     # non-dict/malformed chunks reaching `parse_stream_chunk` are covered
     # directly by `test_openrouter_provider_ignores_non_dict_chunks` instead.
     chunks = [
@@ -309,7 +311,7 @@ def test_stream_model_completion_falls_back_on_invalid_chunks(monkeypatch) -> No
         },
     ]
     stub = _StubOpenRouter(chunks)
-    provider = OpenRouterProvider(stub, stream_chunk_model=OpenRouterStreamChunk)
+    provider = OpenRouterProvider(stub)
 
     request = ChatRequest(
         messages=[],

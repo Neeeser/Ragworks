@@ -3,8 +3,9 @@
 Ragworks is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`) — an
 easy-to-use RAG interface for power users. Its backbones are pluggable vector stores
 (pgvector in the shipped Postgres by default, Pinecone optionally) and pluggable
-model providers behind per-user connections (OpenRouter and Ollama today, embeddings
-+ chat), mixable per pipeline and per chat session.
+model providers behind per-user connections (OpenRouter, OpenAI, Anthropic,
+Cohere, Ollama, Hugging Face TEI, and a custom option for any server speaking the
+standard APIs), mixable per pipeline and per chat session.
 
 This file holds only repo-wide rules. Area rules live next to the code they govern —
 load the one for the code you're touching; area files extend these rules, they never

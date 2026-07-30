@@ -61,7 +61,6 @@ interface UseModelCatalogResult {
   currentModelInfo: CatalogModel | null;
   providerModelSlug: string | null;
   supportedParameterKeys: Set<ModelParameterKey>;
-  visibleParameterDefinitions: ParameterDefinition[];
   toolReadyModels: CatalogModel[];
   sortedModelCatalog: CatalogModel[];
   selectedModelKey: string;
@@ -157,18 +156,12 @@ export function useModelCatalog({
     return supported;
   }, [currentModelInfo]);
 
-  const visibleParameterDefinitions = useMemo(
-    () => PARAMETER_DEFINITIONS.filter((definition) => supportedParameterKeys.has(definition.key)),
-    [supportedParameterKeys],
-  );
-
   const toolReadyModels = useMemo(() => {
     if (!toolsEnabled) {
       return modelCatalog;
     }
-    return modelCatalog.filter((model) =>
-      (model.supported_parameters || []).some((param) => param.toLowerCase() === "tools"),
-    );
+    // Tool support is a capability the provider states, not a knob.
+    return modelCatalog.filter((model) => model.capabilities?.tools);
   }, [modelCatalog, toolsEnabled]);
 
   const connectionOptions = useMemo(() => {
@@ -229,7 +222,6 @@ export function useModelCatalog({
     currentModelInfo,
     providerModelSlug,
     supportedParameterKeys,
-    visibleParameterDefinitions,
     toolReadyModels,
     sortedModelCatalog,
     selectedModelKey,
