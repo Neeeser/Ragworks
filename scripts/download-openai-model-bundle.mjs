@@ -30,17 +30,19 @@ const SNAPSHOT_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
 /**
  * Price ceiling for the sampling probe, in USD per million tokens.
  *
- * The probe is one request at the API's minimum size (a one-token input and
- * 16 output tokens), so the spend is fractions of a cent either way — but a
- * refresh should never be a reason to think about cost, and the docs publish
- * each model's price, so the guard reads that rather than guessing from the
- * name. A model priced above this, or one whose page states no price, is left
- * unprobed and records `sampling: null` — which callers read as unknown and
- * treat permissively, the same fallback any model OpenAI ships after this
- * bundle gets.
+ * Set just above the cheap tier of each generation — the nano/mini/luna-class
+ * models, plus the base `gpt-5`, `gpt-5.1`, `o3` and `o4-mini`. The tier above
+ * that jumps to $14–30 per million output and buys nothing: what is being
+ * measured is a per-model API behavior, not a quality difference.
+ *
+ * A model priced above this, or one whose page states no price, is left
+ * unprobed and records `sampling: null` — read as unknown and treated
+ * permissively, the same fallback any model OpenAI ships after this bundle
+ * gets. Permissive is the safe direction: a knob the model rejects comes back
+ * naming the field, where hiding one the model accepts cannot be undone.
  */
-const MAX_PROBE_INPUT_USD_PER_M = 10;
-const MAX_PROBE_OUTPUT_USD_PER_M = 50;
+const MAX_PROBE_INPUT_USD_PER_M = 2;
+const MAX_PROBE_OUTPUT_USD_PER_M = 10;
 
 /** A model that has not answered by now is not worth waiting on. */
 const PROBE_TIMEOUT_MS = 30_000;
