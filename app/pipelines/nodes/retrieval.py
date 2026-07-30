@@ -45,6 +45,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Upper bound on query items one retriever run fans out into store queries.
+#: Multi-query retrieval runs one store query per input item, so an unbounded
+#: stream (a whole result set wired into a retriever) would issue hundreds of
+#: sequential queries; past this size the graph almost certainly wired the
+#: wrong stream in, and an honest error beats a minutes-long run.
+MAX_QUERY_ITEMS = 32
+
+
+def ensure_query_fanout(count: int, node_label: str) -> None:
+    """Reject a query stream too large to fan out into per-item store queries."""
+    if count > MAX_QUERY_ITEMS:
+        raise InvalidInputError(
+            f"{node_label} received {count} query items; at most "
+            f"{MAX_QUERY_ITEMS} are queried per run. Reduce the stream feeding "
+            "it (e.g. with a Result Limit node)."
+        )
+
 
 def merge_query_matches(per_query: list[list[ScoredChunk]]) -> list[ScoredChunk]:
     """Merge per-query-item match lists into one ordered list.
@@ -191,6 +208,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
+        ensure_query_fanout(len(batch.items), "Retriever")
         per_query: list[list[ScoredChunk]] = []
         for item in batch.items:
             if item.embedding is None:

@@ -365,3 +365,33 @@ def test_ingestion_output_merge_is_not_fooled_by_unembedded_first_chunk(
 
     result = IndexingPayload.model_validate(outputs["result"])
     assert result.chunks[1].embedding == [0.1, 0.2]
+
+
+def test_retrievers_reject_an_oversized_query_stream(session: Session) -> None:
+    """Retrievers fan out one store query per input item, so an unbounded
+    stream (a whole result set wired into a retriever) is rejected honestly
+    instead of issuing hundreds of sequential store queries."""
+    from app.pipelines.nodes.retrieval import MAX_QUERY_ITEMS
+
+    store = StubVectorStore()
+    context = _context(session, store)
+    oversized = ItemBatch(
+        items=[
+            Item(id=f"q{i}", text="q", embedding=[0.1, 0.2])
+            for i in range(MAX_QUERY_ITEMS + 1)
+        ]
+    )
+
+    dense = VectorRetrieverNode(
+        VectorRetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs", top_k=4)
+    )
+    with pytest.raises(InvalidInputError, match="query items"):
+        dense.run({"items": oversized}, context)
+
+    bm25 = Bm25RetrieverNode(
+        Bm25RetrieverConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25", top_k=4)
+    )
+    with pytest.raises(InvalidInputError, match="query items"):
+        bm25.run({"items": oversized}, context)
+
+    assert store.query_calls == [] and store.lexical_query_calls == []

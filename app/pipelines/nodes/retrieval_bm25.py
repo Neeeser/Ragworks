@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.nodes.retrieval import merge_query_matches
+from app.pipelines.nodes.retrieval import ensure_query_fanout, merge_query_matches
 from app.pipelines.nodes.validators import (
     lexical_support_issue,
     missing_index_issue,
@@ -138,6 +138,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.config.backend)
+        ensure_query_fanout(len(batch.items), "BM25 retriever")
         per_query: list[list[ScoredChunk]] = []
         for item in batch.items:
             if item.text is None:
