@@ -46,7 +46,12 @@ ANTHROPIC_DESCRIPTOR = ProviderDescriptor(
             required=False,
             advanced=True,
             placeholder="https://api.anthropic.com",
-            description="Set only to route this key through a compatible gateway.",
+            description="Route this key through a proxy in front of Anthropic.",
+            help=(
+                "For a proxy that forwards to Anthropic's own models — the "
+                "model catalog and capabilities still come from Anthropic, and "
+                "the proxy must serve the Messages API."
+            ),
         ),
     ),
     docs_url="https://console.anthropic.com/settings/keys",

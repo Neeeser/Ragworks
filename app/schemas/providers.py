@@ -52,6 +52,11 @@ class ProviderConfigField(BaseModel):
     required: bool = True
     placeholder: str | None = None
     description: str | None = None
+    #: The longer explanation, shown in a tooltip beside the label. Keeps
+    #: `description` to what the field *is* — a field whose whole explanation
+    #: sits under the input pushes the next field off the dialog, and the user
+    #: who needs the detail is the one who already stopped to read.
+    help: str | None = None
     #: Choices for a `select` field. The same set must be enforced by the
     #: config model's validator — a form-only constraint is bypassed by any
     #: caller that PATCHes the connection directly.

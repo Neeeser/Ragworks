@@ -53,7 +53,13 @@ OPENAI_DESCRIPTOR = ProviderDescriptor(
             required=False,
             advanced=True,
             placeholder="https://api.openai.com/v1",
-            description="Set only to route this key through a compatible gateway.",
+            description="Route this key through a proxy in front of OpenAI.",
+            help=(
+                "For a proxy that forwards to OpenAI's own models — model "
+                "capabilities still come from OpenAI, and the proxy must serve "
+                "the Responses API. A server running its own models behind an "
+                "OpenAI-shaped API is a Custom server connection instead."
+            ),
         ),
     ),
     docs_url="https://platform.openai.com/api-keys",

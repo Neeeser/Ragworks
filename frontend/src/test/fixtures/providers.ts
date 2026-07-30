@@ -24,6 +24,7 @@ export function makeProviderConfigField(
     required: true,
     placeholder: null,
     description: null,
+    help: null,
     options: [],
     default: null,
     advanced: false,

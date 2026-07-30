@@ -33,6 +33,8 @@ export interface ProviderConfigField {
   required: boolean;
   placeholder?: string | null;
   description?: string | null;
+  /** Longer explanation, shown in a tooltip beside the label. */
+  help?: string | null;
   options: ProviderConfigOption[];
   default?: string | boolean | null;
   /** Shown behind a disclosure so the common case stays URL + key. */

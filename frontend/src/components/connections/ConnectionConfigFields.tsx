@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronRight, Eye, EyeOff, Info } from "lucide-react";
 import { useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { ProviderConfigField } from "@/lib/types";
@@ -23,6 +24,28 @@ export function isFieldEnabled(config: Record<string, string>, field: ProviderCo
 /** The value a field starts from: what the user typed, else its declared default. */
 function fieldValue(config: Record<string, string>, field: ProviderConfigField) {
   return config[field.name] ?? (typeof field.default === "string" ? field.default : "");
+}
+
+const iconButtonClass =
+  "rounded-control p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+
+/**
+ * The tooltip trigger for a field's longer explanation.
+ *
+ * The help text is the button's accessible name rather than a `title`: a
+ * `title` cannot be themed and never reaches a keyboard user, and the portaled
+ * tooltip box is not adjacent to the trigger in reading order, so naming the
+ * button with the text is what gives a screen reader the same explanation the
+ * pointer gets on hover.
+ */
+function FieldHelp({ help }: { help: string }) {
+  return (
+    <Tooltip content={help}>
+      <button type="button" aria-label={help} className={iconButtonClass}>
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </Tooltip>
+  );
 }
 
 interface FieldProps {
@@ -44,7 +67,11 @@ function BooleanConfigField({ field, config, onChange }: FieldProps) {
 
 function SelectConfigField({ field, config, onChange }: FieldProps) {
   return (
-    <Field label={field.label} hint={field.description ?? undefined}>
+    <Field
+      label={field.label}
+      labelEnd={field.help ? <FieldHelp help={field.help} /> : undefined}
+      hint={field.description ?? undefined}
+    >
       <CustomSelect
         value={fieldValue(config, field)}
         placeholder="Select…"
@@ -64,24 +91,31 @@ function TextConfigField({
   const [revealed, setRevealed] = useState(false);
   const isSecret = field.kind === "secret";
   const secretKept = isSecret && secretConfigured;
+  const help = field.help ? <FieldHelp help={field.help} /> : null;
+  const reveal = isSecret ? (
+    <button
+      type="button"
+      aria-label={`${revealed ? "Hide" : "Show"} secret: ${field.name}`}
+      aria-pressed={revealed}
+      onClick={() => setRevealed((current) => !current)}
+      className={iconButtonClass}
+    >
+      {revealed ? (
+        <EyeOff className="h-3.5 w-3.5" aria-hidden />
+      ) : (
+        <Eye className="h-3.5 w-3.5" aria-hidden />
+      )}
+    </button>
+  ) : null;
   return (
     <Field
       label={field.label}
       labelEnd={
-        isSecret ? (
-          <button
-            type="button"
-            aria-label={`${revealed ? "Hide" : "Show"} secret: ${field.name}`}
-            aria-pressed={revealed}
-            onClick={() => setRevealed((current) => !current)}
-            className="rounded-control p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-          >
-            {revealed ? (
-              <EyeOff className="h-3.5 w-3.5" aria-hidden />
-            ) : (
-              <Eye className="h-3.5 w-3.5" aria-hidden />
-            )}
-          </button>
+        help || reveal ? (
+          <span className="flex items-center gap-1">
+            {help}
+            {reveal}
+          </span>
         ) : undefined
       }
       hint={
