@@ -234,6 +234,14 @@ the same PR.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
   Dead code costs every future reader.
+- **A control character in source is written as an escape (`\u0000`), never as a raw
+  byte.** Webpack's dev chunks wrap each module in `eval("…")`, and SWC emits a raw
+  source byte as a `\u0000` escape *inside that outer string* — so `eval` hands the
+  parser a literal control character. V8 tolerates it, SpiderMonkey aborts the script
+  ("literal not terminated before end of script") and every route whose chunk includes
+  the module dies in Firefox only. Nothing else in the gate sees it: esbuild, vitest,
+  tsc, and Prettier all accept the raw byte, which is why
+  `src/lib/__tests__/source-hygiene.test.ts` scans for it.
 
 ## Duplication
 
