@@ -26,6 +26,7 @@ from app.providers.custom import CustomAdapter
 from app.providers.openai_catalog import CatalogConnection, classify_openai_models
 from app.schemas.anthropic import AnthropicModel
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import ReasoningStyle
 from app.services.errors import InvalidInputError
 
 SERVER_URL = "http://localhost:8000"
@@ -184,16 +185,30 @@ class _StubClient:
 class TestAnthropicCapabilityDerivation:
     """Which parameters a Claude model accepts is read live, never shipped."""
 
-    def test_an_adaptive_thinking_model_is_offered_no_sampling_parameters(self) -> None:
-        """The generation that gained adaptive thinking rejects them with a 400."""
+    def test_an_adaptive_only_model_is_offered_no_sampling_parameters(self) -> None:
+        """A model publishing no `enabled` mode reasons on every turn, and
+        rejects temperature/top_p/top_k outright while it does."""
         model = AnthropicModel.model_validate(
             {
                 "id": "claude-opus-5",
                 "display_name": "Claude Opus 5",
                 "max_input_tokens": 1_000_000,
                 "capabilities": {
-                    "thinking": {"supported": True, "types": {"adaptive": {"supported": True}}},
-                    "effort": {"supported": True},
+                    "thinking": {
+                        "supported": True,
+                        "types": {
+                            "adaptive": {"supported": True},
+                            "enabled": {"supported": False},
+                        },
+                    },
+                    "effort": {
+                        "supported": True,
+                        "low": {"supported": True},
+                        "medium": {"supported": True},
+                        "high": {"supported": True},
+                        "xhigh": {"supported": True},
+                        "max": {"supported": True},
+                    },
                 },
             }
         )
@@ -202,8 +217,49 @@ class TestAnthropicCapabilityDerivation:
 
         assert "temperature" not in info.supported_parameters
         assert "top_p" not in info.supported_parameters
-        assert "reasoning" in info.supported_parameters
+        assert info.capabilities.reasoning is ReasoningStyle.BLOCK
+        # Effort levels come from the model's own tree — `xhigh`/`max` exist
+        # only on the newer generations, so a shipped list would be wrong.
+        assert info.capabilities.reasoning_efforts == [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+        ]
         assert info.context_length == 1_000_000
+
+    def test_a_model_publishing_both_modes_keeps_its_sampling_parameters(self) -> None:
+        """`adaptive` alone mislabels these: 4.6 publishes both modes and
+        still takes samplers when it is not asked to think."""
+        model = AnthropicModel.model_validate(
+            {
+                "id": "claude-sonnet-4-6",
+                "display_name": "Claude Sonnet 4.6",
+                "max_input_tokens": 200_000,
+                "capabilities": {
+                    "thinking": {
+                        "supported": True,
+                        "types": {
+                            "adaptive": {"supported": True},
+                            "enabled": {"supported": True},
+                        },
+                    },
+                    "effort": {
+                        "supported": True,
+                        "low": {"supported": True},
+                        "medium": {"supported": True},
+                        "high": {"supported": True},
+                        "max": {"supported": True},
+                    },
+                },
+            }
+        )
+
+        info = model_info_from_catalog(model)
+
+        assert "temperature" in info.supported_parameters
+        assert info.capabilities.reasoning_efforts == ["low", "medium", "high", "max"]
 
     def test_a_budgeted_thinking_model_keeps_its_sampling_parameters(self) -> None:
         """Haiku 4.5 still accepts them, so hiding them would remove real control."""
@@ -223,6 +279,9 @@ class TestAnthropicCapabilityDerivation:
 
         assert "temperature" in info.supported_parameters
         assert "top_k" in info.supported_parameters
+        # Thinking without effort: the model takes a budget, not a level.
+        assert info.capabilities.reasoning is ReasoningStyle.BLOCK
+        assert info.capabilities.reasoning_efforts == []
         assert info.name == "Claude Haiku 4.5"
 
 

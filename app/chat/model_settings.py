@@ -23,6 +23,7 @@ from app.providers.chat.base import ChatProvider
 from app.providers.registry import ProviderResolver
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import ProviderKind
+from app.schemas.models import ChatCapabilities
 from app.services.errors import InvalidInputError
 
 # Context-window fallback when the provider's model catalog does not report
@@ -51,16 +52,30 @@ def resolve_chat_provider(
 
 
 def _build_reasoning_request_options(
-    supported_parameters: list[str],
+    capabilities: ChatCapabilities,
     reasoning_override: dict[str, Any] | None,
     default_effort: str | None,
 ) -> dict[str, Any]:
     """Build reasoning options for the current model."""
     override_effort = reasoning_override.get("effort") if reasoning_override else None
-    options = build_reasoning_options(supported_parameters, override_effort or default_effort)
+    options = build_reasoning_options(capabilities, override_effort or default_effort)
     if reasoning_override and "reasoning" in options:
         options["reasoning"].update(reasoning_override)
     return options
+
+
+def _default_effort(capabilities: ChatCapabilities, configured: str | None) -> str | None:
+    """Pick the effort to use when the turn names none.
+
+    A model that publishes `none` documents it as its own default, and on
+    OpenAI's newest generation that is load-bearing: with any other level the
+    model reasons, and reasoning makes it reject `temperature` outright. For
+    every other model the answer is to say nothing and let the provider
+    apply whatever it defaults to.
+    """
+    if configured:
+        return configured
+    return "none" if "none" in capabilities.reasoning_efforts else None
 
 
 # Resolves model info, tool support, parameter overrides, reasoning options,
@@ -83,8 +98,8 @@ def prepare_model_settings(
     if not model_info:
         raise InvalidInputError(f"Selected model is not available on {connection_label}.")
     supported_parameters = model_info.supported_parameters or []
-    tool_supported = any(param.lower() == "tools" for param in supported_parameters)
-    if tools_enabled and not tool_supported:
+    capabilities = model_info.capabilities
+    if tools_enabled and not capabilities.tools:
         raise InvalidInputError(
             "Selected model does not support tool calls required for retrieval."
         )
@@ -95,15 +110,8 @@ def prepare_model_settings(
     if payload.parameters is not None and payload.parameters.extra_body:
         parameter_overrides["extra_body"] = payload.parameters.extra_body
     reasoning_override = prepare_reasoning_override(parameter_overrides.pop("reasoning", None))
-    # When the model's own effort levels include "none", that is its documented
-    # default — forcing "medium" would both change behavior the user never
-    # asked for and 400 any sampling parameter (OpenAI rejects `temperature`
-    # while reasoning is active). An explicit user/session choice still wins.
-    default_effort = reasoning_effort
-    if default_effort is None and "none" in (model_info.reasoning_efforts or []):
-        default_effort = "none"
     reasoning_options = _build_reasoning_request_options(
-        supported_parameters, reasoning_override, default_effort
+        capabilities, reasoning_override, _default_effort(capabilities, reasoning_effort)
     )
     provider_preferences = payload.provider.to_request_payload() if payload.provider else None
     context_window = model_info.context_length or DEFAULT_CONTEXT_WINDOW

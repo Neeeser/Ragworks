@@ -21,8 +21,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from app.providers.chat.dialects.chat_completions import DIALECT_FLOOR_CAPABILITIES
 from app.providers.openai_bundle import OpenAIModelBundle
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import ChatCapabilities
 from app.schemas.providers import CatalogModel
 
 #: Substring that marks an embedding model. OpenAI has named every one
@@ -77,11 +79,11 @@ def classify_openai_models(
 ) -> list[CatalogModel]:
     """Return the connection's models of one kind, qualified by the connection.
 
-    The bundle refines what it provably knows — context window, the
-    `reasoning` knob, effort levels, deprecation — and never subtracts more:
-    a model the bundle has never heard of keeps the full `chat_parameters`
-    floor, so a model OpenAI ships tomorrow appears with working parameters
-    rather than a blank panel.
+    Sampling knobs are the dialect's floor for every model — a knob the model
+    rejects surfaces the server's own error naming it. Capabilities come from
+    the bundle where it knows the model, and from the floor's deliberately
+    conservative defaults where it does not, because a wrong capability is a
+    400 the user cannot clear.
     """
     if kind is ProviderKind.EMBEDDING:
         selected = [model_id for model_id in model_ids if is_embedding_model(model_id)]
@@ -89,15 +91,16 @@ def classify_openai_models(
     else:
         selected = [model_id for model_id in model_ids if is_chat_model(model_id)]
         output_modalities = ["text"]
+    embedding = kind is ProviderKind.EMBEDDING
     models = []
     for model_id in sorted(selected):
         entry = bundle.lookup(model_id) if bundle else None
-        if kind is ProviderKind.EMBEDDING or entry is None:
-            parameters = [] if kind is ProviderKind.EMBEDDING else list(chat_parameters)
-            efforts = None
+        if embedding:
+            capabilities = ChatCapabilities()
+        elif entry is None:
+            capabilities = DIALECT_FLOOR_CAPABILITIES
         else:
-            parameters = [p for p in chat_parameters if p != "reasoning" or entry.reasoning]
-            efforts = entry.effort_options() or None
+            capabilities = entry.capabilities()
         models.append(
             CatalogModel(
                 connection_id=connection.id,
@@ -108,8 +111,8 @@ def classify_openai_models(
                 context_length=entry.context_window if entry else None,
                 input_modalities=list(entry.input_modalities) if entry else ["text"],
                 output_modalities=output_modalities,
-                supported_parameters=parameters,
-                reasoning_efforts=efforts,
+                supported_parameters=[] if embedding else list(chat_parameters),
+                capabilities=capabilities,
                 deprecated=entry.deprecated if entry else False,
             )
         )

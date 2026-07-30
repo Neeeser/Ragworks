@@ -20,12 +20,22 @@ from app.schemas.chat_parameters import (
     coerce_bool_parameter,
     coerce_numeric_parameter,
 )
+from app.schemas.models import ChatCapabilities, ReasoningStyle
 
-#: Every effort level any provider accepts: OpenAI's newer reasoning models
-#: add `none` and `xhigh` (published per model in the capability bundle's
-#: `reasoning_efforts`). Dropping an unknown level here would silently
-#: discard the user's picker choice on models that genuinely accept it.
-REASONING_EFFORT_OPTIONS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+#: Every effort level any provider accepts, across all of them: OpenAI adds
+#: `none`/`minimal`/`xhigh`, Anthropic adds `xhigh`/`max`. This gate only
+#: rejects nonsense — which levels a given model takes is published per model
+#: in `ChatCapabilities.reasoning_efforts`, and dropping a level here would
+#: silently discard a choice the model genuinely accepts.
+REASONING_EFFORT_OPTIONS = {
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+}
 
 
 def normalize_reasoning_effort(value: Any) -> str | None:
@@ -94,25 +104,29 @@ def sanitize_parameter_overrides(
 
 
 def build_reasoning_options(
-    supported_parameters: list[str] | None,
+    capabilities: ChatCapabilities,
     effort: str | None,
 ) -> dict[str, Any]:
-    """Build reasoning options compatible with the selected model."""
-    selected_effort = normalize_reasoning_effort(effort) or "medium"
+    """Build the normalized reasoning options for the selected model.
+
+    A model whose provider never claimed reasoning gets nothing: the block is
+    a capability claim, and sending one to a model without it is a hard 400
+    naming a field the user never set.
+
+    An effort is included only when one was actually chosen. Defaulting to a
+    level would both override the model's own default and, on OpenAI, switch
+    reasoning on for a turn the user meant to sample with `temperature` —
+    which that generation rejects while reasoning is active.
+    """
     options: dict[str, Any] = {}
-
-    if not supported_parameters:
-        # No catalog at all: send the block and let the server decide.
-        options["reasoning"] = {"effort": selected_effort}
+    if capabilities.reasoning is ReasoningStyle.NONE:
         return options
-
-    normalized = {param.lower() for param in supported_parameters}
-
-    if "reasoning" in normalized:
-        options["reasoning"] = {"effort": selected_effort}
-    elif "include_reasoning" in normalized:
+    if capabilities.reasoning is ReasoningStyle.INCLUDE_FLAG:
         options["include_reasoning"] = True
-    # A catalog that lists parameters but no reasoning marker positively says
-    # the model cannot reason — sending the block anyway 400s on OpenAI
-    # (`reasoning.effort` unsupported on non-reasoning models).
+        return options
+    block: dict[str, Any] = {}
+    selected_effort = normalize_reasoning_effort(effort)
+    if selected_effort:
+        block["effort"] = selected_effort
+    options["reasoning"] = block
     return options

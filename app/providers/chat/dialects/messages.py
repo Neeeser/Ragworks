@@ -1,13 +1,20 @@
 """The Anthropic Messages dialect.
 
-Two things are model-dependent and are read from Anthropic's own live
+Three things are model-dependent and are read from Anthropic's own live
 capability catalog rather than a shipped table: which thinking mode a model
-takes (`adaptive` on the 4.7-and-later generation, `enabled` with a token
-budget before that), and whether it still accepts sampling parameters — the
-same generation that gained adaptive thinking rejects `temperature`, `top_p`,
-and `top_k` outright. Deriving both from `GET /v1/models` is what makes a model
-released after this code was written work without an edit; a hardcoded list
-would start 400-ing the moment Anthropic ships the next family.
+takes (`adaptive`, or `enabled` with a token budget), which effort levels it
+accepts (low/medium/high, plus `max` from 4.6 and `xhigh` from the 5
+generation), and whether it accepts sampling parameters at all. Deriving all
+three from `GET /v1/models` is what makes a model released after this code
+was written work without an edit; a hardcoded list would start 400-ing the
+moment Anthropic ships the next family.
+
+Sampling support keys off whether the model publishes the `enabled` thinking
+mode. A model without it reasons on every turn and rejects `temperature`,
+`top_p`, and `top_k` outright; one with it can be asked to skip thinking and
+then accepts them. Thinking itself is opt-in for exactly that reason —
+switching it on unasked would spend a budget the user never chose and take
+the sampling knobs away with it.
 
 Streaming carries tool calls as a `content_block_start` announcing a `tool_use`
 block followed by `input_json_delta` fragments. Both are re-emitted in the
@@ -28,16 +35,15 @@ from app.schemas.anthropic import (
     MessagesResponse,
     MessagesStreamEvent,
 )
-from app.schemas.models import ModelInfo
+from app.schemas.models import ChatCapabilities, ModelInfo, ReasoningStyle
 
-#: Parameters every Claude model accepts.
-BASE_PARAMETERS: tuple[str, ...] = ("max_tokens", "stop", "tools", "reasoning")
+#: Sampling knobs every Claude model accepts. Capability claims (tools,
+#: reasoning) are not listed here — they are stated per model from the live
+#: catalog, on `ChatCapabilities`.
+BASE_PARAMETERS: tuple[str, ...] = ("max_tokens", "stop")
 
 #: Sampling parameters, offered only to models that still accept them.
 SAMPLING_PARAMETERS: tuple[str, ...] = ("temperature", "top_p", "top_k")
-
-#: Effort levels the Messages API accepts, in the app's own vocabulary.
-_EFFORT_VALUES = frozenset({"low", "medium", "high"})
 
 #: Share of a model's output ceiling given to thinking when a model needs an
 #: explicit budget. Anthropic requires the budget to be strictly below
@@ -48,15 +54,30 @@ _MIN_THINKING_BUDGET = 1024
 
 
 def model_info_from_catalog(model: AnthropicModel) -> ModelInfo:
-    """Build the shared `ModelInfo` from Anthropic's published capabilities."""
+    """Build the shared `ModelInfo` from Anthropic's published capabilities.
+
+    Sampling support keys off `thinking.types.enabled`, not `adaptive`. A
+    model that publishes no `enabled` mode reasons on every turn and rejects
+    `temperature`/`top_p`/`top_k` outright; one that publishes it can be
+    asked to skip thinking, and then takes them. Several models publish both
+    modes, which is why `adaptive` alone mislabels them in each direction.
+    """
+    thinking = model.capabilities.thinking
     supported = list(BASE_PARAMETERS)
-    if not model.capabilities.thinking.adaptive:
+    if thinking.budgeted:
         supported.extend(SAMPLING_PARAMETERS)
     return ModelInfo(
         id=model.id,
         name=model.display_name or model.id,
         context_length=model.max_input_tokens,
         supported_parameters=supported,
+        capabilities=ChatCapabilities(
+            tools=True,
+            reasoning=(
+                ReasoningStyle.BLOCK if thinking.supported else ReasoningStyle.NONE
+            ),
+            reasoning_efforts=model.capabilities.effort.levels,
+        ),
     )
 
 
@@ -100,12 +121,20 @@ class MessagesProvider:
     def _thinking(
         self, request: ChatRequest, entry: AnthropicModel | None, max_tokens: int
     ) -> dict[str, Any] | None:
-        """Map normalized reasoning options onto the model's thinking mode."""
-        options = request.reasoning_options or {}
-        reasoning = options.get("reasoning")
+        """Map normalized reasoning options onto the model's thinking mode.
+
+        Thinking is opt-in: Anthropic runs a turn happily without the block,
+        and switching it on unasked spends a thinking budget the user never
+        chose *and* makes the model reject `temperature`/`top_p`/`top_k` for
+        that turn. So a block goes out only when this turn actually asked for
+        one — an effort, or an explicit enable.
+        """
+        reasoning = (request.reasoning_options or {}).get("reasoning")
         if not isinstance(reasoning, dict):
             return None
         if reasoning.get("exclude") is True or reasoning.get("enabled") is False:
+            return None
+        if not reasoning.get("effort") and reasoning.get("enabled") is not True:
             return None
         capability = entry.capabilities.thinking if entry else None
         if capability is None or not capability.supported:
@@ -119,29 +148,33 @@ class MessagesProvider:
 
     @staticmethod
     def _effort(request: ChatRequest, entry: AnthropicModel | None) -> dict[str, Any] | None:
-        """Map a reasoning effort onto `output_config.effort` where supported."""
-        if entry is None or not entry.capabilities.effort.supported:
+        """Map a reasoning effort onto `output_config.effort` where supported.
+
+        Validated against the levels this model itself publishes: they differ
+        by generation, and sending one a model does not list is a 400.
+        """
+        if entry is None:
+            return None
+        levels = entry.capabilities.effort.levels
+        if not levels:
             return None
         reasoning = (request.reasoning_options or {}).get("reasoning")
         if not isinstance(reasoning, dict):
             return None
         effort = reasoning.get("effort")
-        if isinstance(effort, str) and effort in _EFFORT_VALUES:
+        if isinstance(effort, str) and effort in levels:
             return {"effort": effort}
         return None
 
     def _parameters(
         self, request: ChatRequest, entry: AnthropicModel | None
     ) -> dict[str, Any] | None:
-        """Build the extra request parameters, dropping the ones this model rejects."""
+        """Build the extra request parameters for this model."""
         parameters = dict(request.parameters or {})
         parameters.pop("max_tokens", None)
         stop = parameters.pop("stop", None)
         if stop:
             parameters["stop_sequences"] = stop
-        if entry is not None and entry.capabilities.thinking.adaptive:
-            for name in SAMPLING_PARAMETERS:
-                parameters.pop(name, None)
         effort = self._effort(request, entry)
         if effort is not None:
             parameters["output_config"] = effort

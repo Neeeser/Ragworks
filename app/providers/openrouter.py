@@ -102,6 +102,7 @@ class OpenRouterAdapter(ProviderAdapter):
                     pricing=model.pricing,
                     supported_parameters=model.supported_parameters,
                     default_parameters=model.default_parameters,
+                    capabilities=model.capabilities,
                 )
                 for model in snapshot.value
             ]

@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 from app.clients.openai_compat import OpenAICompatClient, ResponsesCall
 from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.providers.chat.dialects import responses_translation as tr
+from app.providers.chat.dialects.chat_completions import DIALECT_FLOOR_CAPABILITIES
 from app.schemas.models import ModelInfo
 from app.schemas.openai_responses import (
     REASONING_DELTA_EVENTS,
@@ -40,14 +41,14 @@ from app.services.errors import ExternalServiceError
 #: knobs outright (`frequency_penalty`, `presence_penalty`, `logit_bias`,
 #: `seed`, `stop`), so declaring the Chat Completions set here would offer
 #: users parameters that 400.
+#: Capability claims are deliberately absent — they are not knobs, and a
+#: floor cannot state them (see `DIALECT_FLOOR_CAPABILITIES`).
 RESPONSES_PARAMETERS: tuple[str, ...] = (
     "temperature",
     "top_p",
     "max_tokens",
     "top_logprobs",
     "response_format",
-    "reasoning",
-    "tools",
 )
 
 #: Chat Completions names that mean something different on Responses.
@@ -84,6 +85,7 @@ class ResponsesProvider:
             id=model_id,
             name=model_id,
             supported_parameters=list(self.supported_parameters),
+            capabilities=DIALECT_FLOOR_CAPABILITIES,
         )
 
     @staticmethod
@@ -190,6 +192,16 @@ class ResponsesProvider:
             return self._tool_call_started(event)
         if event.type == "response.function_call_arguments.delta":
             return self._tool_call_arguments(event)
+        if event.type == "error":
+            # A mid-stream failure arrives as its own event and the SDK does
+            # not raise for it (its check is a top-level `error` key, which
+            # this frame has no room for). Left unhandled the stream simply
+            # ends, and the run loop finalizes the truncated partial as a
+            # complete answer with no usage — a failed turn stored, and
+            # reported, as a successful one.
+            raise ExternalServiceError(
+                event.message or "OpenAI reported a stream error."
+            )
         if event.type in TERMINAL_EVENTS:
             return self._terminal(event)
         return None

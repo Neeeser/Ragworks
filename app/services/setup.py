@@ -40,6 +40,7 @@ from app.providers.registry import build_adapter, get_provider, resolve_connecti
 from app.schemas.enums import ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
 from app.services.collection_tools import CollectionToolService
+from app.services.connections import connection_kinds
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_scaffolding import register_definition_indexes
 from app.services.pipeline_defaults import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
@@ -120,10 +121,14 @@ class SetupService:
             coverage[ProviderKind.VECTOR_STORE] = True
         for connection in ProviderConnectionRepository(self.session).list_for_user(user.id):
             try:
-                descriptor = build_adapter(connection).descriptor
+                adapter = build_adapter(connection)
             except InvalidInputError:
                 continue
-            for kind in descriptor.kinds:
+            # The connection's real capabilities, not its provider type's:
+            # a custom server saved as embeddings-only would otherwise satisfy
+            # the chat gate, and the wizard would hand the user a finished
+            # console whose model picker is empty.
+            for kind in connection_kinds(adapter):
                 coverage[kind] = True
         return coverage
 

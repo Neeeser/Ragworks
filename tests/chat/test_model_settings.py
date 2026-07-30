@@ -7,7 +7,7 @@ from uuid import uuid4
 from app.chat.model_settings import prepare_model_settings
 from app.db import models
 from app.schemas.chat import ChatMessageCreate
-from app.schemas.models import ModelInfo
+from app.schemas.models import ChatCapabilities, ModelInfo, ReasoningStyle
 
 
 class _Provider:
@@ -31,12 +31,16 @@ def _settings(info: ModelInfo, *, reasoning_effort: str | None = None):
     )
 
 
-def _info(efforts: list[str] | None) -> ModelInfo:
+def _info(efforts: list[str]) -> ModelInfo:
     return ModelInfo(
         id="m",
         name="m",
-        supported_parameters=["temperature", "reasoning", "tools"],
-        reasoning_efforts=efforts,
+        supported_parameters=["temperature"],
+        capabilities=ChatCapabilities(
+            tools=True,
+            reasoning=ReasoningStyle.BLOCK,
+            reasoning_efforts=efforts,
+        ),
     )
 
 
@@ -48,9 +52,11 @@ def test_model_whose_efforts_include_none_defaults_to_none() -> None:
     assert settings.reasoning_options["reasoning"]["effort"] == "none"
 
 
-def test_model_without_a_none_level_keeps_the_medium_default() -> None:
+def test_model_without_a_none_level_names_no_effort_at_all() -> None:
+    """Saying nothing leaves the model on its own default; inventing `medium`
+    would override a choice the user never made."""
     settings = _settings(_info(["low", "medium", "high"]))
-    assert settings.reasoning_options["reasoning"]["effort"] == "medium"
+    assert settings.reasoning_options == {"reasoning": {}}
 
 
 def test_explicit_session_effort_beats_the_model_default() -> None:
@@ -61,10 +67,26 @@ def test_explicit_session_effort_beats_the_model_default() -> None:
 
 
 def test_non_reasoning_model_gets_no_reasoning_block_at_all() -> None:
-    """A catalog that lists parameters but no reasoning marker positively says
-    the model cannot reason; sending the block 400s on OpenAI."""
+    """A model whose provider never claimed reasoning must not be sent a
+    block: it is a hard 400 naming a field the user never set."""
     info = ModelInfo(
-        id="m", name="m", supported_parameters=["temperature", "tools"]
+        id="m",
+        name="m",
+        supported_parameters=["temperature"],
+        capabilities=ChatCapabilities(tools=True),
     )
     settings = _settings(info)
     assert settings.reasoning_options == {}
+
+
+def test_a_model_with_no_published_efforts_still_reasons_when_asked() -> None:
+    """Anthropic's budget-thinking models publish no effort levels; the
+    reasoning claim alone must still reach the provider."""
+    info = ModelInfo(
+        id="m",
+        name="m",
+        supported_parameters=["temperature"],
+        capabilities=ChatCapabilities(tools=True, reasoning=ReasoningStyle.BLOCK),
+    )
+    settings = _settings(info, reasoning_effort=None)
+    assert settings.reasoning_options == {"reasoning": {}}

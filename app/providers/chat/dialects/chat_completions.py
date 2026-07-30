@@ -18,13 +18,16 @@ from pydantic import ValidationError
 from app.clients.openai_compat import ChatCall, OpenAICompatClient
 from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.schemas.chat_completions import ChatCompletionChunk, ChatCompletionResponse
-from app.schemas.models import ModelInfo
+from app.schemas.models import ChatCapabilities, ModelInfo
 
 #: Sampling parameters the Chat Completions wire format accepts. Declared by
 #: the dialect rather than per model: an OpenAI-compatible server publishes no
 #: per-model parameter list, so what the format accepts is the only honest
 #: answer. A model that rejects one returns its own error naming the parameter,
 #: which beats a picker that hides a knob the model actually supports.
+#:
+#: Capability claims are deliberately absent — they are not knobs, and a floor
+#: cannot state them (see `DIALECT_FLOOR_CAPABILITIES`).
 CHAT_COMPLETIONS_PARAMETERS: tuple[str, ...] = (
     "temperature",
     "top_p",
@@ -37,8 +40,18 @@ CHAT_COMPLETIONS_PARAMETERS: tuple[str, ...] = (
     "logprobs",
     "top_logprobs",
     "response_format",
-    "tools",
 )
+
+#: What a dialect may claim for a model whose provider publishes nothing.
+#:
+#: The two capabilities fail differently, so they default differently. Guess
+#: `tools` wrong and the server answers naming the field, and the user can
+#: turn retrieval off — while guessing it *absent* locks every collection
+#: tool out of a server that supports them, with no override anywhere. Guess
+#: `reasoning` wrong and every turn carries a block the server rejects, which
+#: no setting can undo; a server that does reason simply shows no reasoning
+#: text until its catalog says so.
+DIALECT_FLOOR_CAPABILITIES = ChatCapabilities(tools=True)
 
 ModelResolver = Callable[[str], ModelInfo | None]
 
@@ -75,6 +88,7 @@ class ChatCompletionsProvider:
             id=model_id,
             name=model_id,
             supported_parameters=list(self.supported_parameters),
+            capabilities=DIALECT_FLOOR_CAPABILITIES,
         )
 
     def build_extra_body(self, request: ChatRequest) -> dict[str, Any] | None:

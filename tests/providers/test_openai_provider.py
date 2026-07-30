@@ -19,9 +19,10 @@ from app.providers.openai_bundle import (
 )
 from app.providers.openai_catalog import CatalogConnection, classify_openai_models
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import ReasoningStyle
 from app.services.errors import ExternalServiceError
 
-FLOOR = ["temperature", "top_p", "max_tokens", "reasoning", "tools"]
+FLOOR = ["temperature", "top_p", "max_tokens"]
 
 
 def _bundle_entry(*, deprecated: bool) -> BundleModel:
@@ -59,25 +60,49 @@ def _chat_catalog(ids: list[str]) -> dict[str, Any]:
 
 
 class TestBundleRefinedCatalog:
-    def test_non_reasoning_model_loses_only_the_reasoning_knob(self) -> None:
+    def test_non_reasoning_model_claims_no_reasoning_capability(self) -> None:
         model = _chat_catalog(["gpt-4.1"])["gpt-4.1"]
-        assert "reasoning" not in model.supported_parameters
-        assert set(model.supported_parameters) == set(FLOOR) - {"reasoning"}
+        assert model.capabilities.reasoning is ReasoningStyle.NONE
+        assert model.capabilities.tools is True
+        # Knobs are the dialect floor either way — only the claim differs.
+        assert set(model.supported_parameters) == set(FLOOR)
 
-    def test_reasoning_model_keeps_the_knob_and_reports_effort_levels(self) -> None:
+    def test_reasoning_model_claims_it_and_reports_effort_levels(self) -> None:
         model = _chat_catalog(["gpt-5.4-nano"])["gpt-5.4-nano"]
-        assert "reasoning" in model.supported_parameters
-        assert model.reasoning_efforts == ["none", "low", "medium", "high", "xhigh"]
+        assert model.capabilities.reasoning is ReasoningStyle.BLOCK
+        assert model.capabilities.reasoning_efforts == [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+        ]
 
     def test_context_window_comes_from_the_bundle(self) -> None:
         model = _chat_catalog(["gpt-4.1"])["gpt-4.1"]
         assert model.context_length == 1_047_576
 
-    def test_unknown_model_keeps_the_full_floor(self) -> None:
-        """A model OpenAI ships tomorrow appears with working parameters."""
+    def test_unknown_model_keeps_the_knob_floor_but_claims_no_reasoning(self) -> None:
+        """A model OpenAI ships tomorrow keeps working knobs — but a guessed
+        reasoning block would 400 every turn with nothing for the user to
+        clear, so the claim stays off until the bundle says otherwise."""
         model = _chat_catalog(["some-future-model-9"])["some-future-model-9"]
         assert model.supported_parameters == FLOOR
+        assert model.capabilities.reasoning is ReasoningStyle.NONE
+        assert model.capabilities.tools is True
         assert model.context_length is None
+
+    def test_a_snapshot_id_the_date_rule_misses_resolves_through_snapshots(self) -> None:
+        """`gpt-4-0613` is a snapshot without a dated suffix; missing it sent
+        a reasoning block to a model that has none."""
+        model = _chat_catalog(["gpt-4-0613"])["gpt-4-0613"]
+        assert model.context_length is not None
+        assert model.capabilities.reasoning is ReasoningStyle.NONE
+
+    def test_a_fine_tuned_id_inherits_its_base_model(self) -> None:
+        info = load_openai_bundle().lookup("ft:gpt-4.1:acme::abc123")
+        assert info is not None
+        assert info.context_window == 1_047_576
 
     def test_deprecated_models_sink_to_the_end_but_stay_listed(self) -> None:
         # Synthetic bundle: the live listing currently has no deprecated-marked
@@ -115,7 +140,7 @@ class TestAdapterModelResolver:
     def test_known_model_resolves_real_context_window(self) -> None:
         info = self._adapter()._resolve_model("gpt-4.1")
         assert info.context_length == 1_047_576
-        assert "reasoning" not in info.supported_parameters
+        assert info.capabilities.reasoning is ReasoningStyle.NONE
 
     def test_snapshot_id_resolves_through_its_base_model(self) -> None:
         info = self._adapter()._resolve_model("gpt-4.1-2025-04-14")
@@ -126,6 +151,7 @@ class TestAdapterModelResolver:
         info = self._adapter()._resolve_model("some-future-model-9")
         assert info.context_length is None
         assert "temperature" in info.supported_parameters
+        assert info.capabilities.reasoning is ReasoningStyle.NONE
 
 
 def _request(
@@ -225,3 +251,20 @@ class TestResponsesFailureSurfaces:
         }
         with pytest.raises(ExternalServiceError, match="Upstream fell over"):
             self._provider().parse_stream_chunk(event)
+
+
+class TestStreamErrorEvent:
+    """A mid-stream failure must not be stored as a finished answer."""
+
+    def test_error_event_raises_instead_of_ending_the_stream_quietly(self) -> None:
+        """The SDK does not raise for this frame (its check is a top-level
+        `error` key). Swallowed, the run loop finalizes the truncated partial
+        as a complete assistant message with no usage."""
+        provider = ResponsesProvider(object(), name="openai")  # type: ignore[arg-type]
+        event = {
+            "type": "error",
+            "code": "rate_limit_exceeded",
+            "message": "Rate limit reached.",
+        }
+        with pytest.raises(ExternalServiceError, match="Rate limit reached"):
+            provider.parse_stream_chunk(event)

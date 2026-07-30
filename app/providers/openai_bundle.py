@@ -17,11 +17,13 @@ a conservative context default.
 from __future__ import annotations
 
 import json
-from functools import cache
+from functools import cache, cached_property
 from pathlib import Path
 from re import sub
 
 from pydantic import BaseModel
+
+from app.schemas.models import ChatCapabilities, ReasoningStyle
 
 _BUNDLE_PATH = Path(__file__).parent / "openai_model_bundle.json"
 
@@ -61,6 +63,19 @@ class BundleModel(BaseModel):
             return []
         return self.reasoning_efforts or list(DEFAULT_REASONING_EFFORTS)
 
+    def capabilities(self) -> ChatCapabilities:
+        """State this model's capabilities from what the docs page published.
+
+        The single place the bundle is turned into capability claims — the
+        catalog listing and the per-turn resolver both read it, so a new
+        capability cannot land in one and be forgotten in the other.
+        """
+        return ChatCapabilities(
+            tools=self.function_calling,
+            reasoning=ReasoningStyle.BLOCK if self.reasoning else ReasoningStyle.NONE,
+            reasoning_efforts=self.effort_options(),
+        )
+
 
 class OpenAIModelBundle(BaseModel):
     """The shipped bundle: models by base id, plus ids the docs never covered."""
@@ -70,13 +85,36 @@ class OpenAIModelBundle(BaseModel):
     models: dict[str, BundleModel]
     unresolved: list[str]
 
+    @cached_property
+    def _by_snapshot(self) -> dict[str, BundleModel]:
+        """Index every snapshot id each entry names onto that entry.
+
+        Snapshot ids do not all share one spelling — `gpt-4.1-2025-04-14` is
+        dated, `gpt-4-0613` and `gpt-3.5-turbo-0125` are not — so stripping a
+        date pattern reaches only some of them. The entries list their own,
+        which is the authoritative answer.
+        """
+        return {
+            snapshot: entry
+            for entry in self.models.values()
+            for snapshot in entry.snapshots
+        }
+
     def lookup(self, model_id: str) -> BundleModel | None:
-        """Resolve an id, following dated snapshots onto their base entry."""
+        """Resolve an id, following snapshots and fine-tunes to their base."""
         entry = self.models.get(model_id)
         if entry is not None:
             return entry
-        base_id = sub(r"-\d{4}-\d{2}-\d{2}$", "", model_id)
-        return self.models.get(base_id)
+        # `ft:<base>:<org>::<id>` — a fine-tune inherits its base's capabilities.
+        if model_id.startswith("ft:"):
+            model_id = model_id.split(":")[1] if ":" in model_id[3:] else model_id[3:]
+            entry = self.models.get(model_id)
+            if entry is not None:
+                return entry
+        snapshot_entry = self._by_snapshot.get(model_id)
+        if snapshot_entry is not None:
+            return snapshot_entry
+        return self.models.get(sub(r"-\d{4}-\d{2}-\d{2}$", "", model_id))
 
 
 @cache

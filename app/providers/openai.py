@@ -14,6 +14,7 @@ from app.providers.chat.dialects import (
     RESPONSES_PARAMETERS,
     ResponsesProvider,
 )
+from app.providers.chat.dialects.chat_completions import DIALECT_FLOOR_CAPABILITIES
 from app.providers.openai_bundle import load_openai_bundle
 from app.providers.openai_catalog import CatalogConnection, classify_openai_models
 from app.retrieval.embedders.base import Embedder
@@ -141,10 +142,11 @@ class OpenAIAdapter(ProviderAdapter):
         """Resolve chat-model metadata from the shipped capability bundle.
 
         The bundle is not the account catalog — `/v1/models` is — so an id it
-        has never heard of still resolves, to the full Responses floor and no
-        context claim (the chat loop applies its conservative default). A
-        model OpenAI ships after the bundle was generated must keep working;
-        a retired id fails at inference with OpenAI's own message.
+        has never heard of still resolves, to the full Responses floor with
+        the floor's conservative capabilities and no context claim (the chat
+        loop applies its default). A model OpenAI ships after the bundle was
+        generated must keep working; a retired id fails at inference with
+        OpenAI's own message.
         """
         entry = load_openai_bundle().lookup(model_id)
         if entry is None:
@@ -152,16 +154,14 @@ class OpenAIAdapter(ProviderAdapter):
                 id=model_id,
                 name=model_id,
                 supported_parameters=self._chat_parameters(),
+                capabilities=DIALECT_FLOOR_CAPABILITIES,
             )
-        parameters = [
-            p for p in self._chat_parameters() if p != "reasoning" or entry.reasoning
-        ]
         return ModelInfo(
             id=model_id,
             name=entry.display_name or model_id,
             context_length=entry.context_window,
-            supported_parameters=parameters,
-            reasoning_efforts=entry.effort_options() or None,
+            supported_parameters=self._chat_parameters(),
+            capabilities=entry.capabilities(),
         )
 
     def chat_provider(self) -> ChatProvider:

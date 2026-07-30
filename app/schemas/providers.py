@@ -14,11 +14,15 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.models import ModelPricing
+from app.schemas.models import (
+    ChatCapabilities,
+    ModelPricing,
+    normalize_capability_markers,
+)
 
 
 class ConfigFieldKind(StrEnum):
@@ -173,14 +177,19 @@ class CatalogModel(BaseModel):
     dimension: int | None = None
     input_modalities: list[str] = Field(default_factory=list)
     output_modalities: list[str] = Field(default_factory=list)
+    #: Sampling knobs only — capability markers are split out on construction.
     supported_parameters: list[str] = Field(default_factory=list)
     default_parameters: dict[str, Any] | None = None
-    #: Effort levels the model's reasoning accepts, where the provider
-    #: publishes them; None keeps the UI's generic effort list.
-    reasoning_efforts: list[str] | None = None
+    capabilities: ChatCapabilities = Field(default_factory=ChatCapabilities)
     #: True when the provider's own catalog marks the model deprecated —
     #: ordered last in pickers, never filtered out.
     deprecated: bool = False
+
+    @model_validator(mode="after")
+    def _split_markers(self) -> CatalogModel:
+        """Keep capability claims out of the sampling-knob list."""
+        normalize_capability_markers(self)
+        return self
 
 
 class ConnectionCatalogError(BaseModel):

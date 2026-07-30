@@ -120,12 +120,38 @@ class ThinkingCapability(BaseModel):
         return self.types.get("enabled", ThinkingTypeSupport()).supported
 
 
+#: Effort levels Anthropic has published a per-level block for. Read as an
+#: allowlist of *names to look for* in the model's own tree, never as a claim
+#: about any model — each level is reported per model and a model that omits
+#: one does not accept it.
+EFFORT_LEVEL_NAMES: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+
+
 class EffortCapability(BaseModel):
-    """A model's `output_config.effort` capability block."""
+    """A model's `output_config.effort` capability block.
+
+    Anthropic publishes one nested `{"supported": bool}` per level beside the
+    top-level flag, and the levels genuinely differ per model — the 4.5
+    generation takes low/medium/high, 4.6 adds `max`, and the 5 generation
+    adds `xhigh` too. Reading them is what keeps effort out of a shipped
+    table that would be wrong the day the next family ships.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     supported: bool = False
+
+    @property
+    def levels(self) -> list[str]:
+        """The effort levels this model publishes as supported."""
+        if not self.supported:
+            return []
+        extra = self.model_extra or {}
+        return [
+            name
+            for name in EFFORT_LEVEL_NAMES
+            if isinstance(extra.get(name), dict) and extra[name].get("supported") is True
+        ]
 
 
 class ModelCapabilities(BaseModel):

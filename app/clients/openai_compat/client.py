@@ -25,7 +25,6 @@ from app.schemas.chat_completions import (
     EmbeddingsResponse,
     RerankResponse,
 )
-from app.schemas.models import ModelInfo
 from app.schemas.openai_responses import ResponsesResponse, ResponsesStreamEvent
 
 
@@ -111,13 +110,6 @@ class OpenAICompatClient:
         """Return the model ids the endpoint publishes."""
         return catalog.list_model_ids(self._transport)
 
-    def list_models(
-        self, *, supported_parameters: list[str] | None = None
-    ) -> list[ModelInfo]:
-        """Return published models as `ModelInfo`."""
-        return catalog.list_models(
-            self._transport, supported_parameters=supported_parameters
-        )
 
     def probe(self) -> probe.ServerProbe:
         """Discover which surfaces this endpoint serves."""

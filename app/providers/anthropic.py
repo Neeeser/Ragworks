@@ -117,6 +117,7 @@ class AnthropicAdapter(ProviderAdapter):
                     input_modalities=["text"],
                     output_modalities=["text"],
                     supported_parameters=info.supported_parameters,
+                    capabilities=info.capabilities,
                 )
             )
         return CatalogResult(

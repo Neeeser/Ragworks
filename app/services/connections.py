@@ -52,8 +52,14 @@ PGVECTOR_BUILTIN_TYPE = "pgvector"
 logger = logging.getLogger(__name__)
 
 
-def _connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
-    """Return actual capabilities, retaining Settings access during outages."""
+def connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
+    """Return actual capabilities, retaining Settings access during outages.
+
+    The one answer to "what does this connection serve". A caller reading the
+    *descriptor* instead gets what the provider type could serve, which for a
+    custom server is every kind it might be configured for — so an
+    embeddings-only server reads as a chat provider too.
+    """
     try:
         return adapter.kinds
     except Exception as exc:
@@ -135,7 +141,7 @@ def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
         id=connection.id,
         provider_type=ProviderType(connection.provider_type),
         label=connection.label,
-        kinds=list(descriptor.kinds if adapter is None else _connection_kinds(adapter)),
+        kinds=list(descriptor.kinds if adapter is None else connection_kinds(adapter)),
         config_valid=adapter is not None,
         config=public_config,
         secrets_configured=secrets_configured,
@@ -176,7 +182,7 @@ class ConnectionService:
                 adapter = build_adapter(row)
             except InvalidInputError:
                 continue
-            kinds.update(_connection_kinds(adapter))
+            kinds.update(connection_kinds(adapter))
         return ProviderCoverage(
             has_embedding=ProviderKind.EMBEDDING in kinds,
             has_chat=ProviderKind.CHAT in kinds,

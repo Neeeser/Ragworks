@@ -169,18 +169,12 @@ class OllamaChatProvider:
 
     @staticmethod
     def _build_options(request: ChatRequest) -> dict[str, Any] | None:
-        """Map sanitized parameter overrides onto Ollama `options`.
-
-        Ollama's request body is fixed, so the user's `extra_body` merges
-        into `options` — the one open-ended surface it exposes — last, over
-        the mapped sampler parameters.
-        """
+        """Map sanitized parameter overrides onto Ollama `options`."""
         options = {
             _OPTION_KEY_MAP.get(key, key): value
             for key, value in (request.parameters or {}).items()
             if key in OLLAMA_SAMPLER_PARAMETERS
         }
-        options.update(request.extra_body or {})
         return options or None
 
     def chat(self, request: ChatRequest) -> dict[str, Any]:
@@ -191,6 +185,7 @@ class OllamaChatProvider:
             tools=request.tools,
             options=self._build_options(request),
             think=self._resolve_think(request),
+            extra_body=request.extra_body or None,
         )
         return response.model_dump(exclude_none=True)
 
@@ -202,6 +197,7 @@ class OllamaChatProvider:
             tools=request.tools,
             options=self._build_options(request),
             think=self._resolve_think(request),
+            extra_body=request.extra_body or None,
         ):
             yield chunk.model_dump(exclude_none=True)
 

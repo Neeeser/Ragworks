@@ -35,12 +35,14 @@ from app.providers.chat.dialects import (
     ChatCompletionsProvider,
     ResponsesProvider,
 )
+from app.providers.chat.dialects.chat_completions import DIALECT_FLOOR_CAPABILITIES
 from app.providers.openai_catalog import is_chat_model, is_embedding_model
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openai_compat_embedder import OpenAICompatEmbedder
 from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.openai_compat import OpenAICompatReranker
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.models import ChatCapabilities
 from app.schemas.provider_configs import (
     OPENAI_COMPAT_DEFAULT_PORT,
     ChatDialect,
@@ -273,6 +275,11 @@ class CustomAdapter(ProviderAdapter):
                 input_modalities=["text"],
                 output_modalities=[modality],
                 supported_parameters=parameters,
+                capabilities=(
+                    DIALECT_FLOOR_CAPABILITIES
+                    if kind is ProviderKind.CHAT
+                    else ChatCapabilities()
+                ),
             )
             for model_id in model_ids
         ]
