@@ -111,7 +111,7 @@ failing-then-passing test is incomplete.
 
 # Pull requests
 
-- Work on a branch; merge to `main` via PR. Keep PRs to one concern.
+- Work on a branch; merge to `main` via PR.
 - The PR title follows the commit-subject convention, and the description links
   the issue (`Refs #N` / `Closes #N`).
 - **The description is a short narrative of what changed and why — decisions, not
