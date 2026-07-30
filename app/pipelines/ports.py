@@ -59,6 +59,14 @@ class NodePort(BaseModel):
     - `preserves` (outputs): the output keeps the facets its items input
       guaranteed (intersection across inbound edges), plus `adds`. A
       non-preserving output guarantees exactly `adds` — its items are new.
+
+    `preserves` deliberately reads the intersection of *all* the node's
+    items inputs, not a named one: every current node has at most one items
+    output, and a per-input binding is a parameter no caller needs yet. A
+    future node with two items inputs feeding two per-input preserving
+    outputs would extend `preserves` to name its input port — in both
+    implementations plus the shared vectors, like any facet semantics
+    change.
     """
 
     key: str

@@ -6,7 +6,9 @@
  * Facets are per-item guarantees carried by `items` streams (`text`,
  * `embedding`, `score`). A port's effective guarantees depend on everything
  * upstream — a preserving node forwards whatever its input guaranteed — so
- * facet compatibility is a graph property, not a pairwise port check. The
+ * facet compatibility is a graph property, not a pairwise port check.
+ * `preserves` reads the intersection of all the node's items inputs (see the
+ * scope note on `NodePort` in `app/pipelines/ports.py`). The
  * shared vectors in `tests/assets/facet_vectors.json` pin this
  * implementation and the backend's together; a semantics change lands in
  * both plus the vectors, never one side.
