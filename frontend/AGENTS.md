@@ -236,7 +236,7 @@ the same PR.
   Dead code costs every future reader.
 - **A control character in source is written as an escape (`\u0000`), never as a raw
   byte.** Webpack's dev chunks wrap each module in `eval("…")`, and SWC emits a raw
-  source byte as a `\u0000` escape *inside that outer string* — so `eval` hands the
+  source byte as a `\u0000` escape _inside that outer string_ — so `eval` hands the
   parser a literal control character. V8 tolerates it, SpiderMonkey aborts the script
   ("literal not terminated before end of script") and every route whose chunk includes
   the module dies in Firefox only. Nothing else in the gate sees it: esbuild, vitest,
