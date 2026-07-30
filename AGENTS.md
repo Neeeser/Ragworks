@@ -75,6 +75,18 @@ the bug's reason, then apply the fix and watch it pass. This is how the test sui
 grows: on things we know were broken, not on coverage padding. A bug fix PR with no
 failing-then-passing test is incomplete.
 
+# Branches
+
+- Branch names are `type/short-slug`, with `type` drawn from the commit types
+  (`feat/`, `fix/`, `test/`, `docs/`, `refactor/`, `chore/`, `ci/`) — one
+  convention across branch, commit subject, and PR title, so history reads as one
+  system.
+- Never open a PR from an auto-generated `claude/<slug>-<hash>` branch — the
+  harness names worktree branches before any instruction loads, so the rule
+  targets the outcome: push with `git push origin HEAD:refs/heads/type/slug` and
+  open the PR from the clean name, while continuing to work locally on the
+  auto-named branch.
+
 # Commits
 
 - Subjects are conventional-commit style with a scope: `type(scope): summary`, e.g.
@@ -85,17 +97,43 @@ failing-then-passing test is incomplete.
 - Never use the `!` breaking marker (`feat!:`) — breaking changes are flagged with
   the `breaking` PR label, which is what release notes are built from.
 - Imperative mood, no trailing period, ≤72 characters. Add a body when the *why*
-  isn't obvious from the subject.
+  isn't obvious from the subject: one short paragraph wrapped at 72 characters,
+  stating the why — never a file inventory, which restates what the diff already
+  shows.
+- No AI attribution trailers (`Generated with Claude Code`, `Co-Authored-By:
+  Claude`) in commits or PR descriptions — commits read as project work.
 - Commit as you go on a branch: small, coherent commits per logical step — never one
   squashed mega-commit at the end of the work.
 - A bug fix and its regression test share one commit (see above).
+- When squash-merging, replace GitHub's default body (which concatenates every
+  branch commit) with a paragraph or two of the why, distilled from the PR
+  description — branch commits keep the detail; `main`'s history stays readable.
 
 # Pull requests
 
 - Work on a branch; merge to `main` via PR. Keep PRs to one concern.
-- The PR title follows the commit-subject convention. The description states what
-  changed, why, and how it was verified (name the gates you ran), and links the
-  issue (`Refs #N` / `Closes #N`).
+- The PR title follows the commit-subject convention, and the description links
+  the issue (`Refs #N` / `Closes #N`).
+- **The description is a short narrative of what changed and why — decisions, not
+  inventory.** A few paragraphs of prose covering what changed, why it was needed
+  (unless the linked issue already carries the why), and the judgment calls made
+  along the way — the user's and the agent's alike, written as one voice — with
+  their reasoning inline, so a future reader learns why the code is the way it is.
+  No bullet-per-file listings, nothing the diff already shows, no test-count or
+  coverage recitation — padding buries the decisions the description exists to
+  record. "What changed" / "Why" / "Verification" is the natural heading shape,
+  not a mandatory template; these rules calibrate agents, and a human writing a
+  PR keeps their freedom.
+- **Verification is 2–3 lines** naming the gates run (`make verify`,
+  `npm run verify`, …) and any live sandbox/browser testing.
+- **Never hard-wrap the description.** GitHub renders single newlines in PR and
+  issue bodies as real line breaks, so a body wrapped at 72/80 characters renders
+  with ragged mid-sentence breaks. Each paragraph is one line.
+- **The description is one living document.** After review rounds, follow-up
+  commits, or merging `main`, rewrite it in place so it always describes the
+  final state of the branch — never append "post-review updates" or
+  changelog-of-the-PR sections, which turn the record of the change into a diary
+  of its review.
 - If a change spans the API contract (backend schemas + frontend types), update both
   sides in the same PR so they can't drift — and say so in the description. Same for
   the `docker-compose.yml` ↔ README mirror (below).
