@@ -267,6 +267,51 @@ class TestExpressions:
         )
         assert "expression_static_only" not in _codes(definition)
 
+    def test_taint_propagates_through_a_sibling_config_field(self) -> None:
+        """An identity field must not launder caller input through a sibling.
+
+        A per-request index name returns nothing rather than failing, so
+        nothing downstream would ever surface this.
+        """
+        node = PipelineNodeDefinition(
+            id="retriever",
+            type="retriever.vector",
+            name="Retriever",
+            config={
+                "namespace": {"$expr": "'ns-' + suffix"},
+                "index_name": {"$expr": "'idx-' + self.namespace"},
+            },
+        )
+        definition = _definition(
+            arguments=[PipelineInputArgument(name="suffix", type=VariableType.STRING, default="a")],
+            nodes=[node],
+        )
+
+        issues = collect_variable_issues(definition, default_registry())
+
+        taint = {
+            issue.field: issue
+            for issue in issues
+            if issue.code == "expression_static_only"
+        }
+        # `namespace` is an identity field too, so it flags on the direct
+        # reference; `index_name` flags only because taint crossed the sibling.
+        assert set(taint) == {"namespace", "index_name"}
+        assert "self.namespace" in taint["index_name"].message
+
+    def test_a_constant_sibling_does_not_taint_an_identity_field(self) -> None:
+        node = PipelineNodeDefinition(
+            id="retriever",
+            type="retriever.vector",
+            name="Retriever",
+            config={
+                "namespace": {"$expr": "'ns-' + collection_id"},
+                "index_name": {"$expr": "'idx-' + self.namespace"},
+            },
+        )
+
+        assert "expression_static_only" not in _codes(_definition(nodes=[node]))
+
     def test_taint_propagates_through_derived_variable(self) -> None:
         node = PipelineNodeDefinition(
             id="retriever",

@@ -60,6 +60,16 @@ class IndexValue(BaseModel):
 ExprValue = int | float | str | bool | ModelValue | IndexValue
 """Runtime values an expression can produce or reference."""
 
+SELF_SCOPE = "self"
+"""Qualifier for a node's *own* config fields: `self.chunk_size`.
+
+A scope, not a value — there is no `self` variable to read, and its members
+are the config fields of whichever node the expression sits on, so they vary
+per node rather than coming from a fixed member map. Qualifying is what makes
+scope readable without knowing the node's schema, and it is why adding a
+pipeline variable can never change what an existing node computes.
+"""
+
 MODEL_MEMBERS: dict[str, ExprType] = {
     "connection_id": ExprType.STRING,
     "model_name": ExprType.STRING,
@@ -103,3 +113,8 @@ def value_type(value: ExprValue) -> ExprType:
     if isinstance(value, IndexValue):
         return ExprType.INDEX
     return ExprType.MODEL
+
+
+def is_assignable(result: ExprType, expected: ExprType) -> bool:
+    """Integer results satisfy number fields; everything else matches exactly."""
+    return result is expected or (result is ExprType.INTEGER and expected is ExprType.NUMBER)

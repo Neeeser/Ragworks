@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.pipelines.backend_support import backend_support_issues
@@ -9,16 +12,15 @@ from app.pipelines.definition import (
     PipelineDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.embedding_limits import embedding_limit_issues
 from app.pipelines.facets import EdgeRef, NodePorts, facet_issues
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition, strip_expressions
-from app.pipelines.validation_limits import (
-    EmbeddingInputLimitResolver,
-    check_embedding_input_limits,
-)
 from app.pipelines.validation_variables import collect_variable_issues
+
+EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
 
 
 class PipelineValidationResult(BaseModel):
@@ -67,9 +69,7 @@ class PipelineValidator:
         hook_definition = self._definition_for_node_hooks(definition, issues)
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(
-            check_embedding_input_limits(
-                hook_definition, self._registry, self._embedding_input_limit
-            )
+            embedding_limit_issues(hook_definition, self._registry, self._embedding_input_limit)
         )
         issues.extend(backend_support_issues(hook_definition, self._registry))
         node_errors = [issue.message for issue in issues if issue.severity == "error"]

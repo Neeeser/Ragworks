@@ -22,11 +22,23 @@ from app.pipelines.expressions.errors import ExpressionEvalError
 Numeric = int | float
 
 
-def _round_half_away(value: Numeric) -> int:
+def round_half_away(value: Numeric) -> int:
     """Round to the nearest integer, halves away from zero."""
     if value >= 0:
         return math.floor(value + 0.5)
     return -math.floor(-value + 0.5)
+
+
+def _percent(args: Sequence[Numeric]) -> Numeric:
+    """Return `args[1]` percent of `args[0]`.
+
+    Exists so a proportion reads as one — `percent(self.chunk_size, 20)` says
+    what `self.chunk_size * 0.2` only implies, and a named function is
+    discoverable in the editor's suggestion list where a magic multiplier is
+    not.
+    """
+    value, share = args
+    return value * share / 100
 
 
 def _clamp(args: Sequence[Numeric]) -> Numeric:
@@ -43,13 +55,14 @@ class BuiltinSpec:
 
     `result` is the result-type rule: `preserve_int` yields integer when every
     argument is an integer (else number); `always_int` yields integer
-    regardless of argument types.
+    regardless of argument types; `always_number` yields number regardless,
+    because a share of an integer is rarely one (20% of 512 is 102.4).
     """
 
     name: str
     min_args: int
     max_args: int | None
-    result: Literal["preserve_int", "always_int"]
+    result: Literal["preserve_int", "always_int", "always_number"]
     apply: Callable[[Sequence[Numeric]], Numeric]
 
 
@@ -61,7 +74,8 @@ BUILTINS: dict[str, BuiltinSpec] = {
         BuiltinSpec("clamp", 3, 3, "preserve_int", _clamp),
         BuiltinSpec("floor", 1, 1, "always_int", lambda args: math.floor(args[0])),
         BuiltinSpec("ceil", 1, 1, "always_int", lambda args: math.ceil(args[0])),
-        BuiltinSpec("round", 1, 1, "always_int", lambda args: _round_half_away(args[0])),
+        BuiltinSpec("round", 1, 1, "always_int", lambda args: round_half_away(args[0])),
+        BuiltinSpec("percent", 2, 2, "always_number", _percent),
     )
 }
 

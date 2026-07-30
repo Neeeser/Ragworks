@@ -7,7 +7,7 @@ TypeScript (`frontend/src/lib/expressions/`); both implementations are pinned
 by the shared vectors in `tests/assets/expression_vectors.json`.
 """
 
-from app.pipelines.expressions.analysis import check_type, references
+from app.pipelines.expressions.analysis import check_type, references, self_references
 from app.pipelines.expressions.errors import (
     ExpressionError,
     ExpressionEvalError,
@@ -16,9 +16,17 @@ from app.pipelines.expressions.errors import (
 )
 from app.pipelines.expressions.evaluator import evaluate
 from app.pipelines.expressions.parser import Expression, parse
-from app.pipelines.expressions.values import ExprType, ExprValue, IndexValue, ModelValue
+from app.pipelines.expressions.values import (
+    SELF_SCOPE,
+    ExprType,
+    ExprValue,
+    IndexValue,
+    ModelValue,
+    is_assignable,
+)
 
 __all__ = [
+    "SELF_SCOPE",
     "ExprType",
     "ExprValue",
     "Expression",
@@ -30,6 +38,8 @@ __all__ = [
     "ModelValue",
     "check_type",
     "evaluate",
+    "is_assignable",
     "parse",
     "references",
+    "self_references",
 ]
