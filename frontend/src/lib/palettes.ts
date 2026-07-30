@@ -4,7 +4,7 @@
  * palette contract test.
  *
  * A palette is a values-only diff in `globals.css`, keyed by
- * `:root[data-palette="<id>"]`; the two mode defaults (deep-space, paper) are
+ * `:root[data-palette="<id>"]`; the two mode defaults (graphite, paper) are
  * the `data-theme` base blocks themselves, so they need no override block.
  * Every palette resolves to one of two structural modes — the user picks one
  * palette per mode, and the resolved mode decides which applies.
@@ -28,10 +28,17 @@ export interface PaletteDefinition {
 
 export const PALETTES: readonly PaletteDefinition[] = [
   {
+    id: "graphite",
+    label: "Graphite",
+    mode: "dark",
+    hint: "Lifted base, lower contrast (default)",
+    swatch: { canvas: "#15161d", panel: "#1e2029" },
+  },
+  {
     id: "deep-space",
     label: "Deep space",
     mode: "dark",
-    hint: "Violet-cast dark (default)",
+    hint: "Violet-cast dark",
     swatch: { canvas: "#0a0910", panel: "#171420" },
   },
   {
@@ -40,13 +47,6 @@ export const PALETTES: readonly PaletteDefinition[] = [
     mode: "dark",
     hint: "Indigo-cast dark",
     swatch: { canvas: "#070b16", panel: "#121a2e" },
-  },
-  {
-    id: "graphite",
-    label: "Graphite",
-    mode: "dark",
-    hint: "Lifted base, lower contrast",
-    swatch: { canvas: "#15161d", panel: "#1e2029" },
   },
   {
     id: "true-black",
@@ -80,7 +80,7 @@ export const PALETTES: readonly PaletteDefinition[] = [
 
 /** The palette each mode falls back to when nothing is stored. */
 export const DEFAULT_PALETTES: Record<PaletteMode, string> = {
-  dark: "deep-space",
+  dark: "graphite",
   light: "paper",
 };
 
