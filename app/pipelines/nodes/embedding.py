@@ -24,6 +24,7 @@ from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     TokenUsage,
+    combine_usage,
     summarize_chunks,
     summarize_embeddings,
 )
@@ -190,7 +191,10 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         mode = self._resolve_mode(batch.items)
         guarded = self._guard_batch(batch, context) if mode == "documents" else batch
         embedded = self._embed_items(embedder, guarded.items, mode)
-        usage = TokenUsage.model_validate(embedder.usage or {})
+        # Usage accumulates along the stream: re-embedded items may already
+        # carry provider accounting (a reranked result set), which this call's
+        # own usage adds to rather than replaces.
+        usage = combine_usage([batch.usage, TokenUsage.model_validate(embedder.usage or {})])
         return {
             "items": ItemBatch(
                 items=embedded,

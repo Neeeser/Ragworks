@@ -936,3 +936,26 @@ def test_reranker_node_summarize_io(session: Session) -> None:
 
     assert summary.inputs
     assert summary.outputs
+
+
+def test_embedder_node_sums_upstream_usage_with_its_own(monkeypatch, session: Session) -> None:
+    """Usage accumulates along a stream: re-embedding items that already carry
+    provider accounting (a reranked result set) must not drop it."""
+    from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+
+    batch = ItemBatch(
+        items=[Item(id="query", text="hello")],
+        usage=TokenUsage(prompt_tokens=10, total_tokens=10),
+    )
+    node = EmbedderNode(EmbedderConfig(connection_id=EMBED_CONNECTION_ID, model_name="test-embed"))
+    user = _build_user()
+    collection = _build_collection(user)
+    context = _build_context(session, user, collection)
+    context.providers.embedder_cls = make_stub_embedder(
+        usage={"prompt_tokens": 4, "total_tokens": 4}, query_result=[0.1, 0.2]
+    )
+
+    outputs = node.run({"items": batch}, context)
+    result = ItemBatch.model_validate(outputs["items"])
+
+    assert result.usage == TokenUsage(prompt_tokens=14, total_tokens=14)
