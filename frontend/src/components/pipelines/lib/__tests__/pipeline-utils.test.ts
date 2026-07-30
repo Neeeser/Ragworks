@@ -105,8 +105,8 @@ describe("pipeline-utils", () => {
       expect.objectContaining({
         source: embedder?.id,
         target: retriever?.id,
-        source_port: "query_embedding",
-        target_port: "query_embedding",
+        source_port: "items",
+        target_port: "items",
       }),
     );
 
@@ -177,6 +177,9 @@ describe("pipeline-utils", () => {
             data_type: "document_source",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         output_ports: [
@@ -186,6 +189,9 @@ describe("pipeline-utils", () => {
             data_type: "document",
             required: true,
             accepts_many: false,
+            requires: [],
+            adds: [],
+            preserves: false,
           },
         ],
         config_schema: { input: { type: "string" } },

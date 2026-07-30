@@ -1,29 +1,50 @@
 import { expressionSource } from "@/lib/expressions";
 
+import { ITEMS_KIND, facetIssues, inferOutputFacets } from "./facet-inference";
+
+import type { FacetEdge, FacetNodePorts } from "./facet-inference";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
-type PortCompatibilityMap = Record<string, Set<string>>;
-
-const PORT_COMPATIBILITY: PortCompatibilityMap = {
-  document_source: new Set(["document_source"]),
-  document: new Set(["document"]),
-  chunk_batch: new Set(["chunk_batch"]),
-  embedded_batch: new Set(["embedded_batch"]),
-  indexed_batch: new Set(["indexed_batch"]),
-  query_request: new Set(["query_request"]),
-  query_embedding: new Set(["query_embedding"]),
-  retrieval_results: new Set(["retrieval_results"]),
-};
-
-const resolvePortType = (
+const resolvePort = (
   node: Node<PipelineNodeData> | undefined,
   handleId: string | null | undefined,
   kind: "input" | "output",
 ) => {
   if (!node || !handleId) return undefined;
   const ports = kind === "input" ? node.data.inputs : node.data.outputs;
-  return ports.find((port) => port.key === handleId)?.data_type;
+  return ports.find((port) => port.key === handleId);
+};
+
+const toFacetNodePorts = (nodes: Node<PipelineNodeData>[]): FacetNodePorts =>
+  new Map(nodes.map((node) => [node.id, { inputs: node.data.inputs, outputs: node.data.outputs }]));
+
+type FacetEdgeSource = Pick<Edge, "id" | "source" | "target"> &
+  Partial<Pick<Edge, "sourceHandle" | "targetHandle">>;
+
+const toFacetEdges = (edges: readonly FacetEdgeSource[]): FacetEdge[] =>
+  edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    sourcePort: edge.sourceHandle,
+    target: edge.target,
+    targetPort: edge.targetHandle,
+  }));
+
+const validateItemFacets = (
+  connection: Connection | Edge,
+  nodes: Node<PipelineNodeData>[],
+  targetRequires: readonly string[],
+  edges?: readonly FacetEdgeSource[],
+) => {
+  const guarantees = inferOutputFacets(toFacetNodePorts(nodes), toFacetEdges(edges ?? [])).get(
+    `${connection.source}.${connection.sourceHandle}`,
+  );
+  // An unresolved source (cycle mid-edit) defers to server validation.
+  if (!guarantees) return null;
+  const missing = [...targetRequires].filter((facet) => !guarantees.has(facet)).sort();
+  if (missing.length === 0) return null;
+  return `This connection delivers items without ${missing.join(", ")}.`;
 };
 
 const resolveNodeConfig = (
@@ -83,7 +104,9 @@ export const validatePipelineConnection = (
   connection: Connection | Edge,
   nodes: Node<PipelineNodeData>[],
   configOverrides?: Record<string, Record<string, unknown>>,
-  edges?: Array<Pick<Edge, "id" | "target" | "targetHandle">>,
+  edges?: Array<
+    Pick<Edge, "id" | "source" | "target"> & Partial<Pick<Edge, "sourceHandle" | "targetHandle">>
+  >,
 ) => {
   if (!connection.source || !connection.target) {
     return { valid: false, reason: "Connections must have both a source and a target." };
@@ -93,19 +116,25 @@ export const validatePipelineConnection = (
   }
   const sourceNode = nodes.find((node) => node.id === connection.source);
   const targetNode = nodes.find((node) => node.id === connection.target);
-  const sourceType = resolvePortType(sourceNode, connection.sourceHandle, "output");
-  const targetType = resolvePortType(targetNode, connection.targetHandle, "input");
+  const sourcePort = resolvePort(sourceNode, connection.sourceHandle, "output");
+  const targetPort = resolvePort(targetNode, connection.targetHandle, "input");
 
-  if (!sourceType || !targetType) {
+  if (!sourcePort || !targetPort) {
     return { valid: false, reason: "Connections must specify compatible ports." };
   }
 
-  const allowed = PORT_COMPATIBILITY[sourceType] ?? new Set([sourceType]);
-  if (!allowed.has(targetType)) {
+  if (sourcePort.data_type !== targetPort.data_type) {
     return {
       valid: false,
-      reason: `Cannot connect ${sourceType} to ${targetType}.`,
+      reason: `Cannot connect ${sourcePort.data_type} to ${targetPort.data_type}.`,
     };
+  }
+
+  if (targetPort.data_type === ITEMS_KIND && targetPort.requires.length > 0) {
+    const facetError = validateItemFacets(connection, nodes, targetPort.requires, edges);
+    if (facetError) {
+      return { valid: false, reason: facetError };
+    }
   }
 
   const fanInError = validatePortFanIn(connection, targetNode, edges);
@@ -123,22 +152,37 @@ export const validatePipelineConnection = (
 
 export const validatePipelineEdges = (
   nodes: Node<PipelineNodeData>[],
-  edges: Array<{ id: string; source: string; target: string }>,
+  edges: Array<
+    { id: string; source: string; target: string } & Partial<
+      Pick<Edge, "sourceHandle" | "targetHandle">
+    >
+  >,
   configOverrides?: Record<string, Record<string, unknown>>,
 ) => {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const edgeErrors: Record<string, string> = {};
   const nodeErrors: Record<string, string[]> = {};
+  const addError = (edgeId: string, targetId: string | undefined, message: string) => {
+    edgeErrors[edgeId] = message;
+    if (targetId) {
+      nodeErrors[targetId] = [...(nodeErrors[targetId] ?? []), message];
+    }
+  };
 
   edges.forEach((edge) => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
     const dimensionError = validateDimensionConnection(sourceNode, targetNode, configOverrides);
     if (!dimensionError) return;
-    edgeErrors[edge.id] = dimensionError;
-    if (targetNode) {
-      nodeErrors[targetNode.id] = [...(nodeErrors[targetNode.id] ?? []), dimensionError];
-    }
+    addError(edge.id, targetNode?.id, dimensionError);
+  });
+
+  facetIssues(toFacetNodePorts(nodes), toFacetEdges(edges)).forEach((issue) => {
+    addError(
+      issue.edgeId,
+      issue.target,
+      `This connection delivers items without ${issue.missing.join(", ")}.`,
+    );
   });
 
   return { edgeErrors, nodeErrors };

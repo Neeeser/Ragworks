@@ -99,40 +99,40 @@
             "id": "edge-chunker-embedder",
             "source": "chunk-document",
             "target": "embed-chunks",
-            "source_port": "chunks",
-            "target_port": "chunks",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-embedder-indexer",
             "source": "embed-chunks",
             "target": "index-chunks",
-            "source_port": "embedded",
-            "target_port": "embedded",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-indexer-output",
             "source": "index-chunks",
             "target": "ingest-output",
-            "source_port": "indexed",
-            "target_port": "indexed",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-chunker-bm25-indexer",
             "source": "chunk-document",
             "target": "index-bm25",
-            "source_port": "chunks",
-            "target_port": "chunks",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-bm25-indexer-output",
             "source": "index-bm25",
             "target": "ingest-output",
-            "source_port": "indexed",
-            "target_port": "indexed",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           }
         ],
@@ -232,56 +232,56 @@
             "id": "edge-retrieval-input",
             "source": "query-input",
             "target": "embed-query",
-            "source_port": "request",
-            "target_port": "request",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-retrieval-embedder",
             "source": "embed-query",
             "target": "vector-retriever",
-            "source_port": "query_embedding",
-            "target_port": "query_embedding",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-input-bm25-retriever",
             "source": "query-input",
             "target": "bm25-retriever",
-            "source_port": "request",
-            "target_port": "request",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-semantic-fusion",
             "source": "vector-retriever",
             "target": "fuse-results",
-            "source_port": "results",
-            "target_port": "results",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-bm25-fusion",
             "source": "bm25-retriever",
             "target": "fuse-results",
-            "source_port": "results",
-            "target_port": "results",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-fusion-limit",
             "source": "fuse-results",
             "target": "limit-results",
-            "source_port": "results",
-            "target_port": "results",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
             "id": "edge-limit-output",
             "source": "limit-results",
             "target": "retrieval-output",
-            "source_port": "results",
-            "target_port": "results",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           }
         ],
@@ -318,7 +318,10 @@
           "label": "Source",
           "data_type": "document_source",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -343,7 +346,10 @@
           "label": "Source",
           "data_type": "document_source",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
@@ -352,7 +358,10 @@
           "label": "Document",
           "data_type": "document",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -385,23 +394,29 @@
       "label": "Token Chunker",
       "category": "ingestion",
       "description": "Chunk documents based on token counts.",
-      "example": "ParsedDocumentPayload(text='Hello world') -> ChunkPayload(chunks=['Hello', 'world']).",
+      "example": "ParsedDocumentPayload(text='Hello world') -> Items(['Hello', 'world']).",
       "input_ports": [
         {
           "key": "document",
           "label": "Document",
           "data_type": "document",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "chunks",
+          "key": "items",
           "label": "Chunks",
-          "data_type": "chunk_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["text"],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -459,38 +474,30 @@
       "type": "embedder.text",
       "label": "Embedder",
       "category": "ingestion",
-      "description": "Embed text using a configured provider connection.",
-      "example": "ChunkPayload(chunks=['hello']) -> EmbeddingPayload(embeddings=[[0.12, 0.03, ...]]).",
+      "description": "Embed each item's text using a configured provider connection.",
+      "example": "Items(text='hello') -> Items(text='hello', embedding=[0.12, 0.03, ...]).",
       "input_ports": [
         {
-          "key": "chunks",
-          "label": "Chunks",
-          "data_type": "chunk_batch",
-          "required": false,
-          "accepts_many": false
-        },
-        {
-          "key": "request",
-          "label": "Request",
-          "data_type": "query_request",
-          "required": false,
-          "accepts_many": false
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": ["text"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "embedded",
-          "label": "Embedded",
-          "data_type": "embedded_batch",
-          "required": false,
-          "accepts_many": false
-        },
-        {
-          "key": "query_embedding",
-          "label": "Query Embedding",
-          "data_type": "query_embedding",
-          "required": false,
-          "accepts_many": false
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["embedding"],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -531,6 +538,13 @@
             "description": "Requested output dimension, for models that support reduced (Matryoshka-style) embeddings. Leave unset to store the model's native dimension \u2014 most embedding models only serve that size and error on an explicit request.",
             "static_only": true,
             "title": "Dimension"
+          },
+          "embed_as": {
+            "default": "auto",
+            "description": "Which side of an asymmetric embedding model the items go through. auto embeds items that belong to a document as documents and free-standing items (the query) as a query; pin it when a model distinguishes the two and auto guesses wrong.",
+            "enum": ["auto", "documents", "query"],
+            "title": "Embed As",
+            "type": "string"
           }
         },
         "title": "EmbedderConfig",
@@ -539,7 +553,8 @@
       "default_config": {
         "connection_id": null,
         "model_name": "",
-        "dimension": null
+        "dimension": null,
+        "embed_as": "auto"
       },
       "hidden": false,
       "supported_backends": null
@@ -549,23 +564,29 @@
       "label": "Indexer",
       "category": "ingestion",
       "description": "Write embeddings into a vector index (pgvector or Pinecone).",
-      "example": "EmbeddingPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs').",
+      "example": "Items(2 embedded) -> Items(2 embedded, indexed into 'docs').",
       "input_ports": [
         {
-          "key": "embedded",
+          "key": "items",
           "label": "Embedded",
-          "data_type": "embedded_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": ["text", "embedding"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "indexed",
+          "key": "items",
           "label": "Indexed",
-          "data_type": "indexed_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -644,23 +665,29 @@
       "label": "BM25 Indexer",
       "category": "ingestion",
       "description": "Write chunk text into a sparse BM25 index for exact-term (lexical) search \u2014 no embeddings involved.",
-      "example": "ChunkPayload(chunks=2) -> IndexingPayload(chunks=2, index='docs-bm25').",
+      "example": "Items(2 chunks) -> Items(2 chunks, indexed into 'docs-bm25').",
       "input_ports": [
         {
-          "key": "chunks",
+          "key": "items",
           "label": "Chunks",
-          "data_type": "chunk_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": ["text"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "indexed",
+          "key": "items",
           "label": "Indexed",
-          "data_type": "indexed_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -714,23 +741,29 @@
       "label": "Ingestion Output",
       "category": "ingestion",
       "description": "Emit the indexed chunks for persistence.",
-      "example": "IndexingPayload(chunks=2) -> Result(IndexingPayload(chunks=2)).",
+      "example": "Items(2 indexed) -> Result(chunks=2).",
       "input_ports": [
         {
-          "key": "indexed",
+          "key": "items",
           "label": "Indexed",
-          "data_type": "indexed_batch",
+          "data_type": "items",
           "required": true,
-          "accepts_many": true
+          "accepts_many": true,
+          "requires": ["text"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
           "key": "result",
           "label": "Result",
-          "data_type": "indexed_batch",
+          "data_type": "result",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -748,15 +781,18 @@
       "label": "Retrieval Input",
       "category": "retrieval",
       "description": "Provide the query payload for retrieval.",
-      "example": "Query='coffee', top_k=3 -> QueryRequest(text='coffee', top_k=3).",
+      "example": "Query='coffee' -> Items(text='coffee').",
       "input_ports": [],
       "output_ports": [
         {
-          "key": "request",
-          "label": "Request",
-          "data_type": "query_request",
+          "key": "items",
+          "label": "Query",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["text"],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -810,23 +846,29 @@
       "label": "Retriever",
       "category": "retrieval",
       "description": "Query a vector index (pgvector or Pinecone) for matching chunks.",
-      "example": "QueryEmbedding(request='coffee', embedding=[0.1, 0.2]) -> RetrievalPayload(matches=[chunk_a, chunk_b]).",
+      "example": "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b]).",
       "input_ports": [
         {
-          "key": "query_embedding",
+          "key": "items",
           "label": "Query Embedding",
-          "data_type": "query_embedding",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": ["embedding"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["text", "score"],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -889,23 +931,29 @@
       "label": "BM25 Retriever",
       "category": "retrieval",
       "description": "Query a sparse BM25 index with the raw query text for exact-term (lexical) matches \u2014 no embeddings involved.",
-      "example": "QueryRequest(text='error E1042') -> RetrievalPayload(matches=[chunk_a]).",
+      "example": "Items(text='error E1042') -> Items(matches=[chunk_a]).",
       "input_ports": [
         {
-          "key": "request",
-          "label": "Request",
-          "data_type": "query_request",
+          "key": "items",
+          "label": "Query",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": ["text"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["text", "score"],
+          "preserves": false
         }
       ],
       "config_schema": {
@@ -968,23 +1016,29 @@
       "label": "RRF Fusion",
       "category": "retrieval",
       "description": "Combine results from multiple retrievers by reciprocal rank \u2014 robust fusion without comparable scores (e.g. semantic + BM25).",
-      "example": "[semantic: (a, b), bm25: (b, c)] -> RetrievalPayload(b, a, c).",
+      "example": "[semantic: (a, b), bm25: (b, c)] -> Items(b, a, c).",
       "input_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": true
+          "accepts_many": true,
+          "requires": ["score"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": ["score"],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -1012,23 +1066,29 @@
       "label": "Result Limit",
       "category": "retrieval",
       "description": "Cut ordered results to the requested maximum result count.",
-      "example": "RetrievalPayload(a, b, c), max_results=2 -> RetrievalPayload(a, b).",
+      "example": "Items(a, b, c), max_results=2 -> Items(a, b).",
       "input_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -1063,23 +1123,29 @@
       "label": "Retrieval Output",
       "category": "retrieval",
       "description": "Emit retrieval results for the API.",
-      "example": "RetrievalPayload(matches=2) -> Result(RetrievalPayload(matches=2)).",
+      "example": "Items(matches=2) -> Result(matches=2).",
       "input_ports": [
         {
-          "key": "results",
+          "key": "items",
           "label": "Results",
-          "data_type": "retrieval_results",
+          "data_type": "items",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": ["text", "score"],
+          "adds": [],
+          "preserves": false
         }
       ],
       "output_ports": [
         {
           "key": "result",
           "label": "Result",
-          "data_type": "retrieval_results",
+          "data_type": "result",
           "required": true,
-          "accepts_many": false
+          "accepts_many": false,
+          "requires": [],
+          "adds": [],
+          "preserves": false
         }
       ],
       "config_schema": {

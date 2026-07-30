@@ -35,9 +35,9 @@ from app.db import models
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.limiting import ResultLimitConfig, ResultLimitNode
 from app.pipelines.nodes.reranking import RerankerConfig, RerankerNode
-from app.pipelines.payloads import RetrievalPayload
+from app.pipelines.payloads import ItemBatch
 from app.providers.registry import ProviderResolver, build_adapter, close_provider_clients
-from app.retrieval.models import DocumentChunk, DocumentMetadata, RetrievalResponse, ScoredChunk
+from app.retrieval.models import DocumentChunk, DocumentMetadata, ScoredChunk
 from app.schemas.enums import ProviderType
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import VectorStoreProvider
@@ -172,13 +172,13 @@ def _run_live_smoke(target: LiveRerankingTarget) -> LiveSmokeResult:
             build_adapter(connection).reranker(target.model)
             context = _create_context(session, user, Path(temp_dir))
             original = _candidates()
-            payload = RetrievalPayload(response=RetrievalResponse(matches=original))
-            reranked_payload = RetrievalPayload.model_validate(
+            batch = ItemBatch.from_matches(original)
+            reranked_batch = ItemBatch.model_validate(
                 RerankerNode(
                     RerankerConfig(connection_id=connection.id, model_name=target.model)
-                ).run({"results": payload}, context)["results"]
+                ).run({"items": batch}, context)["items"]
             )
-            reranked = reranked_payload.response.matches
+            reranked = reranked_batch.to_matches()
             if len(reranked) != len(original) or set(_ordered_chunk_ids(reranked)) != set(
                 _ordered_chunk_ids(original)
             ):
@@ -187,12 +187,12 @@ def _run_live_smoke(target: LiveRerankingTarget) -> LiveSmokeResult:
             if top_chunk_id != EXPECTED_TOP_CHUNK_ID:
                 raise RuntimeError("Provider reranking returned the wrong semantic winner.")
 
-            limited_payload = RetrievalPayload.model_validate(
+            limited_batch = ItemBatch.model_validate(
                 ResultLimitNode(ResultLimitConfig(max_results=_RESULT_LIMIT)).run(
-                    {"results": reranked_payload}, context
-                )["results"]
+                    {"items": reranked_batch}, context
+                )["items"]
             )
-            limited = limited_payload.response.matches
+            limited = limited_batch.to_matches()
             if _ordered_chunk_ids(limited) != _ordered_chunk_ids(reranked)[:_RESULT_LIMIT]:
                 raise RuntimeError("Result Limit did not preserve the complete reranked order.")
             return LiveSmokeResult(

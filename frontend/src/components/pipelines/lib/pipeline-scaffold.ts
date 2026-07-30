@@ -11,12 +11,7 @@ import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable }
 
 const PORT_SOURCE = "source";
 const PORT_DOCUMENT = "document";
-const PORT_CHUNKS = "chunks";
-const PORT_EMBEDDED = "embedded";
-const PORT_QUERY_EMBEDDING = "query_embedding";
-const PORT_INDEXED = "indexed";
-const PORT_REQUEST = "request";
-const PORT_RESULTS = "results";
+const PORT_ITEMS = "items";
 const NODE_QUERY_INPUT = "query-input";
 const NODE_EMBED_QUERY = "embed-query";
 const NODE_VECTOR_RETRIEVER = "vector-retriever";
@@ -167,15 +162,15 @@ export const buildDefaultDefinition = (
         id: "edge-retrieval-input",
         source: NODE_QUERY_INPUT,
         target: NODE_EMBED_QUERY,
-        source_port: PORT_REQUEST,
-        target_port: PORT_REQUEST,
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       },
       {
         id: "edge-retrieval-embedder",
         source: NODE_EMBED_QUERY,
         target: NODE_VECTOR_RETRIEVER,
-        source_port: PORT_QUERY_EMBEDDING,
-        target_port: PORT_QUERY_EMBEDDING,
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       },
     ];
     if (includeBm25) {
@@ -206,36 +201,36 @@ export const buildDefaultDefinition = (
           id: "edge-input-bm25-retriever",
           source: NODE_QUERY_INPUT,
           target: NODE_BM25_RETRIEVER,
-          source_port: PORT_REQUEST,
-          target_port: PORT_REQUEST,
+          source_port: PORT_ITEMS,
+          target_port: PORT_ITEMS,
         },
         {
           id: "edge-semantic-fusion",
           source: NODE_VECTOR_RETRIEVER,
           target: NODE_FUSE_RESULTS,
-          source_port: PORT_RESULTS,
-          target_port: PORT_RESULTS,
+          source_port: PORT_ITEMS,
+          target_port: PORT_ITEMS,
         },
         {
           id: "edge-bm25-fusion",
           source: NODE_BM25_RETRIEVER,
           target: NODE_FUSE_RESULTS,
-          source_port: PORT_RESULTS,
-          target_port: PORT_RESULTS,
+          source_port: PORT_ITEMS,
+          target_port: PORT_ITEMS,
         },
         {
           id: "edge-fusion-limit",
           source: NODE_FUSE_RESULTS,
           target: NODE_LIMIT_RESULTS,
-          source_port: PORT_RESULTS,
-          target_port: PORT_RESULTS,
+          source_port: PORT_ITEMS,
+          target_port: PORT_ITEMS,
         },
         {
           id: "edge-limit-output",
           source: NODE_LIMIT_RESULTS,
           target: NODE_RETRIEVAL_OUTPUT,
-          source_port: PORT_RESULTS,
-          target_port: PORT_RESULTS,
+          source_port: PORT_ITEMS,
+          target_port: PORT_ITEMS,
         },
       );
     } else {
@@ -243,8 +238,8 @@ export const buildDefaultDefinition = (
         id: "edge-retrieval-output",
         source: NODE_VECTOR_RETRIEVER,
         target: NODE_RETRIEVAL_OUTPUT,
-        source_port: PORT_RESULTS,
-        target_port: PORT_RESULTS,
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       });
     }
     return {
@@ -315,22 +310,22 @@ export const buildDefaultDefinition = (
       id: "edge-chunker-embedder",
       source: NODE_CHUNK_DOCUMENT,
       target: NODE_EMBED_CHUNKS,
-      source_port: PORT_CHUNKS,
-      target_port: PORT_CHUNKS,
+      source_port: PORT_ITEMS,
+      target_port: PORT_ITEMS,
     },
     {
       id: "edge-embedder-indexer",
       source: NODE_EMBED_CHUNKS,
       target: NODE_INDEX_CHUNKS,
-      source_port: PORT_EMBEDDED,
-      target_port: PORT_EMBEDDED,
+      source_port: PORT_ITEMS,
+      target_port: PORT_ITEMS,
     },
     {
       id: "edge-indexer-output",
       source: NODE_INDEX_CHUNKS,
       target: NODE_INGEST_OUTPUT,
-      source_port: PORT_INDEXED,
-      target_port: PORT_INDEXED,
+      source_port: PORT_ITEMS,
+      target_port: PORT_ITEMS,
     },
   ];
   if (includeBm25) {
@@ -345,15 +340,15 @@ export const buildDefaultDefinition = (
         id: "edge-chunker-bm25-indexer",
         source: NODE_CHUNK_DOCUMENT,
         target: NODE_INDEX_BM25,
-        source_port: PORT_CHUNKS,
-        target_port: PORT_CHUNKS,
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       },
       {
         id: "edge-bm25-indexer-output",
         source: NODE_INDEX_BM25,
         target: NODE_INGEST_OUTPUT,
-        source_port: PORT_INDEXED,
-        target_port: PORT_INDEXED,
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       },
     );
   }

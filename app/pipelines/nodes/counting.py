@@ -22,11 +22,11 @@ from app.pipelines.nodes.validators import (
     missing_index_issue,
 )
 from app.pipelines.payloads import (
-    RetrievalRequestPayload,
+    ItemBatch,
     StructuredValuesPayload,
     dump_outputs,
 )
-from app.pipelines.ports import NodePort
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.template import namespace_field, resolve_collection_template
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_text
@@ -69,12 +69,19 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
         "in a sparse BM25 index — an aggregate, not a top-k fetch."
     )
     example = (
-        "QueryRequest(text='aurora') -> "
+        "Items(text='aurora') -> "
         "StructuredValues(matching_documents=2, matching_chunks=3)."
     )
-    input_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Query",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+        ),
+    )
     output_ports = (
-        NodePort(key="values", label="Values", data_type="structured_values"),
+        NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),
     )
     config_model = Bm25CountConfig
 
@@ -101,8 +108,9 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
         return [issue for issue in maybe_issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Count lexical matches for the query request."""
-        payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        """Count lexical matches for the query stream."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        query = batch.query_text() or ""
         namespace = resolve_owned_namespace(
             self.config.namespace, context.collection, context.session
         )
@@ -113,9 +121,7 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
 
         store = context.vector_stores.get(self.config.backend)
         try:
-            result = store.lexical_count(
-                index_name, namespace or "", text=payload.request.text
-            )
+            result = store.lexical_count(index_name, namespace or "", text=query)
             documents, chunks = result.matching_documents, result.matching_chunks
         except NotFoundError:
             # Mirrors the retriever contract: a not-yet-created index holds
@@ -139,12 +145,12 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize the counted query and its counts."""
-        request = RetrievalRequestPayload.model_validate(inputs.get("request")).request
+        batch = ItemBatch.model_validate(inputs.get("items"))
         values = StructuredValuesPayload.model_validate(outputs.get("values")).values
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(request.text, 200), kind="text"
+                    label="Query", value=summarize_text(batch.query_text() or "", 200), kind="text"
                 ),
             ],
             outputs=[NodeTraceValue(label="Counts", value=dict(values))],
@@ -190,12 +196,19 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
         "(filename by default), counting documents and chunks per value."
     )
     example = (
-        "QueryRequest(text='aurora') -> StructuredValues(facets=[('alpha.md', 2 chunks), "
+        "Items(text='aurora') -> StructuredValues(facets=[('alpha.md', 2 chunks), "
         "('beta.md', 1 chunk)])."
     )
-    input_ports = (NodePort(key="request", label="Request", data_type="query_request"),)
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Query",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+        ),
+    )
     output_ports = (
-        NodePort(key="values", label="Values", data_type="structured_values"),
+        NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),
     )
     config_model = Bm25FacetConfig
 
@@ -222,8 +235,9 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
         return [issue for issue in maybe_issues if issue]
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Facet lexical matches for the query request."""
-        payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
+        """Facet lexical matches for the query stream."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        query = batch.query_text() or ""
         namespace = resolve_owned_namespace(
             self.config.namespace, context.collection, context.session
         )
@@ -238,7 +252,7 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
             buckets = store.lexical_facet(
                 index_name,
                 namespace or "",
-                text=payload.request.text,
+                text=query,
                 field=self.config.field,
                 top_n=self.config.top_n,
             )
@@ -264,12 +278,12 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize the faceted query and its buckets (JSON-safe values)."""
-        request = RetrievalRequestPayload.model_validate(inputs.get("request")).request
+        batch = ItemBatch.model_validate(inputs.get("items"))
         values = StructuredValuesPayload.model_validate(outputs.get("values")).values
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(request.text, 200), kind="text"
+                    label="Query", value=summarize_text(batch.query_text() or "", 200), kind="text"
                 ),
             ],
             outputs=[NodeTraceValue(label="Facets", value=dump_outputs(values))],

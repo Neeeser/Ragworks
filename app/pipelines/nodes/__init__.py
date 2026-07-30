@@ -13,7 +13,8 @@ from app.pipelines.nodes.io import (
 )
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.reranking import RerankerNode
-from app.pipelines.nodes.retrieval import Bm25RetrieverNode, PineconeRetrieverNode
+from app.pipelines.nodes.retrieval import PineconeRetrieverNode
+from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 
 __all__ = [
     "Bm25IndexerNode",

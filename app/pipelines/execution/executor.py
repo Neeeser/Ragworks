@@ -12,7 +12,7 @@ from app.pipelines.definition import (
 )
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.payloads import ChunkPayload
+from app.pipelines.payloads import ItemBatch
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
 from app.services.errors import ServiceError, is_external_provider_error
@@ -265,10 +265,18 @@ class PipelineExecutor:
         state: _RunState,
         context: PipelineRunContext,
     ) -> dict[str, object]:
-        """Apply one downstream embedding guard before hybrid fan-out."""
-        payload = node_outputs.get("chunks")
+        """Apply one downstream embedding guard before hybrid fan-out.
+
+        Only document-owned streams (chunker output fanning into dense + BM25
+        branches) are guarded: both index planes must see the same split. A
+        query stream fanning out is left alone — splitting the query would
+        change its meaning, and the embedder's own guard still applies.
+        """
+        payload = node_outputs.get("items")
         outgoing = state.outgoing.get(node_id, [])
-        if not isinstance(payload, ChunkPayload) or len(outgoing) < 2:
+        if not isinstance(payload, ItemBatch) or len(outgoing) < 2:
+            return node_outputs
+        if not payload.items or any(item.document_id is None for item in payload.items):
             return node_outputs
 
         limits: list[int] = []
@@ -291,8 +299,8 @@ class PipelineExecutor:
                 limits.append(published)
         if not limits:
             return node_outputs
-        guarded = EmbedderNode.guard_chunks_for_embedding(payload, min(limits), context)
-        return {**node_outputs, "chunks": payload.model_copy(update={"chunks": guarded})}
+        guarded = EmbedderNode.guard_items_for_embedding(payload, min(limits), context)
+        return {**node_outputs, "items": guarded}
 
     def _is_many_port(self, node_def: PipelineNodeDefinition | None, port_key: str) -> bool:
         """Return True when the target node declares `port_key` as accepts_many."""

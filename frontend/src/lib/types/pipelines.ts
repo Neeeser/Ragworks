@@ -237,6 +237,12 @@ export interface NodePort {
   required: boolean;
   /** Variadic input: any number of edges may target this port (fusion nodes). */
   accepts_many: boolean;
+  /** Facets an `items` input requires of every inbound stream. */
+  requires: string[];
+  /** Facets an `items` output stamps onto every emitted item. */
+  adds: string[];
+  /** Output keeps its input's facets (intersection across edges) plus `adds`. */
+  preserves: boolean;
 }
 
 export interface NodeSpec {

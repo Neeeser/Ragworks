@@ -12,7 +12,7 @@ from app.pipelines.definition import (
 )
 from app.pipelines.embedding_limits import embedding_limit_issues
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.ports import NodePort
+from app.pipelines.ports import NodePort, PortKind
 from app.pipelines.registry import NodeRegistry, build_default_registry
 from app.pipelines.tracing import NodeTraceSummary
 
@@ -26,19 +26,21 @@ def _limit(connection_id: UUID, _model: str) -> int | None:
 
 
 class _ChunkPassThrough(PipelineNodeBase[Any]):
-    """A node that forwards chunk batches unchanged.
+    """A node that forwards item streams unchanged (a preserving output).
 
-    No shipped node forwards chunks, so without one the indirect path is
-    unreachable and its behavior untestable. Registering it here exercises the
-    transitive walk with a real graph rather than asserting on internals.
+    Only the result-limit node forwards items today, so registering a bare
+    forwarder here exercises the transitive walk with a real graph rather
+    than asserting on internals.
     """
 
     type = "test.chunk_passthrough"
     label = "Pass Through"
     category = "utility"
-    description = "Forwards chunks unchanged."
-    input_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
-    output_ports = (NodePort(key="chunks", label="Chunks", data_type="chunk_batch"),)
+    description = "Forwards items unchanged."
+    input_ports = (NodePort(key="items", label="Items", data_type=PortKind.ITEMS),)
+    output_ports = (
+        NodePort(key="items", label="Items", data_type=PortKind.ITEMS, preserves=True),
+    )
 
     def run(self, inputs: dict[str, Any], context: Any) -> dict[str, Any]:
         """Return the inputs untouched."""
@@ -78,8 +80,8 @@ def _edge(source: str, target: str) -> PipelineEdgeDefinition:
         id=f"{source}-{target}",
         source=source,
         target=target,
-        source_port="chunks",
-        target_port="chunks",
+        source_port="items",
+        target_port="items",
     )
 
 
@@ -208,3 +210,41 @@ def test_an_unpublished_limit_warns_once_for_the_embedder() -> None:
     )
 
     assert [issue.code for issue in issues] == ["embedding_input_limit_unknown"]
+
+
+class _ItemProducer(PipelineNodeBase[Any]):
+    """A node that emits *new* items (a non-preserving output), like a retriever."""
+
+    type = "test.item_producer"
+    label = "Producer"
+    category = "utility"
+    description = "Emits new items."
+    input_ports = (NodePort(key="items", label="Items", data_type=PortKind.ITEMS),)
+    output_ports = (NodePort(key="items", label="Items", data_type=PortKind.ITEMS),)
+
+    def run(self, inputs: dict[str, Any], context: Any) -> dict[str, Any]:
+        """Return the inputs untouched (shape only — tests never run it)."""
+        return inputs
+
+    def summarize(self, *_args: Any, **_kwargs: Any) -> NodeTraceSummary:
+        """Return an empty trace summary."""
+        return NodeTraceSummary()
+
+
+def test_a_non_preserving_node_ends_the_walk() -> None:
+    """A node that emits new items (a retriever) breaks the chunker's reach:
+    its output is no longer the chunker's chunks, so the window comparison
+    would be judging items the chunker never sized."""
+    base = build_default_registry()
+    builtin = [base.get_node_class(node_type) for node_type in base.node_types()]
+    registry = NodeRegistry([node for node in builtin if node is not None] + [_ItemProducer])
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(4000, 2000),
+            PipelineNodeDefinition(id="produce", type="test.item_producer", name="P", config={}),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "produce"), _edge("produce", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, registry, _limit) == []

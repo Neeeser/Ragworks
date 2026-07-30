@@ -4,13 +4,14 @@ The constraint belongs to the embedder — it is the model's input limit — but
 the field a user changes to satisfy it is the chunker's, so findings are
 addressed to the chunker while the message names the model imposing the limit.
 
-Chunks are followed through the graph rather than across a single edge. Today
-only chunkers produce `chunk_batch` and only embedders and BM25 indexers
-consume it, so every path is one hop; writing the walk transitively means
-adding a node that forwards chunks cannot silently switch the check off.
-A chunker reaching an embedder *through* another node says so, because a node
-in between may change chunk sizes and the configured window then no longer
-describes what arrives.
+Chunks are followed through the graph rather than across a single edge, along
+`items` streams: the walk starts at each chunker's items outputs and continues
+past an intermediate node only through outputs declaring `preserves` — the
+port system's own statement that the node forwards the items it received — so
+adding a forwarding node cannot silently switch the check off, while nodes
+that emit *new* items (retrievers) end the walk. A chunker reaching an
+embedder *through* another node says so, because a node in between may change
+chunk sizes and the configured window then no longer describes what arrives.
 
 Findings are advisory, never blocking. An oversized window still ingests — the
 embedding guard splits the chunk and the file row carries a warning badge — so
@@ -29,10 +30,9 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+from app.pipelines.ports import PortKind
 from app.pipelines.registry import NodeRegistry
 from app.providers.base import effective_embedding_input_limit
-
-CHUNK_DATA_TYPE = "chunk_batch"
 
 _TOKENIZER_LABELS = {
     "wordpiece": "BERT WordPiece",
@@ -55,15 +55,46 @@ def _tokenizer_label(tokenizer: str) -> str:
     return _TOKENIZER_LABELS.get(tokenizer, tokenizer)
 
 
-def _chunk_ports(
-    node: PipelineNodeDefinition, registry: NodeRegistry, *, outgoing: bool
+def _items_ports(
+    node: PipelineNodeDefinition,
+    registry: NodeRegistry,
+    *,
+    outgoing: bool,
+    preserving_only: bool = False,
 ) -> set[str]:
-    """Return the node's port keys carrying chunk batches."""
+    """Return the node's items-kind port keys, optionally only preserving outputs."""
     node_cls = registry.get_node_class(node.type)
     if node_cls is None:
         return set()
     ports = node_cls.output_ports if outgoing else node_cls.input_ports
-    return {port.key for port in ports if port.data_type == CHUNK_DATA_TYPE}
+    return {
+        port.key
+        for port in ports
+        if port.data_type == PortKind.ITEMS and (not preserving_only or port.preserves)
+    }
+
+
+def _items_adjacency(
+    definition: PipelineDefinition, registry: NodeRegistry
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Return (all items edges, items edges leaving preserving outputs) by source."""
+    node_map = definition.node_map()
+    origin: dict[str, list[str]] = {}
+    forward: dict[str, list[str]] = {}
+    for edge in definition.edges:
+        source = node_map.get(edge.source)
+        target = node_map.get(edge.target)
+        if source is None or target is None:
+            continue
+        if edge.target_port not in _items_ports(target, registry, outgoing=False):
+            continue
+        if edge.source_port in _items_ports(source, registry, outgoing=True):
+            origin.setdefault(edge.source, []).append(edge.target)
+        if edge.source_port in _items_ports(
+            source, registry, outgoing=True, preserving_only=True
+        ):
+            forward.setdefault(edge.source, []).append(edge.target)
+    return origin, forward
 
 
 def _chunk_hops(
@@ -71,21 +102,16 @@ def _chunk_hops(
 ) -> dict[str, dict[str, int]]:
     """Map each chunker to the embedders it reaches, and in how many hops.
 
+    The walk starts on every items edge leaving a chunker and continues past
+    an intermediate node only through its *preserving* items outputs — the
+    port declaration that the node forwards the items it received. A
+    non-preserving output emits new items (a retriever's matches), so the
+    chunker's window no longer describes them and the walk stops.
     Breadth-first, so the recorded distance is the shortest path: a chunker
     wired both directly and through another node is judged on the direct feed.
     """
     node_map = definition.node_map()
-    adjacency: dict[str, list[str]] = {}
-    for edge in definition.edges:
-        source = node_map.get(edge.source)
-        target = node_map.get(edge.target)
-        if source is None or target is None:
-            continue
-        source_ports = _chunk_ports(source, registry, outgoing=True)
-        target_ports = _chunk_ports(target, registry, outgoing=False)
-        if edge.source_port not in source_ports or edge.target_port not in target_ports:
-            continue
-        adjacency.setdefault(edge.source, []).append(edge.target)
+    origin_adjacency, forward_adjacency = _items_adjacency(definition, registry)
 
     reach: dict[str, dict[str, int]] = {}
     for node in definition.nodes:
@@ -94,7 +120,9 @@ def _chunk_hops(
             continue
         found: dict[str, int] = {}
         seen = {node.id}
-        queue: deque[tuple[str, int]] = deque((target, 1) for target in adjacency.get(node.id, []))
+        queue: deque[tuple[str, int]] = deque(
+            (target, 1) for target in origin_adjacency.get(node.id, [])
+        )
         while queue:
             current, hops = queue.popleft()
             if current in seen:
@@ -102,9 +130,9 @@ def _chunk_hops(
             seen.add(current)
             if node_map[current].type == EmbedderNode.type:
                 found[current] = hops
-                # An embedder consumes chunks; nothing continues past it.
+                # An embedder consumes the chunks' text; nothing continues past it.
                 continue
-            queue.extend((target, hops + 1) for target in adjacency.get(current, []))
+            queue.extend((target, hops + 1) for target in forward_adjacency.get(current, []))
         if found:
             reach[node.id] = found
     return reach

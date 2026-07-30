@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.indexing import BaseIndexerNode, Bm25IndexerNode
-from app.pipelines.nodes.retrieval import BaseRetrieverNode, Bm25RetrieverNode
+from app.pipelines.nodes.retrieval import BaseRetrieverNode
+from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.variables import EXPRESSION_KEY, expression_source
 from app.schemas.enums import IndexBackend

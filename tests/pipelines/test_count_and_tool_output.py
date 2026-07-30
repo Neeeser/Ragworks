@@ -25,13 +25,13 @@ from app.pipelines.nodes.counting import (
 )
 from app.pipelines.nodes.tool_output import ToolOutputConfig, ToolOutputNode
 from app.pipelines.payloads import (
+    Item,
+    ItemBatch,
     RetrievalPayload,
-    RetrievalRequestPayload,
     StructuredValuesPayload,
     dump_outputs,
 )
 from app.pipelines.registry import default_registry
-from app.retrieval.models import QueryRequest
 from app.schemas.enums import IndexBackend
 from app.services.errors import NotFoundError
 from app.utils.file_storage import FileStorage
@@ -61,11 +61,7 @@ def _context(session: Session, store: StubVectorStore) -> PipelineRunContext:
 
 
 def _request_input() -> dict[str, object]:
-    return {
-        "request": RetrievalRequestPayload(
-            request=QueryRequest(text="aurora", top_k=5, namespace=None)
-        )
-    }
+    return {"items": ItemBatch(items=[Item(id="query", text="aurora")])}
 
 
 class TestBm25CountNode:

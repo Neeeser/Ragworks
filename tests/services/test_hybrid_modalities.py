@@ -231,11 +231,11 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
                 ),
                 PipelineEdgeDefinition(
                     id="e3", source="chunk", target="bm25",
-                    source_port="chunks", target_port="chunks",
+                    source_port="items", target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="e4", source="bm25", target="out",
-                    source_port="indexed", target_port="indexed",
+                    source_port="items", target_port="items",
                 ),
             ],
         ),
@@ -260,11 +260,11 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
             edges=[
                 PipelineEdgeDefinition(
                     id="e1", source="in", target="bm25",
-                    source_port="request", target_port="request",
+                    source_port="items", target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="e2", source="bm25", target="out",
-                    source_port="results", target_port="results",
+                    source_port="items", target_port="items",
                 ),
             ],
         ),

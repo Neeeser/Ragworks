@@ -81,8 +81,8 @@ def _build_aggregate_pipeline(
                 id="edge-input-aggregate",
                 source="query-input",
                 target="aggregate",
-                source_port="request",
-                target_port="request",
+                source_port="items",
+                target_port="items",
             ),
             PipelineEdgeDefinition(
                 id="edge-aggregate-output",
@@ -169,8 +169,8 @@ def with_reranker(
             id="edge-reranker-target",
             source=_RERANK_NODE_ID,
             target=target.id,
-            source_port="results",
-            target_port="results",
+            source_port="items",
+            target_port="items",
         )
     )
     return definition.model_copy(update={"nodes": nodes, "edges": edges})

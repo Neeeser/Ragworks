@@ -15,13 +15,12 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
-from app.pipelines.payloads import RetrievalPayload
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import ItemBatch, trace_items
+from app.pipelines.ports import NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     summarize_match_order,
     summarize_matches,
-    trace_match_items,
 )
 
 
@@ -47,9 +46,11 @@ class ResultLimitNode(PipelineNodeBase[ResultLimitConfig]):
     label = "Result Limit"
     category = "retrieval"
     description = "Cut ordered results to the requested maximum result count."
-    example = "RetrievalPayload(a, b, c), max_results=2 -> RetrievalPayload(a, b)."
-    input_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
-    output_ports = (NodePort(key="results", label="Results", data_type="retrieval_results"),)
+    example = "Items(a, b, c), max_results=2 -> Items(a, b)."
+    input_ports = (NodePort(key="items", label="Results", data_type=PortKind.ITEMS),)
+    output_ports = (
+        NodePort(key="items", label="Results", data_type=PortKind.ITEMS, preserves=True),
+    )
     config_model = ResultLimitConfig
 
     def __init__(self, config: ResultLimitConfig) -> None:
@@ -67,14 +68,13 @@ class ResultLimitNode(PipelineNodeBase[ResultLimitConfig]):
         return None
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Truncate the ordered match list to the effective depth."""
-        payload = RetrievalPayload.model_validate(inputs.get("results"))
+        """Truncate the ordered item list to the effective depth."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
         self._effective_max_results = self._resolve_max_results(context)
-        matches = list(payload.response.matches)
+        items = list(batch.items)
         if self._effective_max_results is not None:
-            matches = matches[: self._effective_max_results]
-        response = payload.response.model_copy(update={"matches": matches})
-        return {"results": payload.model_copy(update={"response": response})}
+            items = items[: self._effective_max_results]
+        return {"items": batch.model_copy(update={"items": items})}
 
     def summarize_io(
         self,
@@ -82,21 +82,21 @@ class ResultLimitNode(PipelineNodeBase[ResultLimitConfig]):
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
         """Summarize the full input order against the truncated output."""
-        input_payload = RetrievalPayload.model_validate(inputs.get("results"))
-        output_payload = RetrievalPayload.model_validate(outputs.get("results"))
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
                     label="Candidates",
-                    value=summarize_matches(input_payload.response.matches),
+                    value=summarize_matches(input_batch.preview_matches()),
                 ),
                 NodeTraceValue(
                     label="Candidate order",
-                    value=summarize_match_order(input_payload.response.matches),
+                    value=summarize_match_order(input_batch.preview_matches()),
                 ),
                 NodeTraceValue(
                     label="Candidate items",
-                    value=trace_match_items(input_payload.response.matches),
+                    value=trace_items(input_batch.items),
                     kind="items",
                 ),
             ],
@@ -105,14 +105,13 @@ class ResultLimitNode(PipelineNodeBase[ResultLimitConfig]):
                     label="Kept",
                     value={
                         "max_results": self._effective_max_results,
-                        "kept": len(output_payload.response.matches),
-                        "dropped": len(input_payload.response.matches)
-                        - len(output_payload.response.matches),
+                        "kept": len(output_batch.items),
+                        "dropped": len(input_batch.items) - len(output_batch.items),
                     },
                 ),
                 NodeTraceValue(
                     label="Kept items",
-                    value=trace_match_items(output_payload.response.matches),
+                    value=trace_items(output_batch.items),
                     kind="items",
                 ),
             ],

@@ -24,7 +24,7 @@ from app.pipelines.payloads import (
     StructuredValuesPayload,
     dump_outputs,
 )
-from app.pipelines.ports import NodePort
+from app.pipelines.ports import NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import combine_usage
 from app.pipelines.variables import PipelineOutputField
@@ -89,11 +89,11 @@ class ToolOutputNode(PipelineNodeBase[ToolOutputConfig]):
         NodePort(
             key="values",
             label="Values",
-            data_type="structured_values",
+            data_type=PortKind.STRUCTURED_VALUES,
             accepts_many=True,
         ),
     )
-    output_ports = (NodePort(key="result", label="Result", data_type="retrieval_results"),)
+    output_ports = (NodePort(key="result", label="Result", data_type=PortKind.RESULT),)
     config_model = ToolOutputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:

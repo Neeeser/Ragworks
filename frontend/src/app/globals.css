@@ -69,12 +69,10 @@
   /* Port data-types (edges/handles across editor + trace + demo flow). */
   --port-document-source: #38bdf8;
   --port-document: #34d399;
-  --port-chunk-batch: #2dd4bf;
-  --port-embedded-batch: #fbbf24;
-  --port-indexed-batch: #22d3ee;
-  --port-query-request: #818cf8;
-  --port-query-embedding: #fbbf24;
-  --port-retrieval-results: #e879f9;
+  --port-items-text: #2dd4bf;
+  --port-items-embedding: #fbbf24;
+  --port-items-scored: #e879f9;
+  --port-structured-values: #818cf8;
   --port-default: #64748b;
 
   /* Semantic status */
@@ -150,12 +148,10 @@
 
   --port-document-source: #0284c7;
   --port-document: #059669;
-  --port-chunk-batch: #0d9488;
-  --port-embedded-batch: #d97706;
-  --port-indexed-batch: #0e7490;
-  --port-query-request: #4f46e5;
-  --port-query-embedding: #d97706;
-  --port-retrieval-results: #c026d3;
+  --port-items-text: #0d9488;
+  --port-items-embedding: #d97706;
+  --port-items-scored: #c026d3;
+  --port-structured-values: #4f46e5;
   --port-default: #64748b;
 
   --data-pos: #059669;

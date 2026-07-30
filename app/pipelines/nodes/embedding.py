@@ -1,18 +1,17 @@
-"""Embedding node: provider-connection-backed embedder for chunks or queries.
+"""Embedding node: provider-connection-backed embedder for item streams.
 
-`embedder.text` is one dual-mode node type (chunk batches on the ingestion
-side, single queries on the retrieval side); `run()` resolves which mode
-applies, then dispatches to `_embed_chunks`/`_embed_query`. The embedder
-itself comes from the run context's `ProviderResolver`, so any connection
-with the EMBEDDING kind (OpenRouter, Ollama, ...) can serve the node.
-(The legacy `embedder.openrouter` id was retired by a startup data migration
-that rewrote stored definitions — see `app/services/provider_migration.py`.)
+`embedder.text` is a facet-adding transform: it requires items with text,
+stamps an embedding onto every item, and preserves whatever else the stream
+carried — chunks, the query, or a re-embedded result set are all the same
+wiring. The embedder itself comes from the run context's `ProviderResolver`,
+so any connection with the EMBEDDING kind (OpenRouter, Ollama, ...) can
+serve the node.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,27 +19,18 @@ from pydantic import BaseModel, Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.payloads import (
-    ChunkPayload,
-    EmbeddingPayload,
-    QueryEmbeddingPayload,
-    RetrievalRequestPayload,
-    TokenizerSpec,
-)
-from app.pipelines.ports import NodePort
+from app.pipelines.payloads import Item, ItemBatch, TokenizerSpec, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     TokenUsage,
+    combine_usage,
     summarize_chunks,
     summarize_embeddings,
-    summarize_query_embedding,
-    summarize_text,
-    trace_chunk_items,
 )
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.providers.base import effective_embedding_input_limit
 from app.retrieval.embedders.base import Embedder
-from app.retrieval.models import DocumentChunk
 from app.retrieval.tokenizers.resources import build_token_counter
 from app.services.errors import (
     InvalidInputError,
@@ -52,6 +42,36 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def _rekey_split_items(parts_by_item: list[tuple[Item, list[str]]]) -> list[Item]:
+    """Re-key a batch whose oversized items were split into parts.
+
+    Document-owned batches renumber to the canonical `{document_id}:{order}`
+    scheme so vector ids and per-document deletion stay consistent;
+    free-standing items keep their id, with a `#part` suffix when split.
+    """
+    renumber = all(item.document_id is not None for item, _ in parts_by_item)
+    rekeyed: list[Item] = []
+    for item, parts in parts_by_item:
+        for part_index, text in enumerate(parts):
+            if renumber:
+                order = len(rekeyed)
+                item_id = f"{item.document_id}:{order}"
+            else:
+                order = item.order if item.order is not None else len(rekeyed)
+                item_id = item.id if len(parts) == 1 else f"{item.id}#{part_index}"
+            rekeyed.append(
+                item.model_copy(
+                    update={
+                        "id": item_id,
+                        "text": text,
+                        "order": order,
+                        "metadata": item.metadata.model_copy(deep=True),
+                    }
+                )
+            )
+    return rekeyed
 
 
 class EmbedderConfig(BaseModel):
@@ -80,31 +100,40 @@ class EmbedderConfig(BaseModel):
         ),
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
+    embed_as: Literal["auto", "documents", "query"] = Field(
+        default="auto",
+        description=(
+            "Which side of an asymmetric embedding model the items go "
+            "through. auto embeds items that belong to a document as "
+            "documents and free-standing items (the query) as a query; pin "
+            "it when a model distinguishes the two and auto guesses wrong."
+        ),
+    )
 
 
 class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
-    """Generate embeddings for document chunks or a retrieval query.
-
-    Exactly one of the `chunks`/`request` input ports is connected in any
-    given pipeline; `run()` resolves which mode applies before dispatching.
-    """
+    """Stamp an embedding onto every item in the stream."""
 
     type = "embedder.text"
     label = "Embedder"
     category = "ingestion"
-    description = "Embed text using a configured provider connection."
-    example = "ChunkPayload(chunks=['hello']) -> EmbeddingPayload(embeddings=[[0.12, 0.03, ...]])."
+    description = "Embed each item's text using a configured provider connection."
+    example = "Items(text='hello') -> Items(text='hello', embedding=[0.12, 0.03, ...])."
     input_ports = (
-        NodePort(key="chunks", label="Chunks", data_type="chunk_batch", required=False),
-        NodePort(key="request", label="Request", data_type="query_request", required=False),
+        NodePort(
+            key="items",
+            label="Items",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.TEXT,),
+        ),
     )
     output_ports = (
-        NodePort(key="embedded", label="Embedded", data_type="embedded_batch", required=False),
         NodePort(
-            key="query_embedding",
-            label="Query Embedding",
-            data_type="query_embedding",
-            required=False,
+            key="items",
+            label="Items",
+            data_type=PortKind.ITEMS,
+            adds=(Facet.EMBEDDING,),
+            preserves=True,
         ),
     )
     config_model = EmbedderConfig
@@ -142,12 +171,11 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Resolve the embedding mode and dispatch to the matching unit."""
-        chunks_input = inputs.get("chunks")
-        request_input = inputs.get("request")
-        if chunks_input is not None and request_input is not None:
-            raise ValueError("Embedder node cannot process both chunks and request payloads.")
-
+        """Embed every item's text and return the enriched stream."""
+        raw = inputs.get("items")
+        if raw is None:
+            raise ValueError("Embedder node requires an items input.")
+        batch = ItemBatch.model_validate(raw)
         if self.config.connection_id is None or not self.config.model_name:
             raise InvalidInputError(
                 "Embedder node needs a provider connection and model. "
@@ -158,106 +186,117 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
             self.config.model_name,
             dimensions=self.config.dimension,
         )
-        if chunks_input is not None:
-            return self._embed_chunks(embedder, chunks_input, context)
-        if request_input is not None:
-            return self._embed_query(embedder, request_input)
-        raise ValueError("Embedder node requires a chunk batch or query request payload.")
-
-    def _embed_chunks(
-        self,
-        embedder: Embedder,
-        chunks_input: object,
-        context: PipelineRunContext,
-    ) -> dict[str, object]:
-        """Embed a chunk batch and return it as an EmbeddingPayload."""
-        payload = ChunkPayload.model_validate(chunks_input)
-        document = payload.document
-        chunks = self._guard_embedding_inputs(payload, context)
-        embeddings = embedder.embed_documents(chunks)
-        if len(embeddings) != len(chunks):
-            raise ValueError("Embedder returned mismatched embeddings.")
-        enriched_chunks = [
-            chunk.with_embedding(embedding)
-            for chunk, embedding in zip(chunks, embeddings, strict=True)
-        ]
-        usage = TokenUsage.model_validate(embedder.usage or {})
+        # Only document streams are guarded/split: cutting a query into
+        # parts would change what is being asked, not just how it's batched.
+        mode = self._resolve_mode(batch.items)
+        guarded = self._guard_batch(batch, context) if mode == "documents" else batch
+        embedded = self._embed_items(embedder, guarded.items, mode)
+        # Usage accumulates along the stream: re-embedded items may already
+        # carry provider accounting (a reranked result set), which this call's
+        # own usage adds to rather than replaces.
+        usage = combine_usage([batch.usage, TokenUsage.model_validate(embedder.usage or {})])
         return {
-            "embedded": EmbeddingPayload(
-                document=document,
-                chunks=enriched_chunks,
+            "items": ItemBatch(
+                items=embedded,
+                tokenizer=guarded.tokenizer,
                 usage=usage,
             )
         }
 
-    def _guard_embedding_inputs(
+    def _embed_items(
         self,
-        payload: ChunkPayload,
-        context: PipelineRunContext,
-    ) -> list[DocumentChunk]:
-        """Split provider-bound chunks that exceed the model's effective limit."""
+        embedder: Embedder,
+        items: list[Item],
+        mode: Literal["documents", "query"],
+    ) -> list[Item]:
+        """Embed items through the document or query side of the model."""
+        missing = [item.id for item in items if item.text is None]
+        if missing:
+            raise InvalidInputError(
+                f"Embedder received {len(missing)} item(s) without text "
+                f"(first: '{missing[0]}')."
+            )
+        if mode == "query":
+            embeddings = [embedder.embed_query(item.text or "") for item in items]
+        else:
+            embeddings = list(embedder.embed_documents([item.to_chunk() for item in items]))
+            if len(embeddings) != len(items):
+                raise ValueError("Embedder returned mismatched embeddings.")
+        return [
+            item.model_copy(update={"embedding": embedding})
+            for item, embedding in zip(items, embeddings, strict=True)
+        ]
+
+    def _resolve_mode(self, items: list[Item]) -> Literal["documents", "query"]:
+        """Resolve the embedding side: pinned by config, else by item identity."""
+        if self.config.embed_as != "auto":
+            return self.config.embed_as
+        return "documents" if any(item.document_id is not None for item in items) else "query"
+
+    def _guard_batch(self, batch: ItemBatch, context: PipelineRunContext) -> ItemBatch:
+        """Split provider-bound items that exceed the model's effective limit."""
         if self.config.connection_id is None:  # guarded by run(), kept for type narrowing
-            return payload.chunks
+            return batch
         published_limit = self._embedding_input_limit(context)
-        return self.guard_chunks_for_embedding(payload, published_limit, context)
+        return self.guard_items_for_embedding(batch, published_limit, context)
 
     @staticmethod
-    def guard_chunks_for_embedding(
-        payload: ChunkPayload,
+    def guard_items_for_embedding(
+        batch: ItemBatch,
         published_limit: int | None,
         context: PipelineRunContext,
-    ) -> list[DocumentChunk]:
-        """Split a chunk payload once before it fans out to index planes."""
+    ) -> ItemBatch:
+        """Split oversized textual items once before they fan out to index planes.
+
+        Split parts of a document-owned item are re-keyed to the canonical
+        `{document_id}:{order}` scheme (the whole batch renumbers, so vector
+        ids and per-document deletion stay consistent); free-standing items
+        keep their id with a `#part` suffix.
+        """
         if published_limit is None:
-            return payload.chunks
+            return batch
         limit = effective_embedding_input_limit(published_limit)
         if limit <= 0:
-            return payload.chunks
+            return batch
 
         # A whitespace tokenizer is useful for legacy chunking, but it is not
         # an estimate of model tokens. The runtime guard must use a real model
         # tokenizer whenever the configured tokenizer cannot enforce the provider's
         # limit, otherwise providers may still silently truncate the parts.
-        tokenizer = payload.tokenizer
+        tokenizer = batch.tokenizer or TokenizerSpec(kind="wordpiece")
         if tokenizer.kind == "whitespace":
             tokenizer = TokenizerSpec(kind="wordpiece")
         counter = build_token_counter(tokenizer, context.storage.base_path)
-        guarded: list[DocumentChunk] = []
-        for original_index, chunk in enumerate(payload.chunks):
-            token_count = counter.count(chunk.text)
+
+        split_any = False
+        parts_by_item: list[tuple[Item, list[str]]] = []
+        for original_index, item in enumerate(batch.items):
+            text = item.text or ""
+            token_count = counter.count(text)
             # Overlap is added to chunk_size, so the size passed here has to
             # leave room for it — splitting at the full limit plus an overlap
             # would emit parts over the very limit this guard enforces.
             guard_overlap = min(32, max(0, limit - 1))
-            parts = (
-                counter.split(
-                    chunk.text,
+            if token_count > limit:
+                parts = counter.split(
+                    text,
                     chunk_size=max(1, limit - guard_overlap),
                     overlap=guard_overlap,
                 )
-                if token_count > limit
-                else [chunk.text]
-            )
-            if token_count > limit:
+                split_any = True
                 warning = (
-                    f"Document {payload.document.document_id} chunk {original_index} contained "
-                    f"{token_count} tokens, exceeding the {limit}-token embedding limit, and "
-                    f"was split into {len(parts)} parts using the {tokenizer.kind} counter."
+                    f"Item '{item.id}' (index {original_index}) contained "
+                    f"{token_count} tokens, exceeding the {limit}-token embedding limit, "
+                    f"and was split into {len(parts)} parts using the {tokenizer.kind} counter."
                 )
                 if context.trace is not None:
                     context.trace.record_warning(warning)
-            for text in parts:
-                order = len(guarded)
-                guarded.append(
-                    DocumentChunk(
-                        document_id=chunk.document_id,
-                        chunk_id=f"{chunk.document_id}:{order}",
-                        text=text,
-                        order=order,
-                        metadata=chunk.metadata.model_copy(deep=True),
-                    )
-                )
-        return guarded
+            else:
+                parts = [text]
+            parts_by_item.append((item, parts))
+        if not split_any:
+            return batch
+        return batch.model_copy(update={"items": _rekey_split_items(parts_by_item)})
 
     def _embedding_input_limit(self, context: PipelineRunContext) -> int | None:
         """Resolve provider metadata, treating recognized lookup failures as unknown."""
@@ -279,84 +318,34 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
             )
             return None
 
-    @staticmethod
-    def _embed_query(embedder: Embedder, request_input: object) -> dict[str, object]:
-        """Embed a single query and return it as a QueryEmbeddingPayload."""
-        payload = RetrievalRequestPayload.model_validate(request_input)
-        request = payload.request
-        embedding = embedder.embed_query(request.text)
-        usage = TokenUsage.model_validate(embedder.usage or {})
-        return {
-            "query_embedding": QueryEmbeddingPayload(
-                request=request,
-                embedding=embedding,
-                usage=usage,
-            )
-        }
-
     def summarize_io(
         self,
         inputs: dict[str, object],
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
-        """Summarize embedding inputs and outputs for whichever mode ran."""
-        if "embedded" in outputs:
-            return self._summarize_chunks_io(inputs, outputs)
-        return self._summarize_query_io(inputs, outputs)
-
-    @staticmethod
-    def _summarize_chunks_io(
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize the chunk-embedding mode's inputs and outputs."""
-        input_payload = ChunkPayload.model_validate(inputs.get("chunks"))
-        output_payload = EmbeddingPayload.model_validate(outputs.get("embedded"))
+        """Summarize the textual input stream and the embedded output stream."""
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Chunk text",
-                    value=summarize_chunks(input_payload.chunks),
+                    label="Item text",
+                    value=summarize_chunks(input_batch.preview_chunks()),
                 ),
                 NodeTraceValue(
-                    label="Chunk items", value=trace_chunk_items(input_payload.chunks), kind="items"
+                    label="Input items", value=trace_items(input_batch.items), kind="items"
                 ),
             ],
             outputs=[
                 NodeTraceValue(
                     label="Embeddings",
-                    value=summarize_embeddings(output_payload.chunks),
+                    value=summarize_embeddings(output_batch.preview_chunks()),
                     kind="embedding",
                 ),
                 NodeTraceValue(
                     label="Embedded items",
-                    value=trace_chunk_items(output_payload.chunks),
+                    value=trace_items(output_batch.items),
                     kind="items",
                 ),
-            ],
-        )
-
-    @staticmethod
-    def _summarize_query_io(
-        inputs: dict[str, object],
-        outputs: dict[str, object],
-    ) -> NodeTraceSummary:
-        """Summarize the query-embedding mode's inputs and outputs."""
-        input_payload = RetrievalRequestPayload.model_validate(inputs.get("request"))
-        output_payload = QueryEmbeddingPayload.model_validate(outputs.get("query_embedding"))
-        return NodeTraceSummary(
-            inputs=[
-                NodeTraceValue(
-                    label="Query",
-                    value=summarize_text(input_payload.request.text),
-                    kind="text",
-                )
-            ],
-            outputs=[
-                NodeTraceValue(
-                    label="Embedding",
-                    value=summarize_query_embedding(output_payload.embedding),
-                    kind="embedding",
-                )
             ],
         )

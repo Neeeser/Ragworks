@@ -86,6 +86,16 @@ colocate a single file with its consumer.
   submodule. Re-exporting foreign symbols so a test can monkeypatch through the
   package is forbidden — patch at the real boundary where the name is used
   (e.g. `app.chat.setup.resolve_retrieval_settings`, not a package re-export).
+- **Ports are typed by data shape, never by pipeline stage.** The unified `items`
+  kind carries every list-of-items stream (chunks, the query, matches) and what a
+  stream guarantees about its items is a facet set (`text`/`embedding`/`score`):
+  inputs declare `requires`, outputs declare `adds`/`preserves`, and compatibility
+  is inferred through the whole graph (`app/pipelines/facets.py`) — a stage-named
+  port type forces dual-mode nodes (an embedder with chunk and query ports) and
+  blocks sound graphs like re-embedding a result set. The inference is mirrored in
+  `frontend/src/components/pipelines/lib/facet-inference.ts` and pinned by the
+  shared vectors in `tests/assets/facet_vectors.json` (pytest + vitest) — a
+  semantics change lands in both implementations plus the vectors, never one side.
 - **`pipelines/nodes/` modules group by pipeline stage, not node count** — a stage
   with several fixed-shape variants shares one base class in its module. Shared
   cross-node validation helpers live in `nodes/validators.py`; a helper used by one
@@ -127,8 +137,10 @@ colocate a single file with its consumer.
   belongs to the embedder, but `chunk_size` is what a user changes, so
   `app/pipelines/embedding_limits.py` walks chunks forward and addresses its
   finding to the chunker while naming the model. Chunks are followed
-  transitively, not across one edge: adding a node that forwards `chunk_batch`
-  must not silently switch the check off. A chunker fanning out to several
+  transitively along `items` edges, continuing only through *preserving*
+  outputs, not across one edge: adding a node that forwards items must not
+  silently switch the check off, while a node emitting new items (a
+  retriever) honestly ends the chunker's reach. A chunker fanning out to several
   embedders yields **one** finding bound by the smallest limit — the editor
   renders a single issue per field, so several would hide each other and could
   leave the least restrictive one showing.

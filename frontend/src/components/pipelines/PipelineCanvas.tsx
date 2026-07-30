@@ -23,6 +23,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PipelineEdgeRoutingProvider } from "./flow/PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./flow/TypedEdge";
 import { useFlowDotColor } from "./flow/use-flow-dot-color";
+import { portToken } from "./lib/facet-inference";
 import { getPortTypeColorVar, getPortTypeLabel } from "./lib/pipeline-theme";
 import { pipelineNodeTypes } from "./PipelineNode";
 
@@ -54,12 +55,12 @@ type PipelineCanvasProps = {
   onInit: (instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>) => void;
 };
 
-/** Data types actually present on the canvas, for the legend. */
+/** Port tokens actually present on the canvas, for the legend. */
 const legendTypes = (nodes: Node<PipelineNodeData>[]): string[] => {
   const seen = new Set<string>();
   nodes.forEach((node) => {
-    (node.data.inputs ?? []).forEach((port) => seen.add(port.data_type));
-    (node.data.outputs ?? []).forEach((port) => seen.add(port.data_type));
+    (node.data.inputs ?? []).forEach((port) => seen.add(portToken(port, "input")));
+    (node.data.outputs ?? []).forEach((port) => seen.add(portToken(port, "output")));
   });
   return [...seen];
 };
