@@ -15,8 +15,7 @@ type StaleFilesNoticeProps = {
 /** Files indexed by an older version of the current ingestion pipeline. */
 export function countStaleFiles(nodes: FileNode[]): number {
   return nodes.filter(
-    (node) =>
-      node.kind === "file" && node.ingestion?.status === "ready" && node.ingestion.stale,
+    (node) => node.kind === "file" && node.ingestion?.status === "ready" && node.ingestion.stale,
   ).length;
 }
 

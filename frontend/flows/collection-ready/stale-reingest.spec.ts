@@ -20,6 +20,9 @@ test("updating the ingestion pipeline marks files out of date until re-ingested"
   const handoff = loadHandoff();
   await loginViaApi(page);
 
+  if (!handoff.email || !handoff.password) {
+    throw new Error("Scenario handoff has no seeded login.");
+  }
   const auth = await page.context().request.post(`${handoff.backend_url}/api/auth/token`, {
     form: { grant_type: "password", username: handoff.email, password: handoff.password },
   });
@@ -35,9 +38,7 @@ test("updating the ingestion pipeline marks files out of date until re-ingested"
       .context()
       .request.get(`${handoff.backend_url}/api/pipelines/${ingest.id}`, { headers })
   ).json();
-  const chunker = detail.definition.nodes.find((n: { type: string }) =>
-    n.type.includes("chunk"),
-  );
+  const chunker = detail.definition.nodes.find((n: { type: string }) => n.type.includes("chunk"));
   chunker.config.chunk_size = Number(chunker.config.chunk_size ?? 512) + 16;
   const patch = await page
     .context()

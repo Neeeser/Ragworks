@@ -24,8 +24,8 @@ import {
   resolveFolder,
 } from "@/components/files/lib/tree";
 import { NewFolderDialog } from "@/components/files/NewFolderDialog";
-import { StaleFilesNotice } from "@/components/files/StaleFilesNotice";
 import { RenameDialog } from "@/components/files/RenameDialog";
+import { StaleFilesNotice } from "@/components/files/StaleFilesNotice";
 import { UploadTray } from "@/components/files/UploadTray";
 import { PageBody } from "@/components/ui/app-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";

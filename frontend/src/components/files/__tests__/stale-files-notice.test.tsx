@@ -40,9 +40,7 @@ describe("StaleFilesNotice", () => {
     expect(
       screen.getByText("1 file was ingested with an older version of the ingestion pipeline."),
     ).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: /re-ingest out-of-date files/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /re-ingest out-of-date files/i }));
     expect(onReingest).toHaveBeenCalledTimes(1);
   });
 });

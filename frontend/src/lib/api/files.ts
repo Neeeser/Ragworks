@@ -95,10 +95,10 @@ export async function reingestStaleFiles(
   token: string,
   collectionId: string,
 ): Promise<StaleReingestResponse> {
-  return apiFetch<StaleReingestResponse>(
-    `/api/collections/${collectionId}/files/reingest-stale`,
-    { method: "POST", token },
-  );
+  return apiFetch<StaleReingestResponse>(`/api/collections/${collectionId}/files/reingest-stale`, {
+    method: "POST",
+    token,
+  });
 }
 
 export async function searchFiles(
