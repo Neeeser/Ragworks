@@ -42,7 +42,14 @@ from app.db.models.provider import ProviderConnection
 from app.db.models.telemetry import TelemetryEventRow
 from app.db.models.user import AuthSession, TimestampMixin, User
 from app.db.models.vectors import VectorIndexRecord
-from app.db.models.visualization import UmapPointRecord, UmapProjectionRecord
+from app.db.models.visualization import (
+    InsightClusterRecord,
+    InsightDocEdgeRecord,
+    InsightDocPointRecord,
+    InsightNeighborRecord,
+    InsightPointRecord,
+    InsightSnapshotRecord,
+)
 from app.schemas.enums import (
     ApiKeyCapability,
     BindingRole,
@@ -51,6 +58,8 @@ from app.schemas.enums import (
     ChunkStrategy,
     DocumentStatus,
     FileNodeKind,
+    InsightSpace,
+    InsightStatus,
     PipelineIOType,
     PipelineKind,
     PipelineRunStatus,
@@ -82,6 +91,14 @@ __all__ = [
     "FileNode",
     "FileNodeKind",
     "IngestionEvent",
+    "InsightClusterRecord",
+    "InsightDocEdgeRecord",
+    "InsightDocPointRecord",
+    "InsightNeighborRecord",
+    "InsightPointRecord",
+    "InsightSnapshotRecord",
+    "InsightSpace",
+    "InsightStatus",
     "Pipeline",
     "PipelineIOType",
     "PipelineKind",
@@ -95,8 +112,6 @@ __all__ = [
     "RegisteredIndex",
     "TelemetryEventRow",
     "TimestampMixin",
-    "UmapPointRecord",
-    "UmapProjectionRecord",
     "User",
     "VectorIndexRecord",
 ]

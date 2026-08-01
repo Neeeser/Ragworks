@@ -153,11 +153,12 @@ class IndexingSettings(BaseModel):
 class FeatureFlags(BaseModel):
     """Feature toggles served to the frontend and enforced at their routes."""
 
-    umap_visualizations: bool = Field(
+    collection_insights: bool = Field(
         default=True,
         json_schema_extra=_meta(
-            "UMAP visualizations",
-            "Embedding-projection visualizations for collections.",
+            "Collection insights",
+            "The Visualize page: projection map, document graph, and "
+            "overlap report computed from each collection's chunks.",
             public=True,
         ),
     )

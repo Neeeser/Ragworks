@@ -33,6 +33,7 @@ from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import VectorStoreProvider
+from app.visualization.insights.tasks import schedule_insight_refresh
 
 logger = get_logger(__name__)
 
@@ -78,6 +79,12 @@ def run_document_ingestion(document_id: UUID, request_id: str | None = None) -> 
                 exc_info=True,
             )
             _ensure_failure_recorded(document_id, exc)
+        else:
+            # The freshness hook: every successful ingestion places its new
+            # chunks into the collection's insight map in the background (or
+            # queues the first build). Failures there record themselves on
+            # the snapshot row and never affect the ingestion outcome.
+            schedule_insight_refresh(collection.id, user.id)
 
 
 def _ensure_failure_recorded(document_id: UUID, exc: Exception) -> None:

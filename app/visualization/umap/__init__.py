@@ -1,1 +1,0 @@
-"""UMAP-based visualization helpers."""

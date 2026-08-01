@@ -32,6 +32,7 @@ from app.db.repositories.document import ChunkRepository, DocumentRepository
 from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
 from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.indexes import RegisteredIndexRepository
+from app.db.repositories.insight import InsightRepository, OverlapPairRow
 from app.db.repositories.pipeline import (
     PipelineRepository,
     PipelineRunRepository,
@@ -60,8 +61,10 @@ __all__ = [
     "EvalRunRepository",
     "FileNodeRepository",
     "HistoryDomain",
+    "InsightRepository",
     "LatencyBucketStats",
     "LatencySummaryStats",
+    "OverlapPairRow",
     "PipelineChangeMarker",
     "PipelineRepository",
     "PipelineRunRepository",

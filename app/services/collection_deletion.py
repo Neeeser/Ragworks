@@ -24,6 +24,7 @@ from app.telemetry import record
 from app.telemetry.events import CollectionDeleted
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import get_vector_store
+from app.visualization.insights.store import delete_bundle
 
 
 class CollectionDeletionService:
@@ -69,6 +70,7 @@ class CollectionDeletionService:
                 )
         self._purge_files(collection)
         self._purge_rows(collection)
+        delete_bundle(collection.id)
         self.session.commit()
         record(CollectionDeleted(user_id=user.id, collection_id=collection_id))
 

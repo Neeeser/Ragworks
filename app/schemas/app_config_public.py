@@ -39,7 +39,7 @@ class PublicIndexingConfig(BaseModel):
 class PublicFeatureFlags(BaseModel):
     """Public feature flags the frontend gates UI on."""
 
-    umap_visualizations: bool
+    collection_insights: bool
     chat_branching: bool
     mcp_access: bool
 
@@ -71,7 +71,7 @@ class PublicConfig(BaseModel):
                 default_backend=config.indexing.default_backend,
             ),
             features=PublicFeatureFlags(
-                umap_visualizations=config.features.umap_visualizations,
+                collection_insights=config.features.collection_insights,
                 chat_branching=config.features.chat_branching,
                 mcp_access=config.features.mcp_access,
             ),
