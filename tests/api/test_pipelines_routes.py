@@ -136,6 +136,25 @@ def test_list_pipeline_nodes_returns_specs() -> None:
     assert response.nodes
 
 
+def test_node_specs_carry_port_facets_and_presets() -> None:
+    """The wire keeps facet declarations and presets — the editor's facet
+    mirror and preset library render from exactly these fields."""
+    response = pipelines_routes.list_pipeline_nodes(_current_user=models.User())
+    by_type = {spec.type: spec for spec in response.nodes}
+
+    reranker = by_type["llm.rerank"]
+    assert reranker.input_ports[0].requires == ("text",)
+    assert reranker.output_ports[0].adds == ("score",)
+    assert reranker.output_ports[0].preserves is True
+    assert any(preset.id == "llm-judge" for preset in reranker.presets)
+
+    transform = by_type["llm.transform"]
+    preset_ids = {preset.id for preset in transform.presets}
+    assert "contextual-retrieval" in preset_ids
+    contextual = next(p for p in transform.presets if p.id == "contextual-retrieval")
+    assert "{document_text}" in str(contextual.config["prompt"])
+
+
 def test_validate_pipeline_returns_success(session: Session) -> None:
     definition = build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"

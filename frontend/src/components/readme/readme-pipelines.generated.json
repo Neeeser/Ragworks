@@ -150,7 +150,9 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {
-              "arguments": ["result_limit"],
+              "arguments": [
+                "result_limit"
+              ],
               "tool_name": "search",
               "tool_description": "Search the collection for relevant document chunks."
             },
@@ -332,7 +334,8 @@
       },
       "default_config": {},
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "parser.document",
@@ -369,7 +372,11 @@
         "properties": {
           "mode": {
             "default": "auto",
-            "enum": ["auto", "pdf", "text"],
+            "enum": [
+              "auto",
+              "pdf",
+              "text"
+            ],
             "title": "Mode",
             "type": "string"
           },
@@ -387,7 +394,8 @@
         "encoding": "utf-8"
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "chunker.token",
@@ -415,7 +423,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["text"],
+          "adds": [
+            "text"
+          ],
           "preserves": false
         }
       ],
@@ -440,7 +450,12 @@
           "tokenizer": {
             "default": "wordpiece",
             "description": "Counter used to measure chunk_size and overlap. Match the embedding model's own tokenizer \u2014 wordpiece for BERT-family embedders, cl100k for OpenAI-family. whitespace counts words, not tokens, and undercounts by roughly 25%.",
-            "enum": ["wordpiece", "cl100k", "whitespace", "huggingface"],
+            "enum": [
+              "wordpiece",
+              "cl100k",
+              "whitespace",
+              "huggingface"
+            ],
             "title": "Tokenizer",
             "type": "string"
           },
@@ -468,7 +483,8 @@
         "hf_model_id": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "embedder.text",
@@ -483,7 +499,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [
+            "text"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -496,7 +514,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["embedding"],
+          "adds": [
+            "embedding"
+          ],
           "preserves": true
         }
       ],
@@ -542,7 +562,11 @@
           "embed_as": {
             "default": "auto",
             "description": "Which side of an asymmetric embedding model the items go through. auto embeds items that belong to a document as documents and free-standing items (the query) as a query; pin it when a model distinguishes the two and auto guesses wrong.",
-            "enum": ["auto", "documents", "query"],
+            "enum": [
+              "auto",
+              "documents",
+              "query"
+            ],
             "title": "Embed As",
             "type": "string"
           }
@@ -557,7 +581,8 @@
         "embed_as": "auto"
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "indexer.vector",
@@ -572,7 +597,10 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text", "embedding"],
+          "requires": [
+            "text",
+            "embedding"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -593,7 +621,10 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -658,7 +689,11 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
+      "presets": []
     },
     {
       "type": "indexer.bm25",
@@ -673,7 +708,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [
+            "text"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -694,7 +731,10 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -734,7 +774,11 @@
         "ensure_index": true
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
+      "presets": []
     },
     {
       "type": "ingestion.output",
@@ -749,7 +793,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": ["text"],
+          "requires": [
+            "text"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -774,7 +820,8 @@
       },
       "default_config": {},
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retrieval.input",
@@ -791,7 +838,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["text"],
+          "adds": [
+            "text"
+          ],
           "preserves": false
         }
       ],
@@ -839,7 +888,8 @@
         "tool_description": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retriever.vector",
@@ -854,7 +904,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["embedding"],
+          "requires": [
+            "embedding"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -867,17 +919,121 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["text", "score"],
+          "adds": [
+            "text",
+            "score"
+          ],
           "preserves": false
         }
       ],
       "config_schema": {
         "$defs": {
+          "FilterCondition": {
+            "description": "One metadata comparison.\n\nExactly one of `value`/`var` is set \u2014 except `exists`, which takes\nneither. The model itself stays permissive so an in-progress editor\ndraft parses (matching `RetrieverConfig.top_k`); `condition_problems`\nis the coherence check validation and run time share.",
+            "properties": {
+              "field": {
+                "default": "",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/FilterOp",
+                "default": "eq"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              },
+              "var": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Var"
+              }
+            },
+            "title": "FilterCondition",
+            "type": "object"
+          },
+          "FilterOp": {
+            "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
+            "enum": [
+              "eq",
+              "ne",
+              "in",
+              "nin",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "exists"
+            ],
+            "title": "FilterOp",
+            "type": "string"
+          },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
+          },
+          "MetadataFilter": {
+            "description": "Root combinator: every condition in `all` must hold.",
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/$defs/FilterCondition"
+                },
+                "title": "All",
+                "type": "array"
+              }
+            },
+            "title": "MetadataFilter",
+            "type": "object"
           }
         },
         "description": "Unified retriever config: the target backend is data, not a node subtype.\n\n`index_name` deliberately defaults to empty -- an index must be chosen\nexplicitly, and validation flags a blank one (`missing_index_issue`).\nLegacy definitions that relied on the old per-backend defaults get theirs\nfilled by the startup migration (`app.pipelines.upgrades`).",
@@ -909,6 +1065,18 @@
             "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
             "title": "Top K"
           },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MetadataFilter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Metadata conditions every returned chunk must satisfy. A condition's value may name a pipeline variable, bound at query time."
+          },
           "backend": {
             "$ref": "#/$defs/IndexBackend",
             "static_only": true
@@ -921,10 +1089,15 @@
         "index_name": "",
         "namespace": "col-{collection_id}",
         "top_k": null,
+        "filter": null,
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
+      "presets": []
     },
     {
       "type": "retriever.bm25",
@@ -939,7 +1112,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [
+            "text"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -952,17 +1127,121 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["text", "score"],
+          "adds": [
+            "text",
+            "score"
+          ],
           "preserves": false
         }
       ],
       "config_schema": {
         "$defs": {
+          "FilterCondition": {
+            "description": "One metadata comparison.\n\nExactly one of `value`/`var` is set \u2014 except `exists`, which takes\nneither. The model itself stays permissive so an in-progress editor\ndraft parses (matching `RetrieverConfig.top_k`); `condition_problems`\nis the coherence check validation and run time share.",
+            "properties": {
+              "field": {
+                "default": "",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/FilterOp",
+                "default": "eq"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              },
+              "var": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Var"
+              }
+            },
+            "title": "FilterCondition",
+            "type": "object"
+          },
+          "FilterOp": {
+            "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
+            "enum": [
+              "eq",
+              "ne",
+              "in",
+              "nin",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "exists"
+            ],
+            "title": "FilterOp",
+            "type": "string"
+          },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
+          },
+          "MetadataFilter": {
+            "description": "Root combinator: every condition in `all` must hold.",
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/$defs/FilterCondition"
+                },
+                "title": "All",
+                "type": "array"
+              }
+            },
+            "title": "MetadataFilter",
+            "type": "object"
           }
         },
         "description": "Configuration for BM25 (sparse/lexical) retriever nodes.\n\n`top_k` mirrors the dense retriever's contract: required for a runnable\nnode, typically the `top_k` variable or an over-retrieval expression.",
@@ -997,6 +1276,18 @@
             "default": null,
             "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
             "title": "Top K"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MetadataFilter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Metadata conditions every returned chunk must satisfy. A condition's value may name a pipeline variable, bound at query time."
           }
         },
         "title": "Bm25RetrieverConfig",
@@ -1006,10 +1297,15 @@
         "backend": "pgvector",
         "index_name": "",
         "namespace": "col-{collection_id}",
-        "top_k": null
+        "top_k": null,
+        "filter": null
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
+      "presets": []
     },
     {
       "type": "fusion.rrf",
@@ -1024,7 +1320,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": ["score"],
+          "requires": [
+            "score"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -1037,7 +1335,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": ["score"],
+          "adds": [
+            "score"
+          ],
           "preserves": true
         }
       ],
@@ -1059,7 +1359,8 @@
         "k": 60
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "limit.results",
@@ -1116,7 +1417,8 @@
         "max_results": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retrieval.output",
@@ -1131,7 +1433,10 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text", "score"],
+          "requires": [
+            "text",
+            "score"
+          ],
           "adds": [],
           "preserves": false
         }
@@ -1164,7 +1469,9 @@
                 "type": "string"
               }
             },
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "title": "PipelineOutputField",
             "type": "object"
           }
@@ -1186,7 +1493,8 @@
         "outputs": []
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     }
   ]
 }

@@ -121,13 +121,30 @@ class PipelineVersionRead(DateTimeConfigMixin, BaseModel):
 
 
 class NodePortRead(BaseModel):
-    """Wire representation of a node input/output port."""
+    """Wire representation of a node input/output port.
+
+    The facet fields feed the editor's client-side facet inference (the
+    mirror of `app/pipelines/facets.py`) — dropping them would leave every
+    stream guarantee unknown and the live editor mute about facet issues.
+    """
 
     key: str
     label: str
     data_type: str
     required: bool = True
     accepts_many: bool = False
+    requires: tuple[str, ...] = ()
+    adds: tuple[str, ...] = ()
+    preserves: bool = False
+
+
+class NodePresetRead(BaseModel):
+    """Wire representation of one named starting configuration."""
+
+    id: str
+    label: str
+    description: str
+    config: dict[str, object] = Field(default_factory=dict)
 
 
 class NodeSpecRead(BaseModel):
@@ -151,6 +168,7 @@ class NodeSpecRead(BaseModel):
     #: Vector-store backends this node works with (`None` for store-agnostic
     #: nodes). The editor uses it to flag a node the selected backend can't run.
     supported_backends: list[str] | None = None
+    presets: list[NodePresetRead] = Field(default_factory=list)
 
 
 class PipelineNodesResponse(BaseModel):
