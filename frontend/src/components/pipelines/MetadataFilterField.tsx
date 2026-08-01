@@ -133,7 +133,7 @@ export function MetadataFilterField({
             const usesVariable = typeof condition.var === "string" && condition.var !== "";
             const isExists = condition.op === "exists";
             return (
-              <div key={index} className="flex items-center gap-2">
+              <div key={index} className="flex flex-wrap items-center gap-2">
                 <TextInput
                   aria-label={`Condition ${index + 1} field`}
                   placeholder="field"

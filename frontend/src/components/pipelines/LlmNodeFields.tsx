@@ -170,7 +170,7 @@ export function LlmNodeFields({
                 disabled={disabled}
                 onChange={(event) => updateField(index, { description: event.target.value })}
               />
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <CustomSelect
                   aria-label={`Field ${index + 1} write target`}
                   placeholder="Target"

@@ -388,6 +388,37 @@ architecture" in the root `AGENTS.md`.
 The admin settings page renders from the config catalog, so a new field needs no
 frontend form code — only a new `ConfigFieldKind` would.
 
+## LLM pipeline nodes (`app/pipelines/llm/` + `nodes/llm_*.py`)
+
+- **The `llm.*` nodes are thin facet shells over one engine; a new LLM method
+  ships as a `NodePreset` (seeded config), never a new node type id.** Type
+  ids are permanent wire contract; a preset is data — HyDE, contextual
+  retrieval, and query expansion are prompts + output fields on an existing
+  shell, and a per-method type would re-implement the same node under a name
+  that can never be retired.
+- **LLM-call concurrency is connection-scoped, enforced by the engine's
+  process-wide semaphore registry (`llm/throttle.py`) — never a per-node
+  knob.** The connection is the thing being rate-limited; two nodes with
+  their own budgets would unknowingly double-hit one server, and the single
+  choke point is where a future per-connection RPM budget slots in.
+- **The engine's failure policy is classified by run kind
+  (`context.document`): ingestion runs are strict, query-time runs degrade
+  per item with a warning recorded in the trace.** A corpus where some
+  chunks silently lack their transformation is an invisible quality bug; at
+  query time a live answer beats an error, and the trace tells the truth.
+  Only provider faults and output-shape misses degrade — our own bugs
+  surface as themselves.
+- **A new `NodeTraceValue` kind lands in the wire mirror
+  (`app/schemas/traces.py` + `frontend/src/lib/types/traces.ts`) in the same
+  change.** The read model pins a `Literal`, so a kind it has never heard of
+  makes every trace containing it fail to parse — the whole trace endpoint
+  404s, not just the new value.
+- **Metadata-filter values name pipeline variables via the schema's own
+  `var` field, resolved at run time (`app/pipelines/filtering.py`) — never a
+  nested `$expr`.** Expression resolution walks top-level config keys only,
+  so an expression tag inside the filter structure would ship to the store
+  unresolved and match nothing.
+
 ## Vector-store backends (`app/vectorstores/`)
 
 - **Adding a backend is a checklist:** implement `VectorStoreBackend` in a new
