@@ -25,11 +25,12 @@ single-file run so worker startup doesn't dominate.
   its own conftest — never as a credential requirement on the root
   `tests/conftest.py`, which only does environment bootstrapping and the `session`
   fixture, so the suite always collects and runs without secrets.
-- **mypy/ruff overrides are for permanent third-party-stub gaps only** (the one
-  `[[tool.mypy.overrides]]` entry, `umap`, exists because `umap-learn` ships no
-  types and no stub package exists) — never a place to park code you don't want to
-  type. Don't add `ignore_errors` for code you're writing today; the same rule
-  applies to `[tool.ruff.lint.per-file-ignores]`.
+- **mypy/ruff overrides are for permanent third-party-stub gaps only** (the
+  `[[tool.mypy.overrides]]` entries — `pacmap`, `sklearn.*`, `numba` — exist
+  because those packages ship no types and no stub packages exist) — never a
+  place to park code you don't want to type. Don't add `ignore_errors` for code
+  you're writing today; the same rule applies to
+  `[tool.ruff.lint.per-file-ignores]`.
 - **Module size: every module under `app/` stays ≤400 lines**, enforced by
   `tests/test_module_size.py` (its `GRANDFATHERED` dict is the single source of
   truth for legacy exceptions, and it's currently empty). Never add an entry for new
@@ -68,7 +69,8 @@ app/
                    VectorStoreCapabilities + IndexSpec), registry.py
                    (get_vector_store — single construction/prerequisite gate),
                    pinecone/, pgvector/
-  visualization/   embedding-visualization subsystems (umap/ — service + repository)
+  visualization/   collection-insight subsystem (insights/ — spaces, engine,
+                   builder, incremental, service, probe, tasks, projection_worker)
   core/            settings, auth primitives, cross-cutting config
   utils/           small pure helpers only
 tests/             mirrors the app/ layout (tests/api, tests/services, …)
@@ -144,6 +146,14 @@ colocate a single file with its consumer.
   embedders yields **one** finding bound by the smallest limit — the editor
   renders a single issue per field, so several would hide each other and could
   leave the least restrictive one showing.
+- **PaCMAP runs only in the projection subprocess
+  (`app/visualization/insights/projection_worker.py`), never in the app
+  process.** pacmap's faiss+numba OpenMP runtimes clash with the sklearn this
+  process loads, in platform-dependent init orders that segfault or deadlock —
+  an in-process call works on one machine and kills the worker on another. The
+  child module stays import-light (numpy only at module level) and warms numba
+  before pacmap is even imported; `insights/__init__` stays lazy for the same
+  reason.
 - **Config resolution is registry-driven — hardcoding a node type-id string outside
   the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
   type ids off node *classes* and walks the registry for interchangeable variants

@@ -2,10 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ChunkDetailPanel } from "@/components/collections/detail/visualize/ChunkDetailPanel";
-import { makeChunk, makeChunkDetail, makeDocument, makeUmapPoint } from "@/test/fixtures";
+import { makeChunk, makeChunkDetail, makeDocument, makeInsightPoint } from "@/test/fixtures";
+import { getMockRouter } from "@/test/test-utils";
 
 describe("ChunkDetailPanel", () => {
-  const selectedPoint = makeUmapPoint({ id: "point-1", x: 1, y: 2 });
+  const selectedPoint = makeInsightPoint({ id: "point-1", x: 1, y: 2 });
 
   const detail = makeChunkDetail({
     document: makeDocument({ name: "Doc", chunk_size: 12 }),
@@ -109,6 +110,38 @@ describe("ChunkDetailPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close chunk details" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("routes to the ingestion trace focused on the chunk", () => {
+    render(
+      <ChunkDetailPanel
+        detail={detail}
+        loading={false}
+        selectedPoint={selectedPoint}
+        errorMessage={null}
+        onClose={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /view trace/i }));
+    expect(getMockRouter().push).toHaveBeenCalledWith("/traces/documents/doc-1?chunk=doc-1:0");
+  });
+
+  it("omits the trace button when the document has no ingestion run", () => {
+    render(
+      <ChunkDetailPanel
+        detail={makeChunkDetail({
+          document: makeDocument({ ingestion_run_id: null }),
+          chunk: makeChunk(),
+        })}
+        loading={false}
+        selectedPoint={selectedPoint}
+        errorMessage={null}
+        onClose={noop}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /view trace/i })).not.toBeInTheDocument();
   });
 
   it("omits expand button when unavailable", () => {

@@ -235,15 +235,15 @@ class ChunkRepository(Repository):
     def delete_for_document(self, document_id: UUID) -> None:
         """Delete every stored chunk for a document (retry/delete paths).
 
-        Stored UMAP points reference chunk rows (`umap_points.chunk_id`), so
-        the document's stale points are purged first — after a re-ingest or
-        delete they describe chunks that no longer exist anyway.
+        Stored insight artifacts reference chunk rows, so the document's
+        stale points/neighbors are purged first — after a re-ingest or delete
+        they describe chunks that no longer exist anyway. The purge also
+        books the removals as snapshot drift, which is what later tells the
+        freshness check the fitted layout no longer matches the corpus.
         """
-        self.session.execute(
-            sa_delete(models.UmapPointRecord).where(
-                col(models.UmapPointRecord.document_id) == document_id,
-            )
-        )
+        from app.db.repositories.insight import InsightRepository
+
+        InsightRepository(self.session).purge_document(document_id)
         for chunk in self.list_for_document(document_id):
             self.session.delete(chunk)
         self.session.flush()

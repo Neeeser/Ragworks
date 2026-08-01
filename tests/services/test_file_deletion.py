@@ -164,12 +164,12 @@ def test_pinecone_purge_failure_surfaces_as_external_error(
         FileDeletionService(session).delete(user, collection, upload.file)
 
 
-def test_delete_purges_ingestion_events_and_umap_points(
+def test_delete_purges_ingestion_events_and_insight_points(
     monkeypatch: pytest.MonkeyPatch, session: Session
 ) -> None:
     """Rows referencing the doomed documents must go too (regression:
     deleting an ingested file 500'd on the ingestion_events FK, and a file
-    with stored UMAP points hit the umap_points FK the same way)."""
+    with stored insight points hits the insight_points FK the same way)."""
     user = _create_user(session)
     collection = _create_collection(session, user)
     files = FileSystemService(session)
@@ -187,14 +187,20 @@ def test_delete_purges_ingestion_events_and_umap_points(
         )
     )
     chunk = session.exec(select(models.DocumentChunkRecord)).one()
-    projection = models.UmapProjectionRecord(
-        collection_id=collection.id, user_id=user.id, embedding_model="embed", point_count=1
+    snapshot = models.InsightSnapshotRecord(
+        collection_id=collection.id,
+        user_id=user.id,
+        space=models.InsightSpace.SEMANTIC,
+        space_label="embed",
+        status=models.InsightStatus.READY,
+        point_count=1,
+        fitted_count=1,
     )
-    session.add(projection)
+    session.add(snapshot)
     session.commit()
     session.add(
-        models.UmapPointRecord(
-            projection_id=projection.id,
+        models.InsightPointRecord(
+            snapshot_id=snapshot.id,
             chunk_id=chunk.id,
             document_id=upload.document.id,
             chunk_index=0,
@@ -211,7 +217,11 @@ def test_delete_purges_ingestion_events_and_umap_points(
 
     assert session.exec(select(models.Document)).all() == []
     assert session.exec(select(models.IngestionEvent)).all() == []
-    assert session.exec(select(models.UmapPointRecord)).all() == []
+    assert session.exec(select(models.InsightPointRecord)).all() == []
+    # The purge books the removal as drift on the surviving snapshot.
+    reloaded = session.get(models.InsightSnapshotRecord, snapshot.id)
+    assert reloaded is not None
+    assert reloaded.deleted_count == 1
 
 
 def test_delete_wins_when_ingestion_commits_chunks_mid_purge(session: Session) -> None:

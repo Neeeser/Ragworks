@@ -80,6 +80,11 @@ class CollectionRepository(Repository):
         user's chat history outlives the collection it referenced.
         """
         execute = self.session.execute
+        # Insight artifacts reference chunk and document rows, so they go
+        # first or the chunk delete below trips their foreign keys.
+        from app.db.repositories.insight import InsightRepository
+
+        InsightRepository(self.session).delete_collection_snapshots(collection_id)
         execute(
             sa_delete(models.DocumentChunkRecord).where(
                 col(models.DocumentChunkRecord.collection_id) == collection_id,

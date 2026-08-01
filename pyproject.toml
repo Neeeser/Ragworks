@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pinecone>=5.0.0",
-    "umap-learn>=0.5.5",
+    "pacmap>=0.8.0",
     "pydantic>=2.6.0",
     "pypdf>=4.0.0",
     "fastapi>=0.111.0,<0.126",
@@ -107,12 +107,22 @@ plugins = ["pydantic.mypy"]
 strict = true
 
 [[tool.mypy.overrides]]
-# umap-learn ships no inline types and no `types-umap` stub package exists on
-# PyPI. This is a permanent third-party-stubs gap, not a phase burn-down item:
-# unlike the `ignore_errors` overrides above (removed once), there is nothing
-# to "finish" here short of upstream shipping stubs, so it stays even under
-# strict mode.
-module = "umap"
+# pacmap ships no inline types and no stub package exists on PyPI. This is a
+# permanent third-party-stubs gap, not a phase burn-down item: unlike the
+# `ignore_errors` overrides above (removed once), there is nothing to "finish"
+# here short of upstream shipping stubs, so it stays even under strict mode.
+module = "pacmap"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# scikit-learn ships no py.typed and the community stub packages cover only
+# fragments of the API we use. Same permanent-gap reasoning as pacmap above.
+module = "sklearn.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# numba ships no py.typed and no stub package exists. Same permanent gap.
+module = "numba"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

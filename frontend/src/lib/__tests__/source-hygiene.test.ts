@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const SRC_ROOT = join(__dirname, "..", "..");
 const EXTENSIONS = [".ts", ".tsx", ".css"];
 // Every C0 control character except tab, newline, and carriage return.
-// eslint-disable-next-line no-control-regex -- detecting them is the point
+
 const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/;
 
 function sourceFiles(dir: string): string[] {

@@ -21,6 +21,7 @@ from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipeline_resolution import resolve_purge_targets
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import get_vector_store
+from app.visualization.insights.tasks import schedule_insight_refresh
 
 
 class FileDeletionService:
@@ -62,6 +63,10 @@ class FileDeletionService:
         self._purge_files(doomed)
         self._purge_rows(doomed, [doc for _, doc in indexed])
         self.session.commit()
+        # The chunk purge booked the removed insight points as snapshot
+        # drift; this decides in the background whether that drift now
+        # forces a refit. Committed first — the worker reads its own session.
+        schedule_insight_refresh(collection.id, user.id)
 
     def _collect_subtree(self, node: models.FileNode) -> list[models.FileNode]:
         """Return the node and every descendant, children before parents."""

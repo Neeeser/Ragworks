@@ -1,6 +1,7 @@
 "use client";
 
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, Route, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,12 @@ import { formatTimeAgoCompact } from "@/lib/format";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { prettyJson, truncate } from "@/lib/utils";
 
-import type { ChunkDetail, UmapPoint } from "@/lib/types";
+import type { ChunkDetail, InsightPoint } from "@/lib/types";
 
 type ChunkDetailPanelProps = {
   detail: ChunkDetail | null;
   loading: boolean;
-  selectedPoint: UmapPoint | null;
+  selectedPoint: InsightPoint | null;
   errorMessage: string | null;
   onClose: () => void;
   onExpand?: () => void;
@@ -50,8 +51,14 @@ type ChunkBodyProps = {
 };
 
 function ChunkBody({ detail, onExpand }: ChunkBodyProps) {
-  const { chunk } = detail;
+  const router = useRouter();
+  const { chunk, document } = detail;
   const indexedAt = parseApiDate(chunk.created_at);
+  // Trace focus ids are positional (`{document_id}:{chunk_index}`), not the
+  // chunk row's UUID — the UUID resolves to "chunk no longer exists".
+  const traceHref = document.ingestion_run_id
+    ? `/traces/documents/${document.id}?chunk=${document.id}:${chunk.chunk_index}`
+    : null;
 
   return (
     <>
@@ -81,12 +88,22 @@ function ChunkBody({ detail, onExpand }: ChunkBodyProps) {
         </pre>
       </div>
 
-      {onExpand ? (
-        <div className="flex shrink-0 items-center border-t border-hairline px-3 py-2">
-          <Button variant="secondary" size="sm" onClick={onExpand}>
-            <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-            Expand
-          </Button>
+      {onExpand || traceHref ? (
+        <div className="flex shrink-0 items-center gap-2 border-t border-hairline px-3 py-2">
+          {traceHref ? (
+            <Tooltip content="Open the ingestion trace focused on this chunk" side="top">
+              <Button variant="secondary" size="sm" onClick={() => router.push(traceHref)}>
+                <Route className="h-3.5 w-3.5" aria-hidden />
+                View trace
+              </Button>
+            </Tooltip>
+          ) : null}
+          {onExpand ? (
+            <Button variant="ghost" size="sm" onClick={onExpand}>
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+              Expand
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </>

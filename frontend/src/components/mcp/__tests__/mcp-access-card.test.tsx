@@ -35,7 +35,7 @@ describe("McpAccessCard", () => {
   it("renders nothing when the deployment disables MCP access", () => {
     setMockAppConfig({
       config: makePublicConfig({
-        features: { umap_visualizations: true, chat_branching: true, mcp_access: false },
+        features: { collection_insights: true, chat_branching: true, mcp_access: false },
       }),
     });
 

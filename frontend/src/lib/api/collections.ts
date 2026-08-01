@@ -18,8 +18,6 @@ import type {
   EndToEndTrace,
   PipelineTraceResponse,
   PromptDetails,
-  UmapComputePayload,
-  UmapVisualization,
 } from "@/lib/types";
 
 export async function fetchCollections(token: string): Promise<Collection[]> {
@@ -144,27 +142,6 @@ export async function fetchDocumentChunks(
 
 export async function fetchChunkDetail(token: string, chunkId: string): Promise<ChunkDetail> {
   return apiFetch<ChunkDetail>(`/api/chunks/${chunkId}`, { token });
-}
-
-export async function fetchCollectionUmap(
-  token: string,
-  collectionId: string,
-): Promise<UmapVisualization> {
-  return apiFetch<UmapVisualization>(`/api/collections/${collectionId}/visualizations/umap`, {
-    token,
-  });
-}
-
-export async function computeCollectionUmap(
-  token: string,
-  collectionId: string,
-  payload: UmapComputePayload = {},
-): Promise<UmapVisualization> {
-  return apiFetch<UmapVisualization>(`/api/collections/${collectionId}/visualizations/umap`, {
-    method: "POST",
-    token,
-    body: JSON.stringify(payload),
-  });
 }
 
 export async function runCollectionQuery(

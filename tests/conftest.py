@@ -73,6 +73,31 @@ def session_fixture() -> Generator[Session, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def _inert_insight_scheduling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep insight computation out of the background during tests.
+
+    Ingestion and file deletion schedule insight refreshes on a process-wide
+    worker thread; a thread outliving its test holds an open session against
+    the worker database, and the next test's `DROP SCHEMA` reset then
+    deadlocks behind it. Tests exercising the insights pipeline drive
+    `InsightService.run_refresh` synchronously instead; the scheduling seam
+    itself is covered by patching this same name and asserting the call.
+    """
+    monkeypatch.setattr(
+        "app.visualization.insights.tasks.schedule_insight_refresh",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "app.services.ingestion.schedule_insight_refresh",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "app.services.file_deletion.schedule_insight_refresh",
+        lambda *_args, **_kwargs: False,
+    )
+
+
+@pytest.fixture(autouse=True)
 def _reset_pgvector_availability() -> Generator[None, None, None]:
     """Keep the process-wide pgvector flag from leaking across tests.
 

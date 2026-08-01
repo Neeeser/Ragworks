@@ -238,3 +238,18 @@ class EvalFindingSeverity(str, Enum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+class InsightSpace(str, Enum):
+    """Which vector space a collection insight snapshot was computed in."""
+
+    SEMANTIC = "semantic"
+    LEXICAL = "lexical"
+
+
+class InsightStatus(str, Enum):
+    """Lifecycle status of a collection insight snapshot."""
+
+    COMPUTING = "computing"
+    READY = "ready"
+    FAILED = "failed"

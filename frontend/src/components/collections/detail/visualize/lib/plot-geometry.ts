@@ -1,12 +1,14 @@
-import type { UmapPoint } from "@/lib/types";
 import type { OrthographicViewState } from "@deck.gl/core";
+
+/** Any datum with a projected position. */
+export type XYPoint = { x: number; y: number };
 
 /** A grid line in projection space, as deck.gl's `LineLayer` wants it. */
 export type GridLine = { source: [number, number]; target: [number, number] };
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
-function boundsOf(points: UmapPoint[]): Bounds {
+function boundsOf(points: XYPoint[]): Bounds {
   let minX = points[0].x;
   let maxX = points[0].x;
   let minY = points[0].y;
@@ -21,7 +23,7 @@ function boundsOf(points: UmapPoint[]): Bounds {
 }
 
 /** The view that frames every point, used on first paint and by "Reset view". */
-export function buildInitialViewState(points: UmapPoint[]): OrthographicViewState {
+export function buildInitialViewState(points: XYPoint[]): OrthographicViewState {
   if (points.length === 0) {
     return { target: [0, 0, 0], zoom: 0 };
   }
@@ -56,7 +58,7 @@ export function computeGridStep(rawStep: number) {
  * neighbourhood allows without overlapping, so a sparse region reads as marks
  * and a dense one still reads as structure.
  */
-export function computeMinimumSpacing(points: UmapPoint[], fallbackSpacing: number) {
+export function computeMinimumSpacing(points: XYPoint[], fallbackSpacing: number) {
   if (points.length < 2) {
     return fallbackSpacing;
   }
@@ -112,4 +114,42 @@ export function computeMinimumSpacing(points: UmapPoint[], fallbackSpacing: numb
   }
   /* c8 ignore stop */
   return Math.min(minimumSpacing, fallbackSpacing);
+}
+
+/** A labelled datum the decluttering pass can size a text box for. */
+export type LabelledPoint = { x: number; y: number; label: string; size: number };
+
+/**
+ * Screen-space greedy decluttering: keep labels for the biggest clusters
+ * first and drop any whose estimated pixel box would overprint one already
+ * kept. Zooming in spreads the boxes apart, so more labels qualify — the
+ * map paradigm's level-of-detail, without ever drawing text over text.
+ */
+export function declutterClusters<T extends LabelledPoint>(clusters: T[], zoom: number): T[] {
+  const scale = Math.pow(2, zoom);
+  const kept: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+  const visible: T[] = [];
+  const ordered = [...clusters].sort((a, b) => b.size - a.size);
+  for (const cluster of ordered) {
+    const halfWidth = (cluster.label.length * 7.2) / 2 + 8;
+    const halfHeight = 12;
+    const box = {
+      minX: cluster.x * scale - halfWidth,
+      maxX: cluster.x * scale + halfWidth,
+      minY: cluster.y * scale - halfHeight,
+      maxY: cluster.y * scale + halfHeight,
+    };
+    const collides = kept.some(
+      (other) =>
+        box.minX < other.maxX &&
+        box.maxX > other.minX &&
+        box.minY < other.maxY &&
+        box.maxY > other.minY,
+    );
+    if (!collides) {
+      kept.push(box);
+      visible.push(cluster);
+    }
+  }
+  return visible;
 }

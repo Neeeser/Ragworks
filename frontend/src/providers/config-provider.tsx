@@ -25,7 +25,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
     default_backend: "pgvector",
   },
   features: {
-    umap_visualizations: true,
+    collection_insights: true,
     chat_branching: true,
     mcp_access: true,
   },
