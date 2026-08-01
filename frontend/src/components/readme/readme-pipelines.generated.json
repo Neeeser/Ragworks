@@ -150,9 +150,7 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {
-              "arguments": [
-                "result_limit"
-              ],
+              "arguments": ["result_limit"],
               "tool_name": "search",
               "tool_description": "Search the collection for relevant document chunks."
             },
@@ -372,11 +370,7 @@
         "properties": {
           "mode": {
             "default": "auto",
-            "enum": [
-              "auto",
-              "pdf",
-              "text"
-            ],
+            "enum": ["auto", "pdf", "text"],
             "title": "Mode",
             "type": "string"
           },
@@ -423,9 +417,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "text"
-          ],
+          "adds": ["text"],
           "preserves": false
         }
       ],
@@ -450,12 +442,7 @@
           "tokenizer": {
             "default": "wordpiece",
             "description": "Counter used to measure chunk_size and overlap. Match the embedding model's own tokenizer \u2014 wordpiece for BERT-family embedders, cl100k for OpenAI-family. whitespace counts words, not tokens, and undercounts by roughly 25%.",
-            "enum": [
-              "wordpiece",
-              "cl100k",
-              "whitespace",
-              "huggingface"
-            ],
+            "enum": ["wordpiece", "cl100k", "whitespace", "huggingface"],
             "title": "Tokenizer",
             "type": "string"
           },
@@ -499,9 +486,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "text"
-          ],
+          "requires": ["text"],
           "adds": [],
           "preserves": false
         }
@@ -514,9 +499,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "embedding"
-          ],
+          "adds": ["embedding"],
           "preserves": true
         }
       ],
@@ -562,11 +545,7 @@
           "embed_as": {
             "default": "auto",
             "description": "Which side of an asymmetric embedding model the items go through. auto embeds items that belong to a document as documents and free-standing items (the query) as a query; pin it when a model distinguishes the two and auto guesses wrong.",
-            "enum": [
-              "auto",
-              "documents",
-              "query"
-            ],
+            "enum": ["auto", "documents", "query"],
             "title": "Embed As",
             "type": "string"
           }
@@ -597,10 +576,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "text",
-            "embedding"
-          ],
+          "requires": ["text", "embedding"],
           "adds": [],
           "preserves": false
         }
@@ -621,10 +597,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -689,10 +662,7 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ],
+      "supported_backends": ["pgvector", "pinecone"],
       "presets": []
     },
     {
@@ -708,9 +678,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "text"
-          ],
+          "requires": ["text"],
           "adds": [],
           "preserves": false
         }
@@ -731,10 +699,7 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -774,10 +739,7 @@
         "ensure_index": true
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ],
+      "supported_backends": ["pgvector", "pinecone"],
       "presets": []
     },
     {
@@ -793,9 +755,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": [
-            "text"
-          ],
+          "requires": ["text"],
           "adds": [],
           "preserves": false
         }
@@ -838,9 +798,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "text"
-          ],
+          "adds": ["text"],
           "preserves": false
         }
       ],
@@ -904,9 +862,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "embedding"
-          ],
+          "requires": ["embedding"],
           "adds": [],
           "preserves": false
         }
@@ -919,10 +875,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "text",
-            "score"
-          ],
+          "adds": ["text", "score"],
           "preserves": false
         }
       ],
@@ -998,26 +951,13 @@
           },
           "FilterOp": {
             "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
-            "enum": [
-              "eq",
-              "ne",
-              "in",
-              "nin",
-              "gt",
-              "gte",
-              "lt",
-              "lte",
-              "exists"
-            ],
+            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
             "title": "FilterOp",
             "type": "string"
           },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           },
@@ -1093,10 +1033,7 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ],
+      "supported_backends": ["pgvector", "pinecone"],
       "presets": []
     },
     {
@@ -1112,9 +1049,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "text"
-          ],
+          "requires": ["text"],
           "adds": [],
           "preserves": false
         }
@@ -1127,10 +1062,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "text",
-            "score"
-          ],
+          "adds": ["text", "score"],
           "preserves": false
         }
       ],
@@ -1206,26 +1138,13 @@
           },
           "FilterOp": {
             "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
-            "enum": [
-              "eq",
-              "ne",
-              "in",
-              "nin",
-              "gt",
-              "gte",
-              "lt",
-              "lte",
-              "exists"
-            ],
+            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
             "title": "FilterOp",
             "type": "string"
           },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": [
-              "pinecone",
-              "pgvector"
-            ],
+            "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
           },
@@ -1301,10 +1220,7 @@
         "filter": null
       },
       "hidden": false,
-      "supported_backends": [
-        "pgvector",
-        "pinecone"
-      ],
+      "supported_backends": ["pgvector", "pinecone"],
       "presets": []
     },
     {
@@ -1320,9 +1236,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": [
-            "score"
-          ],
+          "requires": ["score"],
           "adds": [],
           "preserves": false
         }
@@ -1335,9 +1249,7 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "adds": [
-            "score"
-          ],
+          "adds": ["score"],
           "preserves": true
         }
       ],
@@ -1433,10 +1345,7 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": [
-            "text",
-            "score"
-          ],
+          "requires": ["text", "score"],
           "adds": [],
           "preserves": false
         }
@@ -1469,9 +1378,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "title": "PipelineOutputField",
             "type": "object"
           }
