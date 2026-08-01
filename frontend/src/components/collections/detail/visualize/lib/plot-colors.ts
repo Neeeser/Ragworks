@@ -39,3 +39,28 @@ export function cssColorToRgba(value: string, alpha?: number): Rgba | null {
   }
   return null;
 }
+
+/** The colour with its alpha channel replaced. */
+export function withAlpha(color: Rgba, alpha: number): Rgba {
+  return [color[0], color[1], color[2], alpha];
+}
+
+/**
+ * The deck.gl hover box's look. The library renders its tooltip into its own
+ * element, so the style travels inline; `var()` keeps it correct in every
+ * palette. This is the plot's hover layer rather than the shared `Tooltip`
+ * primitive because a point has no DOM node to anchor to and the box has to
+ * follow the cursor across the canvas.
+ */
+export const CANVAS_TOOLTIP_STYLE = {
+  background: "var(--canvas-raised)",
+  border: "1px solid var(--border-hairline)",
+  borderRadius: "6px",
+  boxShadow: "var(--elevation-2)",
+  color: "var(--text-primary)",
+  fontSize: "11px",
+  lineHeight: "1.45",
+  maxWidth: "260px",
+  padding: "4px 6px",
+  whiteSpace: "pre-line",
+};

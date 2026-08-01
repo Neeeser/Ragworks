@@ -17,7 +17,7 @@ export function makePublicConfig(overrides: Partial<PublicConfig> = {}): PublicC
       default_backend: "pgvector",
     },
     features: {
-      umap_visualizations: true,
+      collection_insights: true,
       chat_branching: true,
       mcp_access: true,
     },

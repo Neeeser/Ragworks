@@ -1,12 +1,14 @@
-import type { UmapPoint } from "@/lib/types";
 import type { OrthographicViewState } from "@deck.gl/core";
+
+/** Any datum with a projected position. */
+export type XYPoint = { x: number; y: number };
 
 /** A grid line in projection space, as deck.gl's `LineLayer` wants it. */
 export type GridLine = { source: [number, number]; target: [number, number] };
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
-function boundsOf(points: UmapPoint[]): Bounds {
+function boundsOf(points: XYPoint[]): Bounds {
   let minX = points[0].x;
   let maxX = points[0].x;
   let minY = points[0].y;
@@ -21,7 +23,7 @@ function boundsOf(points: UmapPoint[]): Bounds {
 }
 
 /** The view that frames every point, used on first paint and by "Reset view". */
-export function buildInitialViewState(points: UmapPoint[]): OrthographicViewState {
+export function buildInitialViewState(points: XYPoint[]): OrthographicViewState {
   if (points.length === 0) {
     return { target: [0, 0, 0], zoom: 0 };
   }
@@ -56,7 +58,7 @@ export function computeGridStep(rawStep: number) {
  * neighbourhood allows without overlapping, so a sparse region reads as marks
  * and a dense one still reads as structure.
  */
-export function computeMinimumSpacing(points: UmapPoint[], fallbackSpacing: number) {
+export function computeMinimumSpacing(points: XYPoint[], fallbackSpacing: number) {
   if (points.length < 2) {
     return fallbackSpacing;
   }

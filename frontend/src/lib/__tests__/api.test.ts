@@ -4,7 +4,7 @@ import {
   activatePipelineVersion,
   branchChatSession,
   chat,
-  computeCollectionUmap,
+  fetchInsightOverview,
   createCollection,
   createPipeline,
   createIndex,
@@ -17,7 +17,7 @@ import {
   fetchCollection,
   fetchCollectionStats,
   fetchCollectionStatsById,
-  fetchCollectionUmap,
+  fetchInsightMap,
   fetchCollections,
   fetchDocumentChunks,
   fetchDocuments,
@@ -373,8 +373,8 @@ describe("api", () => {
       fetchDocuments("token", "col-1"),
       fetchDocumentChunks("token", "doc-1"),
       fetchChunkDetail("token", "chunk-1"),
-      fetchCollectionUmap("token", "col-1"),
-      computeCollectionUmap("token", "col-1"),
+      fetchInsightOverview("token", "col-1"),
+      fetchInsightMap("token", "col-1"),
       runCollectionQuery("token", "col-1", { query: "hi" }),
     ]);
   });

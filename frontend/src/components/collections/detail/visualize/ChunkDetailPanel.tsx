@@ -14,12 +14,12 @@ import { formatTimeAgoCompact } from "@/lib/format";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { prettyJson, truncate } from "@/lib/utils";
 
-import type { ChunkDetail, UmapPoint } from "@/lib/types";
+import type { ChunkDetail, InsightPoint } from "@/lib/types";
 
 type ChunkDetailPanelProps = {
   detail: ChunkDetail | null;
   loading: boolean;
-  selectedPoint: UmapPoint | null;
+  selectedPoint: InsightPoint | null;
   errorMessage: string | null;
   onClose: () => void;
   onExpand?: () => void;

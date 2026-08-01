@@ -43,7 +43,7 @@ function CollectionShell({ children }: { children: ReactNode }) {
     { href: `${base}/files`, label: "Files" },
     { href: `${base}/search`, label: "Search" },
     { href: `${base}/diagnostics`, label: "Diagnostics" },
-    ...(config.features.umap_visualizations === false
+    ...(config.features.collection_insights === false
       ? []
       : [{ href: `${base}/visualize`, label: "Visualize" }]),
   ];

@@ -15,7 +15,7 @@ function ConfigStateView() {
     <div>
       <div data-testid="loading">{String(loading)}</div>
       <div data-testid="allow_registration">{String(config.auth.allow_registration)}</div>
-      <div data-testid="umap">{String(config.features.umap_visualizations)}</div>
+      <div data-testid="umap">{String(config.features.collection_insights)}</div>
       <div data-testid="branching">{String(config.features.chat_branching)}</div>
       <div data-testid="max_upload">{String(config.uploads.max_upload_size_mb)}</div>
     </div>
@@ -54,7 +54,7 @@ describe("ConfigProvider", () => {
       resolveFetch(
         makePublicConfig({
           auth: { allow_registration: false },
-          features: { umap_visualizations: false, chat_branching: false, mcp_access: true },
+          features: { collection_insights: false, chat_branching: false, mcp_access: true },
         }),
       );
     });

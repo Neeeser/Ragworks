@@ -1,9 +1,9 @@
 "use client";
 
 import { useCollection } from "@/components/collections/detail/collection-context";
-import { CollectionVisualization } from "@/components/collections/detail/visualize/CollectionVisualization";
+import { CollectionInsights } from "@/components/collections/detail/visualize/CollectionInsights";
 
 export default function CollectionVisualizePage() {
   const { collection, token } = useCollection();
-  return <CollectionVisualization collectionId={collection.id} token={token} />;
+  return <CollectionInsights collectionId={collection.id} token={token} />;
 }

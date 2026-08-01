@@ -3,6 +3,7 @@ export * from "@/lib/api/admin";
 export * from "@/lib/api/api-keys";
 export * from "@/lib/api/auth";
 export * from "@/lib/api/collections";
+export * from "@/lib/api/insights";
 export * from "@/lib/api/diagnostics";
 export * from "@/lib/api/files";
 export * from "@/lib/api/config";
