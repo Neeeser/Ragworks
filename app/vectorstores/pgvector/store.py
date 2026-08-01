@@ -18,6 +18,7 @@ from app.retrieval.models import (
     ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.errors import ExternalServiceError, InvalidInputError, NotFoundError
 from app.vectorstores.base import (
     FacetBucket,
@@ -42,6 +43,7 @@ PGVECTOR_CAPABILITIES = VectorStoreCapabilities(
     supported_vector_types=("dense", "sparse"),
     supports_lexical_count=True,
     supports_lexical_facet=True,
+    supports_metadata_filter=True,
     # One deployment Postgres holds every user's indexes, and an index name
     # maps to exactly one `vec_<name>` table, so a name is shared workspace-wide.
     shared_across_users=True,
@@ -152,7 +154,7 @@ class PgvectorStore(VectorStoreBackend):
         *,
         embedding: Sequence[float],
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the nearest chunks in a namespace, highest score first."""
         record = self._require_record(index, vector_type="dense")
@@ -161,6 +163,7 @@ class PgvectorStore(VectorStoreBackend):
             namespace,
             embedding=embedding,
             top_k=min(top_k, self.capabilities.max_top_k),
+            metadata_filter=filter,
         )
         return RetrievalResponse(
             matches=[self._to_scored_chunk(row, record.metric) for row in rows]
@@ -180,7 +183,7 @@ class PgvectorStore(VectorStoreBackend):
         *,
         text: str,
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the BM25 best-matching chunks for raw query text."""
         record = self._require_record(index, vector_type="sparse")
@@ -190,6 +193,7 @@ class PgvectorStore(VectorStoreBackend):
                 namespace,
                 query_text=text,
                 top_k=min(top_k, self.capabilities.max_top_k),
+                metadata_filter=filter,
             )
         except DBAPIError as exc:
             # The BM25 operators come from the pg_search extension; if it is

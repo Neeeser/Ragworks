@@ -23,7 +23,9 @@ from sqlmodel import Session, col, select
 
 from app.db.models import VectorIndexRecord
 from app.retrieval.models import DocumentChunk
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.errors import InvalidInputError
+from app.vectorstores.pgvector.filters import filter_clause
 from app.vectorstores.pgvector.lexical import LexicalRepositoryMixin, lexical_table_name
 
 # HNSW over an fp32 `vector` column caps at 2,000 dimensions. Above that the
@@ -257,8 +259,10 @@ class PgvectorRepository(LexicalRepositoryMixin):
         *,
         embedding: Sequence[float],
         top_k: int,
+        metadata_filter: MetadataFilter | None = None,
     ) -> list[tuple[str, str, str, dict[str, Any], float]]:
         """Return `(chunk_id, document_id, text, metadata, distance)` rows, nearest first."""
+        filter_sql, filter_params = filter_clause(metadata_filter)
         _, _, operator = _METRIC_OPS[record.metric]
         table = data_table_name(record.name)
         # Dense catalog rows always carry a dimension (sparse rows never reach
@@ -277,7 +281,7 @@ class PgvectorRepository(LexicalRepositoryMixin):
             SELECT chunk_id, document_id, text, metadata,
                    {distance} AS distance
             FROM {table}
-            WHERE namespace = :namespace
+            WHERE namespace = :namespace{filter_sql}
             ORDER BY distance
             LIMIT :top_k
             """
@@ -288,6 +292,7 @@ class PgvectorRepository(LexicalRepositoryMixin):
                 "embedding": list(embedding),
                 "namespace": namespace,
                 "top_k": top_k,
+                **filter_params,
             },
         ).all()
         return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]

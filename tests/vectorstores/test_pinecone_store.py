@@ -10,6 +10,7 @@ import pytest
 from pinecone.exceptions import NotFoundException as PineconeNotFoundException
 
 from app.retrieval.models import DocumentChunk, DocumentMetadata
+from app.schemas.metadata_filter import FilterCondition, MetadataFilter
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pinecone import PineconeStore
 
@@ -147,13 +148,13 @@ def test_query_converts_matches_and_passes_params() -> None:
         "ns-1",
         embedding=[0.1, 0.2, 0.3],
         top_k=3,
-        filter={"category": "faq"},
+        filter=MetadataFilter(all=[FilterCondition(field="category", value="faq")]),
     )
 
     kwargs = index.query_calls[0]
     assert kwargs["namespace"] == "ns-1"
     assert kwargs["top_k"] == 3
-    assert kwargs["filter"] == {"category": "faq"}
+    assert kwargs["filter"] == {"$and": [{"category": {"$eq": "faq"}}]}
     assert kwargs["vector"] == [0.1, 0.2, 0.3]
     assert kwargs["include_metadata"]
     assert not kwargs["include_values"]

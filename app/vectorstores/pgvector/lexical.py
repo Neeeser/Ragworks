@@ -19,6 +19,8 @@ from sqlmodel import Session
 
 from app.db.models import VectorIndexRecord
 from app.retrieval.models import DocumentChunk
+from app.schemas.metadata_filter import MetadataFilter
+from app.vectorstores.pgvector.filters import filter_clause
 
 
 def lexical_table_name(index_name: str) -> str:
@@ -113,6 +115,7 @@ class LexicalRepositoryMixin:
         *,
         query_text: str,
         top_k: int,
+        metadata_filter: MetadataFilter | None = None,
     ) -> list[tuple[str, str, str, dict[str, Any], float]]:
         """Return `(chunk_id, document_id, text, metadata, score)` rows, best first.
 
@@ -121,19 +124,20 @@ class LexicalRepositoryMixin:
         scoring via `pdb.score` (verified against pg_search 0.24).
         """
         table = lexical_table_name(record.name)
+        filter_sql, filter_params = filter_clause(metadata_filter)
         statement = text(
             f"""
             SELECT chunk_id, document_id, text, metadata,
                    pdb.score(chunk_id) AS score
             FROM {table}
-            WHERE namespace = :namespace AND text ||| :query
+            WHERE namespace = :namespace AND text ||| :query{filter_sql}
             ORDER BY score DESC
             LIMIT :top_k
             """
         )
         rows = self._session.exec(  # type: ignore[call-overload]
             statement,
-            params={"namespace": namespace, "query": query_text, "top_k": top_k},
+            params={"namespace": namespace, "query": query_text, "top_k": top_k, **filter_params},
         ).all()
         return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]
 

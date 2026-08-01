@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.filtering import filter_issues, resolve_filter
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.retrieval import ensure_query_fanout, merge_query_matches
 from app.pipelines.nodes.validators import (
@@ -28,6 +29,7 @@ from app.pipelines.tracing.summaries import summarize_matches, summarize_text
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.retrieval.models import RetrievalResponse, ScoredChunk
 from app.schemas.enums import IndexBackend
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.namespace_ownership import resolve_owned_namespace
@@ -60,6 +62,14 @@ class Bm25RetrieverConfig(BaseModel):
         description=(
             "How many chunks to fetch — typically the top_k variable, or an "
             "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
+    )
+    filter: MetadataFilter | None = Field(
+        default=None,
+        description=(
+            "Metadata conditions every returned chunk must satisfy. A "
+            "condition's value may name a pipeline variable, bound at query "
+            "time."
         ),
     )
 
@@ -106,7 +116,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
     def validation_issues_for_node(
         cls,
         node: PipelineNodeDefinition,
-        _definition: PipelineDefinition,
+        definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
         """Validate index selection, fetch depth, and the backend's lexical support."""
@@ -118,7 +128,14 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                 CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
             ),
         ]
-        return [issue for issue in maybe_issues if issue]
+        issues = [issue for issue in maybe_issues if issue]
+        issues.extend(
+            filter_issues(
+                config.filter, node, definition, config.backend,
+                node_label="BM25 retriever",
+            )
+        )
+        return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve lexically matching chunks for every query item and merge."""
@@ -138,6 +155,9 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.config.backend)
+        metadata_filter = resolve_filter(
+            self.config.filter, context, node_label="BM25 retriever"
+        )
         ensure_query_fanout(len(batch.items), "BM25 retriever")
         per_query: list[list[ScoredChunk]] = []
         for item in batch.items:
@@ -151,7 +171,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                     namespace or "",
                     text=item.text,
                     top_k=self.config.top_k,
-                    filter=None,
+                    filter=metadata_filter,
                 )
             except NotFoundError:
                 # The sparse index is created by the first ingest (ensure_index on
