@@ -38,8 +38,8 @@ const FACET_DEFINITION = {
       id: "e1",
       source: "query-input",
       target: "facet",
-      source_port: "request",
-      target_port: "request",
+      source_port: "items",
+      target_port: "items",
     },
     {
       id: "e2",
