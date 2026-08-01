@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     llm_concurrency_field,
+    llm_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
@@ -67,6 +68,7 @@ OPENAI_DESCRIPTOR = ProviderDescriptor(
             ),
         ),
         llm_concurrency_field(8),
+        llm_rpm_field(500),
     ),
     docs_url="https://platform.openai.com/api-keys",
     recommended=True,
@@ -79,6 +81,7 @@ class OpenAIAdapter(ProviderAdapter):
     provider_type: ClassVar[ProviderType] = ProviderType.OPENAI
     descriptor: ClassVar[ProviderDescriptor] = OPENAI_DESCRIPTOR
     default_llm_concurrency: ClassVar[int] = 8
+    default_llm_rpm: ClassVar[int | None] = 500
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

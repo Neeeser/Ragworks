@@ -273,6 +273,10 @@ class ProviderResolver:
         """Concurrent LLM calls allowed through a connection (see throttle)."""
         return self.adapter(connection_id, ProviderKind.CHAT).llm_concurrency()
 
+    def llm_requests_per_minute(self, connection_id: UUID) -> int | None:
+        """Requests-per-minute pace for a connection, or None (unpaced)."""
+        return self.adapter(connection_id, ProviderKind.CHAT).llm_requests_per_minute()
+
     def reranker(self, connection_id: UUID, model_name: str) -> Reranker:
         """Construct a reranker from a connection id and model name."""
         return self.adapter(connection_id, ProviderKind.RERANKING).reranker(model_name)

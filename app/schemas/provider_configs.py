@@ -66,15 +66,19 @@ def normalize_server_url(value: str, default_port: int) -> str:
 
 
 class LlmConcurrencyConfig(BaseModel):
-    """Mixin for chat-capable connections: the LLM-call concurrency cap.
+    """Mixin for chat-capable connections: the LLM-call throttle settings.
 
     `None` falls back to the provider type's default (a starter-tier-safe
     number declared on the adapter). The connection is the right scope — a
     laptop Ollama and a tier-4 cloud key differ by orders of magnitude, and
     every pipeline node sharing the connection shares its budget.
+    `requests_per_minute` paces calls proactively across a sliding window;
+    a provider default of `None` means unpaced (backoff stays the reactive
+    safety net either way).
     """
 
     max_concurrent_requests: int | None = Field(default=None, ge=1, le=64)
+    requests_per_minute: int | None = Field(default=None, ge=1, le=100_000)
 
 
 class OpenRouterConnectionConfig(LlmConcurrencyConfig):

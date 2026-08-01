@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     llm_concurrency_field,
+    llm_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.ollama import OllamaChatProvider, model_info_from_description
@@ -57,6 +58,7 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
             required=False,
         ),
         llm_concurrency_field(1),
+        llm_rpm_field(None),
     ),
     docs_url="https://ollama.com/download",
 )
@@ -83,6 +85,7 @@ class OllamaAdapter(ProviderAdapter):
     provider_type: ClassVar[ProviderType] = ProviderType.OLLAMA
     descriptor: ClassVar[ProviderDescriptor] = OLLAMA_DESCRIPTOR
     default_llm_concurrency: ClassVar[int] = 1
+    default_llm_rpm: ClassVar[int | None] = None
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

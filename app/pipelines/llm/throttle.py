@@ -17,6 +17,7 @@ from __future__ import annotations
 import random
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,18 +30,55 @@ T = TypeVar("T")
 
 _registry_lock = threading.Lock()
 _semaphores: dict[UUID, tuple[int, threading.BoundedSemaphore]] = {}
+_rate_windows: dict[UUID, tuple[threading.Lock, deque[float]]] = {}
 
 #: Statuses worth retrying: rate limits and transient server faults.
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
+_WINDOW_SECONDS = 60.0
+
+
+def _pace_request(connection_id: UUID, rpm: int, sleep: Callable[[float], None]) -> None:
+    """Block until the connection's sliding one-minute window has room.
+
+    The window records request start times; when it is full, the caller
+    sleeps until the oldest recorded request ages out. Proactive pacing —
+    reactive 429 backoff stays underneath as the safety net for tiers the
+    setting overstates.
+    """
+    with _registry_lock:
+        entry = _rate_windows.get(connection_id)
+        if entry is None:
+            entry = (threading.Lock(), deque())
+            _rate_windows[connection_id] = entry
+    lock, window = entry
+    while True:
+        with lock:
+            now = time.monotonic()
+            while window and now - window[0] >= _WINDOW_SECONDS:
+                window.popleft()
+            if len(window) < rpm:
+                window.append(now)
+                return
+            wait = _WINDOW_SECONDS - (now - window[0])
+        sleep(max(wait, 0.05))
+
 
 @contextmanager
-def connection_slot(connection_id: UUID, limit: int) -> Iterator[None]:
-    """Hold one of the connection's concurrent-request slots.
+def connection_slot(
+    connection_id: UUID,
+    limit: int,
+    *,
+    rpm: int | None = None,
+    sleep: Callable[[float], None] | None = None,
+) -> Iterator[None]:
+    """Hold one of the connection's concurrent-request slots, paced to `rpm`.
 
     A changed limit (the user edited the connection) rebuilds the semaphore;
     in-flight holders of the old one drain independently, which transiently
     overshoots by at most the old limit — acceptable for a safety valve.
+    Pacing happens *inside* the held slot so a full window never parks more
+    than `limit` threads in sleep loops.
     """
     limit = max(1, limit)
     with _registry_lock:
@@ -51,6 +89,8 @@ def connection_slot(connection_id: UUID, limit: int) -> Iterator[None]:
     semaphore = entry[1]
     semaphore.acquire()
     try:
+        if rpm is not None and rpm >= 1:
+            _pace_request(connection_id, rpm, sleep if sleep is not None else time.sleep)
         yield
     finally:
         semaphore.release()

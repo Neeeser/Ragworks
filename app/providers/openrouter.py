@@ -14,6 +14,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     llm_concurrency_field,
+    llm_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.openrouter import OpenRouterProvider
@@ -47,6 +48,7 @@ OPENROUTER_DESCRIPTOR = ProviderDescriptor(
             placeholder="sk-or-...",
         ),
         llm_concurrency_field(8),
+        llm_rpm_field(None),
     ),
     docs_url="https://openrouter.ai/settings/keys",
     recommended=True,
@@ -72,6 +74,7 @@ class OpenRouterAdapter(ProviderAdapter):
     provider_type: ClassVar[ProviderType] = ProviderType.OPENROUTER
     descriptor: ClassVar[ProviderDescriptor] = OPENROUTER_DESCRIPTOR
     default_llm_concurrency: ClassVar[int] = 8
+    default_llm_rpm: ClassVar[int | None] = None
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

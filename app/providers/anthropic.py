@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     llm_concurrency_field,
+    llm_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import MessagesProvider
@@ -60,6 +61,7 @@ ANTHROPIC_DESCRIPTOR = ProviderDescriptor(
             ),
         ),
         llm_concurrency_field(4),
+        llm_rpm_field(50),
     ),
     docs_url="https://console.anthropic.com/settings/keys",
     recommended=True,
@@ -86,6 +88,7 @@ class AnthropicAdapter(ProviderAdapter):
     provider_type: ClassVar[ProviderType] = ProviderType.ANTHROPIC
     descriptor: ClassVar[ProviderDescriptor] = ANTHROPIC_DESCRIPTOR
     default_llm_concurrency: ClassVar[int] = 4
+    default_llm_rpm: ClassVar[int | None] = 50
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

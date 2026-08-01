@@ -74,6 +74,7 @@ class LlmEngine:
         self._node_label = node_label
         self._provider: ChatProvider = context.providers.chat(config.connection_id)
         self._concurrency = context.providers.llm_concurrency(config.connection_id)
+        self._rpm = context.providers.llm_requests_per_minute(config.connection_id)
         #: Ingestion runs are strict; query-time runs degrade with warnings.
         self.strict: bool = context.document is not None
         self.warnings: list[str] = []
@@ -130,7 +131,7 @@ class LlmEngine:
         """One throttled, retried, validated structured call."""
         outcome = RetryOutcome()
         try:
-            with connection_slot(self._connection_id, self._concurrency):
+            with connection_slot(self._connection_id, self._concurrency, rpm=self._rpm):
                 payload, usage = call_with_retries(
                     lambda: self._request(prompt_pair, schema), outcome=outcome
                 )

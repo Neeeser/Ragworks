@@ -396,11 +396,18 @@ frontend form code — only a new `ConfigFieldKind` would.
   retrieval, and query expansion are prompts + output fields on an existing
   shell, and a per-method type would re-implement the same node under a name
   that can never be retired.
-- **LLM-call concurrency is connection-scoped, enforced by the engine's
-  process-wide semaphore registry (`llm/throttle.py`) — never a per-node
-  knob.** The connection is the thing being rate-limited; two nodes with
-  their own budgets would unknowingly double-hit one server, and the single
-  choke point is where a future per-connection RPM budget slots in.
+- **LLM-call throttling is connection-scoped, enforced by the engine's
+  process-wide registry (`llm/throttle.py`) — never a per-node knob.** The
+  connection is the thing being rate-limited; two nodes with their own
+  budgets would unknowingly double-hit one server. Both settings live on the
+  connection config (`max_concurrent_requests`, `requests_per_minute`) with
+  starter-tier defaults on the adapters; RPM pacing runs inside a held
+  concurrency slot so a full window never parks unbounded threads, and a
+  `None` RPM default means unpaced (local servers, providers with no
+  router-side cap) with 429 backoff as the reactive floor.
+  `stamp_llm_throttle_defaults` writes the defaults onto existing chat
+  connection rows at startup — key-presence idempotent, so a user's edit is
+  never overwritten.
 - **The engine's failure policy is classified by run kind
   (`context.document`): ingestion runs are strict, query-time runs degrade
   per item with a warning recorded in the trace.** A corpus where some

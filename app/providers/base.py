@@ -39,6 +39,31 @@ def effective_embedding_input_limit(published_limit: int) -> int:
     return max(0, published_limit - EMBEDDING_INPUT_MARGIN_TOKENS)
 
 
+def llm_rpm_field(default: int | None) -> ProviderConfigField:
+    """The shared `requests_per_minute` form field for chat providers.
+
+    Declared per descriptor so the add-connection form renders it with zero
+    provider-specific frontend code; a `None` default means the provider is
+    unpaced unless the user sets a value.
+    """
+    return ProviderConfigField(
+        name="requests_per_minute",
+        label="Requests per minute",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default) if default is not None else "unlimited",
+        description="Pace pipeline LLM calls to this many requests per minute.",
+        help=(
+            "Pipeline LLM nodes pace their calls across a sliding one-minute "
+            "window so a large ingestion doesn't burn straight into the "
+            "provider's rate limit. Raise it to match your account's tier; "
+            "empty uses the provider default"
+            + (f" ({default})." if default is not None else " (no pacing).")
+        ),
+        advanced=True,
+    )
+
+
 def llm_concurrency_field(default: int) -> ProviderConfigField:
     """The shared `max_concurrent_requests` form field for chat providers.
 
@@ -163,6 +188,28 @@ class ProviderAdapter(ABC):
     #: safe per provider type; adapters serving CHAT override to match their
     #: provider's published entry limits.
     default_llm_concurrency: ClassVar[int] = 4
+
+    #: Requests-per-minute pace when the connection sets none. `None` means
+    #: unpaced — right for providers that publish no router-side cap
+    #: (OpenRouter paid models) and for local servers, where reactive
+    #: backoff is the only limit that means anything.
+    default_llm_rpm: ClassVar[int | None] = None
+
+    def llm_requests_per_minute(self) -> int | None:
+        """Requests-per-minute pace for pipeline LLM calls, or None (unpaced).
+
+        Reads the stored `requests_per_minute` override, falling back to the
+        provider type's default. Malformed stored values fall back rather
+        than raise — a throttle must never be what breaks a run.
+        """
+        raw = self.connection.config.get("requests_per_minute")
+        try:
+            value = int(str(raw)) if raw is not None and str(raw).strip() else None
+        except ValueError:
+            value = None
+        if value is not None and value >= 1:
+            return value
+        return self.default_llm_rpm
 
     def llm_concurrency(self) -> int:
         """Concurrent LLM calls pipeline nodes may make through this connection.

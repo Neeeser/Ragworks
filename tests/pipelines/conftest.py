@@ -285,6 +285,10 @@ class StubProviderResolver:
         """Return the configured concurrent-call cap for any connection."""
         return self.chat_concurrency
 
+    def llm_requests_per_minute(self, _connection_id: Any) -> int | None:
+        """Tests run unpaced — RPM pacing is pinned in the throttle tests."""
+        return None
+
 
 class StubVectorStoreProvider:
     """Stands in for `VectorStoreProvider`: one shared store for any backend."""
