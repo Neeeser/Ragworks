@@ -4,6 +4,10 @@ import type {
   EmbeddingDimensionResponse,
   ListModelEndpointsResponse,
   ModelCatalogResponse,
+  ModelShortlistEntry,
+  ModelShortlistIdentity,
+  ModelShortlistResponse,
+  ShortlistKind,
   UUID,
 } from "@/lib/types";
 
@@ -61,4 +65,41 @@ export async function listModelEndpoints(
     `/api/connections/${connectionId}/models/${encodedAuthor}/${encodedSlug}/endpoints`,
     { token },
   );
+}
+
+export async function fetchModelShortlist(
+  token: string,
+  kind: ShortlistKind,
+): Promise<ModelShortlistResponse> {
+  return apiFetch<ModelShortlistResponse>(`/api/models/shortlist?kind=${kind}`, { token });
+}
+
+export async function pinModel(
+  token: string,
+  identity: ModelShortlistIdentity,
+): Promise<ModelShortlistEntry> {
+  return apiFetch<ModelShortlistEntry>("/api/models/shortlist/pins", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(identity),
+  });
+}
+
+export async function unpinModel(token: string, identity: ModelShortlistIdentity): Promise<void> {
+  await apiFetch<void>("/api/models/shortlist/pins", {
+    token,
+    method: "DELETE",
+    body: JSON.stringify(identity),
+  });
+}
+
+export async function recordModelUse(
+  token: string,
+  identity: ModelShortlistIdentity,
+): Promise<ModelShortlistEntry> {
+  return apiFetch<ModelShortlistEntry>("/api/models/shortlist/recents", {
+    token,
+    method: "POST",
+    body: JSON.stringify(identity),
+  });
 }

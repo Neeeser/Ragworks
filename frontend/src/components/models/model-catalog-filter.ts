@@ -1,7 +1,3 @@
-"use client";
-
-import { useMemo, useState } from "react";
-
 import { sortChatModels, sortEmbeddingModels } from "@/lib/model-sorting";
 
 import type { CatalogModel, UUID } from "@/lib/types";
@@ -96,71 +92,13 @@ export function groupModelsByConnection(models: CatalogModel[]): ConnectionGroup
   return [...groups.values()];
 }
 
-interface UseModelCatalogFilterOptions {
-  models: CatalogModel[];
-  /** Keep only models the caller can use (structured-output support, etc.). Must be stable. */
-  prefilter?: (model: CatalogModel) => boolean;
-  /** Expose a provider filter and derive its options. */
-  enableProviderFilter?: boolean;
-  /** Sort controls to offer; the first is the initial sort. Empty = no sort control. */
-  sortOptions?: ModelSortDef[];
-}
-
-interface UseModelCatalogFilterResult {
-  searchTerm: string;
-  setSearchTerm: (value: string) => void;
-  connectionFilter: string;
-  setConnectionFilter: (value: string) => void;
-  sortValue: string;
-  setSortValue: (value: string) => void;
-  connectionOptions: ConnectionOption[];
-  filteredModels: CatalogModel[];
-}
-
-const EMPTY_SORTS: ModelSortDef[] = [];
-
 /**
- * Owns the search / provider-filter / sort state for a model catalog and returns
- * the filtered, sorted list ready to render. Centralizing it here keeps the
- * embedding, reranking, and eval-generation pickers behaving identically; the
- * chat picker keeps its own catalog hook (which also feeds the parameter panel).
+ * The identity key for a model: its connection plus its id.
+ *
+ * Model identity is a `(connection, model)` pair everywhere it is persisted,
+ * and the same pair is what joins a shortlist entry to a catalog row — the
+ * same model id served by two connections is two different choices.
  */
-export function useModelCatalogFilter({
-  models,
-  prefilter,
-  enableProviderFilter = false,
-  sortOptions = EMPTY_SORTS,
-}: UseModelCatalogFilterOptions): UseModelCatalogFilterResult {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [connectionFilter, setConnectionFilter] = useState("");
-  const [sortValue, setSortValue] = useState(sortOptions[0]?.value ?? "");
-
-  const baseModels = useMemo(
-    () => (prefilter ? models.filter(prefilter) : models),
-    [models, prefilter],
-  );
-  const connectionOptions = useMemo(() => buildConnectionOptions(baseModels), [baseModels]);
-  const scopedModels = useMemo(() => {
-    if (!enableProviderFilter || !connectionFilter) return baseModels;
-    return baseModels.filter((model) => model.connection_id === connectionFilter);
-  }, [baseModels, connectionFilter, enableProviderFilter]);
-  const searchedModels = useMemo(
-    () => filterModelsBySearch(scopedModels, searchTerm),
-    [scopedModels, searchTerm],
-  );
-  const filteredModels = useMemo(
-    () => (sortValue ? sortModelsBy(searchedModels, sortValue) : searchedModels),
-    [searchedModels, sortValue],
-  );
-
-  return {
-    searchTerm,
-    setSearchTerm,
-    connectionFilter,
-    setConnectionFilter,
-    sortValue,
-    setSortValue,
-    connectionOptions,
-    filteredModels,
-  };
+export function modelKey(connectionId: string, modelId: string): string {
+  return `${connectionId}::${modelId}`;
 }

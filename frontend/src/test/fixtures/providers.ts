@@ -3,12 +3,15 @@ import type {
   CatalogMetadata,
   ConnectionCatalogError,
   ModelCatalogResponse,
+  ModelShortlistEntry,
+  ModelShortlistResponse,
   ProviderConfigField,
   ProviderConnection,
   ProviderTypeInfo,
 } from "@/lib/types";
 
 const OPENROUTER_CONNECTION_ID = "conn-openrouter-1";
+const FIXED_TIMESTAMP = "2026-01-01T00:00:00Z";
 
 /**
  * One provider config field, with the catalog's own defaults filled in.
@@ -41,8 +44,8 @@ export function makeConnection(overrides: Partial<ProviderConnection> = {}): Pro
     config_valid: true,
     config: {},
     secrets_configured: { api_key: true },
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
+    created_at: FIXED_TIMESTAMP,
+    updated_at: FIXED_TIMESTAMP,
     ...overrides,
   };
 }
@@ -99,4 +102,24 @@ export function makeModelCatalog(
   },
 ): ModelCatalogResponse {
   return { models, connection_errors: connectionErrors, meta };
+}
+
+export function makeShortlistEntry(
+  overrides: Partial<ModelShortlistEntry> = {},
+): ModelShortlistEntry {
+  return {
+    kind: "chat",
+    entry_type: "pinned",
+    connection_id: OPENROUTER_CONNECTION_ID,
+    model_id: "model-1",
+    created_at: FIXED_TIMESTAMP,
+    last_used_at: null,
+    ...overrides,
+  };
+}
+
+export function makeModelShortlist(
+  overrides: Partial<ModelShortlistResponse> = {},
+): ModelShortlistResponse {
+  return { pinned: [], recent: [], ...overrides };
 }
