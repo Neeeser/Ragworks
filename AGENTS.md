@@ -140,7 +140,11 @@ failing-then-passing test is incomplete.
   the `docker-compose.yml` ↔ README mirror (below).
 - Every PR carries at least one release-notes label (`breaking`, `feature`, `fix`,
   `docs`, `ci`, `dependencies`, `chore`, or `skip-changelog`) — the `PR labels` check
-  fails without one, and `.github/release.yml` uses them to organize release notes.
+  fails without one. Only `breaking`/`feature`/`fix` PRs appear in release notes
+  (`.github/release.yml` excludes the rest), so the title of a PR carrying one of
+  those labels is a published release-note line: write it as a user-facing
+  statement of what changed, not an implementation note — a reader of the release
+  page sees the title verbatim, with no diff beside it.
 - **A merged PR cleans up what it created**, in this order: `make
   clean-worktree-dbs` (from inside the worktree, while it still exists — the target
   derives this worktree's own database names, so it cannot reach a neighbouring
@@ -164,7 +168,13 @@ bumps the version on a `release/v<version>` branch and opens a PR — it does **
 push to `main` or create the tag. Merging that PR fires `release.yml`, which tags the
 merge commit, publishes multi-arch `ghcr.io/neeeser/ragworks-backend` / `-frontend`
 images (`X.Y.Z` + `X.Y` + `latest` for stable, `X.Y.Z-rc.N` alone for pre-releases),
-and cuts the GitHub Release with label-organized notes. The version lives in
+and cuts the GitHub Release with label-organized notes (only
+`breaking`/`feature`/`fix` PRs appear; `docs`/`ci`/`dependencies`/`chore` are
+excluded). The release PR body carries a `## Highlights` section — hand-written
+prose, seeded from the terminal (`make bump-minor HIGHLIGHTS="…"`) or the
+workflow input, and editable any time before merge — which `release.yml` prepends above the
+generated PR list; left as its seeded comment, the release ships generated notes
+alone. The version lives in
 `pyproject.toml` and `frontend/package.json` (plus lockfiles); only
 `scripts/bump_version.py` writes it. Every push to `main` publishes rolling `edge`
 images (`edge.yml`) for testing — never a release. The multi-arch build is one

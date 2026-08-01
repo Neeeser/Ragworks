@@ -84,3 +84,22 @@ def test_package_lock_pins_current_frontend_version() -> None:
 
     assert lock["version"] == version
     assert lock["packages"][""]["version"] == version
+
+
+def test_pr_body_seeds_placeholder_when_no_highlights() -> None:
+    body = bump_version._pr_body("0.3.0", "0.4.0", "v0.4.0", "")
+    assert "## Highlights" in body
+    # Placeholder-only section: release.yml strips the comment and falls back
+    # to purely generated notes.
+    section = body.split("## Highlights", 1)[1]
+    assert section.strip().startswith("<!--")
+    assert section.strip().endswith("-->")
+
+
+def test_pr_body_prefills_highlights_from_env_value() -> None:
+    body = bump_version._pr_body(
+        "0.3.0", "0.4.0", "v0.4.0", "This release reworks the frontend console.\n"
+    )
+    section = body.split("## Highlights", 1)[1]
+    assert section.strip() == "This release reworks the frontend console."
+    assert "<!--" not in section
