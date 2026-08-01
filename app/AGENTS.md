@@ -396,18 +396,28 @@ frontend form code — only a new `ConfigFieldKind` would.
   retrieval, and query expansion are prompts + output fields on an existing
   shell, and a per-method type would re-implement the same node under a name
   that can never be retired.
-- **LLM-call throttling is connection-scoped, enforced by the engine's
-  process-wide registry (`llm/throttle.py`) — never a per-node knob.** The
-  connection is the thing being rate-limited; two nodes with their own
-  budgets would unknowingly double-hit one server. Both settings live on the
-  connection config (`max_concurrent_requests`, `requests_per_minute`) with
-  starter-tier defaults on the adapters; RPM pacing runs inside a held
-  concurrency slot so a full window never parks unbounded threads, and a
-  `None` RPM default means unpaced (local servers, providers with no
-  router-side cap) with 429 backoff as the reactive floor.
-  `stamp_llm_throttle_defaults` writes the defaults onto existing chat
-  connection rows at startup — key-presence idempotent, so a user's edit is
-  never overwritten.
+- **Model-request throttling is connection-scoped and holistic, enforced by
+  the process-wide registry (`app/providers/throttle.py`) — never a
+  per-node knob.** The connection is the thing being rate-limited; chat,
+  embedding, and reranking all honor it — `ProviderResolver` hands out
+  throttled embedder/reranker proxies (`app/providers/throttled.py`), bulk
+  chat outside the LLM engine (eval generation) wraps the same way, and
+  the engine slots its own calls against the same keys, so everything
+  counts once. Interactive chat streaming is deliberately unthrottled —
+  parking a user's turn behind a bulk run's exhausted window trades a
+  retryable 429 for a stall nothing explains. Settings live on the
+  connection config (`max_concurrent_requests`, `requests_per_minute`,
+  plus advanced per-kind `embedding_/rerank_requests_per_minute`
+  overrides) with starter-tier defaults on the adapters. By default every
+  kind draws from one shared window; a kind with its own pace (override or
+  provider default — providers meter per endpoint, and embedding limits
+  run far above chat) carves out into its own window, so a set override
+  never multiplies the shared budget. RPM pacing runs inside a held
+  concurrency slot so a full window never parks unbounded threads; a
+  `None` pace means unpaced with 429 backoff as the reactive floor.
+  `stamp_llm_throttle_defaults` writes the defaults onto existing
+  model-serving connection rows at startup — key-presence idempotent, so a
+  user's edit is never overwritten.
 - **The engine's failure policy is classified by run kind
   (`context.document`): ingestion runs are strict, query-time runs degrade
   per item with a warning recorded in the trace.** A corpus where some

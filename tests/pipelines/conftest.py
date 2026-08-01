@@ -281,11 +281,11 @@ class StubProviderResolver:
         """Return the canned chat provider for any connection."""
         return self.chat_provider
 
-    def llm_concurrency(self, _connection_id: Any) -> int:
+    def request_concurrency(self, _connection_id: Any) -> int:
         """Return the configured concurrent-call cap for any connection."""
         return self.chat_concurrency
 
-    def llm_requests_per_minute(self, _connection_id: Any) -> int | None:
+    def request_rpm(self, _connection_id: Any) -> int | None:
         """Tests run unpaced — RPM pacing is pinned in the throttle tests."""
         return None
 

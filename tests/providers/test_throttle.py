@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from app.pipelines.llm.throttle import (
+from app.providers.throttle import (
     RetryOutcome,
     RetryPolicy,
     call_with_retries,

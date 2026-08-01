@@ -79,6 +79,12 @@ class LlmConcurrencyConfig(BaseModel):
 
     max_concurrent_requests: int | None = Field(default=None, ge=1, le=64)
     requests_per_minute: int | None = Field(default=None, ge=1, le=100_000)
+    #: Per-kind pace overrides. Unset, a kind draws from the shared
+    #: `requests_per_minute` window; set, it paces in its own window at this
+    #: rate — providers meter per endpoint (embeddings limits run far above
+    #: chat), so heavy ingestion need not crawl at chat pace.
+    embedding_requests_per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
+    rerank_requests_per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
 
 
 class OpenRouterConnectionConfig(LlmConcurrencyConfig):
@@ -106,7 +112,7 @@ class OllamaConnectionConfig(LlmConcurrencyConfig):
         return normalize_server_url(value, OLLAMA_DEFAULT_PORT)
 
 
-class TEIConnectionConfig(BaseModel):
+class TEIConnectionConfig(LlmConcurrencyConfig):
     """Stored config for a Text Embeddings Inference connection."""
 
     base_url: str = Field(min_length=1)

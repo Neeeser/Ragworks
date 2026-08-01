@@ -44,6 +44,7 @@ from app.providers.openai import OpenAIAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.providers.tei import TEIAdapter
+from app.providers.throttled import ThrottledEmbedder, ThrottledReranker
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.rerankers.base import Reranker
 from app.schemas.enums import ProviderKind, ProviderType
@@ -254,9 +255,15 @@ class ProviderResolver:
         model_name: str,
         dimensions: int | None = None,
     ) -> Embedder:
-        """Construct an embedder from a connection id and model name."""
-        return self.adapter(connection_id, ProviderKind.EMBEDDING).embedder(
-            model_name, dimensions=dimensions
+        """Construct an embedder, throttled to the connection's budget."""
+        adapter = self.adapter(connection_id, ProviderKind.EMBEDDING)
+        rpm, window = adapter.request_pace(ProviderKind.EMBEDDING)
+        return ThrottledEmbedder(
+            adapter.embedder(model_name, dimensions=dimensions),
+            connection_id,
+            limit=adapter.request_concurrency(),
+            rpm=rpm,
+            window=window,
         )
 
     def embedding_input_limit(self, connection_id: UUID, model_name: str) -> int | None:
@@ -269,14 +276,22 @@ class ProviderResolver:
         """Construct a chat provider from a connection id."""
         return self.adapter(connection_id, ProviderKind.CHAT).chat_provider()
 
-    def llm_concurrency(self, connection_id: UUID) -> int:
-        """Concurrent LLM calls allowed through a connection (see throttle)."""
-        return self.adapter(connection_id, ProviderKind.CHAT).llm_concurrency()
+    def request_concurrency(self, connection_id: UUID) -> int:
+        """Concurrent model calls allowed through a connection (see throttle)."""
+        return self.adapter(connection_id, ProviderKind.CHAT).request_concurrency()
 
-    def llm_requests_per_minute(self, connection_id: UUID) -> int | None:
-        """Requests-per-minute pace for a connection, or None (unpaced)."""
-        return self.adapter(connection_id, ProviderKind.CHAT).llm_requests_per_minute()
+    def request_rpm(self, connection_id: UUID) -> int | None:
+        """Shared requests-per-minute pace for a connection, or None."""
+        return self.adapter(connection_id, ProviderKind.CHAT).request_rpm()
 
     def reranker(self, connection_id: UUID, model_name: str) -> Reranker:
-        """Construct a reranker from a connection id and model name."""
-        return self.adapter(connection_id, ProviderKind.RERANKING).reranker(model_name)
+        """Construct a reranker, throttled to the connection's budget."""
+        adapter = self.adapter(connection_id, ProviderKind.RERANKING)
+        rpm, window = adapter.request_pace(ProviderKind.RERANKING)
+        return ThrottledReranker(
+            adapter.reranker(model_name),
+            connection_id,
+            limit=adapter.request_concurrency(),
+            rpm=rpm,
+            window=window,
+        )

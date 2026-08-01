@@ -31,8 +31,9 @@ from app.providers.base import (
     CatalogResult,
     ProviderAdapter,
     ProviderDescriptor,
-    llm_concurrency_field,
-    llm_rpm_field,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
@@ -150,8 +151,10 @@ CUSTOM_DESCRIPTOR = ProviderDescriptor(
             default="/rerank",
             placeholder="/rerank",
         ),
-        llm_concurrency_field(2),
-        llm_rpm_field(None),
+        request_concurrency_field(2),
+        request_rpm_field(None),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
+        kind_rpm_field("Reranking", "rerank_requests_per_minute", None),
     ),
     docs_url="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html",
 )
@@ -168,8 +171,8 @@ class CustomAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.CUSTOM
     descriptor: ClassVar[ProviderDescriptor] = CUSTOM_DESCRIPTOR
-    default_llm_concurrency: ClassVar[int] = 2
-    default_llm_rpm: ClassVar[int | None] = None
+    default_request_concurrency: ClassVar[int] = 2
+    default_request_rpm: ClassVar[int | None] = None
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

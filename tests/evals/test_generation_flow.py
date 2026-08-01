@@ -126,12 +126,17 @@ _DISTINCT_QUESTIONS = [
 class _ScriptedChat:
     """A chat provider double: unique candidates per context, scripted scores.
 
+    Carries the ChatProvider protocol's `name` so the generator's throttling
+    wrapper can adopt it.
+
     Each generation call yields two candidates quoting the real context (one
     later fails critique), so acceptance advances exactly one question per
     context and the accept/reject paths both execute. Question texts come
     from a bank of genuinely distinct sentences so the dedup gate ignores
     them.
     """
+
+    name = "scripted"
 
     def __init__(self) -> None:
         self.calls = 0
@@ -176,6 +181,12 @@ class _Adapter:
 
     def chat_provider(self) -> _ScriptedChat:
         return self._chat
+
+    def request_concurrency(self) -> int:
+        return 4
+
+    def request_pace(self, _kind: object) -> tuple[int | None, str]:
+        return None, "shared"
 
 
 def _wire(monkeypatch: pytest.MonkeyPatch, session: Session, chat: _ScriptedChat) -> None:

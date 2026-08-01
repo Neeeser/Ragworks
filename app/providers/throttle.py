@@ -1,11 +1,14 @@
-"""Connection-scoped concurrency limiting and retry for LLM calls.
+"""Connection-scoped concurrency limiting, pacing, and retry for model calls.
 
 The provider connection is the thing being rate-limited — a laptop Ollama
 and a tier-4 cloud key differ by orders of magnitude — so the semaphore
-registry is process-wide and keyed by connection id: every LLM node sharing
-a connection, across nodes and concurrent runs in this process, shares one
-budget. The limit comes from the connection's `max_concurrent_requests`
-config (falling back to the provider type's default), read by the engine.
+registry is process-wide and keyed by connection id, and it is holistic:
+chat, embedding, and reranking requests through one connection all share
+the same budget (providers meter per endpoint, so a shared window is
+deliberately conservative — and embedding calls are batched, so the
+conservatism costs little). Limits come from the connection's
+`max_concurrent_requests`/`requests_per_minute` config, falling back to
+the provider type's defaults.
 
 Retries are reactive: exponential backoff with jitter on provider-side
 failures (429/5xx/timeouts), honoring `Retry-After`. What happens after the
@@ -30,7 +33,7 @@ T = TypeVar("T")
 
 _registry_lock = threading.Lock()
 _semaphores: dict[UUID, tuple[int, threading.BoundedSemaphore]] = {}
-_rate_windows: dict[UUID, tuple[threading.Lock, deque[float]]] = {}
+_rate_windows: dict[tuple[UUID, str], tuple[threading.Lock, deque[float]]] = {}
 
 #: Statuses worth retrying: rate limits and transient server faults.
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -38,19 +41,22 @@ _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _WINDOW_SECONDS = 60.0
 
 
-def _pace_request(connection_id: UUID, rpm: int, sleep: Callable[[float], None]) -> None:
+def _pace_request(
+    connection_id: UUID, window_key: str, rpm: int, sleep: Callable[[float], None]
+) -> None:
     """Block until the connection's sliding one-minute window has room.
 
     The window records request start times; when it is full, the caller
     sleeps until the oldest recorded request ages out. Proactive pacing —
     reactive 429 backoff stays underneath as the safety net for tiers the
-    setting overstates.
+    setting overstates. `window_key` is "shared" unless a request kind
+    carries its own pace (see `ProviderAdapter.request_pace`).
     """
     with _registry_lock:
-        entry = _rate_windows.get(connection_id)
+        entry = _rate_windows.get((connection_id, window_key))
         if entry is None:
             entry = (threading.Lock(), deque())
-            _rate_windows[connection_id] = entry
+            _rate_windows[(connection_id, window_key)] = entry
     lock, window = entry
     while True:
         with lock:
@@ -70,6 +76,7 @@ def connection_slot(
     limit: int,
     *,
     rpm: int | None = None,
+    window: str = "shared",
     sleep: Callable[[float], None] | None = None,
 ) -> Iterator[None]:
     """Hold one of the connection's concurrent-request slots, paced to `rpm`.
@@ -90,7 +97,9 @@ def connection_slot(
     semaphore.acquire()
     try:
         if rpm is not None and rpm >= 1:
-            _pace_request(connection_id, rpm, sleep if sleep is not None else time.sleep)
+            _pace_request(
+                connection_id, window, rpm, sleep if sleep is not None else time.sleep
+            )
         yield
     finally:
         semaphore.release()

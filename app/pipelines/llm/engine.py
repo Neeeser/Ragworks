@@ -26,13 +26,13 @@ from app.pipelines.llm.output_schema import (
     LlmOutputError,
     parse_payload,
 )
-from app.pipelines.llm.throttle import (
+from app.pipelines.tracing.summaries import TokenUsage, combine_usage
+from app.providers.chat.base import ChatProvider, ChatRequest
+from app.providers.throttle import (
     RetryOutcome,
     call_with_retries,
     connection_slot,
 )
-from app.pipelines.tracing.summaries import TokenUsage, combine_usage
-from app.providers.chat.base import ChatProvider, ChatRequest
 from app.services.errors import InvalidInputError, is_external_provider_error
 
 logger = logging.getLogger(__name__)
@@ -73,8 +73,8 @@ class LlmEngine:
         self._config = config
         self._node_label = node_label
         self._provider: ChatProvider = context.providers.chat(config.connection_id)
-        self._concurrency = context.providers.llm_concurrency(config.connection_id)
-        self._rpm = context.providers.llm_requests_per_minute(config.connection_id)
+        self._concurrency = context.providers.request_concurrency(config.connection_id)
+        self._rpm = context.providers.request_rpm(config.connection_id)
         #: Ingestion runs are strict; query-time runs degrade with warnings.
         self.strict: bool = context.document is not None
         self.warnings: list[str] = []

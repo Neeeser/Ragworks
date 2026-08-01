@@ -31,7 +31,7 @@ CONNECTION_ID = uuid4()
 @pytest.fixture(autouse=True)
 def _no_real_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
     """Retry backoff must never wait out real time in these tests."""
-    monkeypatch.setattr("app.pipelines.llm.throttle.time.sleep", lambda _: None)
+    monkeypatch.setattr("app.providers.throttle.time.sleep", lambda _: None)
 
 
 def _context(

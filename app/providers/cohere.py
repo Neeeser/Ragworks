@@ -13,8 +13,9 @@ from app.providers.base import (
     CatalogResult,
     ProviderAdapter,
     ProviderDescriptor,
-    llm_concurrency_field,
-    llm_rpm_field,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.cohere import CohereChatProvider
@@ -45,8 +46,10 @@ COHERE_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.SECRET,
             required=True,
         ),
-        llm_concurrency_field(4),
-        llm_rpm_field(500),
+        request_concurrency_field(4),
+        request_rpm_field(500),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", 2000),
+        kind_rpm_field("Reranking", "rerank_requests_per_minute", 1000),
     ),
     docs_url="https://dashboard.cohere.com/api-keys",
 )
@@ -59,8 +62,10 @@ class CohereAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.COHERE
     descriptor: ClassVar[ProviderDescriptor] = COHERE_DESCRIPTOR
-    default_llm_concurrency: ClassVar[int] = 4
-    default_llm_rpm: ClassVar[int | None] = 500
+    default_request_concurrency: ClassVar[int] = 4
+    default_request_rpm: ClassVar[int | None] = 500
+    default_embedding_rpm: ClassVar[int | None] = 2000
+    default_rerank_rpm: ClassVar[int | None] = 1000
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the Cohere connection secret and bind this adapter."""

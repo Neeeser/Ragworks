@@ -51,13 +51,31 @@ def test_stamps_chat_connections_and_leaves_the_rest(session: Session) -> None:
 
         kept = fresh.get(models.ProviderConnection, openai.id)
         assert kept is not None
-        # An explicit user value survives; the absent RPM gains the default.
+        # An explicit user value survives; the absent paces gain defaults —
+        # including the embedding carve-out OpenAI ships a rate for.
         assert kept.config["max_concurrent_requests"] == 32
         assert kept.config["requests_per_minute"] == 500
+        assert kept.config["embedding_requests_per_minute"] == 3000
 
         untouched = fresh.get(models.ProviderConnection, pinecone.id)
         assert untouched is not None
         assert untouched.config == {"api_key": "pc-x"}
+
+
+def test_embedding_only_providers_are_stamped_too(session: Session) -> None:
+    user = _user(session)
+    tei = _connection(user.id, "tei", {"base_url": "http://localhost:8080"})
+    session.add(tei)
+    session.commit()
+
+    stamp_llm_throttle_defaults(session)
+
+    with Session(session.get_bind()) as fresh:
+        row = fresh.get(models.ProviderConnection, tei.id)
+        assert row is not None
+        assert row.config["max_concurrent_requests"] == 2
+        # No pace defaults for a local server — absent keys stay absent.
+        assert "requests_per_minute" not in row.config
 
 
 def test_migration_is_idempotent(session: Session) -> None:
