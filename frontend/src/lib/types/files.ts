@@ -19,6 +19,8 @@ export interface FileIngestion {
   embedding_model: string;
   ingestion_run_id?: UUID | null;
   updated_at: string;
+  /** Ready, but ingested by an older version of the bound ingestion pipeline. */
+  stale: boolean;
 }
 
 export interface FileNode {
@@ -57,6 +59,10 @@ export interface FileContentMatch {
   chunk_id: string;
   snippet: string;
   score: number;
+}
+
+export interface StaleReingestResponse {
+  queued: number;
 }
 
 export interface FileSearchResponse {

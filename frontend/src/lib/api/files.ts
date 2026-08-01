@@ -9,6 +9,7 @@ import type {
   FileSearchResponse,
   FileTree,
   FileUploadResponse,
+  StaleReingestResponse,
 } from "@/lib/types";
 
 export async function fetchFileTree(token: string, collectionId: string): Promise<FileTree> {
@@ -88,6 +89,16 @@ export async function deleteFileNode(token: string, fileId: string): Promise<voi
 
 export async function ingestFile(token: string, fileId: string): Promise<FileNode> {
   return apiFetch<FileNode>(`/api/files/${fileId}/ingest`, { method: "POST", token });
+}
+
+export async function reingestStaleFiles(
+  token: string,
+  collectionId: string,
+): Promise<StaleReingestResponse> {
+  return apiFetch<StaleReingestResponse>(`/api/collections/${collectionId}/files/reingest-stale`, {
+    method: "POST",
+    token,
+  });
 }
 
 export async function searchFiles(

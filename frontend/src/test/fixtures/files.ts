@@ -26,6 +26,7 @@ export function makeFileNode(overrides: Partial<FileNode> = {}): FileNode {
       embedding_model: "embed-1",
       ingestion_run_id: "run-1",
       updated_at: TIMESTAMP,
+      stale: false,
     },
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,

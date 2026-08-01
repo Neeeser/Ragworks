@@ -148,6 +148,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     copyFileNode: vi.fn(async () => makeFileNode()),
     deleteFileNode: vi.fn(async () => undefined),
     ingestFile: vi.fn(async () => makeFileNode()),
+    reingestStaleFiles: vi.fn(async () => ({ queued: 0 })),
     searchFiles: vi.fn(async () => ({ query: "", folders: [], files: [], content: [] })),
     fetchFileBlob: vi.fn(async () => new Blob(["content"], { type: "text/plain" })),
     fetchDocumentChunks: vi.fn(async () => makeChunkVisualization()),

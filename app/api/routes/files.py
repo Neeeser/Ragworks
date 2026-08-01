@@ -36,12 +36,14 @@ from app.schemas.files import (
     FileTreeResponse,
     FileUploadResponse,
     FolderCreate,
+    StaleReingestResponse,
 )
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.services.file_copy import FileCopyService
 from app.services.file_deletion import FileDeletionService
 from app.services.file_search import SEARCH_MODES, FileSearchService
+from app.services.file_staleness import mark_stale_documents_pending
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion_queue import enqueue_document_ingestion
 
@@ -273,6 +275,26 @@ def ingest_file(
     session.commit()
     background_tasks.add_task(enqueue_document_ingestion, document.id)
     return service.read_node(node)
+
+
+@router.post(
+    "/collections/{collection_id}/files/reingest-stale",
+    response_model=StaleReingestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def reingest_stale_files(
+    collection_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> StaleReingestResponse:
+    """Requeue every ready document ingested by an outdated pipeline version."""
+    collection = get_collection_or_404(collection_id, current_user.id, session)
+    document_ids = mark_stale_documents_pending(session, collection)
+    session.commit()
+    for document_id in document_ids:
+        background_tasks.add_task(enqueue_document_ingestion, document_id)
+    return StaleReingestResponse(queued=len(document_ids))
 
 
 @router.get("/collections/{collection_id}/files/search", response_model=FileSearchResponse)

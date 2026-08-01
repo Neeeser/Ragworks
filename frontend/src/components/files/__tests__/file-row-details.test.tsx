@@ -28,6 +28,7 @@ const ingestion: FileIngestion = {
   chunk_strategy: "token",
   embedding_model: "all-minilm",
   ingestion_run_id: "run-1",
+  stale: false,
   updated_at: "2026-07-15T00:00:00Z",
 };
 

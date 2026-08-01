@@ -58,6 +58,16 @@ export function fileStatus(node: FileNode): FileStatus | null {
   }
   switch (ingestion.status) {
     case "ready":
+      if (ingestion.stale) {
+        return {
+          tone: "warn",
+          label: "Out of date",
+          detail:
+            "Indexed with an older version of the ingestion pipeline. Re-ingest to apply the current version.",
+          retryable: true,
+          live: false,
+        };
+      }
       return ingestion.warnings.length > 0
         ? {
             tone: "warn",

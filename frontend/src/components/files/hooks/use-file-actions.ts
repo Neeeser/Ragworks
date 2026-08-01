@@ -7,6 +7,7 @@ import {
   copyFileNode,
   deleteFileNode,
   ingestFile,
+  reingestStaleFiles,
   updateFileNode,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -22,6 +23,7 @@ export interface FileActions {
   copyNode: (node: FileNode, parentId: string | null) => Promise<boolean>;
   deleteNode: (node: FileNode) => Promise<boolean>;
   retryIngestion: (node: FileNode) => Promise<boolean>;
+  reingestStale: () => Promise<boolean>;
 }
 
 /** Tree mutations with a single error channel; every success refreshes the tree. */
@@ -87,6 +89,15 @@ export function useFileActions(
     [run, token],
   );
 
+  const reingestStale = useCallback(
+    async () =>
+      (await run(
+        () => reingestStaleFiles(token, collectionId),
+        "Unable to queue re-ingestion.",
+      )) !== null,
+    [collectionId, run, token],
+  );
+
   return {
     error,
     clearError,
@@ -96,5 +107,6 @@ export function useFileActions(
     copyNode,
     deleteNode,
     retryIngestion,
+    reingestStale,
   };
 }
