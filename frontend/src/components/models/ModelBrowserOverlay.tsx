@@ -19,6 +19,7 @@ import { availableCapabilities, filterModelsByCapabilities } from "@/lib/model-c
 import { cn } from "@/lib/utils";
 
 import type { ModelSortDef } from "@/components/models/model-catalog-filter";
+import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
 import type { ModelCapabilityId } from "@/lib/model-capabilities";
 import type { CatalogModel } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -37,6 +38,7 @@ export interface ModelBrowserOverlayProps {
   emptyLabel: string;
   sortOptions?: ModelSortDef[];
   renderTrailing?: (model: CatalogModel) => ReactNode;
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
 }
 
 /**
@@ -64,6 +66,7 @@ export function ModelBrowserOverlay({
   emptyLabel,
   sortOptions,
   renderTrailing,
+  annotate,
 }: ModelBrowserOverlayProps) {
   const titleId = useId();
   const [search, setSearch] = useState("");
@@ -190,6 +193,7 @@ export function ModelBrowserOverlay({
               loading={loading}
               emptyLabel={search ? `No models match "${search}".` : emptyLabel}
               renderTrailing={renderTrailing}
+              annotate={annotate}
             />
           </div>
           <div className={cn("min-h-0 flex-1", !focused && "hidden lg:block")}>
