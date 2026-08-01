@@ -12,6 +12,7 @@ from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescripto
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import MessagesProvider
 from app.providers.chat.dialects.messages import model_info_from_catalog
+from app.schemas.anthropic import AnthropicModel
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.provider_configs import (
     AnthropicConnectionConfig,
@@ -57,6 +58,20 @@ ANTHROPIC_DESCRIPTOR = ProviderDescriptor(
     docs_url="https://console.anthropic.com/settings/keys",
     recommended=True,
 )
+
+
+def _input_modalities(entry: AnthropicModel) -> list[str]:
+    """Modalities the model accepts, from its published capability tree.
+
+    Text is the baseline every Claude model serves; `image_input` is
+    Anthropic's own positive statement that a model also accepts images, so
+    it is the only thing that adds a modality here. A model that publishes
+    nothing stays text-only rather than claiming a capability that would make
+    the request itself malformed.
+    """
+    if entry.capabilities.image_input.supported:
+        return ["text", "image"]
+    return ["text"]
 
 
 class AnthropicAdapter(ProviderAdapter):
@@ -119,7 +134,7 @@ class AnthropicAdapter(ProviderAdapter):
                     id=info.id,
                     name=info.name,
                     context_length=info.context_length,
-                    input_modalities=["text"],
+                    input_modalities=_input_modalities(entry),
                     output_modalities=["text"],
                     supported_parameters=info.supported_parameters,
                     capabilities=info.capabilities,

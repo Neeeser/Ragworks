@@ -664,6 +664,15 @@ frontend form code — only a new `ConfigFieldKind` would.
   down must not silently lose a capability its owner knows it has. For the same
   reason a guess may *order* a listing but never filter it — filtering hides a
   model the server actually serves whenever its naming differs.
+- **A catalog entry states the modalities its provider publishes, on every
+  kind it serves.** `input_modalities`/`output_modalities` are what the model
+  pickers render capability marks from and what their capability filters
+  narrow on, so a branch that drops them makes every model on that provider
+  look text-only and hides the vision models a filter exists to find. Each
+  adapter reads its provider's own positive statement — OpenRouter's
+  `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
+  published `capabilities.image_input` — and a provider that publishes nothing
+  claims nothing beyond text rather than guessing.
 - **Adding a provider type is a checklist**: config model in
   `app/schemas/provider_configs.py`, `ProviderType` enum value, adapter module
   with its descriptor, `ADAPTERS` registry entry, and either an existing dialect

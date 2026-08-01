@@ -14,6 +14,7 @@ from app.providers.chat.ollama import OllamaChatProvider, model_info_from_descri
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.ollama import OllamaModelDescription
 from app.schemas.provider_configs import (
     OLLAMA_DEFAULT_PORT,
     OllamaConnectionConfig,
@@ -53,6 +54,21 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
     ),
     docs_url="https://ollama.com/download",
 )
+
+
+def _input_modalities(
+    description: OllamaModelDescription, kind: ProviderKind
+) -> list[str]:
+    """Modalities the model accepts, from its `/api/show` capabilities.
+
+    Text is the baseline every model serves; `vision` is the server's own
+    positive statement that a model also accepts images, so it is the only
+    thing that adds a modality here. Embedding models take text alone
+    regardless of what the tag advertises.
+    """
+    if kind is ProviderKind.CHAT and "vision" in description.capabilities:
+        return ["text", "image"]
+    return ["text"]
 
 
 class OllamaAdapter(ProviderAdapter):
@@ -122,6 +138,8 @@ class OllamaAdapter(ProviderAdapter):
                         if kind is ProviderKind.EMBEDDING
                         else None
                     ),
+                    input_modalities=_input_modalities(description, kind),
+                    output_modalities=["text"],
                     supported_parameters=(
                         info.supported_parameters if kind is ProviderKind.CHAT else []
                     ),

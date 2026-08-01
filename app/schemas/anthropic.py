@@ -154,6 +154,14 @@ class EffortCapability(BaseModel):
         ]
 
 
+class SupportFlag(BaseModel):
+    """A capability block that publishes nothing but whether it is supported."""
+
+    model_config = ConfigDict(extra="allow")
+
+    supported: bool = False
+
+
 class ModelCapabilities(BaseModel):
     """The capability tree published for one model."""
 
@@ -161,6 +169,10 @@ class ModelCapabilities(BaseModel):
 
     thinking: ThinkingCapability = Field(default_factory=ThinkingCapability)
     effort: EffortCapability = Field(default_factory=EffortCapability)
+    #: Whether the model accepts images. Published per model, so vision is
+    #: read off the live catalog rather than guessed from a family name --
+    #: a shipped table would be wrong the day the next family ships.
+    image_input: SupportFlag = Field(default_factory=SupportFlag)
 
 
 class AnthropicModel(BaseModel):
