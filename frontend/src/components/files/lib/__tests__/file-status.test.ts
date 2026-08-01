@@ -31,6 +31,12 @@ describe("fileStatus", () => {
     expect(fileStatus(makeFileNode())?.detail).toBe("Indexed as 4 chunks.");
   });
 
+  it("marks a stale ready file out of date and retryable", () => {
+    const status = fileStatus(makeFileNode({ ingestion: { ...readyIngestion, stale: true } }));
+    expect(status).toMatchObject({ tone: "warn", label: "Out of date", retryable: true });
+    expect(status?.detail).toMatch(/older version of the ingestion pipeline/i);
+  });
+
   it("keeps a warned file ready, because it was still indexed", () => {
     const status = fileStatus(
       makeFileNode({
