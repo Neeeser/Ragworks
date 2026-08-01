@@ -14,6 +14,7 @@ import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 import type { ModelSortDef } from "@/components/models/model-catalog-filter";
+import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
 import type { CatalogModel } from "@/lib/types";
 import type { ReactNode } from "react";
 
@@ -32,6 +33,9 @@ export interface ModelPickerAllTabProps {
   /** Extra control on the control row (the embedding dimension readout). */
   controlsLeading?: ReactNode;
   renderTrailing?: (model: CatalogModel) => ReactNode;
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
+  /** Model id floated to the top of the list — a surface's own recommendation. */
+  prioritizedModelId?: string | null;
 }
 
 /**
@@ -58,6 +62,8 @@ export function ModelPickerAllTab({
   sortOptions,
   controlsLeading,
   renderTrailing,
+  annotate,
+  prioritizedModelId,
 }: ModelPickerAllTabProps) {
   const [search, setSearch] = useState("");
   const [connectionFilter, setConnectionFilter] = useState(ALL_PROVIDERS);
@@ -69,8 +75,14 @@ export function ModelPickerAllTab({
       ? models.filter((model) => model.connection_id === connectionFilter)
       : models;
     const searched = filterModelsBySearch(scoped, search);
-    return sortValue ? sortModelsBy(searched, sortValue) : searched;
-  }, [models, connectionFilter, search, sortValue]);
+    const ordered = sortValue ? sortModelsBy(searched, sortValue) : searched;
+    if (!prioritizedModelId) return ordered;
+    // A surface's recommendation leads the list, so the default it wants the
+    // user to take is one click away rather than somewhere in three hundred.
+    return [...ordered].sort((a, b) =>
+      a.id === prioritizedModelId ? -1 : b.id === prioritizedModelId ? 1 : 0,
+    );
+  }, [models, connectionFilter, search, sortValue, prioritizedModelId]);
 
   const showProviderFilter = connectionOptions.length > 1;
   const showSort = Boolean(sortOptions && sortOptions.length > 0);
@@ -139,6 +151,7 @@ export function ModelPickerAllTab({
           loading={loading}
           emptyLabel={search ? `No models match "${search}".` : emptyLabel}
           renderTrailing={renderTrailing}
+          annotate={annotate}
         />
       </div>
     </div>

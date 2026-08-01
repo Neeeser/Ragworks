@@ -19,6 +19,7 @@ import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
 import type { BackendInfo, CatalogModel } from "@/lib/types";
 
 const MINILM = "sentence-transformers/all-minilm-l6-v2";
+const MINILM_NAME = "all-MiniLM-L6-v2";
 
 const models: CatalogModel[] = [
   makeCatalogModel({
@@ -26,7 +27,7 @@ const models: CatalogModel[] = [
     name: "Embedding 3 Large",
     dimension: 3072,
   }),
-  makeCatalogModel({ id: MINILM, name: "all-MiniLM-L6-v2", dimension: 384 }),
+  makeCatalogModel({ id: MINILM, name: MINILM_NAME, dimension: 384 }),
 ];
 
 const backends = [
@@ -93,7 +94,8 @@ describe("StepModel", () => {
     render(<StepModel wizard={wizard} />);
 
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: /all-MiniLM-L6-v2/i }));
+    // Exact: the row's own name. A loose match also hits its "Pin …" button.
+    await userEvent.click(screen.getByRole("button", { name: MINILM_NAME }));
 
     expect(wizard.setChoices).toHaveBeenCalledWith({
       embeddingConnectionId: "conn-openrouter-1",
@@ -112,10 +114,10 @@ describe("StepModel", () => {
   it("filters the catalog by search term", async () => {
     render(<StepModel wizard={makeWizard()} />);
 
-    await userEvent.type(screen.getByLabelText(/search models/i), "minilm");
+    await userEvent.type(screen.getByPlaceholderText(/all-MiniLM, bge/i), "minilm");
 
     expect(screen.queryByText("Embedding 3 Large")).not.toBeInTheDocument();
-    expect(screen.getByText("all-MiniLM-L6-v2")).toBeInTheDocument();
+    expect(screen.getByText(MINILM_NAME)).toBeInTheDocument();
   });
 });
 

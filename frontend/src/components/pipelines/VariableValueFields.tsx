@@ -1,8 +1,11 @@
 "use client";
 
+import { CHAT_MODEL_SORTS } from "@/components/models/model-catalog-filter";
+import { ModelPickerField } from "@/components/models/ModelPickerField";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
+import { formatContextLength } from "@/lib/format";
 
 import { ExpressionInput } from "./ExpressionInput";
 
@@ -283,19 +286,21 @@ export function VariableValueEditor({
   if (variable.type === "model") {
     const modelValue = modelValueOf(variable.value);
     return (
-      <Field label="Model">
-        <CustomSelect
-          value={modelValue ? `${modelValue.connection_id}::${modelValue.model_name}` : ""}
-          options={modelOptions.map((model) => ({
-            value: `${model.connection_id}::${model.id}`,
-            label: `${model.name} — ${model.connection_label}`,
-          }))}
-          placeholder="Pick a model"
+      <Field label="Model" hint="Every node reading this variable uses it.">
+        <ModelPickerField
+          kind="chat"
+          aria-label={`Model for ${variable.name}`}
+          models={modelOptions}
+          selectedConnectionId={modelValue?.connection_id ?? null}
+          selectedModelId={modelValue?.model_name ?? null}
           disabled={disabled}
-          onValueChange={(encoded) => {
-            const [connectionId, ...rest] = encoded.split("::");
-            onPatch({ value: { connection_id: connectionId, model_name: rest.join("::") } });
-          }}
+          sortOptions={CHAT_MODEL_SORTS}
+          renderTrailing={(model) =>
+            model.context_length ? formatContextLength(model.context_length) : null
+          }
+          onSelectModel={(model) =>
+            onPatch({ value: { connection_id: model.connection_id, model_name: model.id } })
+          }
         />
       </Field>
     );

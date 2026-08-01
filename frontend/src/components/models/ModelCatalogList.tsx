@@ -11,6 +11,14 @@ import type { ConnectionGroup } from "@/components/models/model-catalog-filter";
 import type { CatalogModel } from "@/lib/types";
 import type { ReactNode } from "react";
 
+/** Per-model annotations a surface adds on top of the catalog's own facts. */
+export interface ModelAnnotation {
+  /** Short marker beside the name, e.g. "Suggested". */
+  badge?: ReactNode;
+  /** A caveat under the row — why this model may not suit the current target. */
+  note?: ReactNode;
+}
+
 export interface ModelCatalogListProps {
   /** Models after search, provider filter, and capability filters. */
   models: CatalogModel[];
@@ -26,6 +34,8 @@ export interface ModelCatalogListProps {
   emptyLabel: string;
   /** Trailing datum per row (context length, dimension). */
   renderTrailing?: (model: CatalogModel) => ReactNode;
+  /** Surface-specific marks on a row — a recommendation, or a caveat. */
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
 }
 
 /** Provider ids the user has explicitly opened or closed, overriding the default. */
@@ -61,6 +71,7 @@ export function ModelCatalogList({
   loading = false,
   emptyLabel,
   renderTrailing,
+  annotate,
 }: ModelCatalogListProps) {
   const [overrides, setOverrides] = useState<DrawerOverrides>({});
 
@@ -125,6 +136,8 @@ export function ModelCatalogList({
                 onTogglePin={onTogglePin}
                 showProviderIcon={false}
                 trailing={renderTrailing?.(model)}
+                badge={annotate?.(model)?.badge}
+                note={annotate?.(model)?.note}
               />
             ))}
           </ProviderDrawer>

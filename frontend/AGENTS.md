@@ -333,12 +333,23 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
-- **Every model picker is `ModelPickerInline`, and the models a user works with
-  come before the catalog.** The picker opens on Pinned, else Recent, else All,
+- **Every model choice renders one of two shared components — there is no third
+  way to pick a model.** A pane gets `ModelPickerInline`; a form row gets
+  `ModelPickerField`, a trigger showing the selected model that opens the same
+  `ModelBrowserOverlay`. A bare `CustomSelect` over a catalog is what reduces a
+  model to a name-and-connection string with no capabilities, no search across
+  providers, and no pins, so it is never the answer for a model — only for the
+  things that genuinely are short enumerations (variable types, backends).
+- **`ModelPickerInline` puts the models a user works with before the catalog.** The picker opens on Pinned, else Recent, else All,
   so a returning user picks from a handful and a brand-new account still lands
   on a searchable list rather than an empty section. A surface that renders its
   own list of models re-derives the shortlist, the drawers, and the capability
-  marks, and drifts from the other three the first time any of them changes.
+  marks, and drifts from the shared one the first time either changes.
+- **A surface's own facts about a model go through `annotate`, not a forked
+  row.** The setup wizard's "Suggested" marker and its over-the-pgvector-cap
+  warning are per-model annotations the catalog cannot know; they ride on
+  `ModelRow`'s badge and note slots, with `prioritizedModelId` floating a
+  recommendation to the top of the list.
 - **Catalog narrowing is by capability, not by price.** "The models that read
   images and call tools" is the question users ask; a sort never answered it.
   Chips are offered only for capabilities present in the loaded catalog, so a

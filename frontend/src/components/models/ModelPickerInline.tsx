@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import type { ShortlistedModel } from "@/components/models/hooks/use-model-shortlist";
 import type { ModelSortDef } from "@/components/models/model-catalog-filter";
+import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
 import type { UnavailableSelection } from "@/components/models/ModelPickerHeader";
 import type { CatalogModel, ShortlistKind } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -47,6 +48,10 @@ export interface ModelPickerInlineProps {
   controlsLeading?: ReactNode;
   sortOptions?: ModelSortDef[];
   renderTrailing?: (model: CatalogModel) => ReactNode;
+  /** Surface-specific marks on a row — a recommendation, or a caveat. */
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
+  /** Model id floated to the top of the All tab. */
+  prioritizedModelId?: string | null;
   unavailable?: UnavailableSelection | null;
 }
 
@@ -70,6 +75,7 @@ function ShortlistSection({
   isPinned,
   onTogglePin,
   renderTrailing,
+  annotate,
   emptyHint,
 }: {
   entries: ShortlistedModel[];
@@ -78,6 +84,7 @@ function ShortlistSection({
   isPinned: (model: CatalogModel) => boolean;
   onTogglePin: (model: CatalogModel) => void;
   renderTrailing?: (model: CatalogModel) => ReactNode;
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
   emptyHint: string;
 }) {
   const resolved = entries.filter((entry) => entry.model !== null);
@@ -97,6 +104,8 @@ function ShortlistSection({
             pinned={isPinned(catalogModel)}
             onTogglePin={onTogglePin}
             trailing={renderTrailing?.(catalogModel)}
+            badge={annotate?.(catalogModel)?.badge}
+            note={annotate?.(catalogModel)?.note}
           />
         );
       })}
@@ -128,6 +137,8 @@ export function ModelPickerInline({
   controlsLeading,
   sortOptions,
   renderTrailing,
+  annotate,
+  prioritizedModelId,
   unavailable,
 }: ModelPickerInlineProps) {
   const shortlist = useModelShortlist(kind, models);
@@ -206,6 +217,7 @@ export function ModelPickerInline({
           isPinned={shortlist.isPinned}
           onTogglePin={shortlist.togglePin}
           renderTrailing={renderTrailing}
+          annotate={annotate}
           emptyHint="Star a model to pin it here."
         />
       ) : null}
@@ -218,6 +230,7 @@ export function ModelPickerInline({
           isPinned={shortlist.isPinned}
           onTogglePin={shortlist.togglePin}
           renderTrailing={renderTrailing}
+          annotate={annotate}
           emptyHint="Models you select appear here."
         />
       ) : null}
@@ -235,6 +248,8 @@ export function ModelPickerInline({
           sortOptions={sortOptions}
           controlsLeading={controlsLeading}
           renderTrailing={renderTrailing}
+          annotate={annotate}
+          prioritizedModelId={prioritizedModelId}
         />
       ) : null}
 
@@ -264,6 +279,7 @@ export function ModelPickerInline({
           emptyLabel={copy.emptyLabel}
           sortOptions={sortOptions}
           renderTrailing={renderTrailing}
+          annotate={annotate}
         />
       ) : null}
     </div>

@@ -165,6 +165,14 @@ what *this user* works with first, the catalog behind it.
   answer the question users actually ask; sort stays available beside them, demoted.
   Offer a chip only when the loaded catalog contains it, so no chip advertises something
   no connected provider serves.
+- **Two shapes, no third.** A pane gets the full picker; a form row gets a
+  compact trigger that opens the same browser. Degrading a long catalog to a
+  bare dropdown in a narrow field throws away everything the picker knows —
+  capabilities, cross-source search, the user's own set — and is what makes one
+  screen feel unrelated to the rest.
+- **A surface's own facts about an entry are annotations, not a forked row.** A
+  recommendation marker or a "won't fit here" caveat rides on the shared row's
+  badge and note slots, so every list keeps one geometry.
 - **Detail gets its own room.** Descriptions and full metadata belong in an overlay
   browser (list plus detail pane), never crammed into an inline pane — inline rows carry
   identity, capability marks, and one trailing measure. Below `lg` the two panes become
