@@ -1,10 +1,8 @@
-import type { ConnectionOption } from "@/components/chat-studio/hooks/settings/use-model-catalog";
 import type {
   ModelParameterKey,
   ResolvedParameterDefinition,
   ParameterOverrides,
 } from "@/lib/chat-parameters";
-import type { ChatModelSortOption } from "@/lib/model-sorting";
 import type {
   Collection,
   ModelEndpointDirectory,
@@ -97,13 +95,6 @@ export interface TelemetryStreamingProps {
 export interface TelemetryModelProps {
   modelSelectorOpen: boolean;
   onModelSelectorToggle: () => void;
-  modelSearchTerm: string;
-  onModelSearchChange: (value: string) => void;
-  modelSortOption: ChatModelSortOption;
-  onModelSortChange: (value: ChatModelSortOption) => void;
-  connectionFilter: string;
-  onConnectionFilterChange: (connectionId: string) => void;
-  connectionOptions: ConnectionOption[];
   toolReadyModels: CatalogModel[];
   filteredModelCatalog: CatalogModel[];
   modelsLoading: boolean;

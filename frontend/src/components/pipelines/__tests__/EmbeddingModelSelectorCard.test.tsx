@@ -1,27 +1,49 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
-import { makeCatalogModel } from "@/test/fixtures";
+import * as apiModule from "@/lib/api";
+import { makeCatalogModel, makeModelShortlist } from "@/test/fixtures";
+import { resetMockAuth } from "@/test/mocks";
 
 import type { CatalogModel } from "@/lib/types";
 
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+
+const api = vi.mocked(apiModule);
+
+const MODELS: CatalogModel[] = [
+  makeCatalogModel({ id: "model-1", name: "Alpha", dimension: 1536 }),
+  makeCatalogModel({ id: "model-2", name: "Beta", dimension: 768 }),
+];
+
+function renderCard(props: Partial<Parameters<typeof EmbeddingModelSelectorCard>[0]> = {}) {
+  return render(
+    <EmbeddingModelSelectorCard
+      selectedModelKey=""
+      models={MODELS}
+      modelsLoading={false}
+      modelsError={null}
+      onSelectModel={() => undefined}
+      {...props}
+    />,
+  );
+}
+
 describe("EmbeddingModelSelectorCard", () => {
-  it("shows loading, empty, and error states", () => {
-    const { rerender } = render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey=""
-        models={[]}
-        modelsLoading
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
-    );
+  beforeEach(() => {
+    resetMockAuth();
+    api.fetchModelShortlist.mockResolvedValue(makeModelShortlist());
+  });
+
+  it("shows loading, empty, and error states", async () => {
+    const { rerender } = renderCard({ models: [], modelsLoading: true });
 
     // Loading is a skeleton at the list's final geometry; the only thing said
     // out loud is the placeholder block's accessible name.
-    expect(screen.getByText("Loading embedding models")).toBeInTheDocument();
+    expect(await screen.findByText("Loading models")).toBeInTheDocument();
 
     rerender(
       <EmbeddingModelSelectorCard
@@ -46,212 +68,57 @@ describe("EmbeddingModelSelectorCard", () => {
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
-  it("filters models by the internal search box", () => {
-    const models: CatalogModel[] = [
-      makeCatalogModel({
-        id: "model-1",
-        name: "Alpha",
-        description: "desc",
-        pricing: { prompt: 0.0002 },
-      }),
-      makeCatalogModel({
-        id: "model-2",
-        name: "Beta",
-        description: "desc",
-        pricing: { prompt: 0.0002 },
-      }),
-    ];
-
-    render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey=""
-        models={models}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: /Alpha/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Beta/ })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "Alpha" } });
-
-    expect(screen.getByRole("button", { name: /Alpha/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Beta/ })).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "nothing" } });
-    expect(screen.getByText(/No models match "nothing"/)).toBeInTheDocument();
-  });
-
-  it("sorts models via the internal sort control", async () => {
+  it("filters models by the search box", async () => {
+    renderCard();
     const user = userEvent.setup();
-    const models: CatalogModel[] = [
-      makeCatalogModel({ id: "model-big", name: "Big", dimension: 1024, pricing: {} }),
-      makeCatalogModel({ id: "model-small", name: "Small", dimension: 128, pricing: {} }),
-    ];
 
-    render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey=""
-        models={models}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
+    await user.type(screen.getByPlaceholderText(/Search embedding models/), "Beta");
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Alpha" })).not.toBeInTheDocument(),
     );
-
-    // The sort control is a `CustomSelect`: a combobox trigger opening a
-    // portalled listbox, so the choice is made by opening and picking.
-    await user.click(screen.getByRole("combobox", { name: "Sort models" }));
-    await user.click(screen.getByRole("option", { name: "Sort by dimension" }));
-
-    const names = screen
-      .getAllByRole("button")
-      .map((el) => el.textContent ?? "")
-      .filter((text) => text.includes("Big") || text.includes("Small"));
-    expect(names[0]).toContain("Small");
-    expect(names[1]).toContain("Big");
+    expect(screen.getByRole("button", { name: "Beta" })).toBeInTheDocument();
   });
 
-  it("renders models and pricing details, and reports selection", () => {
+  it("carries each model's vector dimension on its row", async () => {
+    renderCard();
+
+    expect(await screen.findByText("1,536d")).toBeInTheDocument();
+    expect(screen.getByText("768d")).toBeInTheDocument();
+  });
+
+  it("shows the selected model's dimension beside the controls", async () => {
+    renderCard({
+      selectedModelKey: "model-2",
+      selectedConnectionId: MODELS[1]?.connection_id,
+    });
+
+    // Dimension decides whether a model can serve an existing index, so it
+    // stays visible without reopening the list.
+    expect(await screen.findByText("768")).toBeInTheDocument();
+  });
+
+  it("reports the selection", async () => {
     const onSelectModel = vi.fn();
-    const longDescription = "A".repeat(200);
-    const models: CatalogModel[] = [
-      makeCatalogModel({
-        id: "model-1",
-        name: "Alpha",
-        description: longDescription,
-        dimension: 768,
-        context_length: 1024,
-        pricing: { prompt: 0.0002, completion: 0.00002 },
-      }),
-      makeCatalogModel({
-        id: "model-2",
-        name: "Beta",
-        description: "desc",
-        dimension: 256,
-        pricing: { prompt: 0.0000015, completion: 0.00000015 },
-      }),
-      makeCatalogModel({
-        id: "model-3",
-        name: "Gamma",
-        description: "desc",
-        pricing: { prompt: 0.000000015, completion: 0.000000001 },
-      }),
-      makeCatalogModel({
-        id: "model-4",
-        name: "Delta",
-        description: "desc",
-        pricing: { prompt: "free" },
-      }),
-      makeCatalogModel({
-        id: "model-5",
-        name: "Epsilon",
-        description: "desc",
-        pricing: { prompt: "e" },
-      }),
-    ];
+    renderCard({ onSelectModel });
+    const user = userEvent.setup();
 
-    render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey="model-1"
-        selectedConnectionId="conn-openrouter-1"
-        models={models}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={onSelectModel}
-      />,
-    );
+    await user.click(await screen.findByRole("button", { name: "Beta" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Alpha/ }));
-    expect(onSelectModel).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "model-1", connection_id: "conn-openrouter-1" }),
-    );
-
-    expect(screen.getByText(`${longDescription.slice(0, 157)}...`)).toBeInTheDocument();
-    // Each price is a labelled readout: a sentence-case label beside a mono value.
-    expect(screen.getAllByText("Prompt").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Completion").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^\$/).length).toBeGreaterThan(0);
-    // Unparseable prices pass through verbatim rather than reading as $0.
-    expect(screen.getByText("free")).toBeInTheDocument();
-    expect(screen.getByText("e")).toBeInTheDocument();
-
-    // currentModelInfo is now derived internally from models + selectedModelKey.
-    expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
-    // Once on the model's own row, once in the header summary for the selection.
-    expect(screen.getAllByText("768")).toHaveLength(2);
+    expect(onSelectModel).toHaveBeenCalledWith(expect.objectContaining({ id: "model-2" }));
   });
 
-  it("renders non-numeric pricing fallbacks", () => {
-    const models: CatalogModel[] = [
-      makeCatalogModel({
-        id: "model-fallback",
-        name: "Fallback",
-        description: "desc",
-        pricing: { prompt: "free", completion: " " },
-      }),
-    ];
-
-    render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey="model-fallback"
-        selectedConnectionId="conn-openrouter-1"
-        models={models}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
-    );
-
-    expect(screen.getByText("Prompt")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
-  });
-
-  it("keeps a disappeared exact selection visible and requires a replacement", () => {
-    const selected = makeCatalogModel({
-      connection_id: "conn-a",
-      connection_label: "Provider A",
-      id: "shared-id",
-      name: "Selected model",
+  it("keeps a disappeared selection visible and requires a replacement", async () => {
+    renderCard({
+      models: [],
+      selectedModelKey: "ghost-model",
+      selectedConnectionId: "conn-openrouter-1",
+      selectedConnectionLabel: "OpenRouter",
+      selectedAvailability: "missing",
     });
-    const otherConnection = makeCatalogModel({
-      connection_id: "conn-b",
-      connection_label: "Provider B",
-      id: "shared-id",
-      name: "Same ID elsewhere",
-    });
-    const { rerender } = render(
-      <EmbeddingModelSelectorCard
-        selectedModelKey="shared-id"
-        selectedConnectionId="conn-a"
-        selectedConnectionLabel="Provider A"
-        models={[selected]}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
-    );
 
-    rerender(
-      <EmbeddingModelSelectorCard
-        selectedModelKey="shared-id"
-        selectedConnectionId="conn-a"
-        selectedConnectionLabel="Provider A"
-        models={[otherConnection]}
-        modelsLoading={false}
-        modelsError={null}
-        onSelectModel={() => undefined}
-      />,
-    );
-
-    expect(screen.getByText("Unavailable")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Selected model is no longer available from Provider A. Select another model.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Same ID elsewhere/ })).toBeInTheDocument();
+    expect(await screen.findByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/OpenRouter · ghost-model/)).toBeInTheDocument();
+    expect(screen.getByText(/no longer available from OpenRouter/)).toBeInTheDocument();
   });
 });

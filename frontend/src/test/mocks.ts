@@ -61,6 +61,8 @@ import {
   makeInsightSnapshot,
   makeConnection,
   makeModelCatalog,
+  makeModelShortlist,
+  makeShortlistEntry,
   makeProviderConfigField,
   makeProviderType,
   makeUser,
@@ -247,6 +249,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEmbeddingDimension: vi.fn(async () => ({ dimension: 1536 })),
     listChatModels: vi.fn(async () => makeModelCatalog()),
     listModelEndpoints: vi.fn(async () => ({ data: makeProviderDirectory() })),
+    fetchModelShortlist: vi.fn(async () => makeModelShortlist()),
+    pinModel: vi.fn(async () => makeShortlistEntry()),
+    unpinModel: vi.fn(async () => undefined),
+    recordModelUse: vi.fn(async () => makeShortlistEntry({ entry_type: "recent" })),
     // connections
     listProviderTypes: vi.fn(async () => [
       makeProviderType(),

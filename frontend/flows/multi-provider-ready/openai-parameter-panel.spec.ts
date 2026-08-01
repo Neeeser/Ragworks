@@ -30,10 +30,14 @@ test("gpt-5.4-nano renders bundle-backed parameters and completes a turn", async
     await expect(routingToggle).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 60_000 });
   await routingToggle.click();
+  // The picker opens on Pinned or Recent when this account has either, and the
+  // catalog search lives on the All tab — ask for it rather than assuming.
+  await page.getByRole("button", { name: "All", exact: true }).click();
   await page.getByPlaceholder("Search models across providers…").fill("gpt-5.4-nano");
-  // The direct-connection entry is titled by its bare id; OpenRouter's
-  // entries for the same model start with "OpenAI: GPT-5.4 Nano".
-  const directEntry = page.getByRole("button", { name: /^gpt-5\.4-nano gpt-5\.4-nano/ });
+  // Rows are named by the model's display name. The direct connection titles
+  // this model by its bare id; OpenRouter's entry for the same model is named
+  // "OpenAI: GPT-5.4 Nano", so an exact name picks the direct one.
+  const directEntry = page.getByRole("button", { name: "gpt-5.4-nano", exact: true });
   await expect(directEntry).toContainText("400K");
   await directEntry.click();
 

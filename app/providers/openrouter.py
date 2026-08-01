@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 import httpx
 
@@ -47,6 +47,17 @@ OPENROUTER_DESCRIPTOR = ProviderDescriptor(
 )
 
 SnapshotValueT = TypeVar("SnapshotValueT")
+
+
+def _architecture_modalities(architecture: dict[str, Any], key: str) -> list[str]:
+    """Read one modality list off OpenRouter's `architecture` block.
+
+    OpenRouter publishes what a model takes and returns per model, so the
+    picker's modality marks are its own statement rather than a guess. A model
+    that publishes nothing keeps an empty list: absence reads as "not stated",
+    never as "cannot".
+    """
+    return [str(value) for value in architecture.get(key, [])]
 
 
 class OpenRouterAdapter(ProviderAdapter):
@@ -100,6 +111,12 @@ class OpenRouterAdapter(ProviderAdapter):
                     description=model.description,
                     context_length=model.context_length,
                     pricing=model.pricing,
+                    input_modalities=_architecture_modalities(
+                        model.architecture, "input_modalities"
+                    ),
+                    output_modalities=_architecture_modalities(
+                        model.architecture, "output_modalities"
+                    ),
                     supported_parameters=model.supported_parameters,
                     default_parameters=model.default_parameters,
                     capabilities=model.capabilities,
@@ -119,14 +136,12 @@ class OpenRouterAdapter(ProviderAdapter):
                     description=model.description,
                     context_length=model.context_length,
                     pricing=model.pricing,
-                    input_modalities=[
-                        str(value)
-                        for value in model.architecture.get("input_modalities", [])
-                    ],
-                    output_modalities=[
-                        str(value)
-                        for value in model.architecture.get("output_modalities", [])
-                    ],
+                    input_modalities=_architecture_modalities(
+                        model.architecture, "input_modalities"
+                    ),
+                    output_modalities=_architecture_modalities(
+                        model.architecture, "output_modalities"
+                    ),
                     supported_parameters=model.supported_parameters,
                 )
                 for model in snapshot.value

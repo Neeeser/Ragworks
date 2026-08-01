@@ -280,13 +280,6 @@ const buildProps = (overrides: FlatOverrides = {}): React.ComponentProps<typeof 
     model: {
       modelSelectorOpen: f.modelSelectorOpen,
       onModelSelectorToggle: f.onModelSelectorToggle,
-      modelSearchTerm: f.modelSearchTerm,
-      onModelSearchChange: f.onModelSearchChange,
-      modelSortOption: f.modelSortOption,
-      onModelSortChange: f.onModelSortChange,
-      connectionFilter: "",
-      onConnectionFilterChange: vi.fn(),
-      connectionOptions: [],
       toolReadyModels: f.toolReadyModels,
       filteredModelCatalog: f.filteredModelCatalog,
       modelsLoading: f.modelsLoading,

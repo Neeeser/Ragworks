@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useReducer } from "react";
+import { useMemo, useReducer } from "react";
 
 import {
   buildGeneratePayload,
@@ -12,15 +12,14 @@ import {
   resolvedQuestionCount,
   supportsStructuredOutputs,
 } from "@/components/evals/lib/generate-dataset-wizard-reducer";
-import { CHAT_MODEL_SORTS, useModelCatalogFilter } from "@/components/models/model-catalog-filter";
-import { ModelCatalogPicker } from "@/components/models/ModelCatalogPicker";
-import { ModelMetaBadge, ModelOptionButton } from "@/components/models/ModelOptionButton";
+import { CHAT_MODEL_SORTS } from "@/components/models/model-catalog-filter";
+import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { formatContextLength, formatPricePerMillion } from "@/lib/format";
+import { formatContextLength } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type {
@@ -78,19 +77,13 @@ export function GenerateDatasetWizard({
   const [state, dispatch] = useReducer(generateWizardReducer, initialGenerateWizardState);
   const { step, busy, message } = state;
 
-  const modelFilter = useModelCatalogFilter({
-    models: chatModels,
-    prefilter: supportsStructuredOutputs,
-    enableProviderFilter: true,
-    sortOptions: CHAT_MODEL_SORTS,
-  });
+  const structuredOutputModels = useMemo(
+    () => chatModels.filter(supportsStructuredOutputs),
+    [chatModels],
+  );
   const { connectionId: selectedConnectionId, modelName: selectedModelName } = splitModelKey(
     state.modelKey,
   );
-  const currentModel =
-    chatModels.find(
-      (model) => model.connection_id === selectedConnectionId && model.id === selectedModelName,
-    ) ?? null;
 
   const stepReady = [
     state.collectionId !== "" && state.name.trim() !== "",
@@ -163,58 +156,29 @@ export function GenerateDatasetWizard({
         </div>
       )}
       {step === 1 && (
-        <ModelCatalogPicker
-          models={modelFilter.filteredModels}
-          selectedModelKey={state.modelKey}
-          currentModel={currentModel}
-          headerPlaceholder="Select a chat model"
-          headerSubtitle={
-            currentModel ? `${currentModel.connection_label} · ${currentModel.id}` : null
+        <ModelPickerInline
+          kind="chat"
+          models={structuredOutputModels}
+          selectedConnectionId={selectedConnectionId}
+          selectedModelId={selectedModelName}
+          onSelectModel={(chosen) =>
+            dispatch({
+              type: "select_model",
+              modelKey: `${chosen.connection_id}::${chosen.id}`,
+            })
           }
-          description="Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed."
-          modelsLoading={false}
-          searchTerm={modelFilter.searchTerm}
-          onSearchChange={modelFilter.setSearchTerm}
-          searchPlaceholder="Search models across providers…"
-          connectionOptions={modelFilter.connectionOptions}
-          connectionFilter={modelFilter.connectionFilter}
-          onConnectionFilterChange={modelFilter.setConnectionFilter}
-          sortOptions={CHAT_MODEL_SORTS}
-          sortValue={modelFilter.sortValue}
-          onSortChange={modelFilter.setSortValue}
-          groupByConnection
-          noun="chat model"
-          emptyLabel="No chat models with structured-output support available."
-          renderModel={(model) => {
-            const modelKey = `${model.connection_id}::${model.id}`;
-            const contextLabel = model.context_length
-              ? formatContextLength(model.context_length)
-              : null;
-            const promptLabel = formatPricePerMillion(model.pricing?.prompt);
-            const completionLabel = formatPricePerMillion(model.pricing?.completion);
-            return (
-              <ModelOptionButton
-                key={modelKey}
-                model={model}
-                selected={state.modelKey === modelKey}
-                onSelect={(chosen) =>
-                  dispatch({
-                    type: "select_model",
-                    modelKey: `${chosen.connection_id}::${chosen.id}`,
-                  })
-                }
-                subtitle={`${model.connection_label} · ${model.id}`}
-              >
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                  {contextLabel ? <ModelMetaBadge label="Context" value={contextLabel} /> : null}
-                  {promptLabel ? <ModelMetaBadge label="Prompt" value={promptLabel} /> : null}
-                  {completionLabel ? (
-                    <ModelMetaBadge label="Completion" value={completionLabel} />
-                  ) : null}
-                </div>
-              </ModelOptionButton>
-            );
+          loading={false}
+          copy={{
+            placeholder: "Select a chat model",
+            searchPlaceholder: "Search models across providers…",
+            emptyLabel: "No chat models with structured-output support available.",
+            description:
+              "Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed.",
           }}
+          sortOptions={CHAT_MODEL_SORTS}
+          renderTrailing={(model) =>
+            model.context_length ? formatContextLength(model.context_length) : null
+          }
         />
       )}
       {step === 2 && (

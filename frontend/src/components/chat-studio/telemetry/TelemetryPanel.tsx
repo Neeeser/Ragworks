@@ -95,13 +95,6 @@ const TelemetryPanelComponent = ({
   const {
     modelSelectorOpen,
     onModelSelectorToggle,
-    modelSearchTerm,
-    onModelSearchChange,
-    modelSortOption,
-    onModelSortChange,
-    connectionFilter,
-    onConnectionFilterChange,
-    connectionOptions,
     toolReadyModels,
     filteredModelCatalog,
     modelsLoading,
@@ -223,13 +216,6 @@ const TelemetryPanelComponent = ({
           selectedModelKey={selectedModelKey}
           toolReadyModels={toolReadyModels}
           filteredModelCatalog={filteredModelCatalog}
-          modelSearchTerm={modelSearchTerm}
-          onSearchChange={onModelSearchChange}
-          sortOption={modelSortOption}
-          onSortChange={onModelSortChange}
-          connectionFilter={connectionFilter}
-          onConnectionFilterChange={onConnectionFilterChange}
-          connectionOptions={connectionOptions}
           modelsLoading={modelsLoading}
           modelsError={modelsError}
           toolsEnabled={toolsEnabled}

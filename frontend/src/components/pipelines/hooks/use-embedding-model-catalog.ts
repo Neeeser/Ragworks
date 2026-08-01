@@ -19,9 +19,9 @@ const EMPTY_MODELS: CatalogModel[] = [];
 const EMPTY_CONNECTION_ERRORS: ConnectionCatalogError[] = [];
 
 /** Loads the unified embedding-model catalog (all embedding-capable provider
- * connections), used to auto-fill index/embedder dimensions. Search/sort over
- * the list is owned by the shared `useModelCatalogFilter`
- * (components/models/model-catalog-filter.ts); this hook only owns the fetch. */
+ * connections), used to auto-fill index/embedder dimensions. Search, filtering,
+ * and sort over the list are owned by `ModelPickerInline`; this hook only owns
+ * the fetch. */
 export function useEmbeddingModelCatalog(
   token: string | null,
   userId?: UUID | null,

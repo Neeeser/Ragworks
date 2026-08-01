@@ -253,3 +253,14 @@ class InsightStatus(str, Enum):
     COMPUTING = "computing"
     READY = "ready"
     FAILED = "failed"
+
+
+class ShortlistEntryType(str, Enum):
+    """How a model earned its place on a user's shortlist.
+
+    Pins are explicit (the user starred the model); recents are recorded
+    automatically when a model is selected, and are pruned to a cap.
+    """
+
+    PINNED = "pinned"
+    RECENT = "recent"

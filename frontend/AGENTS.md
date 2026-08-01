@@ -333,6 +333,42 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
+- **Every model choice renders one of two shared components — there is no third
+  way to pick a model.** A pane gets `ModelPickerInline`; a form row gets
+  `ModelPickerField`, a trigger showing the selected model that opens the same
+  `ModelBrowserOverlay`. A bare `CustomSelect` over a catalog is what reduces a
+  model to a name-and-connection string with no capabilities, no search across
+  providers, and no pins, so it is never the answer for a model — only for the
+  things that genuinely are short enumerations (variable types, backends).
+- **`ModelPickerInline` puts the models a user works with before the catalog.** The picker opens on Pinned, else Recent, else All,
+  so a returning user picks from a handful and a brand-new account still lands
+  on a searchable list rather than an empty section. A surface that renders its
+  own list of models re-derives the shortlist, the drawers, and the capability
+  marks, and drifts from the shared one the first time either changes.
+- **A surface's own facts about a model go through `annotate`, not a forked
+  row.** The setup wizard's "Suggested" marker and its over-the-pgvector-cap
+  warning are per-model annotations the catalog cannot know; they ride on
+  `ModelRow`'s badge and note slots, with `prioritizedModelId` floating a
+  recommendation to the top of the list.
+- **Catalog narrowing is by capability, not by price.** "The models that read
+  images and call tools" is the question users ask; a sort never answered it.
+  Chips are offered only for capabilities present in the loaded catalog, so a
+  chip is never a dead control advertising something no connected provider
+  serves. Provider filter and sort stay available beside them — demoting a
+  control is not removing it.
+- **A provider's models group into collapsible drawers with counts.** One
+  connection publishing three hundred models otherwise pushes every other
+  provider below the fold; a search auto-expands the drawers holding matches
+  and names the providers with none, because a provider silently missing from
+  the list reads as a broken connection.
+- **Capability marks are additive claims, never denials.** Text is the baseline
+  and is not badged; a mark appears only where a provider stated the capability
+  (`lib/model-capabilities.ts`). Absence means "not stated" — rendering it as
+  "cannot" makes a provider that publishes no capability tree look less capable
+  than one that does.
+- **An icon next to its own visible label is `decorative`.** `CapabilityIcon`
+  otherwise carries a tooltip and an `sr-only` name, so a chip that also prints
+  the label announces it twice ("Tool callingTool calling").
 - **The connection form renders every field kind from the catalog.**
   `ConnectionConfigFields` dispatches on `field.kind` (`string`/`secret`/`url`/
   `boolean`/`select`) and hides `advanced` fields behind a disclosure, so a new

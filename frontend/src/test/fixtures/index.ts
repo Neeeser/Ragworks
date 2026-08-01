@@ -340,6 +340,8 @@ export {
   makeCatalogModel,
   makeConnection,
   makeModelCatalog,
+  makeModelShortlist,
+  makeShortlistEntry,
   makeProviderConfigField,
   makeProviderType,
 } from "@/test/fixtures/providers";

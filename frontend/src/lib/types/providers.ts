@@ -161,3 +161,32 @@ export interface EmbeddingDimensionResponse {
   model_id: string;
   dimension?: number | null;
 }
+
+/** Mirrors `app/schemas/enums.py::ShortlistEntryType`. */
+export type ShortlistEntryType = "pinned" | "recent";
+
+/** The model kinds a shortlist can be scoped to (`SHORTLIST_KINDS`). */
+export type ShortlistKind = "chat" | "embedding" | "reranking";
+
+/** Mirrors `app/schemas/model_shortlist.py::ModelShortlistEntry`. */
+export interface ModelShortlistEntry {
+  kind: ShortlistKind;
+  entry_type: ShortlistEntryType;
+  connection_id: UUID;
+  model_id: string;
+  created_at: string;
+  last_used_at?: string | null;
+}
+
+/** Mirrors `app/schemas/model_shortlist.py::ModelShortlistResponse`. */
+export interface ModelShortlistResponse {
+  pinned: ModelShortlistEntry[];
+  recent: ModelShortlistEntry[];
+}
+
+/** Mirrors `app/schemas/model_shortlist.py::ModelShortlistIdentity`. */
+export interface ModelShortlistIdentity {
+  kind: ShortlistKind;
+  connection_id: UUID;
+  model_id: string;
+}

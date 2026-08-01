@@ -1,18 +1,17 @@
 "use client";
 
+import { ModelPickerField } from "@/components/models/ModelPickerField";
 import { SetupNotice } from "@/components/setup/SetupNotice";
 import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
-import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { effectiveInputLimit } from "@/lib/chunk-defaults";
 import { cn } from "@/lib/utils";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
-import type { CustomSelectOption } from "@/components/ui/custom-select";
 import type { IndexBackend } from "@/lib/types";
 
 const KICKER = "First-run setup";
@@ -158,11 +157,6 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
   const supportsFacet = chosenBackend?.capabilities.supports_lexical_facet ?? false;
   const showAggregateTools = supportsCount || supportsFacet;
 
-  const rerankerOptions: CustomSelectOption[] = (wizard.rerankingModels ?? []).map((model) => ({
-    value: `${model.connection_id}::${model.id}`,
-    label: `${model.name} · ${model.connection_label}`,
-  }));
-
   return (
     <SetupStepShell
       stepKey="collection"
@@ -262,24 +256,27 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
           />
           {addReranker ? (
             <Field label="Reranking model">
-              <CustomSelect
-                value={
-                  rerankerModel
-                    ? `${wizard.state.choices.rerankerConnectionId}::${rerankerModel}`
-                    : ""
-                }
-                options={rerankerOptions}
+              <ModelPickerField
+                kind="reranking"
+                aria-label="Reranking model"
+                models={wizard.rerankingModels ?? []}
+                selectedConnectionId={wizard.state.choices.rerankerConnectionId}
+                selectedModelId={rerankerModel || null}
                 placeholder={
                   wizard.rerankingModelsLoading ? "Loading models…" : "Select a reranking model"
                 }
-                onValueChange={(value) => {
-                  const [connectionId, model] = value.split("::");
-                  wizard.setChoices({
-                    rerankerConnectionId: connectionId,
-                    rerankerModel: model,
-                  });
+                searchPlaceholder="Search reranking models…"
+                emptyLabel="No reranking models available."
+                renderTrailing={(model) => {
+                  const limit = model.context_length ?? model.max_input_tokens;
+                  return limit ? limit.toLocaleString() : null;
                 }}
-                aria-label="Reranking model"
+                onSelectModel={(model) =>
+                  wizard.setChoices({
+                    rerankerConnectionId: model.connection_id,
+                    rerankerModel: model.id,
+                  })
+                }
               />
             </Field>
           ) : null}
