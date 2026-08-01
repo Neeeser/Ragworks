@@ -26,6 +26,9 @@ type GraphCanvasProps = {
   edges: InsightDocEdge[];
   /** Edges below this similarity are hidden. */
   threshold: number;
+  selectedDocumentId: string | null;
+  /** Node click; `null` from a background click clears the selection. */
+  onSelectDocument: (point: InsightDocPoint | null) => void;
 };
 
 type PositionedEdge = InsightDocEdge & {
@@ -50,7 +53,13 @@ const MAX_NODE_RADIUS_PX = 18;
  * shows, so the two views agree about where a document "is"; the edges add
  * what the 2D approximation cannot promise — measured similarity.
  */
-export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
+export function GraphCanvas({
+  documents,
+  edges,
+  threshold,
+  selectedDocumentId,
+  onSelectDocument,
+}: GraphCanvasProps) {
   ensureCanvasContextLimits();
   const tokens = useCssTokens(GRAPH_TOKENS);
   const accentColor = useMemo(() => cssColorToRgba(tokens[0] ?? "", 220) ?? ACCENT_RGBA, [tokens]);
@@ -119,14 +128,24 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
         radiusUnits: "pixels",
         stroked: true,
         lineWidthUnits: "pixels",
-        getLineWidth: 1.5,
         getPosition: (doc) => [doc.x, doc.y],
         getRadius: (doc) =>
           MIN_NODE_RADIUS_PX +
           (MAX_NODE_RADIUS_PX - MIN_NODE_RADIUS_PX) * Math.sqrt(doc.chunk_count / maxChunks),
-        getFillColor: [...accentColor.slice(0, 3), 70] as Rgba,
+        getFillColor: (doc) =>
+          doc.document_id === selectedDocumentId
+            ? ([...accentColor.slice(0, 3), 150] as Rgba)
+            : ([...accentColor.slice(0, 3), 70] as Rgba),
         getLineColor: accentColor,
-        updateTriggers: { getFillColor: accentColor, getLineColor: accentColor },
+        getLineWidth: (doc) => (doc.document_id === selectedDocumentId ? 2.5 : 1.5),
+        onClick: (info) => {
+          onSelectDocument((info.object as InsightDocPoint | undefined) ?? null);
+        },
+        updateTriggers: {
+          getFillColor: [accentColor, selectedDocumentId],
+          getLineColor: accentColor,
+          getLineWidth: [selectedDocumentId],
+        },
       }),
       new TextLayer<InsightDocPoint>({
         id: "graph-labels",
@@ -149,7 +168,18 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
         parameters: { depthCompare: "always" },
       }),
     ],
-    [accentColor, documents, edgeColor, labelColor, maxChunks, negColor, showLabels, visibleEdges],
+    [
+      accentColor,
+      documents,
+      edgeColor,
+      labelColor,
+      maxChunks,
+      negColor,
+      onSelectDocument,
+      selectedDocumentId,
+      showLabels,
+      visibleEdges,
+    ],
   );
 
   return (
@@ -161,6 +191,11 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
         viewState={viewState}
         onViewStateChange={handleViewStateChange}
         layers={layers}
+        onClick={(info) => {
+          if (!info.object) {
+            onSelectDocument(null);
+          }
+        }}
         getTooltip={(info) => {
           const object = info.object as InsightDocPoint | PositionedEdge | undefined;
           if (!object) {
