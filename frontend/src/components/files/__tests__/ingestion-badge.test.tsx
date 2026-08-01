@@ -28,6 +28,22 @@ describe("IngestionBadge", () => {
     expect(warning).toHaveFocus();
   });
 
+  it("re-ingests a ready file marked stale, beating the warning state", async () => {
+    const onRetry = vi.fn();
+    const node = makeFileNode({
+      ingestion: {
+        ...makeFileNode().ingestion!,
+        stale: true,
+        warnings: ["Chunk 0 was split into 2 parts."],
+      },
+    });
+    render(<IngestionBadge node={node} onRetry={onRetry} />);
+
+    const badge = screen.getByRole("button", { name: /out of date/i });
+    await userEvent.click(badge);
+    expect(onRetry).toHaveBeenCalledWith(node);
+  });
+
   it("shows a spinner while queued or running", () => {
     const node = makeFileNode({
       ingestion: { ...makeFileNode().ingestion!, status: "processing" },

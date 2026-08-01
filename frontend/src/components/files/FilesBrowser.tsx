@@ -24,6 +24,7 @@ import {
   resolveFolder,
 } from "@/components/files/lib/tree";
 import { NewFolderDialog } from "@/components/files/NewFolderDialog";
+import { StaleFilesNotice } from "@/components/files/StaleFilesNotice";
 import { RenameDialog } from "@/components/files/RenameDialog";
 import { UploadTray } from "@/components/files/UploadTray";
 import { PageBody } from "@/components/ui/app-shell";
@@ -249,6 +250,7 @@ export function FilesBrowser({
           error={tree.error ?? actions.error ?? downloadError}
           brokenPath={brokenPath}
         />
+        <StaleFilesNotice nodes={tree.nodes} onReingest={actions.reingestStale} />
 
         <div className="flex min-h-0 flex-1">
           {/* Entries sit directly on the card's own material — a background of

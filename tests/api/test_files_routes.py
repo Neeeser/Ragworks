@@ -238,3 +238,103 @@ def test_copy_endpoint_is_ownership_isolated(
     session.commit()
 
     assert client.post(f"/api/files/{foreign_node.id}/copy", json={}).status_code == 404
+
+
+def _seed_ready_document_from_run(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    *,
+    run_version: int,
+    pipeline_version: int,
+) -> models.Document:
+    """A ready document whose run recorded `run_version` of a bound pipeline."""
+    pipeline = models.Pipeline(
+        user_id=user.id, name="Ingest", current_version=pipeline_version
+    )
+    session.add(pipeline)
+    session.commit()
+    session.refresh(pipeline)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        pipeline_version=run_version,
+        trigger=models.BindingRole.INGEST,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    node = models.FileNode(
+        collection_id=collection.id,
+        user_id=user.id,
+        kind=models.FileNodeKind.FILE,
+        name="doc.txt",
+        content_type="text/plain",
+    )
+    session.add(node)
+    session.commit()
+    session.refresh(node)
+    document = models.Document(
+        collection_id=collection.id,
+        user_id=user.id,
+        file_id=node.id,
+        name="doc.txt",
+        content_type="text/plain",
+        status=models.DocumentStatus.READY,
+        embedding_model="",
+        ingestion_run_id=run.id,
+    )
+    session.add(document)
+    session.commit()
+    session.refresh(document)
+    return document
+
+
+def test_listing_marks_documents_from_older_pipeline_versions_stale(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    collection = _create_collection(session, auth_user)
+    _seed_ready_document_from_run(
+        session, auth_user, collection, run_version=2, pipeline_version=3
+    )
+    listing = client.get(f"/api/collections/{collection.id}/files").json()
+    assert [entry["ingestion"]["stale"] for entry in listing["entries"]] == [True]
+
+
+def test_reingest_stale_requeues_only_outdated_documents(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    collection = _create_collection(session, auth_user)
+    document = _seed_ready_document_from_run(
+        session, auth_user, collection, run_version=1, pipeline_version=2
+    )
+    response = client.post(f"/api/collections/{collection.id}/files/reingest-stale")
+    assert response.status_code == 202
+    assert response.json() == {"queued": 1}
+    session.expire_all()
+    refreshed = session.get(models.Document, document.id)
+    assert refreshed is not None
+    assert refreshed.status == models.DocumentStatus.PENDING
+
+    # A second call finds nothing stale (the pending row is no longer ready).
+    assert client.post(
+        f"/api/collections/{collection.id}/files/reingest-stale"
+    ).json() == {"queued": 0}
+
+
+def test_reingest_stale_is_owner_scoped(
+    client: TestClient, session: Session
+) -> None:
+    intruder = _other_user(session)
+    foreign = _create_collection(session, intruder)
+    response = client.post(f"/api/collections/{foreign.id}/files/reingest-stale")
+    assert response.status_code == 404

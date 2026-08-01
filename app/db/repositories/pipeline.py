@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import asc, desc
@@ -108,6 +109,14 @@ class PipelineRunRepository(Repository):
         statement = select(models.PipelineRun).where(models.PipelineRun.id == run_id)
         statement = user_scoped(statement, models.PipelineRun, user_id)
         return self.session.exec(statement).first()
+
+    def get_many(self, run_ids: Iterable[UUID]) -> dict[UUID, models.PipelineRun]:
+        """Return runs by id, keyed by id; absent ids are simply missing."""
+        ids = list(run_ids)
+        if not ids:
+            return {}
+        statement = select(models.PipelineRun).where(col(models.PipelineRun.id).in_(ids))
+        return {run.id: run for run in self.session.exec(statement).all()}
 
     def list_node_runs(self, run_id: UUID) -> list[models.PipelineNodeRun]:
         """List node run records for a pipeline run."""

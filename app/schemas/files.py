@@ -34,11 +34,14 @@ class FileIngestionRead(DateTimeConfigMixin, BaseModel):
     embedding_model: str
     ingestion_run_id: UUID | None = None
     updated_at: datetime
+    stale: bool = False
+    """Ready, but ingested by an older version of the bound ingestion pipeline."""
 
     @classmethod
-    def from_model(cls, document: Document) -> FileIngestionRead:
+    def from_model(cls, document: Document, *, stale: bool = False) -> FileIngestionRead:
         """Build an ingestion summary from a document row."""
         return cls(
+            stale=stale,
             document_id=document.id,
             status=document.status,
             error_message=document.error_message,
@@ -76,6 +79,7 @@ class FileNodeRead(DateTimeConfigMixin, BaseModel):
         *,
         path: str,
         ingestion: Document | None = None,
+        stale: bool = False,
     ) -> FileNodeRead:
         """Build a node read model; `path` is computed by the service."""
         return cls(
@@ -87,7 +91,9 @@ class FileNodeRead(DateTimeConfigMixin, BaseModel):
             path=path,
             content_type=node.content_type,
             size_bytes=node.size_bytes,
-            ingestion=FileIngestionRead.from_model(ingestion) if ingestion else None,
+            ingestion=(
+                FileIngestionRead.from_model(ingestion, stale=stale) if ingestion else None
+            ),
             created_at=node.created_at,
             updated_at=node.updated_at,
         )
@@ -138,6 +144,12 @@ class FileUploadResponse(BaseModel):
 
     file: FileNodeRead
     created_folders: list[FileNodeRead] = Field(default_factory=list)
+
+
+class StaleReingestResponse(BaseModel):
+    """How many out-of-date documents were queued for re-ingestion."""
+
+    queued: int
 
 
 class FileContentMatch(BaseModel):

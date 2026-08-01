@@ -25,6 +25,7 @@ from app.schemas.files import (
 )
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
+from app.services.file_staleness import stale_ingestion_ids
 from app.utils.file_storage import FileStorage
 
 _FORBIDDEN_NAMES = {".", ".."}
@@ -83,14 +84,10 @@ class FileSystemService:
         nodes = self.nodes.list_for_collection(collection.id)
         paths = self._paths_for(nodes)
         ingestion = self._ingestion_by_file(collection.id)
+        stale_ids = self._stale_ids(collection.id, ingestion)
         return FileTreeResponse(
             collection_id=collection.id,
-            nodes=[
-                FileNodeRead.from_model(
-                    node, path=paths[node.id], ingestion=ingestion.get(node.id)
-                )
-                for node in nodes
-            ],
+            nodes=[self._entry(node, paths, ingestion, stale_ids) for node in nodes],
         )
 
     def listing(
@@ -104,6 +101,7 @@ class FileSystemService:
         all_nodes = self.nodes.list_for_collection(collection.id)
         paths = self._paths_for(all_nodes)
         ingestion = self._ingestion_by_file(collection.id)
+        stale_ids = self._stale_ids(collection.id, ingestion)
         breadcrumb: list[FileNodeRead] = []
         cursor = parent
         by_id = {node.id: node for node in all_nodes}
@@ -112,16 +110,9 @@ class FileSystemService:
             cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
         breadcrumb.reverse()
         return FileListingResponse(
-            parent=(
-                FileNodeRead.from_model(parent, path=paths[parent.id]) if parent else None
-            ),
+            parent=FileNodeRead.from_model(parent, path=paths[parent.id]) if parent else None,
             breadcrumb=breadcrumb,
-            entries=[
-                FileNodeRead.from_model(
-                    node, path=paths[node.id], ingestion=ingestion.get(node.id)
-                )
-                for node in entries
-            ],
+            entries=[self._entry(node, paths, ingestion, stale_ids) for node in entries],
         )
 
     def read_node(self, node: models.FileNode) -> FileNodeRead:
@@ -129,7 +120,10 @@ class FileSystemService:
         nodes = self.nodes.list_for_collection(node.collection_id)
         paths = self._paths_for(nodes)
         document = self.documents.get_for_file(node.id)
-        return FileNodeRead.from_model(node, path=paths[node.id], ingestion=document)
+        stale = document is not None and document.id in stale_ingestion_ids(
+            self.session, node.collection_id, [document]
+        )
+        return FileNodeRead.from_model(node, path=paths[node.id], ingestion=document, stale=stale)
 
     def resolve_path(self, collection: models.Collection, path: str) -> models.FileNode:
         """Resolve a slash-separated path to its node or raise `NotFoundError`.
@@ -357,13 +351,32 @@ class FileSystemService:
                 )
             cursor = self.nodes.get(cursor.parent_id) if cursor.parent_id else None
 
+    def _entry(
+        self,
+        node: models.FileNode,
+        paths: dict[UUID, str],
+        ingestion: dict[UUID, models.Document],
+        stale_ids: set[UUID],
+    ) -> FileNodeRead:
+        """One path- and staleness-annotated read model for a listing entry."""
+        document = ingestion.get(node.id)
+        return FileNodeRead.from_model(
+            node,
+            path=paths[node.id],
+            ingestion=document,
+            stale=document is not None and document.id in stale_ids,
+        )
+
+    def _stale_ids(
+        self, collection_id: UUID, ingestion: dict[UUID, models.Document]
+    ) -> set[UUID]:
+        """Document ids ingested by an outdated version of the bound pipeline."""
+        return stale_ingestion_ids(self.session, collection_id, list(ingestion.values()))
+
     def _ingestion_by_file(self, collection_id: UUID) -> dict[UUID, models.Document]:
         """Map file id -> ingestion record for every document in the collection."""
-        return {
-            document.file_id: document
-            for document in self.documents.list_for_collection(collection_id)
-            if document.file_id is not None
-        }
+        documents = self.documents.list_for_collection(collection_id)
+        return {doc.file_id: doc for doc in documents if doc.file_id is not None}
 
     @staticmethod
     def _paths_for(nodes: list[models.FileNode]) -> dict[UUID, str]:
