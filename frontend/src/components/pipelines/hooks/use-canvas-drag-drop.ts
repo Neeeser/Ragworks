@@ -2,6 +2,8 @@
 
 import { useCallback, useState, type DragEvent } from "react";
 
+import { NODE_PRESET_MIME, resolveDraggedSpec } from "../lib/presets";
+
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { NodeSpec } from "@/lib/types";
@@ -82,11 +84,13 @@ export function useCanvasDragDrop({
         handleDragLeave();
         return;
       }
-      const spec = catalogSpecs.find((item) => item.type === type);
-      if (!spec || !canAddNode(spec) || !reactFlowInstance) {
+      const baseSpec = catalogSpecs.find((item) => item.type === type);
+      if (!baseSpec || !canAddNode(baseSpec) || !reactFlowInstance) {
         handleDragLeave();
         return;
       }
+      const presetId = event.dataTransfer.getData(NODE_PRESET_MIME);
+      const spec = presetId ? resolveDraggedSpec(baseSpec, presetId) : baseSpec;
       const position = resolveFlowPosition(reactFlowInstance, pointFromEvent(event));
       setDropPreviewPosition(position);
       setDropPreviewLabel(spec.label);
@@ -99,11 +103,13 @@ export function useCanvasDragDrop({
       event.preventDefault();
       const type = event.dataTransfer.getData(NODE_TYPE_MIME);
       if (!type) return;
-      const spec = catalogSpecs.find((item) => item.type === type);
-      if (!spec) {
+      const baseSpec = catalogSpecs.find((item) => item.type === type);
+      if (!baseSpec) {
         onUnknownNodeType();
         return;
       }
+      const presetId = event.dataTransfer.getData(NODE_PRESET_MIME);
+      const spec = presetId ? resolveDraggedSpec(baseSpec, presetId) : baseSpec;
       if (!canAddNode(spec)) {
         handleDragLeave();
         onUnavailableNodeType?.();

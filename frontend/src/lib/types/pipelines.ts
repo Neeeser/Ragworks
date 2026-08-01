@@ -245,6 +245,14 @@ export interface NodePort {
   preserves: boolean;
 }
 
+/** Mirrors `app/pipelines/node.py::NodePreset` — a named seeded config. */
+export interface NodePreset {
+  id: string;
+  label: string;
+  description: string;
+  config: Record<string, unknown>;
+}
+
 export interface NodeSpec {
   type: string;
   label: string;
@@ -262,6 +270,41 @@ export interface NodeSpec {
    * user learns a backend-specific node is off-limits before wiring it in.
    */
   supported_backends: IndexBackend[] | null;
+  /** Named starting configurations offered beside the raw node. */
+  presets?: NodePreset[];
+}
+
+/** Mirrors `app/schemas/metadata_filter.py`. */
+export type FilterOp = "eq" | "ne" | "in" | "nin" | "gt" | "gte" | "lt" | "lte" | "exists";
+
+export type FilterScalar = string | number | boolean;
+
+export interface FilterCondition {
+  field: string;
+  op: FilterOp;
+  value?: FilterScalar | FilterScalar[] | null;
+  /** Pipeline variable read at query time instead of a literal value. */
+  var?: string | null;
+}
+
+export interface MetadataFilter {
+  all: FilterCondition[];
+}
+
+/** Mirrors `app/pipelines/llm/config.py::OutputFieldSpec`. */
+export type LlmOutputFieldType = "string" | "number" | "boolean" | "string_list";
+
+export type LlmOutputTarget =
+  | { kind: "metadata"; key: string }
+  | { kind: "text"; mode: "replace" | "prepend" | "append"; separator: string }
+  | { kind: "score" }
+  | { kind: "items" };
+
+export interface LlmOutputField {
+  name: string;
+  type: LlmOutputFieldType;
+  description: string;
+  target: LlmOutputTarget;
 }
 
 export interface PipelineValidationResult {

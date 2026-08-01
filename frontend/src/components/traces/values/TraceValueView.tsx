@@ -1,5 +1,6 @@
 "use client";
 
+import { LlmCallValue, isLlmCallTrace } from "@/components/traces/values/LlmCallValue";
 import {
   isChunkBatch,
   isEmbeddingPreview,
@@ -42,6 +43,11 @@ type Renderer = {
  * node-type conditionals at the debugger level.
  */
 const RENDERERS: Renderer[] = [
+  {
+    id: "llm-call",
+    match: (value, kind) => kind === "llm_call" && isLlmCallTrace(value),
+    Component: LlmCallValue,
+  },
   {
     id: "items",
     match: (value, kind) => kind === "items" && isItemListTrace(value),

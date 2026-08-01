@@ -156,6 +156,11 @@ const renderDrawer = (overrides: Partial<DrawerProps> = {}) => {
     rerankingModelsLoading: false,
     rerankingModelsError: null,
     onRetryRerankingModels: () => undefined,
+    llmModels: [],
+    llmCatalog: null,
+    llmModelsLoading: false,
+    llmModelsError: null,
+    onRetryLlmModels: () => undefined,
     hasRerankingProvider: true,
     variables: [],
     ...overrides,
@@ -185,6 +190,11 @@ function DrawerWithIndexRegistry() {
         rerankingModelsLoading={false}
         rerankingModelsError={null}
         onRetryRerankingModels={() => undefined}
+        llmModels={[]}
+        llmCatalog={null}
+        llmModelsLoading={false}
+        llmModelsError={null}
+        onRetryLlmModels={() => undefined}
         hasRerankingProvider
       />
       <ModalOverlay
@@ -227,6 +237,11 @@ function DrawerWithDraftParent() {
         rerankingModelsLoading={false}
         rerankingModelsError={null}
         onRetryRerankingModels={() => undefined}
+        llmModels={[]}
+        llmCatalog={null}
+        llmModelsLoading={false}
+        llmModelsError={null}
+        onRetryLlmModels={() => undefined}
         hasRerankingProvider
       />
       <span data-testid="draft">{JSON.stringify(draft)}</span>

@@ -19,6 +19,7 @@ import {
   acceptedNamesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
+import { isLlmNodeType } from "./lib/llm";
 import { buildPipelineConfigFields, coerceFieldValue, resolvedNumber } from "./lib/pipeline-config";
 import { CREATE_SENTINEL } from "./lib/pipeline-kinds";
 import { sortIndexesByName } from "./lib/pipeline-utils";
@@ -30,6 +31,8 @@ import {
   expressionVariableNames,
   indexVariables,
 } from "./lib/variable-env";
+import { LlmNodeFields } from "./LlmNodeFields";
+import { MetadataFilterField } from "./MetadataFilterField";
 import { NodeModelSelectors } from "./NodeModelSelectors";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
@@ -88,6 +91,8 @@ export function NodeConfigSections({
   const isChunker = nodeType.startsWith("chunker.");
   const isRetrievalInput = nodeType === RETRIEVAL_INPUT_TYPE;
   const isRetrievalOutput = nodeType === RETRIEVAL_OUTPUT_TYPE;
+  const isLlmNode = isLlmNodeType(nodeType);
+  const isRetrieverNode = nodeType.startsWith("retriever.");
 
   // The static expression environment — built from the definition's
   // variables alone (input-source ones included).
@@ -128,12 +133,20 @@ export function NodeConfigSections({
     const declarationField =
       (isRetrievalInput && field.key === "arguments") ||
       (isRetrievalOutput && field.key === "outputs");
+    const llmHidden =
+      isLlmNode &&
+      ["connection_id", "model_name", "system_prompt", "prompt", "output_fields"].includes(
+        field.key,
+      );
+    const filterHidden = isRetrieverNode && field.key === "filter";
     return !(
       embedderHidden ||
       rerankerHidden ||
       vectorHidden ||
       chunkerTokenizerField ||
-      declarationField
+      declarationField ||
+      llmHidden ||
+      filterHidden
     );
   });
   const backendIndexes = useMemo(
@@ -338,6 +351,24 @@ export function NodeConfigSections({
           onOpenIndexRegistry={onOpenIndexRegistry}
         />
       ) : null}
+      {isLlmNode ? (
+        <LlmNodeFields
+          nodeType={nodeType}
+          config={config}
+          disabled={isPreview}
+          validationIssues={validationIssues}
+          onConfigChange={onConfigChange}
+        />
+      ) : null}
+      {isRetrieverNode ? (
+        <MetadataFilterField
+          config={config}
+          variables={variables}
+          disabled={isPreview}
+          validationIssues={validationIssues}
+          onConfigChange={onConfigChange}
+        />
+      ) : null}
       {isRetrievalInput ? (
         <ArgumentsPicker
           acceptedNames={acceptedNamesFromConfig(config)}
@@ -378,7 +409,12 @@ export function NodeConfigSections({
             />
           ) : null}
         </div>
-      ) : !isEmbedder && !isReranker && !isVectorNode && !isRetrievalInput && !isRetrievalOutput ? (
+      ) : !isEmbedder &&
+        !isReranker &&
+        !isVectorNode &&
+        !isRetrievalInput &&
+        !isRetrievalOutput &&
+        !isLlmNode ? (
         <p className="p-8 text-center text-ui text-muted">
           This node has no configurable settings.
         </p>
