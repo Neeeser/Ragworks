@@ -143,49 +143,30 @@ def test_upload_queues_ingestion_for_eligible_type(
     assert ingestion["status"] == "pending"
 
 
-# --- Enforcement 4: feature flags gate visualization and branching ------
+# --- Enforcement 4: feature flags gate insights and branching ------
 
 
-def _create_umap_projection(session: Session, collection: models.Collection, user: models.User) -> None:
-    """Persist a projection row so an un-gated GET would return 200, not 404.
-
-    This distinguishes "the flag returned 404" from "there's nothing to find" --
-    the same distinction the off-path test needs from the on-path 404 the
-    service itself already raises for a missing projection.
-    """
-    projection = models.UmapProjectionRecord(
-        collection_id=collection.id,
-        user_id=user.id,
-        embedding_model="test-embed",
-        point_count=0,
-    )
-    session.add(projection)
-    session.commit()
-
-
-def test_get_umap_returns_404_when_feature_disabled(
+def test_get_insights_returns_404_when_feature_disabled(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:
     collection = _create_collection(session, auth_user)
-    _create_umap_projection(session, collection, auth_user)
-    _set_override(session, "features.umap_visualizations", False)
+    _set_override(session, "features.collection_insights", False)
 
-    response = client.get(f"/api/collections/{collection.id}/visualizations/umap")
+    # The un-gated overview answers 200 even for an empty collection, so a
+    # 404 here is unambiguously the flag.
+    response = client.get(f"/api/collections/{collection.id}/insights")
 
     assert response.status_code == 404
 
 
-def test_compute_umap_returns_404_when_feature_disabled(
+def test_refresh_insights_returns_404_when_feature_disabled(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:
-    _set_override(session, "features.umap_visualizations", False)
+    _set_override(session, "features.collection_insights", False)
     collection = _create_collection(session, auth_user)
 
-    response = client.post(f"/api/collections/{collection.id}/visualizations/umap")
+    response = client.post(f"/api/collections/{collection.id}/insights/refresh")
 
-    # 404 must come from the feature-flag gate, not the service's own
-    # too-few-chunks validation error (400) -- if the gate were absent this
-    # request would 400, never 404, so a 404 here is unambiguous.
     assert response.status_code == 404
 
 

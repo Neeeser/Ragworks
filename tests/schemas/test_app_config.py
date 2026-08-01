@@ -18,7 +18,7 @@ def test_defaults_construct_a_complete_config() -> None:
     config = AppConfig()
     assert config.auth.allow_registration is True
     assert config.uploads.max_upload_size_mb == 50
-    assert config.features.umap_visualizations is True
+    assert config.features.collection_insights is True
     assert config.features.chat_branching is True
 
 
@@ -37,7 +37,7 @@ def test_catalog_covers_every_leaf_field_with_metadata() -> None:
 def test_public_flags_are_marked() -> None:
     by_key = {field.key: field for field in iter_config_fields()}
     assert by_key["auth.allow_registration"].public is True
-    assert by_key["features.umap_visualizations"].public is True
+    assert by_key["features.collection_insights"].public is True
     # Backend policy fields are not public (admin + server concern only).
     assert by_key["telemetry.retention_days"].public is False
 

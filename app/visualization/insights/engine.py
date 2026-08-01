@@ -7,11 +7,13 @@ scheduling live in the service; this module never touches the database.
 
 from __future__ import annotations
 
+import pickle
+import subprocess
+import sys
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeAlias
+from typing import Any, TypeAlias, cast
 
 import numpy as np
-from numba import njit, prange
 from sklearn.cluster import HDBSCAN
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
@@ -30,40 +32,9 @@ CLUSTER_LABEL_TERMS = 3
 Array: TypeAlias = np.ndarray[Any, np.dtype[Any]]
 
 
-class Projector(Protocol):
-    """The slice of PaCMAP's surface the engine and its pickle bundle rely on."""
-
-    def fit_transform(self, X: Array) -> Array: ...
-
-    def transform(self, X: Array, basis: Array) -> Array: ...
-
-
-_numba_warmed = False
-
-
-@njit(parallel=True, cache=False)  # type: ignore[untyped-decorator]  # numba ships no types
-def _warm_kernel(values: Array) -> float:  # pragma: no cover - trivial jit body
-    total = 0.0
-    for i in prange(values.shape[0]):
-        total += values[i]
-    return total
-
-
-def warm_numba() -> None:
-    """Initialize numba's OpenMP runtime before any faiss call.
-
-    pacmap uses faiss for its internal kNN and numba for its optimizer; on
-    macOS, letting faiss create its OpenMP pool first segfaults numba's
-    first parallel region (two libomp runtimes, wrong init order). Running
-    one trivial numba-parallel kernel first makes the full sequence safe —
-    verified empirically; there is no pure-Python way to express this
-    constraint, so it is enforced by calling this before pacmap.
-    """
-    global _numba_warmed
-    if _numba_warmed:
-        return
-    _warm_kernel(np.arange(16.0))
-    _numba_warmed = True
+# Generous ceiling on one subprocess projection call; a hung fit surfaces
+# as a failed snapshot instead of a worker stuck forever.
+PROJECTION_TIMEOUT_SECONDS = 900
 
 
 def normalized(matrix: Array) -> Array:
@@ -82,43 +53,73 @@ class KnnGraph:
 
 
 def knn_graph(matrix: Array, k: int = KNN_NEIGHBORS) -> KnnGraph:
-    """Compute each row's k nearest neighbors by cosine similarity."""
+    """Compute each row's k nearest neighbors by cosine similarity.
+
+    Self-matches are filtered by index, never by dropping the first column:
+    exact-duplicate rows (the near-duplicate chunks this graph exists to
+    surface) tie at distance zero, so the query row's own entry can land in
+    any column — dropping column 0 would then silently delete the strongest
+    cross-document edge and keep a useless self-edge instead.
+    """
     n = matrix.shape[0]
     k = min(k, n - 1)
     unit = normalized(matrix)
-    finder = NearestNeighbors(n_neighbors=k + 1, metric="cosine").fit(unit)
+    finder = NearestNeighbors(n_neighbors=min(k + 1, n), metric="cosine").fit(unit)
     distances, indices = finder.kneighbors(unit)
-    # Column 0 is each row itself (distance 0); similarity = 1 - cosine dist.
-    return KnnGraph(
-        indices=indices[:, 1:].astype(np.int64),
-        similarities=np.clip(1.0 - distances[:, 1:], -1.0, 1.0).astype(np.float32),
+    out_indices = np.empty((n, k), dtype=np.int64)
+    out_sims = np.empty((n, k), dtype=np.float32)
+    for i in range(n):
+        kept = [
+            (int(j), float(d))
+            for j, d in zip(indices[i], distances[i], strict=True)
+            if int(j) != i
+        ][:k]
+        out_indices[i] = [j for j, _ in kept]
+        out_sims[i] = [min(1.0, max(-1.0, 1.0 - d)) for _, d in kept]
+    return KnnGraph(indices=out_indices, similarities=out_sims)
+
+
+def _run_projection(request: dict[str, object]) -> dict[str, Any]:
+    """Execute a projection request in a child interpreter.
+
+    pacmap's faiss+numba OpenMP runtimes conflict with the sklearn already
+    loaded here, in platform-dependent init orders that segfault (macOS).
+    A child that imports only numpy/numba/pacmap is the one arrangement
+    that is safe everywhere, so every projection call pays a subprocess —
+    acceptable for a background compute path. See `projection_worker` for
+    why this is a bare subprocess rather than `multiprocessing`.
+    """
+    completed = subprocess.run(
+        [sys.executable, "-m", "app.visualization.insights.projection_worker"],
+        input=pickle.dumps(request),
+        capture_output=True,
+        timeout=PROJECTION_TIMEOUT_SECONDS,
+        check=False,
     )
+    if completed.returncode != 0:
+        tail = completed.stderr.decode(errors="replace")[-500:]
+        raise RuntimeError(f"Projection subprocess died (rc={completed.returncode}): {tail}")
+    reply = cast(dict[str, Any], pickle.loads(completed.stdout))
+    if not reply.get("ok"):
+        raise RuntimeError(f"Projection failed: {reply.get('error', 'unknown error')}")
+    return reply
 
 
-def fit_projection(
-    matrix: Array, random_state: int = 42
-) -> tuple[Projector, Array]:
-    """Fit a PaCMAP projection and return (reducer, 2D coordinates)."""
-    import pacmap
-
-    warm_numba()
-    n = matrix.shape[0]
-    reducer: Projector = pacmap.PaCMAP(
-        n_components=2,
-        n_neighbors=min(10, max(2, n - 2)),
-        distance="angular",
-        random_state=random_state,
-    )
-    coordinates = np.asarray(reducer.fit_transform(matrix), dtype=np.float64)
+def fit_projection(matrix: Array, random_state: int = 42) -> tuple[bytes, Array]:
+    """Fit a PaCMAP projection; returns (pickled reducer, 2D coordinates)."""
+    reply = _run_projection({"op": "fit", "matrix": matrix, "random_state": random_state})
+    coordinates = np.asarray(reply["coordinates"], dtype=np.float64)
     if not np.isfinite(coordinates).all():
         raise ValueError("Projection produced non-finite coordinates.")
-    return reducer, coordinates
+    return cast(bytes, reply["blob"]), coordinates
 
 
-def transform_points(reducer: Projector, basis: Array, new: Array) -> Array:
+def transform_points(reducer_blob: bytes, basis: Array, new: Array) -> Array:
     """Place new vectors into an existing projection without moving it."""
-    warm_numba()
-    coordinates = np.asarray(reducer.transform(new, basis=basis), dtype=np.float64)
+    reply = _run_projection(
+        {"op": "transform", "blob": reducer_blob, "basis": basis, "new": new}
+    )
+    coordinates = np.asarray(reply["coordinates"], dtype=np.float64)
     if not np.isfinite(coordinates).all():
         raise ValueError("Incremental transform produced non-finite coordinates.")
     return coordinates

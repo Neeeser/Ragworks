@@ -38,8 +38,13 @@ def schedule_insight_refresh(collection_id: UUID, user_id: UUID) -> bool:
     caller's side of the queue, so the page shows progress immediately and
     a second trigger while one is pending is a no-op.
     """
+    from app.services.app_config import get_app_config
     from app.visualization.insights.service import InsightService
 
+    # A disabled feature must not keep burning CPU in the background just
+    # because ingestion still runs.
+    if not get_app_config().features.collection_insights:
+        return False
     request_id = current_request_id() or str(uuid4())
     with session_scope() as session:
         service = InsightService(session)

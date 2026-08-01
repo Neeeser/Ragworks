@@ -23,7 +23,6 @@ from sklearn.pipeline import Pipeline as SkPipeline
 
 from app.core.config import get_settings
 from app.schemas.enums import InsightSpace
-from app.visualization.insights.engine import Projector
 
 _BUNDLE_DIR = "insights"
 
@@ -34,7 +33,9 @@ class InsightModelBundle:
 
     snapshot_id: UUID
     space: InsightSpace
-    reducer: Projector
+    # The fitted reducer stays pickled: it is only ever executed inside the
+    # projection subprocess (see `projection_worker`), never in-process.
+    reducer_blob: bytes
     # Row order of the fitted basis; embeddings/text re-fetched by these ids
     # must be stacked in exactly this order to reproduce the basis.
     fitted_chunk_ids: list[UUID]

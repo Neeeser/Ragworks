@@ -18,7 +18,7 @@ from app.db import models
 from app.db.repositories.insight import InsightRepository, OverlapPairRow
 from app.schemas.enums import InsightSpace, InsightStatus
 from app.services.errors import InvalidInputError, NotFoundError
-from app.visualization.insights import builder, engine, store
+from app.visualization.insights import builder, engine, incremental, store
 from app.visualization.insights.engine import Array
 from app.visualization.insights.spaces import load_chunk_rows
 
@@ -149,8 +149,8 @@ class InsightService:
         deletes the old snapshot. Either way exactly one snapshot survives.
         """
         ready = self._repo.get_ready_snapshot(snapshot.collection_id)
-        if ready is not None and not builder.needs_full_rebuild(self._session, ready):
-            builder.incremental_update(self._session, ready)
+        if ready is not None and not incremental.needs_full_rebuild(self._session, ready):
+            incremental.incremental_update(self._session, ready)
             ready.updated_at = datetime.now(UTC)
             self._session.add(ready)
             self._repo.delete_snapshot(snapshot.id)
@@ -202,7 +202,7 @@ class InsightService:
             raise InvalidInputError(
                 "The query vector's dimension does not match the projection space."
             )
-        coordinates = engine.transform_points(bundle.reducer, basis, query)
+        coordinates = engine.transform_points(bundle.reducer_blob, basis, query)
         sims = (engine.normalized(basis) @ engine.normalized(query).T).ravel()
         order = np.argsort(sims)[::-1][:PROBE_TOP_K]
         ranked = [(basis_rows[int(i)].chunk_id, float(sims[int(i)])) for i in order]
