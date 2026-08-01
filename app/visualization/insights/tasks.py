@@ -51,9 +51,12 @@ def schedule_insight_refresh(collection_id: UUID, user_id: UUID) -> bool:
         if not service.can_compute(collection_id):
             return False
         snapshot = service.begin_refresh(collection_id, user_id)
-    if snapshot is None:
+        # Read inside the scope: leaving it expires the instance, and a
+        # detached expired row raises on its first attribute access.
+        snapshot_id = snapshot.id if snapshot is not None else None
+    if snapshot_id is None:
         return False
-    _get_executor().submit(_run_refresh, snapshot.id, request_id)
+    _get_executor().submit(_run_refresh, snapshot_id, request_id)
     return True
 
 
