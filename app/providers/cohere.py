@@ -9,7 +9,12 @@ import httpx
 from app.cache import CacheSnapshot
 from app.clients.cohere import CohereClient, get_cohere_client
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    llm_concurrency_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.cohere import CohereChatProvider
 from app.retrieval.embedders.base import Embedder
@@ -39,6 +44,7 @@ COHERE_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.SECRET,
             required=True,
         ),
+        llm_concurrency_field(4),
     ),
     docs_url="https://dashboard.cohere.com/api-keys",
 )
@@ -51,6 +57,7 @@ class CohereAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.COHERE
     descriptor: ClassVar[ProviderDescriptor] = COHERE_DESCRIPTOR
+    default_llm_concurrency: ClassVar[int] = 4
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the Cohere connection secret and bind this adapter."""

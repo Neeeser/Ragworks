@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import httpx
+from anthropic import AnthropicError
 from openai import OpenAIError
 from pinecone.exceptions import PineconeException
 
@@ -27,6 +28,7 @@ from app.clients.ollama import OllamaApiError
 
 _EXTERNAL_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
     httpx.HTTPError,
+    AnthropicError,
     OpenAIError,
     PineconeException,
     OllamaApiError,

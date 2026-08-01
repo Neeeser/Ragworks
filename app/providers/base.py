@@ -23,6 +23,7 @@ from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
+    ConfigFieldKind,
     ConnectionValidationResult,
     ProviderConfigField,
 )
@@ -36,6 +37,30 @@ EMBEDDING_INPUT_MARGIN_TOKENS = 16
 def effective_embedding_input_limit(published_limit: int) -> int:
     """Reserve provider-agnostic headroom for embedding input wrappers."""
     return max(0, published_limit - EMBEDDING_INPUT_MARGIN_TOKENS)
+
+
+def llm_concurrency_field(default: int) -> ProviderConfigField:
+    """The shared `max_concurrent_requests` form field for chat providers.
+
+    Declared per descriptor (with the provider's own default as the
+    placeholder) so the add-connection form renders it with zero
+    provider-specific frontend code.
+    """
+    return ProviderConfigField(
+        name="max_concurrent_requests",
+        label="Max concurrent requests",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default),
+        description="Concurrent LLM calls pipeline nodes may make through this connection.",
+        help=(
+            "Pipeline LLM nodes fan per-chunk calls out in parallel; this caps how "
+            "many run at once through this connection, across all pipelines. Raise "
+            "it if your account's rate tier allows more; lower it for constrained "
+            f"servers. Empty uses the provider default ({default})."
+        ),
+        advanced=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -133,6 +158,27 @@ class ProviderAdapter(ABC):
         raise InvalidInputError(
             f"{self.descriptor.label} connections do not provide chat models."
         )
+
+    #: Concurrent-LLM-call cap when the connection sets none. Starter-tier
+    #: safe per provider type; adapters serving CHAT override to match their
+    #: provider's published entry limits.
+    default_llm_concurrency: ClassVar[int] = 4
+
+    def llm_concurrency(self) -> int:
+        """Concurrent LLM calls pipeline nodes may make through this connection.
+
+        Reads the stored `max_concurrent_requests` override, falling back to
+        the provider type's default. Malformed stored values fall back rather
+        than raise — a throttle must never be what breaks a run.
+        """
+        raw = self.connection.config.get("max_concurrent_requests")
+        try:
+            value = int(str(raw)) if raw is not None and str(raw).strip() else None
+        except ValueError:
+            value = None
+        if value is not None and value >= 1:
+            return min(value, 64)
+        return self.default_llm_concurrency
 
     def reranker(self, model_name: str) -> Reranker:
         """Construct a reranker for a model served by this connection."""

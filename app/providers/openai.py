@@ -8,7 +8,12 @@ import httpx
 
 from app.clients.openai_compat import OpenAICompatClient, TransportConfig
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    llm_concurrency_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
     RESPONSES_PARAMETERS,
@@ -61,6 +66,7 @@ OPENAI_DESCRIPTOR = ProviderDescriptor(
                 "OpenAI-shaped API is a Custom server connection instead."
             ),
         ),
+        llm_concurrency_field(8),
     ),
     docs_url="https://platform.openai.com/api-keys",
     recommended=True,
@@ -72,6 +78,7 @@ class OpenAIAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.OPENAI
     descriptor: ClassVar[ProviderDescriptor] = OPENAI_DESCRIPTOR
+    default_llm_concurrency: ClassVar[int] = 8
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

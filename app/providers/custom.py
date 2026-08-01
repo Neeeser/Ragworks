@@ -27,7 +27,12 @@ from app.clients.openai_compat import (
     get_openai_compat_client,
 )
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    llm_concurrency_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
     CHAT_COMPLETIONS_PARAMETERS,
@@ -144,6 +149,7 @@ CUSTOM_DESCRIPTOR = ProviderDescriptor(
             default="/rerank",
             placeholder="/rerank",
         ),
+        llm_concurrency_field(2),
     ),
     docs_url="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html",
 )
@@ -160,6 +166,7 @@ class CustomAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.CUSTOM
     descriptor: ClassVar[ProviderDescriptor] = CUSTOM_DESCRIPTOR
+    default_llm_concurrency: ClassVar[int] = 2
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

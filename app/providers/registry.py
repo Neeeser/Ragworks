@@ -269,6 +269,10 @@ class ProviderResolver:
         """Construct a chat provider from a connection id."""
         return self.adapter(connection_id, ProviderKind.CHAT).chat_provider()
 
+    def llm_concurrency(self, connection_id: UUID) -> int:
+        """Concurrent LLM calls allowed through a connection (see throttle)."""
+        return self.adapter(connection_id, ProviderKind.CHAT).llm_concurrency()
+
     def reranker(self, connection_id: UUID, model_name: str) -> Reranker:
         """Construct a reranker from a connection id and model name."""
         return self.adapter(connection_id, ProviderKind.RERANKING).reranker(model_name)

@@ -8,7 +8,12 @@ import anthropic
 
 from app.clients.anthropic import AnthropicClient, get_anthropic_client
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    llm_concurrency_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import MessagesProvider
 from app.providers.chat.dialects.messages import model_info_from_catalog
@@ -54,6 +59,7 @@ ANTHROPIC_DESCRIPTOR = ProviderDescriptor(
                 "the proxy must serve the Messages API."
             ),
         ),
+        llm_concurrency_field(4),
     ),
     docs_url="https://console.anthropic.com/settings/keys",
     recommended=True,
@@ -79,6 +85,7 @@ class AnthropicAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.ANTHROPIC
     descriptor: ClassVar[ProviderDescriptor] = ANTHROPIC_DESCRIPTOR
+    default_llm_concurrency: ClassVar[int] = 4
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""
