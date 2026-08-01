@@ -24,6 +24,8 @@ Semantics:
   rc     0.1.0 -> 0.1.1-rc.1   0.1.1-rc.1 -> 0.1.1-rc.2
 
 Usage: uv run python scripts/bump_version.py {patch,minor,major,rc}
+Set HIGHLIGHTS to pre-fill the release PR's Highlights section (the hand-written
+prose prepended to the generated release notes); it stays editable on the PR.
 Opens a release PR (branch `release/v<version>`) that bumps every file recording
 the version; merging that PR tags the commit and publishes the release (see
 .github/workflows/release.yml). Refuses to run on a dirty tree, off `main`, or if
@@ -141,6 +143,33 @@ def _remote_branch_exists(branch: str) -> bool:
     return result.returncode == 0
 
 
+def _pr_body(current: str, new_version: str, tag: str, highlights: str) -> str:
+    """Build the release PR description, seeding the Highlights section.
+
+    `highlights` (the HIGHLIGHTS env var) pre-fills the section; empty leaves
+    the editable placeholder comment. Either way the section stays editable on
+    GitHub until the PR merges — release.yml reads it from the body at merge
+    time and prepends it to the generated release notes.
+    """
+    section = highlights.strip() or (
+        "<!-- Optional, edit before merging. Anything in this section is placed "
+        "at the top of the release notes, above the generated PR list. Leave "
+        "only this comment to publish generated notes alone. -->"
+    )
+    return (
+        f"Automated release PR: **{current} → {new_version}**.\n\n"
+        f"Merging this PR publishes the release — it tags the merge commit `{tag}`, "
+        "builds and pushes the multi-arch backend/frontend images to GHCR, and "
+        "creates the GitHub Release (notes generated from merged PRs, with "
+        "`docker-compose.yml` attached).\n\n"
+        "Only the version files change in the diff. If the version is wrong, "
+        "close this PR and run the bump again — never edit the version files "
+        "by hand. The Highlights section below is the one part meant to be "
+        "edited.\n\n"
+        f"## Highlights\n\n{section}"
+    )
+
+
 def main() -> None:
     """Validate repo state, bump versions on a release branch, and open a PR."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -175,21 +204,7 @@ def main() -> None:
     _run("git", "commit", "-m", f"chore: release {tag}")
     _run("git", "push", "-u", "origin", release_branch)
 
-    body = (
-        f"Automated release PR: **{current} → {new_version}**.\n\n"
-        f"Merging this PR publishes the release — it tags the merge commit `{tag}`, "
-        "builds and pushes the multi-arch backend/frontend images to GHCR, and "
-        "creates the GitHub Release (notes generated from merged PRs, with "
-        "`docker-compose.yml` attached).\n\n"
-        "Only the version files change in the diff. If the version is wrong, "
-        "close this PR and run the bump again — never edit the version files "
-        "by hand. The Highlights section below is the one part meant to be "
-        "edited.\n\n"
-        "## Highlights\n\n"
-        "<!-- Optional, edit before merging. Anything in this section is placed "
-        "at the top of the release notes, above the generated PR list. Leave "
-        "only this comment to publish generated notes alone. -->"
-    )
+    body = _pr_body(current, new_version, tag, os.environ.get("HIGHLIGHTS", ""))
     pr_url = _run(
         "gh",
         "pr",

@@ -171,7 +171,8 @@ images (`X.Y.Z` + `X.Y` + `latest` for stable, `X.Y.Z-rc.N` alone for pre-releas
 and cuts the GitHub Release with label-organized notes (only
 `breaking`/`feature`/`fix` PRs appear; `docs`/`ci`/`dependencies`/`chore` are
 excluded). The release PR body carries a `## Highlights` section — hand-written
-prose edited any time before merge — which `release.yml` prepends above the
+prose, seeded from the terminal (`make bump-minor HIGHLIGHTS="…"`) or the
+workflow input, and editable any time before merge — which `release.yml` prepends above the
 generated PR list; left as its seeded comment, the release ships generated notes
 alone. The version lives in
 `pyproject.toml` and `frontend/package.json` (plus lockfiles); only

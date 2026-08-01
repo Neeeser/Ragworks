@@ -25,6 +25,10 @@ on:
           - minor
           - major
           - rc
+      highlights:
+        description: "Release highlights (pre-fills the PR's Highlights section; editable on the PR before merging)"
+        required: false
+        type: string
 
 # All writes go through the App token; GITHUB_TOKEN needs nothing.
 permissions: {}
@@ -58,4 +62,5 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           UV_BIN: uv
+          HIGHLIGHTS: ${{ inputs.highlights }}
         run: uv run python scripts/bump_version.py ${{ inputs.level }}

@@ -76,7 +76,7 @@ help:
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
 	@echo "  make readme-assets - regenerate the README pipeline animation"
-	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - open a release PR (merge it to publish)"
+	@echo "  make bump-patch|bump-minor|bump-major|bump-rc - open a release PR (merge it to publish; HIGHLIGHTS=\"...\" pre-fills release notes)"
 
 env: env-backend env-frontend
 
@@ -178,6 +178,11 @@ readme-assets: env-backend env-frontend
 
 refresh-openai-bundle:
 	node scripts/download-openai-model-bundle.mjs
+
+# HIGHLIGHTS pre-fills the release PR's Highlights section (exported as an env
+# var so prose with quotes survives; still editable on the PR before merging):
+#   make bump-minor HIGHLIGHTS="This release reworks the frontend console."
+export HIGHLIGHTS
 
 bump-patch:
 	UV_BIN="$(UV)" $(UV) run python scripts/bump_version.py patch
