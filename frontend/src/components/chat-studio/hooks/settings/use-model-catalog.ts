@@ -1,15 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { PARAMETER_DEFINITIONS } from "@/lib/chat-parameters";
 import { modelAvailability, useSharedModelCatalog } from "@/lib/model-catalog-cache";
-import { sortChatModels } from "@/lib/model-sorting";
 
 import { sanitizeModelSlug } from "../../lib/chat-utils";
 
 import type { ModelParameterKey, ParameterDefinition } from "@/lib/chat-parameters";
-import type { ChatModelSortOption } from "@/lib/model-sorting";
 import type { CatalogModel, ConnectionCatalogError, ProviderConnection, UUID } from "@/lib/types";
 
 const PARAMETER_DEFINITION_MAP: Record<ModelParameterKey, ParameterDefinition> =
@@ -49,20 +47,10 @@ interface UseModelCatalogResult {
   connectionErrors: ConnectionCatalogError[];
   modelsLoading: boolean;
   modelsError: string | null;
-  modelSearchTerm: string;
-  setModelSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  modelSortOption: ChatModelSortOption;
-  setModelSortOption: React.Dispatch<React.SetStateAction<ChatModelSortOption>>;
-  /** Connection id to restrict the picker to, or "" for every provider. */
-  connectionFilter: string;
-  setConnectionFilter: React.Dispatch<React.SetStateAction<string>>;
-  /** One entry per connection present in the catalog, for the filter dropdown. */
-  connectionOptions: ConnectionOption[];
   currentModelInfo: CatalogModel | null;
   providerModelSlug: string | null;
   supportedParameterKeys: Set<ModelParameterKey>;
   toolReadyModels: CatalogModel[];
-  sortedModelCatalog: CatalogModel[];
   selectedModelKey: string;
   selectedAvailability: "available" | "unknown" | "missing";
   refreshModels: () => Promise<void>;
@@ -92,9 +80,6 @@ export function useModelCatalog({
   );
   const modelCatalog = query.data?.models ?? EMPTY_MODELS;
   const connectionErrors = query.data?.connection_errors ?? EMPTY_CONNECTION_ERRORS;
-  const [modelSearchTerm, setModelSearchTerm] = useState("");
-  const [modelSortOption, setModelSortOption] = useState<ChatModelSortOption>("price");
-  const [connectionFilter, setConnectionFilter] = useState("");
 
   const currentModelInfo = useMemo(() => {
     if (!activeModelId || !activeConnectionId) return null;
@@ -164,42 +149,6 @@ export function useModelCatalog({
     return modelCatalog.filter((model) => model.capabilities?.tools);
   }, [modelCatalog, toolsEnabled]);
 
-  const connectionOptions = useMemo(() => {
-    const options = new Map<UUID, ConnectionOption>();
-    for (const model of modelCatalog) {
-      if (!options.has(model.connection_id)) {
-        options.set(model.connection_id, {
-          connectionId: model.connection_id,
-          label: model.connection_label,
-          providerType: model.provider_type,
-        });
-      }
-    }
-    return [...options.values()];
-  }, [modelCatalog]);
-
-  const connectionScopedModels = useMemo(() => {
-    if (!connectionFilter) return toolReadyModels;
-    return toolReadyModels.filter((model) => model.connection_id === connectionFilter);
-  }, [connectionFilter, toolReadyModels]);
-
-  const filteredModelCatalog = useMemo(() => {
-    const query = modelSearchTerm.trim().toLowerCase();
-    if (!query) return connectionScopedModels;
-    return connectionScopedModels.filter((model) => {
-      const haystack = [model.name, model.id, model.connection_label, model.description]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [connectionScopedModels, modelSearchTerm]);
-
-  const sortedModelCatalog = useMemo(
-    () => sortChatModels(filteredModelCatalog, modelSortOption),
-    [filteredModelCatalog, modelSortOption],
-  );
-
   const selectedModelKey = useMemo(() => {
     if (!activeModelId) return "";
     return activeConnectionId
@@ -212,18 +161,10 @@ export function useModelCatalog({
     connectionErrors,
     modelsLoading: query.loading,
     modelsError,
-    modelSearchTerm,
-    setModelSearchTerm,
-    modelSortOption,
-    setModelSortOption,
-    connectionFilter,
-    setConnectionFilter,
-    connectionOptions,
     currentModelInfo,
     providerModelSlug,
     supportedParameterKeys,
     toolReadyModels,
-    sortedModelCatalog,
     selectedModelKey,
     selectedAvailability,
     refreshModels: query.refresh,

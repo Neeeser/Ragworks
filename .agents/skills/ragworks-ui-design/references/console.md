@@ -148,6 +148,32 @@ Where one decision needs the other, reach across rather than duplicate: the regi
 links to the collection that owns a choice, and a binding flow creates an index inline
 through the shared control instead of sending the user to the registry and back.
 
+### Picking from a long catalog — the user's set, then everything
+
+Any list a provider can grow without bound (models today) is presented the same way:
+what *this user* works with first, the catalog behind it.
+
+- **Shortlist first.** The picker opens on Pinned, else Recent, else All. Pins are
+  explicit (a star on every row), recents are recorded on use. A returning user picks
+  from a handful; a new account with neither still lands on a searchable list rather
+  than an empty section with a hint in it.
+- **Group by source into drawers with counts.** One provider publishing three hundred
+  entries otherwise buries every other one. Searching auto-expands the drawers holding
+  matches and names the sources with none — a source silently missing from a list reads
+  as a broken connection, not as a filtered one.
+- **Narrow by capability, not by price.** Filter chips over what an entry *can do*
+  answer the question users actually ask; sort stays available beside them, demoted.
+  Offer a chip only when the loaded catalog contains it, so no chip advertises something
+  no connected provider serves.
+- **Detail gets its own room.** Descriptions and full metadata belong in an overlay
+  browser (list plus detail pane), never crammed into an inline pane — inline rows carry
+  identity, capability marks, and one trailing measure. Below `lg` the two panes become
+  one and the detail slides over the list.
+- **Capability marks are additive.** The baseline every entry shares is not badged, and
+  a mark appears only where the source stated the capability. Absence reads as "not
+  stated", never "cannot" — and an icon printed beside its own label is decorative, or
+  it announces the same words twice.
+
 ### Stats belong to their owner
 
 - An **entity list** never gets an aggregate KPI strip above it. Each entity's numbers

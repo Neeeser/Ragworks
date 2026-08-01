@@ -333,6 +333,31 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
+- **Every model picker is `ModelPickerInline`, and the models a user works with
+  come before the catalog.** The picker opens on Pinned, else Recent, else All,
+  so a returning user picks from a handful and a brand-new account still lands
+  on a searchable list rather than an empty section. A surface that renders its
+  own list of models re-derives the shortlist, the drawers, and the capability
+  marks, and drifts from the other three the first time any of them changes.
+- **Catalog narrowing is by capability, not by price.** "The models that read
+  images and call tools" is the question users ask; a sort never answered it.
+  Chips are offered only for capabilities present in the loaded catalog, so a
+  chip is never a dead control advertising something no connected provider
+  serves. Provider filter and sort stay available beside them — demoting a
+  control is not removing it.
+- **A provider's models group into collapsible drawers with counts.** One
+  connection publishing three hundred models otherwise pushes every other
+  provider below the fold; a search auto-expands the drawers holding matches
+  and names the providers with none, because a provider silently missing from
+  the list reads as a broken connection.
+- **Capability marks are additive claims, never denials.** Text is the baseline
+  and is not badged; a mark appears only where a provider stated the capability
+  (`lib/model-capabilities.ts`). Absence means "not stated" — rendering it as
+  "cannot" makes a provider that publishes no capability tree look less capable
+  than one that does.
+- **An icon next to its own visible label is `decorative`.** `CapabilityIcon`
+  otherwise carries a tooltip and an `sr-only` name, so a chip that also prints
+  the label announces it twice ("Tool callingTool calling").
 - **The connection form renders every field kind from the catalog.**
   `ConnectionConfigFields` dispatches on `field.kind` (`string`/`secret`/`url`/
   `boolean`/`select`) and hides `advanced` fields behind a disclosure, so a new
