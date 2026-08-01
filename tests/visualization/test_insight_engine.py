@@ -93,3 +93,19 @@ def test_fit_projection_separates_distinct_clusters_and_transform_lands_nearby()
     dist_b = np.linalg.norm(placed - center_b, axis=1).mean()
     dist_a = np.linalg.norm(placed - center_a, axis=1).mean()
     assert dist_b < dist_a
+
+
+def test_fit_projection_handles_a_tiny_corpus() -> None:
+    """A three-chunk collection projects and transforms instead of failing
+    (regression: PaCMAP's pair sampling degenerates below ~a dozen points and
+    the first sandbox collection — three one-chunk documents — never got a
+    map)."""
+    matrix = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32
+    )
+    reducer_blob, coordinates = engine.fit_projection(matrix)
+    assert coordinates.shape == (3, 2)
+    assert np.isfinite(coordinates).all()
+    placed = engine.transform_points(reducer_blob, matrix, matrix[:1])
+    assert placed.shape == (1, 2)
+    assert np.allclose(placed[0], coordinates[0], atol=1e-6)

@@ -54,8 +54,44 @@ def _warm_numba() -> None:
     _numba_warmed = True
 
 
+# Below this many points PaCMAP's neighbor sampling degenerates (its pair
+# counts round down to zero); a centered SVD plane is the honest projection
+# for a corpus this small anyway.
+TINY_FIT_MIN = 12
+
+
+class TinyProjector:
+    """Centered rank-2 SVD projection for corpora too small for PaCMAP.
+
+    Speaks the same `transform(X, basis=...)` surface as PaCMAP so the
+    incremental path and the probe treat both reducers identically.
+    """
+
+    def __init__(self, mean: Array, components: Array) -> None:
+        self.mean = mean
+        self.components = components
+
+    def transform(self, X: Array, basis: Array | None = None) -> Array:
+        return np.asarray((X - self.mean) @ self.components.T, dtype=np.float64)
+
+
+def _fit_tiny(matrix: Array) -> tuple[bytes, Array]:
+    mean = matrix.mean(axis=0)
+    centered = matrix - mean
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    components = np.zeros((2, matrix.shape[1]), dtype=np.float64)
+    components[: min(2, vt.shape[0])] = vt[:2]
+    projector = TinyProjector(mean=mean.astype(np.float64), components=components)
+    return pickle.dumps(projector), projector.transform(matrix)
+
+
 def fit(matrix: Array, random_state: int) -> tuple[bytes, Array]:
-    """Fit a 2D PaCMAP projection; returns (pickled reducer, coordinates)."""
+    """Fit a 2D projection; returns (pickled reducer, coordinates)."""
+    if matrix.shape[0] < TINY_FIT_MIN:
+        return _fit_tiny(matrix)
+    # Warm BEFORE the pacmap import: merely importing faiss (which the
+    # pacmap module does) loads its libomp, and numba's first parallel
+    # region after that segfaults.
     _warm_numba()
     import pacmap
 
