@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Column, Float, String
+from sqlalchemy import Boolean, Column, Float, Index, String
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
@@ -83,6 +83,17 @@ class InsightNeighborRecord(SQLModel, table=True):
     """
 
     __tablename__ = "insight_neighbors"
+    # The overlap report reads this table sorted by similarity with an
+    # offset — on a million-chunk corpus that scan needs the composite
+    # index or every page costs a full sort.
+    __table_args__ = (
+        Index(
+            "ix_insight_neighbors_overlap_scan",
+            "snapshot_id",
+            "cross_document",
+            "similarity",
+        ),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     snapshot_id: UUID = Field(foreign_key="insight_snapshots.id", nullable=False, index=True)

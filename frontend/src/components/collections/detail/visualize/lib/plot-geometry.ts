@@ -115,3 +115,41 @@ export function computeMinimumSpacing(points: XYPoint[], fallbackSpacing: number
   /* c8 ignore stop */
   return Math.min(minimumSpacing, fallbackSpacing);
 }
+
+/** A labelled datum the decluttering pass can size a text box for. */
+export type LabelledPoint = { x: number; y: number; label: string; size: number };
+
+/**
+ * Screen-space greedy decluttering: keep labels for the biggest clusters
+ * first and drop any whose estimated pixel box would overprint one already
+ * kept. Zooming in spreads the boxes apart, so more labels qualify — the
+ * map paradigm's level-of-detail, without ever drawing text over text.
+ */
+export function declutterClusters<T extends LabelledPoint>(clusters: T[], zoom: number): T[] {
+  const scale = Math.pow(2, zoom);
+  const kept: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
+  const visible: T[] = [];
+  const ordered = [...clusters].sort((a, b) => b.size - a.size);
+  for (const cluster of ordered) {
+    const halfWidth = (cluster.label.length * 7.2) / 2 + 8;
+    const halfHeight = 12;
+    const box = {
+      minX: cluster.x * scale - halfWidth,
+      maxX: cluster.x * scale + halfWidth,
+      minY: cluster.y * scale - halfHeight,
+      maxY: cluster.y * scale + halfHeight,
+    };
+    const collides = kept.some(
+      (other) =>
+        box.minX < other.maxX &&
+        box.maxX > other.minX &&
+        box.minY < other.maxY &&
+        box.maxY > other.minY,
+    );
+    if (!collides) {
+      kept.push(box);
+      visible.push(cluster);
+    }
+  }
+  return visible;
+}

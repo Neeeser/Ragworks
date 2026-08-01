@@ -95,6 +95,8 @@ export interface InsightOverlap {
 export interface InsightOverlaps {
   snapshot: InsightSnapshot;
   pairs: InsightOverlap[];
+  total: number;
+  offset: number;
 }
 
 export interface InsightProbeMatch {

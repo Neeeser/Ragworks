@@ -212,3 +212,37 @@ def test_cross_user_collection_is_invisible(
 
 def test_unknown_collection_404s(client: TestClient) -> None:
     assert client.get(f"/api/collections/{uuid4()}/insights").status_code == 404
+
+
+def test_overlaps_page_and_sort(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """The report pages with a stable total and honors the sort order."""
+    collection = _make_collection(session, auth_user)
+    _build_ready_snapshot(session, collection, auth_user)
+
+    first = client.get(
+        f"/api/collections/{collection.id}/insights/overlaps?limit=1&offset=0"
+    ).json()
+    assert first["total"] >= 2
+    assert first["offset"] == 0
+    assert len(first["pairs"]) == 1
+
+    second = client.get(
+        f"/api/collections/{collection.id}/insights/overlaps?limit=1&offset=1"
+    ).json()
+    assert second["offset"] == 1
+    assert len(second["pairs"]) == 1
+    assert second["pairs"][0]["similarity"] <= first["pairs"][0]["similarity"]
+
+    ascending = client.get(
+        f"/api/collections/{collection.id}/insights/overlaps?limit=1&order=asc"
+    ).json()
+    assert ascending["pairs"][0]["similarity"] <= first["pairs"][0]["similarity"]
+
+    assert (
+        client.get(
+            f"/api/collections/{collection.id}/insights/overlaps?order=upward"
+        ).status_code
+        == 422
+    )

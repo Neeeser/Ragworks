@@ -12,6 +12,12 @@ const GRID_MARGIN_MULTIPLIER = 0.2;
 const MIN_POINT_RADIUS_PX = 4;
 const MAX_POINT_RADIUS_PX = 10;
 
+// Zoom is bounded around the fitted overview: two steps out keeps every
+// point on screen with context, six steps in separates the densest pair —
+// beyond either end there is only empty plane and a lost user.
+const ZOOM_OUT_STEPS = 2;
+const ZOOM_IN_STEPS = 6;
+
 export type PlotViewport = {
   /** Callback ref for the plot's container element. */
   setContainerElement: (element: HTMLDivElement | null) => void;
@@ -36,7 +42,14 @@ export function usePlotViewport(
   points: XYPoint[],
   initialViewState: OrthographicViewState,
 ): PlotViewport {
-  const [viewState, setViewState] = useState<OrthographicViewState>(initialViewState);
+  const initialZoom = typeof initialViewState.zoom === "number" ? initialViewState.zoom : 0;
+  const minZoom = initialZoom - ZOOM_OUT_STEPS;
+  const maxZoom = initialZoom + ZOOM_IN_STEPS;
+  const [viewState, setViewState] = useState<OrthographicViewState>({
+    ...initialViewState,
+    minZoom,
+    maxZoom,
+  });
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
@@ -126,24 +139,33 @@ export function usePlotViewport(
 
   const handleViewStateChange = useCallback(
     (params: ViewStateChangeParameters<OrthographicViewState>) => {
-      setViewState(params.viewState as OrthographicViewState);
+      // Re-assert the bounds: the controller honors them for its own
+      // gestures, but a state it emits must never drop them.
+      setViewState({
+        ...(params.viewState as OrthographicViewState),
+        minZoom,
+        maxZoom,
+      });
     },
-    [],
+    [maxZoom, minZoom],
   );
 
-  const zoomBy = useCallback((delta: number) => {
-    setViewState((previous) => {
-      const previousZoom = typeof previous.zoom === "number" ? previous.zoom : 0;
-      return {
-        ...previous,
-        zoom: Math.max(-10, Math.min(14, previousZoom + delta)),
-      };
-    });
-  }, []);
+  const zoomBy = useCallback(
+    (delta: number) => {
+      setViewState((previous) => {
+        const previousZoom = typeof previous.zoom === "number" ? previous.zoom : 0;
+        return {
+          ...previous,
+          zoom: Math.max(minZoom, Math.min(maxZoom, previousZoom + delta)),
+        };
+      });
+    },
+    [maxZoom, minZoom],
+  );
 
   const reset = useCallback(() => {
-    setViewState(initialViewState);
-  }, [initialViewState]);
+    setViewState({ ...initialViewState, minZoom, maxZoom });
+  }, [initialViewState, maxZoom, minZoom]);
 
   const centerOn = useCallback((x: number, y: number) => {
     setViewState((previous) => ({ ...previous, target: [x, y, 0] }));

@@ -138,10 +138,14 @@ class InsightOverlapRead(BaseModel):
 
 
 class InsightOverlapsRead(BaseModel):
-    """The ranked confusability report."""
+    """One page of the ranked confusability report."""
 
     snapshot: InsightSnapshotRead
     pairs: list[InsightOverlapRead]
+    # Canonical cross-document pairs in the whole snapshot, so the client can
+    # page without guessing where the list ends.
+    total: int
+    offset: int
 
 
 class InsightProbeRequest(BaseModel):

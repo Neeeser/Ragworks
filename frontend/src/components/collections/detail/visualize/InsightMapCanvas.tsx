@@ -14,9 +14,10 @@ import { cn } from "@/lib/utils";
 
 import { usePlotViewport } from "./hooks/use-plot-viewport";
 import { CANVAS_TOOLTIP_STYLE, cssColorToRgba, withAlpha } from "./lib/plot-colors";
-import { buildInitialViewState } from "./lib/plot-geometry";
+import { buildInitialViewState, declutterClusters } from "./lib/plot-geometry";
 import { SERIES_TOKENS, clusterSeriesIndex } from "./lib/series-tokens";
 import { ensureCanvasContextLimits } from "./luma-patches";
+import { ChunkMark, DocumentMark, PlotKey, ProbeMark, ProbeMatchMark } from "./PlotKey";
 
 import type { Rgba } from "./lib/plot-colors";
 import type { GridLine } from "./lib/plot-geometry";
@@ -158,6 +159,8 @@ export function InsightMapCanvas({
     baseRadius,
     gridLines,
   } = usePlotViewport(points, initialViewState);
+  const zoom = typeof viewState.zoom === "number" ? viewState.zoom : 0;
+  const visibleClusters = useMemo(() => declutterClusters(clusters, zoom), [clusters, zoom]);
 
   const layers = useMemo(() => {
     const dimmed = (point: InsightPoint) =>
@@ -238,7 +241,7 @@ export function InsightMapCanvas({
       }),
       new TextLayer<InsightCluster>({
         id: "insight-cluster-labels",
-        data: clusters,
+        data: visibleClusters,
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (cluster) => [cluster.x, cluster.y],
         getText: (cluster) => cluster.label,
@@ -296,7 +299,6 @@ export function InsightMapCanvas({
   }, [
     accentColor,
     baseRadius,
-    clusters,
     cyanColor,
     documents,
     focusedDocumentId,
@@ -311,6 +313,7 @@ export function InsightMapCanvas({
     selectedColor,
     selectedPointId,
     seriesColors,
+    visibleClusters,
   ]);
 
   const controls: Array<{
@@ -358,6 +361,14 @@ export function InsightMapCanvas({
       />
       {/* Docked to the plot's inner corner; tooltips open toward the plot's
           interior so the card's clipped overflow never cuts them. */}
+      <PlotKey
+        entries={[
+          { mark: <ChunkMark />, label: "Chunk (colour = cluster)" },
+          { mark: <DocumentMark />, label: "Document (click to focus)" },
+          { mark: <ProbeMark />, label: "Probed query" },
+          { mark: <ProbeMatchMark />, label: "Probe match" },
+        ]}
+      />
       <div
         className={cn(popoverSurfaceClass, "absolute bottom-3 left-3 z-10 flex flex-col text-body")}
       >

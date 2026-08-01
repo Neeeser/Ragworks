@@ -106,13 +106,32 @@ class InsightRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
-    def list_overlaps(self, snapshot_id: UUID, limit: int) -> list[OverlapPairRow]:
-        """Return the strongest cross-document chunk pairs with display context.
+    def count_overlaps(self, snapshot_id: UUID) -> int:
+        """How many canonical cross-document pairs the snapshot holds."""
+        count = self.session.exec(
+            select(func.count(col(models.InsightNeighborRecord.id))).where(
+                col(models.InsightNeighborRecord.snapshot_id) == snapshot_id,
+                col(models.InsightNeighborRecord.cross_document).is_(True),
+                col(models.InsightNeighborRecord.chunk_id)
+                < col(models.InsightNeighborRecord.neighbor_chunk_id),
+            )
+        ).one()
+        return int(count)
+
+    def list_overlaps(
+        self,
+        snapshot_id: UUID,
+        limit: int,
+        offset: int = 0,
+        descending: bool = True,
+    ) -> list[OverlapPairRow]:
+        """Return cross-document chunk pairs with display context, paged.
 
         The kNN graph stores directed edges, so an A↔B pair can appear twice;
         the canonical direction (`chunk_id < neighbor_chunk_id`) keeps each
         pair once without losing pairs whose reverse edge fell outside the
-        neighbor's own top-k.
+        neighbor's own top-k. Offset paging over the composite similarity
+        index keeps each page cheap even on very large corpora.
         """
         chunk = models.DocumentChunkRecord
         neighbor_chunk = aliased(models.DocumentChunkRecord)
@@ -148,7 +167,12 @@ class InsightRepository(Repository):
                 col(models.InsightNeighborRecord.chunk_id)
                 < col(models.InsightNeighborRecord.neighbor_chunk_id),
             )
-            .order_by(desc(col(models.InsightNeighborRecord.similarity)))
+            .order_by(
+                desc(col(models.InsightNeighborRecord.similarity))
+                if descending
+                else col(models.InsightNeighborRecord.similarity)
+            )
+            .offset(offset)
             .limit(limit)
         )
         return [

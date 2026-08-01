@@ -98,10 +98,17 @@ class InsightService:
         )
 
     def overlaps(
-        self, snapshot: models.InsightSnapshotRecord, limit: int
-    ) -> list[OverlapPairRow]:
-        """Strongest cross-document chunk pairs, the confusability report."""
-        return self._repo.list_overlaps(snapshot.id, limit)
+        self,
+        snapshot: models.InsightSnapshotRecord,
+        limit: int,
+        offset: int = 0,
+        descending: bool = True,
+    ) -> tuple[list[OverlapPairRow], int]:
+        """A page of cross-document chunk pairs plus the total pair count."""
+        return (
+            self._repo.list_overlaps(snapshot.id, limit, offset, descending),
+            self._repo.count_overlaps(snapshot.id),
+        )
 
     # -- refresh ----------------------------------------------------------
 

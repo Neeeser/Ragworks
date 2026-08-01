@@ -109,7 +109,7 @@ def test_overlap_report_names_the_cross_document_duplicate_once(
     with Session(session.get_bind()) as fresh:
         service = InsightService(fresh)
         snapshot = service.ready_snapshot(collection.id)
-        pairs = service.overlaps(snapshot, limit=10)
+        pairs, total = service.overlaps(snapshot, limit=10)
         assert pairs
         top = pairs[0]
         assert top.neighbor.similarity == pytest.approx(1.0, abs=1e-5)
@@ -122,6 +122,7 @@ def test_overlap_report_names_the_cross_document_duplicate_once(
             for row in pairs
         }
         assert len(keys) == len(pairs)
+        assert total == len(pairs)
 
 
 def test_incremental_update_places_new_chunks_without_refitting(

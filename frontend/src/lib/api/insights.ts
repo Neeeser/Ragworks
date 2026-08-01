@@ -39,12 +39,16 @@ export async function fetchInsightGraph(
 export async function fetchInsightOverlaps(
   token: string,
   collectionId: string,
-  limit = 50,
+  options: { limit?: number; offset?: number; order?: "asc" | "desc" } = {},
 ): Promise<InsightOverlaps> {
-  return apiFetch<InsightOverlaps>(
-    `/api/collections/${collectionId}/insights/overlaps?limit=${limit}`,
-    { token },
-  );
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 50),
+    offset: String(options.offset ?? 0),
+    order: options.order ?? "desc",
+  });
+  return apiFetch<InsightOverlaps>(`/api/collections/${collectionId}/insights/overlaps?${params}`, {
+    token,
+  });
 }
 
 export async function probeInsights(

@@ -174,6 +174,8 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchInsightOverlaps: vi.fn(async () => ({
       snapshot: makeInsightSnapshot(),
       pairs: [],
+      total: 0,
+      offset: 0,
     })),
     probeInsights: vi.fn(async () => ({
       x: 0,

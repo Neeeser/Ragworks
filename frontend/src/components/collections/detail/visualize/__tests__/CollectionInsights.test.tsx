@@ -49,6 +49,8 @@ describe("CollectionInsights", () => {
     api.fetchInsightOverview.mockResolvedValue(overview());
     api.fetchInsightOverlaps.mockResolvedValue({
       snapshot: makeInsightSnapshot(),
+      total: 1,
+      offset: 0,
       pairs: [
         {
           similarity: 0.973,

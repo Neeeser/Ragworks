@@ -173,21 +173,27 @@ def get_insight_graph(
 def get_insight_overlaps(
     collection_id: UUID,
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    order: str = Query(default="desc", pattern="^(asc|desc)$"),
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> InsightOverlapsRead:
-    """Ranked cross-document chunk pairs retrieval is likely to confuse."""
+    """A page of cross-document chunk pairs retrieval is likely to confuse."""
     collection = get_collection_or_404(
         collection_id=collection_id, user_id=current_user.id, session=session
     )
     service = InsightService(session)
     try:
         snapshot = service.ready_snapshot(collection.id)
-        pairs = service.overlaps(snapshot, limit)
+        pairs, total = service.overlaps(
+            snapshot, limit, offset=offset, descending=order == "desc"
+        )
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return InsightOverlapsRead(
         snapshot=InsightSnapshotRead.from_model(snapshot),
+        total=total,
+        offset=offset,
         pairs=[
             InsightOverlapRead(
                 similarity=row.neighbor.similarity,

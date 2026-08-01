@@ -16,6 +16,7 @@ import { useCssTokens } from "@/lib/use-css-tokens";
 import { CANVAS_TOOLTIP_STYLE, cssColorToRgba } from "./lib/plot-colors";
 import { buildInitialViewState } from "./lib/plot-geometry";
 import { ensureCanvasContextLimits } from "./luma-patches";
+import { CollisionTieMark, DocumentMark, PlotKey, TieMark } from "./PlotKey";
 
 import type { Rgba } from "./lib/plot-colors";
 import type { InsightDocEdge, InsightDocPoint } from "@/lib/types";
@@ -152,36 +153,45 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
   );
 
   return (
-    <DeckGL
-      views={VIEW}
-      controller
-      deviceProps={{ type: "webgl", adapters: [webgl2Adapter] }}
-      viewState={viewState}
-      onViewStateChange={handleViewStateChange}
-      layers={layers}
-      getTooltip={(info) => {
-        const object = info.object as InsightDocPoint | PositionedEdge | undefined;
-        if (!object) {
-          return null;
-        }
-        if ("document_name" in object) {
+    <div className="relative h-full w-full">
+      <DeckGL
+        views={VIEW}
+        controller
+        deviceProps={{ type: "webgl", adapters: [webgl2Adapter] }}
+        viewState={viewState}
+        onViewStateChange={handleViewStateChange}
+        layers={layers}
+        getTooltip={(info) => {
+          const object = info.object as InsightDocPoint | PositionedEdge | undefined;
+          if (!object) {
+            return null;
+          }
+          if ("document_name" in object) {
+            return {
+              text: `${object.document_name}\n${object.chunk_count} chunks`,
+              style: CANVAS_TOOLTIP_STYLE,
+            };
+          }
+          const collisions =
+            object.collision_count > 0
+              ? `\n${object.collision_count} confusable chunk ${
+                  object.collision_count === 1 ? "pair" : "pairs"
+                }`
+              : "";
           return {
-            text: `${object.document_name}\n${object.chunk_count} chunks`,
+            text: `similarity ${object.similarity.toFixed(3)}${collisions}`,
             style: CANVAS_TOOLTIP_STYLE,
           };
-        }
-        const collisions =
-          object.collision_count > 0
-            ? `\n${object.collision_count} confusable chunk ${
-                object.collision_count === 1 ? "pair" : "pairs"
-              }`
-            : "";
-        return {
-          text: `similarity ${object.similarity.toFixed(3)}${collisions}`,
-          style: CANVAS_TOOLTIP_STYLE,
-        };
-      }}
-      style={{ position: "absolute", inset: "0" }}
-    />
+        }}
+        style={{ position: "absolute", inset: "0" }}
+      />
+      <PlotKey
+        entries={[
+          { mark: <DocumentMark />, label: "Document (size = chunks)" },
+          { mark: <TieMark />, label: "Similarity tie (width = strength)" },
+          { mark: <CollisionTieMark />, label: "Tie with confusable chunks" },
+        ]}
+      />
+    </div>
   );
 }
