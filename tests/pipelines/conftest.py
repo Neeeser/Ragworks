@@ -198,11 +198,63 @@ class StubVectorStore(VectorStoreBackend):
         return IndexStats(exists=True, count=len(self.query_matches))
 
 
+class StubChatProvider:
+    """Canned `ChatProvider`: replays queued responses and records requests.
+
+    Each queued entry is either a message dict (returned as the assistant
+    message) or an exception instance (raised by `chat`). `usage` rides
+    along on every successful response.
+    """
+
+    name = "stub"
+
+    def __init__(
+        self,
+        responses: list[Any] | None = None,
+        *,
+        model_info: Any = None,
+        usage: dict[str, int] | None = None,
+    ) -> None:
+        self.responses = list(responses or [])
+        self.model_info = model_info
+        self.usage = usage or {"prompt_tokens": 10, "completion_tokens": 5}
+        self.requests: list[Any] = []
+
+    def get_model(self, _model_id: str) -> Any:
+        return self.model_info
+
+    def chat(self, request: Any) -> dict[str, Any]:
+        self.requests.append(request)
+        if not self.responses:
+            raise AssertionError("StubChatProvider ran out of queued responses.")
+        entry = self.responses.pop(0)
+        if isinstance(entry, Exception):
+            raise entry
+        return {"message": entry, "usage": dict(self.usage)}
+
+    def chat_stream(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def parse_chat_response(self, response: dict[str, Any]) -> Any:
+        from app.providers.chat.base import ParsedChatResponse
+
+        return ParsedChatResponse(
+            message=response["message"],
+            usage=response["usage"],
+            provider="stub",
+            response_model=None,
+        )
+
+    def parse_stream_chunk(self, chunk: dict[str, Any]) -> Any:
+        raise NotImplementedError
+
+
 class StubProviderResolver:
     """Stands in for `ProviderResolver`: serves `embedder_cls` for any connection.
 
     Tests swap `embedder_cls` (built via `make_stub_embedder`) after building
-    the run context — the resolver is the run's real embedder boundary.
+    the run context — the resolver is the run's real embedder boundary. LLM
+    nodes read `chat_provider` and `chat_concurrency` the same way.
     """
 
     def __init__(
@@ -210,9 +262,13 @@ class StubProviderResolver:
         embedder_cls: type | None = None,
         *,
         embedding_input_limit: int | None = None,
+        chat_provider: StubChatProvider | None = None,
+        chat_concurrency: int = 2,
     ) -> None:
         self.embedder_cls = embedder_cls or make_stub_embedder()
         self.published_embedding_input_limit = embedding_input_limit
+        self.chat_provider = chat_provider or StubChatProvider()
+        self.chat_concurrency = chat_concurrency
 
     def embedder(self, _connection_id: Any, model_name: str, dimensions: int | None = None) -> Any:
         return self.embedder_cls(None, model_name, dimensions=dimensions)
@@ -220,6 +276,14 @@ class StubProviderResolver:
     def embedding_input_limit(self, _connection_id: Any, _model_name: str) -> int | None:
         """Return the configured provider-published embedding limit."""
         return self.published_embedding_input_limit
+
+    def chat(self, _connection_id: Any) -> StubChatProvider:
+        """Return the canned chat provider for any connection."""
+        return self.chat_provider
+
+    def llm_concurrency(self, _connection_id: Any) -> int:
+        """Return the configured concurrent-call cap for any connection."""
+        return self.chat_concurrency
 
 
 class StubVectorStoreProvider:

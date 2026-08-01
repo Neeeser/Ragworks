@@ -26,6 +26,9 @@ from app.pipelines.nodes.io import (
     RetrievalOutputNode,
 )
 from app.pipelines.nodes.limiting import ResultLimitNode
+from app.pipelines.nodes.llm_generate import LlmGenerateNode
+from app.pipelines.nodes.llm_rerank import LlmRerankNode
+from app.pipelines.nodes.llm_transform import LlmTransformNode
 from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import (
@@ -98,6 +101,9 @@ def build_default_registry() -> NodeRegistry:
             PineconeRetrieverNode,
             PgvectorRetrieverNode,
             RerankerNode,
+            LlmTransformNode,
+            LlmRerankNode,
+            LlmGenerateNode,
             RetrievalOutputNode,
             ToolOutputNode,
         ]

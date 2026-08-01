@@ -125,10 +125,16 @@ def call_with_retries(
     *,
     policy: RetryPolicy | None = None,
     outcome: RetryOutcome | None = None,
-    sleep: Callable[[float], None] = time.sleep,
+    sleep: Callable[[float], None] | None = None,
 ) -> T:
-    """Run `call`, retrying retryable provider failures with backoff."""
+    """Run `call`, retrying retryable provider failures with backoff.
+
+    `sleep` resolves to `time.sleep` at call time (not def time) so tests
+    can monkeypatch the module attribute and never wait out real backoff.
+    """
     policy = policy or RetryPolicy()
+    if sleep is None:
+        sleep = time.sleep
     last: Exception | None = None
     for attempt in range(policy.attempts):
         try:

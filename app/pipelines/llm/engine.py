@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
 from app.pipelines.execution.context import PipelineRunContext
@@ -39,12 +40,14 @@ logger = logging.getLogger(__name__)
 #: Tool name used when structured output is forced through a tool call.
 STRUCTURED_TOOL_NAME = "emit_structured_output"
 
+ValuesT = TypeVar("ValuesT")
+
 
 @dataclass
-class LlmCallOutcome:
+class LlmCallOutcome(Generic[ValuesT]):
     """What one structured call produced (or why it failed, when degrading)."""
 
-    payload: dict[str, Any] | None
+    values: ValuesT | None
     usage: TokenUsage = field(default_factory=TokenUsage)
     retries: int = 0
     error: str | None = None
@@ -74,7 +77,7 @@ class LlmEngine:
         #: Ingestion runs are strict; query-time runs degrade with warnings.
         self.strict: bool = context.document is not None
         self.warnings: list[str] = []
-        self._mechanism = self._pick_mechanism()
+        self.mechanism: str = self._pick_mechanism()
 
     def _pick_mechanism(self) -> str:
         """Choose how the output shape is forced, from the model's own claims.
@@ -94,42 +97,52 @@ class LlmEngine:
         return "instructed"
 
     def run_calls(
-        self, prompts: list[tuple[str, str]], schema: dict[str, Any]
-    ) -> list[LlmCallOutcome]:
+        self,
+        prompts: list[tuple[str, str]],
+        schema: dict[str, Any],
+        validate: Callable[[dict[str, Any]], ValuesT],
+    ) -> list[LlmCallOutcome[ValuesT]]:
         """Run one structured call per (system, user) prompt pair, bounded.
 
-        Order is preserved. In strict mode the first exhausted failure
-        raises; otherwise failed calls return `payload=None` outcomes with
-        the error recorded on the engine's warnings.
+        Order is preserved; `validate` turns each parsed payload into the
+        node's typed values (raising `LlmOutputError` on shape misses, which
+        follow the same failure policy as provider faults). In strict mode
+        the first exhausted failure raises; otherwise failed calls return
+        `values=None` outcomes with the error recorded on the engine's
+        warnings.
         """
         if not prompts:
             return []
         if len(prompts) == 1:
-            return [self._one_call(prompts[0], schema)]
+            return [self._one_call(prompts[0], schema, validate)]
         workers = max(1, min(self._concurrency, len(prompts)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             return list(
-                pool.map(lambda pair: self._one_call(pair, schema), prompts)
+                pool.map(lambda pair: self._one_call(pair, schema, validate), prompts)
             )
 
     def _one_call(
-        self, prompt_pair: tuple[str, str], schema: dict[str, Any]
-    ) -> LlmCallOutcome:
-        """One throttled, retried structured call."""
+        self,
+        prompt_pair: tuple[str, str],
+        schema: dict[str, Any],
+        validate: Callable[[dict[str, Any]], ValuesT],
+    ) -> LlmCallOutcome[ValuesT]:
+        """One throttled, retried, validated structured call."""
         outcome = RetryOutcome()
         try:
             with connection_slot(self._connection_id, self._concurrency):
                 payload, usage = call_with_retries(
                     lambda: self._request(prompt_pair, schema), outcome=outcome
                 )
+            values = validate(payload)
         except Exception as exc:
             if self.strict or not _is_degradable(exc):
                 raise
             message = f"{self._node_label}: LLM call failed after retries — {exc}"
             logger.warning("%s", message)
             self.warnings.append(message)
-            return LlmCallOutcome(payload=None, retries=outcome.retries, error=str(exc))
-        return LlmCallOutcome(payload=payload, usage=usage, retries=outcome.retries)
+            return LlmCallOutcome(values=None, retries=outcome.retries, error=str(exc))
+        return LlmCallOutcome(values=values, usage=usage, retries=outcome.retries)
 
     def _request(
         self, prompt_pair: tuple[str, str], schema: dict[str, Any]
@@ -138,7 +151,7 @@ class LlmEngine:
         system_prompt, user_prompt = prompt_pair
         messages: list[dict[str, Any]] = []
         system_text = system_prompt.strip()
-        if self._mechanism == "instructed":
+        if self.mechanism == "instructed":
             instruction = (
                 "Respond with a single JSON object matching this JSON schema, "
                 f"and nothing else:\n{json.dumps(schema)}"
@@ -150,7 +163,7 @@ class LlmEngine:
 
         parameters: dict[str, Any] = {"temperature": self._config.temperature}
         tools: list[dict[str, Any]] | None = None
-        if self._mechanism == "response_format":
+        if self.mechanism == "response_format":
             parameters["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -159,7 +172,7 @@ class LlmEngine:
                     "schema": schema,
                 },
             }
-        elif self._mechanism == "tool_call":
+        elif self.mechanism == "tool_call":
             tools = [
                 {
                     "type": "function",
@@ -185,7 +198,7 @@ class LlmEngine:
         usage = _token_usage(parsed.usage)
         return _extract_payload(parsed.message), usage
 
-    def combined_usage(self, outcomes: list[LlmCallOutcome]) -> TokenUsage:
+    def combined_usage(self, outcomes: list[LlmCallOutcome[ValuesT]]) -> TokenUsage:
         """Sum usage over this run's calls."""
         return combine_usage([outcome.usage for outcome in outcomes])
 

@@ -23,6 +23,22 @@ if TYPE_CHECKING:
 ConfigT = TypeVar("ConfigT", bound=BaseModel)
 
 
+class NodePreset(BaseModel):
+    """One named starting configuration for a node type.
+
+    Presets are how named methods (contextual retrieval, HyDE, query
+    expansion) ship without their own node types: the editor's library
+    offers them beside the raw node, and dropping one instantiates the node
+    with `config` seeded — fully editable afterwards. `config` is merged
+    over the node type's `default_config`.
+    """
+
+    id: str
+    label: str
+    description: str = Field(min_length=1)
+    config: dict[str, object] = Field(default_factory=dict)
+
+
 class NodeSpec(BaseModel):
     """Metadata describing an available pipeline node type.
 
@@ -47,6 +63,7 @@ class NodeSpec(BaseModel):
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False
     supported_backends: list[str] | None = None
+    presets: list[NodePreset] = Field(default_factory=list)
 
 
 class PipelineValidationIssue(BaseModel):
@@ -83,6 +100,7 @@ class PipelineNodeBase(Generic[ConfigT]):
     output_ports: Sequence[NodePort] = ()
     config_model: builtins.type[BaseModel] = EmptyConfig
     hidden: bool = False
+    presets: Sequence[NodePreset] = ()
 
     def __init__(self, config: ConfigT) -> None:
         """Initialize the node with its config."""
@@ -152,4 +170,5 @@ class PipelineNodeBase(Generic[ConfigT]):
             supported_backends=(
                 [backend.value for backend in backends] if backends is not None else None
             ),
+            presets=list(cls.presets),
         )
