@@ -241,7 +241,7 @@ export function InsightMapCanvas({
         getColor: labelColor,
         getSize: 12,
         sizeUnits: "pixels",
-        fontFamily: "var(--font-mono, monospace)",
+        fontFamily: "ui-monospace, monospace",
         characterSet: "auto",
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",

@@ -132,7 +132,7 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
         getSize: 11,
         sizeUnits: "pixels",
         getPixelOffset: [0, 22],
-        fontFamily: "var(--font-mono, monospace)",
+        fontFamily: "ui-monospace, monospace",
         characterSet: "auto",
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",
