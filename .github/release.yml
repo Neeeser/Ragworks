@@ -2,6 +2,10 @@ changelog:
   exclude:
     labels:
       - skip-changelog
+      - docs
+      - ci
+      - dependencies
+      - chore
     authors:
       - dependabot
       - dependabot[bot]
@@ -15,9 +19,3 @@ changelog:
     - title: 🐛 Bug fixes
       labels:
         - fix
-    - title: 📚 Documentation
-      labels:
-        - docs
-    - title: 🧰 Maintenance
-      labels:
-        - "*"

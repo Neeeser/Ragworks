@@ -2,8 +2,9 @@ name: Release
 
 # Cut when a `release/v*` PR (opened by scripts/bump_version.py) is merged:
 # build versioned multi-arch images, tag the merge commit, and create the
-# GitHub Release with label-organized notes (.github/release.yml) and
-# docker-compose.yml attached. The release commit already passed the verify
+# GitHub Release with label-organized notes (.github/release.yml) — prefixed
+# by the release PR's hand-written "## Highlights" section when one was
+# filled in — and docker-compose.yml attached. The release commit already passed the verify
 # gate on the release PR, so this path never re-runs it — and because the tag
 # is created here (not pushed by hand), a failed build leaves no dangling tag.
 on:
@@ -75,14 +76,35 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "$TAG" "$SHA"
           git push origin "$TAG"
+      - name: Extract highlights from the release PR body
+        # The release PR's "## Highlights" section (seeded by
+        # scripts/bump_version.py, hand-edited before merge) becomes the top of
+        # the release notes; GitHub appends the generated PR list after any body
+        # passed alongside --generate-notes. An empty or comment-only section
+        # falls back to purely generated notes.
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n' "$PR_BODY" | tr -d '\r' \
+            | awk '/^## Highlights[[:space:]]*$/{f=1; next} f && /^## /{exit} f' \
+            | perl -0pe 's/<!--.*?-->//gs' > highlights-body.md
+          if grep -q '[^[:space:]]' highlights-body.md; then
+            { echo "## Highlights"; echo; cat highlights-body.md; } > highlights.md
+            echo "has_highlights=true" >> "$GITHUB_ENV"
+          else
+            echo "has_highlights=false" >> "$GITHUB_ENV"
+          fi
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         run: |
+          FLAGS=(--verify-tag --generate-notes)
           if [ "$PRERELEASE" = "true" ]; then
-            gh release create "$TAG" --verify-tag --generate-notes --prerelease docker-compose.yml
-          else
-            gh release create "$TAG" --verify-tag --generate-notes docker-compose.yml
+            FLAGS+=(--prerelease)
           fi
+          if [ "$has_highlights" = "true" ]; then
+            FLAGS+=(--notes-file highlights.md)
+          fi
+          gh release create "$TAG" "${FLAGS[@]}" docker-compose.yml

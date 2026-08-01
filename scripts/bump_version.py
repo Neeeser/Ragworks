@@ -181,8 +181,14 @@ def main() -> None:
         "builds and pushes the multi-arch backend/frontend images to GHCR, and "
         "creates the GitHub Release (notes generated from merged PRs, with "
         "`docker-compose.yml` attached).\n\n"
-        "Only the version files change here. If the version is wrong, close this "
-        "PR and run the bump again — do not edit it by hand."
+        "Only the version files change in the diff. If the version is wrong, "
+        "close this PR and run the bump again — never edit the version files "
+        "by hand. The Highlights section below is the one part meant to be "
+        "edited.\n\n"
+        "## Highlights\n\n"
+        "<!-- Optional, edit before merging. Anything in this section is placed "
+        "at the top of the release notes, above the generated PR list. Leave "
+        "only this comment to publish generated notes alone. -->"
     )
     pr_url = _run(
         "gh",
