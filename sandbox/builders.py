@@ -538,3 +538,82 @@ def _adopt_or_create_pinecone_index(
         admin.register_index(
             user, IndexRegisterRequest(backend=IndexBackend.PINECONE, name=name)
         )
+
+
+def ingest_generated_documents(
+    ctx: SeedContext,
+    *,
+    documents: list[tuple[str, str]],
+) -> None:
+    """Upload and ingest in-memory documents through the real pipeline.
+
+    The per-ingest insight hook is held off for the duration: one hundred
+    sequential triggers would race the seeding process's exit, and the
+    scenario computes one synchronous snapshot at the end instead
+    (`compute_insights`), so the seeded state never ships a half-built map.
+    """
+    import io
+    from unittest import mock
+
+    from app.db import models
+    from app.services.files import FileSystemService, UploadSpec
+    from app.services.ingestion import run_document_ingestion
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = FileSystemService(ctx.session)
+    document_ids: list[UUID] = []
+    for filename, text in documents:
+        result = service.register_upload(
+            user,
+            collection,
+            UploadSpec(filename=filename, content_type="text/plain"),
+            io.BytesIO(text.encode("utf-8")),
+        )
+        if result.document is None:
+            raise SystemExit(f"{filename} was not eligible for ingestion.")
+        document_ids.append(result.document.id)
+
+    chunk_total = 0
+    with mock.patch(
+        "app.services.ingestion.schedule_insight_refresh", return_value=False
+    ):
+        for document_id in document_ids:
+            run_document_ingestion(document_id)
+            ctx.session.expire_all()
+            document = ctx.session.get(models.Document, document_id)
+            if document is None or document.status != models.DocumentStatus.READY:
+                detail = document.error_message if document else "document row missing"
+                raise SystemExit(f"Ingestion failed for {document_id}: {detail}")
+            chunk_total += document.num_chunks
+    ctx.facts.append(
+        f"documents: {len(document_ids)} ingested, {chunk_total} chunks total"
+    )
+
+
+def compute_insights(ctx: SeedContext) -> None:
+    """Build the collection's insight snapshot synchronously.
+
+    The running app maintains snapshots from its ingestion hook; seeding
+    computes one here so the Visualize page is served, not still computing,
+    the moment the sandbox hands over.
+    """
+    from app.schemas.enums import InsightSpace
+    from app.visualization.insights.service import InsightService
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = InsightService(ctx.session)
+    marker = service.begin_refresh(collection.id, user.id)
+    if marker is None:
+        raise SystemExit("Insight refresh could not start (marker already pending).")
+    service.run_refresh(marker)
+    snapshot = service.ready_snapshot(collection.id)
+    ctx.facts.append(
+        # DB-loaded enum columns are raw strings; normalize before .value.
+        f"insights: {InsightSpace(snapshot.space).value} snapshot ready — {snapshot.point_count} "
+        f"chunks, {snapshot.document_count} documents, {snapshot.cluster_count} clusters"
+    )
+    ctx.links.append(
+        ("collection visualize", f"/collections/{collection.id}/visualize")
+    )

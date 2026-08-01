@@ -79,6 +79,12 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
 
   const initialViewState = useMemo(() => buildInitialViewState(documents), [documents]);
   const [viewState, setViewState] = useState<OrthographicViewState>(initialViewState);
+  // Names label every node only while they can be read: on small corpora, or
+  // once the user zooms past the overview. A hundred always-on labels
+  // overprint into noise; hover tooltips carry the name meanwhile.
+  const initialZoom = typeof initialViewState.zoom === "number" ? initialViewState.zoom : 0;
+  const zoom = typeof viewState.zoom === "number" ? viewState.zoom : 0;
+  const showLabels = documents.length <= 30 || zoom > initialZoom + 1.2;
   const handleViewStateChange = useCallback(
     (params: ViewStateChangeParameters<OrthographicViewState>) => {
       setViewState(params.viewState as OrthographicViewState);
@@ -123,12 +129,15 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
       }),
       new TextLayer<InsightDocPoint>({
         id: "graph-labels",
-        data: documents,
+        data: showLabels ? documents : [],
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (doc) => [doc.x, doc.y],
         getText: (doc) =>
           doc.document_name.length > 24 ? `${doc.document_name.slice(0, 23)}…` : doc.document_name,
         getColor: labelColor,
+        background: true,
+        getBackgroundColor: [10, 12, 16, 170],
+        backgroundPadding: [4, 2, 4, 2],
         getSize: 11,
         sizeUnits: "pixels",
         getPixelOffset: [0, 22],
@@ -139,7 +148,7 @@ export function GraphCanvas({ documents, edges, threshold }: GraphCanvasProps) {
         parameters: { depthCompare: "always" },
       }),
     ],
-    [accentColor, documents, edgeColor, labelColor, maxChunks, negColor, visibleEdges],
+    [accentColor, documents, edgeColor, labelColor, maxChunks, negColor, showLabels, visibleEdges],
   );
 
   return (

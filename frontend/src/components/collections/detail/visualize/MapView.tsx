@@ -153,6 +153,15 @@ export function MapView({ collectionId, token, dataVersion }: MapViewProps) {
           type="text"
           value={probeQuery}
           onChange={(event) => setProbeQuery(event.target.value)}
+          // Explicit alongside the form's implicit submission: the probe is
+          // the kind of box users hit Enter in, so the behavior must not
+          // hinge on default-button resolution.
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void runProbe();
+            }
+          }}
           placeholder="Place a query on the map"
           aria-label="Probe query"
           className="h-7 min-w-0 flex-1 bg-transparent text-ui text-primary outline-none placeholder:text-faint"

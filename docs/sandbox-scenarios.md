@@ -19,6 +19,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
+| `insights-corpus` | collection-ready's wizard path with a ~100-document, multi-chunk corpus built from 20 newsgroups and embedded with MiniLM — the Visualize page shows real clusters, document ties, and cross-document overlaps. | `OPENROUTER_API_KEY` |
 | `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
 | `multi-provider` | Admin user with live OpenRouter, OpenAI, and Anthropic connections — three chat dialects available at once for cross-provider comparison. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
 | `multi-provider-ready` | collection-ready plus live OpenAI and Anthropic connections — cross-provider chat flows run against a wizard-complete console. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
@@ -114,6 +115,20 @@ After seeding:
 - one admin user (the standard sandbox login)
 - no provider connections, indexes, pipelines, or collections
 - GET /api/setup/status reports nothing ready; the wizard gates the console
+
+## `insights-corpus`
+
+collection-ready's wizard path with a ~100-document, multi-chunk corpus built from 20 newsgroups and embedded with MiniLM — the Visualize page shows real clusters, document ties, and cross-document overlaps.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- one admin user (the standard sandbox login)
+- a live-validated OpenRouter connection (embeddings + chat)
+- a pgvector dense index sized to all-minilm-l6-v2 (384d)
+- hybrid default ingestion + retrieval pipelines (dense + BM25, RRF-fused)
+- collection "Insights Corpus": ~100 ready documents from 8 newsgroup topics, several chunks each (hundreds of chunks total)
+- a ready insight snapshot: PaCMAP map with labelled clusters, document graph edges, and a populated overlap report
 
 ## `mcp-connected`
 

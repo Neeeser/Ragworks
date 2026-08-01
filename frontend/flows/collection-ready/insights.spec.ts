@@ -39,7 +39,8 @@ test("insights auto-compute and serve map, overlaps, graph, and probe", async ({
 
   await page.getByRole("button", { name: "Map" }).click();
   await page.getByLabel("Probe query").fill("How is power generated aboard Aurora Station?");
-  await page.getByRole("button", { name: "Probe" }).click();
+  // Enter must place the query — the Probe button is not the only route.
+  await page.getByLabel("Probe query").press("Enter");
   await expect(page.getByText("Nearest chunks")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("aurora-station.md").first()).toBeVisible();
 });

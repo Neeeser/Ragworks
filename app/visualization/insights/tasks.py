@@ -61,7 +61,14 @@ def schedule_insight_refresh(collection_id: UUID, user_id: UUID) -> bool:
 
 
 def _run_refresh(snapshot_id: UUID, request_id: str) -> None:
-    """Worker entry point: fill one marker snapshot, never raise."""
+    """Worker entry point: fill one marker snapshot, never raise.
+
+    Self-chaining: triggers arriving while this run computes are refused
+    (one pending marker at a time), so a bulk upload's later documents
+    would otherwise stay unplaced until some unrelated future trigger.
+    When the corpus changed under the run, the worker schedules itself
+    again; the chain terminates the first pass the corpus holds still.
+    """
     from app.db import models
     from app.visualization.insights.service import InsightService
 
@@ -71,7 +78,14 @@ def _run_refresh(snapshot_id: UUID, request_id: str) -> None:
                 snapshot = session.get(models.InsightSnapshotRecord, snapshot_id)
                 if snapshot is None:
                     return
-                InsightService(session).run_refresh(snapshot)
+                collection_id = snapshot.collection_id
+                user_id = snapshot.user_id
+                service = InsightService(session)
+                total_before = service.chunk_total(collection_id)
+                service.run_refresh(snapshot)
+            with session_scope() as session:
+                if InsightService(session).chunk_total(collection_id) != total_before:
+                    schedule_insight_refresh(collection_id, user_id)
         except Exception as exc:
             # The failed marker row is the outcome the page reports; a
             # background worker has no caller to re-raise to.

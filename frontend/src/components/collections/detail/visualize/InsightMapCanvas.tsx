@@ -45,7 +45,7 @@ const VIEW = new OrthographicView({ id: "insight-map", controller: true });
 
 const MIN_POINT_RADIUS_PX = 4;
 const MAX_POINT_RADIUS_PX = 10;
-const DOC_RADIUS_PX = 9;
+const DOC_RADIUS_PX = 7;
 const PROBE_RADIUS_PX = 8;
 
 // deck.gl takes numeric channels, so the plot resolves its palette tokens to
@@ -215,11 +215,15 @@ export function InsightMapCanvas({
         filled: false,
         stroked: true,
         lineWidthUnits: "pixels",
-        getLineWidth: (doc) => (doc.document_id === focusedDocumentId ? 3 : 1.5),
+        getLineWidth: (doc) => (doc.document_id === focusedDocumentId ? 3 : 1),
         getRadius: DOC_RADIUS_PX,
         getPosition: (doc) => [doc.x, doc.y],
+        // Rings rest quiet so a hundred of them do not bury the chunk dots;
+        // the full accent belongs to the focused document alone.
         getLineColor: (doc) =>
-          doc.document_id === focusedDocumentId ? withAlpha(accentColor, 255) : accentColor,
+          doc.document_id === focusedDocumentId
+            ? withAlpha(accentColor, 255)
+            : withAlpha(accentColor, 110),
         updateTriggers: {
           getLineColor: [accentColor, focusedDocumentId],
           getLineWidth: focusedDocumentId,
@@ -238,13 +242,17 @@ export function InsightMapCanvas({
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (cluster) => [cluster.x, cluster.y],
         getText: (cluster) => cluster.label,
-        getColor: labelColor,
+        getColor: withAlpha(labelColor, 240),
         getSize: 12,
         sizeUnits: "pixels",
         fontFamily: "ui-monospace, monospace",
         characterSet: "auto",
         getTextAnchor: "middle",
         getAlignmentBaseline: "center",
+        // A translucent backing keeps labels legible over dense point fields.
+        background: true,
+        getBackgroundColor: [10, 12, 16, 170],
+        backgroundPadding: [6, 3, 6, 3],
         parameters: { depthCompare: "always" },
       }),
     ];
