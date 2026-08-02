@@ -15,6 +15,7 @@ import {
   savePromptVersion,
   updatePrompt,
 } from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
 
@@ -71,7 +72,7 @@ export function usePromptStudio(token: string | null) {
   );
 
   const loadDetail = useCallback(
-    async (promptId: string) => {
+    async (promptId: string, attempt = 0) => {
       if (!token) return;
       setDetailLoading(true);
       setError(null);
@@ -84,6 +85,12 @@ export function usePromptStudio(token: string | null) {
         setVersions(nextVersions);
         setDraft({ body: nextDetail.body, systemBody: nextDetail.system_body ?? "" });
       } catch (loadError) {
+        // A prompt created a beat ago can 404 while the create request's
+        // session finishes committing — retry briefly before reporting.
+        if (loadError instanceof ApiError && loadError.status === 404 && attempt < 2) {
+          window.setTimeout(() => void loadDetail(promptId, attempt + 1), 300);
+          return;
+        }
         setError(getErrorMessage(loadError, "Unable to load the prompt."));
       } finally {
         setDetailLoading(false);
@@ -156,15 +163,29 @@ export function usePromptStudio(token: string | null) {
     async (label: string | null) => {
       if (!token || !detail) return false;
       return await runMutation(async () => {
-        await savePromptVersion(token, detail.id, {
+        // Apply the response locally instead of refetching: the request
+        // session commits at teardown, so an immediate GET can race the
+        // write and read the pre-save state.
+        const saved = await savePromptVersion(token, detail.id, {
           body: draft.body,
           system_body: draft.systemBody || null,
           label,
         });
-        await Promise.all([loadDetail(detail.id), promptsQuery.reload()]);
+        setDetail((previous) =>
+          previous && previous.id === detail.id
+            ? {
+                ...previous,
+                current_version: saved.version,
+                body: saved.body,
+                system_body: saved.system_body,
+              }
+            : previous,
+        );
+        setVersions((previous) => [saved, ...previous]);
+        promptsQuery.reload();
       }, "Unable to save the version.");
     },
-    [detail, draft, loadDetail, promptsQuery, runMutation, token],
+    [detail, draft, promptsQuery, runMutation, token],
   );
 
   const handleCreate = useCallback(

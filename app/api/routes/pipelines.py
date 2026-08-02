@@ -30,6 +30,7 @@ from app.schemas.pipelines import (
 )
 from app.services.errors import ServiceError
 from app.services.pipelines import PipelineService, derived_kind
+from app.services.prompts.preset_refs import reference_preset_prompts
 
 router = APIRouter(prefix="/api/pipelines", tags=["pipelines"])
 
@@ -83,12 +84,14 @@ def _to_pipeline_read(
 
 @router.get("/nodes", response_model=PipelineNodesResponse)
 def list_pipeline_nodes(
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ) -> PipelineNodesResponse:
     """Return pipeline node definitions for the editor."""
     registry = default_registry()
+    nodes = [NodeSpecRead.model_validate(spec, from_attributes=True) for spec in registry.specs()]
     return PipelineNodesResponse(
-        nodes=[NodeSpecRead.model_validate(spec, from_attributes=True) for spec in registry.specs()]
+        nodes=reference_preset_prompts(session, current_user.id, nodes)
     )
 
 
