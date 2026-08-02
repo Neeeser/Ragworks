@@ -20,7 +20,7 @@ import type {
 
 type SidebarTab = "pipelines" | "nodes" | "variables";
 
-type PipelineSidebarProps = {
+export type PipelineSidebarProps = {
   pipelines: Pipeline[];
   selectedPipelineId?: string;
   catalog: NodeCatalogGroup[];

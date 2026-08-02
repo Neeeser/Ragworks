@@ -270,7 +270,9 @@ export function NodeCatalogOverlay({
             )}
           </div>
 
-          <div className={cn("min-h-0 flex-1", !focused && "hidden lg:block")}>
+          {/* min-w-0: without it the pane's min-width is its content and it
+              overflows the card instead of wrapping. */}
+          <div className={cn("min-h-0 min-w-0 flex-1", !focused && "hidden lg:block")}>
             {focusedSpec && focused ? (
               <div className="flex h-full min-h-0 flex-col">
                 <button

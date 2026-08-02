@@ -4,6 +4,7 @@ import { PageBody } from "@/components/ui/app-shell";
 import { Panel } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { MobileEditorPanels } from "./MobileEditorPanels";
 import { PipelineCanvas } from "./PipelineCanvas";
 import { PipelineSidebar } from "./PipelineSidebar";
 
@@ -66,16 +67,17 @@ export function PipelineBuilderWorkspace({
         <WorkspaceSkeleton />
       ) : (
         <Panel
-          className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row"
+          className="relative flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row"
           style={{ "--sidebar-width": `${resize.width}px` } as React.CSSProperties}
         >
-          {/* Stacked below `xl`, the rail is capped so the canvas keeps a
-              usable share of the card instead of being pushed off it. */}
           {/* Secondary pane: bg-surface fill differentiates it from the working
-              canvas — fill plus seam, not the seam alone. */}
-          <div className="flex max-h-[38vh] min-h-0 shrink-0 flex-col border-b border-hairline bg-surface xl:max-h-none xl:w-[var(--sidebar-width)] xl:border-b-0 xl:border-r">
+              canvas — fill plus seam, not the seam alone. Below `xl` it is
+              hidden entirely: the canvas keeps the whole screen and the same
+              panels open as bottom sheets from the floating pill row. */}
+          <div className="hidden min-h-0 flex-col border-hairline bg-surface xl:flex xl:w-[var(--sidebar-width)] xl:border-r">
             <PipelineSidebar {...sidebar} />
           </div>
+          <MobileEditorPanels {...sidebar} />
           <div
             role="separator"
             aria-orientation="vertical"

@@ -117,8 +117,10 @@ export function PipelineNodeLibrary({
           <LibraryBig className="h-3.5 w-3.5 text-muted" aria-hidden />
           Browse all nodes
         </button>
-        {/* Kept: drag-to-add is the only affordance the layout cannot show. */}
-        <InstrumentLabel className="mt-1.5 block text-center">
+        {/* Kept: drag-to-add is the only affordance the layout cannot show.
+            xl-only — in the bottom sheet the canvas is covered, so the gesture
+            does not exist and the hint would mislead. */}
+        <InstrumentLabel className="mt-1.5 hidden text-center xl:block">
           Drag nodes onto the canvas
         </InstrumentLabel>
       </div>

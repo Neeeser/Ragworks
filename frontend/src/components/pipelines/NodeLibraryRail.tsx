@@ -41,7 +41,10 @@ export function NodeLibraryRail({ families, active, onSelect }: NodeLibraryRailP
     <div
       role="group"
       aria-label="Node categories"
-      className="flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-y-auto border-r border-hairline bg-canvas-raised px-1 py-1.5"
+      // Hidden at phone width: inside the bottom sheet the grouped headers +
+      // search carry navigation, and a squeezed rail is the cramp this layout
+      // removes. It returns from `sm` up (tablet sheets and the desktop rail).
+      className="hidden w-11 shrink-0 flex-col items-center gap-0.5 overflow-y-auto border-r border-hairline bg-canvas-raised px-1 py-1.5 sm:flex"
     >
       <Tooltip content="All categories" side="right">
         <button
