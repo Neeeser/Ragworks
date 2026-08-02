@@ -120,6 +120,19 @@ top of the hairline seam, so the panes read as different rooms and the layout do
 flat. The primary working pane stays on the card material. Fill plus seam, never the
 seam alone; and never a third fill level inside one card.
 
+### An expanded section is two materials: raised header, recessed body
+
+A collapsible section in a pane (`TelemetrySection` in Chat Studio's run settings is the
+reference) keeps its header on the raised fill and drops its **body to `bg-canvas`**, so
+content sits in a tray beneath a handle. Painting header and body at one level is what
+makes a stack of open sections read as a single wash: the rows inside a section carry
+translucent fills (`bg-surface`, `bg-surface-strong`, an accent tint), and a translucent
+fill only separates from what is behind it when that surface steps back. The recess is
+a token reshuffle, not a new value, so it holds in both structural modes — and it is
+only safe while nothing inside the section paints `bg-canvas` itself. Open sections take
+`shadow-elevation-1` to lift out of their collapsed neighbours; collapsed ones carry no
+fill, so they need `hover:border-strong` for pointer affordance.
+
 ### One decision, one surface — entity lifecycle vs. what an entity points at
 
 A control is placed by *what kind of decision it makes*, and it appears in exactly one
