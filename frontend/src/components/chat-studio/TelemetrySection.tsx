@@ -26,6 +26,11 @@ interface TelemetrySectionProps {
  * A section whose value differs from the default carries a positive node dot,
  * because "this run is not on defaults" is the fact a user scanning the pane is
  * looking for.
+ *
+ * An open section is two materials, not one: the header keeps a raised fill and
+ * the body recesses to the canvas. Painting both at one level is what makes a
+ * long pane read as a single wash — the rows inside a section carry translucent
+ * fills, so they only separate when the surface behind them steps back.
  */
 export const TelemetrySection = ({
   title,
@@ -46,14 +51,14 @@ export const TelemetrySection = ({
       isDragging
         ? "border-data-pos/60 bg-data-pos/5"
         : isOpen
-          ? "border-strong bg-surface-strong"
-          : "border-hairline",
+          ? "border-strong bg-canvas shadow-elevation-1"
+          : "border-hairline hover:border-strong",
     )}
   >
     <div
       className={cn(
-        "flex w-full items-center gap-2 px-2 py-1.5",
-        isOpen && "border-b border-hairline",
+        "flex w-full items-center gap-2 px-2 py-1.5 transition-colors duration-140 ease-standard",
+        isOpen && !isDragging && "border-b border-hairline bg-surface-strong",
       )}
     >
       <button
