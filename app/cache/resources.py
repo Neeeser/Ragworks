@@ -96,11 +96,7 @@ class ResourceCache(Generic[KeyT, ResourceT]):
         detached: list[Future[ResourceT]] = []
         while len(self._entries) > self._max_entries:
             identifier = next(
-                (
-                    candidate
-                    for candidate, future in self._entries.items()
-                    if future.done()
-                ),
+                (candidate for candidate, future in self._entries.items() if future.done()),
                 None,
             )
             if identifier is None:

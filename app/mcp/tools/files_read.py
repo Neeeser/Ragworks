@@ -100,9 +100,7 @@ class ListFilesTool(TypedTool[ListFilesArguments]):
                     "kind": entry.kind.value,
                     "content_type": entry.content_type,
                     "size_bytes": entry.size_bytes,
-                    "ingestion_status": (
-                        entry.ingestion.status.value if entry.ingestion else None
-                    ),
+                    "ingestion_status": (entry.ingestion.status.value if entry.ingestion else None),
                 }
                 for entry in listing.entries
             ],
@@ -238,9 +236,7 @@ class SearchFilesTool(TypedTool[SearchFilesArguments]):
             "\n".join(describe_entry(entry) for entry in matches),
             {
                 "query": arguments.query,
-                "matches": [
-                    {"path": entry.path, "kind": entry.kind.value} for entry in matches
-                ],
+                "matches": [{"path": entry.path, "kind": entry.kind.value} for entry in matches],
             },
         )
 

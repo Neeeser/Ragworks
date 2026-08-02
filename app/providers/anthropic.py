@@ -108,28 +108,18 @@ class AnthropicAdapter(ProviderAdapter):
         try:
             models = self._client().list_models(force_refresh=True).value
         except anthropic.AuthenticationError:
-            return ConnectionValidationResult(
-                valid=False, message="Invalid Anthropic API key."
-            )
+            return ConnectionValidationResult(valid=False, message="Invalid Anthropic API key.")
         except anthropic.PermissionDeniedError:
             return ConnectionValidationResult(
                 valid=False, message="This Anthropic key lacks model access."
             )
         except anthropic.APIConnectionError:
-            return ConnectionValidationResult(
-                valid=False, message="Anthropic is unreachable."
-            )
+            return ConnectionValidationResult(valid=False, message="Anthropic is unreachable.")
         except anthropic.APIStatusError:
-            return ConnectionValidationResult(
-                valid=False, message="Anthropic validation failed."
-            )
-        return ConnectionValidationResult(
-            valid=True, message=f"Connected ({len(models)} models)."
-        )
+            return ConnectionValidationResult(valid=False, message="Anthropic validation failed.")
+        return ConnectionValidationResult(valid=True, message=f"Connected ({len(models)} models).")
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """List the account's chat models with their published capabilities."""
         self.require_kind(kind)
         snapshot = self._client().list_models(force_refresh=force_refresh)

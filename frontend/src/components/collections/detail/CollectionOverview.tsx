@@ -19,7 +19,17 @@ import { listCollectionTools } from "@/lib/api";
 import { formatLatency, formatTimeAgoCompact } from "@/lib/format";
 import { useApiQuery } from "@/lib/use-api-query";
 
-import type { Collection, CollectionStats, Pipeline } from "@/lib/types";
+import type {
+  Collection,
+  CollectionStats,
+  CollectionStatsHistoryPoint,
+  Pipeline,
+} from "@/lib/types";
+
+// Module scope so the growth cards' memos keep their identity across renders;
+// an inline arrow would rebuild every derived series on every parent render.
+const documentTotal = (point: CollectionStatsHistoryPoint) => point.document_total;
+const chunkTotal = (point: CollectionStatsHistoryPoint) => point.chunk_total;
 
 type CollectionOverviewProps = {
   collection: Collection;
@@ -89,18 +99,22 @@ export function CollectionOverview({
       <PanelGrid columns={2}>
         <StatTrendCard
           label="Documents"
+          noun="documents"
           buckets={buckets}
           bucketSeconds={bucketSeconds}
-          values={points.map((point) => point.document_total)}
+          points={points}
+          measure={documentTotal}
           markers={ingestMarkers}
           onBrush={setZoom}
           onResetBrush={zoomOut}
         />
         <StatTrendCard
           label="Chunks"
+          noun="chunks"
           buckets={buckets}
           bucketSeconds={bucketSeconds}
-          values={points.map((point) => point.chunk_total)}
+          points={points}
+          measure={chunkTotal}
           markers={ingestMarkers}
           onBrush={setZoom}
           onResetBrush={zoomOut}
@@ -110,6 +124,8 @@ export function CollectionOverview({
       <IngestionLatencyCard
         points={points}
         summary={history.history?.ingestion_summary ?? { count: 0 }}
+        events={history.ingestionEvents}
+        sampled={history.eventsSampled}
         buckets={buckets}
         bucketSeconds={bucketSeconds}
         markers={ingestMarkers}
@@ -120,6 +136,9 @@ export function CollectionOverview({
       <RetrievalLatencyCard
         points={points}
         tools={toolSeries}
+        summary={history.history?.retrieval_summary ?? { count: 0 }}
+        events={history.queryEvents}
+        sampled={history.eventsSampled}
         toolColors={toolColors}
         buckets={buckets}
         bucketSeconds={bucketSeconds}

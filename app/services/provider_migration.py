@@ -110,10 +110,7 @@ def _openrouter_connection_ids(session: Session) -> dict[UUID, UUID]:
     """Map each user to their earliest OpenRouter connection, if any."""
     statement = (
         select(models.ProviderConnection)
-        .where(
-            col(models.ProviderConnection.provider_type)
-            == ProviderType.OPENROUTER.value
-        )
+        .where(col(models.ProviderConnection.provider_type) == ProviderType.OPENROUTER.value)
         .order_by(col(models.ProviderConnection.created_at))
     )
     mapping: dict[UUID, UUID] = {}
@@ -122,13 +119,10 @@ def _openrouter_connection_ids(session: Session) -> dict[UUID, UUID]:
     return mapping
 
 
-def _rewrite_embedder_nodes(
-    session: Session, openrouter_by_user: dict[UUID, UUID]
-) -> None:
+def _rewrite_embedder_nodes(session: Session, openrouter_by_user: dict[UUID, UUID]) -> None:
     """Rewrite legacy embedder nodes in every stored pipeline version."""
     pipeline_owners = {
-        pipeline.id: pipeline.user_id
-        for pipeline in session.exec(select(models.Pipeline)).all()
+        pipeline.id: pipeline.user_id for pipeline in session.exec(select(models.Pipeline)).all()
     }
     rewritten = 0
     for version in session.exec(select(models.PipelineVersion)).all():
@@ -137,11 +131,12 @@ def _rewrite_embedder_nodes(
         if not isinstance(nodes, list):
             continue
         if not any(
-            isinstance(node, dict) and node.get("type") == LEGACY_EMBEDDER_TYPE
-            for node in nodes
+            isinstance(node, dict) and node.get("type") == LEGACY_EMBEDDER_TYPE for node in nodes
         ):
             continue
-        owner_connection = openrouter_by_user.get(pipeline_owners.get(version.pipeline_id, UUID(int=0)))
+        owner_connection = openrouter_by_user.get(
+            pipeline_owners.get(version.pipeline_id, UUID(int=0))
+        )
         new_nodes: list[Any] = []
         for node in nodes:
             if isinstance(node, dict) and node.get("type") == LEGACY_EMBEDDER_TYPE:
@@ -160,9 +155,7 @@ def _rewrite_embedder_nodes(
         session.flush()
 
 
-def _backfill_chat_sessions(
-    session: Session, openrouter_by_user: dict[UUID, UUID]
-) -> None:
+def _backfill_chat_sessions(session: Session, openrouter_by_user: dict[UUID, UUID]) -> None:
     """Point connection-less chat sessions and users at their OpenRouter connection."""
     statement = select(models.ChatSession).where(
         col(models.ChatSession.provider_connection_id).is_(None)

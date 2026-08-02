@@ -69,9 +69,9 @@ class EvalDatasetRepository(Repository):
         self, dataset_id: UUID, *, offset: int, limit: int
     ) -> tuple[list[models.EvalDatasetQuery], int]:
         """Page a dataset's queries in stable external-id order, with the total."""
-        total_statement = select(
-            func.count(col(models.EvalDatasetQuery.id))
-        ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
+        total_statement = select(func.count(col(models.EvalDatasetQuery.id))).where(
+            col(models.EvalDatasetQuery.dataset_id) == dataset_id
+        )
         total = int(self.session.exec(total_statement).one())
         statement = (
             select(models.EvalDatasetQuery)
@@ -84,14 +84,12 @@ class EvalDatasetRepository(Repository):
 
     def count_queries(self, dataset_id: UUID) -> int:
         """Count a dataset's queries."""
-        statement = select(
-            func.count(col(models.EvalDatasetQuery.id))
-        ).where(col(models.EvalDatasetQuery.dataset_id) == dataset_id)
+        statement = select(func.count(col(models.EvalDatasetQuery.id))).where(
+            col(models.EvalDatasetQuery.dataset_id) == dataset_id
+        )
         return int(self.session.exec(statement).one())
 
-    def get_query(
-        self, dataset_id: UUID, query_id: UUID
-    ) -> models.EvalDatasetQuery | None:
+    def get_query(self, dataset_id: UUID, query_id: UUID) -> models.EvalDatasetQuery | None:
         """Return one query only when it belongs to the dataset."""
         query = self.session.get(models.EvalDatasetQuery, query_id)
         if query is None or query.dataset_id != dataset_id:
@@ -106,9 +104,7 @@ class EvalDatasetRepository(Repository):
             return []
         statement = select(models.EvalRelevanceJudgment).where(
             col(models.EvalRelevanceJudgment.dataset_id) == dataset_id,
-            col(models.EvalRelevanceJudgment.query_external_id).in_(
-                list(query_external_ids)
-            ),
+            col(models.EvalRelevanceJudgment.query_external_id).in_(list(query_external_ids)),
         )
         return list(self.session.exec(statement).all())
 
@@ -117,8 +113,7 @@ class EvalDatasetRepository(Repository):
         self.session.execute(
             sa_delete(models.EvalRelevanceJudgment).where(
                 col(models.EvalRelevanceJudgment.dataset_id) == query.dataset_id,
-                col(models.EvalRelevanceJudgment.query_external_id)
-                == query.external_query_id,
+                col(models.EvalRelevanceJudgment.query_external_id) == query.external_query_id,
             )
         )
         self.session.delete(query)
@@ -164,9 +159,7 @@ class EvalDatasetRepository(Repository):
             col(models.EvalDatasetDocument.external_doc_id).in_(list(external_ids)),
         )
         return {
-            external_id: title
-            for external_id, title in self.session.exec(statement).all()
-            if title
+            external_id: title for external_id, title in self.session.exec(statement).all() if title
         }
 
     def page_collection_documents(
@@ -185,9 +178,7 @@ class EvalDatasetRepository(Repository):
         (`external_id` with "/" -> "_" plus ".txt"), and `search` matches the
         external id or the corpus title, case-insensitively.
         """
-        name_expr = (
-            func.replace(col(models.EvalDatasetDocument.external_doc_id), "/", "_") + ".txt"
-        )
+        name_expr = func.replace(col(models.EvalDatasetDocument.external_doc_id), "/", "_") + ".txt"
         clauses = [
             col(models.Document.collection_id) == collection_id,
             col(models.EvalDatasetDocument.dataset_id) == dataset_id,
@@ -201,9 +192,7 @@ class EvalDatasetRepository(Repository):
                     col(models.EvalDatasetDocument.title).ilike(pattern),
                 )
             )
-        total_statement = select(
-            func.count(col(models.Document.id))
-        ).where(*clauses)
+        total_statement = select(func.count(col(models.Document.id))).where(*clauses)
         total = int(self.session.exec(total_statement).one())
         statement = (
             select(

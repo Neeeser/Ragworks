@@ -302,9 +302,7 @@ class RetrievalOutputNode(PipelineNodeBase[RetrievalOutputConfig]):
         )
         return {"result": payload}
 
-    def _evaluate_outputs(
-        self, context: PipelineRunContext
-    ) -> dict[str, int | float | str | bool]:
+    def _evaluate_outputs(self, context: PipelineRunContext) -> dict[str, int | float | str | bool]:
         """Evaluate the config's output expressions (shared terminal helper)."""
         return evaluate_output_fields(self.config.outputs, context)
 

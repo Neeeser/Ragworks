@@ -62,9 +62,7 @@ def get_current_user(
     session_id = payload.get("sid")
     if session_id is not None:
         try:
-            auth_session = AuthSessionRepository(session).get_owned(
-                UUID(str(session_id)), user.id
-            )
+            auth_session = AuthSessionRepository(session).get_owned(UUID(str(session_id)), user.id)
         except ValueError as exc:
             raise credentials_exception from exc
         if (

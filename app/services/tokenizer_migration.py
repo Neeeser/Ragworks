@@ -21,8 +21,7 @@ def migrate_tokenizer_definition(definition: dict[str, Any]) -> dict[str, Any]:
     tokenizer_nodes = {
         node.get("id"): node
         for node in nodes
-        if isinstance(node.get("type"), str)
-        and node["type"].startswith(TOKENIZER_PREFIX)
+        if isinstance(node.get("type"), str) and node["type"].startswith(TOKENIZER_PREFIX)
     }
     if not tokenizer_nodes:
         return migrated

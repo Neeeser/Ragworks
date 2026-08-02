@@ -281,9 +281,7 @@ class VectorStoreBackend(ABC):
         domain error the registry's prerequisite gates use.
         """
         del index, namespace, text
-        raise InvalidInputError(
-            "This vector-store backend cannot count lexical matches."
-        )
+        raise InvalidInputError("This vector-store backend cannot count lexical matches.")
 
     def lexical_facet(
         self,
@@ -301,9 +299,7 @@ class VectorStoreBackend(ABC):
         query-conditioned aggregation plane keep this default.
         """
         del index, namespace, text, field, top_n
-        raise InvalidInputError(
-            "This vector-store backend cannot facet lexical matches."
-        )
+        raise InvalidInputError("This vector-store backend cannot facet lexical matches.")
 
     @abstractmethod
     def delete_namespace(self, index: str, namespace: str) -> None:

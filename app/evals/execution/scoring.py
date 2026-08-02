@@ -106,9 +106,7 @@ def failed_item(
     )
 
 
-def rank_ordered_documents(
-    document_uuids: Sequence[str], mapping: Mapping[str, str]
-) -> list[str]:
+def rank_ordered_documents(document_uuids: Sequence[str], mapping: Mapping[str, str]) -> list[str]:
     """Map retrieved document UUIDs to external ids, rank-ordered, deduplicated."""
     return unique_in_order(
         external

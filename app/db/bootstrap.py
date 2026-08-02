@@ -105,8 +105,7 @@ def _format_validation_error(validation: SchemaValidationResult) -> str:
     missing_tables = ", ".join(sorted(validation.missing_tables)) or "none"
     missing_columns = (
         ", ".join(
-            f"{table}: {sorted(columns)}"
-            for table, columns in validation.missing_columns.items()
+            f"{table}: {sorted(columns)}" for table, columns in validation.missing_columns.items()
         )
         or "none"
     )

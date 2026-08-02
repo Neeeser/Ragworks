@@ -42,9 +42,7 @@ class CollectionIndexService:
         self._pipelines = PipelineService(session)
         self._indexes = RegisteredIndexRepository(session)
 
-    def read(
-        self, user: models.User, collection: models.Collection
-    ) -> CollectionIndexesRead:
+    def read(self, user: models.User, collection: models.Collection) -> CollectionIndexesRead:
         """Merge every bound graph's index targets into one list."""
         drafts: dict[tuple[IndexBackend, str, str], _TargetDraft] = {}
         registry = default_registry()
@@ -71,9 +69,7 @@ class CollectionIndexService:
                     # A node states no width — the embedder beside it decides
                     # one — so the registration is what knows how wide the
                     # store is.
-                    row = self._indexes.find_by_identity(
-                        user.id, identity.backend, identity.name
-                    )
+                    row = self._indexes.find_by_identity(user.id, identity.backend, identity.name)
                     draft.dimension = row.dimension if row is not None else None
                 if pipeline.name not in draft.pipelines:
                     draft.pipelines.append(pipeline.name)

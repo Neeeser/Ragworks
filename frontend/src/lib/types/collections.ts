@@ -66,6 +66,17 @@ export interface ToolLatencySeries {
   summary: LatencySummary;
 }
 
+/**
+ * One measured operation, at the moment it happened. Buckets describe a
+ * window; an event describes a run, so the spread a percentile summarizes
+ * stays visible. `key` names a query's tool series and is absent on ingestion.
+ */
+export interface LatencyEvent {
+  at: string;
+  duration_ms: number;
+  key?: string | null;
+}
+
 export type PipelineMarkerKind = "version" | "tool_added";
 
 /**
@@ -88,6 +99,11 @@ export interface CollectionStatsHistoryPoint {
   document_total: number;
   chunk_total: number;
   ingestion: LatencyBucket;
+  /**
+   * Every query in the bucket, whichever tool served it. Measured across all
+   * of them, never folded from `tools` — percentiles do not combine.
+   */
+  retrieval: LatencyBucket;
   /** Keyed by series key; an absent key is a gap, never a zero-latency query. */
   tools: Record<string, LatencyBucket>;
 }
@@ -100,7 +116,12 @@ export interface CollectionStatsHistory {
   points: CollectionStatsHistoryPoint[];
   tools: ToolLatencySeries[];
   ingestion_summary: LatencySummary;
+  retrieval_summary: LatencySummary;
   markers: PipelineMarker[];
+  ingestion_events: LatencyEvent[];
+  query_events: LatencyEvent[];
+  /** True when an event list was thinned to fit its cap; lines still cover every row. */
+  events_sampled: boolean;
 }
 
 export interface PromptVariable {

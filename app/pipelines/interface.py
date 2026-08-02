@@ -56,9 +56,7 @@ class PipelineInterface(BaseModel):
     output_kind: ToolOutputKind | None = None
 
 
-def _first_node(
-    definition: PipelineDefinition, node_type: str
-) -> PipelineNodeDefinition | None:
+def _first_node(definition: PipelineDefinition, node_type: str) -> PipelineNodeDefinition | None:
     """Return the first node of the given type, if present."""
     return next((node for node in definition.nodes if node.type == node_type), None)
 

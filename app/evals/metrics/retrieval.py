@@ -69,9 +69,7 @@ def ndcg_at_k(retrieved: Sequence[str], gold: Mapping[str, int], k: int) -> floa
         for rank, doc_id in enumerate(retrieved[:k], start=1)
     )
     ideal_grades = sorted(gold.values(), reverse=True)[:k]
-    idcg = sum(
-        grade / math.log2(rank + 1) for rank, grade in enumerate(ideal_grades, start=1)
-    )
+    idcg = sum(grade / math.log2(rank + 1) for rank, grade in enumerate(ideal_grades, start=1))
     if idcg == 0.0:
         return 0.0
     return dcg / idcg

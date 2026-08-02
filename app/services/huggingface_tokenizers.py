@@ -94,6 +94,4 @@ class HuggingFaceTokenizerService:
         # The Rust-backed `tokenizers` binding exposes parse failures as a
         # plain `Exception`, so this boundary must normalize that broad type.
         except Exception as exc:
-            raise InvalidInputError(
-                "The downloaded file is not a valid tokenizer.json."
-            ) from exc
+            raise InvalidInputError("The downloaded file is not a valid tokenizer.json.") from exc

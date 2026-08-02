@@ -82,9 +82,7 @@ class PipelineSettings:
     chunk_strategy: models.ChunkStrategy = models.ChunkStrategy.TOKEN
     chunk_size: int = 512
     chunk_overlap: int = 200
-    tokenizer: TokenizerSpec = field(
-        default_factory=lambda: TokenizerSpec(kind="wordpiece")
-    )
+    tokenizer: TokenizerSpec = field(default_factory=lambda: TokenizerSpec(kind="wordpiece"))
     embedding_model: str = ""
     namespace: str | None = None
     dimension: int | None = None
@@ -249,8 +247,7 @@ def resolve_pipeline_settings(  # noqa: PLR0914
     else:
         primary_backend = retriever_backend
         primary_name = (
-            resolve_collection_template(retriever.index_name, collection)
-            or retriever.index_name
+            resolve_collection_template(retriever.index_name, collection) or retriever.index_name
         )
         primary_namespace = resolve_collection_template(retriever.namespace, collection)
         dimension = embedder.dimension

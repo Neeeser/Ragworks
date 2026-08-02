@@ -137,9 +137,7 @@ class TEIAdapter(ProviderAdapter):
             valid=True, message=f"Connected ({info.model_id}, {kind.value})."
         )
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """Return TEI's one served model only when its task matches ``kind``."""
         info = self._info(force_refresh)
         served_kind = _kind_for_info(info)
@@ -159,9 +157,7 @@ class TEIAdapter(ProviderAdapter):
                     max_input_tokens=info.max_input_length,
                     input_modalities=["text"],
                     output_modalities=(
-                        ["embedding"]
-                        if served_kind is ProviderKind.EMBEDDING
-                        else ["rerank"]
+                        ["embedding"] if served_kind is ProviderKind.EMBEDDING else ["rerank"]
                     ),
                 )
             ],
@@ -197,6 +193,4 @@ class TEIAdapter(ProviderAdapter):
 
     def embedding_input_limit(self, model_name: str) -> int | None:
         """Return the served embedding model's published TEI input limit."""
-        return self._require_served_model(
-            model_name, ProviderKind.EMBEDDING
-        ).max_input_length
+        return self._require_served_model(model_name, ProviderKind.EMBEDDING).max_input_length

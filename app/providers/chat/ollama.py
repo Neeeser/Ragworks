@@ -53,9 +53,7 @@ def model_info_from_description(description: OllamaModelDescription) -> ModelInf
     if "thinking" in description.capabilities:
         supported.append("reasoning")
     detail_parts = [
-        part
-        for part in (description.parameter_size, description.quantization_level)
-        if part
+        part for part in (description.parameter_size, description.quantization_level) if part
     ]
     return ModelInfo(
         id=description.name,
@@ -233,9 +231,7 @@ class OllamaChatProvider:
         if response.eval_count is not None:
             usage["completion_tokens"] = response.eval_count
         if usage:
-            usage["total_tokens"] = (response.prompt_eval_count or 0) + (
-                response.eval_count or 0
-            )
+            usage["total_tokens"] = (response.prompt_eval_count or 0) + (response.eval_count or 0)
         return usage
 
     def parse_chat_response(self, response: dict[str, Any]) -> ParsedChatResponse:

@@ -88,8 +88,7 @@ def get_app_config() -> AppConfig:
                 config = AppConfigService(session).effective_config()
         except Exception:
             logger.warning(
-                "Failed to read runtime config from the database; "
-                "falling back to env+defaults.",
+                "Failed to read runtime config from the database; falling back to env+defaults.",
                 exc_info=True,
             )
             config = _env_and_defaults_config()
@@ -144,9 +143,7 @@ class AppConfigService:
         try:
             return AppConfig.model_validate(data)
         except ValidationError as exc:
-            logger.warning(
-                "Invalid config overrides in DB; falling back field-by-field: %s", exc
-            )
+            logger.warning("Invalid config overrides in DB; falling back field-by-field: %s", exc)
             return self._validate_dropping_bad_overrides(data, overrides)
 
     def _validate_dropping_bad_overrides(
@@ -213,9 +210,7 @@ class AppConfigService:
             )
         return entries
 
-    def apply_update(
-        self, patch: dict[str, dict[str, Any]], updated_by: UUID
-    ) -> AppConfig:
+    def apply_update(self, patch: dict[str, dict[str, Any]], updated_by: UUID) -> AppConfig:
         """Apply a sparse nested patch; a `null` leaf resets to default.
 
         Raises `InvalidInputError` (per-field `{dotted_key: message}` detail)
@@ -238,8 +233,7 @@ class AppConfigService:
             new_config = AppConfig.model_validate(data)
         except ValidationError as exc:
             errors = {
-                ".".join(str(part) for part in error["loc"]): error["msg"]
-                for error in exc.errors()
+                ".".join(str(part) for part in error["loc"]): error["msg"] for error in exc.errors()
             }
             raise InvalidInputError(errors) from exc
 

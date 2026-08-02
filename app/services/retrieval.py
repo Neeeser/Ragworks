@@ -7,7 +7,6 @@ tool path. It resolves the collection's *primary search tool* and delegates
 to `ToolInvocationService`, the single pipeline-invocation path.
 """
 
-
 from __future__ import annotations
 
 from collections.abc import Mapping

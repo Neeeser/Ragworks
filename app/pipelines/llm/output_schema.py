@@ -32,8 +32,7 @@ class LlmOutputError(ValueError):
 
 def _properties(fields: list[OutputFieldSpec]) -> dict[str, Any]:
     return {
-        spec.name: {**_TYPE_SCHEMAS[spec.type], "description": spec.description}
-        for spec in fields
+        spec.name: {**_TYPE_SCHEMAS[spec.type], "description": spec.description} for spec in fields
     }
 
 
@@ -119,9 +118,7 @@ def validate_listwise(
         if not isinstance(index, int) or isinstance(index, bool):
             raise LlmOutputError("Each result needs an integer 'index'.")
         if not 1 <= index <= item_count:
-            raise LlmOutputError(
-                f"Result index {index} is out of range (1..{item_count})."
-            )
+            raise LlmOutputError(f"Result index {index} is out of range (1..{item_count}).")
         by_index[index - 1] = validate_fields(entry, fields)
     return by_index
 
@@ -141,6 +138,5 @@ def _check_type(spec: OutputFieldSpec, value: Any) -> Any:
     ):
         return value
     raise LlmOutputError(
-        f"Field '{spec.name}' must be a {kind.replace('_', ' ')}, "
-        f"got {type(value).__name__}."
+        f"Field '{spec.name}' must be a {kind.replace('_', ' ')}, got {type(value).__name__}."
     )

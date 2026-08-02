@@ -37,9 +37,7 @@ class FileNodeRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
-    def list_children(
-        self, collection_id: UUID, parent_id: UUID | None
-    ) -> list[models.FileNode]:
+    def list_children(self, collection_id: UUID, parent_id: UUID | None) -> list[models.FileNode]:
         """Return one folder's direct children, folders-first by name."""
         statement = (
             select(models.FileNode)

@@ -44,9 +44,7 @@ class EvalDatasetGenerateRequest(BaseModel):
 
     @field_validator("type_mix")
     @classmethod
-    def _usable_mix(
-        cls, value: dict[EvalQuestionType, float]
-    ) -> dict[EvalQuestionType, float]:
+    def _usable_mix(cls, value: dict[EvalQuestionType, float]) -> dict[EvalQuestionType, float]:
         """Reject negative weights and all-zero mixes; weights are ratios, not sums."""
         if any(weight < 0 for weight in value.values()):
             raise ValueError("Question type weights must be non-negative.")

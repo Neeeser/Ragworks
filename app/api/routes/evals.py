@@ -137,9 +137,7 @@ def list_dataset_queries(
         raise to_http_exception(exc) from exc
 
 
-@router.patch(
-    "/datasets/{dataset_id}/queries/{query_id}", response_model=EvalDatasetQueryRead
-)
+@router.patch("/datasets/{dataset_id}/queries/{query_id}", response_model=EvalDatasetQueryRead)
 def update_dataset_query(
     dataset_id: UUID,
     query_id: UUID,
@@ -321,9 +319,7 @@ def get_dataset_document(
 ) -> EvalDatasetDocumentRead:
     """Return one corpus document's stored source text."""
     try:
-        return EvalService(session).get_dataset_document(
-            current_user, dataset_id, external_doc_id
-        )
+        return EvalService(session).get_dataset_document(current_user, dataset_id, external_doc_id)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 

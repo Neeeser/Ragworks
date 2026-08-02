@@ -22,9 +22,7 @@ def llm_call_summary_values(
 ) -> list[NodeTraceValue]:
     """Model identity, call accounting, and any degrade warnings."""
     call_info = {
-        "connection_id": (
-            str(config.connection_id) if config.connection_id is not None else None
-        ),
+        "connection_id": (str(config.connection_id) if config.connection_id is not None else None),
         "model_name": config.model_name,
         "mechanism": mechanism,
         "temperature": config.temperature,

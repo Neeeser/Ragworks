@@ -44,6 +44,24 @@ New code goes in the feature folder that owns it. Promote to `components/ui/` or
 `lib/` only on second use (see Duplication). A single-file folder isn't a feature —
 colocate the file with its only consumer.
 
+**Anything round in a `TrendChart` is drawn against the plot's measured scale, never
+as a bare `<circle>`.** The plot renders `preserveAspectRatio="none"`, so the two axes
+stretch by different factors and a circle comes out a lozenge — worse at every
+container width, and a chart of measurements drawn as lozenges reads as a rendering
+fault rather than data. `usePlotScale` + the `Dot` helper in `trend-chart/layers.tsx`
+express radius per axis; new marks use them.
+
+**A latency band is drawn only where a bucket holds ≥2 samples.** One measurement has
+no distribution — its p50 and p95 are both that measurement — so shading it runs the
+band's outline between lone values and inflates a single slow query into a wedge of
+sustained variance nobody recorded. The event dot is already the honest record.
+
+**Events carry their own timestamp, so they position at a fractional bucket index.**
+Series values plot at bucket _starts_, which leaves the final tick one bucket short of
+the domain end; anything inside that last bucket must clamp onto the tick rather than
+be dropped, or the chart silently hides the most recent activity — the part a reader
+opened it for.
+
 **Trace value displays are a registry, not a switch.** Pipeline trace inputs/outputs
 render through `components/traces/values/`: an ordered `{ match, Component }`
 registry picks the most specific view per value by _shape_ (`shape-guards.ts`), with

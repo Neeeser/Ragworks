@@ -154,9 +154,7 @@ class PipelineExecutor:
         changed = False
         for node_id in list(state.pending):
             edges = state.incoming.get(node_id, [])
-            if not all(
-                edge.source in state.outputs or edge.source in state.dead for edge in edges
-            ):
+            if not all(edge.source in state.outputs or edge.source in state.dead for edge in edges):
                 continue
             if not state.inputs[node_id] and edges:
                 logger.info("Skipping pipeline node %s: no branch delivered to it.", node_id)
@@ -252,8 +250,7 @@ class PipelineExecutor:
                 target_inputs[input_key] = [
                     delivered[incoming.id]
                     for incoming in state.incoming.get(edge.target, [])
-                    if (incoming.target_port or "default") == input_key
-                    and incoming.id in delivered
+                    if (incoming.target_port or "default") == input_key and incoming.id in delivered
                 ]
             else:
                 target_inputs[input_key] = node_outputs[output_key]

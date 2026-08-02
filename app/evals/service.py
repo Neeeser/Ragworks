@@ -353,9 +353,7 @@ class EvalService:
             text=document.text,
         )
 
-    def _require_ingest_pipeline(
-        self, user: models.User, pipeline_id: UUID
-    ) -> models.Pipeline:
+    def _require_ingest_pipeline(self, user: models.User, pipeline_id: UUID) -> models.Pipeline:
         """Return a user-owned document-accepting pipeline or raise a 400."""
         service = PipelineService(self.session)
         pipeline = service.get_pipeline(pipeline_id, user.id)
@@ -378,7 +376,5 @@ class EvalService:
             raise InvalidInputError("Invalid retrieval pipeline selection.")
         interface = service.interface_for(pipeline)
         if not interface.callable or interface.output_kind is not ToolOutputKind.CHUNKS:
-            raise InvalidInputError(
-                "Eval runs require a search tool pipeline that returns chunks."
-            )
+            raise InvalidInputError("Eval runs require a search tool pipeline that returns chunks.")
         return pipeline

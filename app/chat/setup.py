@@ -117,9 +117,9 @@ class ChatSetupBuilder:
             for tool in context.tools
             for target in tool.settings.index_targets
         )
-        if needs_pinecone and not ProviderConnectionRepository(
-            self.session
-        ).list_for_user_of_type(user.id, ProviderType.PINECONE.value):
+        if needs_pinecone and not ProviderConnectionRepository(self.session).list_for_user_of_type(
+            user.id, ProviderType.PINECONE.value
+        ):
             raise InvalidInputError(
                 "No Pinecone connection is configured. Add one in Settings to enable tools."
             )
@@ -194,10 +194,7 @@ class ChatSetupBuilder:
         if requested_model and requested_model != session_model.chat_model:
             session_model.chat_model = requested_model
             changed = True
-        if (
-            requested_connection
-            and requested_connection != session_model.provider_connection_id
-        ):
+        if requested_connection and requested_connection != session_model.provider_connection_id:
             session_model.provider_connection_id = requested_connection
             changed = True
         if changed:

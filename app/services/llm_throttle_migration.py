@@ -24,9 +24,7 @@ from app.schemas.enums import ProviderKind, ProviderType
 
 logger = logging.getLogger(__name__)
 
-_MODEL_KINDS = frozenset(
-    {ProviderKind.CHAT, ProviderKind.EMBEDDING, ProviderKind.RERANKING}
-)
+_MODEL_KINDS = frozenset({ProviderKind.CHAT, ProviderKind.EMBEDDING, ProviderKind.RERANKING})
 
 
 def stamp_llm_throttle_defaults(session: Session) -> None:
@@ -38,9 +36,7 @@ def stamp_llm_throttle_defaults(session: Session) -> None:
         except ValueError:
             continue
         adapter_cls = ADAPTERS.get(provider_type)
-        if adapter_cls is None or not (
-            _MODEL_KINDS & set(adapter_cls.descriptor.kinds)
-        ):
+        if adapter_cls is None or not (_MODEL_KINDS & set(adapter_cls.descriptor.kinds)):
             continue
         config = dict(connection.config or {})
         changed = False

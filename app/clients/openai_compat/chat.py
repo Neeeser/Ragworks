@@ -47,9 +47,7 @@ def _build_kwargs(
     if call.extra_body:
         kwargs["extra_body"] = call.extra_body
     if call.parameters:
-        kwargs.update(
-            {key: value for key, value in call.parameters.items() if value is not None}
-        )
+        kwargs.update({key: value for key, value in call.parameters.items() if value is not None})
     if stream:
         kwargs["stream"] = True
         # Part of the Chat Completions spec, and without it OpenAI-compatible
@@ -62,18 +60,12 @@ def _build_kwargs(
 
 def chat(transport: OpenAICompatTransport, call: ChatCall) -> ChatCompletionResponse:
     """Request a buffered chat completion."""
-    response = transport.sdk.chat.completions.create(
-        **_build_kwargs(transport, call, stream=False)
-    )
+    response = transport.sdk.chat.completions.create(**_build_kwargs(transport, call, stream=False))
     return ChatCompletionResponse.model_validate(response.model_dump())
 
 
-def chat_stream(
-    transport: OpenAICompatTransport, call: ChatCall
-) -> Iterator[ChatCompletionChunk]:
+def chat_stream(transport: OpenAICompatTransport, call: ChatCall) -> Iterator[ChatCompletionChunk]:
     """Yield streaming chat-completion chunks."""
-    stream = transport.sdk.chat.completions.create(
-        **_build_kwargs(transport, call, stream=True)
-    )
+    stream = transport.sdk.chat.completions.create(**_build_kwargs(transport, call, stream=True))
     for chunk in stream:
         yield ChatCompletionChunk.model_validate(chunk.model_dump())

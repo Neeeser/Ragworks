@@ -158,6 +158,23 @@ class ToolLatencySeries(BaseModel):
     summary: LatencySummary = Field(default_factory=LatencySummary)
 
 
+class LatencyEvent(DateTimeConfigMixin, BaseModel):
+    """One measured operation, at the moment it happened.
+
+    Buckets describe a window; an event describes a run. Charts draw these as
+    dots so the variance a percentile summarizes stays visible — with a handful
+    of runs a bucketed line is mostly gaps, and with thousands the dots read as
+    the spread the median line sits inside.
+
+    `key` names the tool series a query belongs to and is absent on ingestion
+    events, which have only one series.
+    """
+
+    at: datetime
+    duration_ms: float
+    key: str | None = None
+
+
 class PipelineMarker(DateTimeConfigMixin, BaseModel):
     """A pipeline change, placed on the timeline the charts share.
 
@@ -188,6 +205,13 @@ class CollectionStatsHistoryPoint(DateTimeConfigMixin, BaseModel):
     document_total: int
     chunk_total: int
     ingestion: LatencyBucket = Field(default_factory=LatencyBucket)
+    retrieval: LatencyBucket = Field(default_factory=LatencyBucket)
+    """Every query in the bucket, whichever tool served it.
+
+    Measured across all of them rather than folded from `tools`: percentiles
+    do not combine, so a spread assembled from per-tool spreads describes the
+    worst tool, not retrieval.
+    """
     tools: dict[str, LatencyBucket] = Field(default_factory=dict)
 
 
@@ -206,7 +230,17 @@ class CollectionStatsHistoryRead(DateTimeConfigMixin, BaseModel):
     points: list[CollectionStatsHistoryPoint]
     tools: list[ToolLatencySeries] = Field(default_factory=list)
     ingestion_summary: LatencySummary = Field(default_factory=LatencySummary)
+    retrieval_summary: LatencySummary = Field(default_factory=LatencySummary)
     markers: list[PipelineMarker] = Field(default_factory=list)
+    ingestion_events: list[LatencyEvent] = Field(default_factory=list)
+    query_events: list[LatencyEvent] = Field(default_factory=list)
+    events_sampled: bool = False
+    """True when an event list was downsampled to fit its cap.
+
+    The bands and lines still summarize every row — only the dots thin out —
+    so a reader who sees fewer dots than the count claims is told why rather
+    than left to conclude events went missing.
+    """
 
 
 class CollectionIndexTarget(BaseModel):

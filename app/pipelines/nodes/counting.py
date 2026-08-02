@@ -68,10 +68,7 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
         "Count how many documents and chunks lexically match the query text "
         "in a sparse BM25 index — an aggregate, not a top-k fetch."
     )
-    example = (
-        "Items(text='aurora') -> "
-        "StructuredValues(matching_documents=2, matching_chunks=3)."
-    )
+    example = "Items(text='aurora') -> StructuredValues(matching_documents=2, matching_chunks=3)."
     input_ports = (
         NodePort(
             key="items",
@@ -80,9 +77,7 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
             requires=(Facet.TEXT,),
         ),
     )
-    output_ports = (
-        NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),
-    )
+    output_ports = (NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),)
     config_model = Bm25CountConfig
 
     @classmethod
@@ -207,9 +202,7 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
             requires=(Facet.TEXT,),
         ),
     )
-    output_ports = (
-        NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),
-    )
+    output_ports = (NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),)
     config_model = Bm25FacetConfig
 
     @classmethod

@@ -64,9 +64,7 @@ def request_rpm_field(default: int | None) -> ProviderConfigField:
     )
 
 
-def kind_rpm_field(
-    kind_label: str, field_name: str, default: int | None
-) -> ProviderConfigField:
+def kind_rpm_field(kind_label: str, field_name: str, default: int | None) -> ProviderConfigField:
     """An advanced per-kind pace override (embedding/reranking requests).
 
     Providers meter per endpoint — embedding limits run far above chat — so
@@ -78,9 +76,7 @@ def kind_rpm_field(
         kind=ConfigFieldKind.STRING,
         required=False,
         placeholder=str(default) if default is not None else "shared",
-        description=(
-            f"Pace {kind_label.lower()} requests separately from the shared window."
-        ),
+        description=(f"Pace {kind_label.lower()} requests separately from the shared window."),
         advanced=True,
     )
 
@@ -185,9 +181,7 @@ class ProviderAdapter(ABC):
     def validate_connection(self) -> ConnectionValidationResult:
         """Probe the connection's credentials/reachability."""
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """Return the connection's models of one kind (empty by default)."""
         del force_refresh
         self.require_kind(kind)
@@ -201,9 +195,7 @@ class ProviderAdapter(ABC):
 
     def chat_provider(self) -> ChatProvider:
         """Construct a chat provider backed by this connection."""
-        raise InvalidInputError(
-            f"{self.descriptor.label} connections do not provide chat models."
-        )
+        raise InvalidInputError(f"{self.descriptor.label} connections do not provide chat models.")
 
     #: Concurrent-LLM-call cap when the connection sets none. Starter-tier
     #: safe per provider type; adapters serving CHAT override to match their

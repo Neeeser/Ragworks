@@ -94,8 +94,6 @@ def _redact_value(key: str, value: Any) -> Any:
     return value
 
 
-def redact_processor(
-    _logger: WrappedLogger, _method_name: str, event_dict: EventDict
-) -> EventDict:
+def redact_processor(_logger: WrappedLogger, _method_name: str, event_dict: EventDict) -> EventDict:
     """structlog processor: redact and sanitize every field of an event."""
     return {key: _redact_value(key, value) for key, value in event_dict.items()}

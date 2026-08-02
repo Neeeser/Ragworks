@@ -165,8 +165,7 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
                     message = f"Node '{node.id}' has an invalid tokenizer configuration."
                 else:
                     message = (
-                        f"Node '{node.id}' has an invalid value for '{field}': "
-                        f"{error['msg']}."
+                        f"Node '{node.id}' has an invalid value for '{field}': {error['msg']}."
                     )
                 issues.append(
                     PipelineValidationIssue(
@@ -268,10 +267,7 @@ class ParagraphChunkerNode(BaseChunkerNode[FixedChunkerConfig]):
     label = "Paragraph Chunker"
     category = "ingestion"
     description = "Chunk documents using paragraph boundaries."
-    example = (
-        "ParsedDocumentPayload(text='Para 1.\\n\\nPara 2.') -> "
-        "Items(['Para 1.', 'Para 2.'])."
-    )
+    example = "ParsedDocumentPayload(text='Para 1.\\n\\nPara 2.') -> Items(['Para 1.', 'Para 2.'])."
     strategy = ChunkStrategy.PARAGRAPH
 
 

@@ -17,9 +17,7 @@ class OpenRouterReranker(Reranker):
         self._client = client
         self.model_name = model_name
 
-    def rerank(
-        self, query: str, candidates: Sequence[ScoredChunk]
-    ) -> Sequence[ScoredChunk]:
+    def rerank(self, query: str, candidates: Sequence[ScoredChunk]) -> Sequence[ScoredChunk]:
         """Return every candidate in provider-ranked order."""
         if not candidates:
             return []

@@ -136,9 +136,7 @@ CUSTOM_DESCRIPTOR = ProviderDescriptor(
                 "Face Text Embeddings Inference's own shape."
             ),
             options=(
-                ProviderConfigOption(
-                    value=RerankDialect.JINA_COHERE.value, label="Jina / Cohere"
-                ),
+                ProviderConfigOption(value=RerankDialect.JINA_COHERE.value, label="Jina / Cohere"),
                 ProviderConfigOption(value=RerankDialect.TEI.value, label="TEI"),
             ),
         ),
@@ -186,17 +184,11 @@ class CustomAdapter(ProviderAdapter):
     @property
     def kinds(self) -> tuple[ProviderKind, ...]:
         """Return only the capabilities this connection is configured to serve."""
-        return tuple(
-            kind
-            for kind, flag in _KIND_FLAGS.items()
-            if getattr(self._config, flag)
-        )
+        return tuple(kind for kind, flag in _KIND_FLAGS.items() if getattr(self._config, flag))
 
     def transport_config(self) -> TransportConfig:
         """Return the endpoint identity this connection's client is keyed by."""
-        return TransportConfig(
-            base_url=self._config.base_url, api_key=self._config.api_key
-        )
+        return TransportConfig(base_url=self._config.base_url, api_key=self._config.api_key)
 
     def _client(self) -> OpenAICompatClient:
         """Return the cached client for this server."""
@@ -262,9 +254,7 @@ class CustomAdapter(ProviderAdapter):
             return sorted(model_ids)
         return sorted(model_ids, key=lambda model_id: (not likely(model_id), model_id))
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """Return every published model for the requested kind, likely ones first."""
         del force_refresh
         self.require_kind(kind)
@@ -289,9 +279,7 @@ class CustomAdapter(ProviderAdapter):
                 output_modalities=[modality],
                 supported_parameters=parameters,
                 capabilities=(
-                    DIALECT_FLOOR_CAPABILITIES
-                    if kind is ProviderKind.CHAT
-                    else ChatCapabilities()
+                    DIALECT_FLOOR_CAPABILITIES if kind is ProviderKind.CHAT else ChatCapabilities()
                 ),
             )
             for model_id in model_ids

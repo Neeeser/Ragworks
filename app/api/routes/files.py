@@ -64,9 +64,7 @@ def _upload_form(
     )
 
 
-def _get_file_or_404(
-    file_id: UUID, user_id: UUID, session: Session
-) -> models.FileNode:
+def _get_file_or_404(file_id: UUID, user_id: UUID, session: Session) -> models.FileNode:
     """Return a user-owned node or 404 (cross-user access looks identical)."""
     node = FileNodeRepository(session).get_for_user(file_id, user_id)
     if not node:
@@ -319,8 +317,6 @@ def search_files(
             detail=f"Unknown search modes: {', '.join(sorted(invalid))}.",
         )
     try:
-        return FileSearchService(session).search(
-            current_user, collection, query=q, modes=requested
-        )
+        return FileSearchService(session).search(current_user, collection, query=q, modes=requested)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc

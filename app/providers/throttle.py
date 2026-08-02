@@ -97,9 +97,7 @@ def connection_slot(
     semaphore.acquire()
     try:
         if rpm is not None and rpm >= 1:
-            _pace_request(
-                connection_id, window, rpm, sleep if sleep is not None else time.sleep
-            )
+            _pace_request(connection_id, window, rpm, sleep if sleep is not None else time.sleep)
         yield
     finally:
         semaphore.release()

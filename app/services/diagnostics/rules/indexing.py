@@ -63,9 +63,7 @@ class BackendMismatchRule:
                     pipeline_resource(ctx, "retrieval"),
                 ],
                 observations=[
-                    paired_observation(
-                        "Backend", ingestion.backend.value, retrieval.backend.value
-                    )
+                    paired_observation("Backend", ingestion.backend.value, retrieval.backend.value)
                 ],
                 action=DiagnosticAction(
                     label="Edit retrieval pipeline",
@@ -151,9 +149,7 @@ class Bm25IndexMismatchRule:
                     pipeline_resource(ctx, "retrieval"),
                 ],
                 observations=[
-                    paired_observation(
-                        "BM25 index", ing_sparse.index_name, ret_sparse.index_name
-                    )
+                    paired_observation("BM25 index", ing_sparse.index_name, ret_sparse.index_name)
                 ],
                 action=DiagnosticAction(
                     label="Edit retrieval pipeline",

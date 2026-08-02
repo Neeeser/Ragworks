@@ -47,9 +47,7 @@ class OllamaEmbedder(Embedder):
         """Embed document chunks using the Ollama server."""
         if not chunks:
             return []
-        logger.info(
-            "Embedding %s chunk(s) with Ollama model %s", len(chunks), self.model_name
-        )
+        logger.info("Embedding %s chunk(s) with Ollama model %s", len(chunks), self.model_name)
         response = self._client.embed(
             [chunk.text for chunk in chunks],
             model=self.model_name,
@@ -62,9 +60,7 @@ class OllamaEmbedder(Embedder):
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a single query string using the Ollama server."""
-        response = self._client.embed(
-            [query], model=self.model_name, dimensions=self.dimensions
-        )
+        response = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(response)
         if not vectors:
             raise ValueError("Ollama returned no embedding for the query.")

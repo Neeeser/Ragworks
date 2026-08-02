@@ -72,8 +72,7 @@ def condition_problems(condition: FilterCondition) -> list[str]:
         if op not in _LIST_OPS and isinstance(condition.value, list):
             problems.append(f"'{op.value}' takes a single value")
         if op in _RANGE_OPS and (
-            isinstance(condition.value, bool)
-            or not isinstance(condition.value, (int, float))
+            isinstance(condition.value, bool) or not isinstance(condition.value, (int, float))
         ):
             problems.append(f"'{op.value}' compares numbers")
     return problems

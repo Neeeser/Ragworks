@@ -118,9 +118,7 @@ class LlmEngine:
             return [self._one_call(prompts[0], schema, validate)]
         workers = max(1, min(self._concurrency, len(prompts)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(
-                pool.map(lambda pair: self._one_call(pair, schema, validate), prompts)
-            )
+            return list(pool.map(lambda pair: self._one_call(pair, schema, validate), prompts))
 
     def _one_call(
         self,
@@ -235,9 +233,7 @@ def _extract_payload(message: dict[str, Any]) -> dict[str, Any]:
     if isinstance(content, str):
         return parse_payload(content)
     if isinstance(content, list):
-        text = "".join(
-            str(part.get("text", "")) for part in content if isinstance(part, dict)
-        )
+        text = "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
         return parse_payload(text)
     raise LlmOutputError("Model response carried no content.")
 

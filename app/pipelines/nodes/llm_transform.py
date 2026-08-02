@@ -118,17 +118,13 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
             prompts, schema, lambda payload: validate_fields(payload, fields)
         )
         items = [
-            apply_annotations(item, fields, outcome.values)
-            if outcome.values is not None
-            else item
+            apply_annotations(item, fields, outcome.values) if outcome.values is not None else item
             for item, outcome in zip(batch.items, outcomes, strict=True)
         ]
         self._warnings = engine.warnings
         self._retries = sum(outcome.retries for outcome in outcomes)
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
-        return {
-            "items": batch.model_copy(update={"items": items, "usage": usage})
-        }
+        return {"items": batch.model_copy(update={"items": items, "usage": usage})}
 
     def summarize_io(
         self,

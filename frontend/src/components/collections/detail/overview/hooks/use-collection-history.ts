@@ -69,6 +69,8 @@ export function useCollectionHistory(token: string, collectionId: string) {
   const buckets = useMemo(() => points.map((point) => point.bucket_start), [points]);
   const bucketSeconds = history?.bucket_seconds ?? FALLBACK_BUCKET_SECONDS;
   const tools = useMemo(() => history?.tools ?? [], [history]);
+  const ingestionEvents = useMemo(() => history?.ingestion_events ?? [], [history]);
+  const queryEvents = useMemo(() => history?.query_events ?? [], [history]);
   const toolColors = useMemo(() => colorTools(tools), [tools]);
 
   const ingestMarkers = useMemo(
@@ -89,6 +91,9 @@ export function useCollectionHistory(token: string, collectionId: string) {
     bucketSeconds,
     tools,
     toolColors,
+    ingestionEvents,
+    queryEvents,
+    eventsSampled: history?.events_sampled ?? false,
     ingestMarkers,
     toolMarkers,
     zoom,

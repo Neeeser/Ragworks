@@ -89,9 +89,7 @@ class OpenAICompatTransport:
             base_url=self.base_url,
             api_key=config.api_key or KEYLESS_PLACEHOLDER,
             http_client=self.http,
-            timeout=httpx.Timeout(
-                INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
-            ),
+            timeout=httpx.Timeout(INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS),
             max_retries=1,
         )
 

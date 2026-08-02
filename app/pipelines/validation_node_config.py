@@ -39,9 +39,7 @@ def self_types_for(schema: dict[str, object]) -> dict[str, ExprType]:
     return typed
 
 
-def tainted_config_fields(
-    node: PipelineNodeDefinition, tainted: frozenset[str]
-) -> frozenset[str]:
+def tainted_config_fields(node: PipelineNodeDefinition, tainted: frozenset[str]) -> frozenset[str]:
     """Return the node's config fields that depend on caller input.
 
     Taint travels along `self.` chains: a field reading a sibling that reads an

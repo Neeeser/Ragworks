@@ -109,9 +109,7 @@ class PgvectorStore(VectorStoreBackend):
             return self._describe(self._repo.create_lexical_index(spec.name, self._owner_id))
         if spec.dimension is None:
             raise InvalidInputError("pgvector indexes require a dimension.")
-        record = self._repo.create_index(
-            spec.name, spec.dimension, spec.metric, self._owner_id
-        )
+        record = self._repo.create_index(spec.name, spec.dimension, spec.metric, self._owner_id)
         return self._describe(record)
 
     def delete_index(self, name: str) -> None:

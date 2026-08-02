@@ -23,9 +23,7 @@ class ProviderConnectionRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
-    def list_for_user_of_type(
-        self, user_id: UUID, provider_type: str
-    ) -> list[ProviderConnection]:
+    def list_for_user_of_type(self, user_id: UUID, provider_type: str) -> list[ProviderConnection]:
         """Return the user's connections of one provider type, oldest first."""
         statement = (
             select(ProviderConnection)

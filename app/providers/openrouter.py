@@ -97,18 +97,12 @@ class OpenRouterAdapter(ProviderAdapter):
                 return ConnectionValidationResult(
                     valid=False, message="Invalid OpenRouter API key."
                 )
-            return ConnectionValidationResult(
-                valid=False, message="OpenRouter validation failed."
-            )
+            return ConnectionValidationResult(valid=False, message="OpenRouter validation failed.")
         except httpx.HTTPError:
-            return ConnectionValidationResult(
-                valid=False, message="OpenRouter is unreachable."
-            )
+            return ConnectionValidationResult(valid=False, message="OpenRouter is unreachable.")
         return ConnectionValidationResult(valid=True, message="Connected.")
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """List OpenRouter chat or embedding models for this connection."""
         self.require_kind(kind)
         client = self._client()
@@ -160,9 +154,7 @@ class OpenRouterAdapter(ProviderAdapter):
                 for model in snapshot.value
             ]
             return CatalogResult(models=models, meta=_catalog_metadata(snapshot))
-        embedding_snapshot = client.list_embedding_models(
-            force_refresh=force_refresh
-        )
+        embedding_snapshot = client.list_embedding_models(force_refresh=force_refresh)
         models = [
             CatalogModel(
                 connection_id=self.connection.id,
@@ -171,18 +163,14 @@ class OpenRouterAdapter(ProviderAdapter):
                 id=model.id,
                 name=model.name,
                 description=model.description,
-                context_length=(
-                    int(model.context_length) if model.context_length else None
-                ),
+                context_length=(int(model.context_length) if model.context_length else None),
                 max_input_tokens=model.max_input_tokens,
                 pricing=model.pricing,
                 dimension=model.dimension,
             )
             for model in embedding_snapshot.value
         ]
-        return CatalogResult(
-            models=models, meta=_catalog_metadata(embedding_snapshot)
-        )
+        return CatalogResult(models=models, meta=_catalog_metadata(embedding_snapshot))
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an OpenRouter embedder for this connection."""

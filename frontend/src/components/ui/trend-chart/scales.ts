@@ -3,7 +3,8 @@ import { parseApiDate, resolvedTimeZone } from "@/lib/datetime";
 /** Chart geometry. The viewBox is fixed; the element scales to its container. */
 export const VIEW_W = 600;
 export const VIEW_H = 160;
-export const PAD_X = 4;
+/** Room for the widest event dot, so one on the first or last bucket isn't clipped. */
+export const PAD_X = 10;
 export const PAD_TOP = 8;
 export const PAD_BOTTOM = 4;
 
@@ -107,6 +108,101 @@ export function buildPath(
     pen = true;
   });
   return path;
+}
+
+/**
+ * Build a step path: hold each value until the next one, then jump.
+ *
+ * A cumulative total is a step function — it changes only when something is
+ * ingested. Interpolating between samples draws a collection growing steadily
+ * through nights when nothing happened, which is the shape a reader is trying
+ * to distinguish a real ingestion from.
+ */
+export function buildStepPath(
+  values: Array<number | null>,
+  x: (index: number) => number,
+  y: (value: number) => number,
+): string {
+  let path = "";
+  let held: number | null = null;
+  let last = 0;
+  values.forEach((value, index) => {
+    if (value === null) return;
+    if (held === null) {
+      path += `M${x(index).toFixed(2)},${y(value).toFixed(2)}`;
+    } else {
+      path += `L${x(index).toFixed(2)},${y(held).toFixed(2)}L${x(index).toFixed(2)},${y(value).toFixed(2)}`;
+    }
+    held = value;
+    last = index;
+  });
+  // A total holds until something changes it, so the line runs to the domain
+  // edge. Stopping at the final sample would read as the collection ending.
+  if (held !== null && last < values.length - 1) {
+    path += `L${x(values.length - 1).toFixed(2)},${y(held).toFixed(2)}`;
+  }
+  return path;
+}
+
+/**
+ * Build a closed band between two bounds: out along `upper`, back along
+ * `lower`. Buckets where either bound is missing break the band into separate
+ * shapes rather than spanning a gap nobody measured.
+ */
+export function buildBandPath(
+  lower: Array<number | null>,
+  upper: Array<number | null>,
+  x: (index: number) => number,
+  y: (value: number) => number,
+): string {
+  let path = "";
+  let run: number[] = [];
+  const flush = () => {
+    if (run.length < 2) {
+      run = [];
+      return;
+    }
+    const top = run.map((i) => `${x(i).toFixed(2)},${y(upper[i] as number).toFixed(2)}`);
+    const bottom = [...run]
+      .reverse()
+      .map((i) => `${x(i).toFixed(2)},${y(lower[i] as number).toFixed(2)}`);
+    path += `M${top.join("L")}L${bottom.join("L")}Z`;
+    run = [];
+  };
+  upper.forEach((value, index) => {
+    if (value === null || lower[index] === null) flush();
+    else run.push(index);
+  });
+  flush();
+  return path;
+}
+
+/**
+ * Where a timestamp falls on the bucket axis, as a fractional index.
+ *
+ * Events happen at moments, not in buckets, so they position between the
+ * bucket ticks the aggregate series are drawn on. Returns null outside the
+ * domain, so an event from another range is dropped rather than drawn off-plot.
+ *
+ * The last bucket is the exception: series values are plotted at bucket
+ * *starts*, so the final tick sits one bucket short of the domain end and
+ * everything that happened inside that last bucket would fall past it.
+ * Dropping those would hide the most recent activity — the part a reader is
+ * usually here for — so they clamp onto the final tick, at most one bucket
+ * from where they truly are.
+ */
+export function fractionalIndex(
+  iso: string,
+  firstBucket: string,
+  bucketSeconds: number,
+  bucketCount: number,
+): number | null {
+  const at = parseApiDate(iso) ?? new Date(iso);
+  const origin = parseApiDate(firstBucket) ?? new Date(firstBucket);
+  if (Number.isNaN(at.getTime()) || Number.isNaN(origin.getTime())) return null;
+  const index = (at.getTime() - origin.getTime()) / (bucketSeconds * 1000);
+  if (index < 0 || index >= bucketCount) return null;
+  return Math.min(index, bucketCount - 1);
 }
 
 /** True when a sample has no drawn neighbour, so it needs a dot to be visible. */

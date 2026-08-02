@@ -94,9 +94,7 @@ class IndexRegistryService:
             collection.id: collection
             for collection in CollectionRepository(self._session).list_for_user(user.id)
         }
-        rows = {
-            (row.backend, row.name): row for row in self._indexes.list_for_user(user.id)
-        }
+        rows = {(row.backend, row.name): row for row in self._indexes.list_for_user(user.id)}
         return list(self._iter_usages(bindings, collections, rows))
 
     def usages_by_index(self, user: models.User) -> dict[UUID, list[IndexUsage]]:
@@ -122,9 +120,7 @@ class IndexRegistryService:
             "Point those collections at another index first."
         )
 
-    def ensure_no_other_owner(
-        self, user: models.User, backend: IndexBackend, name: str
-    ) -> None:
+    def ensure_no_other_owner(self, user: models.User, backend: IndexBackend, name: str) -> None:
         """Raise when another account has registered the same `(backend, name)`.
 
         On a backend whose index names are shared workspace-wide, one name is
@@ -134,9 +130,7 @@ class IndexRegistryService:
         `ensure_unused`'s declared-reference rule; the other account is not
         named, because a user must not be able to enumerate their neighbours.
         """
-        if not RegisteredIndexRepository(self._session).other_owner_exists(
-            user.id, backend, name
-        ):
+        if not RegisteredIndexRepository(self._session).other_owner_exists(user.id, backend, name):
             return
         raise InvalidInputError(
             f"Index '{name}' is also registered by another account, and "

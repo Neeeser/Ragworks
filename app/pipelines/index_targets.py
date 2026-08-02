@@ -136,15 +136,11 @@ def _dense_target(
     config: IndexerConfig | RetrieverConfig,
 ) -> IndexTarget:
     """Build the dense index target for an indexer/retriever config."""
-    index_name = (
-        resolve_collection_template(config.index_name, collection) or config.index_name
-    )
+    index_name = resolve_collection_template(config.index_name, collection) or config.index_name
     return IndexTarget(backend=backend, index_name=index_name, vector_type="dense")
 
 
 def _sparse_target(collection: models.Collection, config: Bm25Config) -> IndexTarget:
     """Build the sparse index target for a BM25 node config."""
-    index_name = (
-        resolve_collection_template(config.index_name, collection) or config.index_name
-    )
+    index_name = resolve_collection_template(config.index_name, collection) or config.index_name
     return IndexTarget(backend=config.backend, index_name=index_name, vector_type="sparse")

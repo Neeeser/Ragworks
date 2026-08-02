@@ -89,9 +89,7 @@ def resolve_static_definition(
     what purge coverage and diagnostics read.
     """
     try:
-        return resolve_definition(
-            definition, default_environment(definition, binding=binding)
-        )
+        return resolve_definition(definition, default_environment(definition, binding=binding))
     except VariableResolutionError:
         return strip_expressions(definition)
 

@@ -40,9 +40,7 @@ def filter_clause(
     return " AND " + " AND ".join(fragments), params
 
 
-def _condition_sql(
-    condition: FilterCondition, position: int, params: dict[str, Any]
-) -> str:
+def _condition_sql(condition: FilterCondition, position: int, params: dict[str, Any]) -> str:
     field_param = f"mf_field_{position}"
     value_param = f"mf_value_{position}"
     params[field_param] = condition.field

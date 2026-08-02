@@ -96,8 +96,7 @@ class IndexAdminService:
         backends = [backend] if backend else self._usable_backends(user)
         registry = IndexRegistryService(self._session)
         registered = {
-            (row.backend, row.name): row
-            for row in registry.list_registered(user, backend)
+            (row.backend, row.name): row for row in registry.list_registered(user, backend)
         }
         usages = registry.usages_by_index(user)
         indexes: list[IndexRead] = []
@@ -118,16 +117,10 @@ class IndexAdminService:
         """Return one index's description, including its registration."""
         store = get_vector_store(backend, user=user, session=self._session)
         registry = IndexRegistryService(self._session)
-        row = RegisteredIndexRepository(self._session).find_by_identity(
-            user.id, backend, name
-        )
-        return self._merged_read(
-            store.describe_index(name), row, registry.usages_by_index(user)
-        )
+        row = RegisteredIndexRepository(self._session).find_by_identity(user.id, backend, name)
+        return self._merged_read(store.describe_index(name), row, registry.usages_by_index(user))
 
-    def register_index(
-        self, user: models.User, request: IndexRegisterRequest
-    ) -> IndexRead:
+    def register_index(self, user: models.User, request: IndexRegisterRequest) -> IndexRead:
         """Adopt a physically-existing index so bindings can point at it.
 
         The store's own description supplies dimension, metric, and vector

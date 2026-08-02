@@ -78,7 +78,9 @@ def list_collection_stats(
     """Return aggregated stats for all collections."""
     repo = CollectionRepository(session)
     collections = list(repo.list_for_user(current_user.id))
-    stats_map = CollectionStatsRepository(session).stats_for(current_user.id, [collection.id for collection in collections])
+    stats_map = CollectionStatsRepository(session).stats_for(
+        current_user.id, [collection.id for collection in collections]
+    )
     return [_stats_read(collection.id, stats_map[collection.id]) for collection in collections]
 
 

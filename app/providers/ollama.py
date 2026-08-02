@@ -66,9 +66,7 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
 )
 
 
-def _input_modalities(
-    description: OllamaModelDescription, kind: ProviderKind
-) -> list[str]:
+def _input_modalities(description: OllamaModelDescription, kind: ProviderKind) -> list[str]:
     """Modalities the model accepts, from its `/api/show` capabilities.
 
     Text is the baseline every model serves; `vision` is the server's own
@@ -119,9 +117,7 @@ class OllamaAdapter(ProviderAdapter):
             )
         return ConnectionValidationResult(valid=True, message=f"Connected (Ollama {version}).")
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """List the server's local models that serve the requested kind."""
         self.require_kind(kind)
         capability = "embedding" if kind is ProviderKind.EMBEDDING else "completion"
@@ -141,14 +137,10 @@ class OllamaAdapter(ProviderAdapter):
                     description=info.description,
                     context_length=description.context_length,
                     max_input_tokens=(
-                        description.context_length
-                        if kind is ProviderKind.EMBEDDING
-                        else None
+                        description.context_length if kind is ProviderKind.EMBEDDING else None
                     ),
                     dimension=(
-                        description.embedding_dimension
-                        if kind is ProviderKind.EMBEDDING
-                        else None
+                        description.embedding_dimension if kind is ProviderKind.EMBEDDING else None
                     ),
                     input_modalities=_input_modalities(description, kind),
                     output_modalities=["text"],

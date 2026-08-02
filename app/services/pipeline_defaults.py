@@ -53,9 +53,7 @@ class DefaultPipelines:
     retrieval: models.Pipeline
 
 
-def ensure_default_pipelines(
-    service: PipelineService, user: models.User
-) -> DefaultPipelines:
+def ensure_default_pipelines(service: PipelineService, user: models.User) -> DefaultPipelines:
     """Ensure default ingest/search pipelines on the configured backend.
 
     A stored default whose vector-store backend no longer matches the

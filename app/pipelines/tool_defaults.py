@@ -96,9 +96,7 @@ def _build_aggregate_pipeline(
     )
 
 
-def build_count_tool_pipeline(
-    *, backend: IndexBackend, index_name: str
-) -> PipelineDefinition:
+def build_count_tool_pipeline(*, backend: IndexBackend, index_name: str) -> PipelineDefinition:
     """Return the structured count tool definition (`count.bm25`)."""
     return _build_aggregate_pipeline(
         aggregate_type="count.bm25",
@@ -110,9 +108,7 @@ def build_count_tool_pipeline(
     )
 
 
-def build_facet_tool_pipeline(
-    *, backend: IndexBackend, index_name: str
-) -> PipelineDefinition:
+def build_facet_tool_pipeline(*, backend: IndexBackend, index_name: str) -> PipelineDefinition:
     """Return the structured facet-by-source tool definition (`facet.bm25`)."""
     return _build_aggregate_pipeline(
         aggregate_type="facet.bm25",

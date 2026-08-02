@@ -88,7 +88,9 @@ def update_config(
     # Log which fields changed, never their values — a config value can be a
     # secret (provider defaults, limits), and the field paths are enough to
     # correlate a behavior change to an admin action.
-    changed_fields = [f"{section}.{field}" for section, fields in payload.items() for field in fields]
+    changed_fields = [
+        f"{section}.{field}" for section, fields in payload.items() for field in fields
+    ]
     logger.info(
         log_events.ADMIN_CONFIG_UPDATED,
         user_id=str(current_user.id),

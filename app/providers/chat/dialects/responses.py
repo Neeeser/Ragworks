@@ -101,18 +101,13 @@ class ResponsesProvider:
         if not request.parameters:
             return None
         parameters = {
-            _PARAMETER_ALIASES.get(key, key): value
-            for key, value in request.parameters.items()
+            _PARAMETER_ALIASES.get(key, key): value for key, value in request.parameters.items()
         }
         response_format = parameters.pop("response_format", None)
         if isinstance(response_format, dict):
             schema_envelope = response_format.get("json_schema")
-            if response_format.get("type") == "json_schema" and isinstance(
-                schema_envelope, dict
-            ):
-                parameters["text"] = {
-                    "format": {"type": "json_schema", **schema_envelope}
-                }
+            if response_format.get("type") == "json_schema" and isinstance(schema_envelope, dict):
+                parameters["text"] = {"format": {"type": "json_schema", **schema_envelope}}
             else:
                 parameters["text"] = {"format": response_format}
         return parameters
@@ -151,9 +146,7 @@ class ResponsesProvider:
 
     def chat(self, request: ChatRequest) -> dict[str, Any]:
         """Send a buffered Responses request."""
-        return self._client.create_response(self._call(request)).model_dump(
-            exclude_none=True
-        )
+        return self._client.create_response(self._call(request)).model_dump(exclude_none=True)
 
     def chat_stream(self, request: ChatRequest) -> Iterable[dict[str, Any]]:
         """Stream a Responses request, dumping each typed event to a dict."""
@@ -199,9 +192,7 @@ class ResponsesProvider:
             # ends, and the run loop finalizes the truncated partial as a
             # complete answer with no usage — a failed turn stored, and
             # reported, as a successful one.
-            raise ExternalServiceError(
-                event.message or "OpenAI reported a stream error."
-            )
+            raise ExternalServiceError(event.message or "OpenAI reported a stream error.")
         if event.type in TERMINAL_EVENTS:
             return self._terminal(event)
         return None
@@ -240,9 +231,7 @@ class ResponsesProvider:
                     "type": "function",
                     "function": {
                         "name": item.name or "",
-                        "arguments": tr.encode_arguments(item.arguments)
-                        if item.arguments
-                        else "",
+                        "arguments": tr.encode_arguments(item.arguments) if item.arguments else "",
                     },
                 }
             ]
@@ -271,17 +260,11 @@ class ResponsesProvider:
         response = event.response
         finish_reason = "stop"
         if event.type == "response.failed":
-            message = (
-                tr.response_error_text(response) if response is not None else None
-            )
-            raise ExternalServiceError(
-                message or "OpenAI reported the response failed."
-            )
+            message = tr.response_error_text(response) if response is not None else None
+            raise ExternalServiceError(message or "OpenAI reported the response failed.")
         if event.type == "response.incomplete":
             finish_reason = "length"
-        elif response is not None and any(
-            item.type == "function_call" for item in response.output
-        ):
+        elif response is not None and any(item.type == "function_call" for item in response.output):
             finish_reason = "tool_calls"
         return self._snapshot(
             finish_reason=finish_reason,

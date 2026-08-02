@@ -24,15 +24,11 @@ from app.schemas.enums import DocumentStatus
 DISTRACTOR_SNIPPET_CHARS = 600
 
 
-def eligible_documents(
-    session: Session, collection_id: UUID
-) -> list[models.Document]:
+def eligible_documents(session: Session, collection_id: UUID) -> list[models.Document]:
     """READY documents with stored chunks, in a stable order."""
     documents = DocumentRepository(session).list_for_collection(collection_id)
     eligible = [
-        doc
-        for doc in documents
-        if doc.status == DocumentStatus.READY and doc.num_chunks > 0
+        doc for doc in documents if doc.status == DocumentStatus.READY and doc.num_chunks > 0
     ]
     eligible.sort(key=lambda doc: str(doc.id))
     return eligible

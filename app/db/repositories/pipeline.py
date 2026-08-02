@@ -157,4 +157,3 @@ class PipelineRunRepository(Repository):
             statement = statement.where(col(models.PipelineRun.status) == status)
         statement = statement.order_by(desc(col(models.PipelineRun.started_at))).limit(limit)
         return list(self.session.exec(statement).all())
-

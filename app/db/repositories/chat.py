@@ -64,8 +64,7 @@ class ChatRepository(Repository):
                 .where(col(models.ChatSession.user_id) == user_id)
                 .where(
                     ~exists().where(
-                        col(models.ChatSessionCollection.session_id)
-                        == col(models.ChatSession.id)
+                        col(models.ChatSessionCollection.session_id) == col(models.ChatSession.id)
                     )
                 )
             )
@@ -73,9 +72,7 @@ class ChatRepository(Repository):
 
         if not session_ids:
             return []
-        filtered_statement = base_statement.where(
-            col(models.ChatSession.id).in_(session_ids)
-        )
+        filtered_statement = base_statement.where(col(models.ChatSession.id).in_(session_ids))
         return list(self.session.exec(filtered_statement).all())
 
     def list_session_collection_ids(self, session_id: UUID) -> list[UUID]:

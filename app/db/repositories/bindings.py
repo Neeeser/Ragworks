@@ -76,9 +76,7 @@ class CollectionPipelineBindingRepository(Repository):
         )
         return self.session.exec(statement).first() is not None
 
-    def add(
-        self, binding: models.CollectionPipelineBinding
-    ) -> models.CollectionPipelineBinding:
+    def add(self, binding: models.CollectionPipelineBinding) -> models.CollectionPipelineBinding:
         """Persist a new binding and return it."""
         return self._add(binding)
 

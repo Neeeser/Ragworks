@@ -65,9 +65,7 @@ def stale_ingestion_ids(
     return IngestionStaleness(session, collection_id).stale_document_ids(documents)
 
 
-def mark_stale_documents_pending(
-    session: Session, collection: models.Collection
-) -> list[UUID]:
+def mark_stale_documents_pending(session: Session, collection: models.Collection) -> list[UUID]:
     """Reset every stale ready document to `pending` and return their ids.
 
     The caller commits and enqueues — the queue contract requires the pending

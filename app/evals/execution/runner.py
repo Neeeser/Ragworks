@@ -167,7 +167,14 @@ class EvalRunner:
         queries = self._sampled_queries(all_queries, plan)
         mapping = EvalProvisioner(self.session).document_mapping(provision.collection.id)
         funnel_inputs = self._evaluate_queries(
-            run, user, provision.collection, queries, qrels, plan, config, mapping,
+            run,
+            user,
+            provision.collection,
+            queries,
+            qrels,
+            plan,
+            config,
+            mapping,
             provision.indexed_external_ids,
         )
         if self._cancelled(run):
@@ -209,9 +216,7 @@ class EvalRunner:
         retrieval = self._require_pipeline(pipelines, run.retrieval_pipeline_id, user.id)
         provisioner = EvalProvisioner(self.session)
         cache_key = provisioner.cache_key_for(dataset, ingestion)
-        corpus_docs = self.datasets.get_documents_by_external_ids(
-            dataset.id, plan.corpus_doc_ids
-        )
+        corpus_docs = self.datasets.get_documents_by_external_ids(dataset.id, plan.corpus_doc_ids)
 
         def bump() -> None:
             run.progress_done += 1

@@ -52,7 +52,9 @@ class IndexProbeRule:
         namespace: str | None,
     ) -> list[CollectionDiagnostic]:
         """Probe one index target, degrading to an info finding on failure."""
-        resource = DiagnosticResource(kind="index", name=target.index_name, pipeline_side="retrieval")
+        resource = DiagnosticResource(
+            kind="index", name=target.index_name, pipeline_side="retrieval"
+        )
         try:
             stats = ctx.prober.stats(target.backend, target.index_name, namespace)
         except ProbeUnavailable:

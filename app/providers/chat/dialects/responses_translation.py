@@ -133,11 +133,7 @@ def _reasoning_text(item_summary: list[dict[str, Any]] | None) -> str:
     """Join a reasoning item's summary parts into displayable text."""
     if not item_summary:
         return ""
-    return "".join(
-        str(part.get("text", ""))
-        for part in item_summary
-        if isinstance(part, dict)
-    )
+    return "".join(str(part.get("text", "")) for part in item_summary if isinstance(part, dict))
 
 
 def response_to_message(response: ResponsesResponse) -> dict[str, Any]:
@@ -147,9 +143,7 @@ def response_to_message(response: ResponsesResponse) -> dict[str, Any]:
     tool_calls: list[dict[str, Any]] = []
     for item in response.output:
         if item.type == "message":
-            text_parts.extend(
-                part.text for part in item.content or [] if part.text is not None
-            )
+            text_parts.extend(part.text for part in item.content or [] if part.text is not None)
         elif item.type == "function_call":
             tool_calls.append(
                 {

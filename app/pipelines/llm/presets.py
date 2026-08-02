@@ -120,8 +120,7 @@ RERANK_PRESETS: tuple[NodePreset, ...] = (
         id="llm-judge",
         label="LLM Judge",
         description=(
-            "Score chunks like the reranker, then drop everything scoring "
-            "below the threshold."
+            "Score chunks like the reranker, then drop everything scoring below the threshold."
         ),
         config={
             "system_prompt": (

@@ -99,9 +99,7 @@ def parse_candidates(raw: str) -> list[CandidateQuestion]:
         quote = _clean_str(item.get("quote"))
         answer = _clean_str(item.get("answer"))
         if question and quote:
-            candidates.append(
-                CandidateQuestion(question=question, answer=answer, quote=quote)
-            )
+            candidates.append(CandidateQuestion(question=question, answer=answer, quote=quote))
     return candidates
 
 
@@ -121,9 +119,7 @@ def parse_critiques(raw: str, expected: int) -> list[CritiqueScores] | None:
     return scores
 
 
-def quote_matches(
-    quote: str, context: str, threshold: float = QUOTE_MATCH_THRESHOLD
-) -> bool:
+def quote_matches(quote: str, context: str, threshold: float = QUOTE_MATCH_THRESHOLD) -> bool:
     """True when the quote appears (near-)verbatim in the context.
 
     Whitespace and case are normalized first; then either the quote is a

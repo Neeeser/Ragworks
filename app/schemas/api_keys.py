@@ -46,9 +46,7 @@ class ApiKeyCreate(BaseModel):
 
     @field_validator("capabilities")
     @classmethod
-    def _unique_capabilities(
-        cls, value: list[ApiKeyCapability]
-    ) -> list[ApiKeyCapability]:
+    def _unique_capabilities(cls, value: list[ApiKeyCapability]) -> list[ApiKeyCapability]:
         """Reject duplicate capabilities rather than silently collapsing them."""
         if len(set(value)) != len(value):
             raise ValueError("Capabilities must be unique.")

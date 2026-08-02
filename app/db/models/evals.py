@@ -30,9 +30,7 @@ class EvalDataset(SQLModel, TimestampMixin, table=True):
     description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     source: str = Field(sa_column=Column(String, nullable=False))
     source_ref: str | None = Field(default=None, sa_column=Column(String, nullable=True))
-    relevance_granularity: str = Field(
-        default="document", sa_column=Column(String, nullable=False)
-    )
+    relevance_granularity: str = Field(default="document", sa_column=Column(String, nullable=False))
     status: str = Field(default="pending", sa_column=Column(String, nullable=False))
     error_message: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     num_queries: int = Field(default=0, sa_column=Column(Integer, nullable=False))
@@ -42,9 +40,7 @@ class EvalDataset(SQLModel, TimestampMixin, table=True):
     # the dataset. `default=0` on the Columns so the bootstrap auto-migration
     # can backfill rows that predate them.
     progress_done: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
-    progress_total: int = Field(
-        default=0, sa_column=Column(Integer, nullable=False, default=0)
-    )
+    progress_total: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
     generation_config: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
@@ -107,12 +103,8 @@ class EvalRun(SQLModel, TimestampMixin, table=True):
     eval_collection_id: UUID | None = Field(
         default=None, foreign_key="collections.id", nullable=True, index=True
     )
-    ingestion_pipeline_id: UUID = Field(
-        foreign_key="pipelines.id", nullable=False, index=True
-    )
-    retrieval_pipeline_id: UUID = Field(
-        foreign_key="pipelines.id", nullable=False, index=True
-    )
+    ingestion_pipeline_id: UUID = Field(foreign_key="pipelines.id", nullable=False, index=True)
+    retrieval_pipeline_id: UUID = Field(foreign_key="pipelines.id", nullable=False, index=True)
     name: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     status: str = Field(default="pending", sa_column=Column(String, nullable=False))

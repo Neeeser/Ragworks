@@ -111,7 +111,7 @@ class AuthSessionRepository(Repository):
                     token_digest=rotated_digest,
                     last_used_at=used_at,
                 )
-            )
+            ),
         )
         return result.rowcount == 1
 

@@ -150,9 +150,7 @@ def load_beir_zip(
     queries_member = _find_member(names, "queries.jsonl")
     qrels_member = _find_qrels_member(names)
     if not corpus_member or not queries_member or not qrels_member:
-        raise InvalidInputError(
-            "Benchmark archive is missing a corpus, queries, or qrels file."
-        )
+        raise InvalidInputError("Benchmark archive is missing a corpus, queries, or qrels file.")
 
     return parse_beir_upload(
         name=name,

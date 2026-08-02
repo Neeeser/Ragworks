@@ -22,9 +22,7 @@ class RegisteredIndexRepository(Repository):
         backend: IndexBackend | None = None,
     ) -> list[models.RegisteredIndex]:
         """List a user's registered indexes in stable name order."""
-        statement = user_scoped(
-            select(models.RegisteredIndex), models.RegisteredIndex, user_id
-        )
+        statement = user_scoped(select(models.RegisteredIndex), models.RegisteredIndex, user_id)
         if backend is not None:
             statement = statement.where(col(models.RegisteredIndex.backend) == backend)
         statement = statement.order_by(

@@ -116,9 +116,7 @@ def parse_message(body: bytes) -> JsonRpcRequest:
     try:
         return JsonRpcRequest.model_validate(payload)
     except ValidationError as exc:
-        raise ProtocolError(
-            INVALID_REQUEST, "Body is not a valid JSON-RPC 2.0 message."
-        ) from exc
+        raise ProtocolError(INVALID_REQUEST, "Body is not a valid JSON-RPC 2.0 message.") from exc
 
 
 def success_payload(message_id: str | int, result: McpModel) -> dict[str, Any]:

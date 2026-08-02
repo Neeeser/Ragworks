@@ -103,7 +103,9 @@ def _service(session: Session) -> CollectionHistoryService:
 @pytest.mark.parametrize(
     ("span", "expected"),
     [
-        (timedelta(minutes=20), 60),
+        (timedelta(seconds=30), 1),
+        (timedelta(minutes=2), 5),
+        (timedelta(minutes=20), 30),
         (timedelta(hours=1), 60),
         (timedelta(hours=3), 300),
         (timedelta(days=1), 1800),
@@ -406,3 +408,167 @@ def test_unknown_collection_id_yields_an_empty_history(session: Session) -> None
 
     assert history.tools == []
     assert all(point.document_total == 0 for point in history.points)
+
+
+def test_history_returns_one_event_per_query_with_its_series_key(session: Session) -> None:
+    """Query dots carry the moment and duration of individual queries, not a bucket."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    session.add_all(
+        [
+            _query_event(collection, user, latency, now - timedelta(minutes=offset))
+            for offset, latency in ((30, 120.0), (20, 480.0), (10, 95.0))
+        ]
+    )
+    session.commit()
+
+    history = _service(session).history_for(
+        user_id=user.id,
+        collection_id=collection.id,
+        collection_created_at=collection.created_at,
+    )
+
+    assert [event.duration_ms for event in history.query_events] == [120.0, 480.0, 95.0]
+    assert {event.key for event in history.query_events} == {UNATTRIBUTED_TOOL_KEY}
+    assert history.events_sampled is False
+
+
+def test_history_returns_one_event_per_completed_ingest_run(session: Session) -> None:
+    """Ingest dots come from runs, so a handful of runs is a handful of readable points."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    pipeline = models.Pipeline(user_id=user.id, name="ingest")
+    session.add(pipeline)
+    session.commit()
+    session.add_all(
+        [
+            models.PipelineRun(
+                pipeline_id=pipeline.id,
+                trigger=models.BindingRole.INGEST,
+                user_id=user.id,
+                collection_id=collection.id,
+                status=models.PipelineRunStatus.COMPLETED,
+                started_at=now - timedelta(minutes=offset),
+                completed_at=now - timedelta(minutes=offset, seconds=-seconds),
+                created_at=now - timedelta(minutes=offset),
+            )
+            for offset, seconds in ((30, 2), (20, 5))
+        ]
+    )
+    session.commit()
+
+    # An explicit span: the lifetime domain is anchored on the first document
+    # or query, and this collection has neither — only runs.
+    history = _service(session).history_for(
+        user_id=user.id,
+        collection_id=collection.id,
+        collection_created_at=collection.created_at,
+        start=now - timedelta(hours=1),
+        end=now,
+    )
+
+    assert [event.duration_ms for event in history.ingestion_events] == [2000.0, 5000.0]
+    assert all(event.key is None for event in history.ingestion_events)
+
+
+def test_event_sampling_thins_evenly_but_always_keeps_the_slowest(session: Session) -> None:
+    """Over the cap the dots thin, and the outlier a reader is scanning for survives."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    session.add_all(
+        [
+            _query_event(collection, user, 100.0, now - timedelta(minutes=60 - index))
+            for index in range(40)
+        ]
+    )
+    # The one slow query, sitting at an index a blind stride would skip.
+    session.add(_query_event(collection, user, 9000.0, now - timedelta(minutes=60 - 7)))
+    session.commit()
+
+    domain = resolve_domain(
+        collection_created_at=collection.created_at,
+        first_activity_at=now - timedelta(hours=1),
+    )
+    events = CollectionLatencyRepository(session).query_events(
+        user.id, collection.id, domain, cap=10
+    )
+
+    assert len(events) < 41, "the sample must thin below the recorded total"
+    assert max(event.duration_ms for event in events) == 9000.0
+
+
+def test_events_sampled_flags_a_thinned_response(session: Session) -> None:
+    """A reader seeing fewer dots than the count is told the list was thinned."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    session.add_all(
+        [
+            _query_event(collection, user, 100.0 + index, now - timedelta(minutes=60 - index))
+            for index in range(40)
+        ]
+    )
+    session.commit()
+
+    service = _service(session)
+    history = service.history_for(
+        user_id=user.id,
+        collection_id=collection.id,
+        collection_created_at=collection.created_at,
+    )
+    assert history.events_sampled is False
+    assert len(history.query_events) == 40
+
+
+def test_retrieval_spread_is_measured_across_tools_not_folded_from_them(
+    session: Session,
+) -> None:
+    """The combined band comes from every query at once, never from per-tool p95s."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    pipeline = models.Pipeline(user_id=user.id, name="search")
+    session.add(pipeline)
+    session.commit()
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        trigger=models.BindingRole.TOOL,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+        started_at=now - timedelta(minutes=30),
+        completed_at=now - timedelta(minutes=30),
+        created_at=now - timedelta(minutes=30),
+    )
+    session.add(run)
+    session.commit()
+
+    # One tool is uniformly fast, the other uniformly slow. Folding their p95s
+    # would report the slow tool's 900; measuring across all queries does not.
+    session.add_all(
+        [_query_event(collection, user, 100.0, now - timedelta(minutes=30), run.id)] * 1
+        + [_query_event(collection, user, 100.0, now - timedelta(minutes=30)) for _ in range(9)]
+        + [_query_event(collection, user, 900.0, now - timedelta(minutes=30))]
+    )
+    session.commit()
+
+    history = _service(session).history_for(
+        user_id=user.id,
+        collection_id=collection.id,
+        collection_created_at=collection.created_at,
+    )
+
+    assert history.retrieval_summary.count == 11
+    assert history.retrieval_summary.p50_ms == pytest.approx(100.0)
+    busy = [point for point in history.points if point.retrieval.count]
+    assert busy, "the queried bucket must carry a combined retrieval aggregate"
+    assert busy[0].retrieval.count == 11
+    assert busy[0].retrieval.p50_ms == pytest.approx(100.0)

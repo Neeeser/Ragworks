@@ -53,9 +53,7 @@ def evaluate(
         return expr.value
     if isinstance(expr, Name):
         if expr.name == SELF_SCOPE:
-            raise ExpressionTypeError(
-                f"'{SELF_SCOPE}' is a scope, not a value", expr.position
-            )
+            raise ExpressionTypeError(f"'{SELF_SCOPE}' is a scope, not a value", expr.position)
         if expr.name not in env:
             raise ExpressionTypeError(f"Unknown variable '{expr.name}'", expr.position)
         return env[expr.name]
@@ -80,18 +78,14 @@ def _require_numeric(value: ExprValue, context: str, position: int) -> Numeric:
     `flag * 2` must fail here exactly as it does in static checking.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ExpressionTypeError(
-            f"{context} requires a number, got {value_type(value)}", position
-        )
+        raise ExpressionTypeError(f"{context} requires a number, got {value_type(value)}", position)
     return value
 
 
 def _require_integer(value: ExprValue, op: str, position: int) -> int:
     """Narrow a value to a non-boolean int or raise a typed error."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ExpressionTypeError(
-            f"'{op}' requires integers, got {value_type(value)}", position
-        )
+        raise ExpressionTypeError(f"'{op}' requires integers, got {value_type(value)}", position)
     return value
 
 

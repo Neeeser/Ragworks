@@ -25,12 +25,8 @@ class ProviderConnection(SQLModel, TimestampMixin, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     user_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-        )
+        sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     )
     provider_type: str = Field(sa_column=Column(String(32), nullable=False))
     label: str = Field(sa_column=Column(String(100), nullable=False))
-    config: dict[str, Any] = Field(
-        default_factory=dict, sa_column=Column(JSON, nullable=False)
-    )
+    config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))

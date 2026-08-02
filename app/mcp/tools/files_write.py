@@ -86,9 +86,7 @@ class UploadFileTool(TypedTool[UploadFileArguments]):
     @property
     def annotations(self) -> ToolAnnotations | None:
         """Writes, but never destroys: a name collision is de-duplicated."""
-        return ToolAnnotations(
-            read_only_hint=False, destructive_hint=False, idempotent_hint=False
-        )
+        return ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False)
 
     def run(self, arguments: UploadFileArguments) -> CallToolResult:
         """Decode, size-check, store, and queue the upload."""
@@ -166,9 +164,7 @@ class DeleteFileTool(TypedTool[DeleteFileArguments]):
     @property
     def annotations(self) -> ToolAnnotations | None:
         """Destructive: harnesses should confirm before calling."""
-        return ToolAnnotations(
-            read_only_hint=False, destructive_hint=True, idempotent_hint=True
-        )
+        return ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True)
 
     def run(self, arguments: DeleteFileArguments) -> CallToolResult:
         """Resolve the path and run the deletion service."""
@@ -224,9 +220,7 @@ class CreateFolderTool(TypedTool[CreateFolderArguments]):
     @property
     def annotations(self) -> ToolAnnotations | None:
         """Writes, but never destroys."""
-        return ToolAnnotations(
-            read_only_hint=False, destructive_hint=False, idempotent_hint=False
-        )
+        return ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False)
 
     def run(self, arguments: CreateFolderArguments) -> CallToolResult:
         """Create the folder named by the path's final segment."""

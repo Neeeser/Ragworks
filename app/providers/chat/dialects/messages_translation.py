@@ -152,8 +152,7 @@ def tools_to_anthropic(tools: list[dict[str, Any]] | None) -> list[dict[str, Any
             continue
         entry: dict[str, Any] = {
             "name": function.get("name"),
-            "input_schema": function.get("parameters")
-            or {"type": "object", "properties": {}},
+            "input_schema": function.get("parameters") or {"type": "object", "properties": {}},
         }
         description = function.get("description")
         if description:
@@ -174,9 +173,7 @@ def usage_to_chat_shape(usage: MessagesUsage | None) -> dict[str, Any]:
     if usage.input_tokens is not None and usage.output_tokens is not None:
         shaped["total_tokens"] = usage.input_tokens + usage.output_tokens
     if usage.cache_read_input_tokens is not None:
-        shaped["prompt_tokens_details"] = {
-            "cached_tokens": usage.cache_read_input_tokens
-        }
+        shaped["prompt_tokens_details"] = {"cached_tokens": usage.cache_read_input_tokens}
     return shaped
 
 

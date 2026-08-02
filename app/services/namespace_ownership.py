@@ -70,13 +70,10 @@ def assert_namespace_owned(session: Session, namespace: str, user_id: UUID) -> N
     )
 
 
-def has_foreign_namespace(
-    session: Session, namespaces: Iterable[str], user_id: UUID
-) -> bool:
+def has_foreign_namespace(session: Session, namespaces: Iterable[str], user_id: UUID) -> bool:
     """Whether any namespace names a collection another account owns."""
     return any(
-        _foreign_collection_id(session, namespace, user_id) is not None
-        for namespace in namespaces
+        _foreign_collection_id(session, namespace, user_id) is not None for namespace in namespaces
     )
 
 

@@ -143,18 +143,12 @@ def resolve_ingest_binding(
     existing = bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST)
     if not existing:
         if not scaffold:
-            raise PipelineResolutionError(
-                "No ingestion pipeline is bound to this collection."
-            )
+            raise PipelineResolutionError("No ingestion pipeline is bound to this collection.")
         _scaffold_bindings(service, user, collection)
-        existing = bindings.list_for_collection(
-            collection.id, role=models.BindingRole.INGEST
-        )
+        existing = bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST)
     if not existing:
         raise PipelineResolutionError("Ingestion pipeline could not be resolved.")
-    return _load_resolved(
-        service, user, collection, existing[0], registry, context="ingestion"
-    )
+    return _load_resolved(service, user, collection, existing[0], registry, context="ingestion")
 
 
 def resolve_primary_tool(
@@ -184,9 +178,7 @@ def resolve_primary_tool(
         primary = tools[0] if tools else None
     if primary is None:
         raise PipelineResolutionError("Primary search tool could not be resolved.")
-    return _load_resolved(
-        service, user, collection, primary, registry, context="retrieval"
-    )
+    return _load_resolved(service, user, collection, primary, registry, context="retrieval")
 
 
 def resolve_tool_binding(

@@ -38,12 +38,8 @@ def create_generation_dataset(
     if collection.system_purpose is not None:
         raise InvalidInputError("Eval collections cannot seed synthetic datasets.")
     documents = DocumentRepository(session).list_for_collection(collection.id)
-    if not any(
-        doc.status == DocumentStatus.READY and doc.num_chunks > 0 for doc in documents
-    ):
-        raise InvalidInputError(
-            "The collection has no ingested documents to generate from."
-        )
+    if not any(doc.status == DocumentStatus.READY and doc.num_chunks > 0 for doc in documents):
+        raise InvalidInputError("The collection has no ingested documents to generate from.")
     connection = resolve_connection(session, user, payload.connection_id)
     get_provider(connection, ProviderKind.CHAT)  # kind mismatch -> 400 before any work
     dataset = EvalDatasetRepository(session).add(

@@ -39,12 +39,8 @@ class OpenRouterProvider(ChatCompletionsProvider):
 
     def __init__(self, client: OpenRouterClient) -> None:
         """Bind the dialect to OpenRouter's transport and per-model catalog."""
-        super().__init__(
-            client.compat, name="openrouter", model_resolver=client.get_model
-        )
+        super().__init__(client.compat, name="openrouter", model_resolver=client.get_model)
 
     def build_extra_body(self, request: ChatRequest) -> dict[str, Any] | None:
         """Attach OpenRouter's reasoning, routing, and usage-accounting block."""
-        return build_openrouter_body(
-            request.reasoning_options, request.provider_preferences
-        )
+        return build_openrouter_body(request.reasoning_options, request.provider_preferences)
