@@ -13,12 +13,7 @@ import {
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type {
-  Collection,
-  PromptRead,
-  PromptSelection,
-  PromptVersionSelector,
-} from "@/lib/types";
+import type { Collection, PromptRead, PromptSelection, PromptVersionSelector } from "@/lib/types";
 
 export interface PromptChoice {
   promptId: string;
@@ -92,9 +87,9 @@ export function usePromptEditor({
   const [baseSelection, setBaseSelection] = useState<PromptSelection | null>(null);
   const [basePromptLoading, setBasePromptLoading] = useState(false);
   const [basePromptError, setBasePromptError] = useState<string | null>(null);
-  const [collectionSelections, setCollectionSelections] = useState<
-    Record<string, PromptSelection>
-  >({});
+  const [collectionSelections, setCollectionSelections] = useState<Record<string, PromptSelection>>(
+    {},
+  );
   const [collectionErrors, setCollectionErrors] = useState<Record<string, string | null>>({});
   const [collectionLoading, setCollectionLoading] = useState<Record<string, boolean>>({});
   const [choices, setChoices] = useState<Record<string, PromptChoice | null>>({});
@@ -208,8 +203,7 @@ export function usePromptEditor({
         choice.version === "latest"
           ? getPrompt(authToken, choice.promptId).then((detail) => detail.body)
           : listPromptVersions(authToken, choice.promptId).then(
-              (versions) =>
-                versions.find((entry) => entry.version === choice.version)?.body ?? "",
+              (versions) => versions.find((entry) => entry.version === choice.version)?.body ?? "",
             );
       void loadBody
         .then((body) => {

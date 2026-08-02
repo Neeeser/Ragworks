@@ -138,15 +138,26 @@ def _run_completion(
     payload: PromptTestRequest,
     preview: PromptRenderRead,
 ) -> str:
-    """One plain completion for chat-context prompts."""
+    """One plain completion.
+
+    Chat-context prompts are system prompts, so the rendered text goes in
+    the system slot with a canned user turn to react to; node-context
+    prompts are the user message itself (with their own system template).
+    """
     provider = providers.chat(payload.connection_id)
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": preview.rendered},
-        {
-            "role": "user",
-            "content": "Introduce yourself briefly and state what you can help with.",
-        },
-    ]
+    if payload.context in _NODE_CONTEXTS:
+        messages: list[dict[str, Any]] = []
+        if preview.rendered_system:
+            messages.append({"role": "system", "content": preview.rendered_system})
+        messages.append({"role": "user", "content": preview.rendered})
+    else:
+        messages = [
+            {"role": "system", "content": preview.rendered},
+            {
+                "role": "user",
+                "content": "Introduce yourself briefly and state what you can help with.",
+            },
+        ]
     request = ChatRequest(
         messages=messages,
         tools=None,

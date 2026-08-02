@@ -4,7 +4,6 @@ import { ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useId } from "react";
 
-import type { PromptChoice, PromptSection } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -13,6 +12,10 @@ import { Markdown } from "@/components/ui/markdown";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { cn } from "@/lib/utils";
 
+import type {
+  PromptChoice,
+  PromptSection,
+} from "@/components/chat-studio/hooks/settings/use-prompt-editor";
 import type { PromptContext, PromptRead } from "@/lib/types";
 
 interface PromptEditorOverlayProps {

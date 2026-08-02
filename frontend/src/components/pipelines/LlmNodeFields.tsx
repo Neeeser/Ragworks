@@ -3,10 +3,11 @@
 import { Plus, X } from "lucide-react";
 
 import { CustomSelect } from "@/components/ui/custom-select";
-import { Field, TextArea, TextInput } from "@/components/ui/field";
+import { TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import { allowedTargets, emptyOutputField, outputFieldsFromConfig } from "./lib/llm";
+import { PromptRefField } from "./PromptRefField";
 
 import type { LlmOutputField, LlmOutputTarget, PipelineValidationIssue } from "@/lib/types";
 
@@ -16,12 +17,6 @@ type LlmNodeFieldsProps = {
   disabled: boolean;
   validationIssues: PipelineValidationIssue[];
   onConfigChange: (config: Record<string, unknown>) => void;
-};
-
-const PLACEHOLDER_HINTS: Record<string, string> = {
-  "llm.transform": "{text}, {document_text}, {query}, {metadata.<key>}",
-  "llm.rerank": "{items}, {query}",
-  "llm.generate": "{text}, {query}, {metadata.<key>}",
 };
 
 const TYPE_OPTIONS = [
@@ -59,8 +54,6 @@ export function LlmNodeFields({
 }: LlmNodeFieldsProps) {
   const fields = outputFieldsFromConfig(config);
   const targets = allowedTargets(nodeType);
-  const systemPrompt = typeof config.system_prompt === "string" ? config.system_prompt : "";
-  const prompt = typeof config.prompt === "string" ? config.prompt : "";
 
   const setValue = (key: string, value: unknown) => {
     onConfigChange({ ...config, [key]: value });
@@ -82,27 +75,18 @@ export function LlmNodeFields({
 
   return (
     <div className="space-y-3">
-      <Field label="System prompt">
-        <TextArea
-          rows={2}
-          value={systemPrompt}
-          disabled={disabled}
-          onChange={(event) => setValue("system_prompt", event.target.value)}
-        />
-      </Field>
-      <Field
-        label="Prompt"
-        hint={`Placeholders: ${PLACEHOLDER_HINTS[nodeType] ?? "{text}"}`}
-        error={issueFor("prompt") ?? issueFor("system_prompt")}
-      >
-        <TextArea
-          rows={5}
-          value={prompt}
-          disabled={disabled}
-          className="font-mono text-ui"
-          onChange={(event) => setValue("prompt", event.target.value)}
-        />
-      </Field>
+      <PromptRefField
+        nodeType={nodeType}
+        config={config}
+        disabled={disabled}
+        validationIssues={validationIssues}
+        onConfigChange={onConfigChange}
+      />
+      {(issueFor("prompt") ?? issueFor("system_prompt")) && (
+        <p role="alert" className="text-instrument text-data-neg">
+          {issueFor("prompt") ?? issueFor("system_prompt")}
+        </p>
+      )}
 
       <div>
         <div className="flex items-center justify-between">

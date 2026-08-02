@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LlmNodeFields } from "../LlmNodeFields";
 
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+
 const TRANSFORM_TYPE = "llm.transform";
 
 const renderFields = (
@@ -24,11 +27,16 @@ const renderFields = (
 };
 
 describe("LlmNodeFields", () => {
-  it("writes prompt edits into config", async () => {
+  it("writes a picked library prompt as a latest-version reference", async () => {
     const user = userEvent.setup();
-    const onChange = renderFields(TRANSFORM_TYPE, { prompt: "" });
-    await user.type(screen.getByLabelText("Prompt"), "x");
-    expect(onChange).toHaveBeenLastCalledWith({ prompt: "x" });
+    const onChange = renderFields(TRANSFORM_TYPE, { prompt: "old inline text" });
+    await user.click(await screen.findByRole("combobox", { name: "Prompt" }));
+    await user.click(await screen.findByRole("option", { name: "Base prompt" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      prompt: "",
+      system_prompt: "",
+      prompt_ref: { prompt_id: "prompt-1", version: "latest" },
+    });
   });
 
   it("adds a shell-appropriate output field", async () => {

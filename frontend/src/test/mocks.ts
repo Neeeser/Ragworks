@@ -117,7 +117,12 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     getCollectionPrompt: vi.fn(async () => makePromptSelection()),
     getBasePrompt: vi.fn(async () => makePromptSelection()),
     listPrompts: vi.fn(async () => [makePromptRead()]),
-    getPrompt: vi.fn(async () => ({ ...makePromptRead(), body: "Body", system_body: null, used_by: [] })),
+    getPrompt: vi.fn(async () => ({
+      ...makePromptRead(),
+      body: "Body",
+      system_body: null,
+      used_by: [],
+    })),
     createPrompt: vi.fn(async () => makePromptRead()),
     updatePrompt: vi.fn(async () => makePromptRead()),
     deletePrompt: vi.fn(async () => undefined),
