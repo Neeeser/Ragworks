@@ -92,23 +92,35 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-64 flex-1">
-          <InstrumentLabel>Model</InstrumentLabel>
-          <ModelPickerField
-            kind="chat"
-            models={llmModels}
-            selectedConnectionId={model?.connection_id ?? null}
-            selectedModelId={model?.id ?? null}
-            onSelectModel={setModel}
-            placeholder="Pick a model"
-            aria-label="Test model"
-          />
+      <div>
+        <InstrumentLabel>Model</InstrumentLabel>
+        {/* Centered, not bottom-aligned: the picker grows to two lines once a
+            model is chosen, and an edge-aligned button reads as misplaced
+            against a card twice its height. */}
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="min-w-64 flex-1">
+            <ModelPickerField
+              kind="chat"
+              models={llmModels}
+              selectedConnectionId={model?.connection_id ?? null}
+              selectedModelId={model?.id ?? null}
+              onSelectModel={setModel}
+              placeholder="Pick a model"
+              aria-label="Test model"
+            />
+          </div>
+          <Button
+            size="sm"
+            glow
+            className="shrink-0"
+            onClick={handleRun}
+            loading={running}
+            disabled={!model || running}
+          >
+            <Play className="h-3.5 w-3.5" aria-hidden />
+            Run test
+          </Button>
         </div>
-        <Button size="sm" glow onClick={handleRun} loading={running} disabled={!model || running}>
-          <Play className="h-3.5 w-3.5" aria-hidden />
-          Run test
-        </Button>
       </div>
       {structured && (
         <p className="text-instrument text-meta">
