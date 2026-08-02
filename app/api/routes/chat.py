@@ -31,17 +31,11 @@ from app.schemas.chat import (
     ChatMessageRead,
     ChatSessionRead,
 )
-from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
+from app.schemas.prompts import PromptReference, PromptSelectionRead, PromptSelectionUpdate
 from app.services.accounts import AccountService
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
-from app.services.prompts import (
-    apply_prompt_template,
-    base_prompt_context,
-    get_base_prompt_template,
-    is_base_prompt_custom,
-    prompt_variables_payload,
-)
+from app.services.prompts.selection import base_prompt_selection
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -56,41 +50,28 @@ def require_chat_branching_enabled() -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
-@router.get("/chat/prompt", response_model=PromptTemplateRead)
+@router.get("/chat/prompt", response_model=PromptSelectionRead)
 def get_base_prompt(
     current_user: models.User = Depends(get_current_user),
-) -> PromptTemplateRead:
-    """Return the rendered base system prompt for the current user."""
-    template = get_base_prompt_template(current_user)
-    context = base_prompt_context(current_user)
-    rendered = apply_prompt_template(template, context)
-    return PromptTemplateRead(
-        template=template,
-        rendered=rendered,
-        context=context,
-        variables=prompt_variables_payload(scope="base"),
-        is_custom=is_base_prompt_custom(current_user),
-    )
+    session: Session = Depends(get_session),
+) -> PromptSelectionRead:
+    """Return the user's base prompt selection and its rendering."""
+    return base_prompt_selection(session, current_user)
 
 
-@router.patch("/chat/prompt", response_model=PromptTemplateRead)
+@router.patch("/chat/prompt", response_model=PromptSelectionRead)
 def update_base_prompt(
-    payload: PromptTemplateUpdate,
+    payload: PromptSelectionUpdate,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
-) -> PromptTemplateRead:
-    """Update the base system prompt for the current user."""
-    AccountService(session).update_base_prompt(current_user, payload.template)
-    template = get_base_prompt_template(current_user)
-    context = base_prompt_context(current_user)
-    rendered = apply_prompt_template(template, context)
-    return PromptTemplateRead(
-        template=template,
-        rendered=rendered,
-        context=context,
-        variables=prompt_variables_payload(scope="base"),
-        is_custom=is_base_prompt_custom(current_user),
-    )
+) -> PromptSelectionRead:
+    """Point the user's base prompt at a library prompt."""
+    reference = PromptReference(prompt_id=payload.prompt_id, version=payload.version)
+    try:
+        AccountService(session).set_base_prompt(current_user, reference)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    return base_prompt_selection(session, current_user)
 
 
 @router.post("/chat", response_model=ChatCompletionResponse)

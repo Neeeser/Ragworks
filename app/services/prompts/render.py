@@ -8,7 +8,6 @@ from app.db import models
 from app.prompting import render_template
 
 from .context import base_prompt_context
-from .templates import get_base_prompt_template
 
 
 class PromptContext(BaseModel):
@@ -40,9 +39,14 @@ def apply_prompt_template(template: str, context: dict[str, str]) -> str:
 def render_system_prompt(
     tool_contexts: list[PromptContext],
     user: models.User | None,
+    *,
+    base_template: str,
 ) -> str:
-    """Render the final system prompt for base and tool contexts."""
-    base_template = get_base_prompt_template(user)
+    """Render the final system prompt for base and tool contexts.
+
+    `base_template` is resolved by the caller (chat setup owns the session
+    the reference resolution needs).
+    """
     base_context = base_prompt_context(user)
     sections = [apply_prompt_template(base_template, base_context)]
     sections.extend(

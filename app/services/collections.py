@@ -18,11 +18,13 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import CollectionRepository
+from app.prompting import catalog_for
 from app.schemas.collections import (
     CollectionCreate,
-    CollectionPromptRead,
     CollectionUpdate,
 )
+from app.schemas.enums import PromptContext
+from app.schemas.prompts import PromptReference, PromptSelectionRead
 from app.services.collection_tools import CollectionToolService
 from app.services.errors import InvalidInputError
 from app.services.pipeline_resolution import resolve_ingest_binding, resolve_primary_tool
@@ -30,11 +32,12 @@ from app.services.pipelines import PipelineService
 from app.services.prompts import (
     apply_prompt_template,
     collection_tool_name,
-    get_system_prompt_template,
-    is_collection_prompt_custom,
-    prompt_variables_payload,
     system_prompt_context,
-    with_system_prompt_template,
+)
+from app.services.prompts.selection import (
+    resolve_collection_prompt,
+    selection_prompt_read,
+    set_collection_prompt,
 )
 from app.telemetry import record
 from app.telemetry.events import CollectionCreated
@@ -105,11 +108,11 @@ class CollectionService:
         self,
         collection: models.Collection,
         user: models.User,
-    ) -> CollectionPromptRead:
-        """Render the collection's system prompt template and its live context."""
+    ) -> PromptSelectionRead:
+        """Resolve the collection's tool prompt selection and render it."""
         resolved_ingest = resolve_ingest_binding(self.session, user, collection)
         resolved_tool = resolve_primary_tool(self.session, user, collection)
-        template = get_system_prompt_template(collection)
+        body, reference = resolve_collection_prompt(self.session, collection)
         context = system_prompt_context(
             collection,
             user,
@@ -117,28 +120,23 @@ class CollectionService:
             retrieval_settings=resolved_tool.settings,
             tool_name=collection_tool_name(collection.name),
         )
-        return CollectionPromptRead(
-            template=template,
-            rendered=apply_prompt_template(template, context),
+        return PromptSelectionRead(
+            reference=reference,
+            prompt=selection_prompt_read(self.session, user.id, reference),
+            body=body,
+            rendered=apply_prompt_template(body, context),
             context=context,
-            variables=prompt_variables_payload(scope="collection"),
-            is_custom=is_collection_prompt_custom(collection),
+            variables=list(catalog_for(PromptContext.CHAT_TOOL).variables),
         )
 
     def update_prompt(
         self,
         collection: models.Collection,
         user: models.User,
-        template: str | None,
-    ) -> CollectionPromptRead:
-        """Persist a new system prompt template and return the rendered result."""
-        template_value = (template or "").replace("\r\n", "\n")
-        # Reassignment, never in-place mutation: JSON columns aren't change-tracked.
-        collection.extra_metadata = with_system_prompt_template(
-            collection.extra_metadata,
-            template_value,
-        )
-        self.session.add(collection)
+        reference: PromptReference,
+    ) -> PromptSelectionRead:
+        """Point the collection's tool prompt at a library prompt."""
+        set_collection_prompt(self.session, collection, reference)
         self.session.commit()
         self.session.refresh(collection)
         return self.prompt_read(collection, user)

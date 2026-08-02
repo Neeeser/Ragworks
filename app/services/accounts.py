@@ -18,8 +18,11 @@ from app.db import models
 from app.db.repositories import UserRepository
 from app.schemas.auth import UserCreate, UserSettingsUpdate
 from app.schemas.enums import UserRole
+from app.schemas.prompts import PromptReference
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
+from app.services.prompts.seeding import BASE_PROMPT_KEY, seed_shipped_prompts
+from app.services.prompts.selection import set_base_prompt
 from app.telemetry import record
 from app.telemetry.events import UserRegistered
 
@@ -48,6 +51,8 @@ class AccountService:
         # around — sign-up still succeeds and the wizard scaffolds later.
         with suppress(InvalidInputError):
             PipelineService(self.session).ensure_default_pipelines(user)
+        seeded = seed_shipped_prompts(self.session, user.id)
+        user.base_prompt_id = seeded[BASE_PROMPT_KEY].id
         self.session.commit()
         self.session.refresh(user)
         record(UserRegistered(user_id=user.id))
@@ -70,11 +75,9 @@ class AccountService:
         self.session.refresh(user)
         return user
 
-    def update_base_prompt(self, user: models.User, template: str | None) -> models.User:
-        """Persist a user's custom base system prompt (empty/blank clears it)."""
-        normalized = (template or "").strip()
-        user.system_prompt_template = normalized or None
-        self.session.add(user)
+    def set_base_prompt(self, user: models.User, reference: PromptReference) -> models.User:
+        """Point the user's chat base prompt at a library prompt."""
+        set_base_prompt(self.session, user, reference)
         self.session.commit()
         self.session.refresh(user)
         return user

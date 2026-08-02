@@ -1,4 +1,4 @@
-"""Behavior of the prompt-rendering package (templates/context/render)."""
+"""Behavior of the prompt-rendering package (context/render/selection)."""
 
 from __future__ import annotations
 
@@ -11,19 +11,13 @@ from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import PipelineSettings
 from app.schemas.enums import IndexBackend
 from app.services.prompts import (
-    DEFAULT_BASE_PROMPT_TEMPLATE,
-    DEFAULT_SYSTEM_PROMPT_TEMPLATE,
     SYSTEM_PROMPT_METADATA_KEY,
     PromptContext,
     apply_prompt_template,
     base_prompt_context,
     collection_tool_name,
-    get_base_prompt_template,
-    get_system_prompt_template,
-    prompt_variables_payload,
     render_system_prompt,
     system_prompt_context,
-    with_system_prompt_template,
 )
 from app.services.prompts import context as prompts_context
 from app.services.prompts.context import _chunk_strategy_label, _stringify
@@ -78,18 +72,6 @@ def _retrieval_settings(**overrides: Any) -> PipelineSettings:
     }
     defaults.update(overrides)
     return PipelineSettings(**defaults)
-
-
-def test_get_system_prompt_template_falls_back_to_default() -> None:
-    collection = _build_collection(extra_metadata={SYSTEM_PROMPT_METADATA_KEY: "   "})
-    template = get_system_prompt_template(collection)
-    assert template == DEFAULT_SYSTEM_PROMPT_TEMPLATE
-
-
-def test_get_base_prompt_template_falls_back_to_default() -> None:
-    user = _build_user(system_prompt_template="  ")
-    template = get_base_prompt_template(user)
-    assert template == DEFAULT_BASE_PROMPT_TEMPLATE
 
 
 def test_apply_prompt_template_replaces_known_placeholders() -> None:
@@ -152,14 +134,14 @@ def test_chunk_strategy_label_none_without_ingestion_settings() -> None:
     assert _chunk_strategy_label(None) is None
 
 
-def test_render_system_prompt_uses_custom_template(monkeypatch) -> None:
+def test_render_system_prompt_uses_supplied_base_template(monkeypatch) -> None:
     fixed_now = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
     monkeypatch.setattr(prompts_context, "utc_now", lambda: fixed_now)
 
     base_template = "Base {{user.email}} at {{datetime.iso}}"
     tool_template = "Tool {{collection.name}} via {{collection.tool_name}}"
     collection = _build_collection(extra_metadata={SYSTEM_PROMPT_METADATA_KEY: tool_template})
-    user = _build_user(email="custom@example.com", system_prompt_template=base_template)
+    user = _build_user(email="custom@example.com")
 
     ingestion_settings = _ingestion_settings()
     retrieval_settings = _retrieval_settings()
@@ -174,29 +156,20 @@ def test_render_system_prompt_uses_custom_template(monkeypatch) -> None:
     rendered = render_system_prompt(
         [PromptContext(template=tool_template, context=context)],
         user,
+        base_template=base_template,
     )
     assert "Base custom@example.com at 2024-01-02T03:04:05+00:00" in rendered
     assert f"Tool Demo Collection via {collection_tool_name(collection.name)}" in rendered
 
 
 def test_default_system_prompt_without_collections_is_tool_agnostic() -> None:
+    from app.services.prompts import DEFAULT_BASE_PROMPT_TEMPLATE
+
     user = _build_user()
 
-    rendered = render_system_prompt([], user)
+    rendered = render_system_prompt([], user, base_template=DEFAULT_BASE_PROMPT_TEMPLATE)
 
     assert "tool" not in rendered.casefold()
-
-
-def test_prompt_variables_payload_exposes_expected_names() -> None:
-    base_names = {variable.name for variable in prompt_variables_payload(scope="base")}
-    assert "user.email" in base_names
-    assert "datetime.iso" in base_names
-    assert "collection.name" not in base_names
-
-    collection_names = {variable.name for variable in prompt_variables_payload(scope="collection")}
-    assert "collection.name" in collection_names
-    assert "collection.tool_name" in collection_names
-    assert "user.email" in collection_names
 
 
 def test_base_prompt_context_includes_user_profile(monkeypatch) -> None:
@@ -219,23 +192,3 @@ def test_stringify_returns_default_on_unserializable_value() -> None:
 def test_stringify_handles_boolean_values() -> None:
     assert _stringify(True) == "true"
     assert _stringify(False) == "false"
-
-
-def test_with_system_prompt_template_sets_without_mutating_input() -> None:
-    original = {"other": "kept"}
-
-    result = with_system_prompt_template(original, "Hello")
-
-    assert result == {"other": "kept", SYSTEM_PROMPT_METADATA_KEY: "Hello"}
-    assert result is not original
-    assert original == {"other": "kept"}  # never mutated: JSON columns need new dicts
-
-
-def test_with_system_prompt_template_clears_on_blank_without_mutating_input() -> None:
-    original = {"other": "kept", SYSTEM_PROMPT_METADATA_KEY: "old"}
-
-    result = with_system_prompt_template(original, "   ")
-
-    assert result == {"other": "kept"}
-    assert result is not original
-    assert original[SYSTEM_PROMPT_METADATA_KEY] == "old"

@@ -161,6 +161,24 @@ class PromptTestRead(BaseModel):
     structured_output: dict[str, object] | None = None
 
 
+class PromptSelectionRead(BaseModel):
+    """A consumer's current prompt: the reference, entity, and rendering."""
+
+    reference: PromptReference | None = None
+    prompt: PromptRead | None = None
+    body: str
+    rendered: str
+    context: dict[str, str]
+    variables: list[PromptVariable]
+
+
+class PromptSelectionUpdate(BaseModel):
+    """Point a consumer at a library prompt (pin or latest)."""
+
+    prompt_id: UUID
+    version: PromptVersionSelector = "latest"
+
+
 class PromptTemplateRead(BaseModel):
     """Legacy inline-template read shape (chat/collection prompt endpoints)."""
 
