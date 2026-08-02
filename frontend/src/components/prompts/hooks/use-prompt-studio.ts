@@ -20,7 +20,6 @@ import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
 
-
 import { isNodeContext } from "../lib/contexts";
 
 import type {
@@ -163,8 +162,7 @@ export function usePromptStudio(token: string | null) {
     return (
       draft.body !== detail.body ||
       draft.systemBody !== (detail.system_body ?? "") ||
-      JSON.stringify(draft.outputFields) !==
-        JSON.stringify(parseOutputFields(detail.output_fields))
+      JSON.stringify(draft.outputFields) !== JSON.stringify(parseOutputFields(detail.output_fields))
     );
   }, [detail, draft]);
 

@@ -227,7 +227,8 @@ def test_output_fields_version_with_the_prompt(session: Session, user: models.Us
         ),
     )
     stored = service.resolve(user.id, prompt.id, "latest").version.output_fields
-    assert stored is not None and stored[0]["name"] == "topic"
+    assert stored is not None
+    assert stored[0]["name"] == "topic"
     saved = service.save_version(
         user.id, prompt.id, PromptVersionCreate(body="Extract topics from {{text}}")
     )

@@ -170,7 +170,8 @@ def test_seeding_backfills_output_fields_without_a_new_version(
     extractor = seeded["preset.metadata-extractor"]
     versions_repo = PromptVersionRepository(session)
     v1 = versions_repo.get_by_version(extractor.id, 1)
-    assert v1 is not None and v1.output_fields is not None
+    assert v1 is not None
+    assert v1.output_fields is not None
     # Simulate a row seeded before versions carried a schema.
     v1.output_fields = None
     session.add(v1)
@@ -180,4 +181,5 @@ def test_seeding_backfills_output_fields_without_a_new_version(
     session.commit()
     assert reseeded["preset.metadata-extractor"].current_version == 1
     refreshed = versions_repo.get_by_version(extractor.id, 1)
-    assert refreshed is not None and refreshed.output_fields is not None
+    assert refreshed is not None
+    assert refreshed.output_fields is not None

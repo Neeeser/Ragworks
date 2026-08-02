@@ -100,10 +100,12 @@ export function templateEditorExtensions(options: {
 
 /** Insert text at the cursor (replacing any selection), cursor after it. */
 export function insertSnippet(view: EditorView, text: string): void {
-  view.dispatch(view.state.changeByRange((range) => ({
-    changes: { from: range.from, to: range.to, insert: text },
-    range: EditorSelection.cursor(range.from + text.length),
-  })));
+  view.dispatch(
+    view.state.changeByRange((range) => ({
+      changes: { from: range.from, to: range.to, insert: text },
+      range: EditorSelection.cursor(range.from + text.length),
+    })),
+  );
   view.focus();
 }
 
@@ -149,9 +151,7 @@ export function toggleLinePrefix(view: EditorView, prefix: string): void {
     }
   }
   const lineNumbers = [...lines].sort((a, b) => a - b);
-  const allPrefixed = lineNumbers.every((number) =>
-    state.doc.line(number).text.startsWith(prefix),
-  );
+  const allPrefixed = lineNumbers.every((number) => state.doc.line(number).text.startsWith(prefix));
   const changes = lineNumbers.map((number) => {
     const line = state.doc.line(number);
     return allPrefixed

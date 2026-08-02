@@ -20,8 +20,7 @@ export const SYSTEM_BODY_CONTEXTS: readonly PromptContext[] = [
 /** Contexts whose test bench runs the structured-output engine path. */
 export const NODE_CONTEXTS = SYSTEM_BODY_CONTEXTS;
 
-export const isNodeContext = (context: PromptContext): boolean =>
-  NODE_CONTEXTS.includes(context);
+export const isNodeContext = (context: PromptContext): boolean => NODE_CONTEXTS.includes(context);
 
 interface TemplateFieldCopy {
   label: string;

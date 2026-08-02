@@ -128,7 +128,10 @@ function LibraryOverlay({ open, onClose, children }: LibraryOverlayProps) {
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId}>
       <div className="card-surface flex h-[80vh] w-[92vw] max-w-md flex-col gap-2 bg-canvas-raised p-3 shadow-elevation-2">
-        <h2 id={titleId} className="shrink-0 text-head font-semibold tracking-[-0.01em] text-primary">
+        <h2
+          id={titleId}
+          className="shrink-0 text-head font-semibold tracking-[-0.01em] text-primary"
+        >
           Prompt library
         </h2>
         <div className="min-h-0 flex-1">{children}</div>

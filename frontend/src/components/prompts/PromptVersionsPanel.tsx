@@ -47,8 +47,8 @@ export function PromptVersionsPanel({
   }
 
   return (
-    <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[220px_1fr]">
-      <div className="min-h-0 overflow-y-auto">
+    <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[220px_1fr]">
+      <div className="max-h-56 overflow-y-auto lg:max-h-none lg:min-h-0">
         <ul className="divide-y divide-hairline">
           {versions.map((entry) => {
             const isActive = entry.version === selected?.version;
@@ -85,7 +85,7 @@ export function PromptVersionsPanel({
         </ul>
       </div>
 
-      <div className="flex min-h-0 flex-col gap-1">
+      <div className="flex flex-col gap-1 lg:min-h-0">
         <div className="flex items-center justify-between gap-2">
           <InstrumentLabel>
             {predecessor
@@ -98,7 +98,7 @@ export function PromptVersionsPanel({
             </Button>
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-auto rounded-control border border-hairline bg-surface">
+        <div className="overflow-auto rounded-control border border-hairline bg-surface lg:min-h-0 lg:flex-1">
           <pre className="min-w-full p-2 font-mono text-instrument leading-5">
             {diff.map((line, index) => (
               <div

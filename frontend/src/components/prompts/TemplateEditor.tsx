@@ -2,12 +2,7 @@
 
 import { EditorView } from "@codemirror/view";
 import { Bold, Code, Heading2, Italic, List } from "lucide-react";
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-} from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";

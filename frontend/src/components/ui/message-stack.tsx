@@ -69,9 +69,7 @@ export function MessageStack({
               <span className={cn("font-mono text-instrument", ROLE_INK[message.role])}>
                 {message.role}
               </span>
-              {message.note && (
-                <span className="text-instrument text-meta">{message.note}</span>
-              )}
+              {message.note && <span className="text-instrument text-meta">{message.note}</span>}
             </div>
             <div className="p-2">
               {view === "rendered" ? (

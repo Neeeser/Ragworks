@@ -26,7 +26,11 @@ interface PromptEditorPanelProps {
 }
 
 /** The rendered preview as the message payload the templates become. */
-function previewMessages(detail: PromptDetail, preview: PromptRenderResult | null, draft: PromptDraft): StackMessage[] {
+function previewMessages(
+  detail: PromptDetail,
+  preview: PromptRenderResult | null,
+  draft: PromptDraft,
+): StackMessage[] {
   const copy = CONTEXT_ROLE_COPY[detail.context];
   if (isNodeContext(detail.context)) {
     const messages: StackMessage[] = [];
@@ -59,8 +63,8 @@ export function PromptEditorPanel({
   const unknown = preview?.unknown_variables ?? [];
 
   const editorAndPreview = (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 lg:grid lg:grid-cols-2">
-      <div className="flex min-h-0 flex-col gap-2">
+    <div className="flex flex-col gap-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+      <div className="flex flex-col gap-2 lg:min-h-0">
         {hasSystemBody && copy.system && (
           <div className="flex shrink-0 flex-col gap-1">
             <span className="text-instrument font-medium text-muted">
@@ -76,7 +80,7 @@ export function PromptEditorPanel({
             />
           </div>
         )}
-        <div className="flex min-h-0 flex-1 flex-col gap-1">
+        <div className="flex flex-col gap-1 lg:min-h-0 lg:flex-1">
           <span className="text-instrument font-medium text-muted">
             {copy.body.label}
             <span className="ml-2 font-normal text-meta">{copy.body.hint}</span>
@@ -113,7 +117,7 @@ export function PromptEditorPanel({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-col lg:overflow-y-auto">
+      <div className="flex flex-col lg:min-h-0 lg:overflow-y-auto">
         <MessageStack label="Rendered preview" messages={previewMessages(detail, preview, draft)} />
       </div>
     </div>
@@ -156,7 +160,7 @@ export function PromptEditorPanel({
   );
 
   const content = (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
       {editorAndPreview}
       {catalogPanel}
       {isNodeContext(detail.context) && (

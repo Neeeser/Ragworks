@@ -107,7 +107,7 @@ _COLLECTION_VARIABLES: tuple[PromptVariable, ...] = (
 _NODE_TEXT = PromptVariable(
     name="text",
     description="The current item's text (the chunk being processed).",
-    example="Quarterly revenue grew 14% on subscription strength…",
+    example="Quarterly revenue grew 14% on subscription strength, driven by annual plans.",
 )
 _NODE_QUERY = PromptVariable(
     name="query",

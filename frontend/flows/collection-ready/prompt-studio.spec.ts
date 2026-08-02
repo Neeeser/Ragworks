@@ -6,15 +6,18 @@
  * 1. Log in via the API and open the Prompts page.
  * 2. Expect the shipped library seeded by the migration (base prompt,
  *    collection tool prompt, LLM presets) with context chips.
- * 3. Edit the base prompt's template and save it as v2 with a label;
- *    expect the version count and current-version marker to advance.
- * 4. Open the Versions tab and expect the line diff against v1.
+ * 3. Open the base prompt: shipped prompts are read-only, so the editor
+ *    offers "Fork and edit" instead of a save control.
+ * 4. Edit the system prompt (CodeMirror editor) and fork; the draft
+ *    becomes v1 of the new owned prompt.
+ * 5. Edit the fork and save it as v2 with a label; expect the version
+ *    count to advance and the Versions tab to diff v1 → v2.
  */
 import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-test("shipped prompts are seeded, versionable, and diffable", async ({ page }) => {
+test("shipped prompts are read-only and fork-and-edit versions the draft", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
 
@@ -30,11 +33,29 @@ test("shipped prompts are seeded, versionable, and diffable", async ({ page }) =
     timeout: 20_000,
   });
 
-  const body = page.getByLabel("Template");
-  await expect(body).toBeVisible();
-  await body.fill("You are Ragworks. Address {{user.full_name}} directly.");
+  // Read-only shipped prompt: fork-and-edit replaces the save control.
+  await expect(page.getByText("Shipped · read-only")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Save as v/ })).toHaveCount(0);
+
+  const editor = page.getByRole("textbox", { name: "System prompt" });
+  await expect(editor).toBeVisible();
+  await editor.fill("You are Ragworks. Address {{user.full_name}} directly.");
+  await page.getByRole("button", { name: "Fork and edit" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("My base prompt");
+  await dialog.getByRole("button", { name: "Fork", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "My base prompt" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("tab", { name: /Versions \(1\)/ })).toBeVisible();
+
+  // The fork is owned: edit again and save as v2.
+  const forkEditor = page.getByRole("textbox", { name: "System prompt" });
+  await forkEditor.fill("You are Ragworks. Address {{user.full_name}} directly. Be terse.");
   await page.getByLabel("Version label").fill("flow test");
-  await page.getByRole("button", { name: /Save as v/ }).click();
+  await page.getByRole("button", { name: /Save as v2/ }).click();
 
   await expect(page.getByRole("tab", { name: /Versions \(2\)/ })).toBeVisible({ timeout: 20_000 });
   await page.getByRole("tab", { name: /Versions \(2\)/ }).click();
