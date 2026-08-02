@@ -80,6 +80,10 @@ console density still doesn't leak out.
     sidebar is replaced by `MobileNavBar`, a bottom tab bar — the platform-native
     place for section switching that costs the content no width; side panes dock to
     their own edge as drawers over the working surface, never a centered takeover.
+    A canvas-centric editor (the pipeline builder) goes further below `xl`: the
+    working surface keeps the whole screen and its panels open as bottom sheets
+    from a pill row floating over the canvas (`MobileEditorPanels`) — never a
+    stacked pane that starves both halves.
     Verify both viewports back-to-back: resize and screenshot desktop then mobile in
     the same pass, so a phone regression is seen next to the desktop state it drifted
     from.
