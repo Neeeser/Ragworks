@@ -181,6 +181,39 @@ class PromptTestRead(BaseModel):
     structured_output: dict[str, object] | None = None
 
 
+class PromptTestStartEvent(BaseModel):
+    """What a streaming test run sent, emitted before the model answers."""
+
+    type: Literal["start"] = "start"
+    rendered: str
+    rendered_system: str | None = None
+    messages: list[PromptTestMessage] = Field(default_factory=list)
+
+
+class PromptTestTokenEvent(BaseModel):
+    """One content delta from the model."""
+
+    type: Literal["token"] = "token"
+    content: str
+
+
+class PromptTestStructuredEvent(BaseModel):
+    """A structured run's result — the engine returns it whole, not streamed."""
+
+    type: Literal["structured"] = "structured"
+    structured_output: dict[str, object]
+
+
+class PromptTestErrorEvent(BaseModel):
+    """A failure raised after the stream opened, so it can't be an HTTP error."""
+
+    type: Literal["error"] = "error"
+    message: str
+
+
+PromptTestEvent = PromptTestStartEvent | PromptTestTokenEvent | PromptTestStructuredEvent
+
+
 class PromptSelectionRead(BaseModel):
     """A consumer's current prompt: the reference, entity, and rendering."""
 

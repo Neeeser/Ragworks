@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
+from contextlib import ExitStack
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import Session
 
-from app.api.dependencies import get_current_user, get_session
+from app.api.dependencies import get_current_user, get_session, oauth2_scheme
 from app.api.routes.utils import to_http_exception
 from app.db import models
+from app.db.engine import stream_scoped_session
 from app.prompting import catalog_for
 from app.schemas.enums import PromptContext
 from app.schemas.prompts import (
@@ -21,6 +28,7 @@ from app.schemas.prompts import (
     PromptRead,
     PromptRenderRead,
     PromptRenderRequest,
+    PromptTestErrorEvent,
     PromptTestRead,
     PromptTestRequest,
     PromptUpdate,
@@ -29,7 +37,7 @@ from app.schemas.prompts import (
 )
 from app.services.errors import ServiceError
 from app.services.prompts.library import PromptLibraryService
-from app.services.prompts.studio import render_preview, run_test
+from app.services.prompts.studio import render_preview, run_test, stream_test
 from app.services.prompts.usage import prompt_usages
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
@@ -95,6 +103,46 @@ def run_prompt_test(
         return run_test(session, current_user, payload)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
+
+
+@router.post("/test/stream")
+def stream_prompt_test(
+    payload: PromptTestRequest,
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+) -> StreamingResponse:
+    """Stream a test run over SSE so the answer appears as it arrives.
+
+    Setup runs synchronously so auth and validation failures surface as HTTP
+    errors rather than mid-stream events; the generator outlives this handler,
+    so it owns the session it was handed (mirrors `stream_chat`).
+    """
+    with ExitStack() as stack:
+        session = stack.enter_context(stream_scoped_session())
+        current_user = get_current_user(request=request, token=token, session=session)
+        session_cleanup = stack.pop_all()
+
+    def format_event(event: BaseModel) -> str:
+        return f"data: {json.dumps(jsonable_encoder(event.model_dump()))}\n\n"
+
+    def event_stream() -> Iterator[str]:
+        events = iter(stream_test(session, current_user, payload))
+        try:
+            for event in events:
+                yield format_event(event)
+        except ServiceError as exc:
+            yield format_event(PromptTestErrorEvent(message=exc.detail))
+        except Exception as exc:
+            yield format_event(PromptTestErrorEvent(message=str(exc) or "Test run failed."))
+        finally:
+            yield "data: [DONE]\n\n"
+            session_cleanup.close()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.post("", response_model=PromptRead, status_code=status.HTTP_201_CREATED)

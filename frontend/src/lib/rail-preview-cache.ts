@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { fetchCollections, fetchEvalRuns, fetchPipelines, listChatSessions } from "@/lib/api";
+import {
+  fetchCollections,
+  fetchEvalRuns,
+  fetchPipelines,
+  listChatSessions,
+  listPrompts,
+} from "@/lib/api";
 import { formatTimeAgoCompact } from "@/lib/format";
 import { SharedQueryStore } from "@/lib/shared-query-store";
 
@@ -93,6 +99,21 @@ const SECTIONS: Record<string, RailPreviewSection | undefined> = {
           meta: String(count),
         }));
     },
+  },
+  "/prompts": {
+    description: "Versioned prompt templates that chat, collections, and pipeline nodes reference.",
+    itemsLabel: "Recent",
+    emptyLabel: "No prompts yet.",
+    // The API already returns the user's prompts most-recently-updated first,
+    // and a prompt's `updated_at` is unset until its first save — re-sorting
+    // here on a possibly-absent field would order worse, not better.
+    load: async (token) =>
+      (await listPrompts(token)).slice(0, MAX_ITEMS).map((prompt) => ({
+        id: prompt.id,
+        label: prompt.name,
+        href: `/prompts?prompt=${prompt.id}`,
+        meta: `v${prompt.current_version}`,
+      })),
   },
   "/evals": {
     description: "Retrieval quality scored over a benchmark dataset.",

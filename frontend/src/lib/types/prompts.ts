@@ -137,6 +137,17 @@ export interface PromptTestResult {
   structured_output?: Record<string, unknown> | null;
 }
 
+export type PromptTestStreamEvent =
+  | {
+      type: "start";
+      rendered: string;
+      rendered_system?: string | null;
+      messages: PromptTestMessage[];
+    }
+  | { type: "token"; content: string }
+  | { type: "structured"; structured_output: Record<string, unknown> }
+  | { type: "error"; message: string };
+
 export interface PromptSelection {
   reference: PromptReference | null;
   prompt: PromptRead | null;

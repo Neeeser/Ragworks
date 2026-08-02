@@ -8,14 +8,14 @@ import { useLlmModelCatalog } from "@/components/pipelines/hooks/use-llm-model-c
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { MessageStack } from "@/components/ui/message-stack";
-import { testPrompt } from "@/lib/api";
+import { streamPromptTest } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import { isNodeContext } from "./lib/contexts";
 
 import type { PromptDraft } from "./hooks/use-prompt-studio";
-import type { CatalogModel, PromptDetail, PromptTestResult } from "@/lib/types";
+import type { CatalogModel, PromptDetail, PromptTestMessage } from "@/lib/types";
 
 interface PromptTestBenchProps {
   detail: PromptDetail;
@@ -23,17 +23,29 @@ interface PromptTestBenchProps {
 }
 
 /**
+ * What the bench shows for a run — the same shape whether the answer is
+ * still arriving or has settled, so a streaming run doesn't render through
+ * a second, drifting code path.
+ */
+interface RunOutcome {
+  messages: PromptTestMessage[];
+  text: string;
+  structured: Record<string, unknown> | null;
+}
+
+/**
  * Live execution of the current draft: pick a model, run it, read the exact
- * message payload that was sent and what came back. Node-context prompts
- * with output fields run through the same structured-output engine path the
- * pipeline nodes use; everything else runs as a completion.
+ * message payload that was sent and the answer as it streams back.
+ * Node-context prompts with output fields run through the same
+ * structured-output engine path the pipeline nodes use — the engine returns
+ * that whole, so it arrives in one piece rather than token by token.
  */
 export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
   const { token, user } = useAuth();
   const { llmModels } = useLlmModelCatalog(token, user?.id);
   const [model, setModel] = useState<CatalogModel | null>(null);
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<PromptTestResult | null>(null);
+  const [outcome, setOutcome] = useState<RunOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const structured = isNodeContext(detail.context) && draft.outputFields.length > 0;
@@ -42,19 +54,35 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
     if (!token || !model) return;
     setRunning(true);
     setError(null);
-    setResult(null);
+    setOutcome(null);
     try {
-      const outcome = await testPrompt(token, {
-        body: draft.body,
-        system_body: draft.systemBody || null,
-        context: detail.context,
-        connection_id: model.connection_id,
-        model_name: model.id,
-        output_fields: structured
-          ? draft.outputFields.map((field) => ({ ...field, target: { ...field.target } }))
-          : [],
+      const result = await streamPromptTest(
+        token,
+        {
+          body: draft.body,
+          system_body: draft.systemBody || null,
+          context: detail.context,
+          connection_id: model.connection_id,
+          model_name: model.id,
+          output_fields: structured
+            ? draft.outputFields.map((field) => ({ ...field, target: { ...field.target } }))
+            : [],
+        },
+        {
+          // Paint the payload before the model answers, then each delta as
+          // it lands — a slow model reads as progress, not a spinner.
+          onStart: (start) => setOutcome({ messages: start.messages, text: "", structured: null }),
+          onToken: (content) =>
+            setOutcome((previous) =>
+              previous ? { ...previous, text: previous.text + content } : previous,
+            ),
+        },
+      );
+      setOutcome({
+        messages: result.messages,
+        text: result.response_text ?? "",
+        structured: result.structured_output ?? null,
       });
-      setResult(outcome);
     } catch (runError) {
       setError(getErrorMessage(runError, "Test run failed."));
     } finally {
@@ -89,20 +117,20 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
         </p>
       )}
       {error && <p className="text-ui text-data-neg">{error}</p>}
-      {result && (
+      {outcome && (
         <div className="space-y-3">
-          <MessageStack label="Sent payload" messages={result.messages} defaultView="raw" />
-          {result.structured_output ? (
+          <MessageStack label="Sent payload" messages={outcome.messages} defaultView="raw" />
+          {outcome.structured ? (
             <div className="space-y-1">
               <span className="text-instrument font-medium text-muted">Structured output</span>
               <pre className="overflow-x-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
-                {JSON.stringify(result.structured_output, null, 2)}
+                {JSON.stringify(outcome.structured, null, 2)}
               </pre>
             </div>
           ) : (
             <MessageStack
               label="Response"
-              messages={[{ role: "assistant", content: result.response_text ?? "" }]}
+              messages={[{ role: "assistant", content: outcome.text }]}
             />
           )}
         </div>

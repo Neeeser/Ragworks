@@ -1,4 +1,5 @@
 import { apiFetch, API_BASE_URL, parseError } from "@/lib/api/client";
+import { readSseEvents } from "@/lib/api/sse";
 import { isAbortError } from "@/lib/errors";
 
 import type {
@@ -141,81 +142,44 @@ export async function streamChat(
     throw new Error("Streaming response body is not readable.");
   }
 
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let finalPayload: ChatCompletionPayload | null = null;
   let emittedError = false;
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary !== -1) {
-        const rawEvent = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const dataLine = rawEvent
-          .split("\n")
-          .map((line) => line.trim())
-          .find((line) => line.startsWith("data:"));
-        if (!dataLine) {
-          boundary = buffer.indexOf("\n\n");
-          continue;
-        }
-        const payloadStr = dataLine.slice(5).trim();
-        if (!payloadStr) {
-          boundary = buffer.indexOf("\n\n");
-          continue;
-        }
-        if (payloadStr === "[DONE]") {
-          return finalPayload;
-        }
-        let parsed: ChatStreamEvent;
-        try {
-          parsed = JSON.parse(payloadStr) as ChatStreamEvent;
-        } catch {
-          boundary = buffer.indexOf("\n\n");
-          continue;
-        }
-        if (parsed.type === "token" && parsed.content) {
-          handlers?.onToken?.(parsed.content);
-        } else if (parsed.type === "reasoning") {
-          handlers?.onReasoning?.(parsed.segments ?? []);
-        } else if (parsed.type === "tool_call") {
-          handlers?.onToolCall?.({
-            id: parsed.id,
-            name: parsed.name,
-            arguments: parsed.arguments,
-            reasoning: parsed.reasoning,
-            collection_id: parsed.collection_id,
-            collection_name: parsed.collection_name,
-          });
-        } else if (parsed.type === "tool_result") {
-          handlers?.onToolResult?.({
-            id: parsed.id,
-            name: parsed.name,
-            arguments: parsed.arguments,
-            response: parsed.response,
-            reasoning: parsed.reasoning,
-            collection_id: parsed.collection_id,
-            collection_name: parsed.collection_name,
-          });
-        } else if (parsed.type === "final" && parsed.payload) {
-          finalPayload = parsed.payload;
-        } else if (parsed.type === "error") {
-          const message =
-            typeof parsed.message === "string" && parsed.message.trim()
-              ? parsed.message
-              : STREAMING_REQUEST_FAILED_MESSAGE;
-          handlers?.onError?.(message);
-          emittedError = true;
-          throw new Error(message);
-        }
-        boundary = buffer.indexOf("\n\n");
+    for await (const parsed of readSseEvents<ChatStreamEvent>(body)) {
+      if (parsed.type === "token" && parsed.content) {
+        handlers?.onToken?.(parsed.content);
+      } else if (parsed.type === "reasoning") {
+        handlers?.onReasoning?.(parsed.segments ?? []);
+      } else if (parsed.type === "tool_call") {
+        handlers?.onToolCall?.({
+          id: parsed.id,
+          name: parsed.name,
+          arguments: parsed.arguments,
+          reasoning: parsed.reasoning,
+          collection_id: parsed.collection_id,
+          collection_name: parsed.collection_name,
+        });
+      } else if (parsed.type === "tool_result") {
+        handlers?.onToolResult?.({
+          id: parsed.id,
+          name: parsed.name,
+          arguments: parsed.arguments,
+          response: parsed.response,
+          reasoning: parsed.reasoning,
+          collection_id: parsed.collection_id,
+          collection_name: parsed.collection_name,
+        });
+      } else if (parsed.type === "final" && parsed.payload) {
+        finalPayload = parsed.payload;
+      } else if (parsed.type === "error") {
+        const message =
+          typeof parsed.message === "string" && parsed.message.trim()
+            ? parsed.message
+            : STREAMING_REQUEST_FAILED_MESSAGE;
+        handlers?.onError?.(message);
+        emittedError = true;
+        throw new Error(message);
       }
     }
   } catch (error) {
@@ -227,12 +191,6 @@ export async function streamChat(
       }
     }
     throw error;
-  } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // ignore cancellation errors
-    }
   }
 
   return finalPayload;

@@ -11,27 +11,35 @@ completion.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 from pydantic import TypeAdapter
 from sqlmodel import Session
 
 from app.db import models
+from app.observability import get_logger
 from app.pipelines.llm.config import LlmNodeConfig, OutputFieldSpec
 from app.pipelines.llm.engine import LlmEngine
 from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.prompting import catalog_for, referenced_variables, render_template
-from app.providers.chat.base import ChatRequest
+from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import ProviderResolver
 from app.schemas.enums import PromptContext
 from app.schemas.prompts import (
     PromptRenderRead,
     PromptRenderRequest,
+    PromptTestEvent,
     PromptTestMessage,
     PromptTestRead,
     PromptTestRequest,
+    PromptTestStartEvent,
+    PromptTestStructuredEvent,
+    PromptTestTokenEvent,
 )
 from app.services.errors import InvalidInputError
+
+logger = get_logger(__name__)
 
 #: The canned turn a chat-context test reacts to — chat prompts are system
 #: prompts, so the bench needs a user message for the model to answer.
@@ -77,12 +85,19 @@ def render_preview(payload: PromptRenderRequest) -> PromptRenderRead:
     )
 
 
-def run_test(
+def stream_test(
     session: Session,
     user: models.User,
     payload: PromptTestRequest,
-) -> PromptTestRead:
-    """Execute a prompt against a live model from the test bench."""
+) -> Iterator[PromptTestEvent]:
+    """Run a test, yielding what is known as soon as it is known.
+
+    The payload is emitted before the model is called (so the bench can show
+    exactly what it sent while the answer is still arriving), then either
+    token deltas or — for a structured run, which the engine returns whole —
+    one result event. `run_test` drains this same generator, so buffered and
+    streaming runs can never diverge.
+    """
     preview = render_preview(
         PromptRenderRequest(
             body=payload.body,
@@ -93,20 +108,44 @@ def run_test(
     )
     providers = ProviderResolver(user, session)
     messages = _test_messages(payload.context, preview)
-    if payload.context in _NODE_CONTEXTS and payload.output_fields:
-        structured = _run_structured(providers, payload, preview)
-        return PromptTestRead(
-            rendered=preview.rendered,
-            rendered_system=preview.rendered_system,
-            messages=messages,
-            structured_output=structured,
-        )
-    text = _run_completion(providers, payload, messages)
-    return PromptTestRead(
+    yield PromptTestStartEvent(
         rendered=preview.rendered,
         rendered_system=preview.rendered_system,
         messages=messages,
-        response_text=text,
+    )
+    if payload.context in _NODE_CONTEXTS and payload.output_fields:
+        yield PromptTestStructuredEvent(structured_output=_run_structured(providers, payload, preview))
+        return
+    for delta in _stream_completion(providers, payload, messages):
+        yield PromptTestTokenEvent(content=delta)
+
+
+def run_test(
+    session: Session,
+    user: models.User,
+    payload: PromptTestRequest,
+) -> PromptTestRead:
+    """Execute a prompt against a live model, buffered into one result."""
+    rendered = ""
+    rendered_system: str | None = None
+    messages: list[PromptTestMessage] = []
+    structured: dict[str, object] | None = None
+    tokens: list[str] = []
+    for event in stream_test(session, user, payload):
+        if isinstance(event, PromptTestStartEvent):
+            rendered = event.rendered
+            rendered_system = event.rendered_system
+            messages = event.messages
+        elif isinstance(event, PromptTestStructuredEvent):
+            structured = event.structured_output
+        else:
+            tokens.append(event.content)
+    return PromptTestRead(
+        rendered=rendered,
+        rendered_system=rendered_system,
+        messages=messages,
+        response_text="".join(tokens) if structured is None else None,
+        structured_output=structured,
     )
 
 
@@ -162,22 +201,42 @@ def _parse_output_fields(raw: list[dict[str, object]]) -> list[OutputFieldSpec]:
         raise InvalidInputError(f"Invalid output fields: {exc}") from exc
 
 
-def _run_completion(
+def _stream_completion(
     providers: ProviderResolver,
     payload: PromptTestRequest,
     messages: list[PromptTestMessage],
-) -> str:
-    """One plain completion over the already-built test payload."""
+) -> Iterator[str]:
+    """Content deltas for the already-built test payload.
+
+    Streaming is what makes the bench feel live, but a provider that cannot
+    stream must still answer: a failure opening the stream falls back to one
+    buffered call yielding its whole content, so the caller sees the same
+    event shape either way.
+    """
     provider = providers.chat(payload.connection_id)
-    wire: list[dict[str, Any]] = [
-        {"role": message.role, "content": message.content} for message in messages
-    ]
     request = ChatRequest(
-        messages=wire,
+        messages=[{"role": message.role, "content": message.content} for message in messages],
         tools=None,
         model=payload.model_name,
         parameters=None,
     )
+    try:
+        chunks = provider.chat_stream(request)
+    except Exception:
+        logger.warning("prompt.test.stream_unavailable", provider=provider.name)
+        yield _buffered_content(provider, request)
+        return
+    for chunk in chunks:
+        parsed = provider.parse_stream_chunk(chunk)
+        if parsed is None:
+            continue
+        delta = parsed.delta_content
+        if isinstance(delta, str) and delta:
+            yield delta
+
+
+def _buffered_content(provider: ChatProvider, request: ChatRequest) -> str:
+    """The whole reply from one non-streaming call."""
     parsed = provider.parse_chat_response(provider.chat(request))
     content = parsed.message.get("content")
     return content if isinstance(content, str) else ""

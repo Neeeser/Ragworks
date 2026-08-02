@@ -52,7 +52,6 @@ import {
   makePineconeBackendInfo,
   makeVectorIndex,
   makePipeline,
-  makePromptRead,
   makePromptSelection,
   makeProviderDirectory,
   makePublicConfig,
@@ -69,6 +68,7 @@ import {
   makeUser,
   makeValidation,
 } from "@/test/fixtures";
+import { promptApiMocks } from "@/test/prompt-mocks";
 
 import type { PublicConfig, User } from "@/lib/types";
 
@@ -116,44 +116,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchCollectionDiagnostics: vi.fn(async () => makeCollectionDiagnostics()),
     getCollectionPrompt: vi.fn(async () => makePromptSelection()),
     getBasePrompt: vi.fn(async () => makePromptSelection()),
-    listPrompts: vi.fn(async () => [makePromptRead()]),
-    getPrompt: vi.fn(async () => ({
-      ...makePromptRead(),
-      body: "Body",
-      system_body: null,
-      used_by: [],
-    })),
-    createPrompt: vi.fn(async () => makePromptRead()),
-    updatePrompt: vi.fn(async () => makePromptRead()),
-    deletePrompt: vi.fn(async () => undefined),
-    listPromptVersions: vi.fn(async () => []),
-    savePromptVersion: vi.fn(async () => ({
-      id: "pv-1",
-      prompt_id: "prompt-1",
-      version: 2,
-      body: "Body",
-      system_body: null,
-      label: null,
-      created_at: "2024-01-01T00:00:00Z",
-    })),
-    forkPrompt: vi.fn(async () => makePromptRead({ id: "prompt-fork" })),
-    listPromptCatalogs: vi.fn(async () => []),
-    renderPrompt: vi.fn(async () => ({
-      rendered: "Rendered",
-      rendered_system: null,
-      unknown_variables: [],
-      values: {},
-    })),
-    testPrompt: vi.fn(async () => ({
-      rendered: "Rendered",
-      rendered_system: null,
-      messages: [
-        { role: "system" as const, content: "Rendered" },
-        { role: "user" as const, content: "Hello" },
-      ],
-      response_text: "Hi",
-      structured_output: null,
-    })),
+    ...promptApiMocks(),
     updateCollectionPrompt: vi.fn(async () => makePromptSelection()),
     updateBasePrompt: vi.fn(async () => makePromptSelection()),
     createCollection: vi.fn(async () => makeCollection()),
