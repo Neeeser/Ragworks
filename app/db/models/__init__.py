@@ -39,6 +39,7 @@ from app.db.models.pipeline import (
     PipelineRun,
     PipelineVersion,
 )
+from app.db.models.prompt import Prompt, PromptVersion
 from app.db.models.provider import ProviderConnection
 from app.db.models.telemetry import TelemetryEventRow
 from app.db.models.user import AuthSession, TimestampMixin, User
@@ -109,6 +110,8 @@ __all__ = [
     "PipelineRun",
     "PipelineRunStatus",
     "PipelineVersion",
+    "Prompt",
+    "PromptVersion",
     "ProviderConnection",
     "QueryEvent",
     "RegisteredIndex",

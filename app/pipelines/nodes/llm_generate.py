@@ -105,7 +105,12 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         batch = ItemBatch.model_validate(inputs.get("items"))
         if not batch.items:
             return {"items": batch}
-        engine = LlmEngine(context, self.config, node_label=self.label)
+        engine = LlmEngine(
+            context.providers,
+            self.config,
+            node_label=self.label,
+            strict=context.document is not None,
+        )
         self._mechanism = engine.mechanism
         fields = self.config.output_fields
         source_field = items_field(fields)

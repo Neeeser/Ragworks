@@ -96,7 +96,12 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         if not batch.items:
             return {"items": batch}
         document_text = _document_text(inputs)
-        engine = LlmEngine(context, self.config, node_label=self.label)
+        engine = LlmEngine(
+            context.providers,
+            self.config,
+            node_label=self.label,
+            strict=context.document is not None,
+        )
         self._mechanism = engine.mechanism
         fields = self.config.output_fields
         schema = per_item_schema(fields)

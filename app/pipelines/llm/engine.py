@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
 from app.pipelines.llm.output_schema import (
     LlmOutputError,
@@ -28,6 +27,7 @@ from app.pipelines.llm.output_schema import (
 )
 from app.pipelines.tracing.summaries import TokenUsage, combine_usage
 from app.providers.chat.base import ChatProvider, ChatRequest
+from app.providers.registry import ProviderResolver
 from app.providers.throttle import (
     RetryOutcome,
     call_with_retries,
@@ -58,12 +58,18 @@ class LlmEngine:
 
     def __init__(
         self,
-        context: PipelineRunContext,
+        providers: ProviderResolver,
         config: LlmNodeConfig,
         *,
         node_label: str,
+        strict: bool,
     ) -> None:
-        """Resolve the chat provider and pin this run's failure policy."""
+        """Resolve the chat provider and pin this call set's failure policy.
+
+        `strict` follows the run kind — ingestion runs pass True, query-time
+        runs False; the studio test bench passes True so a failure surfaces
+        as itself rather than a degraded empty outcome.
+        """
         if config.connection_id is None or not config.model_name:
             raise InvalidInputError(
                 f"{node_label} needs a provider connection and model. "
@@ -72,11 +78,11 @@ class LlmEngine:
         self._connection_id: UUID = config.connection_id
         self._config = config
         self._node_label = node_label
-        self._provider: ChatProvider = context.providers.chat(config.connection_id)
-        self._concurrency = context.providers.request_concurrency(config.connection_id)
-        self._rpm = context.providers.request_rpm(config.connection_id)
+        self._provider: ChatProvider = providers.chat(config.connection_id)
+        self._concurrency = providers.request_concurrency(config.connection_id)
+        self._rpm = providers.request_rpm(config.connection_id)
         #: Ingestion runs are strict; query-time runs degrade with warnings.
-        self.strict: bool = context.document is not None
+        self.strict: bool = strict
         self.warnings: list[str] = []
         self.mechanism: str = self._pick_mechanism()
 
