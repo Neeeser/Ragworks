@@ -15,6 +15,7 @@ from app.db.repositories import (
     CollectionLatencyRepository,
     HistoryDomain,
     LatencyBucketStats,
+    LatencyEventRow,
     LatencySummaryStats,
     PipelineChangeMarker,
 )
@@ -23,6 +24,7 @@ from app.schemas.collections import (
     CollectionStatsHistoryPoint,
     CollectionStatsHistoryRead,
     LatencyBucket,
+    LatencyEvent,
     LatencySummary,
     PipelineMarker,
     ToolLatencySeries,
@@ -125,6 +127,11 @@ def _to_summary(stats: LatencySummaryStats) -> LatencySummary:
     )
 
 
+def _to_event(row: LatencyEventRow) -> LatencyEvent:
+    """Map a repository event row onto its wire model."""
+    return LatencyEvent(at=row.at, duration_ms=row.duration_ms, key=row.key)
+
+
 def _to_marker(marker: PipelineChangeMarker) -> PipelineMarker:
     """Map a repository marker onto its wire model, keyed to its series."""
     return PipelineMarker(
@@ -170,6 +177,12 @@ class CollectionHistoryService:
         )
         ingestion = self._latency.ingestion_buckets(collection_id, domain)
         tool_buckets = self._latency.tool_buckets(user_id, collection_id, domain)
+        tools = self._tool_series(collection_id, tool_buckets, user_id, domain)
+        ingestion_summary = _to_summary(self._latency.ingestion_summary(collection_id, domain))
+
+        ingestion_events = self._latency.ingestion_events(collection_id, domain)
+        query_events = self._latency.query_events(user_id, collection_id, domain)
+        recorded = ingestion_summary.count + sum(tool.summary.count for tool in tools)
 
         return CollectionStatsHistoryRead(
             collection_id=collection_id,
@@ -177,9 +190,12 @@ class CollectionHistoryService:
             end=domain.end,
             bucket_seconds=domain.bucket_seconds,
             points=self._points(domain, (doc_total, chunk_total), growth, ingestion, tool_buckets),
-            tools=self._tool_series(collection_id, tool_buckets, user_id, domain),
-            ingestion_summary=_to_summary(self._latency.ingestion_summary(collection_id, domain)),
+            tools=tools,
+            ingestion_summary=ingestion_summary,
             markers=[_to_marker(marker) for marker in self._history.markers(collection_id, domain)],
+            ingestion_events=[_to_event(row) for row in ingestion_events],
+            query_events=[_to_event(row) for row in query_events],
+            events_sampled=len(ingestion_events) + len(query_events) < recorded,
         )
 
     @staticmethod

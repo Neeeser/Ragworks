@@ -25,6 +25,7 @@ from app.db.repositories.collection_history import (
 from app.db.repositories.collection_latency import (
     CollectionLatencyRepository,
     LatencyBucketStats,
+    LatencyEventRow,
     LatencySummaryStats,
 )
 from app.db.repositories.collection_stats import CollectionStats, CollectionStatsRepository
@@ -64,6 +65,7 @@ __all__ = [
     "HistoryDomain",
     "InsightRepository",
     "LatencyBucketStats",
+    "LatencyEventRow",
     "LatencySummaryStats",
     "ModelShortlistRepository",
     "OverlapPairRow",

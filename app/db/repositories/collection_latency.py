@@ -14,7 +14,17 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, SQLColumnExpression, String, cast, func, literal
+from sqlalchemy import (
+    ColumnElement,
+    Integer,
+    Select,
+    SQLColumnExpression,
+    String,
+    cast,
+    func,
+    literal,
+    or_,
+)
 from sqlalchemy import select as sa_select
 from sqlmodel import col
 
@@ -22,6 +32,11 @@ from app.db import models
 from app.db.repositories.base import Repository
 from app.db.repositories.collection_history import HistoryDomain, bucket_expr, optional_float
 from app.schemas.collections import UNATTRIBUTED_TOOL_KEY
+
+#: Most event dots returned for one series set. Past this the sample thins
+#: evenly, so a busy collection still plots a readable cloud rather than every
+#: row it ever recorded.
+EVENT_CAP = 2000
 
 
 @dataclass(frozen=True)
@@ -33,6 +48,15 @@ class LatencyBucketStats:
     p50_ms: float | None = None
     p95_ms: float | None = None
     max_ms: float | None = None
+
+
+@dataclass(frozen=True)
+class LatencyEventRow:
+    """One measured operation: when it ran, how long it took, whose series it is."""
+
+    at: datetime
+    duration_ms: float
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +79,60 @@ def _run_duration_ms() -> SQLColumnExpression[Any]:
             col(models.PipelineRun.completed_at) - col(models.PipelineRun.started_at),
         )
         * 1000.0
+    )
+
+
+def _sampled_events(
+    base: Select[Any],
+    *,
+    at: SQLColumnExpression[Any],
+    duration: SQLColumnExpression[Any],
+    key: SQLColumnExpression[Any] | None,
+    domain: HistoryDomain,
+    cap: int,
+) -> Select[Any]:
+    """Wrap `base` so it returns at most ~`cap` events, thinned evenly by time.
+
+    Two windows decide what survives: an even stride over the time order, and
+    each bucket's slowest event. Keeping the peaks is the point — the outliers
+    are what a reader is scanning a latency cloud for, and a blind stride is
+    exactly as likely to drop the one 8-second query as any other row.
+
+    The stride is computed from a `count() over ()` in the same pass rather
+    than a preceding COUNT, so the sample never disagrees with a total that
+    moved between two queries.
+    """
+    inner = base.add_columns(
+        at.label("at"),
+        duration.label("duration_ms"),
+        (key if key is not None else literal(None, String)).label("key"),
+    ).subquery()
+
+    stride = cast(
+        func.greatest(literal(1), func.ceil(func.count().over() / literal(float(cap)))),
+        Integer,
+    )
+    numbered = sa_select(
+        inner.c.at,
+        inner.c.duration_ms,
+        inner.c.key,
+        func.row_number().over(order_by=inner.c.at).label("rn"),
+        func.row_number()
+        .over(
+            partition_by=bucket_expr(inner.c.at, domain),
+            order_by=inner.c.duration_ms.desc(),
+        )
+        .label("peak"),
+        stride.label("stride"),
+    ).subquery()
+
+    return (
+        sa_select(numbered.c.at, numbered.c.duration_ms, numbered.c.key)
+        .where(or_(numbered.c.rn % numbered.c.stride == 0, numbered.c.peak == 1))
+        .order_by(numbered.c.at)
+        # Every bucket contributes a peak, so a domain at the bucket ceiling
+        # can exceed `cap` by that many rows; the limit bounds the payload.
+        .limit(cap * 2)
     )
 
 
@@ -98,6 +176,49 @@ class CollectionLatencyRepository(Repository):
             )
         ).one()
         return self._summary_stats(row)
+
+    def ingestion_events(
+        self,
+        collection_id: UUID,
+        domain: HistoryDomain,
+        cap: int = EVENT_CAP,
+    ) -> list[LatencyEventRow]:
+        """Individual ingest runs in the domain, thinned to `cap`."""
+        rows = self.session.execute(
+            _sampled_events(
+                sa_select()
+                .select_from(models.PipelineRun)
+                .where(*self._ingest_clauses(collection_id, domain)),
+                at=col(models.PipelineRun.created_at),
+                duration=_run_duration_ms(),
+                key=None,
+                domain=domain,
+                cap=cap,
+            )
+        ).all()
+        return [LatencyEventRow(at=row[0], duration_ms=float(row[1])) for row in rows]
+
+    def query_events(
+        self,
+        user_id: UUID,
+        collection_id: UUID,
+        domain: HistoryDomain,
+        cap: int = EVENT_CAP,
+    ) -> list[LatencyEventRow]:
+        """Individual queries in the domain, keyed by tool series, thinned to `cap`."""
+        rows = self.session.execute(
+            _sampled_events(
+                self._query_events(user_id, collection_id, domain),
+                at=col(models.QueryEvent.created_at),
+                duration=col(models.QueryEvent.latency_ms),
+                key=self._tool_key_expr(),
+                domain=domain,
+                cap=cap,
+            )
+        ).all()
+        return [
+            LatencyEventRow(at=row[0], duration_ms=float(row[1]), key=str(row[2])) for row in rows
+        ]
 
     def tool_buckets(
         self,
