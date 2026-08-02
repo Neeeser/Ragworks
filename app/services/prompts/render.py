@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import re
-
 from pydantic import BaseModel
 
 from app.db import models
+from app.prompting import render_template
 
 from .context import base_prompt_context
 from .templates import get_base_prompt_template
-
-_PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}")
 
 
 class PromptContext(BaseModel):
@@ -27,14 +24,17 @@ class PromptContext(BaseModel):
 
 
 def apply_prompt_template(template: str, context: dict[str, str]) -> str:
-    """Apply context variables to a prompt template."""
+    """Apply context variables to a prompt template.
 
-    def _replace(match: re.Match[str]) -> str:
-        """Replace template placeholders with context values."""
-        key = match.group(1)
-        return context.get(key, match.group(0))
-
-    return _PLACEHOLDER_PATTERN.sub(_replace, template)
+    Rendering is deliberately lenient: an unknown variable is left in
+    place rather than failing the chat turn. Strictness lives at edit and
+    save time, where the studio validates against the context's catalog.
+    """
+    return render_template(
+        template,
+        context,
+        on_missing=lambda name: f"{{{{{name}}}}}",
+    )
 
 
 def render_system_prompt(

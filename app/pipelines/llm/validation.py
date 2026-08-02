@@ -12,8 +12,9 @@ from dataclasses import dataclass
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.prompts import PromptTemplateError, referenced_placeholders
+from app.pipelines.llm.prompts import referenced_placeholders
 from app.pipelines.node import PipelineValidationIssue
+from app.prompting import PromptTemplateError
 
 
 @dataclass(frozen=True)
@@ -163,7 +164,7 @@ def _placeholder_issues(
                 issues.append(
                     _error(
                         node,
-                        f"{label} node '{node.id}' uses '{{{name}}}', which this "
+                        f"{label} node '{node.id}' uses '{{{{{name}}}}}', which this "
                         "node type cannot provide.",
                         field=field_name,
                     )
@@ -172,7 +173,7 @@ def _placeholder_issues(
             issues.append(
                 _error(
                     node,
-                    f"{label} node '{node.id}' uses '{{document_text}}' but nothing "
+                    f"{label} node '{node.id}' uses '{{{{document_text}}}}' but nothing "
                     "is wired into its document input. Connect the parser to it.",
                     field=field_name,
                 )

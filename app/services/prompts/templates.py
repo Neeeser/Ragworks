@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.db import models
+from app.prompting import catalog_for
+from app.schemas.enums import PromptContext
 from app.schemas.prompts import PromptVariable
 
 SYSTEM_PROMPT_METADATA_KEY = "system_prompt_template"
@@ -29,96 +31,13 @@ DEFAULT_BASE_PROMPT_TEMPLATE = (
     "- Generated at: {{datetime.iso}}\n"
 )
 
-BASE_PROMPT_VARIABLES: list[PromptVariable] = [
-    PromptVariable(
-        name="user.full_name",
-        description="Full name from the authenticated user profile.",
-        example="Avery Lee",
-    ),
-    PromptVariable(
-        name="user.email",
-        description="Email address for the signed-in user.",
-        example="avery@example.com",
-    ),
-    PromptVariable(
-        name="user.id",
-        description="Internal UUID of the authenticated user.",
-    ),
-    PromptVariable(
-        name="datetime.iso",
-        description="Current UTC timestamp in ISO 8601 format.",
-        example="2024-07-20T14:03:22+00:00",
-    ),
-    PromptVariable(
-        name="datetime.date",
-        description="Current UTC date.",
-        example="2024-07-20",
-    ),
-    PromptVariable(
-        name="datetime.time",
-        description="Current UTC time.",
-        example="14:03:22",
-    ),
-    PromptVariable(
-        name="datetime.human",
-        description="Human-readable UTC timestamp.",
-        example="July 20, 2024 at 14:03 UTC",
-    ),
-]
+BASE_PROMPT_VARIABLES: list[PromptVariable] = list(
+    catalog_for(PromptContext.CHAT_BASE).variables
+)
 
-COLLECTION_PROMPT_VARIABLES: list[PromptVariable] = [
-    PromptVariable(
-        name="collection.name",
-        description="Collection display name.",
-        example="Product Launch War Room",
-    ),
-    PromptVariable(
-        name="collection.description",
-        description="Collection description or 'N/A' when missing.",
-        example="Live updates for Q3 roadmap prep.",
-    ),
-    PromptVariable(
-        name="collection.tool_name",
-        description="Tool function name for this collection.",
-        example="pinecone_query_f47ac10b58cc4372a5670e02b2c3d479",
-    ),
-    PromptVariable(
-        name="collection.embedding_model",
-        description="Embedding model name configured for the ingestion pipeline.",
-        example="text-embedding-3-large",
-    ),
-    PromptVariable(
-        name="collection.chunk.strategy",
-        description="Chunking strategy label configured in the ingestion pipeline.",
-        example="token",
-    ),
-    PromptVariable(
-        name="collection.chunk.size",
-        description="Chunk size configured in the ingestion pipeline.",
-        example="1024",
-    ),
-    PromptVariable(
-        name="collection.chunk.overlap",
-        description="Token overlap between consecutive chunks in the ingestion pipeline.",
-        example="200",
-    ),
-    PromptVariable(
-        name="collection.pinecone.index",
-        description="Pinecone index configured in the ingestion pipeline.",
-        example="ragworks-prod",
-    ),
-    PromptVariable(
-        name="collection.pinecone.namespace",
-        description="Namespace within the Pinecone index for this collection.",
-        example="col-a1b2c3d4e5f6",
-    ),
-    PromptVariable(
-        name="metadata.embedding_dimension",
-        description="Embedding vector dimension discovered at collection creation.",
-        example="3072",
-    ),
-    *BASE_PROMPT_VARIABLES,
-]
+COLLECTION_PROMPT_VARIABLES: list[PromptVariable] = list(
+    catalog_for(PromptContext.CHAT_TOOL).variables
+)
 
 DEFAULT_SYSTEM_PROMPT_TEMPLATE = (
     "## Tool context: {{collection.name}}\n"
