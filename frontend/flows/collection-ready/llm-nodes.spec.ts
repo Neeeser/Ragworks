@@ -18,12 +18,18 @@ test("LLM presets and the retriever filter builder render in the editor", async 
   await loginViaApi(page);
 
   await page.goto(`${handoff.frontend_url}/pipelines/retrieval`);
-  await expect(page.getByText("llm.transform")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("tab", { name: "Nodes" }).click();
+  await expect(page.getByRole("button", { name: /^LLM \(/ })).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: "Contextual Retrieval" }).click();
   const drawer = page.getByRole("dialog");
   await expect(drawer.getByText("Select a chat model")).toBeVisible({ timeout: 20_000 });
-  await expect(drawer.getByLabel("Prompt", { exact: true })).toHaveValue(/situate this chunk/);
+  // The preset references the shipped library prompt; the drawer previews
+  // the resolved template read-only, with the picker naming the prompt.
+  await expect(drawer.getByRole("combobox", { name: "Prompt", exact: true })).toContainText(
+    "Contextual Retrieval",
+  );
+  await expect(drawer.getByText(/situate this chunk/)).toBeVisible({ timeout: 20_000 });
   await expect(drawer.getByLabel("Field 1 name")).toHaveValue("context");
   await drawer.getByRole("button", { name: "Close node editor" }).click();
 

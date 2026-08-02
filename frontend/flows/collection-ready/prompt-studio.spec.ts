@@ -15,10 +15,10 @@ import { expect, test } from "@playwright/test";
 import { loadHandoff, loginViaApi } from "../helpers";
 
 test("shipped prompts are seeded, versionable, and diffable", async ({ page }) => {
-  loadHandoff();
+  const handoff = loadHandoff();
   await loginViaApi(page);
 
-  await page.goto("/prompts");
+  await page.goto(`${handoff.frontend_url}/prompts`);
   await expect(page.getByRole("button", { name: /Ragworks base prompt/ })).toBeVisible({
     timeout: 20_000,
   });
