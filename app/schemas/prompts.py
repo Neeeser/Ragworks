@@ -54,6 +54,7 @@ class PromptVersionRead(BaseModel):
     body: str
     system_body: str | None = None
     label: str | None = None
+    output_fields: list[dict[str, object]] | None = None
     created_at: datetime
 
 
@@ -85,6 +86,7 @@ class PromptDetailRead(PromptRead):
 
     body: str
     system_body: str | None = None
+    output_fields: list[dict[str, object]] | None = None
     used_by: list[PromptUsageRead]
 
 
@@ -96,6 +98,7 @@ class PromptCreate(BaseModel):
     context: PromptContext
     body: str = Field(min_length=1)
     system_body: str | None = None
+    output_fields: list[dict[str, object]] | None = None
 
 
 class PromptUpdate(BaseModel):
@@ -111,15 +114,24 @@ class PromptVersionCreate(BaseModel):
     body: str = Field(min_length=1)
     system_body: str | None = None
     label: str | None = Field(default=None, max_length=120)
+    output_fields: list[dict[str, object]] | None = None
 
 
 class PromptForkCreate(BaseModel):
-    """Payload for forking a prompt into a new entity."""
+    """Payload for forking a prompt into a new entity.
+
+    `body`/`system_body`/`output_fields` override the source version when
+    supplied — the fork-and-edit path, where a read-only shipped prompt's
+    draft becomes v1 of the fork.
+    """
 
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
     context: PromptContext | None = None
     version: PromptVersionSelector = "latest"
+    body: str | None = None
+    system_body: str | None = None
+    output_fields: list[dict[str, object]] | None = None
 
 
 class PromptRenderRequest(BaseModel):
@@ -152,11 +164,19 @@ class PromptTestRequest(BaseModel):
     output_fields: list[dict[str, object]] = Field(default_factory=list)
 
 
+class PromptTestMessage(BaseModel):
+    """One message of the payload the test bench actually sent."""
+
+    role: Literal["system", "user"]
+    content: str
+
+
 class PromptTestRead(BaseModel):
-    """The test bench outcome: what was sent and what came back."""
+    """The test bench outcome: the exact messages sent and what came back."""
 
     rendered: str
     rendered_system: str | None = None
+    messages: list[PromptTestMessage] = Field(default_factory=list)
     response_text: str | None = None
     structured_output: dict[str, object] | None = None
 

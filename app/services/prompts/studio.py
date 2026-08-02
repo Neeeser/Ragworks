@@ -27,10 +27,15 @@ from app.schemas.enums import PromptContext
 from app.schemas.prompts import (
     PromptRenderRead,
     PromptRenderRequest,
+    PromptTestMessage,
     PromptTestRead,
     PromptTestRequest,
 )
 from app.services.errors import InvalidInputError
+
+#: The canned turn a chat-context test reacts to — chat prompts are system
+#: prompts, so the bench needs a user message for the model to answer.
+CHAT_TEST_USER_TURN = "Introduce yourself briefly and state what you can help with."
 
 _OUTPUT_FIELDS = TypeAdapter(list[OutputFieldSpec])
 
@@ -87,19 +92,43 @@ def run_test(
         )
     )
     providers = ProviderResolver(user, session)
+    messages = _test_messages(payload.context, preview)
     if payload.context in _NODE_CONTEXTS and payload.output_fields:
         structured = _run_structured(providers, payload, preview)
         return PromptTestRead(
             rendered=preview.rendered,
             rendered_system=preview.rendered_system,
+            messages=messages,
             structured_output=structured,
         )
-    text = _run_completion(providers, payload, preview)
+    text = _run_completion(providers, payload, messages)
     return PromptTestRead(
         rendered=preview.rendered,
         rendered_system=preview.rendered_system,
+        messages=messages,
         response_text=text,
     )
+
+
+def _test_messages(
+    context: PromptContext, preview: PromptRenderRead
+) -> list[PromptTestMessage]:
+    """The exact message payload a test run sends.
+
+    Chat-context prompts *are* system prompts, so the rendered body goes in
+    the system slot with a canned user turn to react to; node-context
+    prompts are the user message itself, under their own system template.
+    """
+    if context in _NODE_CONTEXTS:
+        messages: list[PromptTestMessage] = []
+        if preview.rendered_system:
+            messages.append(PromptTestMessage(role="system", content=preview.rendered_system))
+        messages.append(PromptTestMessage(role="user", content=preview.rendered))
+        return messages
+    return [
+        PromptTestMessage(role="system", content=preview.rendered),
+        PromptTestMessage(role="user", content=CHAT_TEST_USER_TURN),
+    ]
 
 
 def _run_structured(
@@ -136,30 +165,15 @@ def _parse_output_fields(raw: list[dict[str, object]]) -> list[OutputFieldSpec]:
 def _run_completion(
     providers: ProviderResolver,
     payload: PromptTestRequest,
-    preview: PromptRenderRead,
+    messages: list[PromptTestMessage],
 ) -> str:
-    """One plain completion.
-
-    Chat-context prompts are system prompts, so the rendered text goes in
-    the system slot with a canned user turn to react to; node-context
-    prompts are the user message itself (with their own system template).
-    """
+    """One plain completion over the already-built test payload."""
     provider = providers.chat(payload.connection_id)
-    if payload.context in _NODE_CONTEXTS:
-        messages: list[dict[str, Any]] = []
-        if preview.rendered_system:
-            messages.append({"role": "system", "content": preview.rendered_system})
-        messages.append({"role": "user", "content": preview.rendered})
-    else:
-        messages = [
-            {"role": "system", "content": preview.rendered},
-            {
-                "role": "user",
-                "content": "Introduce yourself briefly and state what you can help with.",
-            },
-        ]
+    wire: list[dict[str, Any]] = [
+        {"role": message.role, "content": message.content} for message in messages
+    ]
     request = ChatRequest(
-        messages=messages,
+        messages=wire,
         tools=None,
         model=payload.model_name,
         parameters=None,

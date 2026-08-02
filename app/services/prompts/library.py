@@ -12,10 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from pydantic import TypeAdapter, ValidationError
 from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import PromptRepository, PromptVersionRepository
+from app.pipelines.llm.config import OutputFieldSpec
+from app.pipelines.llm.validation import CONTEXT_TARGETS
 from app.prompting import catalog_for, referenced_variables
 from app.schemas.enums import PromptContext, PromptSource
 from app.schemas.prompts import (
@@ -29,6 +32,13 @@ from app.services.errors import InvalidInputError, NotFoundError
 
 PROMPT_NOT_FOUND_DETAIL = "Prompt not found"
 
+SHIPPED_READ_ONLY_DETAIL = (
+    "Shipped prompts are read-only so release updates never fight your "
+    "edits — fork it to make it yours."
+)
+
+_OUTPUT_FIELDS = TypeAdapter(list[OutputFieldSpec])
+
 
 @dataclass(frozen=True)
 class ResolvedPrompt:
@@ -36,6 +46,18 @@ class ResolvedPrompt:
 
     prompt: models.Prompt
     version: models.PromptVersion
+
+
+def _ensure_editable(prompt: models.Prompt) -> None:
+    """Refuse mutations on shipped prompts.
+
+    Shipped rows only ever hold shipped versions, so a release appending
+    an improved default can never shadow a user's edit — the edit lives
+    on a fork instead. `==` on purpose: DB-loaded enum columns are raw
+    strings.
+    """
+    if prompt.source == PromptSource.SHIPPED:
+        raise InvalidInputError(SHIPPED_READ_ONLY_DETAIL)
 
 
 def validate_template_body(
@@ -51,6 +73,37 @@ def validate_template_body(
         raise InvalidInputError(
             f"Template references variables this context cannot supply: {names}."
         )
+
+
+def validate_output_fields(
+    context: PromptContext, raw: list[dict[str, object]] | None
+) -> list[dict[str, object]] | None:
+    """Validate a version's output-field schema for its context.
+
+    Only node contexts run the structured-output engine, so only they may
+    carry a schema; targets are checked against the owning shell's allowed
+    set (`CONTEXT_TARGETS`) — the same rule node validation enforces.
+    Returns the normalized field list, or None for an absent/empty one.
+    """
+    if not raw:
+        return None
+    targets = CONTEXT_TARGETS.get(context)
+    if targets is None:
+        raise InvalidInputError(
+            "Output fields only apply to node-context prompts — chat prompts "
+            "have no structured output."
+        )
+    try:
+        fields = _OUTPUT_FIELDS.validate_python(raw)
+    except ValidationError as exc:
+        raise InvalidInputError(f"Invalid output fields: {exc}") from exc
+    bad = sorted({spec.target.kind for spec in fields} - targets)
+    if bad:
+        kinds = ", ".join(f"'{kind}'" for kind in bad)
+        raise InvalidInputError(
+            f"This context cannot write output fields targeting {kinds}."
+        )
+    return [spec.model_dump(mode="json") for spec in fields]
 
 
 class PromptLibraryService:
@@ -83,6 +136,7 @@ class PromptLibraryService:
     ) -> models.Prompt:
         """Create a prompt whose v1 is the supplied body."""
         validate_template_body(payload.context, payload.body, payload.system_body)
+        output_fields = validate_output_fields(payload.context, payload.output_fields)
         prompt = self.prompts.add(
             models.Prompt(
                 user_id=user_id,
@@ -100,6 +154,7 @@ class PromptLibraryService:
                 version=1,
                 body=payload.body,
                 system_body=payload.system_body,
+                output_fields=output_fields,
             )
         )
         return prompt
@@ -107,6 +162,7 @@ class PromptLibraryService:
     def update(self, user_id: UUID, prompt_id: UUID, payload: PromptUpdate) -> models.Prompt:
         """Rename or redescribe a prompt; bodies change through versions."""
         prompt = self.get(user_id, prompt_id)
+        _ensure_editable(prompt)
         if payload.name is not None:
             prompt.name = payload.name
         if payload.description is not None:
@@ -123,7 +179,9 @@ class PromptLibraryService:
     ) -> models.PromptVersion:
         """Append a new immutable version and move `current_version` to it."""
         prompt = self.get(user_id, prompt_id)
+        _ensure_editable(prompt)
         validate_template_body(prompt.context, payload.body, payload.system_body)
+        output_fields = validate_output_fields(prompt.context, payload.output_fields)
         next_version = prompt.current_version + 1
         version = self.versions.add(
             models.PromptVersion(
@@ -132,6 +190,7 @@ class PromptLibraryService:
                 body=payload.body,
                 system_body=payload.system_body,
                 label=payload.label,
+                output_fields=output_fields,
             )
         )
         prompt.current_version = next_version
@@ -155,26 +214,45 @@ class PromptLibraryService:
         return self._version_row(prompt, selector)
 
     def fork(self, user_id: UUID, prompt_id: UUID, payload: PromptForkCreate) -> models.Prompt:
-        """Create a new prompt seeded from one version of an existing one."""
+        """Create a new prompt seeded from one version of an existing one.
+
+        A payload carrying a `body` is the fork-and-edit path: the caller's
+        draft (body, system body, output fields, as given) becomes v1
+        instead of the source version's text.
+        """
         source_prompt = self.get(user_id, prompt_id)
         source_version = self._version_row(source_prompt, payload.version)
         context = payload.context or source_prompt.context
+        if payload.body is None:
+            body = source_version.body
+            system_body = source_version.system_body
+            output_fields = source_version.output_fields
+        else:
+            body = payload.body or source_version.body
+            system_body = payload.system_body
+            output_fields = payload.output_fields
         return self.create(
             user_id,
             PromptCreate(
                 name=payload.name,
                 description=payload.description,
                 context=context,
-                body=source_version.body,
-                system_body=source_version.system_body,
+                body=body,
+                system_body=system_body,
+                output_fields=output_fields,
             ),
         )
 
     def delete(self, user_id: UUID, prompt_id: UUID) -> None:
-        """Delete a prompt and its versions; refuses while referenced."""
+        """Delete a prompt and its versions; refuses while referenced.
+
+        Shipped prompts refuse too: seeding would recreate the row on the
+        next boot, so the delete would only ever look like it worked.
+        """
         from app.services.prompts.usage import prompt_usages
 
         prompt = self.get(user_id, prompt_id)
+        _ensure_editable(prompt)
         usages = prompt_usages(self.session, user_id, prompt_id)
         if usages:
             names = ", ".join(sorted({usage.name for usage in usages}))

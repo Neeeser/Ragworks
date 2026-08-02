@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, String, Text
+from sqlalchemy import JSON, Column, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
@@ -44,7 +45,9 @@ class PromptVersion(SQLModel, TimestampMixin, table=True):
 
     `body` is the user/main template; `system_body` is the paired system
     template for contexts that carry one (the LLM node shells). Chat
-    contexts leave it NULL.
+    contexts leave it NULL. Node-context versions may carry
+    `output_fields` — the structured-output schema that belongs with the
+    prompt text; nodes seed their config from it but keep their own copy.
     """
 
     __tablename__ = "prompt_versions"
@@ -55,3 +58,6 @@ class PromptVersion(SQLModel, TimestampMixin, table=True):
     body: str = Field(sa_column=Column(Text, nullable=False))
     system_body: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     label: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    output_fields: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )

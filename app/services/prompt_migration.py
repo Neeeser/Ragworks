@@ -105,6 +105,7 @@ def _create_entity(
             body=payload.body,
             system_body=payload.system_body,
             label="Migrated",
+            output_fields=payload.output_fields,
         )
     )
     return prompt
@@ -237,6 +238,7 @@ def _migrated_definition(
             target = shipped_bodies.get((body, system or None))
             if target is None:
                 node_id = str(node.get("id", "node"))
+                raw_fields = config.get("output_fields")
                 target = _create_entity(
                     session,
                     user.id,
@@ -246,6 +248,9 @@ def _migrated_definition(
                         context=_NODE_CONTEXTS[str(node.get("type"))],
                         body=body,
                         system_body=system or None,
+                        output_fields=(
+                            raw_fields if isinstance(raw_fields, list) and raw_fields else None
+                        ),
                     ),
                 )
             config[NODE_PROMPT_REF_KEY] = {

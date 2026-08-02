@@ -151,3 +151,33 @@ def test_migration_is_idempotent(session: Session, user: models.User) -> None:
 
     assert first == second
     assert first_count == second_count
+
+
+def test_seeding_backfills_output_fields_without_a_new_version(
+    session: Session, user: models.User
+) -> None:
+    """A text-identical seeded version gains its schema in place, staying v1.
+
+    Rows seeded before versions carried `output_fields` would otherwise see
+    every preset prompt append a body-identical "Shipped update" v2 on the
+    next boot — exactly the version noise seeding exists to avoid.
+    """
+    from app.db.repositories import PromptVersionRepository
+    from app.services.prompts.seeding import seed_shipped_prompts
+
+    seeded = seed_shipped_prompts(session, user.id)
+    session.commit()
+    extractor = seeded["preset.metadata-extractor"]
+    versions_repo = PromptVersionRepository(session)
+    v1 = versions_repo.get_by_version(extractor.id, 1)
+    assert v1 is not None and v1.output_fields is not None
+    # Simulate a row seeded before versions carried a schema.
+    v1.output_fields = None
+    session.add(v1)
+    session.commit()
+
+    reseeded = seed_shipped_prompts(session, user.id)
+    session.commit()
+    assert reseeded["preset.metadata-extractor"].current_version == 1
+    refreshed = versions_repo.get_by_version(extractor.id, 1)
+    assert refreshed is not None and refreshed.output_fields is not None

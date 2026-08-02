@@ -15,6 +15,20 @@ from app.pipelines.llm.config import LlmNodeConfig
 from app.pipelines.llm.prompts import referenced_placeholders
 from app.pipelines.node import PipelineValidationIssue
 from app.prompting import PromptTemplateError
+from app.schemas.enums import PromptContext
+
+#: Write targets each shell allows — declared once, read by the node
+#: shells' `ShellRules` and, via `CONTEXT_TARGETS`, by the prompt library's
+#: version-level output-field validation, so the two can't drift.
+TRANSFORM_TARGETS = frozenset({"metadata", "text"})
+RERANK_TARGETS = frozenset({"score", "metadata"})
+GENERATE_TARGETS = frozenset({"items"})
+
+CONTEXT_TARGETS: dict[PromptContext, frozenset[str]] = {
+    PromptContext.NODE_TRANSFORM: TRANSFORM_TARGETS,
+    PromptContext.NODE_RERANK: RERANK_TARGETS,
+    PromptContext.NODE_GENERATE: GENERATE_TARGETS,
+}
 
 
 @dataclass(frozen=True)

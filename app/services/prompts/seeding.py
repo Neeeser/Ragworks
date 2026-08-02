@@ -45,6 +45,7 @@ class ShippedPromptSpec:
     context: PromptContext
     body: str
     system_body: str | None = None
+    output_fields: list[dict[str, object]] | None = None
 
 
 def _preset_specs(
@@ -56,6 +57,7 @@ def _preset_specs(
         if not isinstance(body, str) or not body.strip():
             continue
         system = preset.config.get("system_prompt")
+        fields = preset.config.get("output_fields")
         specs.append(
             ShippedPromptSpec(
                 key=f"preset.{preset.id}",
@@ -64,6 +66,7 @@ def _preset_specs(
                 context=context,
                 body=body,
                 system_body=system if isinstance(system, str) and system.strip() else None,
+                output_fields=fields if isinstance(fields, list) and fields else None,
             )
         )
     return specs
@@ -124,14 +127,20 @@ def seed_shipped_prompts(session: Session, user_id: UUID) -> dict[str, models.Pr
                     body=spec.body,
                     system_body=spec.system_body,
                     label="Shipped",
+                    output_fields=spec.output_fields,
                 )
             )
         else:
             existing = versions_repo.list_for_prompt(prompt.id)
-            if not any(
-                row.body == spec.body and (row.system_body or None) == spec.system_body
-                for row in existing
-            ):
+            match = next(
+                (
+                    row
+                    for row in existing
+                    if row.body == spec.body and (row.system_body or None) == spec.system_body
+                ),
+                None,
+            )
+            if match is None:
                 next_version = prompt.current_version + 1
                 versions_repo.add(
                     models.PromptVersion(
@@ -140,10 +149,18 @@ def seed_shipped_prompts(session: Session, user_id: UUID) -> dict[str, models.Pr
                         body=spec.body,
                         system_body=spec.system_body,
                         label="Shipped update",
+                        output_fields=spec.output_fields,
                     )
                 )
                 prompt.current_version = next_version
                 session.add(prompt)
+                session.flush()
+            elif spec.output_fields is not None and match.output_fields is None:
+                # Text-identical version missing its schema: enrich in place
+                # rather than appending a version whose body didn't change —
+                # the fields ship with the same preset the body came from.
+                match.output_fields = spec.output_fields
+                session.add(match)
                 session.flush()
         seeded[spec.key] = prompt
     return seeded

@@ -169,3 +169,101 @@ def test_cross_user_prompt_is_not_found(session: Session, user: models.User) -> 
     prompt = _create(service, user)
     with pytest.raises(NotFoundError):
         service.get(uuid4(), prompt.id)
+
+
+def _shipped_prompt(session: Session, user: models.User) -> models.Prompt:
+    from app.services.prompts.seeding import BASE_PROMPT_KEY, seed_shipped_prompts
+
+    seeded = seed_shipped_prompts(session, user.id)
+    session.commit()
+    return seeded[BASE_PROMPT_KEY]
+
+
+def test_shipped_prompts_are_read_only(session: Session, user: models.User) -> None:
+    from app.schemas.prompts import PromptUpdate
+
+    service = PromptLibraryService(session)
+    shipped = _shipped_prompt(session, user)
+    with pytest.raises(InvalidInputError, match="read-only"):
+        service.save_version(user.id, shipped.id, PromptVersionCreate(body="mine now"))
+    with pytest.raises(InvalidInputError, match="read-only"):
+        service.update(user.id, shipped.id, PromptUpdate(name="Renamed"))
+    with pytest.raises(InvalidInputError, match="read-only"):
+        service.delete(user.id, shipped.id)
+    assert service.resolve(user.id, shipped.id, "latest").prompt.current_version == 1
+
+
+def test_fork_carries_the_callers_draft(session: Session, user: models.User) -> None:
+    service = PromptLibraryService(session)
+    shipped = _shipped_prompt(session, user)
+    fork = service.fork(
+        user.id,
+        shipped.id,
+        PromptForkCreate(name="My base prompt", body="You are {{user.full_name}}'s aide."),
+    )
+    assert fork.source == PromptSource.USER
+    resolved = service.resolve(user.id, fork.id, "latest")
+    assert resolved.version.body == "You are {{user.full_name}}'s aide."
+    assert resolved.version.version == 1
+
+
+def test_output_fields_version_with_the_prompt(session: Session, user: models.User) -> None:
+    service = PromptLibraryService(session)
+    fields = [
+        {
+            "name": "topic",
+            "type": "string",
+            "description": "Main topic.",
+            "target": {"kind": "metadata", "key": "topic"},
+        }
+    ]
+    prompt = service.create(
+        user.id,
+        PromptCreate(
+            name="Extractor",
+            context=PromptContext.NODE_TRANSFORM,
+            body="Extract from {{text}}",
+            output_fields=fields,
+        ),
+    )
+    stored = service.resolve(user.id, prompt.id, "latest").version.output_fields
+    assert stored is not None and stored[0]["name"] == "topic"
+    saved = service.save_version(
+        user.id, prompt.id, PromptVersionCreate(body="Extract topics from {{text}}")
+    )
+    assert saved.output_fields is None
+    assert service.resolve(user.id, prompt.id, 1).version.output_fields is not None
+
+
+def test_output_fields_reject_chat_contexts_and_foreign_targets(
+    session: Session, user: models.User
+) -> None:
+    service = PromptLibraryService(session)
+    fields = [
+        {
+            "name": "score",
+            "type": "number",
+            "description": "",
+            "target": {"kind": "score"},
+        }
+    ]
+    with pytest.raises(InvalidInputError, match="node-context"):
+        service.create(
+            user.id,
+            PromptCreate(
+                name="Chat with fields",
+                context=PromptContext.CHAT_BASE,
+                body="Hello",
+                output_fields=fields,
+            ),
+        )
+    with pytest.raises(InvalidInputError, match="'score'"):
+        service.create(
+            user.id,
+            PromptCreate(
+                name="Transform with score",
+                context=PromptContext.NODE_TRANSFORM,
+                body="Rewrite {{text}}",
+                output_fields=fields,
+            ),
+        )

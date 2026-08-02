@@ -21,7 +21,7 @@ from app.pipelines.llm.output_schema import listwise_schema, validate_listwise
 from app.pipelines.llm.presets import RERANK_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render, render_items_block
 from app.pipelines.llm.summaries import llm_call_summary_values
-from app.pipelines.llm.validation import ShellRules, shell_issues
+from app.pipelines.llm.validation import RERANK_TARGETS, ShellRules, shell_issues
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 _RULES = ShellRules(
     node_label="LLM reranker",
-    allowed_targets=frozenset({"score", "metadata"}),
+    allowed_targets=RERANK_TARGETS,
     allowed_placeholders=frozenset({"items", "query"}),
 )
 

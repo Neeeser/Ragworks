@@ -128,6 +128,7 @@ def get_prompt(
         **_read(prompt).model_dump(),
         body=version.body,
         system_body=version.system_body,
+        output_fields=version.output_fields,
         used_by=prompt_usages(session, current_user.id, prompt_id),
     )
 
