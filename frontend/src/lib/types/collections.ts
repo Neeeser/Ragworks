@@ -124,22 +124,6 @@ export interface CollectionStatsHistory {
   events_sampled: boolean;
 }
 
-export interface PromptVariable {
-  name: string;
-  description: string;
-  example?: string | null;
-}
-
-export interface PromptDetails {
-  template: string;
-  rendered: string;
-  context: Record<string, string>;
-  variables: PromptVariable[];
-  is_custom: boolean;
-}
-
-export type CollectionPromptDetails = PromptDetails;
-
 export interface CollectionCreatePayload {
   name: string;
   description?: string;

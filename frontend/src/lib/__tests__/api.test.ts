@@ -367,9 +367,9 @@ describe("api", () => {
 
     await Promise.all([
       getBasePrompt("token"),
-      updateBasePrompt("token", "template"),
+      updateBasePrompt("token", { prompt_id: "prompt-1", version: "latest" }),
       getCollectionPrompt("token", "col-1"),
-      updateCollectionPrompt("token", "col-1", "template"),
+      updateCollectionPrompt("token", "col-1", { prompt_id: "prompt-1", version: 2 }),
       fetchDocuments("token", "col-1"),
       fetchDocumentChunks("token", "doc-1"),
       fetchChunkDetail("token", "chunk-1"),

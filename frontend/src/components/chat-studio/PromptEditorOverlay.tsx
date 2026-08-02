@@ -1,62 +1,53 @@
 "use client";
 
-import { X } from "lucide-react";
-import { type RefObject, useId } from "react";
+import { ExternalLink, X } from "lucide-react";
+import Link from "next/link";
+import { useId } from "react";
 
+import type { PromptChoice, PromptSection } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { inputClass } from "@/components/ui/field";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Markdown } from "@/components/ui/markdown";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { cn } from "@/lib/utils";
 
-import type { PromptDetails } from "@/lib/types";
-
-type PromptEditorSection = {
-  id: string;
-  label: string;
-  scope: "base" | "collection";
-  details: PromptDetails | null;
-  draft: string;
-  hasChanges: boolean;
-  saving: boolean;
-  error: string | null;
-};
+import type { PromptContext, PromptRead } from "@/lib/types";
 
 interface PromptEditorOverlayProps {
   isOpen: boolean;
   onClose: () => void;
-  sections: PromptEditorSection[];
+  sections: PromptSection[];
   activeSectionId: string | null;
+  libraryPrompts: PromptRead[];
   onSelectSection: (sectionId: string) => void;
-  onDraftChange: (sectionId: string, value: string) => void;
+  onChoice: (sectionId: string, choice: PromptChoice) => void;
   onSave: (sectionId: string) => void;
-  onReset: (sectionId: string) => void;
-  onInsertVariable: (sectionId: string, varName: string) => void;
   promptPreviewMarkdown: string;
-  inputRef: RefObject<HTMLTextAreaElement | null>;
 }
 
+const SECTION_CONTEXT: Record<PromptSection["scope"], PromptContext> = {
+  base: "chat.base",
+  collection: "chat.tool",
+};
+
 /**
- * The system-prompt editor: the template on the left, what the model will
- * actually see on the right, and the variables that can be dropped into it.
- *
- * The preview is the reason this is an overlay rather than a field in the run
- * settings pane — the assembled prompt needs the height to be read.
+ * The chat prompt picker: each section references a library prompt with a
+ * Docker-tag style version pin, previewed in place. Editing bodies happens in
+ * the Prompts studio — this overlay only chooses which prompt and version a
+ * section runs.
  */
 export const PromptEditorOverlay = ({
   isOpen,
   onClose,
   sections,
   activeSectionId,
+  libraryPrompts,
   onSelectSection,
-  onDraftChange,
+  onChoice,
   onSave,
-  onReset,
-  onInsertVariable,
   promptPreviewMarkdown,
-  inputRef,
 }: PromptEditorOverlayProps) => {
   const titleId = useId();
 
@@ -65,10 +56,20 @@ export const PromptEditorOverlay = ({
   }
 
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
-  const variables = activeSection.details?.variables ?? [];
-  const contextEntries = Object.entries(activeSection.details?.context ?? {});
+  const contextForSection = SECTION_CONTEXT[activeSection.scope];
+  const candidates = libraryPrompts.filter((prompt) => prompt.context === contextForSection);
+  const chosen = activeSection.choice;
+  const chosenPrompt = candidates.find((prompt) => prompt.id === chosen?.promptId) ?? null;
+  const maxVersion =
+    chosenPrompt?.current_version ?? activeSection.selection?.prompt?.current_version ?? 1;
+  const versionOptions = [
+    { value: "latest", label: `latest (v${maxVersion})` },
+    ...Array.from({ length: maxVersion }, (_, index) => maxVersion - index).map((version) => ({
+      value: String(version),
+      label: `v${version}`,
+    })),
+  ];
   const previewSource = promptPreviewMarkdown?.trim() ? promptPreviewMarkdown : "_No content yet._";
-  const headerLabel = activeSection.scope === "base" ? "Base prompt" : "Tool prompt";
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId} backdropClassName="bg-canvas/80">
@@ -78,14 +79,14 @@ export const PromptEditorOverlay = ({
             id={titleId}
             className="truncate text-head font-semibold tracking-[-0.01em] text-primary"
           >
-            Edit prompt sections
+            System prompt
           </h2>
           <Button
             variant="ghost"
             size="sm"
             className="ml-auto"
             onClick={onClose}
-            aria-label="Close prompt editor"
+            aria-label="Close prompt picker"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
           </Button>
@@ -121,95 +122,66 @@ export const PromptEditorOverlay = ({
           })}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="flex w-full flex-1 flex-col lg:w-1/2">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  className="text-instrument font-medium text-muted"
-                  htmlFor="system-prompt-editor"
-                >
-                  {headerLabel} template
-                </label>
-                <Button size="sm" variant="ghost" onClick={() => onReset(activeSection.id)}>
-                  Revert to default
-                </Button>
-              </div>
-              <textarea
-                id="system-prompt-editor"
-                ref={inputRef}
-                className={cn(inputClass, "mt-1 min-h-[300px] flex-1 resize-none font-mono")}
-                value={activeSection.draft}
-                onChange={(event) => onDraftChange(activeSection.id, event.target.value)}
-                placeholder="Write instructions with Markdown. Use {{variable}} placeholders."
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 lg:flex-row">
+          <div className="flex w-full flex-col gap-3 lg:w-[40%]">
+            <div className="space-y-1">
+              <InstrumentLabel>Prompt</InstrumentLabel>
+              <CustomSelect
+                aria-label="Prompt"
+                value={chosen?.promptId ?? ""}
+                placeholder="Pick a prompt"
+                options={candidates.map((prompt) => ({
+                  value: prompt.id,
+                  label: prompt.name,
+                }))}
+                onValueChange={(promptId) =>
+                  onChoice(activeSection.id, { promptId, version: "latest" })
+                }
               />
-              <p className="mt-1 text-instrument text-meta">
-                Left blank, the default prompt shipped with Ragworks applies.
-              </p>
             </div>
-
-            <div className="flex w-full flex-1 flex-col lg:w-1/2">
-              <div className="flex items-center justify-between gap-2">
-                <InstrumentLabel>Rendered preview</InstrumentLabel>
-                <Chip tone={activeSection.details?.is_custom ? "accent" : "neutral"}>
-                  {activeSection.details?.is_custom ? "Custom template" : "Default template"}
+            <div className="space-y-1">
+              <InstrumentLabel>Version</InstrumentLabel>
+              <CustomSelect
+                aria-label="Version"
+                value={chosen ? String(chosen.version) : "latest"}
+                placeholder="latest"
+                disabled={!chosen}
+                options={versionOptions}
+                onValueChange={(value) =>
+                  chosen &&
+                  onChoice(activeSection.id, {
+                    promptId: chosen.promptId,
+                    version: value === "latest" ? "latest" : Number(value),
+                  })
+                }
+              />
+            </div>
+            {chosenPrompt && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip tone={chosenPrompt.source === "shipped" ? "neutral" : "accent"}>
+                  {chosenPrompt.source === "shipped" ? "Shipped" : "Yours"}
                 </Chip>
+                <Link
+                  href={`/prompts?prompt=${chosenPrompt.id}`}
+                  className="inline-flex items-center gap-1 text-instrument text-accent-cyan hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+                >
+                  Edit in prompt studio
+                  <ExternalLink className="h-3 w-3" aria-hidden />
+                </Link>
               </div>
-              <div className="mt-1 min-h-[300px] flex-1 overflow-y-auto rounded-control border border-hairline bg-surface p-2">
-                <Markdown className="max-w-[66ch]">{previewSource}</Markdown>
-              </div>
+            )}
+            <div className="min-h-0 flex-1 space-y-1">
+              <InstrumentLabel>Template</InstrumentLabel>
+              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
+                {activeSection.choiceBody || "No template selected."}
+              </pre>
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="space-y-1">
-              <InstrumentLabel>Variables</InstrumentLabel>
-              <p className="text-instrument text-meta">
-                Each renders with the current session&apos;s metadata; clicking one inserts it at
-                the cursor.
-              </p>
-              <div className="max-h-60 divide-y divide-hairline overflow-y-auto">
-                {variables.map((variable) => (
-                  <button
-                    key={variable.name}
-                    type="button"
-                    className="w-full rounded-control px-2 py-1.5 text-left transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
-                    onClick={() => onInsertVariable(activeSection.id, variable.name)}
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <code className="font-mono text-instrument text-accent-violet">
-                        {`{{${variable.name}}}`}
-                      </code>
-                      {variable.example && (
-                        <span className="text-instrument text-meta">
-                          Example: <span className="text-body">{variable.example}</span>
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-ui text-body">{variable.description}</p>
-                  </button>
-                ))}
-                {variables.length === 0 && (
-                  <p className="py-1.5 text-ui text-muted">No template variables available.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <InstrumentLabel>Example context</InstrumentLabel>
-              <div className="max-h-32 divide-y divide-hairline overflow-y-auto">
-                {contextEntries.map(([key, value]) => (
-                  <div key={key} className="flex items-start justify-between gap-3 py-1">
-                    <span className="truncate text-instrument text-meta">{key}</span>
-                    <span className="max-w-[60%] truncate text-right text-ui text-body">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-                {contextEntries.length === 0 && (
-                  <p className="py-1.5 text-ui text-muted">Context not available yet.</p>
-                )}
-              </div>
+          <div className="flex w-full min-h-0 flex-1 flex-col lg:w-[60%]">
+            <InstrumentLabel>Rendered preview</InstrumentLabel>
+            <div className="mt-1 min-h-[300px] flex-1 overflow-y-auto rounded-control border border-hairline bg-surface p-2">
+              <Markdown className="max-w-[66ch]">{previewSource}</Markdown>
             </div>
           </div>
         </div>
@@ -229,7 +201,7 @@ export const PromptEditorOverlay = ({
               loading={activeSection.saving}
               disabled={!activeSection.hasChanges || activeSection.saving}
             >
-              Save prompt
+              Use this prompt
             </Button>
           </div>
         </div>

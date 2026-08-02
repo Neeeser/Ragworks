@@ -22,7 +22,8 @@ import type {
   ModelInfo,
   PipelineNodeRunTrace,
   PipelineTraceResponse,
-  PromptDetails,
+  PromptRead,
+  PromptSelection,
   ToolCallTrace,
   User,
 } from "@/lib/types";
@@ -189,13 +190,29 @@ export function makeChatMessage(overrides: Partial<ChatMessage> = {}): ChatMessa
   };
 }
 
-export function makePromptDetails(overrides: Partial<PromptDetails> = {}): PromptDetails {
+export function makePromptRead(overrides: Partial<PromptRead> = {}): PromptRead {
   return {
-    template: "System prompt for {{user}}",
+    id: "prompt-1",
+    name: "Base prompt",
+    description: null,
+    context: "chat.base",
+    source: "user",
+    shipped_key: null,
+    current_version: 2,
+    created_at: TIMESTAMP,
+    updated_at: TIMESTAMP,
+    ...overrides,
+  };
+}
+
+export function makePromptSelection(overrides: Partial<PromptSelection> = {}): PromptSelection {
+  return {
+    reference: { prompt_id: "prompt-1", version: "latest" },
+    prompt: makePromptRead(),
+    body: "System prompt for {{user}}",
     rendered: "System prompt for user@example.com",
     context: { user: "user@example.com" },
     variables: [{ name: "user", description: "User email" }],
-    is_custom: true,
     ...overrides,
   };
 }

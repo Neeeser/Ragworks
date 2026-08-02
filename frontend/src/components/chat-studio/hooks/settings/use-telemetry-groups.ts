@@ -75,7 +75,7 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
   } = params;
 
   const {
-    basePromptDetails,
+    baseSelection,
     promptSectionsSummary,
     promptPreviewMarkdown,
     promptLoading,
@@ -141,7 +141,7 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
 
   const telemetryPrompts = useMemo<TelemetryPromptsProps>(
     () => ({
-      systemPromptCustom: Boolean(basePromptDetails?.is_custom),
+      systemPromptCustom: baseSelection?.prompt?.source === "user",
       promptSections: promptSectionsSummary,
       promptPreviewMarkdown,
       promptLoading,
@@ -152,7 +152,7 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
       onPromptEdit: handlePromptEditorOpen,
     }),
     [
-      basePromptDetails?.is_custom,
+      baseSelection?.prompt?.source,
       handlePromptEditorOpen,
       promptError,
       promptGeneratedAt,
@@ -220,7 +220,7 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
 
   const overrideSections = useMemo(() => {
     const sections: Array<{ id: string; label: string }> = [];
-    if (basePromptDetails?.is_custom) {
+    if (baseSelection?.prompt?.source === "user") {
       sections.push({ id: TELEMETRY_SECTION_IDS.systemPrompt, label: "System prompt" });
     }
     if (selectedToolCollectionIds.length > 0) {
@@ -238,7 +238,7 @@ export function useTelemetryGroups(params: UseTelemetryGroupsParams): UseTelemet
     return sections;
   }, [
     activeParameterCount,
-    basePromptDetails?.is_custom,
+    baseSelection?.prompt?.source,
     providerRuleCount,
     selectedToolCollectionIds.length,
     streamingEnabled,

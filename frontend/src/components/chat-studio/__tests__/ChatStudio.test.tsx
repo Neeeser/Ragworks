@@ -31,7 +31,7 @@ import type {
   ChatCompletionPayload,
   ChatRequestPayload,
   Document,
-  PromptDetails,
+  PromptSelection,
   RunSettingsSectionKey,
 } from "@/lib/types";
 
@@ -118,12 +118,7 @@ vi.mock("@/components/chat-studio/PromptEditorOverlay", () => ({
     if (!props.isOpen) {
       return <div data-testid="prompt-editor" />;
     }
-    const inputRef = props.inputRef as { current: HTMLTextAreaElement | null };
-    return (
-      <div data-testid="prompt-editor">
-        <textarea ref={inputRef} data-testid="prompt-textarea" />
-      </div>
-    );
+    return <div data-testid="prompt-editor" data-open="true" />;
   },
 }));
 
@@ -170,12 +165,12 @@ const setupDefaultApiMocks = () => {
   api.updateRunSettingsOrder.mockResolvedValue(baseUser);
   api.updateBasePrompt.mockResolvedValue({
     ...basePromptDetails,
-    template: "Updated base",
-  } satisfies PromptDetails);
+    body: "Updated base",
+  } satisfies PromptSelection);
   api.updateCollectionPrompt.mockResolvedValue({
     ...collectionPromptDetails,
-    template: "Updated collection",
-  } satisfies PromptDetails);
+    body: "Updated collection",
+  } satisfies PromptSelection);
   api.streamChat.mockImplementation(
     async (
       _token: string,
@@ -866,7 +861,7 @@ describe("ChatStudio", () => {
       expect(screen.getByTestId("notification")).toHaveTextContent("Save failed");
     });
 
-    it("saves prompt edits from the prompt editor overlay", async () => {
+    it("saves a prompt selection from the prompt picker overlay", async () => {
       window.sessionStorage.setItem(CHAT_STUDIO_LOADED_KEY, "true");
       setMockParams({ sessionId: "session-1" });
 
@@ -877,23 +872,27 @@ describe("ChatStudio", () => {
         (mockTelemetryPanelProps as { onPromptEdit: () => void }).onPromptEdit();
       });
       await waitFor(() => {
-        expect(screen.getByTestId("prompt-textarea")).toBeInTheDocument();
+        expect(screen.getByTestId("prompt-editor")).toHaveAttribute("data-open", "true");
       });
 
       act(() => {
         (
-          mockPromptOverlayProps as { onDraftChange: (section: string, value: string) => void }
-        ).onDraftChange("base", "Draft base");
+          mockPromptOverlayProps as {
+            onChoice: (section: string, choice: { promptId: string; version: unknown }) => void;
+          }
+        ).onChoice("base", { promptId: "prompt-2", version: 3 });
       });
 
-      // Re-read the freshly captured props so onSave closes over the updated draft.
       await act(async () => {
         await (mockPromptOverlayProps as { onSave: (section: string) => Promise<void> }).onSave(
           "base",
         );
       });
 
-      expect(api.updateBasePrompt).toHaveBeenCalledWith(AUTH_TOKEN, "Draft base");
+      expect(api.updateBasePrompt).toHaveBeenCalledWith(AUTH_TOKEN, {
+        prompt_id: "prompt-2",
+        version: 3,
+      });
     });
   });
 

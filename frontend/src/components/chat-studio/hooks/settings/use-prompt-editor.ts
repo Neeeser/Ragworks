@@ -1,23 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   getBasePrompt,
   getCollectionPrompt,
+  getPrompt,
+  listPrompts,
+  listPromptVersions,
   updateBasePrompt,
   updateCollectionPrompt,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { Collection, PromptDetails } from "@/lib/types";
+import type {
+  Collection,
+  PromptRead,
+  PromptSelection,
+  PromptVersionSelector,
+} from "@/lib/types";
+
+export interface PromptChoice {
+  promptId: string;
+  version: PromptVersionSelector;
+}
 
 export interface PromptSection {
   id: string;
   label: string;
   scope: "base" | "collection";
-  details: PromptDetails | null;
-  draft: string;
+  selection: PromptSelection | null;
+  choice: PromptChoice | null;
+  /** Body of the drafted choice (the saved body until the choice changes). */
+  choiceBody: string;
   hasChanges: boolean;
   saving: boolean;
   error: string | null;
@@ -27,6 +42,7 @@ export interface PromptSectionSummary {
   id: string;
   label: string;
   scope: "base" | "collection";
+  promptName: string | null;
   isCustom: boolean;
 }
 
@@ -37,72 +53,69 @@ interface UsePromptEditorParams {
   selectedToolCollections: Collection[];
 }
 
-interface UsePromptEditorResult {
-  promptEditorRef: React.RefObject<HTMLTextAreaElement | null>;
-  promptEditorOpen: boolean;
-  activePromptSectionId: string;
-  basePromptDetails: PromptDetails | null;
-  promptSections: PromptSection[];
-  promptSectionsSummary: PromptSectionSummary[];
-  promptPreviewMarkdown: string;
-  promptLoading: boolean;
-  promptError: string | null;
-  promptGeneratedAt: string | null;
-  handlePromptEditorOpen: () => void;
-  handlePromptEditorClose: () => void;
-  handlePromptSectionSelect: (sectionId: string) => void;
-  handlePromptDraftChange: (sectionId: string, value: string) => void;
-  handlePromptSave: (sectionId: string) => Promise<void>;
-  handlePromptReset: (sectionId: string) => void;
-  handleInsertPromptVariable: (sectionId: string, variableName: string) => void;
-}
-
 const PROMPT_SAVE_ERROR = "Unable to update the system prompt right now.";
 
+function substituteVariables(template: string, context?: Record<string, string>): string {
+  if (!template) return "";
+  if (!context) return template;
+  return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, rawKey) => {
+    const key = String(rawKey).trim();
+    return context?.[key] ?? `{{${key}}}`;
+  });
+}
+
+function choiceFromSelection(selection: PromptSelection | null): PromptChoice | null {
+  if (!selection?.reference) return null;
+  return {
+    promptId: selection.reference.prompt_id,
+    version: selection.reference.version,
+  };
+}
+
+function sameChoice(a: PromptChoice | null, b: PromptChoice | null): boolean {
+  if (!a || !b) return a === b;
+  return a.promptId === b.promptId && a.version === b.version;
+}
+
 /**
- * Owns the base + per-collection system prompt state: fetching, drafts, preview
- * composition, and the editor overlay handlers. Errors are surfaced per-section
- * rather than through the global status channel, matching the original behavior.
+ * Owns the base + per-collection prompt selections: which library prompt each
+ * section references (Docker-tag style version pinning), the drafted choice
+ * before saving, and the assembled preview. Prompt bodies are always resolved
+ * from the library — there is no inline template state anymore.
  */
 export function usePromptEditor({
   authToken,
   authLoading,
   selectedToolCollectionIds,
   selectedToolCollections,
-}: UsePromptEditorParams): UsePromptEditorResult {
-  const [basePromptDetails, setBasePromptDetails] = useState<PromptDetails | null>(null);
+}: UsePromptEditorParams) {
+  const [baseSelection, setBaseSelection] = useState<PromptSelection | null>(null);
   const [basePromptLoading, setBasePromptLoading] = useState(false);
   const [basePromptError, setBasePromptError] = useState<string | null>(null);
-  const [basePromptDraft, setBasePromptDraft] = useState("");
+  const [collectionSelections, setCollectionSelections] = useState<
+    Record<string, PromptSelection>
+  >({});
+  const [collectionErrors, setCollectionErrors] = useState<Record<string, string | null>>({});
+  const [collectionLoading, setCollectionLoading] = useState<Record<string, boolean>>({});
+  const [choices, setChoices] = useState<Record<string, PromptChoice | null>>({});
+  const [choiceBodies, setChoiceBodies] = useState<Record<string, string>>({});
+  const [savingBySection, setSavingBySection] = useState<Record<string, boolean>>({});
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [activePromptSectionId, setActivePromptSectionId] = useState("base");
-  const [collectionPromptDetails, setCollectionPromptDetails] = useState<
-    Record<string, PromptDetails>
-  >({});
-  const [collectionPromptDrafts, setCollectionPromptDrafts] = useState<Record<string, string>>({});
-  const [collectionPromptLoading, setCollectionPromptLoading] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [collectionPromptErrors, setCollectionPromptErrors] = useState<
-    Record<string, string | null>
-  >({});
-  const [promptSavingBySection, setPromptSavingBySection] = useState<Record<string, boolean>>({});
-  const promptEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [libraryPrompts, setLibraryPrompts] = useState<PromptRead[]>([]);
 
   useEffect(() => {
     if (authLoading || !authToken) {
-      setBasePromptDetails(null);
-      setBasePromptDraft("");
+      setBaseSelection(null);
       return;
     }
     let cancelled = false;
     setBasePromptLoading(true);
     setBasePromptError(null);
     getBasePrompt(authToken)
-      .then((details) => {
+      .then((selection) => {
         if (cancelled) return;
-        setBasePromptDetails(details);
-        setBasePromptDraft((prev) => (prev ? prev : (details.template ?? "")));
+        setBaseSelection(selection);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -110,9 +123,7 @@ export function usePromptEditor({
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setBasePromptLoading(false);
-        }
+        if (!cancelled) setBasePromptLoading(false);
       });
     return () => {
       cancelled = true;
@@ -120,146 +131,172 @@ export function usePromptEditor({
   }, [authLoading, authToken]);
 
   useEffect(() => {
+    if (authLoading || !authToken) return;
+    let cancelled = false;
+    listPrompts(authToken)
+      .then((prompts) => {
+        if (!cancelled) setLibraryPrompts(prompts);
+      })
+      .catch(() => {
+        // The pickers degrade to the saved selection; errors surface on save.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, authToken, promptEditorOpen]);
+
+  useEffect(() => {
     if (authLoading || !authToken || selectedToolCollectionIds.length === 0) {
       return;
     }
     selectedToolCollectionIds.forEach((collectionId) => {
-      if (collectionPromptDetails[collectionId]) {
+      if (collectionSelections[collectionId]) {
         return;
       }
-      setCollectionPromptLoading((prev) => ({ ...prev, [collectionId]: true }));
-      setCollectionPromptErrors((prev) => ({ ...prev, [collectionId]: null }));
+      setCollectionLoading((prev) => ({ ...prev, [collectionId]: true }));
+      setCollectionErrors((prev) => ({ ...prev, [collectionId]: null }));
       getCollectionPrompt(authToken, collectionId)
-        .then((details) => {
-          setCollectionPromptDetails((prev) => ({ ...prev, [collectionId]: details }));
-          setCollectionPromptDrafts((prev) => {
-            if (prev[collectionId] !== undefined) {
-              return prev;
-            }
-            return { ...prev, [collectionId]: details.template ?? "" };
-          });
+        .then((selection) => {
+          setCollectionSelections((prev) => ({ ...prev, [collectionId]: selection }));
         })
         .catch((error: unknown) => {
-          setCollectionPromptErrors((prev) => ({
+          setCollectionErrors((prev) => ({
             ...prev,
             [collectionId]: getErrorMessage(error, "Unable to load the tool prompt."),
           }));
         })
         .finally(() => {
-          setCollectionPromptLoading((prev) => ({ ...prev, [collectionId]: false }));
+          setCollectionLoading((prev) => ({ ...prev, [collectionId]: false }));
         });
     });
-  }, [authLoading, authToken, collectionPromptDetails, selectedToolCollectionIds]);
+  }, [authLoading, authToken, collectionSelections, selectedToolCollectionIds]);
 
-  const substitutePromptVariables = useCallback(
-    (templateValue: string, context?: Record<string, string>) => {
-      if (!templateValue) return "";
-      if (!context) return templateValue;
-      return templateValue.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, rawKey) => {
-        const key = String(rawKey).trim();
-        return context?.[key] ?? `{{${key}}}`;
-      });
-    },
-    [],
+  const selectionFor = useCallback(
+    (sectionId: string): PromptSelection | null =>
+      sectionId === "base" ? baseSelection : (collectionSelections[sectionId] ?? null),
+    [baseSelection, collectionSelections],
   );
 
-  const basePromptTemplate = useMemo(() => {
-    return basePromptDraft || basePromptDetails?.template || "";
-  }, [basePromptDetails?.template, basePromptDraft]);
+  const choiceFor = useCallback(
+    (sectionId: string): PromptChoice | null => {
+      const drafted = choices[sectionId];
+      if (drafted !== undefined) return drafted;
+      return choiceFromSelection(selectionFor(sectionId));
+    },
+    [choices, selectionFor],
+  );
 
-  const basePromptPreview = useMemo(() => {
-    return substitutePromptVariables(basePromptTemplate, basePromptDetails?.context);
-  }, [basePromptDetails?.context, basePromptTemplate, substitutePromptVariables]);
+  const bodyFor = useCallback(
+    (sectionId: string): string => {
+      const selection = selectionFor(sectionId);
+      const drafted = choices[sectionId];
+      if (drafted === undefined || sameChoice(drafted, choiceFromSelection(selection))) {
+        return selection?.body ?? "";
+      }
+      return choiceBodies[sectionId] ?? "";
+    },
+    [choiceBodies, choices, selectionFor],
+  );
 
-  const toolPromptPreviews = useMemo(() => {
-    return selectedToolCollections
-      .map((collection) => {
-        const details = collectionPromptDetails[collection.id];
-        const draft = collectionPromptDrafts[collection.id] ?? details?.template ?? "";
-        return substitutePromptVariables(draft, details?.context);
-      })
-      .filter((section) => section.trim().length > 0);
-  }, [
-    collectionPromptDetails,
-    collectionPromptDrafts,
-    selectedToolCollections,
-    substitutePromptVariables,
-  ]);
-
-  const promptPreviewMarkdown = useMemo(() => {
-    return [basePromptPreview, ...toolPromptPreviews]
-      .map((section) => section.trim())
-      .filter(Boolean)
-      .join("\n\n");
-  }, [basePromptPreview, toolPromptPreviews]);
-
-  const basePromptHasChanges = useMemo(() => {
-    if (!basePromptDetails) {
-      return Boolean(basePromptDraft);
-    }
-    return basePromptDraft !== (basePromptDetails.template ?? "");
-  }, [basePromptDetails, basePromptDraft]);
+  const handlePromptChoice = useCallback(
+    (sectionId: string, choice: PromptChoice) => {
+      setChoices((prev) => ({ ...prev, [sectionId]: choice }));
+      if (!authToken) return;
+      const saved = choiceFromSelection(selectionFor(sectionId));
+      if (sameChoice(choice, saved)) return;
+      const loadBody =
+        choice.version === "latest"
+          ? getPrompt(authToken, choice.promptId).then((detail) => detail.body)
+          : listPromptVersions(authToken, choice.promptId).then(
+              (versions) =>
+                versions.find((entry) => entry.version === choice.version)?.body ?? "",
+            );
+      void loadBody
+        .then((body) => {
+          setChoiceBodies((prev) => ({ ...prev, [sectionId]: body }));
+        })
+        .catch(() => {
+          setChoiceBodies((prev) => ({ ...prev, [sectionId]: "" }));
+        });
+    },
+    [authToken, selectionFor],
+  );
 
   const promptSections = useMemo<PromptSection[]>(() => {
-    const sections: PromptSection[] = [
-      {
-        id: "base",
-        label: "Base",
-        scope: "base",
-        details: basePromptDetails,
-        draft: basePromptDraft,
-        hasChanges: basePromptHasChanges,
-        saving: Boolean(promptSavingBySection.base),
-        error: basePromptError,
-      },
-    ];
+    const build = (
+      id: string,
+      label: string,
+      scope: "base" | "collection",
+      error: string | null,
+    ): PromptSection => {
+      const selection = selectionFor(id);
+      const choice = choiceFor(id);
+      return {
+        id,
+        label,
+        scope,
+        selection,
+        choice,
+        choiceBody: bodyFor(id),
+        hasChanges: !sameChoice(choice, choiceFromSelection(selection)),
+        saving: Boolean(savingBySection[id]),
+        error,
+      };
+    };
+    const sections = [build("base", "Base", "base", basePromptError)];
     selectedToolCollections.forEach((collection) => {
-      const details = collectionPromptDetails[collection.id] ?? null;
-      const draft = collectionPromptDrafts[collection.id] ?? details?.template ?? "";
-      const hasChanges = details ? draft !== (details.template ?? "") : draft.trim().length > 0;
-      sections.push({
-        id: collection.id,
-        label: collection.name,
-        scope: "collection",
-        details,
-        draft,
-        hasChanges,
-        saving: Boolean(promptSavingBySection[collection.id]),
-        error: collectionPromptErrors[collection.id] ?? null,
-      });
+      sections.push(
+        build(
+          collection.id,
+          collection.name,
+          "collection",
+          collectionErrors[collection.id] ?? null,
+        ),
+      );
     });
     return sections;
   }, [
-    basePromptDetails,
-    basePromptDraft,
     basePromptError,
-    basePromptHasChanges,
-    collectionPromptDetails,
-    collectionPromptDrafts,
-    collectionPromptErrors,
-    promptSavingBySection,
+    bodyFor,
+    choiceFor,
+    collectionErrors,
+    savingBySection,
     selectedToolCollections,
+    selectionFor,
   ]);
 
-  const promptSectionsSummary = useMemo<PromptSectionSummary[]>(() => {
-    return promptSections.map((section) => ({
-      id: section.id,
-      label: section.label,
-      scope: section.scope,
-      isCustom: Boolean(section.details?.is_custom),
-    }));
+  const promptSectionsSummary = useMemo<PromptSectionSummary[]>(
+    () =>
+      promptSections.map((section) => ({
+        id: section.id,
+        label: section.label,
+        scope: section.scope,
+        promptName: section.selection?.prompt?.name ?? null,
+        isCustom: section.selection?.prompt?.source === "user",
+      })),
+    [promptSections],
+  );
+
+  const promptPreviewMarkdown = useMemo(() => {
+    const sections = promptSections.map((section) =>
+      substituteVariables(section.choiceBody, section.selection?.context),
+    );
+    return sections
+      .map((section) => section.trim())
+      .filter(Boolean)
+      .join("\n\n");
   }, [promptSections]);
 
   const promptLoading =
     basePromptLoading ||
-    selectedToolCollectionIds.some((collectionId) => collectionPromptLoading[collectionId]);
+    selectedToolCollectionIds.some((collectionId) => collectionLoading[collectionId]);
   const promptError =
     basePromptError ??
     selectedToolCollectionIds
-      .map((collectionId) => collectionPromptErrors[collectionId])
+      .map((collectionId) => collectionErrors[collectionId])
       .find((value) => Boolean(value)) ??
     null;
-  const promptGeneratedAt = basePromptDetails?.context?.["datetime.iso"] ?? null;
+  const promptGeneratedAt = baseSelection?.context?.["datetime.iso"] ?? null;
 
   useEffect(() => {
     if (
@@ -271,133 +308,60 @@ export function usePromptEditor({
   }, [activePromptSectionId, selectedToolCollectionIds]);
 
   const handlePromptEditorOpen = useCallback(() => {
-    if (promptSections.length > 0) {
-      const isActiveValid = promptSections.some((section) => section.id === activePromptSectionId);
-      if (!isActiveValid) {
-        setActivePromptSectionId("base");
-      }
-    }
     setPromptEditorOpen(true);
-    window.setTimeout(() => {
-      promptEditorRef.current?.focus();
-    }, 20);
-  }, [activePromptSectionId, promptSections]);
+  }, []);
 
   const handlePromptEditorClose = useCallback(() => {
     setPromptEditorOpen(false);
+    setChoices({});
+    setChoiceBodies({});
   }, []);
-
-  const updatePromptDraft = useCallback((sectionId: string, updater: (value: string) => string) => {
-    if (sectionId === "base") {
-      setBasePromptDraft(updater);
-      return;
-    }
-    setCollectionPromptDrafts((prev) => {
-      const current = prev[sectionId] ?? "";
-      return { ...prev, [sectionId]: updater(current) };
-    });
-  }, []);
-
-  const handleInsertPromptVariable = useCallback(
-    (sectionId: string, variableName: string) => {
-      const insertion = `{{${variableName}}}`;
-      updatePromptDraft(sectionId, (prev) => {
-        const textarea = promptEditorRef.current;
-        if (textarea) {
-          const start = textarea.selectionStart ?? prev.length;
-          const end = textarea.selectionEnd ?? prev.length;
-          const next = prev.slice(0, start) + insertion + prev.slice(end);
-          window.requestAnimationFrame(() => {
-            const cursor = start + insertion.length;
-            textarea.selectionStart = cursor;
-            textarea.selectionEnd = cursor;
-            textarea.focus();
-          });
-          return next;
-        }
-        const spacer = prev.endsWith(" ") || prev.endsWith("\n") || prev.length === 0 ? "" : " ";
-        return `${prev}${spacer}${insertion}`;
-      });
-    },
-    [updatePromptDraft],
-  );
-
-  const handlePromptReset = useCallback(
-    (sectionId: string) => {
-      updatePromptDraft(sectionId, () => "");
-      window.requestAnimationFrame(() => {
-        promptEditorRef.current?.focus();
-      });
-    },
-    [updatePromptDraft],
-  );
 
   const handlePromptSave = useCallback(
     async (sectionId: string) => {
-      if (!authToken) {
-        if (sectionId === "base") {
-          setBasePromptError("Sign in to update the system prompt.");
-        } else {
-          setCollectionPromptErrors((prev) => ({
-            ...prev,
-            [sectionId]: "Sign in to update the system prompt.",
-          }));
-        }
-        return;
-      }
-      setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: true }));
-      if (sectionId === "base") {
-        setBasePromptError(null);
-        try {
-          const updated = await updateBasePrompt(authToken, basePromptDraft);
-          setBasePromptDetails(updated);
-          setBasePromptDraft(updated.template ?? "");
-          setPromptEditorOpen(false);
-        } catch (error) {
-          setBasePromptError(getErrorMessage(error, PROMPT_SAVE_ERROR));
-        } finally {
-          setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: false }));
-        }
-        return;
-      }
-      setCollectionPromptErrors((prev) => ({ ...prev, [sectionId]: null }));
+      const choice = choiceFor(sectionId);
+      if (!authToken || !choice) return;
+      setSavingBySection((prev) => ({ ...prev, [sectionId]: true }));
+      const payload = { prompt_id: choice.promptId, version: choice.version };
       try {
-        const draft = collectionPromptDrafts[sectionId] ?? "";
-        const updated = await updateCollectionPrompt(authToken, sectionId, draft);
-        setCollectionPromptDetails((prev) => ({ ...prev, [sectionId]: updated }));
-        setCollectionPromptDrafts((prev) => ({
-          ...prev,
-          [sectionId]: updated.template ?? "",
-        }));
+        if (sectionId === "base") {
+          setBasePromptError(null);
+          const updated = await updateBasePrompt(authToken, payload);
+          setBaseSelection(updated);
+        } else {
+          setCollectionErrors((prev) => ({ ...prev, [sectionId]: null }));
+          const updated = await updateCollectionPrompt(authToken, sectionId, payload);
+          setCollectionSelections((prev) => ({ ...prev, [sectionId]: updated }));
+        }
+        setChoices((prev) => {
+          const next = { ...prev };
+          delete next[sectionId];
+          return next;
+        });
         setPromptEditorOpen(false);
       } catch (error) {
-        setCollectionPromptErrors((prev) => ({
-          ...prev,
-          [sectionId]: getErrorMessage(error, PROMPT_SAVE_ERROR),
-        }));
+        const message = getErrorMessage(error, PROMPT_SAVE_ERROR);
+        if (sectionId === "base") {
+          setBasePromptError(message);
+        } else {
+          setCollectionErrors((prev) => ({ ...prev, [sectionId]: message }));
+        }
       } finally {
-        setPromptSavingBySection((prev) => ({ ...prev, [sectionId]: false }));
+        setSavingBySection((prev) => ({ ...prev, [sectionId]: false }));
       }
     },
-    [authToken, basePromptDraft, collectionPromptDrafts],
+    [authToken, choiceFor],
   );
 
   const handlePromptSectionSelect = useCallback((sectionId: string) => {
     setActivePromptSectionId(sectionId);
   }, []);
 
-  const handlePromptDraftChange = useCallback(
-    (sectionId: string, value: string) => {
-      updatePromptDraft(sectionId, () => value);
-    },
-    [updatePromptDraft],
-  );
-
   return {
-    promptEditorRef,
     promptEditorOpen,
     activePromptSectionId,
-    basePromptDetails,
+    baseSelection,
+    libraryPrompts,
     promptSections,
     promptSectionsSummary,
     promptPreviewMarkdown,
@@ -407,9 +371,7 @@ export function usePromptEditor({
     handlePromptEditorOpen,
     handlePromptEditorClose,
     handlePromptSectionSelect,
-    handlePromptDraftChange,
+    handlePromptChoice,
     handlePromptSave,
-    handlePromptReset,
-    handleInsertPromptVariable,
   };
 }
