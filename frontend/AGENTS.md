@@ -216,6 +216,11 @@ the same PR.
 - **Effects must not write state they derive.** Computing a value in `useMemo` and
   copying it into `useState` via an effect adds a render per change and a stale
   window. Derive it where you use it.
+- **After a mutation, apply the response — don't immediately refetch.** The
+  backend's request session commits at dependency teardown, after the response
+  is sent, so a GET fired the instant a POST resolves can read the pre-write
+  state and quietly revert the UI. Mutation endpoints return the updated
+  entity; fold that into state, and let any list refetch be cosmetic.
 - **Background refetches must be invisible to in-progress work.** The auth
   provider rotates the token every 12 minutes, re-running every data effect
   keyed on it — a reload must preserve the user's selection (re-find by id, not
