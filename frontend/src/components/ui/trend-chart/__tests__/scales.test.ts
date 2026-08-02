@@ -56,9 +56,15 @@ describe("fractionalIndex", () => {
     expect(fractionalIndex("2024-01-01T00:30:00Z", origin, 3600, 4)).toBe(0.5);
   });
 
-  it("drops a moment past the domain rather than clamping it to the edge", () => {
-    // Clamping would draw an event at a time it did not happen.
+  it("drops a moment outside the domain entirely", () => {
     expect(fractionalIndex("2024-01-05T00:00:00Z", origin, 3600, 4)).toBeNull();
     expect(fractionalIndex("2023-12-31T00:00:00Z", origin, 3600, 4)).toBeNull();
+  });
+
+  it("keeps an event inside the last bucket, on the final tick", () => {
+    // Series values plot at bucket starts, so the last tick sits one bucket
+    // short of the domain end. Rejecting past it silently hides the most
+    // recent activity — every run in the bucket the user is watching.
+    expect(fractionalIndex("2024-01-01T03:30:00Z", origin, 3600, 4)).toBe(3);
   });
 });

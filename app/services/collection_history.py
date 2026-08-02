@@ -37,7 +37,16 @@ from app.utils.time import utc_now
 #: other so the chosen width never leaves a span with too few buckets to read
 #: as a curve. `date_bin` cannot use month-based intervals, so the coarsest
 #: step is a fixed 30 days rather than a calendar month.
+#:
+#: The sub-minute steps are what a minutes-old collection needs: a 60-second
+#: floor gives it two buckets, and a two-tick axis has nowhere to draw the
+#: ingestion the user just ran — the chart reads as broken exactly when
+#: someone is watching their first upload land.
 BUCKET_LADDER: tuple[int, ...] = (
+    1,  # 1s
+    5,  # 5s
+    15,  # 15s
+    30,  # 30s
     60,  # 1m
     300,  # 5m
     900,  # 15m

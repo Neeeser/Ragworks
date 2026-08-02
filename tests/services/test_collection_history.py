@@ -103,7 +103,9 @@ def _service(session: Session) -> CollectionHistoryService:
 @pytest.mark.parametrize(
     ("span", "expected"),
     [
-        (timedelta(minutes=20), 60),
+        (timedelta(seconds=30), 1),
+        (timedelta(minutes=2), 5),
+        (timedelta(minutes=20), 30),
         (timedelta(hours=1), 60),
         (timedelta(hours=3), 300),
         (timedelta(days=1), 1800),
@@ -459,10 +461,14 @@ def test_history_returns_one_event_per_completed_ingest_run(session: Session) ->
     )
     session.commit()
 
+    # An explicit span: the lifetime domain is anchored on the first document
+    # or query, and this collection has neither — only runs.
     history = _service(session).history_for(
         user_id=user.id,
         collection_id=collection.id,
         collection_created_at=collection.created_at,
+        start=now - timedelta(hours=1),
+        end=now,
     )
 
     assert [event.duration_ms for event in history.ingestion_events] == [2000.0, 5000.0]

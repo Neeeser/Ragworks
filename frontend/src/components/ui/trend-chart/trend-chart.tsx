@@ -18,6 +18,7 @@ import {
 } from "./scales";
 import { TrendTooltip } from "./tooltip";
 import { useChartBrush } from "./use-chart-brush";
+import { usePlotScale } from "./use-plot-scale";
 
 import type { TrendChartProps } from "./types";
 
@@ -53,9 +54,11 @@ export function TrendChart({
     onResetBrush,
   });
 
+  const scale = usePlotScale(containerRef, height);
+
   // Events sit at their own moment, so each resolves to a fractional position
-  // on the bucket axis; one outside the domain is dropped rather than clamped
-  // onto an edge it did not happen at.
+  // on the bucket axis; one from outside the domain is dropped rather than
+  // drawn at a time it did not happen.
   const placed = useMemo(
     () =>
       (events ?? []).flatMap((event) => {
@@ -109,6 +112,7 @@ export function TrendChart({
           series={series}
           bands={bands ?? []}
           events={placed}
+          scale={scale}
           selection={selection}
           cursor={cursor}
           area={area}

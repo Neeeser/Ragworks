@@ -11,9 +11,11 @@ import {
   buildStepPath,
   isIsolated,
 } from "./scales";
+import { circleRadii } from "./use-plot-scale";
 
 import type { TrendBand, TrendEvent, TrendSeries } from "./types";
 import type { BucketSelection } from "./use-chart-brush";
+import type { PlotScale } from "./use-plot-scale";
 
 type Scale = {
   x: (index: number) => number;
@@ -21,6 +23,30 @@ type Scale = {
 };
 
 const PLOT_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
+
+/**
+ * A dot that stays round.
+ *
+ * The plot's viewBox is stretched independently on each axis, so radius has to
+ * be expressed per-axis to render as a circle rather than a lozenge.
+ */
+function Dot({
+  cx,
+  cy,
+  r,
+  // Named `plot`, not `scale`: SVG has its own `scale` attribute, and the
+  // collision types this prop as a string-or-number.
+  plot,
+  ...rest
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  plot: PlotScale;
+} & React.SVGProps<SVGEllipseElement>) {
+  const { rx, ry } = circleRadii(r, plot);
+  return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...rest} />;
+}
 
 /** Hairline reference lines at the quarter marks. */
 export function GridLines() {
@@ -107,25 +133,27 @@ export function BandLayer({ bands, x, y }: { bands: TrendBand[] } & Scale) {
  */
 export function EventLayer({
   events,
+  scale,
   x,
   y,
 }: {
   events: Array<TrendEvent & { index: number }>;
+  scale: PlotScale;
 } & Scale) {
   return (
     <>
       {events.map((event) => (
-        <circle
+        <Dot
           key={event.id}
           cx={x(event.index)}
           cy={y(event.value)}
           r={event.radius ?? 3}
+          plot={scale}
           style={{ fill: COLOR_VAR[event.color] }}
           opacity={event.muted ? 0.12 : 0.55}
-          vectorEffect="non-scaling-stroke"
         >
           {event.label && <title>{event.label}</title>}
-        </circle>
+        </Dot>
       ))}
     </>
   );
@@ -138,9 +166,10 @@ export function EventLayer({
 export function SeriesLayer({
   series,
   step,
+  scale,
   x,
   y,
-}: { series: TrendSeries[]; step?: boolean } & Scale) {
+}: { series: TrendSeries[]; step?: boolean; scale: PlotScale } & Scale) {
   const draw = step ? buildStepPath : buildPath;
   return (
     <>
@@ -159,13 +188,13 @@ export function SeriesLayer({
       {series.map((entry) =>
         entry.values.map((value, index) =>
           value !== null && isIsolated(entry.values, index) ? (
-            <circle
+            <Dot
               key={`${entry.id}-${index}`}
               cx={x(index)}
               cy={y(value)}
               r={3}
+              plot={scale}
               style={{ fill: COLOR_VAR[entry.color] }}
-              vectorEffect="non-scaling-stroke"
             />
           ) : null,
         ),
@@ -178,9 +207,10 @@ export function SeriesLayer({
 export function CursorLayer({
   index,
   series,
+  scale,
   x,
   y,
-}: { index: number; series: TrendSeries[] } & Scale) {
+}: { index: number; series: TrendSeries[]; scale: PlotScale } & Scale) {
   return (
     <>
       <line
@@ -195,11 +225,12 @@ export function CursorLayer({
       {series.map((entry) => {
         const value = entry.values[index];
         return value === null ? null : (
-          <circle
+          <Dot
             key={entry.id}
             cx={x(index)}
             cy={y(value)}
             r={3.5}
+            plot={scale}
             style={{ fill: COLOR_VAR[entry.color] }}
             stroke="var(--canvas)"
             strokeWidth={2}

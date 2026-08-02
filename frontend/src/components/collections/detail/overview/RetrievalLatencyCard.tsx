@@ -199,7 +199,7 @@ export function RetrievalLatencyCard({
             onBrush={onBrush}
             onResetBrush={onResetBrush}
           />
-          <ChartLegend sampled={sampled} unit="queries" />
+          <ChartLegend sampled={sampled} one="query" many="queries" />
           <div className="mt-2 border-t border-hairline pt-2">
             <SeriesLegendTable
               rows={rows}

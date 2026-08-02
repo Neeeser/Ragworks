@@ -74,11 +74,28 @@ describe("growthDots", () => {
 });
 
 describe("latencyBand", () => {
-  it("spans p50 to p95 per bucket", () => {
-    const band = latencyBand(points([1, 2]), (point) => point.ingestion, "series-1");
+  it("spans p50 to p95 for a bucket that measured a spread", () => {
+    const band = latencyBand(
+      [makeStatsHistoryPoint({ ingestion: { count: 4, p50_ms: 100, p95_ms: 400 } })],
+      (point) => point.ingestion,
+      "series-1",
+    );
 
-    expect(band.lower).toEqual([900, 900]);
-    expect(band.upper).toEqual([900, 900]);
+    expect(band.lower).toEqual([100]);
+    expect(band.upper).toEqual([400]);
+  });
+
+  it("skips a bucket holding one sample, which has no spread to shade", () => {
+    // Its p50 and p95 are both that one measurement, and shading between lone
+    // values inflates a single slow run into a wedge of invented variance.
+    const band = latencyBand(
+      [makeStatsHistoryPoint({ ingestion: { count: 1, p50_ms: 900, p95_ms: 900 } })],
+      (point) => point.ingestion,
+      "series-1",
+    );
+
+    expect(band.lower).toEqual([null]);
+    expect(band.upper).toEqual([null]);
   });
 
   it("carries null on both bounds where nothing was measured", () => {

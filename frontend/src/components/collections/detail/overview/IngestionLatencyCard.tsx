@@ -109,7 +109,7 @@ export function IngestionLatencyCard({
             onBrush={onBrush}
             onResetBrush={onResetBrush}
           />
-          <ChartLegend sampled={sampled} unit="runs" />
+          <ChartLegend sampled={sampled} one="run" many="runs" />
         </>
       ) : (
         <p className="mt-2 text-ui text-muted">No completed ingest runs in this range.</p>
@@ -123,13 +123,24 @@ export function IngestionLatencyCard({
  *
  * The band and dots are unlabelled shapes otherwise, and a reader who reads the
  * band as a second series draws the opposite conclusion from a widening one.
+ *
+ * Both forms of the noun are passed in rather than derived: stripping a
+ * trailing "s" turns "queries" into "querie".
  */
-export function ChartLegend({ sampled, unit }: { sampled: boolean; unit: string }) {
+export function ChartLegend({
+  sampled,
+  one,
+  many,
+}: {
+  sampled: boolean;
+  one: string;
+  many: string;
+}) {
   return (
     <p className="mt-1 text-instrument text-meta">
-      Each dot is one {unit.replace(/s$/, "")}; the line is the median and the band spans p50–p95.
+      Each dot is one {one}; the line is the median and the band spans p50–p95.
       {sampled &&
-        ` Dots are a sample of a larger set of ${unit} — the line and band cover them all.`}
+        ` Dots are a sample of a larger set of ${many} — the line and band cover them all.`}
     </p>
   );
 }

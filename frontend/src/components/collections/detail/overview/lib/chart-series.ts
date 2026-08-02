@@ -79,23 +79,41 @@ export function growthDots(
   });
 }
 
+/** Samples a bucket needs before its percentiles describe a spread. */
+const MIN_SPREAD_SAMPLES = 2;
+
 /**
  * The p50–p95 spread per bucket, as a band.
  *
- * Buckets with no samples carry null on both bounds, which breaks the band
- * rather than spanning a stretch where nothing was measured.
+ * A bucket is skipped unless it holds at least two samples: one measurement has
+ * no distribution, so its p50 and p95 are both just that measurement. Shading
+ * those anyway is worse than useless — the band's outline runs from each lone
+ * value to the next, so a single slow query in an otherwise quiet stretch
+ * inflates into a wide filled wedge suggesting sustained variance nobody
+ * measured. The dot is already the honest record of that query.
+ *
+ * Buckets with no samples are skipped for the same reason, which also breaks
+ * the band rather than spanning a stretch where nothing ran.
  */
 export function latencyBand(
   points: CollectionStatsHistoryPoint[],
-  read: (point: CollectionStatsHistoryPoint) => { p50_ms?: number | null; p95_ms?: number | null },
+  read: (point: CollectionStatsHistoryPoint) => {
+    count?: number;
+    p50_ms?: number | null;
+    p95_ms?: number | null;
+  },
   color: TrendSeriesColor,
   id = "spread",
 ): TrendBand {
+  const bounded = points.map((point) => {
+    const bucket = read(point);
+    return (bucket.count ?? 0) >= MIN_SPREAD_SAMPLES ? bucket : null;
+  });
   return {
     id,
     color,
-    lower: points.map((point) => read(point).p50_ms ?? null),
-    upper: points.map((point) => read(point).p95_ms ?? null),
+    lower: bounded.map((bucket) => bucket?.p50_ms ?? null),
+    upper: bounded.map((bucket) => bucket?.p95_ms ?? null),
   };
 }
 

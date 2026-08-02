@@ -3,7 +3,8 @@ import { parseApiDate, resolvedTimeZone } from "@/lib/datetime";
 /** Chart geometry. The viewBox is fixed; the element scales to its container. */
 export const VIEW_W = 600;
 export const VIEW_H = 160;
-export const PAD_X = 4;
+/** Room for the widest event dot, so one on the first or last bucket isn't clipped. */
+export const PAD_X = 10;
 export const PAD_TOP = 8;
 export const PAD_BOTTOM = 4;
 
@@ -181,7 +182,14 @@ export function buildBandPath(
  *
  * Events happen at moments, not in buckets, so they position between the
  * bucket ticks the aggregate series are drawn on. Returns null outside the
- * domain, so an event just past the end is dropped rather than drawn off-plot.
+ * domain, so an event from another range is dropped rather than drawn off-plot.
+ *
+ * The last bucket is the exception: series values are plotted at bucket
+ * *starts*, so the final tick sits one bucket short of the domain end and
+ * everything that happened inside that last bucket would fall past it.
+ * Dropping those would hide the most recent activity — the part a reader is
+ * usually here for — so they clamp onto the final tick, at most one bucket
+ * from where they truly are.
  */
 export function fractionalIndex(
   iso: string,
@@ -193,8 +201,8 @@ export function fractionalIndex(
   const origin = parseApiDate(firstBucket) ?? new Date(firstBucket);
   if (Number.isNaN(at.getTime()) || Number.isNaN(origin.getTime())) return null;
   const index = (at.getTime() - origin.getTime()) / (bucketSeconds * 1000);
-  if (index < 0 || index > bucketCount - 1) return null;
-  return index;
+  if (index < 0 || index >= bucketCount) return null;
+  return Math.min(index, bucketCount - 1);
 }
 
 /** True when a sample has no drawn neighbour, so it needs a dot to be visible. */

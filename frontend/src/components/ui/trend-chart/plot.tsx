@@ -13,12 +13,14 @@ import { VIEW_H, VIEW_W } from "./scales";
 
 import type { TrendBand, TrendEvent, TrendSeries } from "./types";
 import type { BucketSelection } from "./use-chart-brush";
+import type { PlotScale } from "./use-plot-scale";
 
 type ChartPlotProps = {
   buckets: string[];
   series: TrendSeries[];
   bands: TrendBand[];
   events: Array<TrendEvent & { index: number }>;
+  scale: PlotScale;
   selection: BucketSelection | null;
   cursor: number | null;
   area: boolean;
@@ -39,6 +41,7 @@ export function ChartPlot({
   series,
   bands,
   events,
+  scale,
   selection,
   cursor,
   area,
@@ -63,9 +66,9 @@ export function ChartPlot({
       {area && series[0] && buckets.length > 1 && (
         <AreaFill series={series[0]} bucketCount={buckets.length} step={step} x={x} y={y} />
       )}
-      {events.length > 0 && <EventLayer events={events} x={x} y={y} />}
-      <SeriesLayer series={series} step={step} x={x} y={y} />
-      {cursor !== null && <CursorLayer index={cursor} series={series} x={x} y={y} />}
+      {events.length > 0 && <EventLayer events={events} scale={scale} x={x} y={y} />}
+      <SeriesLayer series={series} step={step} scale={scale} x={x} y={y} />
+      {cursor !== null && <CursorLayer index={cursor} series={series} scale={scale} x={x} y={y} />}
     </svg>
   );
 }
