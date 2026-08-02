@@ -63,7 +63,7 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
   };
 
   return (
-    <div className="flex flex-col gap-2 lg:min-h-0 lg:flex-1">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-64 flex-1">
           <InstrumentLabel>Model</InstrumentLabel>
@@ -90,7 +90,7 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
       )}
       {error && <p className="text-ui text-data-neg">{error}</p>}
       {result && (
-        <div className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        <div className="space-y-3">
           <MessageStack label="Sent payload" messages={result.messages} defaultView="raw" />
           {result.structured_output ? (
             <div className="space-y-1">

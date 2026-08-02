@@ -6,7 +6,7 @@
  * 1. Log in via the API and open the Prompts page.
  * 2. Expect the shipped library seeded by the migration (base prompt,
  *    collection tool prompt, LLM presets) with context chips.
- * 3. Open the base prompt: shipped prompts are read-only, so the editor
+ * 3. Open the base prompt: built-in prompts are read-only, so the editor
  *    offers "Fork and edit" instead of a save control.
  * 4. Edit the system prompt (CodeMirror editor) and fork; the draft
  *    becomes v1 of the new owned prompt.
@@ -17,7 +17,7 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-test("shipped prompts are read-only and fork-and-edit versions the draft", async ({ page }) => {
+test("built-in prompts are read-only and fork-and-edit versions the draft", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
 
@@ -33,8 +33,8 @@ test("shipped prompts are read-only and fork-and-edit versions the draft", async
     timeout: 20_000,
   });
 
-  // Read-only shipped prompt: fork-and-edit replaces the save control.
-  await expect(page.getByText("Shipped · read-only")).toBeVisible();
+  // Read-only built-in prompt: fork-and-edit replaces the save control.
+  await expect(page.getByText("Built-in · read-only")).toBeVisible();
   await expect(page.getByRole("button", { name: /Save as v/ })).toHaveCount(0);
 
   const editor = page.getByRole("textbox", { name: "System prompt" });

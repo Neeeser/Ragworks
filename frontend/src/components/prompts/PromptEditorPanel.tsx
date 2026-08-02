@@ -4,9 +4,10 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { OutputFieldsEditor } from "@/components/pipelines/OutputFieldsEditor";
-import { MessageStack } from "@/components/ui/message-stack";
+import { MessageBody, MessageViewToggle, ROLE_INK } from "@/components/ui/message-stack";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import { CONTEXT_ROLE_COPY, isNodeContext, SYSTEM_BODY_CONTEXTS } from "./lib/contexts";
 import { contextTargets } from "./lib/targets";
@@ -14,8 +15,9 @@ import { TemplateEditor } from "./TemplateEditor";
 
 import type { PromptDraft } from "./hooks/use-prompt-studio";
 import type { TemplateEditorHandle } from "./TemplateEditor";
-import type { StackMessage } from "@/components/ui/message-stack";
+import type { MessageView, StackMessage } from "@/components/ui/message-stack";
 import type { PromptCatalog, PromptDetail, PromptRenderResult } from "@/lib/types";
+import type { ReactNode, Ref } from "react";
 
 interface PromptEditorPanelProps {
   detail: PromptDetail;
@@ -25,105 +27,105 @@ interface PromptEditorPanelProps {
   catalog: PromptCatalog | null;
 }
 
-/** The rendered preview as the message payload the templates become. */
-function previewMessages(
-  detail: PromptDetail,
-  preview: PromptRenderResult | null,
-  draft: PromptDraft,
-): StackMessage[] {
-  const copy = CONTEXT_ROLE_COPY[detail.context];
-  if (isNodeContext(detail.context)) {
-    const messages: StackMessage[] = [];
-    const system = preview?.rendered_system ?? draft.systemBody;
-    if (system) messages.push({ role: "system", content: system, note: copy.system?.hint });
-    messages.push({ role: "user", content: preview?.rendered ?? draft.body, note: copy.body.hint });
-    return messages;
-  }
-  return [{ role: "system", content: preview?.rendered ?? draft.body, note: copy.body.hint }];
+/** Label rows on both sides share a height, so the boxes below them align. */
+const LABEL_ROW = "flex min-h-8 shrink-0 items-center gap-2";
+
+interface TemplateRowProps {
+  label: string;
+  hint: string;
+  role: StackMessage["role"];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  rendered: string;
+  view: MessageView;
+  /** Rendered in the preview's label row — the shared view toggle. */
+  viewControl?: ReactNode;
+  editorActions?: ReactNode;
+  editorRef?: Ref<TemplateEditorHandle>;
+  editorClassName?: string;
 }
 
 /**
- * The template editor: markdown source with `{{variable}}` highlighting on
- * the left, the rendered message payload on the right, the context's
- * variable catalog and (for node contexts) the versioned output-field
- * schema underneath. Expandable to a full-screen editor.
+ * One template beside the message it becomes. The pair is a grid row, so
+ * the editor and its rendering start on the same line and share a height —
+ * a template and its output read as one thing, not two columns that happen
+ * to sit near each other.
  */
-export function PromptEditorPanel({
-  detail,
-  draft,
-  onDraftChange,
-  preview,
-  catalog,
-}: PromptEditorPanelProps) {
-  const bodyEditorRef = useRef<TemplateEditorHandle | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const overlayTitleId = useId();
-  const hasSystemBody = SYSTEM_BODY_CONTEXTS.includes(detail.context);
-  const copy = CONTEXT_ROLE_COPY[detail.context];
-  const unknown = preview?.unknown_variables ?? [];
-
-  const editorAndPreview = (
-    <div className="flex flex-col gap-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-2">
-      <div className="flex flex-col gap-2 lg:min-h-0">
-        {hasSystemBody && copy.system && (
-          <div className="flex shrink-0 flex-col gap-1">
-            <span className="text-instrument font-medium text-muted">
-              {copy.system.label}
-              <span className="ml-2 font-normal text-meta">{copy.system.hint}</span>
-            </span>
-            <TemplateEditor
-              ariaLabel={copy.system.label}
-              value={draft.systemBody}
-              onChange={(systemBody) => onDraftChange({ ...draft, systemBody })}
-              placeholder="Optional instructions sent as the system role."
-              className="min-h-[96px]"
-            />
-          </div>
-        )}
-        <div className="flex flex-col gap-1 lg:min-h-0 lg:flex-1">
-          <span className="text-instrument font-medium text-muted">
-            {copy.body.label}
-            <span className="ml-2 font-normal text-meta">{copy.body.hint}</span>
+function TemplateRow({
+  label,
+  hint,
+  role,
+  value,
+  onChange,
+  placeholder,
+  rendered,
+  view,
+  viewControl,
+  editorActions,
+  editorRef,
+  editorClassName,
+}: TemplateRowProps) {
+  return (
+    <div className="grid gap-x-3 gap-y-2 lg:grid-cols-2">
+      <div className="flex flex-col gap-1">
+        <div className={LABEL_ROW}>
+          <span className="shrink-0 whitespace-nowrap text-instrument font-medium text-primary">
+            {label}
           </span>
-          <TemplateEditor
-            ref={bodyEditorRef}
-            ariaLabel={copy.body.label}
-            value={draft.body}
-            onChange={(body) => onDraftChange({ ...draft, body })}
-            placeholder="Write the template. Use {{variable}} placeholders."
-            className="min-h-[220px] lg:min-h-0 lg:flex-1"
-            actions={
-              <Tooltip content={expanded ? "Exit full screen" : "Edit full screen"}>
-                <button
-                  type="button"
-                  aria-label={expanded ? "Exit full screen" : "Edit full screen"}
-                  onClick={() => setExpanded((previous) => !previous)}
-                  className="rounded-chip p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-                >
-                  {expanded ? (
-                    <Minimize2 className="h-3.5 w-3.5" aria-hidden />
-                  ) : (
-                    <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-                  )}
-                </button>
-              </Tooltip>
-            }
-          />
+          <span className="min-w-0 truncate text-instrument text-meta">{hint}</span>
         </div>
-        {unknown.length > 0 && (
-          <p className="shrink-0 text-instrument text-data-warn">
-            Unknown in this context: {unknown.map((name) => `{{${name}}}`).join(", ")}
-          </p>
-        )}
+        <TemplateEditor
+          ref={editorRef}
+          ariaLabel={label}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          actions={editorActions}
+          className={cn("min-h-[120px]", editorClassName)}
+        />
       </div>
-
-      <div className="flex flex-col lg:min-h-0 lg:overflow-y-auto">
-        <MessageStack label="Rendered preview" messages={previewMessages(detail, preview, draft)} />
+      <div className="flex flex-col gap-1">
+        <div className={cn(LABEL_ROW, "justify-between")}>
+          <span className="flex items-baseline gap-2">
+            <span className={cn("font-mono text-instrument", ROLE_INK[role])}>{role}</span>
+            <span className="text-instrument text-meta">rendered</span>
+          </span>
+          {viewControl}
+        </div>
+        <MessageBody content={rendered} view={view} className="min-h-[120px] flex-1" />
       </div>
     </div>
   );
+}
 
-  const catalogPanel = (
+/** Toolbar control that swaps the editor between inline and full screen. */
+function ExpandButton({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  const label = expanded ? "Exit full screen" : "Edit full screen";
+  const Icon = expanded ? Minimize2 : Maximize2;
+  return (
+    <Tooltip content={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onToggle}
+        className="rounded-chip p-1 text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The context's variables; clicking one inserts it at the cursor. */
+function VariableCatalog({
+  catalog,
+  onInsert,
+}: {
+  catalog: PromptCatalog | null;
+  onInsert: (name: string) => void;
+}) {
+  return (
     <div className="shrink-0 space-y-1">
       <span className="text-instrument font-medium text-muted">Variables</span>
       <div className="max-h-40 divide-y divide-hairline overflow-y-auto rounded-control border border-hairline">
@@ -132,7 +134,7 @@ export function PromptEditorPanel({
             key={variable.name}
             type="button"
             className="w-full px-2 py-1.5 text-left transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
-            onClick={() => bodyEditorRef.current?.insert(`{{${variable.name}}}`)}
+            onClick={() => onInsert(variable.name)}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <code className="font-mono text-instrument text-accent-violet">
@@ -158,11 +160,75 @@ export function PromptEditorPanel({
       </div>
     </div>
   );
+}
+
+/**
+ * The template editor: each template's markdown source beside the message
+ * it renders into, the context's variable catalog underneath, and (for
+ * node contexts) the versioned output-field schema. Expandable to a
+ * full-screen editor.
+ */
+export function PromptEditorPanel({
+  detail,
+  draft,
+  onDraftChange,
+  preview,
+  catalog,
+}: PromptEditorPanelProps) {
+  const bodyEditorRef = useRef<TemplateEditorHandle | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<MessageView>("rendered");
+  const overlayTitleId = useId();
+  const hasSystemBody = SYSTEM_BODY_CONTEXTS.includes(detail.context);
+  const copy = CONTEXT_ROLE_COPY[detail.context];
+  const unknown = preview?.unknown_variables ?? [];
+
+  const toggle = <MessageViewToggle view={view} onChange={setView} label="Rendered preview view" />;
+
+  const expandButton = (
+    <ExpandButton expanded={expanded} onToggle={() => setExpanded((previous) => !previous)} />
+  );
 
   const content = (
-    <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
-      {editorAndPreview}
-      {catalogPanel}
+    <div className="flex flex-col gap-3">
+      {hasSystemBody && copy.system && (
+        <TemplateRow
+          label={copy.system.label}
+          hint={copy.system.hint}
+          role="system"
+          value={draft.systemBody}
+          onChange={(systemBody) => onDraftChange({ ...draft, systemBody })}
+          placeholder="Optional instructions sent as the system role."
+          rendered={preview?.rendered_system ?? draft.systemBody}
+          view={view}
+          viewControl={toggle}
+        />
+      )}
+      <TemplateRow
+        label={copy.body.label}
+        hint={copy.body.hint}
+        role={hasSystemBody ? "user" : "system"}
+        value={draft.body}
+        onChange={(body) => onDraftChange({ ...draft, body })}
+        placeholder="Write the template. Use {{variable}} placeholders."
+        rendered={preview?.rendered ?? draft.body}
+        view={view}
+        viewControl={hasSystemBody ? undefined : toggle}
+        editorActions={expandButton}
+        editorRef={bodyEditorRef}
+        editorClassName="min-h-[220px]"
+      />
+      {unknown.length > 0 && (
+        <p className="shrink-0 text-instrument text-data-warn">
+          Unknown in this context: {unknown.map((name) => `{{${name}}}`).join(", ")}
+        </p>
+      )}
+
+      <VariableCatalog
+        catalog={catalog}
+        onInsert={(name) => bodyEditorRef.current?.insert(`{{${name}}}`)}
+      />
+
       {isNodeContext(detail.context) && (
         <div className="shrink-0">
           <OutputFieldsEditor

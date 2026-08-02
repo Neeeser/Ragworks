@@ -47,7 +47,7 @@ export function PromptVersionsPanel({
   }
 
   return (
-    <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[220px_1fr]">
+    <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
       <div className="max-h-56 overflow-y-auto lg:max-h-none lg:min-h-0">
         <ul className="divide-y divide-hairline">
           {versions.map((entry) => {

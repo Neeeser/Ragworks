@@ -126,7 +126,7 @@ def seed_shipped_prompts(session: Session, user_id: UUID) -> dict[str, models.Pr
                     version=1,
                     body=spec.body,
                     system_body=spec.system_body,
-                    label="Shipped",
+                    label="Built-in",
                     output_fields=spec.output_fields,
                 )
             )
@@ -148,7 +148,7 @@ def seed_shipped_prompts(session: Session, user_id: UUID) -> dict[str, models.Pr
                         version=next_version,
                         body=spec.body,
                         system_body=spec.system_body,
-                        label="Shipped update",
+                        label="Built-in update",
                         output_fields=spec.output_fields,
                     )
                 )

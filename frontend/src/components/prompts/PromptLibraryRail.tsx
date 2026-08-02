@@ -109,7 +109,7 @@ export function PromptLibraryRail({
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5">
                       <Chip tone="neutral">{CONTEXT_LABELS[prompt.context]}</Chip>
-                      {prompt.source === "shipped" && <Chip tone="neutral">Shipped</Chip>}
+                      {prompt.source === "shipped" && <Chip tone="neutral">Built-in</Chip>}
                     </div>
                   </button>
                 </li>

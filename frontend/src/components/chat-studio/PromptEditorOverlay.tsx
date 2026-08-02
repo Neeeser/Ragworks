@@ -162,7 +162,7 @@ export const PromptEditorOverlay = ({
             {chosenPrompt && (
               <div className="flex flex-wrap items-center gap-2">
                 <Chip tone={chosenPrompt.source === "shipped" ? "neutral" : "accent"}>
-                  {chosenPrompt.source === "shipped" ? "Shipped" : "Yours"}
+                  {chosenPrompt.source === "shipped" ? "Built-in" : "Yours"}
                 </Chip>
                 <Link
                   href={`/prompts?prompt=${chosenPrompt.id}`}

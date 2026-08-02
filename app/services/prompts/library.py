@@ -33,7 +33,7 @@ from app.services.errors import InvalidInputError, NotFoundError
 PROMPT_NOT_FOUND_DETAIL = "Prompt not found"
 
 SHIPPED_READ_ONLY_DETAIL = (
-    "Shipped prompts are read-only so release updates never fight your "
+    "Built-in prompts are read-only so release updates never fight your "
     "edits — fork it to make it yours."
 )
 

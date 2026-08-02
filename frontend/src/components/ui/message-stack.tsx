@@ -14,7 +14,73 @@ export interface StackMessage {
   note?: string;
 }
 
-type MessageView = "rendered" | "raw";
+export type MessageView = "rendered" | "raw";
+
+export const ROLE_INK: Record<StackMessage["role"], string> = {
+  system: "text-accent-violet",
+  user: "text-accent-cyan",
+  assistant: "text-body",
+};
+
+/**
+ * Rendered ⇄ Raw: markdown as the reader sees it, or the mono source
+ * exactly as it travels. Split from `MessageStack` so a surface pairing
+ * each message with its own editor can drive several bodies from one
+ * control.
+ */
+export function MessageViewToggle({
+  view,
+  onChange,
+  label,
+}: {
+  view: MessageView;
+  onChange: (view: MessageView) => void;
+  label: string;
+}) {
+  return (
+    <SegmentedControl<MessageView>
+      aria-label={label}
+      value={view}
+      onChange={onChange}
+      options={[
+        { id: "rendered", label: "Rendered" },
+        { id: "raw", label: "Raw" },
+      ]}
+    />
+  );
+}
+
+/**
+ * One message's content on a surface. Shows the complete text — message
+ * content is never ellipsized or capped here; scrolling belongs to the
+ * pane that hosts it.
+ */
+export function MessageBody({
+  content,
+  view,
+  className,
+}: {
+  content: string;
+  view: MessageView;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "overflow-y-auto rounded-control border border-hairline bg-surface p-2",
+        className,
+      )}
+    >
+      {view === "rendered" ? (
+        <Markdown className="max-w-[72ch]">{content}</Markdown>
+      ) : (
+        <pre className="whitespace-pre-wrap break-words font-mono text-instrument text-body">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 interface MessageStackProps {
   messages: StackMessage[];
@@ -24,18 +90,10 @@ interface MessageStackProps {
   defaultView?: MessageView;
 }
 
-const ROLE_INK: Record<StackMessage["role"], string> = {
-  system: "text-accent-violet",
-  user: "text-accent-cyan",
-  assistant: "text-body",
-};
-
 /**
- * A chat payload as role-labelled message blocks with a Rendered ⇄ Raw
- * toggle — rendered markdown to read formatting, raw mono source to read
- * exactly what travels. Every block shows its complete text: message
- * content is never ellipsized or capped here (scrolling belongs to the
- * pane that hosts the stack).
+ * A chat payload as role-labelled message blocks with one Rendered ⇄ Raw
+ * toggle over the whole stack — the shared way to show what was (or would
+ * be) sent to a model.
  */
 export function MessageStack({
   messages,
@@ -49,15 +107,7 @@ export function MessageStack({
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-instrument font-medium text-muted">{label}</span>
-        <SegmentedControl<MessageView>
-          aria-label={`${label} view`}
-          value={view}
-          onChange={setView}
-          options={[
-            { id: "rendered", label: "Rendered" },
-            { id: "raw", label: "Raw" },
-          ]}
-        />
+        <MessageViewToggle view={view} onChange={setView} label={`${label} view`} />
       </div>
       <ol className="space-y-2">
         {messages.map((message, index) => (

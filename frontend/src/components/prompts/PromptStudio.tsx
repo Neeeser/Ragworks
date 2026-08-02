@@ -39,7 +39,7 @@ function StudioHeader({ detail, isShipped, onFork, onDelete }: StudioHeaderProps
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-head font-semibold tracking-[-0.01em] text-primary">{detail.name}</h1>
       <Chip tone="neutral">{CONTEXT_LABELS[detail.context]}</Chip>
-      {isShipped && <Chip tone="neutral">Shipped · read-only</Chip>}
+      {isShipped && <Chip tone="neutral">Built-in · read-only</Chip>}
       <span className="font-mono text-instrument tabular-nums text-meta">
         v{detail.current_version}
       </span>
@@ -90,7 +90,7 @@ function EditorFooter({
       {isShipped ? (
         <>
           <p className="min-w-0 flex-1 text-instrument text-meta">
-            Shipped prompts are read-only — forking makes your draft v1 of a new prompt.
+            Built-in prompts are read-only — forking makes your draft v1 of a new prompt.
           </p>
           <Button size="sm" glow onClick={onFork}>
             <GitFork className="h-3.5 w-3.5" aria-hidden />
@@ -143,7 +143,7 @@ function LibraryOverlay({ open, onClose, children }: LibraryOverlayProps) {
 /**
  * The prompt studio: library on the left, the selected prompt's editor,
  * version history, and test bench on the right. Every prompt in the app is
- * one of these entities — consumers reference them by id + version. Shipped
+ * one of these entities — consumers reference them by id + version. Built-in
  * prompts are read-only; editing one forks it with the draft carried over.
  */
 export function PromptStudio() {
@@ -197,7 +197,7 @@ export function PromptStudio() {
     <div className="flex h-full min-h-0 flex-col gap-3 p-3 lg:flex-row">
       <Panel className="hidden w-72 shrink-0 flex-col p-2 lg:flex">{rail}</Panel>
 
-      <Panel className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 lg:overflow-visible">
+      <Panel className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         <button
           type="button"
           onClick={() => setLibraryOpen(true)}
