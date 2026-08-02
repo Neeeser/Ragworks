@@ -91,13 +91,31 @@ export function PromptRefField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, reference?.prompt_id, reference?.version]);
 
-  const setReference = (next: PromptReference) => {
+  const setReference = async (next: PromptReference) => {
+    // The prompt's version may carry its own output-field schema; picking
+    // seeds the node's copy from it, but the node keeps ownership — a later
+    // prompt save never silently restructures this node.
+    let seeded: Record<string, unknown> = {};
+    if (token) {
+      try {
+        const fields =
+          next.version === "latest"
+            ? (await getPrompt(token, next.prompt_id)).output_fields
+            : (await listPromptVersions(token, next.prompt_id)).find(
+                (entry) => entry.version === next.version,
+              )?.output_fields;
+        if (fields && fields.length > 0) seeded = { output_fields: fields };
+      } catch {
+        // The pick still applies; the preview load surfaces the failure.
+      }
+    }
     onConfigChange({
       ...config,
       prompt_ref: { prompt_id: next.prompt_id, version: next.version },
       // References replace inline text; the resolver fills these at run time.
       prompt: "",
       system_prompt: "",
+      ...seeded,
     });
   };
 
@@ -123,7 +141,9 @@ export function PromptRefField({
             placeholder="Pick a prompt"
             disabled={disabled}
             options={prompts.map((prompt) => ({ value: prompt.id, label: prompt.name }))}
-            onValueChange={(promptId) => setReference({ prompt_id: promptId, version: "latest" })}
+            onValueChange={(promptId) =>
+              void setReference({ prompt_id: promptId, version: "latest" })
+            }
           />
         </div>
         <div className="w-32 shrink-0 space-y-1">
@@ -134,13 +154,13 @@ export function PromptRefField({
             placeholder="latest"
             disabled={disabled || !reference}
             options={versionOptions}
-            onValueChange={(value) =>
-              reference &&
-              setReference({
+            onValueChange={(value) => {
+              if (!reference) return;
+              void setReference({
                 prompt_id: reference.prompt_id,
                 version: value === "latest" ? "latest" : Number(value),
-              })
-            }
+              });
+            }}
           />
         </div>
       </div>

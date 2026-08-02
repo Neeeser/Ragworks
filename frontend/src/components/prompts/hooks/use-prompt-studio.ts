@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { outputFieldsFromConfig } from "@/components/pipelines/lib/llm";
 import {
   createPrompt,
   deletePrompt,
@@ -19,7 +20,11 @@ import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
 
+
+import { isNodeContext } from "../lib/contexts";
+
 import type {
+  LlmOutputField,
   PromptCatalog,
   PromptContext,
   PromptCreatePayload,
@@ -33,7 +38,16 @@ import type {
 export interface PromptDraft {
   body: string;
   systemBody: string;
+  outputFields: LlmOutputField[];
 }
+
+/** Normalize a wire `output_fields` list into builder fields. */
+const parseOutputFields = (raw: unknown): LlmOutputField[] =>
+  outputFieldsFromConfig({ output_fields: raw ?? [] });
+
+/** Builder fields back to the wire shape (null when empty). */
+const toWireFields = (fields: LlmOutputField[]): Record<string, unknown>[] | null =>
+  fields.length > 0 ? fields.map((field) => ({ ...field, target: { ...field.target } })) : null;
 
 /**
  * Owns the prompt studio's state: the library list, the selected prompt's
@@ -48,7 +62,11 @@ export function usePromptStudio(token: string | null) {
   const [detail, setDetail] = useState<PromptDetail | null>(null);
   const [versions, setVersions] = useState<PromptVersionRead[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [draft, setDraft] = useState<PromptDraft>({ body: "", systemBody: "" });
+  const [draft, setDraft] = useState<PromptDraft>({
+    body: "",
+    systemBody: "",
+    outputFields: [],
+  });
   const [preview, setPreview] = useState<PromptRenderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -83,7 +101,11 @@ export function usePromptStudio(token: string | null) {
         ]);
         setDetail(nextDetail);
         setVersions(nextVersions);
-        setDraft({ body: nextDetail.body, systemBody: nextDetail.system_body ?? "" });
+        setDraft({
+          body: nextDetail.body,
+          systemBody: nextDetail.system_body ?? "",
+          outputFields: parseOutputFields(nextDetail.output_fields),
+        });
       } catch (loadError) {
         // A prompt created a beat ago can 404 while the create request's
         // session finishes committing — retry briefly before reporting.
@@ -138,7 +160,12 @@ export function usePromptStudio(token: string | null) {
 
   const hasChanges = useMemo(() => {
     if (!detail) return false;
-    return draft.body !== detail.body || draft.systemBody !== (detail.system_body ?? "");
+    return (
+      draft.body !== detail.body ||
+      draft.systemBody !== (detail.system_body ?? "") ||
+      JSON.stringify(draft.outputFields) !==
+        JSON.stringify(parseOutputFields(detail.output_fields))
+    );
   }, [detail, draft]);
 
   const runMutation = useCallback(
@@ -170,6 +197,7 @@ export function usePromptStudio(token: string | null) {
           body: draft.body,
           system_body: draft.systemBody || null,
           label,
+          output_fields: isNodeContext(detail.context) ? toWireFields(draft.outputFields) : null,
         });
         setDetail((previous) =>
           previous && previous.id === detail.id
@@ -178,6 +206,7 @@ export function usePromptStudio(token: string | null) {
                 current_version: saved.version,
                 body: saved.body,
                 system_body: saved.system_body,
+                output_fields: saved.output_fields,
               }
             : previous,
         );
@@ -200,16 +229,24 @@ export function usePromptStudio(token: string | null) {
     [promptsQuery, runMutation, token],
   );
 
+  // A fork carries the current draft — fork-and-edit is how a read-only
+  // shipped prompt's changes become v1 of an owned prompt.
   const handleFork = useCallback(
     async (payload: PromptForkPayload) => {
       if (!token || !detail) return false;
+      const context = payload.context ?? detail.context;
       return runMutation(async () => {
-        const fork = await forkPrompt(token, detail.id, payload);
+        const fork = await forkPrompt(token, detail.id, {
+          ...payload,
+          body: draft.body,
+          system_body: draft.systemBody || null,
+          output_fields: isNodeContext(context) ? toWireFields(draft.outputFields) : null,
+        });
         await promptsQuery.reload();
         setSelectedId(fork.id);
       }, "Unable to fork the prompt.");
     },
-    [detail, promptsQuery, runMutation, token],
+    [detail, draft, promptsQuery, runMutation, token],
   );
 
   const handleRename = useCallback(
@@ -234,7 +271,11 @@ export function usePromptStudio(token: string | null) {
 
   const handleRestoreVersion = useCallback(
     (version: PromptVersionRead) => {
-      setDraft({ body: version.body, systemBody: version.system_body ?? "" });
+      setDraft({
+        body: version.body,
+        systemBody: version.system_body ?? "",
+        outputFields: parseOutputFields(version.output_fields),
+      });
     },
     [setDraft],
   );

@@ -147,6 +147,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     testPrompt: vi.fn(async () => ({
       rendered: "Rendered",
       rendered_system: null,
+      messages: [
+        { role: "system" as const, content: "Rendered" },
+        { role: "user" as const, content: "Hello" },
+      ],
       response_text: "Hi",
       structured_output: null,
     })),

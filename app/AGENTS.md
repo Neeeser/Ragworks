@@ -405,10 +405,21 @@ frontend form code — only a new `ConfigFieldKind` would.
   place rather than failing a chat turn over a legacy row. Node-context rendering
   stays strict (an unavailable `{{query}}` on an ingestion run is an error with a
   reason, never a silent empty section).
-- **Shipped prompts are per-user rows keyed by `shipped_key`, and seeding appends
-  a changed shipped body as a new version only when no existing version carries
-  it** (`seed_shipped_prompts`). Appending whenever `latest != shipped` would
-  re-stamp the shipped text over a user's own edit on every boot.
+- **Shipped prompts are read-only — editing forks** (`_ensure_editable`). Shipped
+  rows only ever hold shipped versions, so a release appending an improved default
+  (`seed_shipped_prompts`, which appends only bodies no existing version carries)
+  can never shadow a user's edit; the edit lives on a fork, whose v1 may be the
+  caller's draft (`PromptForkCreate.body`). Delete refuses too — seeding would
+  resurrect the row on the next boot, so the delete would only ever look like it
+  worked.
+- **A node-context version's `output_fields` is the prompt's own schema; the node
+  seeds from it but owns its copy.** Prompt text may float on `latest`, structure
+  must not: a pipeline's downstream shape (metadata fields, filters) depends on
+  the node's output fields, so runtime `prompt_refs` resolution fills only
+  `prompt`/`system_prompt` and never rewrites the node's schema. Version-level
+  validation reads the shell's allowed targets from `CONTEXT_TARGETS`
+  (`app/pipelines/llm/validation.py`) — the one declaration the node shells use,
+  so the two gates can't drift.
 - **Node `prompt_ref`s resolve in `PipelineRunner.start` (after `$expr`
   resolution) and in `validate_pipeline_definition`**, via
   `app/pipelines/prompt_refs.py` — repositories only, since the engine may not

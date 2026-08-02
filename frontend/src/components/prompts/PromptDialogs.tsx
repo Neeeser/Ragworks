@@ -77,6 +77,8 @@ interface ForkPromptDialogProps {
   busy: boolean;
   sourceName: string;
   sourceContext: PromptContext;
+  /** Whether the editor draft differs from the saved version. */
+  draftChanged: boolean;
   onClose: () => void;
   onFork: (name: string, context: PromptContext) => void;
 }
@@ -87,6 +89,7 @@ export function ForkPromptDialog({
   busy,
   sourceName,
   sourceContext,
+  draftChanged,
   onClose,
   onFork,
 }: ForkPromptDialogProps) {
@@ -102,8 +105,10 @@ export function ForkPromptDialog({
           Fork prompt
         </h2>
         <p className="mt-1 text-ui text-muted">
-          Creates a new prompt seeded from the current version of “{sourceName}”. Forking into a
-          different context re-validates the variables against that context.
+          {draftChanged
+            ? `Your edited draft of “${sourceName}” becomes v1 of the new prompt.`
+            : `Creates a new prompt seeded from the current version of “${sourceName}”.`}{" "}
+          Forking into a different context re-validates the variables against that context.
         </p>
         <div className="mt-3 space-y-3">
           <Field label="Name">

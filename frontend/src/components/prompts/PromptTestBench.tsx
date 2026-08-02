@@ -7,10 +7,12 @@ import { ModelPickerField } from "@/components/models/ModelPickerField";
 import { useLlmModelCatalog } from "@/components/pipelines/hooks/use-llm-model-catalog";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Markdown } from "@/components/ui/markdown";
+import { MessageStack } from "@/components/ui/message-stack";
 import { testPrompt } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
+
+import { isNodeContext } from "./lib/contexts";
 
 import type { PromptDraft } from "./hooks/use-prompt-studio";
 import type { CatalogModel, PromptDetail, PromptTestResult } from "@/lib/types";
@@ -21,10 +23,10 @@ interface PromptTestBenchProps {
 }
 
 /**
- * Live execution of the current draft: pick a model, run it, read the
- * response. Node-context prompts run through the same structured-output
- * engine path the pipeline nodes use; chat prompts run as a completion
- * with the rendered prompt as the system message.
+ * Live execution of the current draft: pick a model, run it, read the exact
+ * message payload that was sent and what came back. Node-context prompts
+ * with output fields run through the same structured-output engine path the
+ * pipeline nodes use; everything else runs as a completion.
  */
 export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
   const { token, user } = useAuth();
@@ -33,6 +35,8 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PromptTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const structured = isNodeContext(detail.context) && draft.outputFields.length > 0;
 
   const handleRun = async () => {
     if (!token || !model) return;
@@ -46,6 +50,9 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
         context: detail.context,
         connection_id: model.connection_id,
         model_name: model.id,
+        output_fields: structured
+          ? draft.outputFields.map((field) => ({ ...field, target: { ...field.target } }))
+          : [],
       });
       setResult(outcome);
     } catch (runError) {
@@ -75,27 +82,29 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
           Run test
         </Button>
       </div>
+      {structured && (
+        <p className="text-instrument text-meta">
+          Runs the structured-output engine path against the {draft.outputFields.length}{" "}
+          output field{draft.outputFields.length === 1 ? "" : "s"} defined in the editor.
+        </p>
+      )}
       {error && <p className="text-ui text-data-neg">{error}</p>}
       {result && (
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-          <div>
-            <InstrumentLabel>Sent prompt</InstrumentLabel>
-            <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-muted">
-              {[result.rendered_system, result.rendered].filter(Boolean).join("\n\n")}
-            </pre>
-          </div>
-          <div>
-            <InstrumentLabel>Response</InstrumentLabel>
-            {result.structured_output ? (
-              <pre className="mt-1 overflow-x-auto rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
+        <div className="min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto">
+          <MessageStack label="Sent payload" messages={result.messages} defaultView="raw" />
+          {result.structured_output ? (
+            <div className="space-y-1">
+              <span className="text-instrument font-medium text-muted">Structured output</span>
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
                 {JSON.stringify(result.structured_output, null, 2)}
               </pre>
-            ) : (
-              <div className="mt-1 rounded-control border border-hairline bg-surface p-2">
-                <Markdown className="max-w-[66ch]">{result.response_text ?? ""}</Markdown>
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <MessageStack
+              label="Response"
+              messages={[{ role: "assistant", content: result.response_text ?? "" }]}
+            />
+          )}
         </div>
       )}
     </div>

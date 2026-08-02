@@ -70,8 +70,7 @@ const normalizeTarget = (target: Record<string, unknown>): LlmOutputTarget => {
 };
 
 /** A fresh field for the builder's "Add field" action. */
-export const emptyOutputField = (nodeType: string): LlmOutputField => {
-  const kinds = allowedTargets(nodeType);
+export const emptyFieldForTargets = (kinds: LlmOutputTarget["kind"][]): LlmOutputField => {
   const kind = kinds[0];
   if (kind === "score")
     return { name: "score", type: "number", description: "", target: { kind: "score" } };
@@ -79,3 +78,6 @@ export const emptyOutputField = (nodeType: string): LlmOutputField => {
     return { name: "results", type: "string_list", description: "", target: { kind: "items" } };
   return { name: "", type: "string", description: "", target: { kind: "metadata", key: "" } };
 };
+
+export const emptyOutputField = (nodeType: string): LlmOutputField =>
+  emptyFieldForTargets(allowedTargets(nodeType));

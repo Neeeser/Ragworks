@@ -58,6 +58,7 @@ export interface PromptUsage {
 export interface PromptDetail extends PromptRead {
   body: string;
   system_body?: string | null;
+  output_fields?: Record<string, unknown>[] | null;
   used_by: PromptUsage[];
 }
 
@@ -68,6 +69,7 @@ export interface PromptVersionRead {
   body: string;
   system_body?: string | null;
   label?: string | null;
+  output_fields?: Record<string, unknown>[] | null;
   created_at: string;
 }
 
@@ -77,6 +79,7 @@ export interface PromptCreatePayload {
   context: PromptContext;
   body: string;
   system_body?: string | null;
+  output_fields?: Record<string, unknown>[] | null;
 }
 
 export interface PromptUpdatePayload {
@@ -88,6 +91,7 @@ export interface PromptVersionCreatePayload {
   body: string;
   system_body?: string | null;
   label?: string | null;
+  output_fields?: Record<string, unknown>[] | null;
 }
 
 export interface PromptForkPayload {
@@ -95,6 +99,9 @@ export interface PromptForkPayload {
   description?: string | null;
   context?: PromptContext | null;
   version?: PromptVersionSelector;
+  body?: string | null;
+  system_body?: string | null;
+  output_fields?: Record<string, unknown>[] | null;
 }
 
 export interface PromptRenderPayload {
@@ -117,9 +124,15 @@ export interface PromptTestPayload extends PromptRenderPayload {
   output_fields?: Record<string, unknown>[];
 }
 
+export interface PromptTestMessage {
+  role: "system" | "user";
+  content: string;
+}
+
 export interface PromptTestResult {
   rendered: string;
   rendered_system?: string | null;
+  messages: PromptTestMessage[];
   response_text?: string | null;
   structured_output?: Record<string, unknown> | null;
 }
