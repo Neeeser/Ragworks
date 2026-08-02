@@ -25,36 +25,17 @@ class CollectionBase(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class PipelineNodeOverride(BaseModel):
-    """Override configuration for a specific pipeline node."""
-
-    node_id: str
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
-class CollectionPipelineOverrides(BaseModel):
-    """Per-collection pipeline overrides for creation.
-
-    `ingestion` overrides clone the chosen ingest pipeline; `retrieval`
-    overrides clone the primary tool pipeline.
-    """
-
-    ingestion: list[PipelineNodeOverride] = Field(default_factory=list)
-    retrieval: list[PipelineNodeOverride] = Field(default_factory=list)
-
-
 class CollectionCreate(CollectionBase):
     """Payload for creating a collection.
 
     `tool_pipeline_ids` bind in order (the first becomes the primary search
     tool); omitted, the user's default search pipeline is bound as primary.
-    A collection chooses which pipelines run, never what they do — the index
-    each one uses is named in its graph.
+    A collection chooses which pipelines run, never what they do — node
+    configuration and the index each one uses live in the pipeline's graph.
     """
 
     ingest_pipeline_id: UUID | None = None
     tool_pipeline_ids: list[UUID] | None = None
-    pipeline_overrides: CollectionPipelineOverrides | None = None
 
 
 class CollectionUpdate(BaseModel):

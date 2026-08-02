@@ -14,13 +14,12 @@ import {
   deleteCollection,
   fetchCollectionStats,
   fetchCollections,
-  fetchPipelineNodes,
   fetchPipelines,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { Collection, CollectionStats, NodeSpec, Pipeline } from "@/lib/types";
+import type { Collection, CollectionStats, Pipeline } from "@/lib/types";
 
 export default function CollectionsPage() {
   const { token } = useAuth();
@@ -28,10 +27,10 @@ export default function CollectionsPage() {
   const [statsById, setStatsById] = useState<Record<string, CollectionStats>>({});
   const [ingestionPipelines, setIngestionPipelines] = useState<Pipeline[]>([]);
   const [retrievalPipelines, setRetrievalPipelines] = useState<Pipeline[]>([]);
-  const [nodeSpecs, setNodeSpecs] = useState<NodeSpec[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  /** Success toast — `message` is the error channel and renders in the error colour. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -83,15 +82,13 @@ export default function CollectionsPage() {
 
     async function loadPipelines() {
       try {
-        const [ingestion, retrieval, specs] = await Promise.all([
+        const [ingestion, retrieval] = await Promise.all([
           fetchPipelines(authToken, "ingestion"),
           fetchPipelines(authToken, "retrieval"),
-          fetchPipelineNodes(authToken),
         ]);
         if (cancelled) return;
         setIngestionPipelines(ingestion);
         setRetrievalPipelines(retrieval);
-        setNodeSpecs(specs);
       } catch (error) {
         if (!cancelled) {
           setMessage(getErrorMessage(error, "Unable to load pipelines."));
@@ -122,7 +119,7 @@ export default function CollectionsPage() {
       ...prev,
       [collection.id]: { ...statsDefaults, collection_id: collection.id },
     }));
-    setMessage("Collection created.");
+    setNotice("Collection created.");
   };
 
   const handleDelete = async () => {
@@ -137,7 +134,7 @@ export default function CollectionsPage() {
         delete next[deleteTarget.id];
         return next;
       });
-      setDeleteNotice("Collection deleted.");
+      setNotice("Collection deleted.");
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to delete collection."));
     } finally {
@@ -176,9 +173,9 @@ export default function CollectionsPage() {
       />
 
       <PageBody className="relative">
-        {deleteNotice && (
+        {notice && (
           <div className="absolute left-1/2 top-3 z-20 w-[min(520px,90%)] -translate-x-1/2">
-            <Notification message={deleteNotice} onDismiss={() => setDeleteNotice(null)} />
+            <Notification message={notice} onDismiss={() => setNotice(null)} />
           </div>
         )}
 
@@ -198,7 +195,6 @@ export default function CollectionsPage() {
         token={token ?? ""}
         ingestionPipelines={ingestionPipelines}
         retrievalPipelines={retrievalPipelines}
-        nodeSpecs={nodeSpecs}
         onClose={() => setWizardOpen(false)}
         onCreated={handleCreated}
       />

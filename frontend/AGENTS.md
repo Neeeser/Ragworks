@@ -458,7 +458,18 @@ the same PR.
 - **Confirmations use `ConfirmDialog`**, including destructive type-to-confirm
   flows via `confirmText` — no bespoke nested delete modals.
 - **Wizards use `WizardShell` + `WizardFooter`** — the Back/Next/Cancel cluster is
-  one component, not per-wizard JSX.
+  one component, not per-wizard JSX. The shell caps itself at the viewport and
+  scrolls only the step body, so a tall step never pushes the footer off screen.
+  **A step's requirement gates the step list as well as Next**
+  (`maxReachableStepIndex`): gating only the button leaves the sidebar as a way
+  to click straight past a required field, and the wizard then submits without
+  it.
+- **A popover opened inside a scrolling panel must portal to `document.body` and
+  position from the trigger's viewport rect.** An absolutely-positioned one is
+  clipped by the panel's `overflow-y-auto` — the list renders but its options are
+  unreachable, and only at the sizes where the panel actually scrolls.
+  `ModalOverlay` already expects portaled popups (its backdrop-click check reads
+  pointerdown in the capture phase), so a portaled listbox works inside a dialog.
 - **`Button loading` keeps its children visible** (spinner + `aria-busy` +
   disabled). Never swap button content for placeholder text; it causes layout shift
   and breaks accessible names.

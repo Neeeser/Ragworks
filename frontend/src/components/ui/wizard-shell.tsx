@@ -24,6 +24,13 @@ type WizardShellProps = {
   steps: WizardStep[];
   activeStepIndex: number;
   message?: string | null;
+  /**
+   * Highest step the user may jump to from the step list. Steps beyond it are
+   * disabled, so a required field on an earlier step can't be walked past — the
+   * Next button and the step list gate on the same rule instead of only Next.
+   * Defaults to the last step (every step reachable).
+   */
+  maxReachableStepIndex?: number;
   onStepChange: (index: number) => void;
   onClose: () => void;
   children: ReactNode;
@@ -100,6 +107,7 @@ export function WizardShell({
   steps,
   activeStepIndex,
   message,
+  maxReachableStepIndex,
   onStepChange,
   onClose,
   children,
@@ -107,11 +115,19 @@ export function WizardShell({
 }: WizardShellProps) {
   const titleId = useId();
   const activeStep = steps[activeStepIndex];
+  const lastReachable = maxReachableStepIndex ?? steps.length - 1;
 
   return (
     <ModalOverlay open={open} onClose={onClose} labelledBy={titleId}>
-      <div className={cn(popoverSurfaceClass, "w-full max-w-4xl overflow-hidden text-primary")}>
-        <div className="flex items-start justify-between gap-4 border-b border-hairline p-3">
+      {/* The dialog is capped to the viewport and only its step body scrolls, so
+          a tall step keeps the header, step list, and footer controls on screen. */}
+      <div
+        className={cn(
+          popoverSurfaceClass,
+          "flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden text-primary",
+        )}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-hairline p-3">
           <div className="min-w-0">
             <InstrumentLabel>{title}</InstrumentLabel>
             <h2 id={titleId} className="text-head font-semibold">
@@ -132,27 +148,31 @@ export function WizardShell({
         </div>
 
         {message ? (
-          <p className="border-b border-hairline bg-data-neg/10 p-3 text-ui text-data-neg">
+          <p className="shrink-0 border-b border-hairline bg-data-neg/10 p-3 text-ui text-data-neg">
             {message}
           </p>
         ) : null}
 
-        <div className="grid lg:grid-cols-[200px_1fr]">
-          <div className="border-hairline p-2 lg:border-r">
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[200px_1fr]">
+          <div className="shrink-0 border-hairline p-2 lg:border-r">
             {steps.map((step, index) => {
               const isActive = index === activeStepIndex;
               const isComplete = index < activeStepIndex;
+              const isReachable = index <= lastReachable;
               return (
                 <button
                   key={step.id}
                   type="button"
                   onClick={() => onStepChange(index)}
+                  disabled={!isReachable}
                   className={cn(
                     "w-full rounded-control px-2 py-2 text-left transition-colors duration-80 ease-standard",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                     isActive
                       ? "bg-accent-violet/15 text-primary ring-1 ring-inset ring-accent-violet/30"
-                      : "text-body hover:bg-surface",
+                      : isReachable
+                        ? "text-body hover:bg-surface"
+                        : "cursor-not-allowed text-faint",
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -168,9 +188,9 @@ export function WizardShell({
             })}
           </div>
 
-          <div className="space-y-4 p-3">
-            {children}
-            {footer}
+          <div className="flex min-h-0 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">{children}</div>
+            <div className="shrink-0 border-t border-hairline p-3">{footer}</div>
           </div>
         </div>
       </div>

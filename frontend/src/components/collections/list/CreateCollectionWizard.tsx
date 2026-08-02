@@ -1,32 +1,34 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Star, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PipelineOverridesEditor } from "@/components/collections/PipelineOverridesEditor";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
+import { PipelineSelect } from "@/components/pipelines/PipelineSelect";
+import { Button } from "@/components/ui/button";
+import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { Loader } from "@/components/ui/loader";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
 import { createCollection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { Collection, CollectionCreatePayload, NodeSpec, Pipeline } from "@/lib/types";
+import type { Collection, CollectionCreatePayload, Pipeline } from "@/lib/types";
 
 type CreateCollectionWizardProps = {
   open: boolean;
   token: string;
   ingestionPipelines: Pipeline[];
   retrievalPipelines: Pipeline[];
-  nodeSpecs: NodeSpec[];
   onClose: () => void;
   onCreated: (collection: Collection) => void;
 };
 
 const steps: WizardStep[] = [
   { id: "basics", label: "Basics", description: "Name and describe the collection." },
-  { id: "pipelines", label: "Pipelines", description: "Choose ingestion and retrieval flows." },
-  { id: "defaults", label: "Defaults", description: "Fine-tune default pipeline settings." },
+  {
+    id: "pipelines",
+    label: "Pipelines",
+    description: "The pipeline that ingests files and the tools chat can call.",
+  },
   { id: "review", label: "Review", description: "Confirm and create the collection." },
 ];
 
@@ -35,31 +37,18 @@ export function CreateCollectionWizard({
   token,
   ingestionPipelines,
   retrievalPipelines,
-  nodeSpecs,
   onClose,
   onCreated,
 }: CreateCollectionWizardProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [form, setForm] = useState<{
-    name: string;
-    description: string;
-    ingestion_pipeline_id: string;
-    retrieval_pipeline_id: string;
-  }>({
-    name: "",
-    description: "",
-    ingestion_pipeline_id: "",
-    retrieval_pipeline_id: "",
-  });
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [ingestionOverrides, setIngestionOverrides] = useState<
-    Record<string, Record<string, unknown>>
-  >({});
-  const [retrievalOverrides, setRetrievalOverrides] = useState<
-    Record<string, Record<string, unknown>>
-  >({});
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [ingestionPipelineId, setIngestionPipelineId] = useState("");
+  /** Tool pipelines in binding order — the first is the primary search tool. */
+  const [toolPipelineIds, setToolPipelineIds] = useState<string[]>([]);
+  const [pipelineToAdd, setPipelineToAdd] = useState("");
   const wasOpen = useRef(false);
 
   const defaultIngestion = useMemo(
@@ -73,9 +62,9 @@ export function CreateCollectionWizard({
     [retrievalPipelines],
   );
 
-  const pipelineNameById = useMemo(() => {
+  const pipelineById = useMemo(() => {
     const entries = [...ingestionPipelines, ...retrievalPipelines].map(
-      (pipeline): [string, string] => [pipeline.id, pipeline.name],
+      (pipeline): [string, Pipeline] => [pipeline.id, pipeline],
     );
     return new Map(entries);
   }, [ingestionPipelines, retrievalPipelines]);
@@ -93,83 +82,49 @@ export function CreateCollectionWizard({
       wasOpen.current = true;
       setStepIndex(0);
       setMessage(null);
-      setShowAdvanced(false);
-      setIngestionOverrides({});
-      setRetrievalOverrides({});
-      setForm({
-        name: "",
-        description: "",
-        ingestion_pipeline_id: defaultIngestion?.id || "",
-        retrieval_pipeline_id: defaultRetrieval?.id || "",
-      });
+      setName("");
+      setDescription("");
+      setPipelineToAdd("");
+      setIngestionPipelineId(defaultIngestion?.id ?? "");
+      setToolPipelineIds(defaultRetrieval ? [defaultRetrieval.id] : []);
       return;
     }
-    setForm((prev) => ({
-      ...prev,
-      ingestion_pipeline_id: prev.ingestion_pipeline_id || defaultIngestion?.id || "",
-      retrieval_pipeline_id: prev.retrieval_pipeline_id || defaultRetrieval?.id || "",
-    }));
+    setIngestionPipelineId((prev) => prev || (defaultIngestion?.id ?? ""));
+    setToolPipelineIds((prev) =>
+      prev.length > 0 ? prev : defaultRetrieval ? [defaultRetrieval.id] : [],
+    );
   }, [open, defaultIngestion, defaultRetrieval]);
 
-  const usesDefaultPipelines =
-    !!defaultIngestion &&
-    !!defaultRetrieval &&
-    form.ingestion_pipeline_id === defaultIngestion.id &&
-    form.retrieval_pipeline_id === defaultRetrieval.id;
-
-  const buildOverridesFromPipeline = useCallback(
-    (pipeline: Pipeline | null) => {
-      /* c8 ignore next -- defensive fallback for optional pipelines */
-      if (!pipeline) return {};
-      const specsByType = new Map(nodeSpecs.map((spec) => [spec.type, spec]));
-      return pipeline.definition.nodes.reduce<Record<string, Record<string, unknown>>>(
-        (acc, node) => {
-          const spec = specsByType.get(node.type);
-          acc[node.id] = { ...(spec?.default_config ?? {}), ...(node.config ?? {}) };
-          return acc;
-        },
-        {},
-      );
-    },
-    [nodeSpecs],
+  const unboundToolPipelines = useMemo(
+    () => retrievalPipelines.filter((pipeline) => !toolPipelineIds.includes(pipeline.id)),
+    [retrievalPipelines, toolPipelineIds],
   );
 
-  if (!open) {
-    return null;
-  }
+  const nameProvided = name.trim().length > 0;
+  const pipelinesChosen = Boolean(ingestionPipelineId) && toolPipelineIds.length > 0;
 
-  // Seed the override editors once advanced options are expanded AND the default
-  // pipelines are known. This runs during render (React's "adjust state when props
-  // change" pattern) instead of only in the expand click handler, because the
-  // pipelines/specs fetch can resolve *after* the user expanded the panel — without a
-  // reactive re-seed, the editors would display fallback configs but the overrides
-  // state would stay empty, so the user's first edit would submit a one-field
-  // per-node config and silently drop every other seeded value. The empty-object
-  // guards ensure user-entered values are never clobbered, and the non-empty check
-  // on the seeded result prevents a re-render loop for pipelines with no nodes.
-  if (showAdvanced && usesDefaultPipelines) {
-    if (defaultIngestion && Object.keys(ingestionOverrides).length === 0) {
-      const seeded = buildOverridesFromPipeline(defaultIngestion);
-      if (Object.keys(seeded).length > 0) {
-        setIngestionOverrides(seeded);
-      }
-    }
-    if (defaultRetrieval && Object.keys(retrievalOverrides).length === 0) {
-      const seeded = buildOverridesFromPipeline(defaultRetrieval);
-      if (Object.keys(seeded).length > 0) {
-        setRetrievalOverrides(seeded);
-      }
-    }
-  }
-
-  const canProceed = () => {
-    if (stepIndex === 0) {
-      return form.name.trim().length > 0;
-    }
-    if (stepIndex === 1) {
-      return form.ingestion_pipeline_id && form.retrieval_pipeline_id;
-    }
+  const stepValid = (index: number) => {
+    if (index === 0) return nameProvided;
+    if (index === 1) return pipelinesChosen;
     return true;
+  };
+
+  // The furthest step reachable from the step list: every earlier step must be
+  // satisfied, so a blank name can't be walked past by clicking ahead.
+  const maxReachableStepIndex = nameProvided ? (pipelinesChosen ? steps.length - 1 : 1) : 0;
+
+  const addTool = () => {
+    if (!pipelineToAdd) return;
+    setToolPipelineIds((prev) => (prev.includes(pipelineToAdd) ? prev : [...prev, pipelineToAdd]));
+    setPipelineToAdd("");
+  };
+
+  const removeTool = (pipelineId: string) => {
+    setToolPipelineIds((prev) => prev.filter((id) => id !== pipelineId));
+  };
+
+  const makePrimary = (pipelineId: string) => {
+    setToolPipelineIds((prev) => [pipelineId, ...prev.filter((id) => id !== pipelineId)]);
   };
 
   const handleCreate = async () => {
@@ -177,26 +132,14 @@ export function CreateCollectionWizard({
     setMessage(null);
     try {
       const payload: CollectionCreatePayload = {
-        name: form.name,
-        description: form.description,
+        name: name.trim(),
+        description,
       };
-      if (form.ingestion_pipeline_id) {
-        payload.ingest_pipeline_id = form.ingestion_pipeline_id;
+      if (ingestionPipelineId) {
+        payload.ingest_pipeline_id = ingestionPipelineId;
       }
-      if (form.retrieval_pipeline_id) {
-        payload.tool_pipeline_ids = [form.retrieval_pipeline_id];
-      }
-      if (showAdvanced && usesDefaultPipelines) {
-        payload.pipeline_overrides = {
-          ingestion: Object.entries(ingestionOverrides).map(([nodeId, config]) => ({
-            node_id: nodeId,
-            config,
-          })),
-          retrieval: Object.entries(retrievalOverrides).map(([nodeId, config]) => ({
-            node_id: nodeId,
-            config,
-          })),
-        };
+      if (toolPipelineIds.length > 0) {
+        payload.tool_pipeline_ids = toolPipelineIds;
       }
       const created = await createCollection(token, payload);
       onCreated(created);
@@ -208,6 +151,10 @@ export function CreateCollectionWizard({
     }
   };
 
+  if (!open) {
+    return null;
+  }
+
   return (
     <WizardShell
       open={open}
@@ -216,6 +163,7 @@ export function CreateCollectionWizard({
       steps={steps}
       activeStepIndex={stepIndex}
       message={message}
+      maxReachableStepIndex={maxReachableStepIndex}
       onStepChange={setStepIndex}
       onClose={onClose}
       footer={
@@ -229,7 +177,7 @@ export function CreateCollectionWizard({
               : handleCreate()
           }
           nextLabel="Create collection"
-          nextDisabled={!canProceed()}
+          nextDisabled={!stepValid(stepIndex)}
           busy={creating}
           onCancel={onClose}
         />
@@ -242,18 +190,16 @@ export function CreateCollectionWizard({
               type="text"
               placeholder="Research vault"
               required
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
             />
           </Field>
-          <Field label="Description">
+          <Field label="Description" hint="Optional.">
             <TextArea
               placeholder="Summarize what this collection is for."
               className="h-24"
-              value={form.description}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, description: event.target.value }))
-              }
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
             />
           </Field>
         </div>
@@ -261,133 +207,116 @@ export function CreateCollectionWizard({
 
       {stepIndex === 1 && (
         <div className="space-y-4">
-          <Field label="Ingestion pipeline">
-            <Select
-              value={form.ingestion_pipeline_id}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  ingestion_pipeline_id: event.target.value,
-                }))
-              }
-            >
-              {ingestionPipelines.length === 0 && <option value="">Loading pipelines...</option>}
-              {ingestionPipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </Select>
+          <Field label="Ingestion pipeline" hint="Runs on every file uploaded to this collection.">
+            <PipelineSelect
+              label="Ingestion pipeline"
+              pipelines={ingestionPipelines}
+              value={ingestionPipelineId}
+              onChange={setIngestionPipelineId}
+            />
           </Field>
-          <Field label="Retrieval pipeline">
-            <Select
-              value={form.retrieval_pipeline_id}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  retrieval_pipeline_id: event.target.value,
-                }))
-              }
-            >
-              {retrievalPipelines.length === 0 && <option value="">Loading pipelines...</option>}
-              {retrievalPipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-      )}
 
-      {stepIndex === 2 && (
-        <div className="space-y-4">
-          <div className="rounded-panel border border-hairline bg-surface p-3">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-ui text-body"
-              onClick={() => setShowAdvanced((prev) => !prev)}
-            >
-              <span className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-accent-violet" />
-                Advanced pipeline defaults
-              </span>
-              <span className="text-ui text-muted">{showAdvanced ? "Hide" : "Show"}</span>
-            </button>
-            {showAdvanced ? (
-              <div className="mt-4 space-y-4">
-                {!usesDefaultPipelines ? (
-                  <p className="text-ui text-muted">
-                    Advanced options are available only when the default pipelines are selected.
-                  </p>
-                ) : nodeSpecs.length === 0 ? (
-                  <div className="flex items-center gap-2 text-ui text-muted">
-                    <Loader className="h-4 w-4" />
-                    Loading node settings...
-                  </div>
-                ) : (
-                  <>
-                    <PipelineOverridesEditor
-                      title="Ingestion defaults"
-                      pipeline={defaultIngestion}
-                      nodeSpecs={nodeSpecs}
-                      overrides={ingestionOverrides}
-                      onOverridesChange={setIngestionOverrides}
-                    />
-                    <PipelineOverridesEditor
-                      title="Retrieval defaults"
-                      pipeline={defaultRetrieval}
-                      nodeSpecs={nodeSpecs}
-                      overrides={retrievalOverrides}
-                      onOverridesChange={setRetrievalOverrides}
-                    />
-                  </>
-                )}
-              </div>
-            ) : (
-              <p className="mt-3 text-ui text-muted">
-                The default pipelines apply unless you enable advanced overrides.
+          <div>
+            <div className="flex items-baseline justify-between gap-3">
+              <InstrumentLabel>Tools</InstrumentLabel>
+              <p className="text-instrument text-muted">
+                The first tool is the primary search tool.
               </p>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {toolPipelineIds.map((pipelineId, index) => {
+                const pipeline = pipelineById.get(pipelineId);
+                const isPrimary = index === 0;
+                return (
+                  <li
+                    key={pipelineId}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-hairline bg-surface px-3 py-2"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      {isPrimary && (
+                        <Star
+                          className="h-3.5 w-3.5 shrink-0 text-accent-violet"
+                          aria-label="Primary search tool"
+                        />
+                      )}
+                      <span className="truncate text-ui text-primary">
+                        {pipeline?.name ?? pipelineId}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {!isPrimary && (
+                        <Button variant="ghost" size="sm" onClick={() => makePrimary(pipelineId)}>
+                          Make primary
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove ${pipeline?.name ?? "tool"}`}
+                        onClick={() => removeTool(pipelineId)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+              {toolPipelineIds.length === 0 && (
+                <li className="rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-muted">
+                  Add at least one retrieval pipeline for chat to call.
+                </li>
+              )}
+            </ul>
+
+            {unboundToolPipelines.length > 0 && (
+              <div className="mt-2 flex items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <PipelineSelect
+                    label="Retrieval pipeline to add as a tool"
+                    pipelines={unboundToolPipelines}
+                    value={pipelineToAdd}
+                    onChange={setPipelineToAdd}
+                  />
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={addTool}
+                  disabled={!pipelineToAdd}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add tool
+                </Button>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {stepIndex === 3 && (
-        <div className="space-y-4">
-          <div className="rounded-panel border border-hairline bg-surface p-3">
-            <InstrumentLabel>Summary</InstrumentLabel>
-            <div className="mt-3 space-y-3 text-ui text-body">
-              <div>
-                <InstrumentLabel>Name</InstrumentLabel>
-                <p className="text-head font-semibold text-primary">{form.name || "Untitled"}</p>
-              </div>
-              <div>
-                <InstrumentLabel>Description</InstrumentLabel>
-                <p className="text-ui text-body">
-                  {form.description || "No description provided."}
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
-                  <p className="text-ui text-primary">
-                    {pipelineNameById.get(form.ingestion_pipeline_id) || "Default"}
-                  </p>
-                </div>
-                <div>
-                  <InstrumentLabel>Retrieval pipeline</InstrumentLabel>
-                  <p className="text-ui text-primary">
-                    {pipelineNameById.get(form.retrieval_pipeline_id) || "Default"}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <InstrumentLabel>Advanced defaults</InstrumentLabel>
-                <p className="text-ui text-body">
-                  {showAdvanced && usesDefaultPipelines ? "Enabled" : "Not configured"}
-                </p>
-              </div>
+      {stepIndex === 2 && (
+        <div className="rounded-panel border border-hairline bg-surface p-3">
+          <div className="space-y-3">
+            <div>
+              <InstrumentLabel>Name</InstrumentLabel>
+              <p className="text-head font-semibold text-primary">{name.trim() || "Untitled"}</p>
+              {description.trim() && <p className="mt-1 text-ui text-body">{description}</p>}
+            </div>
+            <div>
+              <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
+              <p className="text-ui text-primary">
+                {pipelineById.get(ingestionPipelineId)?.name ?? "Default"}
+              </p>
+            </div>
+            <div>
+              <InstrumentLabel>Tools</InstrumentLabel>
+              <ul className="mt-1 space-y-1">
+                {toolPipelineIds.map((pipelineId, index) => (
+                  <li key={pipelineId} className="text-ui text-primary">
+                    {pipelineById.get(pipelineId)?.name ?? pipelineId}
+                    {index === 0 && <span className="text-muted"> · primary search</span>}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

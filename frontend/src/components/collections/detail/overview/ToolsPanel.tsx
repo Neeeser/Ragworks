@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
+import { PipelineSelect } from "@/components/pipelines/PipelineSelect";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {

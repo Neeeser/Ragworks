@@ -2,18 +2,22 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { PipelineMiniMap } from "@/components/collections/detail/overview/PipelineMiniMap";
 import {
   getNodeFamilyColorVar,
   resolveNodeFamily,
 } from "@/components/pipelines/lib/pipeline-theme";
+import { PipelineMiniMap } from "@/components/pipelines/PipelineMiniMap";
 import { Chip } from "@/components/ui/chip";
 import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 import type { Pipeline } from "@/lib/types";
 import type { KeyboardEvent } from "react";
+
+/** Viewport coordinates the portaled listbox is pinned to. */
+type AnchorRect = { left: number; bottom: number; width: number };
 
 type PipelineSelectProps = {
   label: string;
@@ -57,8 +61,10 @@ function PreviewPane({ pipeline }: { pipeline: Pipeline }) {
 export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
 
   const selected = pipelines.find((pipeline) => pipeline.id === value) ?? null;
   const previewed = pipelines.find((pipeline) => pipeline.id === (previewId ?? value)) ?? null;
@@ -66,12 +72,30 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown, true);
     return () => document.removeEventListener("mousedown", onPointerDown, true);
+  }, [open]);
+
+  // The listbox is portaled, so it has to track the trigger itself. Scroll is
+  // captured rather than bubbled: the trigger usually sits inside a scrolling
+  // panel (a wizard step body), whose scroll events never reach `window`.
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (rect) setAnchor({ left: rect.left, bottom: rect.bottom, width: rect.width });
+    };
+    reposition();
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
   }, [open]);
 
   const openList = () => {
@@ -86,7 +110,7 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
 
   const moveFocus = (direction: 1 | -1) => {
     const options = Array.from(
-      rootRef.current?.querySelectorAll<HTMLButtonElement>("[role='option']") ?? [],
+      popoverRef.current?.querySelectorAll<HTMLButtonElement>("[role='option']") ?? [],
     );
     if (options.length === 0) return;
     const current = options.indexOf(document.activeElement as HTMLButtonElement);
@@ -134,55 +158,57 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
         </span>
       </button>
 
-      {open && (
-        <div
-          onKeyDown={onListKeyDown}
-          className={cn(
-            popoverSurfaceClass,
-            "absolute left-0 right-0 top-full z-30 mt-2 flex overflow-hidden",
-          )}
-        >
-          <ul
-            id={listboxId}
-            role="listbox"
-            aria-label={label}
-            className="max-h-64 min-w-0 flex-1 overflow-y-auto p-1.5"
+      {open &&
+        anchor &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            onKeyDown={onListKeyDown}
+            style={{ left: anchor.left, top: anchor.bottom + 8, width: anchor.width }}
+            className={cn(popoverSurfaceClass, "fixed z-50 flex overflow-hidden")}
           >
-            {pipelines.map((pipeline) => (
-              <li key={pipeline.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={pipeline.id === value}
-                  onClick={() => choose(pipeline.id)}
-                  onMouseEnter={() => setPreviewId(pipeline.id)}
-                  onFocus={() => setPreviewId(pipeline.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                    pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
-                  )}
-                >
-                  <Check
+            <ul
+              id={listboxId}
+              role="listbox"
+              aria-label={label}
+              className="max-h-64 min-w-0 flex-1 overflow-y-auto p-1.5"
+            >
+              {pipelines.map((pipeline) => (
+                <li key={pipeline.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={pipeline.id === value}
+                    onClick={() => choose(pipeline.id)}
+                    onMouseEnter={() => setPreviewId(pipeline.id)}
+                    onFocus={() => setPreviewId(pipeline.id)}
                     className={cn(
-                      "h-3.5 w-3.5 shrink-0",
-                      pipeline.id === value ? "text-accent-violet" : "invisible",
+                      "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+                      pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
                     )}
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
-                  {pipeline.is_default && (
-                    <Chip dot={false} className="shrink-0">
-                      Default
-                    </Chip>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {previewed && <PreviewPane pipeline={previewed} />}
-        </div>
-      )}
+                  >
+                    <Check
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0",
+                        pipeline.id === value ? "text-accent-violet" : "invisible",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
+                    {pipeline.is_default && (
+                      <Chip dot={false} className="shrink-0">
+                        Default
+                      </Chip>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {previewed && <PreviewPane pipeline={previewed} />}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

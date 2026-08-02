@@ -140,16 +140,6 @@ export interface PromptDetails {
 
 export type CollectionPromptDetails = PromptDetails;
 
-export interface PipelineNodeOverride {
-  node_id: string;
-  config: Record<string, unknown>;
-}
-
-export interface CollectionPipelineOverrides {
-  ingestion?: PipelineNodeOverride[];
-  retrieval?: PipelineNodeOverride[];
-}
-
 export interface CollectionCreatePayload {
   name: string;
   description?: string;
@@ -157,7 +147,6 @@ export interface CollectionCreatePayload {
   ingest_pipeline_id?: UUID | null;
   /** Bound in order; the first becomes the primary search tool. */
   tool_pipeline_ids?: UUID[] | null;
-  pipeline_overrides?: CollectionPipelineOverrides;
 }
 
 export interface CollectionUpdatePayload {
