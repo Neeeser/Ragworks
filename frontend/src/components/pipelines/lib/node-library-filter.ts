@@ -35,9 +35,7 @@ export const filterNodeCatalog = (
       specs: group.specs
         .map((spec) => {
           if (specSelfMatches(spec, query)) return spec;
-          const presets = (spec.presets ?? []).filter((preset) =>
-            includes(preset.label, query),
-          );
+          const presets = (spec.presets ?? []).filter((preset) => includes(preset.label, query));
           return presets.length > 0 ? { ...spec, presets } : null;
         })
         .filter((spec): spec is NodeSpec => spec !== null),

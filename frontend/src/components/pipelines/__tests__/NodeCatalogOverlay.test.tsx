@@ -4,12 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 import { NodeCatalogOverlay } from "@/components/pipelines/NodeCatalogOverlay";
 import { makeNodeSpec } from "@/test/fixtures";
 
+const CHUNKER_TYPE = "chunker.custom";
+const ADD_TO_CANVAS = "Add to canvas";
+const TRANSFORM_TYPE = "llm.transform";
+
 const catalog = () => [
   {
     family: "chunker" as const,
     specs: [
       makeNodeSpec({
-        type: "chunker.custom",
+        type: CHUNKER_TYPE,
         label: "Token Chunker",
         description: "Splits text into token chunks. Keeps metadata.",
       }),
@@ -19,7 +23,7 @@ const catalog = () => [
     family: "llm" as const,
     specs: [
       makeNodeSpec({
-        type: "llm.transform",
+        type: TRANSFORM_TYPE,
         label: "LLM Transform",
         description: "Runs a prompt over each item.",
         presets: [
@@ -44,8 +48,10 @@ describe("NodeCatalogOverlay", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Token Chunker/ }));
     // The detail pane carries the full description and the mono type id.
-    expect(screen.getByText("chunker.custom")).toBeInTheDocument();
-    expect(screen.getByText(/Splits text into token chunks\. Keeps metadata\./)).toBeInTheDocument();
+    expect(screen.getByText(CHUNKER_TYPE)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Splits text into token chunks\. Keeps metadata\./),
+    ).toBeInTheDocument();
   });
 
   it("adds the focused node to the canvas", () => {
@@ -53,9 +59,9 @@ describe("NodeCatalogOverlay", () => {
     render(<NodeCatalogOverlay catalog={catalog()} onClose={vi.fn()} onAddNode={onAddNode} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Token Chunker/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Add to canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: ADD_TO_CANVAS }));
     expect(onAddNode).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "chunker.custom", label: "Token Chunker" }),
+      expect.objectContaining({ type: CHUNKER_TYPE, label: "Token Chunker" }),
     );
   });
 
@@ -67,7 +73,7 @@ describe("NodeCatalogOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(onAddNode).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "llm.transform",
+        type: TRANSFORM_TYPE,
         label: "Summarize",
         default_config: expect.objectContaining({ prompt: "Summarize" }),
       }),
@@ -82,8 +88,8 @@ describe("NodeCatalogOverlay", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Summarize/ }));
     // Focusing the preset row shows the presetized entry in the detail pane.
-    expect(screen.getByText("llm.transform")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add to canvas" })).toBeInTheDocument();
+    expect(screen.getByText(TRANSFORM_TYPE)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ADD_TO_CANVAS })).toBeInTheDocument();
   });
 
   it("disables adding a reranker without a reranking provider", () => {
@@ -103,7 +109,7 @@ describe("NodeCatalogOverlay", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Reranker/ }));
-    expect(screen.getByRole("button", { name: "Add to canvas" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: ADD_TO_CANVAS })).toBeDisabled();
     expect(screen.getByText("Add a reranking provider to continue")).toBeInTheDocument();
   });
 });

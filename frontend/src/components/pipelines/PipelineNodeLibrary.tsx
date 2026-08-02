@@ -3,6 +3,8 @@
 import { LibraryBig, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { inputClass } from "../ui/field";
 import { InstrumentLabel } from "../ui/instrument-label";
 
@@ -11,8 +13,6 @@ import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeLibraryRail } from "./NodeLibraryRail";
 import { NodeLibraryRow } from "./NodeLibraryRow";
-
-import { cn } from "@/lib/utils";
 
 import type { IndexBackend, NodeSpec } from "@/lib/types";
 

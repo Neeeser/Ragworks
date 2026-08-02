@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+
 import { Tooltip } from "../ui/tooltip";
 
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import { backendSupportLabel, restrictedBackends } from "./lib/backend-support";
 import { getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
 import { NODE_PRESET_MIME, presetizedSpec } from "./lib/presets";
-
-import { cn } from "@/lib/utils";
 
 import type { IndexBackend, NodePreset, NodeSpec } from "@/lib/types";
 import type { DragEvent } from "react";
@@ -76,7 +76,11 @@ export function NodeLibraryRow({
       >
         <span
           aria-hidden
-          className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px]", styles.accent, unavailable && "opacity-40")}
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-[2px]",
+            styles.accent,
+            unavailable && "opacity-40",
+          )}
         />
         <span
           className={cn(
@@ -107,7 +111,10 @@ export function NodeLibraryRow({
         ) : null}
       </button>
       {presets.length > 0 ? (
-        <div className="mb-1 mt-1 space-y-1 border-l-2 border-hairline pl-2" style={{ marginLeft: 10 }}>
+        <div
+          className="mb-1 mt-1 space-y-1 border-l-2 border-hairline pl-2"
+          style={{ marginLeft: 10 }}
+        >
           {presets.map((preset) => (
             <button
               key={preset.id}
@@ -117,7 +124,10 @@ export function NodeLibraryRow({
               onDragStart={(event) => handleDragStart(event, preset)}
               className="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors duration-80 ease-standard hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
             >
-              <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px] opacity-50", styles.accent)} />
+              <span
+                aria-hidden
+                className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px] opacity-50", styles.accent)}
+              />
               <span className="min-w-0 flex-1 truncate text-instrument font-medium text-body">
                 {preset.label}
               </span>

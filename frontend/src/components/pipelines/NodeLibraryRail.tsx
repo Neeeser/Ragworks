@@ -1,10 +1,10 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import { Tooltip } from "../ui/tooltip";
 
 import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
-
-import { cn } from "@/lib/utils";
 
 type NodeLibraryRailProps = {
   /** Families present in the catalog, with node counts, in display order. */
@@ -25,7 +25,10 @@ const slotClass = (selected: boolean) =>
 
 /** The lit filter's edge marker — where-you-are, same mark as active nav. */
 const ActiveWire = () => (
-  <span aria-hidden className="trace-wire absolute -left-1.5 bottom-1.5 top-1.5 w-0.5 rounded-full" />
+  <span
+    aria-hidden
+    className="trace-wire absolute -left-1.5 bottom-1.5 top-1.5 w-0.5 rounded-full"
+  />
 );
 
 /**
@@ -61,11 +64,7 @@ export function NodeLibraryRail({ families, active, onSelect }: NodeLibraryRailP
         const selected = active === family;
         const styles = getNodeFamilyStyles(family);
         return (
-          <Tooltip
-            key={family}
-            content={`${getNodeFamilyLabel(family)} · ${count}`}
-            side="right"
-          >
+          <Tooltip key={family} content={`${getNodeFamilyLabel(family)} · ${count}`} side="right">
             <button
               type="button"
               aria-pressed={selected}

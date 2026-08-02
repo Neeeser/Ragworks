@@ -3,23 +3,19 @@
 import { Search, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { inputClass } from "../ui/field";
 import { ModalOverlay } from "../ui/modal-overlay";
 
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import { restrictedBackends } from "./lib/backend-support";
 import { resolveNodeDescription } from "./lib/node-content";
-import {
-  filterNodeCatalog,
-  firstSentence,
-  type NodeCatalogGroup,
-} from "./lib/node-library-filter";
+import { filterNodeCatalog, firstSentence, type NodeCatalogGroup } from "./lib/node-library-filter";
 import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
 import { presetizedSpec } from "./lib/presets";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeCatalogDetail } from "./NodeCatalogDetail";
-
-import { cn } from "@/lib/utils";
 
 import type { IndexBackend, NodePreset, NodeSpec } from "@/lib/types";
 
@@ -57,6 +53,71 @@ const entriesForGroup = (group: NodeCatalogGroup, searching: boolean): CatalogEn
       })),
     ];
   });
+
+/** One list row: dot + label, preset/count pill, backend icons, one-line blurb. */
+function CatalogEntryRow({
+  entry,
+  selected,
+  knownBackends,
+  onFocus,
+}: {
+  entry: CatalogEntry;
+  selected: boolean;
+  knownBackends: IndexBackend[];
+  onFocus: () => void;
+}) {
+  const styles = getNodeFamilyStyles(entry.family);
+  const restricted = restrictedBackends(entry.spec, knownBackends);
+  const description = entry.preset ? entry.preset.description : resolveNodeDescription(entry.spec);
+  const pill = entry.preset
+    ? "preset"
+    : entry.spec.presets && entry.spec.presets.length > 0
+      ? `${entry.spec.presets.length} presets`
+      : null;
+  return (
+    <button
+      type="button"
+      onClick={onFocus}
+      className={cn(
+        "w-full rounded-control border px-3 py-2 text-left transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
+        selected
+          ? "border-accent-violet/60 bg-accent-violet/10"
+          : "border-hairline bg-surface hover:border-strong hover:bg-surface-strong",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-[2px]",
+            styles.accent,
+            entry.preset && "opacity-50",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
+          {entry.preset ? entry.preset.label : entry.spec.label}
+        </span>
+        {pill ? (
+          <span className="shrink-0 rounded-full border border-hairline px-1.5 text-instrument text-meta">
+            {pill}
+          </span>
+        ) : null}
+        {restricted ? (
+          <span className="flex shrink-0 items-center gap-1">
+            {restricted.map((backend) => (
+              <IndexBackendIcon key={backend} backend={backend} className="h-3.5 w-3.5 shrink-0" />
+            ))}
+          </span>
+        ) : null}
+      </span>
+      {description ? (
+        <span className="mt-1 block truncate text-instrument text-muted">
+          {firstSentence(description)}
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 /**
  * The full node catalog with room to read it: labeled categories on the left,
@@ -171,7 +232,10 @@ export function NodeCatalogOverlay({
               >
                 <span
                   aria-hidden
-                  className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px]", getNodeFamilyStyles(group.family).accent)}
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 rounded-[2px]",
+                    getNodeFamilyStyles(group.family).accent,
+                  )}
                 />
                 {getNodeFamilyLabel(group.family)}
                 <span className="ml-auto font-mono text-instrument text-meta">
@@ -193,66 +257,15 @@ export function NodeCatalogOverlay({
               </p>
             ) : (
               <div className="space-y-1.5">
-                {entries.map((entry) => {
-                  const selected = entry.key === focusedKey;
-                  const styles = getNodeFamilyStyles(entry.family);
-                  const restricted = restrictedBackends(entry.spec, knownBackends);
-                  const description = entry.preset
-                    ? entry.preset.description
-                    : resolveNodeDescription(entry.spec);
-                  return (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => setFocusedKey(entry.key)}
-                      className={cn(
-                        "w-full rounded-control border px-3 py-2 text-left transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset",
-                        selected
-                          ? "border-accent-violet/60 bg-accent-violet/10"
-                          : "border-hairline bg-surface hover:border-strong hover:bg-surface-strong",
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "h-1.5 w-1.5 shrink-0 rounded-[2px]",
-                            styles.accent,
-                            entry.preset && "opacity-50",
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
-                          {entry.preset ? entry.preset.label : entry.spec.label}
-                        </span>
-                        {entry.preset ? (
-                          <span className="shrink-0 rounded-full border border-hairline px-1.5 text-instrument text-meta">
-                            preset
-                          </span>
-                        ) : entry.spec.presets && entry.spec.presets.length > 0 ? (
-                          <span className="shrink-0 rounded-full border border-hairline px-1.5 text-instrument text-meta">
-                            {entry.spec.presets.length} presets
-                          </span>
-                        ) : null}
-                        {restricted ? (
-                          <span className="flex shrink-0 items-center gap-1">
-                            {restricted.map((backend) => (
-                              <IndexBackendIcon
-                                key={backend}
-                                backend={backend}
-                                className="h-3.5 w-3.5 shrink-0"
-                              />
-                            ))}
-                          </span>
-                        ) : null}
-                      </span>
-                      {description ? (
-                        <span className="mt-1 block truncate text-instrument text-muted">
-                          {firstSentence(description)}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
+                {entries.map((entry) => (
+                  <CatalogEntryRow
+                    key={entry.key}
+                    entry={entry}
+                    selected={entry.key === focusedKey}
+                    knownBackends={knownBackends}
+                    onFocus={() => setFocusedKey(entry.key)}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -268,10 +281,10 @@ export function NodeCatalogOverlay({
                   ← Back to list
                 </button>
                 <NodeCatalogDetail
-                spec={focusedSpec}
-                knownBackends={knownBackends}
-                unavailable={focusedUnavailable}
-                unavailableMessage={focusedUnavailable ? rerankingProviderMessage : null}
+                  spec={focusedSpec}
+                  knownBackends={knownBackends}
+                  unavailable={focusedUnavailable}
+                  unavailableMessage={focusedUnavailable ? rerankingProviderMessage : null}
                   onAdd={onAddNode}
                 />
               </div>

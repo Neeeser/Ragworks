@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { PipelineNodeLibrary } from "@/components/pipelines/PipelineNodeLibrary";
 import { makeNodeSpec } from "@/test/fixtures";
 
+const TOKEN_CHUNKER = "Token Chunker";
+const TOKEN_CHUNKER_TYPE = "chunker.token";
+
 const twoFamilyCatalog = () => [
   {
     family: "chunker" as const,
-    specs: [makeNodeSpec({ type: "chunker.token", label: "Token Chunker" })],
+    specs: [makeNodeSpec({ type: TOKEN_CHUNKER_TYPE, label: TOKEN_CHUNKER })],
   },
   {
     family: "retriever" as const,
@@ -21,7 +24,7 @@ describe("PipelineNodeLibrary", () => {
     const catalog = [
       {
         family: "chunker" as const,
-        specs: [makeNodeSpec({ type: "chunker.token", label: "Token Chunker" })],
+        specs: [makeNodeSpec({ type: TOKEN_CHUNKER_TYPE, label: TOKEN_CHUNKER })],
       },
     ];
 
@@ -34,7 +37,10 @@ describe("PipelineNodeLibrary", () => {
 
     const dataTransfer = { setData: vi.fn(), effectAllowed: "" } as unknown as DataTransfer;
     fireEvent.dragStart(screen.getByRole("button", { name: /Token Chunker/ }), { dataTransfer });
-    expect(dataTransfer.setData).toHaveBeenCalledWith("application/ragworks-node", "chunker.token");
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      "application/ragworks-node",
+      TOKEN_CHUNKER_TYPE,
+    );
   });
 
   it("stamps the preset id alongside the node type when a preset row is dragged", () => {

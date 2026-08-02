@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  filterNodeCatalog,
-  firstSentence,
-} from "@/components/pipelines/lib/node-library-filter";
+import { filterNodeCatalog, firstSentence } from "@/components/pipelines/lib/node-library-filter";
 import { makeNodeSpec } from "@/test/fixtures";
 
 const catalog = [

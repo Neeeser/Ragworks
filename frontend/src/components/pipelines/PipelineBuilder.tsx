@@ -28,7 +28,11 @@ import {
   toFlowNodes,
   toPipelineDefinition,
 } from "./lib/pipeline-utils";
-import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
+import {
+  previewWithRerankerGate,
+  RERANKER_NODE_TYPE,
+  RERANKER_PROVIDER_REQUIRED,
+} from "./lib/reranking";
 import { buildIndexVariable } from "./lib/variable-env";
 import { NodeCatalogOverlay } from "./NodeCatalogOverlay";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
@@ -47,20 +51,6 @@ import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type PipelineBuilderProps = {
   kind: PipelineKind;
-};
-
-const previewWithRerankerGate = (
-  spec: NodeSpec,
-  hasRerankingProvider: boolean,
-  rerankingProviderMessage: string | null,
-  previewNodeSpec: (candidate: NodeSpec) => void,
-  setMessage: (message: string | null) => void,
-) => {
-  if (spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider) {
-    setMessage(rerankingProviderMessage ?? RERANKER_PROVIDER_REQUIRED);
-    return;
-  }
-  previewNodeSpec(spec);
 };
 
 export function PipelineBuilder({ kind }: PipelineBuilderProps) {

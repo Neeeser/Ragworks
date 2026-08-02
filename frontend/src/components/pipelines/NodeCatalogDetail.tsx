@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 import { Button } from "../ui/button";
 import { InstrumentLabel } from "../ui/instrument-label";
 
@@ -9,8 +11,6 @@ import { portToken } from "./lib/facet-inference";
 import { resolveNodeDescription } from "./lib/node-content";
 import { getPortTypeClasses, getPortTypeLabel } from "./lib/pipeline-theme";
 import { presetizedSpec } from "./lib/presets";
-
-import { cn } from "@/lib/utils";
 
 import type { IndexBackend, NodePort, NodeSpec } from "@/lib/types";
 
@@ -37,7 +37,10 @@ function PortLine({ port, side }: { port: NodePort; side: "input" | "output" }) 
     <div className="flex items-baseline gap-2 py-0.5">
       <span
         aria-hidden
-        className={cn("h-1.5 w-1.5 shrink-0 self-center rounded-[2px]", getPortTypeClasses(token).dot)}
+        className={cn(
+          "h-1.5 w-1.5 shrink-0 self-center rounded-[2px]",
+          getPortTypeClasses(token).dot,
+        )}
       />
       <span className="text-instrument text-body">{port.label || getPortTypeLabel(token)}</span>
       {notes.length > 0 ? (
