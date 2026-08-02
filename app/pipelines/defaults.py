@@ -99,9 +99,7 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
     backend = backend or _default_backend()
     index_name = index_name or default_index_name(backend)
     include_bm25 = lexical_available(backend)
-    chunk_size, chunk_overlap = clamp_chunk_window(
-        chunk_size, chunk_overlap, embedding_input_limit
-    )
+    chunk_size, chunk_overlap = clamp_chunk_window(chunk_size, chunk_overlap, embedding_input_limit)
     nodes = [
         PipelineNodeDefinition(
             id="ingest-input",
@@ -219,8 +217,6 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
             ]
         )
     return PipelineDefinition(nodes=nodes, edges=edges, viewport={})
-
-
 
 
 def build_default_retrieval_pipeline(

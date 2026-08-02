@@ -67,9 +67,7 @@ def depth_caps(definition: PipelineDefinition | None) -> dict[str, int]:
     }
 
 
-def raise_bound_depths(
-    config: EvalRunConfig, top_k: int, caps: dict[str, int]
-) -> EvalRunConfig:
+def raise_bound_depths(config: EvalRunConfig, top_k: int, caps: dict[str, int]) -> EvalRunConfig:
     """Raise bound depth variables to the evaluation fetch depth.
 
     A bound depth variable smaller than the fetch depth would truncate inside

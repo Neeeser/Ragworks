@@ -213,8 +213,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         missing = [item.id for item in items if item.text is None]
         if missing:
             raise InvalidInputError(
-                f"Embedder received {len(missing)} item(s) without text "
-                f"(first: '{missing[0]}')."
+                f"Embedder received {len(missing)} item(s) without text (first: '{missing[0]}')."
             )
         if mode == "query":
             embeddings = [embedder.embed_query(item.text or "") for item in items]

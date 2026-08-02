@@ -48,6 +48,7 @@ def backends_where(
         if predicate(capabilities)
     )
 
+
 BACKEND_LABELS: dict[IndexBackend, str] = {
     IndexBackend.PINECONE: "Pinecone",
     IndexBackend.PGVECTOR: "pgvector (PostgreSQL)",

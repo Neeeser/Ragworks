@@ -33,9 +33,7 @@ def build_token_counter(spec: TokenizerSpec, storage_path: Path) -> TokenCounter
         return _cached_counter((spec.kind,), WhitespaceTokenCounter)
     if spec.kind == "cl100k":
         path = _bundled_path("cl100k_base.tiktoken")
-        return _cached_counter(
-            (spec.kind, str(path)), lambda: Cl100kTokenCounter.from_file(path)
-        )
+        return _cached_counter((spec.kind, str(path)), lambda: Cl100kTokenCounter.from_file(path))
     if spec.kind == "huggingface":
         if spec.hf_model_id is None:  # model validation makes this defensive only
             raise ValueError("A HuggingFace tokenizer requires a model id.")
@@ -50,6 +48,4 @@ def build_token_counter(spec: TokenizerSpec, storage_path: Path) -> TokenCounter
             lambda: TokenizerJsonCounter.from_file(path),
         )
     path = _bundled_path("bert-base-uncased-tokenizer.json")
-    return _cached_counter(
-        (spec.kind, str(path)), lambda: TokenizerJsonCounter.from_file(path)
-    )
+    return _cached_counter((spec.kind, str(path)), lambda: TokenizerJsonCounter.from_file(path))

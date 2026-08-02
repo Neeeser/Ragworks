@@ -10,6 +10,7 @@ import {
   makeCollectionStats,
   makePipeline,
   makeStatsHistory,
+  makeStatsHistoryPoint,
 } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -171,16 +172,19 @@ describe("CollectionOverview", () => {
     api.fetchCollectionStatsHistory.mockResolvedValueOnce(
       makeStatsHistory({
         points: [
-          {
-            bucket_start: "2024-01-01T00:00:00Z",
+          makeStatsHistoryPoint({
             document_total: 0,
             chunk_total: 0,
             ingestion: { count: 0 },
+            retrieval: { count: 0 },
             tools: {},
-          },
+          }),
         ],
         tools: [],
         ingestion_summary: { count: 0 },
+        retrieval_summary: { count: 0 },
+        ingestion_events: [],
+        query_events: [],
       }),
     );
     renderOverview({ stats: null });

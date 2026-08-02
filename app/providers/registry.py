@@ -107,9 +107,7 @@ def _invalidate_anthropic(config: dict[str, object]) -> None:
     invalidate_anthropic_client(parsed.api_key, parsed.base_url)
 
 
-def _invalidate_openai_compat(
-    provider_type: ProviderType, config: dict[str, object]
-) -> None:
+def _invalidate_openai_compat(provider_type: ProviderType, config: dict[str, object]) -> None:
     """Drop the shared client keyed by an OpenAI-compatible endpoint identity.
 
     The key is the transport identity, not the credential, so it is rebuilt
@@ -151,9 +149,7 @@ def build_adapter(connection: models.ProviderConnection) -> ProviderAdapter:
     try:
         provider_type = ProviderType(connection.provider_type)
     except ValueError as exc:
-        raise InvalidInputError(
-            f"Unknown provider type '{connection.provider_type}'."
-        ) from exc
+        raise InvalidInputError(f"Unknown provider type '{connection.provider_type}'.") from exc
     return ADAPTERS[provider_type](connection)
 
 
@@ -268,9 +264,7 @@ class ProviderResolver:
 
     def embedding_input_limit(self, connection_id: UUID, model_name: str) -> int | None:
         """Return the provider-published embedding input limit when known."""
-        return self.adapter(
-            connection_id, ProviderKind.EMBEDDING
-        ).embedding_input_limit(model_name)
+        return self.adapter(connection_id, ProviderKind.EMBEDDING).embedding_input_limit(model_name)
 
     def chat(self, connection_id: UUID) -> ChatProvider:
         """Construct a chat provider from a connection id."""

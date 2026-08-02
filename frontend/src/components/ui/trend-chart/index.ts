@@ -5,6 +5,8 @@ export { useChartBrush } from "./use-chart-brush";
 
 export type {
   TrendSeries,
+  TrendBand,
+  TrendEvent,
   TrendChartProps,
   ChartMarker,
   ChartBrushSpan,

@@ -182,14 +182,10 @@ def _random_plan(
     doc, index = pool.draw(rng)
     span = _span_for(rng, question_type, doc)
     start = min(index, doc.chunk_count - span)
-    return ContextPlan(
-        doc_id=doc.doc_id, start_index=start, span=span, question_type=question_type
-    )
+    return ContextPlan(doc_id=doc.doc_id, start_index=start, span=span, question_type=question_type)
 
 
-def _span_for(
-    rng: random.Random, question_type: EvalQuestionType, doc: DocumentPlan
-) -> int:
+def _span_for(rng: random.Random, question_type: EvalQuestionType, doc: DocumentPlan) -> int:
     """Window size for a question type, clamped to what the document has."""
     if question_type is not EvalQuestionType.MULTI_DETAIL:
         return 1

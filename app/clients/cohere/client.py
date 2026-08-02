@@ -155,9 +155,7 @@ class CohereClient:
         return data_lines == ["[DONE]"]
 
     @staticmethod
-    def _parse_stream_event(
-        event_name: str | None, data_lines: list[str]
-    ) -> CohereStreamEvent:
+    def _parse_stream_event(event_name: str | None, data_lines: list[str]) -> CohereStreamEvent:
         """Validate one complete SSE data frame, retaining unknown provider fields."""
         try:
             payload = json.loads("\n".join(data_lines))
@@ -170,9 +168,7 @@ class CohereClient:
         payload["raw"] = payload.copy()
         return CohereStreamEvent.model_validate(payload)
 
-    def rerank(
-        self, *, model: str, query: str, documents: list[str]
-    ) -> CohereRerankResponse:
+    def rerank(self, *, model: str, query: str, documents: list[str]) -> CohereRerankResponse:
         """Request a complete Cohere ranking for all supplied documents."""
         response = self._http.post(
             "/v2/rerank",

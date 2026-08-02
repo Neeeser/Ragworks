@@ -42,16 +42,13 @@ def resolve_filter(
         problems = condition_problems(condition)
         if problems:
             raise InvalidInputError(
-                f"{node_label}: metadata filter on '{condition.field}' "
-                f"{'; '.join(problems)}."
+                f"{node_label}: metadata filter on '{condition.field}' {'; '.join(problems)}."
             )
         if condition.var is None:
             resolved.append(condition)
             continue
         value = _variable_value(condition.var, context, node_label)
-        resolved.append(
-            condition.model_copy(update={"value": value, "var": None})
-        )
+        resolved.append(condition.model_copy(update={"value": value, "var": None}))
     return MetadataFilter(all=resolved)
 
 
@@ -67,8 +64,7 @@ def _variable_value(
     value = environment.values[name]
     if not isinstance(value, (bool, int, float, str)):
         raise InvalidInputError(
-            f"{node_label}: metadata filter variable '{name}' is not a "
-            "scalar value."
+            f"{node_label}: metadata filter variable '{name}' is not a scalar value."
         )
     return value
 

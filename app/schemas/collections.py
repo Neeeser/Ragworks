@@ -205,6 +205,13 @@ class CollectionStatsHistoryPoint(DateTimeConfigMixin, BaseModel):
     document_total: int
     chunk_total: int
     ingestion: LatencyBucket = Field(default_factory=LatencyBucket)
+    retrieval: LatencyBucket = Field(default_factory=LatencyBucket)
+    """Every query in the bucket, whichever tool served it.
+
+    Measured across all of them rather than folded from `tools`: percentiles
+    do not combine, so a spread assembled from per-tool spreads describes the
+    worst tool, not retrieval.
+    """
     tools: dict[str, LatencyBucket] = Field(default_factory=dict)
 
 
@@ -223,6 +230,7 @@ class CollectionStatsHistoryRead(DateTimeConfigMixin, BaseModel):
     points: list[CollectionStatsHistoryPoint]
     tools: list[ToolLatencySeries] = Field(default_factory=list)
     ingestion_summary: LatencySummary = Field(default_factory=LatencySummary)
+    retrieval_summary: LatencySummary = Field(default_factory=LatencySummary)
     markers: list[PipelineMarker] = Field(default_factory=list)
     ingestion_events: list[LatencyEvent] = Field(default_factory=list)
     query_events: list[LatencyEvent] = Field(default_factory=list)

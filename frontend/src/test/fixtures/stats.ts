@@ -37,6 +37,7 @@ export function makeStatsHistoryPoint(
     document_total: 3,
     chunk_total: 12,
     ingestion: { count: 1, avg_ms: 900, p50_ms: 900, p95_ms: 900, max_ms: 900 },
+    retrieval: { count: 2, avg_ms: 40, p50_ms: 38, p95_ms: 60, max_ms: 62 },
     tools: {
       [SEARCH_TOOL_KEY]: { count: 2, avg_ms: 40, p50_ms: 38, p95_ms: 60, max_ms: 62 },
     },
@@ -62,7 +63,17 @@ export function makeStatsHistory(
     ],
     tools: [makeToolSeries()],
     ingestion_summary: makeLatencySummary({ count: 2, avg_ms: 900 }),
+    retrieval_summary: makeLatencySummary({ count: 4, avg_ms: 40, p50_ms: 38, p95_ms: 60 }),
     markers: [],
+    ingestion_events: [
+      { at: "2024-01-01T06:00:00Z", duration_ms: 900 },
+      { at: "2024-01-02T06:00:00Z", duration_ms: 900 },
+    ],
+    query_events: [
+      { at: "2024-01-01T07:00:00Z", duration_ms: 38, key: SEARCH_TOOL_KEY },
+      { at: "2024-01-02T07:00:00Z", duration_ms: 60, key: SEARCH_TOOL_KEY },
+    ],
+    events_sampled: false,
     ...overrides,
   };
 }

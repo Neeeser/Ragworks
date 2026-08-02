@@ -35,9 +35,7 @@ def migrate_insight_settings(session: Session) -> None:
         ).first()
         if new is None:
             session.add(
-                models.AppSetting(
-                    key=_NEW_FLAG_KEY, value=old.value, updated_by=old.updated_by
-                )
+                models.AppSetting(key=_NEW_FLAG_KEY, value=old.value, updated_by=old.updated_by)
             )
         session.delete(old)
         session.flush()

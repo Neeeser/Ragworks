@@ -161,9 +161,7 @@ class CollectionService:
         self.session.refresh(collection)
         return self.prompt_read(collection, user)
 
-    def _require_ingest_pipeline(
-        self, pipeline_id: UUID, user: models.User
-    ) -> models.Pipeline:
+    def _require_ingest_pipeline(self, pipeline_id: UUID, user: models.User) -> models.Pipeline:
         """Return a user-owned document-accepting pipeline or raise a 400."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
         if not pipeline:
@@ -172,9 +170,7 @@ class CollectionService:
             raise InvalidInputError("Invalid ingestion pipeline selection.")
         return pipeline
 
-    def _require_tool_pipeline(
-        self, pipeline_id: UUID, user: models.User
-    ) -> models.Pipeline:
+    def _require_tool_pipeline(self, pipeline_id: UUID, user: models.User) -> models.Pipeline:
         """Return a user-owned callable pipeline or raise a 400."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
         if not pipeline:

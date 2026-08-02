@@ -121,7 +121,9 @@ class RetrieverConfig(BaseModel):
 class PgvectorRetrieverConfig(RetrieverConfig):
     """Configuration for pgvector retriever nodes (local default index name)."""
 
-    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA)
+    index_name: str = Field(
+        default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA
+    )
 
 
 class VectorRetrieverConfig(RetrieverConfig):
@@ -204,9 +206,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         except ValueError:
             backend = None
         issues.extend(
-            filter_issues(
-                config.filter, node, definition, backend, node_label="Retriever"
-            )
+            filter_issues(config.filter, node, definition, backend, node_label="Retriever")
         )
         return issues
 
@@ -228,9 +228,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
-        metadata_filter = resolve_filter(
-            self.config.filter, context, node_label="Retriever"
-        )
+        metadata_filter = resolve_filter(self.config.filter, context, node_label="Retriever")
         ensure_query_fanout(len(batch.items), "Retriever")
         per_query: list[list[ScoredChunk]] = []
         for item in batch.items:
@@ -294,9 +292,7 @@ class VectorRetrieverNode(BaseRetrieverNode):
     type = "retriever.vector"
     label = "Retriever"
     description = "Query a vector index (pgvector or Pinecone) for matching chunks."
-    example = (
-        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
-    )
+    example = "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     config_model: builtins.type[RetrieverConfig] = VectorRetrieverConfig
 
 
@@ -311,9 +307,7 @@ class PineconeRetrieverNode(BaseRetrieverNode):
     type = "retriever.pinecone"
     label = "Pinecone Retriever"
     description = "Retrieve chunks from Pinecone using embeddings."
-    example = (
-        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
-    )
+    example = "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     hidden = True
 
 
@@ -328,8 +322,6 @@ class PgvectorRetrieverNode(BaseRetrieverNode):
     type = "retriever.pgvector"
     label = "pgvector Retriever"
     description = "Retrieve chunks from the built-in Postgres (pgvector) using embeddings."
-    example = (
-        "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
-    )
+    example = "Items(embedding=[0.1, 0.2]) -> Items(matches=[chunk_a, chunk_b])."
     config_model: builtins.type[RetrieverConfig] = PgvectorRetrieverConfig
     hidden = True

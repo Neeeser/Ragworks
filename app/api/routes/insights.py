@@ -185,9 +185,7 @@ def get_insight_overlaps(
     service = InsightService(session)
     try:
         snapshot = service.ready_snapshot(collection.id)
-        pairs, total = service.overlaps(
-            snapshot, limit, offset=offset, descending=order == "desc"
-        )
+        pairs, total = service.overlaps(snapshot, limit, offset=offset, descending=order == "desc")
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return InsightOverlapsRead(

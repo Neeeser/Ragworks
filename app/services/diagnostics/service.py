@@ -115,8 +115,7 @@ class CollectionDiagnosticsService:
         error_count = sum(1 for d in diagnostics if d.severity == "error")
         warning_count = sum(1 for d in diagnostics if d.severity == "warning")
         consistent = not any(
-            d.severity == "error" and d.category in _CONSISTENCY_CATEGORIES
-            for d in diagnostics
+            d.severity == "error" and d.category in _CONSISTENCY_CATEGORIES for d in diagnostics
         )
         return CollectionDiagnosticsResponse(
             collection_id=collection.id,
@@ -141,8 +140,6 @@ class CollectionDiagnosticsService:
             )
         if len(parts) == 1:
             parts.append("none")
-        latest = runs.list_recent_for_collection(
-            collection.id, models.BindingRole.INGEST, limit=1
-        )
+        latest = runs.list_recent_for_collection(collection.id, models.BindingRole.INGEST, limit=1)
         parts.append(str(latest[0].id) if latest else "no-ingest")
         return "|".join(parts)

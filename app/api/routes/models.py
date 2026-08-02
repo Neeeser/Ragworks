@@ -41,9 +41,7 @@ def list_models(
 ) -> ModelCatalogResponse:
     """List models of one kind across every capable provider connection."""
     try:
-        return list_models_for_user(
-            session, current_user, kind, force_refresh=refresh
-        )
+        return list_models_for_user(session, current_user, kind, force_refresh=refresh)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 
@@ -133,8 +131,6 @@ def get_embedding_dimension(
 ) -> EmbeddingDimensionResponse:
     """Resolve one embedding model's dimension for an exact connection."""
     try:
-        return resolve_embedding_dimension(
-            session, current_user, connection_id, model_id
-        )
+        return resolve_embedding_dimension(session, current_user, connection_id, model_id)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc

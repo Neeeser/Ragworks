@@ -519,3 +519,50 @@ def test_events_sampled_flags_a_thinned_response(session: Session) -> None:
     )
     assert history.events_sampled is False
     assert len(history.query_events) == 40
+
+
+def test_retrieval_spread_is_measured_across_tools_not_folded_from_them(
+    session: Session,
+) -> None:
+    """The combined band comes from every query at once, never from per-tool p95s."""
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    pipeline = models.Pipeline(user_id=user.id, name="search")
+    session.add(pipeline)
+    session.commit()
+    run = models.PipelineRun(
+        pipeline_id=pipeline.id,
+        trigger=models.BindingRole.TOOL,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+        started_at=now - timedelta(minutes=30),
+        completed_at=now - timedelta(minutes=30),
+        created_at=now - timedelta(minutes=30),
+    )
+    session.add(run)
+    session.commit()
+
+    # One tool is uniformly fast, the other uniformly slow. Folding their p95s
+    # would report the slow tool's 900; measuring across all queries does not.
+    session.add_all(
+        [_query_event(collection, user, 100.0, now - timedelta(minutes=30), run.id)] * 1
+        + [_query_event(collection, user, 100.0, now - timedelta(minutes=30)) for _ in range(9)]
+        + [_query_event(collection, user, 900.0, now - timedelta(minutes=30))]
+    )
+    session.commit()
+
+    history = _service(session).history_for(
+        user_id=user.id,
+        collection_id=collection.id,
+        collection_created_at=collection.created_at,
+    )
+
+    assert history.retrieval_summary.count == 11
+    assert history.retrieval_summary.p50_ms == pytest.approx(100.0)
+    busy = [point for point in history.points if point.retrieval.count]
+    assert busy, "the queried bucket must carry a combined retrieval aggregate"
+    assert busy[0].retrieval.count == 11
+    assert busy[0].retrieval.p50_ms == pytest.approx(100.0)

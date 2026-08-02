@@ -118,11 +118,7 @@ def _placeable(
     """Filter new chunks to those the snapshot's space can vectorize."""
     if snapshot.space == InsightSpace.LEXICAL:
         return [row for row in fresh if row.text.strip()]
-    return [
-        row
-        for row in fresh
-        if row.embedding and row.embedding_model == snapshot.space_label
-    ]
+    return [row for row in fresh if row.embedding and row.embedding_model == snapshot.space_label]
 
 
 def _write_new_neighbors(

@@ -110,9 +110,7 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         fields = self.config.output_fields
         source_field = items_field(fields)
         if source_field is None:  # validation blocks this; honest error if reached
-            raise LlmOutputError(
-                "LLM generator has no output field targeting 'items'."
-            )
+            raise LlmOutputError("LLM generator has no output field targeting 'items'.")
         schema = per_item_schema(fields)
         prompts = []
         for item in batch.items:
@@ -149,9 +147,7 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         self._warnings = engine.warnings
         self._retries = sum(outcome.retries for outcome in outcomes)
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
-        return {
-            "items": ItemBatch(items=items, tokenizer=batch.tokenizer, usage=usage)
-        }
+        return {"items": ItemBatch(items=items, tokenizer=batch.tokenizer, usage=usage)}
 
     def summarize_io(
         self,
@@ -162,8 +158,7 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         input_batch = ItemBatch.model_validate(inputs.get("items"))
         output_batch = ItemBatch.model_validate(outputs.get("items"))
         generated_preview = [
-            {"id": item.id, "text": (item.text or "")[:200]}
-            for item in output_batch.items
+            {"id": item.id, "text": (item.text or "")[:200]} for item in output_batch.items
         ]
         return NodeTraceSummary(
             inputs=[

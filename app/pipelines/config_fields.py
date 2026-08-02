@@ -75,9 +75,7 @@ def expected_expr_type(field: dict[str, object]) -> ExprType | None:
     """
     if "enum" in field:
         enum_values = field.get("enum")
-        if isinstance(enum_values, list) and all(
-            isinstance(item, str) for item in enum_values
-        ):
+        if isinstance(enum_values, list) and all(isinstance(item, str) for item in enum_values):
             return ExprType.STRING
         return None
     schema_type = field.get("type")

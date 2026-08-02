@@ -50,17 +50,13 @@ class OllamaCatalog:
         """Store the injected fetch callables and initialize empty caches."""
         self._fetch_tags = fetch_tags
         self._fetch_show = fetch_show
-        self._described = ValueCache[str, list[OllamaModelDescription]](
-            _CATALOG_POLICY
-        )
+        self._described = ValueCache[str, list[OllamaModelDescription]](_CATALOG_POLICY)
 
     def describe_models(
         self, force_refresh: bool = False
     ) -> CacheSnapshot[list[OllamaModelDescription]]:
         """Return described models with cache freshness metadata."""
-        return self._described.get(
-            "described", self._load_described, force_refresh=force_refresh
-        )
+        return self._described.get("described", self._load_described, force_refresh=force_refresh)
 
     def _load_described(self) -> list[OllamaModelDescription]:
         """Fetch tags and shape each model's current `/api/show` metadata."""
@@ -83,9 +79,7 @@ class OllamaCatalog:
                     parameter_size=details.parameter_size if details else None,
                     quantization_level=details.quantization_level if details else None,
                     context_length=_architecture_int(show.model_info, "context_length"),
-                    embedding_dimension=_architecture_int(
-                        show.model_info, "embedding_length"
-                    ),
+                    embedding_dimension=_architecture_int(show.model_info, "embedding_length"),
                 )
             )
         return described

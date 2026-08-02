@@ -90,9 +90,7 @@ class FileSystemService:
             nodes=[self._entry(node, paths, ingestion, stale_ids) for node in nodes],
         )
 
-    def listing(
-        self, collection: models.Collection, parent_id: UUID | None
-    ) -> FileListingResponse:
+    def listing(self, collection: models.Collection, parent_id: UUID | None) -> FileListingResponse:
         """Return one folder's children plus ancestry — the `ls` view."""
         parent = None
         if parent_id is not None:
@@ -186,9 +184,7 @@ class FileSystemService:
         renames/moves never touch disk.
         """
         segments = [s for s in (spec.relative_path or "").split("/") if s]
-        name = validate_node_name(
-            segments[-1] if segments else (spec.filename or "uploaded-file")
-        )
+        name = validate_node_name(segments[-1] if segments else (spec.filename or "uploaded-file"))
         parent_id, created_folders = self._create_missing_folders(
             user, collection, spec.parent_id, segments[:-1]
         )
@@ -202,9 +198,7 @@ class FileSystemService:
             content_type=spec.content_type or "application/octet-stream",
         )
         self.nodes.add(node)
-        stored = self.storage.save_stream(
-            stream, f"collections/{collection.id}/files/{node.id}"
-        )
+        stored = self.storage.save_stream(stream, f"collections/{collection.id}/files/{node.id}")
         node.storage_path = str(stored)
         node.size_bytes = stored.stat().st_size
         self.session.add(node)
@@ -367,9 +361,7 @@ class FileSystemService:
             stale=document is not None and document.id in stale_ids,
         )
 
-    def _stale_ids(
-        self, collection_id: UUID, ingestion: dict[UUID, models.Document]
-    ) -> set[UUID]:
+    def _stale_ids(self, collection_id: UUID, ingestion: dict[UUID, models.Document]) -> set[UUID]:
         """Document ids ingested by an outdated version of the bound pipeline."""
         return stale_ingestion_ids(self.session, collection_id, list(ingestion.values()))
 
@@ -395,4 +387,3 @@ class FileSystemService:
         for node in nodes:
             path_of(node)
         return paths
-

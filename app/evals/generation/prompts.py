@@ -23,9 +23,7 @@ GENERATION_SYSTEM_PROMPT = (
     " a real user would type."
 )
 
-CRITIQUE_SYSTEM_PROMPT = (
-    "You grade retrieval evaluation questions against their source excerpt."
-)
+CRITIQUE_SYSTEM_PROMPT = "You grade retrieval evaluation questions against their source excerpt."
 
 _SCORE_PROPERTY = {"type": "integer", "minimum": 1, "maximum": 5}
 
@@ -114,8 +112,7 @@ def build_generation_messages(
 ) -> list[dict[str, str]]:
     """Messages for one generation call over one context window."""
     parts: list[str] = [
-        f"Write {candidates_per_context} candidate questions about the context"
-        " below.",
+        f"Write {candidates_per_context} candidate questions about the context below.",
         _TYPE_INSTRUCTIONS[question_type],
         'For each candidate, include a "quote": a verbatim excerpt copied'
         " exactly from the context that contains the answer. Do not alter the"
@@ -128,13 +125,11 @@ def build_generation_messages(
     if example_queries:
         examples = "\n".join(f"- {query}" for query in example_queries)
         parts.append(
-            "Match the style, tone, and specificity of these real example"
-            f" queries:\n{examples}"
+            f"Match the style, tone, and specificity of these real example queries:\n{examples}"
         )
     if distractor_texts:
         distractors = "\n\n".join(
-            f"[other excerpt {index + 1}]\n{text}"
-            for index, text in enumerate(distractor_texts)
+            f"[other excerpt {index + 1}]\n{text}" for index, text in enumerate(distractor_texts)
         )
         parts.append(
             "The collection also contains other content, like the excerpts"

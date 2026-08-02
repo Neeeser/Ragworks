@@ -17,9 +17,7 @@ class TEIReranker(Reranker):
         self._client = client
         self.model_name = model_name
 
-    def rerank(
-        self, query: str, candidates: Sequence[ScoredChunk]
-    ) -> Sequence[ScoredChunk]:
+    def rerank(self, query: str, candidates: Sequence[ScoredChunk]) -> Sequence[ScoredChunk]:
         """Return every candidate in the order and scores supplied by TEI."""
         if not candidates:
             return []

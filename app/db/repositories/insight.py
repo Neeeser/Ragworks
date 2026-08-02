@@ -74,9 +74,7 @@ class InsightRepository(Repository):
         )
         return [(point, name) for point, name in self.session.exec(statement).all()]
 
-    def list_doc_points(
-        self, snapshot_id: UUID
-    ) -> list[tuple[models.InsightDocPointRecord, str]]:
+    def list_doc_points(self, snapshot_id: UUID) -> list[tuple[models.InsightDocPointRecord, str]]:
         """Return a snapshot's document points joined to document names."""
         statement = (
             select(models.InsightDocPointRecord, col(models.Document.name))
@@ -152,14 +150,12 @@ class InsightRepository(Repository):
             .join(chunk, col(models.InsightNeighborRecord.chunk_id) == col(chunk.id))
             .join(
                 neighbor_chunk,
-                col(models.InsightNeighborRecord.neighbor_chunk_id)
-                == col(neighbor_chunk.id),
+                col(models.InsightNeighborRecord.neighbor_chunk_id) == col(neighbor_chunk.id),
             )
             .join(doc, col(models.InsightNeighborRecord.document_id) == col(doc.id))
             .join(
                 neighbor_doc,
-                col(models.InsightNeighborRecord.neighbor_document_id)
-                == col(neighbor_doc.id),
+                col(models.InsightNeighborRecord.neighbor_document_id) == col(neighbor_doc.id),
             )
             .where(
                 col(models.InsightNeighborRecord.snapshot_id) == snapshot_id,
@@ -197,9 +193,7 @@ class InsightRepository(Repository):
             models.InsightClusterRecord,
             models.InsightDocEdgeRecord,
         ):
-            self.session.execute(
-                sa_delete(table).where(col(table.snapshot_id) == snapshot_id)
-            )
+            self.session.execute(sa_delete(table).where(col(table.snapshot_id) == snapshot_id))
         self.session.execute(
             sa_delete(models.InsightSnapshotRecord).where(
                 col(models.InsightSnapshotRecord.id) == snapshot_id

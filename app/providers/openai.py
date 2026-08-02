@@ -114,17 +114,11 @@ class OpenAIAdapter(ProviderAdapter):
             models = self._client().list_model_ids()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
-                return ConnectionValidationResult(
-                    valid=False, message="Invalid OpenAI API key."
-                )
-            return ConnectionValidationResult(
-                valid=False, message="OpenAI validation failed."
-            )
+                return ConnectionValidationResult(valid=False, message="Invalid OpenAI API key.")
+            return ConnectionValidationResult(valid=False, message="OpenAI validation failed.")
         except httpx.HTTPError:
             return ConnectionValidationResult(valid=False, message="OpenAI is unreachable.")
-        return ConnectionValidationResult(
-            valid=True, message=f"Connected ({len(models)} models)."
-        )
+        return ConnectionValidationResult(valid=True, message=f"Connected ({len(models)} models).")
 
     def _chat_parameters(self) -> list[str]:
         """Return the Responses parameter floor.
@@ -137,9 +131,7 @@ class OpenAIAdapter(ProviderAdapter):
         """
         return list(RESPONSES_PARAMETERS)
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """List the account's models of one kind."""
         del force_refresh
         self.require_kind(kind)
@@ -186,9 +178,7 @@ class OpenAIAdapter(ProviderAdapter):
     def chat_provider(self) -> ChatProvider:
         """Construct the Responses-dialect chat provider."""
         self.require_kind(ProviderKind.CHAT)
-        return ResponsesProvider(
-            self._client(), name="openai", model_resolver=self._resolve_model
-        )
+        return ResponsesProvider(self._client(), name="openai", model_resolver=self._resolve_model)
 
     def embedder(self, model_name: str, dimensions: int | None = None) -> Embedder:
         """Construct an embedder backed by OpenAI's embeddings endpoint."""

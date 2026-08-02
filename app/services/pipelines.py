@@ -336,9 +336,7 @@ class PipelineService:
         self.session.add(pipeline)
         return pipeline
 
-    def get_by_template_slug(
-        self, user_id: UUID, template_slug: str
-    ) -> models.Pipeline | None:
+    def get_by_template_slug(self, user_id: UUID, template_slug: str) -> models.Pipeline | None:
         """Return the user's pipeline scaffolded for a template slug."""
         return self._pipelines.get_by_template_slug(user_id, template_slug)
 

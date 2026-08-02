@@ -48,9 +48,7 @@ def to_dataset_read(dataset: models.EvalDataset) -> EvalDatasetRead:
     )
 
 
-def to_run_read(
-    run: models.EvalRun, coverage: EvalRunCoverage | None = None
-) -> EvalRunRead:
+def to_run_read(run: models.EvalRun, coverage: EvalRunCoverage | None = None) -> EvalRunRead:
     """Shape one run row (with funnel, aggregates, and coverage) for the wire."""
     return EvalRunRead(
         id=run.id,
@@ -80,9 +78,7 @@ def to_run_read(
     )
 
 
-def to_run_summary(
-    run: models.EvalRun, coverage: EvalRunCoverage | None = None
-) -> EvalRunSummary:
+def to_run_summary(run: models.EvalRun, coverage: EvalRunCoverage | None = None) -> EvalRunSummary:
     """Shape one run row for list views."""
     return EvalRunSummary(
         id=run.id,
@@ -117,9 +113,7 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         query_event_id=item.query_event_id,
         result_count=item.result_count,
         gold_doc_ids=list(item.gold_doc_ids),
-        retrieved_document_ids=unique_in_order(
-            chunk.document_id for chunk in retrieved
-        ),
+        retrieved_document_ids=unique_in_order(chunk.document_id for chunk in retrieved),
         retrieved=retrieved,
         per_node_funnel=[
             EvalItemNodeDocs.model_validate(entry)

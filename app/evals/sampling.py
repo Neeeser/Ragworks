@@ -72,9 +72,7 @@ def build_sample_plan(
     """
     rng = random.Random(seed)
     corpus_set = set(corpus_doc_ids)
-    judged = [
-        query_id for query_id in query_ids if qrels.get(query_id, set()) & corpus_set
-    ]
+    judged = [query_id for query_id in query_ids if qrels.get(query_id, set()) & corpus_set]
     sampled_queries = _sample_queries(rng, judged, num_queries)
     gold: set[str] = set()
     for query_id in sampled_queries:
@@ -89,9 +87,7 @@ def build_sample_plan(
     )
 
 
-def _sample_queries(
-    rng: random.Random, query_ids: Sequence[str], num_queries: int
-) -> list[str]:
+def _sample_queries(rng: random.Random, query_ids: Sequence[str], num_queries: int) -> list[str]:
     """Deterministically sample query ids, capped at the available count."""
     ordered = sorted(query_ids)
     return sorted(rng.sample(ordered, min(num_queries, len(ordered))))

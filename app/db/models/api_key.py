@@ -28,22 +28,16 @@ class ApiKey(SQLModel, TimestampMixin, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     user_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-        )
+        sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     )
     name: str = Field(sa_column=Column(String, nullable=False))
     #: Non-secret display prefix (`rw_` plus the secret's first characters).
     prefix: str = Field(sa_column=Column(String(16), nullable=False))
-    token_digest: str = Field(
-        sa_column=Column(String(64), unique=True, index=True, nullable=False)
-    )
+    token_digest: str = Field(sa_column=Column(String(64), unique=True, index=True, nullable=False))
     #: `ApiKeyCapability` values; stored as strings so a new member needs no migration.
     capabilities: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     #: The collection ids (as strings) this key reaches; never empty.
-    collection_ids: list[str] = Field(
-        default_factory=list, sa_column=Column(JSON, nullable=False)
-    )
+    collection_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     last_used_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

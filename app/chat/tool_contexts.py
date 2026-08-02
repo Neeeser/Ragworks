@@ -62,9 +62,7 @@ def tool_contexts_for_collections(
         resolved_tools = resolve_tool_bindings(session, user, collection)
         tools: list[ToolContext] = []
         for resolved in resolved_tools:
-            base_name = tool_exposed_name(
-                tool_base_name(resolved.interface), collection.name
-            )
+            base_name = tool_exposed_name(tool_base_name(resolved.interface), collection.name)
             occurrence = name_counts.get(base_name, 0) + 1
             name_counts[base_name] = occurrence
             exposed = base_name if occurrence == 1 else f"{base_name}_{occurrence}"
@@ -84,9 +82,7 @@ def tool_contexts_for_collections(
         contexts.append(
             ToolCollectionContext(
                 collection=collection,
-                tool_name=(
-                    primary.tool_name if primary else collection_tool_name(collection.name)
-                ),
+                tool_name=(primary.tool_name if primary else collection_tool_name(collection.name)),
                 ingestion_settings=ingest.settings,
                 retrieval_settings=(
                     primary_resolved.settings if primary_resolved else ingest.settings

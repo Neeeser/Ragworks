@@ -48,9 +48,7 @@ class CollectionDeletionService:
         for item in resolve_purge_targets(self.session, user, collection):
             if item.namespace is None:
                 raise InvalidInputError("Ingestion pipeline namespace is not configured.")
-            namespaced_targets.append(
-                (item.target.backend, item.target.index_name, item.namespace)
-            )
+            namespaced_targets.append((item.target.backend, item.target.index_name, item.namespace))
 
         collection_id = collection.id
         # Only ingests that reached READY ever wrote vectors; a collection with

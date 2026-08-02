@@ -70,9 +70,7 @@ def knn_graph(matrix: Array, k: int = KNN_NEIGHBORS) -> KnnGraph:
     out_sims = np.empty((n, k), dtype=np.float32)
     for i in range(n):
         kept = [
-            (int(j), float(d))
-            for j, d in zip(indices[i], distances[i], strict=True)
-            if int(j) != i
+            (int(j), float(d)) for j, d in zip(indices[i], distances[i], strict=True) if int(j) != i
         ][:k]
         out_indices[i] = [j for j, _ in kept]
         out_sims[i] = [min(1.0, max(-1.0, 1.0 - d)) for _, d in kept]
@@ -116,9 +114,7 @@ def fit_projection(matrix: Array, random_state: int = 42) -> tuple[bytes, Array]
 
 def transform_points(reducer_blob: bytes, basis: Array, new: Array) -> Array:
     """Place new vectors into an existing projection without moving it."""
-    reply = _run_projection(
-        {"op": "transform", "blob": reducer_blob, "basis": basis, "new": new}
-    )
+    reply = _run_projection({"op": "transform", "blob": reducer_blob, "basis": basis, "new": new})
     coordinates = np.asarray(reply["coordinates"], dtype=np.float64)
     if not np.isfinite(coordinates).all():
         raise ValueError("Incremental transform produced non-finite coordinates.")

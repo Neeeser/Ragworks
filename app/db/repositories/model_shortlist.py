@@ -101,8 +101,6 @@ class ModelShortlistRepository(Repository):
         """Remove entries by id (used to prune recents past the cap)."""
         if not entry_ids:
             return
-        statement = sa_delete(ModelShortlistRow).where(
-            col(ModelShortlistRow.id).in_(entry_ids)
-        )
+        statement = sa_delete(ModelShortlistRow).where(col(ModelShortlistRow.id).in_(entry_ids))
         self.session.execute(statement)
         self.session.flush()

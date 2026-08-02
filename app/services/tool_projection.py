@@ -41,9 +41,7 @@ def tool_exposed_name(base_name: str, collection_name: str) -> str:
     return f"{base_name}_{slug or 'collection'}"
 
 
-def tool_description(
-    interface: PipelineInterface, collection: models.Collection
-) -> str:
+def tool_description(interface: PipelineInterface, collection: models.Collection) -> str:
     """Build the exposed tool description.
 
     A pipeline-declared description leads; otherwise the historical search

@@ -39,16 +39,12 @@ class ModelCatalog:
         self._fetch_rerank_models = fetch_rerank_models
         self._probe_embedding = probe_embedding
         self._models = ValueCache[str, list[ModelInfo]](_CATALOG_POLICY)
-        self._embedding_models = ValueCache[str, list[EmbeddingModelInfo]](
-            _CATALOG_POLICY
-        )
+        self._embedding_models = ValueCache[str, list[EmbeddingModelInfo]](_CATALOG_POLICY)
         self._rerank_models = ValueCache[str, list[ModelInfo]](_CATALOG_POLICY)
 
     def list_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return available models with cache freshness metadata."""
-        return self._models.get(
-            "models", self._fetch_models, force_refresh=force_refresh
-        )
+        return self._models.get("models", self._fetch_models, force_refresh=force_refresh)
 
     def list_embedding_models(
         self, force_refresh: bool = False
@@ -70,9 +66,7 @@ class ModelCatalog:
             raise ValueError("OpenRouter embeddings response missing embedding values.")
         return len(list(embedding))
 
-    def list_rerank_models(
-        self, force_refresh: bool = False
-    ) -> CacheSnapshot[list[ModelInfo]]:
+    def list_rerank_models(self, force_refresh: bool = False) -> CacheSnapshot[list[ModelInfo]]:
         """Return models whose output modality is reranking."""
         return self._rerank_models.get(
             "reranking", self._fetch_rerank_models, force_refresh=force_refresh

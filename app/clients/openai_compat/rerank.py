@@ -33,9 +33,7 @@ class RerankShape(StrEnum):
     TEI = "tei"
 
 
-def _post(
-    transport: OpenAICompatTransport, path: str, payload: dict[str, Any]
-) -> httpx.Response:
+def _post(transport: OpenAICompatTransport, path: str, payload: dict[str, Any]) -> httpx.Response:
     """POST a rerank payload and raise on a non-2xx status."""
     response = transport.http.post(path, json=payload)
     response.raise_for_status()

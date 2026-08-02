@@ -7,6 +7,7 @@ the server picks the bucket width, so the client never invents an axis.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -104,6 +105,15 @@ def resolve_domain(
     return HistoryDomain(anchor - timedelta(seconds=bucket_seconds), moment, bucket_seconds)
 
 
+@dataclass(frozen=True)
+class _BucketSeries:
+    """Every per-bucket latency series a point is assembled from."""
+
+    ingestion: dict[datetime, LatencyBucketStats]
+    retrieval: dict[datetime, LatencyBucketStats]
+    tools: dict[str, dict[datetime, LatencyBucketStats]]
+
+
 def _to_bucket(stats: LatencyBucketStats) -> LatencyBucket:
     """Map a repository bucket row onto its wire model."""
     return LatencyBucket(
@@ -175,23 +185,30 @@ class CollectionHistoryService:
         doc_total, chunk_total, growth = self._history.document_growth(
             user_id, collection_id, domain
         )
-        ingestion = self._latency.ingestion_buckets(collection_id, domain)
-        tool_buckets = self._latency.tool_buckets(user_id, collection_id, domain)
-        tools = self._tool_series(collection_id, tool_buckets, user_id, domain)
+        series = _BucketSeries(
+            ingestion=self._latency.ingestion_buckets(collection_id, domain),
+            retrieval=self._latency.retrieval_buckets(user_id, collection_id, domain),
+            tools=self._latency.tool_buckets(user_id, collection_id, domain),
+        )
+        tools = self._tool_series(collection_id, series.tools, user_id, domain)
         ingestion_summary = _to_summary(self._latency.ingestion_summary(collection_id, domain))
+        retrieval_summary = _to_summary(
+            self._latency.retrieval_summary(user_id, collection_id, domain)
+        )
 
         ingestion_events = self._latency.ingestion_events(collection_id, domain)
         query_events = self._latency.query_events(user_id, collection_id, domain)
-        recorded = ingestion_summary.count + sum(tool.summary.count for tool in tools)
+        recorded = ingestion_summary.count + retrieval_summary.count
 
         return CollectionStatsHistoryRead(
             collection_id=collection_id,
             start=domain.start,
             end=domain.end,
             bucket_seconds=domain.bucket_seconds,
-            points=self._points(domain, (doc_total, chunk_total), growth, ingestion, tool_buckets),
+            points=self._points(domain, (doc_total, chunk_total), growth, series),
             tools=tools,
             ingestion_summary=ingestion_summary,
+            retrieval_summary=retrieval_summary,
             markers=[_to_marker(marker) for marker in self._history.markers(collection_id, domain)],
             ingestion_events=[_to_event(row) for row in ingestion_events],
             query_events=[_to_event(row) for row in query_events],
@@ -203,8 +220,7 @@ class CollectionHistoryService:
         domain: HistoryDomain,
         baseline: tuple[int, int],
         growth: dict[datetime, tuple[int, int]],
-        ingestion: dict[datetime, LatencyBucketStats],
-        tool_buckets: dict[str, dict[datetime, LatencyBucketStats]],
+        series: _BucketSeries,
     ) -> list[CollectionStatsHistoryPoint]:
         """Fold per-bucket additions into a continuous cumulative series.
 
@@ -219,16 +235,17 @@ class CollectionHistoryService:
             doc_total += added_docs
             chunk_total += added_chunks
             tools = {
-                key: _to_bucket(series[bucket])
-                for key, series in tool_buckets.items()
-                if bucket in series
+                key: _to_bucket(entries[bucket])
+                for key, entries in series.tools.items()
+                if bucket in entries
             }
             points.append(
                 CollectionStatsHistoryPoint(
                     bucket_start=bucket,
                     document_total=doc_total,
                     chunk_total=chunk_total,
-                    ingestion=_to_bucket(ingestion.get(bucket, LatencyBucketStats())),
+                    ingestion=_to_bucket(series.ingestion.get(bucket, LatencyBucketStats())),
+                    retrieval=_to_bucket(series.retrieval.get(bucket, LatencyBucketStats())),
                     tools=tools,
                 )
             )

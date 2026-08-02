@@ -155,9 +155,7 @@ def _bypass_nodes(
         incoming = [edge for edge in rewritten if edge.target == node_id]
         outgoing = [edge for edge in rewritten if edge.source == node_id]
         rewritten = [
-            edge
-            for edge in rewritten
-            if edge.source != node_id and edge.target != node_id
+            edge for edge in rewritten if edge.source != node_id and edge.target != node_id
         ]
         # Never clone a pre-existing identical edge — a duplicate into a
         # variadic port (e.g. fusion) silently double-counts that branch.
@@ -165,17 +163,17 @@ def _bypass_nodes(
         for inbound in incoming:
             for outbound in outgoing:
                 identity = (
-                    inbound.source, outbound.target,
-                    inbound.source_port, outbound.target_port,
+                    inbound.source,
+                    outbound.target,
+                    inbound.source_port,
+                    outbound.target_port,
                 )
                 if identity in seen:
                     continue
                 seen.add(identity)
                 rewritten.append(
                     PipelineEdgeDefinition(
-                        id=unique_edge_id(
-                            f"edge-{inbound.source}-{outbound.target}", rewritten
-                        ),
+                        id=unique_edge_id(f"edge-{inbound.source}-{outbound.target}", rewritten),
                         source=inbound.source,
                         target=outbound.target,
                         source_port=inbound.source_port,

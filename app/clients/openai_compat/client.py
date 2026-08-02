@@ -52,9 +52,7 @@ class OpenAICompatClient:
         """Request a buffered Responses-API completion."""
         return responses_api.create_response(self._transport, call)
 
-    def stream_response(
-        self, call: responses_api.ResponsesCall
-    ) -> Iterator[ResponsesStreamEvent]:
+    def stream_response(self, call: responses_api.ResponsesCall) -> Iterator[ResponsesStreamEvent]:
         """Yield Responses-API stream events."""
         return responses_api.stream_response(self._transport, call)
 
@@ -66,9 +64,7 @@ class OpenAICompatClient:
         dimensions: int | None = None,
     ) -> EmbeddingsResponse:
         """Embed texts with the named model."""
-        return embeddings.embed(
-            self._transport, texts, model=model, dimensions=dimensions
-        )
+        return embeddings.embed(self._transport, texts, model=model, dimensions=dimensions)
 
     def embedding_dimension(self, model: str) -> int | None:
         """Measure a model's vector width."""
@@ -109,7 +105,6 @@ class OpenAICompatClient:
     def list_model_ids(self) -> list[str]:
         """Return the model ids the endpoint publishes."""
         return catalog.list_model_ids(self._transport)
-
 
     def probe(self) -> probe.ServerProbe:
         """Discover which surfaces this endpoint serves."""

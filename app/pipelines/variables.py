@@ -96,6 +96,7 @@ def expr_seed_extra(source: str) -> dict[str, JsonValue]:
     """Build the `json_schema_extra` carrying a field's seed expression."""
     return {EXPR_SEED_KEY: source}
 
+
 ScalarValue = int | float | str | bool
 VariableValue = ScalarValue | ModelValue | IndexValue
 
@@ -200,9 +201,7 @@ def as_input_argument(variable: PipelineVariable) -> PipelineInputArgument:
     A structured default has no scalar wire shape (and structured inputs are
     a validation error anyway), so it projects as required-with-no-default.
     """
-    default = (
-        variable.value if not isinstance(variable.value, (ModelValue, IndexValue)) else None
-    )
+    default = variable.value if not isinstance(variable.value, (ModelValue, IndexValue)) else None
     return PipelineInputArgument(
         name=variable.name,
         type=variable.type,

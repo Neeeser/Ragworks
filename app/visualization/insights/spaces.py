@@ -143,9 +143,7 @@ def build_lexical_transformer() -> SkPipeline:
 def _lexical_space(rows: list[ChunkRow], total: int) -> VectorSpace:
     members = [row for row in rows if row.text.strip()]
     if len(members) < MIN_CHUNKS:
-        raise InvalidInputError(
-            "At least three chunks with text are required to compute insights."
-        )
+        raise InvalidInputError("At least three chunks with text are required to compute insights.")
     transformer = build_lexical_transformer()
     tfidf = transformer.named_steps["tfidf"].fit_transform([row.text for row in members])
     # SVD rank is bounded by both matrix dimensions; a tiny corpus gets the
@@ -174,9 +172,7 @@ def resolve_space(session: Session, collection_id: UUID) -> VectorSpace:
     """
     rows = load_chunk_rows(session, collection_id)
     if len(rows) < MIN_CHUNKS:
-        raise InvalidInputError(
-            "At least three ingested chunks are required to compute insights."
-        )
+        raise InvalidInputError("At least three ingested chunks are required to compute insights.")
     semantic = _semantic_space(rows, len(rows))
     if semantic is not None:
         return semantic

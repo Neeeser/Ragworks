@@ -57,10 +57,7 @@ def list_models_for_user(
             if kind not in adapter.kinds:
                 continue
         except Exception as exc:
-            if not (
-                is_external_provider_error(exc)
-                or isinstance(exc, ServiceError)
-            ):
+            if not (is_external_provider_error(exc) or isinstance(exc, ServiceError)):
                 raise
             errors.append(_catalog_error(connection, exc))
             continue
@@ -73,10 +70,7 @@ def list_models_for_user(
     ):
         if isinstance(result_or_error, Exception):
             failure = result_or_error
-            if not (
-                is_external_provider_error(failure)
-                or isinstance(failure, ServiceError)
-            ):
+            if not (is_external_provider_error(failure) or isinstance(failure, ServiceError)):
                 raise failure
             logger.warning(
                 "Model listing failed for connection %s (%s): %s",
@@ -107,10 +101,7 @@ def _load_catalogs(
     with ThreadPoolExecutor(
         max_workers=min(8, len(jobs)), thread_name_prefix="model-catalog-refresh"
     ) as executor:
-        futures = [
-            executor.submit(_load_one, adapter, kind, True)
-            for _connection, adapter in jobs
-        ]
+        futures = [executor.submit(_load_one, adapter, kind, True) for _connection, adapter in jobs]
         return [future.result() for future in futures]
 
 
@@ -124,22 +115,16 @@ def _load_one(
 
 
 def _aggregate_metadata(metadata: list[CatalogMetadata]) -> CatalogMetadata:
-    warnings = list(
-        dict.fromkeys(meta.warning for meta in metadata if meta.warning is not None)
-    )
+    warnings = list(dict.fromkeys(meta.warning for meta in metadata if meta.warning is not None))
     return CatalogMetadata(
-        freshness=(
-            "stale" if any(meta.freshness == "stale" for meta in metadata) else "fresh"
-        ),
+        freshness=("stale" if any(meta.freshness == "stale" for meta in metadata) else "fresh"),
         age_seconds=max((meta.age_seconds for meta in metadata), default=0),
         refreshing=any(meta.refreshing for meta in metadata),
         warning="; ".join(warnings) or None,
     )
 
 
-def _catalog_error(
-    connection: models.ProviderConnection, exc: Exception
-) -> ConnectionCatalogError:
+def _catalog_error(connection: models.ProviderConnection, exc: Exception) -> ConnectionCatalogError:
     """Build the degraded-connection entry for a catalog failure."""
     return ConnectionCatalogError(
         connection_id=connection.id,

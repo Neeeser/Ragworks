@@ -96,8 +96,7 @@ def render(template: str, context: PromptContext) -> str:
         }[name]
         if available is None:
             raise PromptTemplateError(
-                f"Placeholder '{{{name}}}' is not available here — "
-                + _unavailable_reason(name)
+                f"Placeholder '{{{name}}}' is not available here — " + _unavailable_reason(name)
             )
         return available
 

@@ -26,9 +26,7 @@ def collection_to_schema(session: Session, collection: models.Collection) -> Col
     build this shape. Bindings ride along as identity-only summaries; the
     full tool projection is the tools endpoint's job.
     """
-    bindings = CollectionPipelineBindingRepository(session).list_for_collection(
-        collection.id
-    )
+    bindings = CollectionPipelineBindingRepository(session).list_for_collection(collection.id)
     ingest = next(
         (b for b in bindings if b.role == models.BindingRole.INGEST),
         None,

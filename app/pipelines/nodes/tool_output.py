@@ -55,8 +55,7 @@ def evaluate_output_fields(
             )
         if isinstance(value, IndexValue):
             raise ValueError(
-                f"Output '{output.name}': dereference the index variable with "
-                ".backend or .name."
+                f"Output '{output.name}': dereference the index variable with .backend or .name."
             )
         results[output.name] = value
     return results

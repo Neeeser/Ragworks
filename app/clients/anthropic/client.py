@@ -55,9 +55,7 @@ class AnthropicClient:
             raise ValueError("Anthropic API key must be provided.")
         self.api_key = resolved
         self._http = httpx.Client(
-            timeout=httpx.Timeout(
-                INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
-            )
+            timeout=httpx.Timeout(INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
         )
         # The explicit timeout is what governs a long turn: the SDK otherwise
         # substitutes its own ten-minute ceiling for non-streaming calls and
@@ -68,9 +66,7 @@ class AnthropicClient:
             api_key=resolved,
             base_url=base_url or None,
             http_client=self._http,
-            timeout=httpx.Timeout(
-                INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
-            ),
+            timeout=httpx.Timeout(INFERENCE_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS),
             max_retries=1,
         )
         self._catalog: ValueCache[str, list[AnthropicModel]] = ValueCache(_CATALOG_POLICY)
@@ -116,13 +112,9 @@ class AnthropicClient:
             for model in self._client.models.list()
         ]
 
-    def list_models(
-        self, force_refresh: bool = False
-    ) -> CacheSnapshot[list[AnthropicModel]]:
+    def list_models(self, force_refresh: bool = False) -> CacheSnapshot[list[AnthropicModel]]:
         """Return the model catalog, caching it for a short period."""
-        return self._catalog.get(
-            "models", self._fetch_models, force_refresh=force_refresh
-        )
+        return self._catalog.get("models", self._fetch_models, force_refresh=force_refresh)
 
     def get_model(self, model_id: str) -> AnthropicModel | None:
         """Find one model in the (cached) catalog, resolving undated aliases.

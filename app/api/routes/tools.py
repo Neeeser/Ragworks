@@ -60,9 +60,7 @@ def list_collection_tools(
     )
 
 
-@router.post(
-    "/{collection_id}/tools", response_model=CollectionToolRead, status_code=201
-)
+@router.post("/{collection_id}/tools", response_model=CollectionToolRead, status_code=201)
 def add_collection_tool(
     collection_id: UUID,
     payload: CollectionToolCreate,
@@ -82,9 +80,7 @@ def add_collection_tool(
     return to_tool_read(resolved, collection)
 
 
-@router.patch(
-    "/{collection_id}/tools/{binding_id}", response_model=CollectionToolRead
-)
+@router.patch("/{collection_id}/tools/{binding_id}", response_model=CollectionToolRead)
 def update_collection_tool(
     collection_id: UUID,
     binding_id: UUID,
@@ -99,9 +95,7 @@ def update_collection_tool(
         if payload.is_primary:
             service.set_primary(current_user, collection, binding_id)
         if payload.enabled is not None:
-            service.set_enabled(
-                current_user, collection, binding_id, enabled=payload.enabled
-            )
+            service.set_enabled(current_user, collection, binding_id, enabled=payload.enabled)
         session.commit()
         resolved = resolve_tool_binding(session, current_user, collection, binding_id)
     except ServiceError as exc:

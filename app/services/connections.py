@@ -310,13 +310,9 @@ class ConnectionService:
         endpoints their server mounts.
         """
         try:
-            config = CustomConnectionConfig(
-                base_url=request.base_url, api_key=request.api_key
-            )
+            config = CustomConnectionConfig(base_url=request.base_url, api_key=request.api_key)
         except ValidationError as exc:
-            return ServerProbeResult(
-                reachable=False, message=str(exc.errors()[0]["msg"])
-            )
+            return ServerProbeResult(reachable=False, message=str(exc.errors()[0]["msg"]))
         client = get_openai_compat_client(
             TransportConfig(base_url=config.base_url, api_key=config.api_key)
         )
@@ -336,16 +332,13 @@ class ConnectionService:
             unauthorized=unauthorized,
             model_ids=list(result.model_ids),
             message=(
-                "The server rejected the API key. Check the key rather than the "
-                "capabilities below."
+                "The server rejected the API key. Check the key rather than the capabilities below."
                 if unauthorized
                 else result.error
             ),
         )
 
-    def validate_saved(
-        self, user: models.User, connection_id: UUID
-    ) -> ConnectionValidationResult:
+    def validate_saved(self, user: models.User, connection_id: UUID) -> ConnectionValidationResult:
         """Re-probe a saved connection (status panel refresh)."""
         connection = resolve_connection(self.session, user, connection_id)
         try:

@@ -39,9 +39,7 @@ def embed(
     return EmbeddingsResponse.model_validate(response.model_dump())
 
 
-def probe_embedding_dimension(
-    transport: OpenAICompatTransport, model: str
-) -> int | None:
+def probe_embedding_dimension(transport: OpenAICompatTransport, model: str) -> int | None:
     """Measure a model's vector width with a single one-input call."""
     response = embed(transport, [DIMENSION_PROBE_INPUT], model=model)
     if not response.data:

@@ -95,13 +95,9 @@ class AuthSession(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     user_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-        )
+        sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     )
-    token_digest: str = Field(
-        sa_column=Column(String(64), unique=True, index=True, nullable=False)
-    )
+    token_digest: str = Field(sa_column=Column(String(64), unique=True, index=True, nullable=False))
     previous_token_digest: str | None = Field(
         default=None, sa_column=Column(String(64), index=True, nullable=True)
     )

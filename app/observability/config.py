@@ -68,9 +68,7 @@ def configure_logging(level: str | None = None, *, debug: bool = False) -> None:
     )
 
     renderer: structlog.types.Processor = (
-        structlog.dev.ConsoleRenderer()
-        if debug
-        else structlog.processors.JSONRenderer()
+        structlog.dev.ConsoleRenderer() if debug else structlog.processors.JSONRenderer()
     )
     formatter = structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=list(_PRE_CHAIN),

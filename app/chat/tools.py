@@ -192,9 +192,7 @@ class ToolExecutor:
                 None,
             )
         supplied = {
-            key: value
-            for key, value in parsed.arguments.items()
-            if key not in ("query", "text")
+            key: value for key, value in parsed.arguments.items() if key not in ("query", "text")
         }
         try:
             return (

@@ -90,9 +90,7 @@ def _items_adjacency(
             continue
         if edge.source_port in _items_ports(source, registry, outgoing=True):
             origin.setdefault(edge.source, []).append(edge.target)
-        if edge.source_port in _items_ports(
-            source, registry, outgoing=True, preserving_only=True
-        ):
+        if edge.source_port in _items_ports(source, registry, outgoing=True, preserving_only=True):
             forward.setdefault(edge.source, []).append(edge.target)
     return origin, forward
 
@@ -181,8 +179,7 @@ def _chunk_limit_issue(
         detail = f"The chunker uses {_tokenizer_label(tokenizer)} token counts."
     if indirect:
         detail += (
-            f" Chunks reach '{limit.node_id}' through another node, which may "
-            "change their size."
+            f" Chunks reach '{limit.node_id}' through another node, which may change their size."
         )
     return PipelineValidationIssue(
         code="embedding_input_limit_exceeded",

@@ -1,30 +1,48 @@
 "use client";
 
-import { AreaFill, CursorLayer, GridLines, SelectionBand, SeriesLayer } from "./layers";
+import {
+  AreaFill,
+  BandLayer,
+  CursorLayer,
+  EventLayer,
+  GridLines,
+  SelectionBand,
+  SeriesLayer,
+} from "./layers";
 import { VIEW_H, VIEW_W } from "./scales";
 
-import type { TrendSeries } from "./types";
+import type { TrendBand, TrendEvent, TrendSeries } from "./types";
 import type { BucketSelection } from "./use-chart-brush";
 
 type ChartPlotProps = {
   buckets: string[];
   series: TrendSeries[];
+  bands: TrendBand[];
+  events: Array<TrendEvent & { index: number }>;
   selection: BucketSelection | null;
   cursor: number | null;
   area: boolean;
+  step: boolean;
   height: number;
   name: string;
   x: (index: number) => number;
   y: (value: number) => number;
 };
 
-/** The SVG itself: grid, selection band, series, and the cursor overlay. */
+/**
+ * The SVG itself, back to front: grid, selection, band, area, event dots, then
+ * the series line and cursor. The line stays above the dots it summarizes —
+ * it is the reading, and the cloud is the evidence behind it.
+ */
 export function ChartPlot({
   buckets,
   series,
+  bands,
+  events,
   selection,
   cursor,
   area,
+  step,
   height,
   name,
   x,
@@ -41,10 +59,12 @@ export function ChartPlot({
     >
       <GridLines />
       {selection && <SelectionBand selection={selection} x={x} />}
+      {bands.length > 0 && <BandLayer bands={bands} x={x} y={y} />}
       {area && series[0] && buckets.length > 1 && (
-        <AreaFill series={series[0]} bucketCount={buckets.length} x={x} y={y} />
+        <AreaFill series={series[0]} bucketCount={buckets.length} step={step} x={x} y={y} />
       )}
-      <SeriesLayer series={series} x={x} y={y} />
+      {events.length > 0 && <EventLayer events={events} x={x} y={y} />}
+      <SeriesLayer series={series} step={step} x={x} y={y} />
       {cursor !== null && <CursorLayer index={cursor} series={series} x={x} y={y} />}
     </svg>
   );

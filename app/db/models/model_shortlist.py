@@ -43,9 +43,7 @@ class ModelShortlistRow(SQLModel, TimestampMixin, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     user_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-        )
+        sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     )
     connection_id: UUID = Field(
         sa_column=Column(
@@ -55,9 +53,7 @@ class ModelShortlistRow(SQLModel, TimestampMixin, table=True):
         )
     )
     kind: ProviderKind = Field(sa_column=Column(String(32), nullable=False, index=True))
-    entry_type: ShortlistEntryType = Field(
-        sa_column=Column(String(16), nullable=False, index=True)
-    )
+    entry_type: ShortlistEntryType = Field(sa_column=Column(String(16), nullable=False, index=True))
     model_id: str = Field(sa_column=Column(String(200), nullable=False))
     last_used_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)

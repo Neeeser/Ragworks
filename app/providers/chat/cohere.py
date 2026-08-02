@@ -171,7 +171,10 @@ class CohereChatProvider:
     def parse_chat_response(self, response: dict[str, Any]) -> ParsedChatResponse:
         """Normalize Cohere's content blocks, tool calls, and usage envelope."""
         parsed = CohereChatResponse.model_validate(response)
-        message: dict[str, Any] = {"role": parsed.message.role or "assistant", "content": _message_content(parsed.message)}
+        message: dict[str, Any] = {
+            "role": parsed.message.role or "assistant",
+            "content": _message_content(parsed.message),
+        }
         calls = _tool_calls(parsed.message)
         if calls:
             message["tool_calls"] = calls
@@ -198,7 +201,13 @@ class CohereChatProvider:
                 name = call["function"].get("name")
                 if name is None:
                     call["function"].pop("name", None)
-        if event.type not in {"content-delta", "tool-plan-delta", "tool-call-start", "tool-call-delta", "message-end"}:
+        if event.type not in {
+            "content-delta",
+            "tool-plan-delta",
+            "tool-call-start",
+            "tool-call-delta",
+            "message-end",
+        }:
             return None
         return ParsedStreamChunk(
             provider=self.name,

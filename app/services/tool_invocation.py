@@ -73,9 +73,7 @@ class ToolInvocationService:
     ) -> ToolInvocationResponse:
         """Resolve one tool binding by id and invoke it."""
         resolved = resolve_tool_binding(self.session, user, collection, binding_id)
-        return self.invoke(
-            user, collection, resolved, query, top_k=top_k, arguments=arguments
-        )
+        return self.invoke(user, collection, resolved, query, top_k=top_k, arguments=arguments)
 
     def invoke(
         self,

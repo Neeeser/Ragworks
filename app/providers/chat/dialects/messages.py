@@ -73,9 +73,7 @@ def model_info_from_catalog(model: AnthropicModel) -> ModelInfo:
         supported_parameters=supported,
         capabilities=ChatCapabilities(
             tools=True,
-            reasoning=(
-                ReasoningStyle.BLOCK if thinking.supported else ReasoningStyle.NONE
-            ),
+            reasoning=(ReasoningStyle.BLOCK if thinking.supported else ReasoningStyle.NONE),
             reasoning_efforts=model.capabilities.effort.levels,
         ),
     )
@@ -198,9 +196,7 @@ class MessagesProvider:
 
     def chat(self, request: ChatRequest) -> dict[str, Any]:
         """Send a buffered Messages request."""
-        return self._client.create_message(self._call(request)).model_dump(
-            exclude_none=True
-        )
+        return self._client.create_message(self._call(request)).model_dump(exclude_none=True)
 
     def chat_stream(self, request: ChatRequest) -> Iterable[dict[str, Any]]:
         """Stream a Messages request, dumping each typed event to a dict."""

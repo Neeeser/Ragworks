@@ -76,9 +76,7 @@ class KeyPrincipal:
         skipped rather than raising, so a downgrade cannot lock out a key.
         """
         known = {member.value: member for member in ApiKeyCapability}
-        return frozenset(
-            known[value] for value in self.api_key.capabilities if value in known
-        )
+        return frozenset(known[value] for value in self.api_key.capabilities if value in known)
 
     def reaches_collection(self, collection_id: UUID) -> bool:
         """Return whether the key's scope includes a collection."""
@@ -165,8 +163,7 @@ class ApiKeyService:
                 prefix=secret[: len(SECRET_PREFIX) + _DISPLAY_CHARS],
                 token_digest=digest_secret(secret),
                 capabilities=[
-                    capability.value
-                    for capability in expand_capabilities(payload.capabilities)
+                    capability.value for capability in expand_capabilities(payload.capabilities)
                 ],
                 collection_ids=[str(value) for value in collection_ids],
                 expires_at=expires_at,
@@ -207,9 +204,7 @@ class ApiKeyService:
         """Stamp a key's last use (committed by the caller)."""
         self.keys.touch_last_used(api_key.id, utc_now())
 
-    def _validated_collection_ids(
-        self, user: models.User, payload: ApiKeyCreate
-    ) -> list[UUID]:
+    def _validated_collection_ids(self, user: models.User, payload: ApiKeyCreate) -> list[UUID]:
         """Return the key's collection scope, rejecting an unusable one.
 
         Every id must be a collection the user actually owns. Silently dropping
@@ -217,10 +212,7 @@ class ApiKeyService:
         the caller asked for.
         """
         requested = list(dict.fromkeys(payload.collection_ids))
-        owned = {
-            collection.id
-            for collection in self.collections.list_by_ids(user.id, requested)
-        }
+        owned = {collection.id for collection in self.collections.list_by_ids(user.id, requested)}
         missing = [str(value) for value in requested if value not in owned]
         if missing:
             raise InvalidInputError(f"Unknown collection(s): {', '.join(missing)}")

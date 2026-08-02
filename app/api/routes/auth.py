@@ -187,7 +187,9 @@ def login_for_access_token(
 
 
 @router.post("/refresh", response_model=Token)
-def refresh_access_token(request: Request, response: Response, session: Session = Depends(get_session)) -> Token:
+def refresh_access_token(
+    request: Request, response: Response, session: Session = Depends(get_session)
+) -> Token:
     token = request.cookies.get(_REFRESH_COOKIE)
     repo = AuthSessionRepository(session)
     token_digest = _digest_refresh_token(token or "")
@@ -217,19 +219,13 @@ def refresh_access_token(request: Request, response: Response, session: Session 
                 max(1, (ensure_utc(replayed.expires_at) - now).days + 1),
             )
             return Token(
-                access_token=create_access_token(
-                    str(replayed.user_id), session_id=str(replayed.id)
-                )
+                access_token=create_access_token(str(replayed.user_id), session_id=str(replayed.id))
             )
         if replayed and replayed.revoked_at is None:
             replayed.revoked_at = now
             session.add(replayed)
             session.commit()
-    if (
-        not auth_session
-        or auth_session.revoked_at
-        or ensure_utc(auth_session.expires_at) <= now
-    ):
+    if not auth_session or auth_session.revoked_at or ensure_utc(auth_session.expires_at) <= now:
         _clear_refresh_cookie(response, request)
         raise HTTPException(status_code=401, detail="Could not refresh session")
     user = UserRepository(session).get(auth_session.user_id)
@@ -260,9 +256,7 @@ def refresh_access_token(request: Request, response: Response, session: Session 
             raise HTTPException(status_code=401, detail="Could not refresh session")
     remaining_days = max(1, (ensure_utc(auth_session.expires_at) - now).days + 1)
     _set_refresh_cookie(response, request, rotated, auth_session.persistent, remaining_days)
-    return Token(
-        access_token=create_access_token(str(user.id), session_id=str(auth_session.id))
-    )
+    return Token(access_token=create_access_token(str(user.id), session_id=str(auth_session.id)))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,15 +272,21 @@ def logout(request: Request, response: Response, session: Session = Depends(get_
 
 @router.get("/sessions", response_model=list[AuthSessionRead])
 def list_auth_sessions(
-    request: Request, current_user: models.User = Depends(get_current_user), session: Session = Depends(get_session)
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ) -> list[AuthSessionRead]:
     digest = _digest_refresh_token(request.cookies.get(_REFRESH_COOKIE, ""))
     now = utc_now()
     return [
         AuthSessionRead(
-            id=item.id, user_agent=item.user_agent, ip_address=item.ip_address,
-            created_at=item.created_at, last_used_at=item.last_used_at,
-            expires_at=item.expires_at, current=item.token_digest == digest,
+            id=item.id,
+            user_agent=item.user_agent,
+            ip_address=item.ip_address,
+            created_at=item.created_at,
+            last_used_at=item.last_used_at,
+            expires_at=item.expires_at,
+            current=item.token_digest == digest,
         )
         for item in AuthSessionRepository(session).list_active(current_user.id)
         if ensure_utc(item.expires_at) > now
@@ -295,7 +295,9 @@ def list_auth_sessions(
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_auth_session(
-    session_id: UUID, current_user: models.User = Depends(get_current_user), session: Session = Depends(get_session)
+    session_id: UUID,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ) -> None:
     item = AuthSessionRepository(session).get_owned(session_id, current_user.id)
     if not item:

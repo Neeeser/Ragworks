@@ -57,9 +57,7 @@ def variabledeclaration_issues(
         return issues
     if variable.source is VariableSource.EXPRESSION:
         if variable.expression is None:
-            issues.append(
-                declaration_issue(f"Variable '{variable.name}' needs an expression.")
-            )
+            issues.append(declaration_issue(f"Variable '{variable.name}' needs an expression."))
         if variable.type in (VariableType.MODEL, VariableType.INDEX):
             issues.append(
                 declaration_issue(
@@ -114,8 +112,7 @@ def _input_variable_issues(variable: PipelineVariable) -> list[PipelineValidatio
     if variable.expression is not None:
         issues.append(
             declaration_issue(
-                f"Variable '{variable.name}': input variables take caller values, "
-                "not expressions."
+                f"Variable '{variable.name}': input variables take caller values, not expressions."
             )
         )
     enum_missing_choices = variable.type is VariableType.ENUM and not variable.choices
@@ -145,7 +142,5 @@ def bounds_issues(
 ) -> list[PipelineValidationIssue]:
     """Flag an inverted minimum/maximum pair."""
     if minimum is not None and maximum is not None and minimum > maximum:
-        return [
-            declaration_issue(f"'{name}': minimum {minimum:g} exceeds maximum {maximum:g}.")
-        ]
+        return [declaration_issue(f"'{name}': minimum {minimum:g} exceeds maximum {maximum:g}.")]
     return []

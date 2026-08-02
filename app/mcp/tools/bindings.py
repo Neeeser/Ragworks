@@ -124,8 +124,10 @@ def _render(response: ToolInvocationResponse) -> CallToolResult:
         return text_result(summary or "The tool returned no outputs.", response.outputs)
     lines = [f"{len(response.chunks)} result(s) for: {response.query}"]
     for position, chunk in enumerate(response.chunks, start=1):
-        text = chunk.text if len(chunk.text) <= _TEXT_PREVIEW_CHARS else (
-            f"{chunk.text[:_TEXT_PREVIEW_CHARS]}…"
+        text = (
+            chunk.text
+            if len(chunk.text) <= _TEXT_PREVIEW_CHARS
+            else (f"{chunk.text[:_TEXT_PREVIEW_CHARS]}…")
         )
         lines.append(f"\n[{position}] score={chunk.score:.4f} chunk={chunk.chunk_id}\n{text}")
     structured = {
@@ -190,9 +192,7 @@ def _structured_output_schema(fields: list[str]) -> dict[str, Any] | None:
     }
 
 
-def binding_tools(
-    context: McpToolContext, resolved: list[ResolvedPipeline]
-) -> list[BindingTool]:
+def binding_tools(context: McpToolContext, resolved: list[ResolvedPipeline]) -> list[BindingTool]:
     """Build one tool per resolved binding, keeping exposed names unique.
 
     Two bound pipelines can project the same name (same base tool identity in

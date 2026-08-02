@@ -81,9 +81,7 @@ def probe_query(
     return snapshot, ProbeResult(x=x, y=y, matches=matches)
 
 
-def _resolve_matches(
-    session: Session, ranked: list[tuple[UUID, float]]
-) -> list[ProbeMatch]:
+def _resolve_matches(session: Session, ranked: list[tuple[UUID, float]]) -> list[ProbeMatch]:
     """Join ranked chunk ids to their display context, preserving order."""
     ids = [chunk_id for chunk_id, _ in ranked]
     if not ids:

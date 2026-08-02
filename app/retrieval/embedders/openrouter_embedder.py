@@ -58,9 +58,7 @@ class OpenRouterEmbedder(Embedder):
                 logger.error("OpenRouter embeddings request failed: %s", response.error)
                 raise ExternalServiceError(f"OpenRouter embeddings request failed: {message}")
             logger.error("OpenRouter embeddings response missing 'data': %s", response)
-            raise ValueError(
-                "OpenRouter returned an embeddings payload without a 'data' array."
-            )
+            raise ValueError("OpenRouter returned an embeddings payload without a 'data' array.")
         vectors: list[EmbeddingVector] = []
         for index, entry in enumerate(data):
             embedding = entry.embedding
@@ -78,9 +76,7 @@ class OpenRouterEmbedder(Embedder):
             usage_payload = response.usage.model_dump(exclude_none=True)
             if usage_payload:
                 self._last_usage = {
-                    k: int(v)
-                    for k, v in usage_payload.items()
-                    if isinstance(v, (int, float))
+                    k: int(v) for k, v in usage_payload.items() if isinstance(v, (int, float))
                 }
         return vectors
 

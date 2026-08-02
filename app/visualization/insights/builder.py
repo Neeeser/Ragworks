@@ -99,9 +99,7 @@ def vectors_for(
     return np.array([row.embedding for row in rows], dtype=np.float32)
 
 
-def _other_snapshots(
-    session: Session, snapshot: models.InsightSnapshotRecord
-) -> list[UUID]:
+def _other_snapshots(session: Session, snapshot: models.InsightSnapshotRecord) -> list[UUID]:
     ids = session.exec(
         select(col(models.InsightSnapshotRecord.id)).where(
             col(models.InsightSnapshotRecord.collection_id) == snapshot.collection_id,
@@ -246,5 +244,3 @@ def _collision_counts(session: Session, snapshot_id: UUID) -> dict[tuple[UUID, U
     for doc_a, doc_b, _chunk_a, _chunk_b in pairs:
         counts[(doc_a, doc_b)] = counts.get((doc_a, doc_b), 0) + 1
     return counts
-
-

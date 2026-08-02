@@ -83,6 +83,4 @@ def unsupported_method(collection_id: UUID) -> Response:
     are the spec's prescribed answers, not gaps.
     """
     del collection_id
-    return Response(
-        status_code=status.HTTP_405_METHOD_NOT_ALLOWED, headers={"Allow": "POST"}
-    )
+    return Response(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, headers={"Allow": "POST"})

@@ -38,9 +38,7 @@ from app.services.app_config import get_app_config
 logger = get_logger(__name__)
 
 #: Sent with every 401 so a client knows which scheme to use.
-UNAUTHENTICATED_HEADERS = {
-    "WWW-Authenticate": 'Bearer realm="ragworks", error="invalid_token"'
-}
+UNAUTHENTICATED_HEADERS = {"WWW-Authenticate": 'Bearer realm="ragworks", error="invalid_token"'}
 
 
 @dataclass(frozen=True)
@@ -151,9 +149,7 @@ def _authenticate(session: Session, authorization: str | None) -> KeyPrincipal:
         return ApiKeyService(session).verify(secret.strip())
     except InvalidApiKeyError as exc:
         logger.info(events.MCP_AUTH_REJECTED, reason=exc.reason)
-        raise TransportError(
-            401, "Invalid API key.", dict(UNAUTHENTICATED_HEADERS)
-        ) from exc
+        raise TransportError(401, "Invalid API key.", dict(UNAUTHENTICATED_HEADERS)) from exc
 
 
 def _authorized_collection(

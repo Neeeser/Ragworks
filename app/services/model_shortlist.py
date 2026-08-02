@@ -38,9 +38,7 @@ class ModelShortlistService:
         self.repository = ModelShortlistRepository(session)
         self.connections = ProviderConnectionRepository(session)
 
-    def list_shortlist(
-        self, user: models.User, kind: ProviderKind
-    ) -> ModelShortlistResponse:
+    def list_shortlist(self, user: models.User, kind: ProviderKind) -> ModelShortlistResponse:
         """Return the user's pinned and recent models for one kind."""
         entries = self.repository.list_for_user(user.id, kind)
         return ModelShortlistResponse(
@@ -56,9 +54,7 @@ class ModelShortlistService:
             ],
         )
 
-    def pin(
-        self, user: models.User, identity: ModelShortlistIdentity
-    ) -> ModelShortlistEntry:
+    def pin(self, user: models.User, identity: ModelShortlistIdentity) -> ModelShortlistEntry:
         """Pin a model, or return the existing pin unchanged.
 
         Pinning is idempotent: a second pin of the same model is the same
@@ -138,9 +134,7 @@ class ModelShortlistService:
     def _prune_recents(self, user_id: UUID, kind: ProviderKind) -> None:
         """Drop the oldest recents past `RECENTS_LIMIT`."""
         self.session.flush()
-        recents = self.repository.list_of_type(
-            user_id, kind, ShortlistEntryType.RECENT
-        )
+        recents = self.repository.list_of_type(user_id, kind, ShortlistEntryType.RECENT)
         if len(recents) <= RECENTS_LIMIT:
             return
         self.repository.delete_ids([entry.id for entry in recents[RECENTS_LIMIT:]])

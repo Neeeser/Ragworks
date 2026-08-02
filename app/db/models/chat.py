@@ -73,9 +73,7 @@ class ChatSessionCollection(SQLModel, TimestampMixin, table=True):
     """Tool collection associations for chat sessions."""
 
     __tablename__ = "chat_session_collections"
-    __table_args__ = (
-        Index("ix_chat_session_collections_collection_id", "collection_id"),
-    )
+    __table_args__ = (Index("ix_chat_session_collections_collection_id", "collection_id"),)
 
     session_id: UUID = Field(
         foreign_key="chat_sessions.id",

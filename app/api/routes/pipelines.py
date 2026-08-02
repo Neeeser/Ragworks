@@ -62,9 +62,11 @@ def _to_pipeline_read(
     """
     data = pipeline.model_dump(warnings=False)
     resolved_interface = interface or derive_interface(definition)
-    issues = [] if validation is None else [
-        validation_issue_to_schema(issue) for issue in validation.issues
-    ]
+    issues = (
+        []
+        if validation is None
+        else [validation_issue_to_schema(issue) for issue in validation.issues]
+    )
     return PipelineRead.model_validate(
         {
             **data,
@@ -102,9 +104,7 @@ def validate_pipeline(
         valid=result.valid,
         errors=result.errors,
         warnings=result.warnings,
-        issues=[
-            validation_issue_to_schema(issue) for issue in result.issues
-        ],
+        issues=[validation_issue_to_schema(issue) for issue in result.issues],
     )
 
 
@@ -117,10 +117,7 @@ def list_pipelines(
     """List pipelines for the current user."""
     service = PipelineService(session)
     pipelines = service.list_pipelines(current_user.id, kind=kind)
-    return [
-        _to_pipeline_read(pipeline, service.get_definition(pipeline))
-        for pipeline in pipelines
-    ]
+    return [_to_pipeline_read(pipeline, service.get_definition(pipeline)) for pipeline in pipelines]
 
 
 @router.post("", response_model=PipelineRead, status_code=status.HTTP_201_CREATED)
@@ -204,8 +201,7 @@ def list_pipeline_versions(
             change_summary=version.change_summary,
             created_by=version.created_by,
             changes=[
-                PipelineChangeRead(kind=change.kind, summary=change.summary)
-                for change in changes
+                PipelineChangeRead(kind=change.kind, summary=change.summary) for change in changes
             ],
         )
         for version, changes in versions

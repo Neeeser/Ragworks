@@ -209,11 +209,7 @@ class ValueCache(Generic[KeyT, ValueT]):
     def _evict_completed(self) -> None:
         while len(self._entries) > self._policy.max_entries:
             evicted = next(
-                (
-                    key
-                    for key, candidate in self._entries.items()
-                    if not candidate.refreshing
-                ),
+                (key for key, candidate in self._entries.items() if not candidate.refreshing),
                 None,
             )
             if evicted is None:

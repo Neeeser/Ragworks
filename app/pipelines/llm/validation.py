@@ -30,9 +30,7 @@ class ShellRules:
 def _error(
     node: PipelineNodeDefinition, message: str, field: str | None = None
 ) -> PipelineValidationIssue:
-    return PipelineValidationIssue(
-        message=message, severity="error", node_id=node.id, field=field
-    )
+    return PipelineValidationIssue(message=message, severity="error", node_id=node.id, field=field)
 
 
 def shell_issues(
@@ -87,7 +85,8 @@ def _field_issues(
         )
         return issues
     duplicates = [
-        name for name, count in Counter(spec.name for spec in config.output_fields).items()
+        name
+        for name, count in Counter(spec.name for spec in config.output_fields).items()
         if count > 1
     ]
     issues.extend(
@@ -148,7 +147,10 @@ def _placeholder_issues(
 ) -> list[PipelineValidationIssue]:
     issues: list[PipelineValidationIssue] = []
     label = rules.node_label
-    for field_name, template in (("system_prompt", config.system_prompt), ("prompt", config.prompt)):
+    for field_name, template in (
+        ("system_prompt", config.system_prompt),
+        ("prompt", config.prompt),
+    ):
         try:
             names = referenced_placeholders(template)
         except PromptTemplateError as exc:
@@ -180,6 +182,5 @@ def _placeholder_issues(
 
 def _document_port_wired(node: PipelineNodeDefinition, definition: PipelineDefinition) -> bool:
     return any(
-        edge.target == node.id and edge.target_port == "document"
-        for edge in definition.edges
+        edge.target == node.id and edge.target_port == "document" for edge in definition.edges
     )

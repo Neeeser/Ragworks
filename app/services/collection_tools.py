@@ -28,13 +28,9 @@ class CollectionToolService:
         self.bindings = CollectionPipelineBindingRepository(session)
         self.pipelines = PipelineService(session)
 
-    def list_tools(
-        self, collection: models.Collection
-    ) -> list[models.CollectionPipelineBinding]:
+    def list_tools(self, collection: models.Collection) -> list[models.CollectionPipelineBinding]:
         """List the collection's tool bindings in position order."""
-        return self.bindings.list_for_collection(
-            collection.id, role=models.BindingRole.TOOL
-        )
+        return self.bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
 
     def list_enabled_tools(
         self, collection: models.Collection
@@ -46,9 +42,7 @@ class CollectionToolService:
         self, collection: models.Collection
     ) -> models.CollectionPipelineBinding | None:
         """Return the collection's ingest binding, if bound."""
-        ingest = self.bindings.list_for_collection(
-            collection.id, role=models.BindingRole.INGEST
-        )
+        ingest = self.bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST)
         return ingest[0] if ingest else None
 
     def add_tool(
@@ -149,9 +143,7 @@ class CollectionToolService:
         self.bindings.add(binding)
         return binding
 
-    def _require_callable_pipeline(
-        self, user: models.User, pipeline_id: UUID
-    ) -> models.Pipeline:
+    def _require_callable_pipeline(self, user: models.User, pipeline_id: UUID) -> models.Pipeline:
         """Return a user-owned callable pipeline or raise."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
         if not pipeline:

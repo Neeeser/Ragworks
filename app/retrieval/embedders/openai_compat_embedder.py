@@ -77,9 +77,7 @@ class OpenAICompatEmbedder(Embedder):
             return
         payload = response.usage.model_dump(exclude_none=True)
         counters = {
-            key: int(value)
-            for key, value in payload.items()
-            if isinstance(value, (int, float))
+            key: int(value) for key, value in payload.items() if isinstance(value, (int, float))
         }
         if counters:
             self._last_usage = counters
@@ -97,8 +95,6 @@ class OpenAICompatEmbedder(Embedder):
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a single query string."""
-        response = self._client.embed(
-            [query], model=self.model_name, dimensions=self.dimensions
-        )
+        response = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(response)
         return vectors[0] if vectors else []

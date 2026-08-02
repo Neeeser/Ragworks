@@ -128,9 +128,7 @@ class TelemetryRepository(Repository):
     def purge_older_than(self, cutoff: datetime) -> int:
         """Delete events created before ``cutoff``; return how many went."""
         expired = col(models.TelemetryEventRow.created_at) < cutoff
-        count_statement = (
-            select(func.count()).select_from(models.TelemetryEventRow).where(expired)
-        )
+        count_statement = select(func.count()).select_from(models.TelemetryEventRow).where(expired)
         count = self.session.scalar(count_statement) or 0
         if count:
             self.session.execute(sa_delete(models.TelemetryEventRow).where(expired))

@@ -62,9 +62,7 @@ def get_log_buffer() -> LogRingBuffer:
     return _buffer
 
 
-def buffer_processor(
-    _logger: WrappedLogger, _method_name: str, event_dict: EventDict
-) -> EventDict:
+def buffer_processor(_logger: WrappedLogger, _method_name: str, event_dict: EventDict) -> EventDict:
     """structlog processor: tee a copy of the redacted event into the buffer."""
     _buffer.append({k: v for k, v in event_dict.items() if k not in _META_KEYS})
     return event_dict

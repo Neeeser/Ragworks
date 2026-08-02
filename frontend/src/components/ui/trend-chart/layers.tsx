@@ -1,8 +1,18 @@
 "use client";
 
-import { COLOR_VAR, PAD_BOTTOM, PAD_TOP, VIEW_H, VIEW_W, buildPath, isIsolated } from "./scales";
+import {
+  COLOR_VAR,
+  PAD_BOTTOM,
+  PAD_TOP,
+  VIEW_H,
+  VIEW_W,
+  buildBandPath,
+  buildPath,
+  buildStepPath,
+  isIsolated,
+} from "./scales";
 
-import type { TrendSeries } from "./types";
+import type { TrendBand, TrendEvent, TrendSeries } from "./types";
 import type { BucketSelection } from "./use-chart-brush";
 
 type Scale = {
@@ -53,13 +63,15 @@ export function SelectionBand({ selection, x }: { selection: BucketSelection } &
 export function AreaFill({
   series,
   bucketCount,
+  step,
   x,
   y,
-}: { series: TrendSeries; bucketCount: number } & Scale) {
+}: { series: TrendSeries; bucketCount: number; step?: boolean } & Scale) {
   const baseline = VIEW_H - PAD_BOTTOM;
+  const draw = step ? buildStepPath : buildPath;
   return (
     <path
-      d={`${buildPath(series.values, x, y)}L${x(bucketCount - 1).toFixed(2)},${baseline}L${x(0).toFixed(2)},${baseline}Z`}
+      d={`${draw(series.values, x, y)}L${x(bucketCount - 1).toFixed(2)},${baseline}L${x(0).toFixed(2)},${baseline}Z`}
       style={{ fill: COLOR_VAR[series.color] }}
       opacity={0.12}
     />
@@ -67,16 +79,75 @@ export function AreaFill({
 }
 
 /**
+ * A shaded spread behind the series — the range most measurements fell in.
+ *
+ * Deliberately faint: the band is context for the line, and at high volume it
+ * is the only thing carrying the distribution once individual dots overlap.
+ */
+export function BandLayer({ bands, x, y }: { bands: TrendBand[] } & Scale) {
+  return (
+    <>
+      {bands.map((band) => (
+        <path
+          key={band.id}
+          d={buildBandPath(band.lower, band.upper, x, y)}
+          style={{ fill: COLOR_VAR[band.color] }}
+          opacity={0.16}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Individual measurements as dots.
+ *
+ * They are drawn semi-transparent so a busy stretch reads as a denser cloud
+ * rather than a solid blob — overlap is itself information about volume.
+ */
+export function EventLayer({
+  events,
+  x,
+  y,
+}: {
+  events: Array<TrendEvent & { index: number }>;
+} & Scale) {
+  return (
+    <>
+      {events.map((event) => (
+        <circle
+          key={event.id}
+          cx={x(event.index)}
+          cy={y(event.value)}
+          r={event.radius ?? 3}
+          style={{ fill: COLOR_VAR[event.color] }}
+          opacity={event.muted ? 0.12 : 0.55}
+          vectorEffect="non-scaling-stroke"
+        >
+          {event.label && <title>{event.label}</title>}
+        </circle>
+      ))}
+    </>
+  );
+}
+
+/**
  * Series lines, plus a dot for any sample with no drawn neighbour — a lone
  * measurement should read as one measurement, not as a break in continuity.
  */
-export function SeriesLayer({ series, x, y }: { series: TrendSeries[] } & Scale) {
+export function SeriesLayer({
+  series,
+  step,
+  x,
+  y,
+}: { series: TrendSeries[]; step?: boolean } & Scale) {
+  const draw = step ? buildStepPath : buildPath;
   return (
     <>
       {series.map((entry) => (
         <path
           key={entry.id}
-          d={buildPath(entry.values, x, y)}
+          d={draw(entry.values, x, y)}
           fill="none"
           style={{ stroke: COLOR_VAR[entry.color] }}
           strokeWidth={2}

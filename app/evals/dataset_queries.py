@@ -37,9 +37,7 @@ class DatasetQueryService:
     ) -> EvalDatasetQueriesPage:
         """Page a dataset's queries with their gold references and metadata."""
         dataset = self._get_dataset(user, dataset_id)
-        queries, total = self.datasets.page_queries(
-            dataset.id, offset=offset, limit=limit
-        )
+        queries, total = self.datasets.page_queries(dataset.id, offset=offset, limit=limit)
         gold_map = self._gold_for(dataset.id, [q.external_query_id for q in queries])
         items = [_to_query_read(query, gold_map) for query in queries]
         return EvalDatasetQueriesPage(total=total, items=items)

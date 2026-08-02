@@ -215,18 +215,12 @@ class InsightService:
         ranked = [(basis_rows[int(i)].chunk_id, float(sims[int(i)])) for i in order]
         return float(coordinates[0, 0]), float(coordinates[0, 1]), ranked
 
-    def lexical_probe_vector(
-        self, snapshot: models.InsightSnapshotRecord, query: str
-    ) -> Array:
+    def lexical_probe_vector(self, snapshot: models.InsightSnapshotRecord, query: str) -> Array:
         """Vectorize a probe query through the snapshot's lexical transformer."""
         bundle = store.load_bundle(snapshot.collection_id, snapshot.id)
         if bundle is None or bundle.lexical_transformer is None:
-            raise InvalidInputError(
-                "The lexical model is unavailable; refresh the insights first."
-            )
-        return np.asarray(
-            bundle.lexical_transformer.transform([query]), dtype=np.float32
-        ).ravel()
+            raise InvalidInputError("The lexical model is unavailable; refresh the insights first.")
+        return np.asarray(bundle.lexical_transformer.transform([query]), dtype=np.float32).ravel()
 
     # -- internals --------------------------------------------------------
 

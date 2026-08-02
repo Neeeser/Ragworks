@@ -90,7 +90,9 @@ def collect_index_identities(
                 backend=identity.backend,
                 name=identity.name,
                 vector_type=identity.vector_type,
-                dimension=identity.dimension if identity.dimension is not None else existing.dimension,
+                dimension=identity.dimension
+                if identity.dimension is not None
+                else existing.dimension,
                 metric=identity.metric if identity.metric is not None else existing.metric,
             )
         )

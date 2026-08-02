@@ -123,7 +123,9 @@ class Item(BaseModel):
 
     def to_match(self) -> ScoredChunk:
         """Convert to a scored match; an unscored item scores 0.0."""
-        return ScoredChunk(chunk=self.to_chunk(), score=self.score if self.score is not None else 0.0)
+        return ScoredChunk(
+            chunk=self.to_chunk(), score=self.score if self.score is not None else 0.0
+        )
 
     def preview_chunk(self) -> DocumentChunk:
         """Lenient chunk view for trace previews — missing text renders empty."""
@@ -259,7 +261,6 @@ def trace_items(items: Sequence[Item]) -> ItemListTrace:
     return ItemListTrace(
         kind=kind,
         items=[
-            ItemRef(id=item.id, score=item.score if kind == "matches" else None)
-            for item in items
+            ItemRef(id=item.id, score=item.score if kind == "matches" else None) for item in items
         ],
     )

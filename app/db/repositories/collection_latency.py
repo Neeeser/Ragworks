@@ -220,6 +220,53 @@ class CollectionLatencyRepository(Repository):
             LatencyEventRow(at=row[0], duration_ms=float(row[1]), key=str(row[2])) for row in rows
         ]
 
+    def retrieval_buckets(
+        self,
+        user_id: UUID,
+        collection_id: UUID,
+        domain: HistoryDomain,
+    ) -> dict[datetime, LatencyBucketStats]:
+        """Per-bucket query latency across every tool at once.
+
+        Its own query rather than a fold of the per-tool buckets: percentiles
+        do not combine, so a p95 assembled from per-tool p95s reports the worst
+        tool's p95 under a name claiming to describe all retrieval.
+        """
+        bucket = bucket_expr(col(models.QueryEvent.created_at), domain)
+        rows = self.session.execute(
+            sa_select()
+            .select_from(models.QueryEvent)
+            .where(
+                col(models.QueryEvent.user_id) == user_id,
+                col(models.QueryEvent.collection_id) == collection_id,
+                col(models.QueryEvent.created_at) >= domain.start,
+                col(models.QueryEvent.created_at) < domain.end,
+            )
+            .add_columns(bucket, *self._bucket_aggregates(col(models.QueryEvent.latency_ms)))
+            .group_by(bucket)
+        ).all()
+        return {row[0]: _bucket_stats(row, 1) for row in rows}
+
+    def retrieval_summary(
+        self,
+        user_id: UUID,
+        collection_id: UUID,
+        domain: HistoryDomain,
+    ) -> LatencySummaryStats:
+        """Domain-wide query-latency summary across every tool at once."""
+        row = self.session.execute(
+            sa_select()
+            .select_from(models.QueryEvent)
+            .where(
+                col(models.QueryEvent.user_id) == user_id,
+                col(models.QueryEvent.collection_id) == collection_id,
+                col(models.QueryEvent.created_at) >= domain.start,
+                col(models.QueryEvent.created_at) < domain.end,
+            )
+            .add_columns(*self._summary_aggregates(col(models.QueryEvent.latency_ms)))
+        ).one()
+        return self._summary_stats(row)
+
     def tool_buckets(
         self,
         user_id: UUID,

@@ -98,7 +98,9 @@ class IndexerConfig(BaseModel):
 class PgvectorIndexerConfig(IndexerConfig):
     """Configuration for pgvector indexing nodes (local default index name)."""
 
-    index_name: str = Field(default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA)
+    index_name: str = Field(
+        default=DEFAULT_PGVECTOR_INDEX_NAME, json_schema_extra=STATIC_ONLY_EXTRA
+    )
 
 
 class VectorIndexerConfig(IndexerConfig):

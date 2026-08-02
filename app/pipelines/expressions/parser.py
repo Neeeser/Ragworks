@@ -227,9 +227,7 @@ class _Parser:
     def _expect_op(self, operator: str, context: str) -> Token:
         token = self._match_op(operator)
         if token is None:
-            raise ExpressionSyntaxError(
-                f"Expected '{operator}' {context}", self._current.position
-            )
+            raise ExpressionSyntaxError(f"Expected '{operator}' {context}", self._current.position)
         return token
 
     def parse(self) -> Expression:
@@ -263,9 +261,7 @@ class _Parser:
         while (token := self._match_op(".")) is not None:
             attribute = self._advance()
             if attribute.kind is not TokenKind.IDENT:
-                raise ExpressionSyntaxError(
-                    "Expected a member name after '.'", token.position
-                )
+                raise ExpressionSyntaxError("Expected a member name after '.'", token.position)
             expr = Member(token.position, expr, attribute.text)
         return expr
 

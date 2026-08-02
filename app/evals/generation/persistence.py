@@ -79,9 +79,7 @@ def persist_generated_dataset(
                 },
             )
         )
-        qrels.append(
-            Qrel(query_external_id=external_id, doc_external_id=item.doc_id, relevance=1)
-        )
+        qrels.append(Qrel(query_external_id=external_id, doc_external_id=item.doc_id, relevance=1))
     triple = DatasetTriple(
         name=dataset.name,
         corpus=corpus,

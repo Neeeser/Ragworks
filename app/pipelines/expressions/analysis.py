@@ -105,9 +105,7 @@ def _check_member(
     return member
 
 
-def _check_self_member(
-    expr: Member, self_types: Mapping[str, ExprType] | None
-) -> ExprType:
+def _check_self_member(expr: Member, self_types: Mapping[str, ExprType] | None) -> ExprType:
     """Type `self.<field>` against the owning node's config fields."""
     if self_types is None:
         raise ExpressionTypeError(
@@ -117,8 +115,7 @@ def _check_self_member(
     if field_type is None:
         allowed = ", ".join(sorted(self_types)) or "none"
         raise ExpressionTypeError(
-            f"This node has no config field '{expr.attribute}' "
-            f"(expected one of: {allowed})",
+            f"This node has no config field '{expr.attribute}' (expected one of: {allowed})",
             expr.position,
         )
     return field_type
@@ -141,9 +138,7 @@ def _check_binary(
             f"'{expr.op}' requires integers, got {left} and {right}", expr.position
         )
     if not is_numeric(left) or not is_numeric(right):
-        raise ExpressionTypeError(
-            f"'{expr.op}' cannot combine {left} and {right}", expr.position
-        )
+        raise ExpressionTypeError(f"'{expr.op}' cannot combine {left} and {right}", expr.position)
     if expr.op == "/":
         return ExprType.NUMBER
     if left is ExprType.INTEGER and right is ExprType.INTEGER:

@@ -211,9 +211,7 @@ class EvalProvisioner:
             document.name
             for document in DocumentRepository(self.session).list_for_collection(collection_id)
         }
-        return [
-            doc for doc in corpus_docs if _file_name_for(doc.external_doc_id) not in present
-        ]
+        return [doc for doc in corpus_docs if _file_name_for(doc.external_doc_id) not in present]
 
     def _bind_retrieval(
         self, collection: models.Collection, retrieval_pipeline: models.Pipeline
@@ -256,8 +254,7 @@ class EvalProvisioner:
         """
         files = FileSystemService(self.session)
         document_ids = [
-            self._register(files, user, collection, corpus_doc).id
-            for corpus_doc in corpus_docs
+            self._register(files, user, collection, corpus_doc).id for corpus_doc in corpus_docs
         ]
         self.session.commit()
 
@@ -295,9 +292,7 @@ class EvalProvisioner:
             filename=_file_name_for(corpus_doc.external_doc_id),
             content_type="text/plain",
         )
-        result = files.register_upload(
-            user, collection, spec, io.BytesIO(content.encode("utf-8"))
-        )
+        result = files.register_upload(user, collection, spec, io.BytesIO(content.encode("utf-8")))
         if result.document is not None:
             return result.document
         # Eligibility gates auto-ingestion only; eval provisioning always ingests.

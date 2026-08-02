@@ -243,7 +243,9 @@ class EmbeddingPreview(BaseModel):
     total_values: int
 
 
-def _embedding_preview(embedding: Sequence[float] | None, limit: int = 12) -> EmbeddingPreview | None:
+def _embedding_preview(
+    embedding: Sequence[float] | None, limit: int = 12
+) -> EmbeddingPreview | None:
     """Return a preview for an embedding vector."""
     if embedding is None:
         return None

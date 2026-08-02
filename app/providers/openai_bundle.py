@@ -111,11 +111,7 @@ class OpenAIModelBundle(BaseModel):
         date pattern reaches only some of them. The entries list their own,
         which is the authoritative answer.
         """
-        return {
-            snapshot: entry
-            for entry in self.models.values()
-            for snapshot in entry.snapshots
-        }
+        return {snapshot: entry for entry in self.models.values() for snapshot in entry.snapshots}
 
     def lookup(self, model_id: str) -> BundleModel | None:
         """Resolve an id, following snapshots and fine-tunes to their base."""

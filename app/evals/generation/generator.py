@@ -269,9 +269,7 @@ def _run_plan(
             )
         )
         state.accepted_texts.append(candidate.question)
-        state.per_doc_accepted[plan.doc_id] = (
-            state.per_doc_accepted.get(plan.doc_id, 0) + 1
-        )
+        state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
 
 
 @dataclass(frozen=True)
@@ -364,11 +362,7 @@ def _chat_text(
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return "".join(
-            str(part.get("text", ""))
-            for part in content
-            if isinstance(part, dict)
-        )
+        return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     return ""
 
 

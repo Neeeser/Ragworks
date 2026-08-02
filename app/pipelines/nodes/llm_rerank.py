@@ -121,9 +121,7 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
         fields = self.config.output_fields
         prompt_context = PromptContext(
             query=context.query,
-            items_block=render_items_block(
-                [item.text or "" for item in batch.items]
-            ),
+            items_block=render_items_block([item.text or "" for item in batch.items]),
         )
         prompts = [
             (
@@ -145,9 +143,7 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
         items = self._apply(batch.items, outcome.values)
         return {"items": batch.model_copy(update={"items": items, "usage": usage})}
 
-    def _apply(
-        self, items: list[Item], by_index: dict[int, dict[str, Any]]
-    ) -> list[Item]:
+    def _apply(self, items: list[Item], by_index: dict[int, dict[str, Any]]) -> list[Item]:
         """Apply scores, reorder best-first, and drop below the threshold."""
         fields = self.config.output_fields
         updated: list[Item] = []

@@ -91,9 +91,7 @@ class FileNodeRead(DateTimeConfigMixin, BaseModel):
             path=path,
             content_type=node.content_type,
             size_bytes=node.size_bytes,
-            ingestion=(
-                FileIngestionRead.from_model(ingestion, stale=stale) if ingestion else None
-            ),
+            ingestion=(FileIngestionRead.from_model(ingestion, stale=stale) if ingestion else None),
             created_at=node.created_at,
             updated_at=node.updated_at,
         )

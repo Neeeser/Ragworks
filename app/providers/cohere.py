@@ -88,9 +88,7 @@ class CohereAdapter(ProviderAdapter):
             return ConnectionValidationResult(valid=False, message="Cohere is unreachable.")
         return ConnectionValidationResult(valid=True, message="Connected.")
 
-    def list_models(
-        self, kind: ProviderKind, *, force_refresh: bool = False
-    ) -> CatalogResult:
+    def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
         """List Cohere models filtered by the requested endpoint capability."""
         self.require_kind(kind)
         endpoint = {

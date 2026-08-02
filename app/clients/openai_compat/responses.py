@@ -54,17 +54,13 @@ def _build_kwargs(
     if call.extra_body:
         kwargs["extra_body"] = call.extra_body
     if call.parameters:
-        kwargs.update(
-            {key: value for key, value in call.parameters.items() if value is not None}
-        )
+        kwargs.update({key: value for key, value in call.parameters.items() if value is not None})
     if stream:
         kwargs["stream"] = True
     return kwargs
 
 
-def create_response(
-    transport: OpenAICompatTransport, call: ResponsesCall
-) -> ResponsesResponse:
+def create_response(transport: OpenAICompatTransport, call: ResponsesCall) -> ResponsesResponse:
     """Request a buffered Responses-API completion."""
     response = transport.sdk.responses.create(**_build_kwargs(transport, call, stream=False))
     return ResponsesResponse.model_validate(response.model_dump())

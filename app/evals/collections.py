@@ -94,9 +94,7 @@ class EvalCollectionService:
         collection = self._require_eval_collection(user, collection_id)
         CollectionDeletionService(self.session).delete(user, collection)
 
-    def _require_eval_collection(
-        self, user: models.User, collection_id: UUID
-    ) -> models.Collection:
+    def _require_eval_collection(self, user: models.User, collection_id: UUID) -> models.Collection:
         """Return a user-owned eval collection or raise NotFoundError."""
         collection = self.collections.get(collection_id, user.id)
         if collection is None or collection.system_purpose != CollectionPurpose.EVAL.value:
