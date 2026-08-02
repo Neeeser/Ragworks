@@ -7,6 +7,7 @@ export type NodeFamily =
   | "parser"
   | "retriever"
   | "ranking"
+  | "llm"
   | "router"
   | "ingestion"
   | "retrieval"
@@ -21,6 +22,7 @@ const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
   parser: "Parsers",
   retriever: "Retrievers",
   ranking: "Ranking",
+  llm: "LLM",
   router: "Routers",
   ingestion: "Ingestion",
   retrieval: "Retrieval",
@@ -39,6 +41,7 @@ const NODE_FAMILY_ORDER: NodeFamily[] = [
   "indexer",
   "retriever",
   "ranking",
+  "llm",
   "chat",
   "utility",
   "other",
@@ -120,6 +123,14 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
     badge: "text-stage-retrieve",
   },
   ranking: RERANK_STYLE,
+  // LLM processing nodes are chat-model calls, so they share the chat stage
+  // token — one hue for "a language model runs here" across the console.
+  llm: {
+    accent: "bg-stage-chat",
+    border: "border-stage-chat/40",
+    glow: GLOW,
+    badge: "text-stage-chat",
+  },
   router: ROUTER_STYLE,
   ingestion: NEUTRAL_STYLE,
   retrieval: ROUTER_STYLE,
@@ -213,6 +224,7 @@ const NODE_FAMILY_VAR: Record<NodeFamily, string> = {
   parser: "var(--stage-parse)",
   retriever: "var(--stage-retrieve)",
   ranking: RERANK_VAR,
+  llm: "var(--stage-chat)",
   router: ROUTER_VAR,
   ingestion: NEUTRAL_VAR,
   retrieval: ROUTER_VAR,
@@ -243,6 +255,7 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   // One ranking family: fusion merges, rerankers reorder, limit cuts —
   // the same semantic stage, so they share a section and stage color.
   if (prefix === "fusion" || prefix === "reranker" || prefix === "limit") return "ranking";
+  if (prefix === "llm") return "llm";
   if (prefix === "router") return "router";
   if (prefix === "ingestion") return "ingestion";
   if (prefix === "retrieval") return "retrieval";

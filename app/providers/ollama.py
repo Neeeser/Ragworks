@@ -8,7 +8,14 @@ import httpx
 
 from app.clients.ollama import OllamaApiError, OllamaClient, get_ollama_client
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.ollama import OllamaChatProvider, model_info_from_description
 from app.retrieval.embedders.base import Embedder
@@ -51,6 +58,9 @@ OLLAMA_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.SECRET,
             required=False,
         ),
+        request_concurrency_field(1),
+        request_rpm_field(None),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
     ),
     docs_url="https://ollama.com/download",
 )
@@ -76,6 +86,8 @@ class OllamaAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.OLLAMA
     descriptor: ClassVar[ProviderDescriptor] = OLLAMA_DESCRIPTOR
+    default_request_concurrency: ClassVar[int] = 1
+    default_request_rpm: ClassVar[int | None] = None
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

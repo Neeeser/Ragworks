@@ -11,6 +11,7 @@ import {
 } from "../lib/reranking";
 
 import { useEmbeddingModelCatalog } from "./use-embedding-model-catalog";
+import { useLlmModelCatalog } from "./use-llm-model-catalog";
 import { useRerankingModelCatalog } from "./use-reranking-model-catalog";
 
 import type { UUID } from "@/lib/types";
@@ -25,6 +26,7 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
     token,
     userId,
   );
+  const { refreshModels: refreshLlmModels, ...llm } = useLlmModelCatalog(token, userId);
   const { connectionsLoading, connectionsResolved, connectionsError, hasKind, reloadConnections } =
     useConnections(token ?? "", !token);
   useEffect(() => {
@@ -56,14 +58,19 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
     () => void refreshRerankingModels(),
     [refreshRerankingModels],
   );
+  const onLlmCatalogVisible = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
+  const onRetryLlmModels = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
 
   return {
     ...embedding,
     ...reranking,
+    ...llm,
     hasRerankingProvider,
     rerankingProviderMessage,
     onEmbeddingCatalogVisible,
     onRerankingCatalogVisible,
     onRetryRerankingModels,
+    onLlmCatalogVisible,
+    onRetryLlmModels,
   };
 }

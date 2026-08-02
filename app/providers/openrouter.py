@@ -9,7 +9,14 @@ import httpx
 from app.cache import CacheSnapshot
 from app.clients.openrouter import OpenRouterClient, get_openrouter_client
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.openrouter import OpenRouterProvider
 from app.retrieval.embedders.base import Embedder
@@ -41,6 +48,10 @@ OPENROUTER_DESCRIPTOR = ProviderDescriptor(
             required=True,
             placeholder="sk-or-...",
         ),
+        request_concurrency_field(8),
+        request_rpm_field(None),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
+        kind_rpm_field("Reranking", "rerank_requests_per_minute", None),
     ),
     docs_url="https://openrouter.ai/settings/keys",
     recommended=True,
@@ -65,6 +76,8 @@ class OpenRouterAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.OPENROUTER
     descriptor: ClassVar[ProviderDescriptor] = OPENROUTER_DESCRIPTOR
+    default_request_concurrency: ClassVar[int] = 8
+    default_request_rpm: ClassVar[int | None] = None
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

@@ -48,7 +48,7 @@ class NodeTraceValue(BaseModel):
 
     label: str
     value: object
-    kind: Literal["json", "text", "embedding", "items", "ranking"] = "json"
+    kind: Literal["json", "text", "embedding", "items", "ranking", "llm_call"] = "json"
 
 
 class NodeTraceSummary(BaseModel):

@@ -27,7 +27,11 @@ export type NodeEdits = {
 
 type SectionCatalogProps = Omit<
   NodeConfigSectionsProps,
-  "node" | "onConfigChange" | "onSelectEmbeddingModel" | "onSelectRerankingModel"
+  | "node"
+  | "onConfigChange"
+  | "onSelectEmbeddingModel"
+  | "onSelectRerankingModel"
+  | "onSelectLlmModel"
 >;
 
 type NodeEditorDrawerProps = SectionCatalogProps & {
@@ -128,6 +132,16 @@ function DrawerContent({
     updateDraftConfig({ connection_id: model.connection_id, model_name: model.id });
   };
 
+  // LLM nodes carry prompts and output fields beside the model pair — keep
+  // them; only the identity fields change.
+  const handleSelectLlmModel = (model: CatalogModel) => {
+    updateDraftConfig({
+      ...draftConfig,
+      connection_id: model.connection_id,
+      model_name: model.id,
+    });
+  };
+
   const handleSave = () => {
     if (embeddingSelectionMissing || rerankingSelectionMissing) return;
     onApply(node.id, { label: draftLabel, config: draftConfig });
@@ -213,6 +227,7 @@ function DrawerContent({
             onConfigChange={updateDraftConfig}
             onSelectEmbeddingModel={handleSelectEmbeddingModel}
             onSelectRerankingModel={handleSelectRerankingModel}
+            onSelectLlmModel={handleSelectLlmModel}
             {...catalogProps}
           />
           <NodeExampleSection node={node} />

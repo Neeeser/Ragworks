@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.retrieval.models import DocumentChunk, RetrievalResponse
 from app.schemas.enums import IndexBackend
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.errors import InvalidInputError
 
 # Shared across backends (it is Pinecone's rule, reused for pgvector so index
@@ -73,6 +74,11 @@ class VectorStoreCapabilities(BaseModel):
     #: BY over the lex table); Pinecone has no query-conditioned aggregation
     #: API at all (`describe_index_stats` only reports totals per namespace).
     supports_lexical_facet: bool = False
+    #: Whether dense and lexical queries accept a `MetadataFilter`. Both
+    #: shipped backends do (pgvector via jsonb WHERE translation, Pinecone
+    #: natively); the flag exists so a future backend without it degrades
+    #: at validation time instead of silently ignoring the filter.
+    supports_metadata_filter: bool = False
     #: Whether one index name refers to the same physical index for every
     #: user on the deployment. pgvector does — its indexes are tables in the
     #: app's own Postgres, keyed by name alone — so two accounts that pick
@@ -238,7 +244,7 @@ class VectorStoreBackend(ABC):
         *,
         embedding: Sequence[float],
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the nearest chunks for a query embedding."""
 
@@ -263,7 +269,7 @@ class VectorStoreBackend(ABC):
         *,
         text: str,
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the lexically best-matching chunks for raw query text."""
 

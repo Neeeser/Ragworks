@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.core.config import get_settings
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.filtering import filter_issues, resolve_filter
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.indexing import DEFAULT_PGVECTOR_INDEX_NAME
 from app.pipelines.nodes.validators import (
@@ -33,6 +34,7 @@ from app.pipelines.tracing.summaries import (
 from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.retrieval.models import RetrievalResponse, ScoredChunk
 from app.schemas.enums import IndexBackend
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.namespace_ownership import resolve_owned_namespace
@@ -104,6 +106,14 @@ class RetrieverConfig(BaseModel):
         description=(
             "How many chunks to fetch — typically the top_k variable, or an "
             "expression like top_k * 2 to over-retrieve for fusion/reranking."
+        ),
+    )
+    filter: MetadataFilter | None = Field(
+        default=None,
+        description=(
+            "Metadata conditions every returned chunk must satisfy. A "
+            "condition's value may name a pipeline variable, bound at query "
+            "time."
         ),
     )
 
@@ -179,16 +189,26 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
     def validation_issues_for_node(
         cls,
         node: PipelineNodeDefinition,
-        _definition: PipelineDefinition,
+        definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
         """Validate required index selection and an explicit fetch depth."""
         config = cls.config_model.model_validate(node.config or {})
-        issues = [
+        maybe_issues = [
             missing_index_issue(config.index_name, node.id, "Retriever"),
             missing_top_k_issue(config.top_k, node.id, "Retriever"),
         ]
-        return [issue for issue in issues if issue]
+        issues = [issue for issue in maybe_issues if issue]
+        try:
+            backend: IndexBackend | None = cls.resolve_backend(config)
+        except ValueError:
+            backend = None
+        issues.extend(
+            filter_issues(
+                config.filter, node, definition, backend, node_label="Retriever"
+            )
+        )
+        return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Retrieve chunks for every query item and merge the matches."""
@@ -208,6 +228,9 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         )
 
         store = context.vector_stores.get(self.resolve_backend(self.config))
+        metadata_filter = resolve_filter(
+            self.config.filter, context, node_label="Retriever"
+        )
         ensure_query_fanout(len(batch.items), "Retriever")
         per_query: list[list[ScoredChunk]] = []
         for item in batch.items:
@@ -221,7 +244,7 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
                     namespace or "",
                     embedding=item.embedding,
                     top_k=self.config.top_k,
-                    filter=None,
+                    filter=metadata_filter,
                 )
             except NotFoundError:
                 # The index is created by the first ingest; querying before then

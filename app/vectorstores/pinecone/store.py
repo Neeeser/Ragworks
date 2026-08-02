@@ -32,6 +32,7 @@ from app.retrieval.models import (
     ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
+from app.schemas.metadata_filter import MetadataFilter
 from app.services.errors import InvalidInputError, NotFoundError
 from app.vectorstores.base import (
     IndexSpec,
@@ -40,6 +41,7 @@ from app.vectorstores.base import (
     VectorStoreBackend,
     VectorStoreCapabilities,
 )
+from app.vectorstores.pinecone.filters import to_pinecone_filter
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,7 @@ PINECONE_CAPABILITIES = VectorStoreCapabilities(
     supported_metrics=("cosine", "euclidean", "dotproduct"),
     supported_vector_types=("dense", "sparse"),
     max_lexical_upsert_batch=96,
+    supports_metadata_filter=True,
     requires_api_key=True,
 )
 
@@ -204,7 +207,7 @@ class PineconeStore(VectorStoreBackend):
         *,
         embedding: Sequence[float],
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the nearest chunks in a namespace, highest score first."""
         result = self._get_index(index).query(
@@ -213,7 +216,7 @@ class PineconeStore(VectorStoreBackend):
             include_metadata=True,
             include_values=False,
             namespace=namespace,
-            filter=filter,
+            filter=to_pinecone_filter(filter),
         )
         # We never pass `async_req`, so this call always returns a
         # `QueryResponse` synchronously; the SDK's overloads still union in
@@ -242,7 +245,7 @@ class PineconeStore(VectorStoreBackend):
         *,
         text: str,
         top_k: int,
-        filter: dict[str, Any] | None = None,
+        filter: MetadataFilter | None = None,
     ) -> RetrievalResponse:
         """Return the lexically best-matching chunks for raw query text.
 
@@ -253,8 +256,9 @@ class PineconeStore(VectorStoreBackend):
             "inputs": {"text": text},
             "top_k": min(top_k, self.capabilities.max_top_k),
         }
-        if filter:
-            query["filter"] = filter
+        pinecone_filter = to_pinecone_filter(filter)
+        if pinecone_filter is not None:
+            query["filter"] = pinecone_filter
         try:
             result = self._get_index(index).search(namespace=namespace, query=query)
         except PineconeNotFoundException as exc:

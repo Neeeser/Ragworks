@@ -8,9 +8,10 @@ import { Tooltip } from "../ui/tooltip";
 import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import { backendSupportLabel, restrictedBackends } from "./lib/backend-support";
 import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
+import { NODE_PRESET_MIME, presetizedSpec } from "./lib/presets";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 
-import type { IndexBackend, NodeSpec } from "@/lib/types";
+import type { IndexBackend, NodePreset, NodeSpec } from "@/lib/types";
 import type { DragEvent } from "react";
 
 type PipelineNodeLibraryProps = {
@@ -31,12 +32,19 @@ export function PipelineNodeLibrary({
   rerankingProviderMessage = RERANKER_PROVIDER_REQUIRED,
   knownBackends = [],
 }: PipelineNodeLibraryProps) {
-  const handleDragStart = (event: DragEvent<HTMLButtonElement>, spec: NodeSpec) => {
+  const handleDragStart = (
+    event: DragEvent<HTMLButtonElement>,
+    spec: NodeSpec,
+    preset?: NodePreset,
+  ) => {
     if (spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider) {
       event.preventDefault();
       return;
     }
     event.dataTransfer.setData(NODE_DRAG_TYPE, spec.type);
+    if (preset) {
+      event.dataTransfer.setData(NODE_PRESET_MIME, preset.id);
+    }
     event.dataTransfer.effectAllowed = "move";
   };
 
@@ -104,6 +112,24 @@ export function PipelineNodeLibrary({
                           ) : null}
                         </div>
                       </button>
+                      {spec.presets && spec.presets.length > 0 ? (
+                        <div className="mt-1 space-y-1 pl-3">
+                          {spec.presets.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              draggable={!unavailable}
+                              onClick={() => onPreviewNode(presetizedSpec(spec, preset))}
+                              onDragStart={(event) => handleDragStart(event, spec, preset)}
+                              className="w-full rounded-control border border-hairline bg-canvas px-2 py-1 text-left transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
+                            >
+                              <span className="block truncate text-instrument font-medium text-body">
+                                {preset.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {unavailable ? (
                         <p className="mt-1 px-1 text-instrument text-muted">
                           {rerankingProviderMessage}{" "}

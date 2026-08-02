@@ -38,7 +38,7 @@ export interface PipelineNodeRunTrace {
 export interface PipelineNodeSummaryValue {
   label: string;
   value: unknown;
-  kind?: "json" | "text" | "embedding" | "items" | "ranking";
+  kind?: "json" | "text" | "embedding" | "items" | "ranking" | "llm_call";
 }
 
 export interface ItemRef {

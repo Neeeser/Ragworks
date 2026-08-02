@@ -17,7 +17,7 @@ from app.providers.registry import (
     get_provider,
     resolve_connection,
 )
-from app.retrieval.embedders.ollama_embedder import OllamaEmbedder
+from app.providers.throttled import ThrottledEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
 from app.services.errors import InvalidInputError, NotFoundError
 
@@ -96,7 +96,8 @@ def test_provider_resolver_builds_and_caches_adapters(session: Session) -> None:
     resolver = ProviderResolver(user, session)
 
     embedder = resolver.embedder(connection.id, "nomic-embed-text", dimensions=None)
-    assert isinstance(embedder, OllamaEmbedder)
+    # The resolver hands out throttled proxies; the real embedder sits inside.
+    assert isinstance(embedder, ThrottledEmbedder)
     assert embedder.model_name == "nomic-embed-text"
 
     first = resolver.adapter(connection.id, ProviderKind.EMBEDDING)

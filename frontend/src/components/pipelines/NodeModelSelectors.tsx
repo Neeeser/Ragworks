@@ -5,7 +5,9 @@ import { useEffect } from "react";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
+import { isLlmNodeType } from "./lib/llm";
 import { RERANKER_NODE_TYPE } from "./lib/reranking";
+import { LlmModelSelectorCard } from "./LlmModelSelectorCard";
 import { RerankingModelSelectorCard } from "./RerankingModelSelectorCard";
 
 import type { CatalogModel, ModelCatalogResponse } from "@/lib/types";
@@ -24,6 +26,13 @@ export type NodeModelCatalogProps = {
   onRerankingCatalogVisible?: () => void;
   onRetryRerankingModels: () => void;
   onSelectRerankingModel: (model: CatalogModel) => void;
+  llmModels: CatalogModel[];
+  llmCatalog: ModelCatalogResponse | null;
+  llmModelsLoading: boolean;
+  llmModelsError: string | null;
+  onLlmCatalogVisible?: () => void;
+  onRetryLlmModels: () => void;
+  onSelectLlmModel: (model: CatalogModel) => void;
 };
 
 type NodeModelSelectorsProps = NodeModelCatalogProps & {
@@ -49,9 +58,17 @@ export function NodeModelSelectors({
   onRerankingCatalogVisible,
   onRetryRerankingModels,
   onSelectRerankingModel,
+  llmModels,
+  llmCatalog,
+  llmModelsLoading,
+  llmModelsError,
+  onLlmCatalogVisible,
+  onRetryLlmModels,
+  onSelectLlmModel,
 }: NodeModelSelectorsProps) {
   const isEmbedder = nodeType === "embedder.text";
   const isReranker = nodeType === RERANKER_NODE_TYPE;
+  const isLlm = isLlmNodeType(nodeType);
   const modelName = typeof config.model_name === "string" ? config.model_name : "";
   const connectionId = typeof config.connection_id === "string" ? config.connection_id : null;
 
@@ -61,6 +78,9 @@ export function NodeModelSelectors({
   useEffect(() => {
     if (isReranker) onRerankingCatalogVisible?.();
   }, [isReranker, onRerankingCatalogVisible]);
+  useEffect(() => {
+    if (isLlm) onLlmCatalogVisible?.();
+  }, [isLlm, onLlmCatalogVisible]);
 
   if (isEmbedder && !embeddingBoundToVariable) {
     return (
@@ -86,6 +106,20 @@ export function NodeModelSelectors({
         modelsError={rerankingModelsError}
         onRetry={onRetryRerankingModels}
         onSelectModel={onSelectRerankingModel}
+      />
+    );
+  }
+  if (isLlm) {
+    return (
+      <LlmModelSelectorCard
+        models={llmModels}
+        selectedModelKey={modelName}
+        selectedConnectionId={connectionId}
+        selectedAvailability={modelAvailability(llmCatalog, connectionId, modelName || null)}
+        modelsLoading={llmModelsLoading}
+        modelsError={llmModelsError}
+        onRetry={onRetryLlmModels}
+        onSelectModel={onSelectLlmModel}
       />
     );
   }

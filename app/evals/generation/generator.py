@@ -54,6 +54,7 @@ from app.evals.generation.sources import (
 )
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import get_provider, resolve_connection
+from app.providers.throttled import throttled_chat
 from app.schemas.enums import EvalDatasetStatus, ProviderKind
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
 from app.services.errors import InvalidInputError
@@ -194,11 +195,9 @@ def _prepare(session: Session, dataset: models.EvalDataset) -> _RunSetup:
         raise InvalidInputError("The dataset's owning user no longer exists.")
     documents = eligible_documents(session, config.collection_id)
     if not documents:
-        raise InvalidInputError(
-            "The collection has no ingested documents with stored chunks."
-        )
+        raise InvalidInputError("The collection has no ingested documents with stored chunks.")
     connection = resolve_connection(session, user, config.connection_id)
-    chat = get_provider(connection, ProviderKind.CHAT).chat_provider()
+    chat = throttled_chat(get_provider(connection, ProviderKind.CHAT), config.connection_id)
     doc_plans = [
         DocumentPlan(doc_id=str(doc.id), title=doc.name, chunk_count=doc.num_chunks)
         for doc in documents

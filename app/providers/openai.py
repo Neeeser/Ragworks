@@ -8,7 +8,14 @@ import httpx
 
 from app.clients.openai_compat import OpenAICompatClient, TransportConfig
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
+)
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
     RESPONSES_PARAMETERS,
@@ -61,6 +68,9 @@ OPENAI_DESCRIPTOR = ProviderDescriptor(
                 "OpenAI-shaped API is a Custom server connection instead."
             ),
         ),
+        request_concurrency_field(8),
+        request_rpm_field(500),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", 3000),
     ),
     docs_url="https://platform.openai.com/api-keys",
     recommended=True,
@@ -72,6 +82,9 @@ class OpenAIAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.OPENAI
     descriptor: ClassVar[ProviderDescriptor] = OPENAI_DESCRIPTOR
+    default_request_concurrency: ClassVar[int] = 8
+    default_request_rpm: ClassVar[int | None] = 500
+    default_embedding_rpm: ClassVar[int | None] = 3000
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

@@ -332,7 +332,8 @@
       },
       "default_config": {},
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "parser.document",
@@ -387,7 +388,8 @@
         "encoding": "utf-8"
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "chunker.token",
@@ -468,7 +470,8 @@
         "hf_model_id": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "embedder.text",
@@ -557,7 +560,8 @@
         "embed_as": "auto"
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "indexer.vector",
@@ -658,7 +662,8 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": ["pgvector", "pinecone"],
+      "presets": []
     },
     {
       "type": "indexer.bm25",
@@ -734,7 +739,8 @@
         "ensure_index": true
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": ["pgvector", "pinecone"],
+      "presets": []
     },
     {
       "type": "ingestion.output",
@@ -774,7 +780,8 @@
       },
       "default_config": {},
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retrieval.input",
@@ -839,7 +846,8 @@
         "tool_description": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retriever.vector",
@@ -873,11 +881,99 @@
       ],
       "config_schema": {
         "$defs": {
+          "FilterCondition": {
+            "description": "One metadata comparison.\n\nExactly one of `value`/`var` is set \u2014 except `exists`, which takes\nneither. The model itself stays permissive so an in-progress editor\ndraft parses (matching `RetrieverConfig.top_k`); `condition_problems`\nis the coherence check validation and run time share.",
+            "properties": {
+              "field": {
+                "default": "",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/FilterOp",
+                "default": "eq"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              },
+              "var": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Var"
+              }
+            },
+            "title": "FilterCondition",
+            "type": "object"
+          },
+          "FilterOp": {
+            "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
+            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
+            "title": "FilterOp",
+            "type": "string"
+          },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
             "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
+          },
+          "MetadataFilter": {
+            "description": "Root combinator: every condition in `all` must hold.",
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/$defs/FilterCondition"
+                },
+                "title": "All",
+                "type": "array"
+              }
+            },
+            "title": "MetadataFilter",
+            "type": "object"
           }
         },
         "description": "Unified retriever config: the target backend is data, not a node subtype.\n\n`index_name` deliberately defaults to empty -- an index must be chosen\nexplicitly, and validation flags a blank one (`missing_index_issue`).\nLegacy definitions that relied on the old per-backend defaults get theirs\nfilled by the startup migration (`app.pipelines.upgrades`).",
@@ -909,6 +1005,18 @@
             "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
             "title": "Top K"
           },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MetadataFilter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Metadata conditions every returned chunk must satisfy. A condition's value may name a pipeline variable, bound at query time."
+          },
           "backend": {
             "$ref": "#/$defs/IndexBackend",
             "static_only": true
@@ -921,10 +1029,12 @@
         "index_name": "",
         "namespace": "col-{collection_id}",
         "top_k": null,
+        "filter": null,
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": ["pgvector", "pinecone"],
+      "presets": []
     },
     {
       "type": "retriever.bm25",
@@ -958,11 +1068,99 @@
       ],
       "config_schema": {
         "$defs": {
+          "FilterCondition": {
+            "description": "One metadata comparison.\n\nExactly one of `value`/`var` is set \u2014 except `exists`, which takes\nneither. The model itself stays permissive so an in-progress editor\ndraft parses (matching `RetrieverConfig.top_k`); `condition_problems`\nis the coherence check validation and run time share.",
+            "properties": {
+              "field": {
+                "default": "",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/FilterOp",
+                "default": "eq"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              },
+              "var": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Var"
+              }
+            },
+            "title": "FilterCondition",
+            "type": "object"
+          },
+          "FilterOp": {
+            "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
+            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
+            "title": "FilterOp",
+            "type": "string"
+          },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
             "enum": ["pinecone", "pgvector"],
             "title": "IndexBackend",
             "type": "string"
+          },
+          "MetadataFilter": {
+            "description": "Root combinator: every condition in `all` must hold.",
+            "properties": {
+              "all": {
+                "items": {
+                  "$ref": "#/$defs/FilterCondition"
+                },
+                "title": "All",
+                "type": "array"
+              }
+            },
+            "title": "MetadataFilter",
+            "type": "object"
           }
         },
         "description": "Configuration for BM25 (sparse/lexical) retriever nodes.\n\n`top_k` mirrors the dense retriever's contract: required for a runnable\nnode, typically the `top_k` variable or an over-retrieval expression.",
@@ -997,6 +1195,18 @@
             "default": null,
             "description": "How many chunks to fetch \u2014 typically the top_k variable, or an expression like top_k * 2 to over-retrieve for fusion/reranking.",
             "title": "Top K"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MetadataFilter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Metadata conditions every returned chunk must satisfy. A condition's value may name a pipeline variable, bound at query time."
           }
         },
         "title": "Bm25RetrieverConfig",
@@ -1006,10 +1216,12 @@
         "backend": "pgvector",
         "index_name": "",
         "namespace": "col-{collection_id}",
-        "top_k": null
+        "top_k": null,
+        "filter": null
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"]
+      "supported_backends": ["pgvector", "pinecone"],
+      "presets": []
     },
     {
       "type": "fusion.rrf",
@@ -1059,7 +1271,8 @@
         "k": 60
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "limit.results",
@@ -1116,7 +1329,8 @@
         "max_results": null
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     },
     {
       "type": "retrieval.output",
@@ -1186,7 +1400,8 @@
         "outputs": []
       },
       "hidden": false,
-      "supported_backends": null
+      "supported_backends": null,
+      "presets": []
     }
   ]
 }

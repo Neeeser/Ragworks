@@ -65,19 +65,41 @@ def normalize_server_url(value: str, default_port: int) -> str:
     return urlunsplit(parts)
 
 
-class OpenRouterConnectionConfig(BaseModel):
+class LlmConcurrencyConfig(BaseModel):
+    """Mixin for chat-capable connections: the LLM-call throttle settings.
+
+    `None` falls back to the provider type's default (a starter-tier-safe
+    number declared on the adapter). The connection is the right scope — a
+    laptop Ollama and a tier-4 cloud key differ by orders of magnitude, and
+    every pipeline node sharing the connection shares its budget.
+    `requests_per_minute` paces calls proactively across a sliding window;
+    a provider default of `None` means unpaced (backoff stays the reactive
+    safety net either way).
+    """
+
+    max_concurrent_requests: int | None = Field(default=None, ge=1, le=64)
+    requests_per_minute: int | None = Field(default=None, ge=1, le=100_000)
+    #: Per-kind pace overrides. Unset, a kind draws from the shared
+    #: `requests_per_minute` window; set, it paces in its own window at this
+    #: rate — providers meter per endpoint (embeddings limits run far above
+    #: chat), so heavy ingestion need not crawl at chat pace.
+    embedding_requests_per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
+    rerank_requests_per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
+
+
+class OpenRouterConnectionConfig(LlmConcurrencyConfig):
     """Stored config for an OpenRouter connection."""
 
     api_key: str = Field(min_length=1)
 
 
-class CohereConnectionConfig(BaseModel):
+class CohereConnectionConfig(LlmConcurrencyConfig):
     """Stored config for a Cohere connection."""
 
     api_key: str = Field(min_length=1)
 
 
-class OllamaConnectionConfig(BaseModel):
+class OllamaConnectionConfig(LlmConcurrencyConfig):
     """Stored config for an Ollama connection."""
 
     base_url: str = Field(min_length=1)
@@ -90,7 +112,7 @@ class OllamaConnectionConfig(BaseModel):
         return normalize_server_url(value, OLLAMA_DEFAULT_PORT)
 
 
-class TEIConnectionConfig(BaseModel):
+class TEIConnectionConfig(LlmConcurrencyConfig):
     """Stored config for a Text Embeddings Inference connection."""
 
     base_url: str = Field(min_length=1)
@@ -117,7 +139,7 @@ class ChatDialect(StrEnum):
     RESPONSES = "responses"
 
 
-class OpenAIConnectionConfig(BaseModel):
+class OpenAIConnectionConfig(LlmConcurrencyConfig):
     """Stored config for an OpenAI connection."""
 
     api_key: str = Field(min_length=1)
@@ -134,7 +156,7 @@ class OpenAIConnectionConfig(BaseModel):
         return normalize_server_url(value, OPENAI_COMPAT_DEFAULT_PORT)
 
 
-class AnthropicConnectionConfig(BaseModel):
+class AnthropicConnectionConfig(LlmConcurrencyConfig):
     """Stored config for an Anthropic connection."""
 
     api_key: str = Field(min_length=1)
@@ -156,7 +178,7 @@ class RerankDialect(StrEnum):
     TEI = "tei"
 
 
-class CustomConnectionConfig(BaseModel):
+class CustomConnectionConfig(LlmConcurrencyConfig):
     """Stored config for a server reached through the standard APIs.
 
     The capability flags are what the probe writes and the user may correct.

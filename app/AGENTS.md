@@ -388,6 +388,54 @@ architecture" in the root `AGENTS.md`.
 The admin settings page renders from the config catalog, so a new field needs no
 frontend form code — only a new `ConfigFieldKind` would.
 
+## LLM pipeline nodes (`app/pipelines/llm/` + `nodes/llm_*.py`)
+
+- **The `llm.*` nodes are thin facet shells over one engine; a new LLM method
+  ships as a `NodePreset` (seeded config), never a new node type id.** Type
+  ids are permanent wire contract; a preset is data — HyDE, contextual
+  retrieval, and query expansion are prompts + output fields on an existing
+  shell, and a per-method type would re-implement the same node under a name
+  that can never be retired.
+- **Model-request throttling is connection-scoped and holistic, enforced by
+  the process-wide registry (`app/providers/throttle.py`) — never a
+  per-node knob.** The connection is the thing being rate-limited; chat,
+  embedding, and reranking all honor it — `ProviderResolver` hands out
+  throttled embedder/reranker proxies (`app/providers/throttled.py`), bulk
+  chat outside the LLM engine (eval generation) wraps the same way, and
+  the engine slots its own calls against the same keys, so everything
+  counts once. Interactive chat streaming is deliberately unthrottled —
+  parking a user's turn behind a bulk run's exhausted window trades a
+  retryable 429 for a stall nothing explains. Settings live on the
+  connection config (`max_concurrent_requests`, `requests_per_minute`,
+  plus advanced per-kind `embedding_/rerank_requests_per_minute`
+  overrides) with starter-tier defaults on the adapters. By default every
+  kind draws from one shared window; a kind with its own pace (override or
+  provider default — providers meter per endpoint, and embedding limits
+  run far above chat) carves out into its own window, so a set override
+  never multiplies the shared budget. RPM pacing runs inside a held
+  concurrency slot so a full window never parks unbounded threads; a
+  `None` pace means unpaced with 429 backoff as the reactive floor.
+  `stamp_llm_throttle_defaults` writes the defaults onto existing
+  model-serving connection rows at startup — key-presence idempotent, so a
+  user's edit is never overwritten.
+- **The engine's failure policy is classified by run kind
+  (`context.document`): ingestion runs are strict, query-time runs degrade
+  per item with a warning recorded in the trace.** A corpus where some
+  chunks silently lack their transformation is an invisible quality bug; at
+  query time a live answer beats an error, and the trace tells the truth.
+  Only provider faults and output-shape misses degrade — our own bugs
+  surface as themselves.
+- **A new `NodeTraceValue` kind lands in the wire mirror
+  (`app/schemas/traces.py` + `frontend/src/lib/types/traces.ts`) in the same
+  change.** The read model pins a `Literal`, so a kind it has never heard of
+  makes every trace containing it fail to parse — the whole trace endpoint
+  404s, not just the new value.
+- **Metadata-filter values name pipeline variables via the schema's own
+  `var` field, resolved at run time (`app/pipelines/filtering.py`) — never a
+  nested `$expr`.** Expression resolution walks top-level config keys only,
+  so an expression tag inside the filter structure would ship to the store
+  unresolved and match nothing.
+
 ## Vector-store backends (`app/vectorstores/`)
 
 - **Adding a backend is a checklist:** implement `VectorStoreBackend` in a new

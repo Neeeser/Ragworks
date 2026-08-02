@@ -23,6 +23,7 @@ from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.providers import (
     CatalogMetadata,
     CatalogModel,
+    ConfigFieldKind,
     ConnectionValidationResult,
     ProviderConfigField,
 )
@@ -36,6 +37,76 @@ EMBEDDING_INPUT_MARGIN_TOKENS = 16
 def effective_embedding_input_limit(published_limit: int) -> int:
     """Reserve provider-agnostic headroom for embedding input wrappers."""
     return max(0, published_limit - EMBEDDING_INPUT_MARGIN_TOKENS)
+
+
+def request_rpm_field(default: int | None) -> ProviderConfigField:
+    """The shared `requests_per_minute` form field for model-serving providers.
+
+    Declared per descriptor so the add-connection form renders it with zero
+    provider-specific frontend code; a `None` default means the provider is
+    unpaced unless the user sets a value.
+    """
+    return ProviderConfigField(
+        name="requests_per_minute",
+        label="Requests per minute",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default) if default is not None else "unlimited",
+        description="Pace model requests to this many per minute, shared across kinds.",
+        help=(
+            "Chat, embedding, and reranking requests through this connection "
+            "pace themselves across one sliding one-minute window, so a large "
+            "ingestion doesn't burn straight into the provider's rate limit. "
+            "Raise it to match your account's tier; empty uses the provider "
+            "default" + (f" ({default})." if default is not None else " (no pacing).")
+        ),
+        advanced=True,
+    )
+
+
+def kind_rpm_field(
+    kind_label: str, field_name: str, default: int | None
+) -> ProviderConfigField:
+    """An advanced per-kind pace override (embedding/reranking requests).
+
+    Providers meter per endpoint — embedding limits run far above chat — so
+    a set value carves that kind out of the shared window into its own.
+    """
+    return ProviderConfigField(
+        name=field_name,
+        label=f"{kind_label} requests per minute",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default) if default is not None else "shared",
+        description=(
+            f"Pace {kind_label.lower()} requests separately from the shared window."
+        ),
+        advanced=True,
+    )
+
+
+def request_concurrency_field(default: int) -> ProviderConfigField:
+    """The shared `max_concurrent_requests` form field for chat providers.
+
+    Declared per descriptor (with the provider's own default as the
+    placeholder) so the add-connection form renders it with zero
+    provider-specific frontend code.
+    """
+    return ProviderConfigField(
+        name="max_concurrent_requests",
+        label="Max concurrent requests",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default),
+        description="Concurrent LLM calls pipeline nodes may make through this connection.",
+        help=(
+            "Pipeline LLM nodes fan per-chunk calls out in parallel; this caps how "
+            "many run at once through this connection, across all pipelines. Raise "
+            "it if your account's rate tier allows more; lower it for constrained "
+            f"servers. Empty uses the provider default ({default})."
+        ),
+        advanced=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -133,6 +204,83 @@ class ProviderAdapter(ABC):
         raise InvalidInputError(
             f"{self.descriptor.label} connections do not provide chat models."
         )
+
+    #: Concurrent-LLM-call cap when the connection sets none. Starter-tier
+    #: safe per provider type; adapters serving CHAT override to match their
+    #: provider's published entry limits.
+    default_request_concurrency: ClassVar[int] = 4
+
+    #: Requests-per-minute pace when the connection sets none. `None` means
+    #: unpaced — right for providers that publish no router-side cap
+    #: (OpenRouter paid models) and for local servers, where reactive
+    #: backoff is the only limit that means anything.
+    default_request_rpm: ClassVar[int | None] = None
+
+    #: Per-kind pace defaults. `None` means the kind draws from the shared
+    #: window; a value carves it out into its own window at that rate —
+    #: providers meter per endpoint, and embedding limits run far above chat.
+    default_embedding_rpm: ClassVar[int | None] = None
+    default_rerank_rpm: ClassVar[int | None] = None
+
+    def _config_int(self, key: str) -> int | None:
+        """Read a positive int off the stored config; malformed falls back.
+
+        A throttle must never be what breaks a run, so a value the config
+        model would reject (unreachable through validated saves, but stored
+        rows predate validation) reads as unset rather than raising.
+        """
+        raw = self.connection.config.get(key)
+        try:
+            value = int(str(raw)) if raw is not None and str(raw).strip() else None
+        except ValueError:
+            return None
+        return value if value is not None and value >= 1 else None
+
+    def request_rpm(self) -> int | None:
+        """The shared requests-per-minute pace, or None (unpaced)."""
+        return self._config_int("requests_per_minute") or self.default_request_rpm
+
+    def request_pace(self, kind: ProviderKind) -> tuple[int | None, str]:
+        """Return `(rpm, window_key)` for one request kind.
+
+        A kind with its own pace (config override, or the provider's
+        per-kind default) gets its own window; otherwise it draws from the
+        shared window — so by default one budget governs everything, and a
+        set override never triples it.
+        """
+        overrides: dict[ProviderKind, tuple[str, int | None]] = {
+            ProviderKind.EMBEDDING: (
+                "embedding_requests_per_minute",
+                self.default_embedding_rpm,
+            ),
+            ProviderKind.RERANKING: (
+                "rerank_requests_per_minute",
+                self.default_rerank_rpm,
+            ),
+        }
+        entry = overrides.get(kind)
+        if entry is not None:
+            key, kind_default = entry
+            rpm = self._config_int(key) or kind_default
+            if rpm is not None:
+                return rpm, kind.value
+        return self.request_rpm(), "shared"
+
+    def request_concurrency(self) -> int:
+        """Concurrent LLM calls pipeline nodes may make through this connection.
+
+        Reads the stored `max_concurrent_requests` override, falling back to
+        the provider type's default. Malformed stored values fall back rather
+        than raise — a throttle must never be what breaks a run.
+        """
+        raw = self.connection.config.get("max_concurrent_requests")
+        try:
+            value = int(str(raw)) if raw is not None and str(raw).strip() else None
+        except ValueError:
+            value = None
+        if value is not None and value >= 1:
+            return min(value, 64)
+        return self.default_request_concurrency
 
     def reranker(self, model_name: str) -> Reranker:
         """Construct a reranker for a model served by this connection."""

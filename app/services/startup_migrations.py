@@ -22,6 +22,7 @@ from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.file_backfill import backfill_file_nodes
 from app.services.index_migration import migrate_index_entities
 from app.services.insight_migration import migrate_insight_settings
+from app.services.llm_throttle_migration import stamp_llm_throttle_defaults
 from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
@@ -33,6 +34,7 @@ from app.services.tokenizer_migration import migrate_tokenizer_nodes
 def run_startup_migrations(session: Session) -> None:
     """Bring stored rows up to the shapes the running code expects."""
     migrate_provider_connections(session)
+    stamp_llm_throttle_defaults(session)
     migrate_pipeline_bindings(session)
     migrate_insight_settings(session)
 

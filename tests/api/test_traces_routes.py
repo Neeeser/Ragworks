@@ -716,3 +716,14 @@ def test_end_to_end_trace_route_translates_missing_event(session: Session) -> No
         )
 
     assert excinfo.value.status_code == 404
+
+
+def test_trace_summary_accepts_llm_call_kind() -> None:
+    """A stored llm.rerank summary must parse on the wire — a kind missing
+    from the read model 404s every trace containing an LLM node."""
+    from app.schemas.traces import PipelineNodeSummaryValueRead
+
+    value = PipelineNodeSummaryValueRead.model_validate(
+        {"label": "LLM call", "value": {"model_name": "m"}, "kind": "llm_call"}
+    )
+    assert value.kind == "llm_call"

@@ -8,7 +8,14 @@ import httpx
 
 from app.clients.tei import TEIClient, TEIInfo, get_tei_client
 from app.db.models import ProviderConnection
-from app.providers.base import CatalogResult, ProviderAdapter, ProviderDescriptor
+from app.providers.base import (
+    CatalogResult,
+    ProviderAdapter,
+    ProviderDescriptor,
+    kind_rpm_field,
+    request_concurrency_field,
+    request_rpm_field,
+)
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.tei_embedder import TEIEmbedder
 from app.retrieval.rerankers.base import Reranker
@@ -51,6 +58,10 @@ TEI_DESCRIPTOR = ProviderDescriptor(
             kind=ConfigFieldKind.SECRET,
             required=False,
         ),
+        request_concurrency_field(2),
+        request_rpm_field(None),
+        kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
+        kind_rpm_field("Reranking", "rerank_requests_per_minute", None),
     ),
     docs_url="https://huggingface.co/docs/text-embeddings-inference",
 )
@@ -75,6 +86,7 @@ class TEIAdapter(ProviderAdapter):
 
     provider_type: ClassVar[ProviderType] = ProviderType.TEI
     descriptor: ClassVar[ProviderDescriptor] = TEI_DESCRIPTOR
+    default_request_concurrency: ClassVar[int] = 2
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse stored connection configuration and defer the live `/info` probe."""
