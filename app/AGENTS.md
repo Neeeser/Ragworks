@@ -561,6 +561,13 @@ frontend form code — only a new `ConfigFieldKind` would.
   contract, vary per call, and never move where data lives. A pipeline that
   must differ per collection is a different pipeline — `copy_pipeline` is how
   you get one.
+- **There is no per-collection node config either: creating a collection binds
+  pipelines, it never clones one with edited node configs.** A clone made at
+  creation time is a graph nobody ever opens again — it drifts from the
+  pipeline it was copied from, and the editor's own validation (embedding
+  limits, backend compatibility, expression taint) never sees the edit. Node
+  configuration belongs to the pipeline editor; `CollectionCreate` carries
+  pipeline *ids* and nothing else.
 - **A user's collections are separated inside one index by `namespace`, not by
   having their own index.** One pipeline already serves every collection that
   user owns without interference, which is why per-collection index choice buys

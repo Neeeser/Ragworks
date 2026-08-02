@@ -1,8 +1,9 @@
-"""Collection service: creation (with pipeline overrides), updates, and prompts.
+"""Collection service: creation, updates, and prompts.
 
 Owns the behavior the collection routes used to inline -- validating pipeline
-selections, cloning a base pipeline with per-node config overrides, and
-rendering/persisting a collection's system prompt. Bindings are created
+selections and rendering/persisting a collection's system prompt. A collection
+chooses which pipelines run, never what they do: node configuration lives in
+the pipeline editor, so there is no per-collection config. Bindings are created
 eagerly at collection creation (a collection is born with its ingest binding
 and primary search tool), so read-only surfaces never need to scaffold.
 Resolution and validation failures surface as typed domain errors
@@ -21,7 +22,6 @@ from app.schemas.collections import (
     CollectionCreate,
     CollectionPromptRead,
     CollectionUpdate,
-    PipelineNodeOverride,
 )
 from app.services.collection_tools import CollectionToolService
 from app.services.errors import InvalidInputError
@@ -62,24 +62,6 @@ class CollectionService:
             else [defaults.retrieval.id]
         )
         tool_pipelines = [self._require_tool_pipeline(tool_id, user) for tool_id in tool_ids]
-
-        overrides = payload.pipeline_overrides
-        if overrides and overrides.ingestion:
-            ingest = self._clone_pipeline_with_overrides(
-                user=user,
-                name=payload.name,
-                label="Ingestion",
-                base=ingest,
-                overrides=overrides.ingestion,
-            )
-        if overrides and overrides.retrieval and tool_pipelines:
-            tool_pipelines[0] = self._clone_pipeline_with_overrides(
-                user=user,
-                name=payload.name,
-                label="Retrieval",
-                base=tool_pipelines[0],
-                overrides=overrides.retrieval,
-            )
 
         collection = models.Collection(
             id=uuid4(),
@@ -183,24 +165,3 @@ class CollectionService:
             raise InvalidInputError("Invalid retrieval pipeline selection.")
         return pipeline
 
-    def _clone_pipeline_with_overrides(
-        self,
-        *,
-        user: models.User,
-        name: str,
-        label: str,
-        base: models.Pipeline,
-        overrides: list[PipelineNodeOverride],
-    ) -> models.Pipeline:
-        """Clone `base` into a collection-specific pipeline with node overrides."""
-        override_map = {override.node_id: override.config for override in overrides}
-        definition = self.pipelines.get_definition(base).model_copy(deep=True)
-        for node in definition.nodes:
-            if node.id in override_map:
-                node.config = {**node.config, **override_map[node.id]}
-        return self.pipelines.create_pipeline(
-            user=user,
-            name=f"{name} {label} Pipeline",
-            definition=definition,
-            change_summary=f"Customized {label.lower()} pipeline for collection.",
-        )

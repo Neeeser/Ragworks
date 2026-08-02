@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { layoutDefinition } from "@/components/collections/detail/overview/PipelineMiniMap";
-import { PipelineSelect } from "@/components/collections/detail/overview/PipelineSelect";
+import { layoutDefinition } from "@/components/pipelines/PipelineMiniMap";
+import { PipelineSelect } from "@/components/pipelines/PipelineSelect";
 import { makePipeline } from "@/test/fixtures";
 
 import type { PipelineDefinition } from "@/lib/types";

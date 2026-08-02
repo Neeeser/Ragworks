@@ -23,14 +23,7 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
-from app.pipelines.nodes.chunking import DEFAULT_CHUNK_OVERLAP
-from app.pipelines.resolution import resolve_static_definition
-from app.schemas.collections import (
-    CollectionCreate,
-    CollectionPipelineOverrides,
-    CollectionUpdate,
-    PipelineNodeOverride,
-)
+from app.schemas.collections import CollectionCreate, CollectionUpdate
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
@@ -87,108 +80,38 @@ def test_create_assigns_default_pipelines(session: Session) -> None:
     assert set(bound) == {"ingest", "tool"}
 
 
-def test_create_with_pipeline_overrides_clones_both(session: Session) -> None:
+def test_create_binds_tool_pipelines_in_order_with_the_first_primary(session: Session) -> None:
+    """Extra tool pipelines bind alongside the primary one, in the given order."""
     user = _create_user(session)
     pipeline_service = PipelineService(session)
     defaults = pipeline_service.ensure_default_pipelines(user)
+    second = pipeline_service.create_pipeline(
+        user=user,
+        name="Second Tool",
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
+    )
     session.commit()
-
-    ingestion_definition = pipeline_service.get_definition(defaults.ingestion)
-    retrieval_definition = pipeline_service.get_definition(defaults.retrieval)
-    chunker = next(n for n in ingestion_definition.nodes if n.type == "chunker.token")
-    retriever = next(n for n in retrieval_definition.nodes if n.type == "retriever.vector")
 
     created = CollectionService(session).create(
         user,
         CollectionCreate(
-            name="Overrides Collection",
-            pipeline_overrides=CollectionPipelineOverrides(
-                ingestion=[PipelineNodeOverride(node_id=chunker.id, config={"chunk_size": 2048})],
-                retrieval=[
-                    PipelineNodeOverride(node_id=retriever.id, config={"namespace": "custom-ns"})
-                ],
-            ),
+            name="Multi-tool",
+            tool_pipeline_ids=[defaults.retrieval.id, second.id],
         ),
     )
 
-    bound = _bound_ids(session, created)
-    assert bound["ingest"] != defaults.ingestion.id
-    assert bound["tool"] != defaults.retrieval.id
-
-    ingestion_pipeline = pipeline_service.get_pipeline(bound["ingest"], user.id)
-    retrieval_pipeline = pipeline_service.get_pipeline(bound["tool"], user.id)
-    assert ingestion_pipeline is not None
-    assert retrieval_pipeline is not None
-    updated_chunker = next(
-        n for n in pipeline_service.get_definition(ingestion_pipeline).nodes
-        if n.type == "chunker.token"
-    )
-    # Resolved, because a store-bound node's backend is an expression over the
-    # pipeline's index variable — the raw config holds the expression.
-    updated_retriever = next(
-        n
-        for n in resolve_static_definition(
-            pipeline_service.get_definition(retrieval_pipeline)
-        ).nodes
-        if n.type == "retriever.vector"
-    )
-    # Merged, not replaced: the untouched sibling field survives the override.
-    assert updated_chunker.config["chunk_size"] == 2048
-    assert updated_chunker.config["chunk_overlap"] == DEFAULT_CHUNK_OVERLAP
-    assert updated_retriever.config["namespace"] == "custom-ns"
-    assert updated_retriever.config["backend"] == "pgvector"
-
-
-def test_create_with_ingestion_overrides_only(session: Session) -> None:
-    user = _create_user(session)
-    pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
-    session.commit()
-    chunker = next(
-        n for n in pipeline_service.get_definition(defaults.ingestion).nodes
-        if n.type == "chunker.token"
-    )
-
-    created = CollectionService(session).create(
-        user,
-        CollectionCreate(
-            name="Overrides",
-            pipeline_overrides=CollectionPipelineOverrides(
-                ingestion=[PipelineNodeOverride(node_id=chunker.id, config={"chunk_size": 2048})],
-            ),
-        ),
-    )
-
-    bound = _bound_ids(session, created)
-    assert bound["ingest"] != defaults.ingestion.id
-    assert bound["tool"] == defaults.retrieval.id
-
-
-def test_create_with_retrieval_overrides_only(session: Session) -> None:
-    user = _create_user(session)
-    pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
-    session.commit()
-    retriever = next(
-        n for n in pipeline_service.get_definition(defaults.retrieval).nodes
-        if n.type == "retriever.vector"
-    )
-
-    created = CollectionService(session).create(
-        user,
-        CollectionCreate(
-            name="Overrides",
-            pipeline_overrides=CollectionPipelineOverrides(
-                retrieval=[
-                    PipelineNodeOverride(node_id=retriever.id, config={"namespace": "custom-ns"})
-                ],
-            ),
-        ),
-    )
-
-    bound = _bound_ids(session, created)
-    assert bound["tool"] != defaults.retrieval.id
-    assert bound["ingest"] == defaults.ingestion.id
+    tools = [
+        binding
+        for binding in CollectionPipelineBindingRepository(session).list_for_collection(
+            created.id
+        )
+        if models.BindingRole(binding.role) == models.BindingRole.TOOL
+    ]
+    tools.sort(key=lambda binding: binding.position)
+    assert [binding.pipeline_id for binding in tools] == [defaults.retrieval.id, second.id]
+    assert [binding.is_primary for binding in tools] == [True, False]
 
 
 def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
