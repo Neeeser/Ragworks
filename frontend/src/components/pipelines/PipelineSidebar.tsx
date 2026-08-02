@@ -8,7 +8,7 @@ import { PipelineCatalog } from "./PipelineCatalog";
 import { PipelineNodeLibrary } from "./PipelineNodeLibrary";
 import { VariablesPanel } from "./VariablesPanel";
 
-import type { NodeFamily } from "./lib/pipeline-theme";
+import type { NodeCatalogGroup } from "./lib/node-library-filter";
 import type {
   CatalogModel,
   IndexBackend,
@@ -18,17 +18,18 @@ import type {
   VectorIndex,
 } from "@/lib/types";
 
-type SidebarTab = "pipelines" | "variables";
+type SidebarTab = "pipelines" | "nodes" | "variables";
 
-type PipelineSidebarProps = {
+export type PipelineSidebarProps = {
   pipelines: Pipeline[];
   selectedPipelineId?: string;
-  catalog: Array<{ family: NodeFamily; specs: NodeSpec[] }>;
+  catalog: NodeCatalogGroup[];
   onSelectPipeline: (pipeline: Pipeline) => void;
   onDeletePipeline: (pipeline: Pipeline) => void;
   onCopyPipeline: (pipeline: Pipeline) => void;
   pipelineUsage: Set<string>;
   onPreviewNode: (spec: NodeSpec) => void;
+  onBrowseAllNodes: () => void;
   variables: PipelineVariable[];
   onVariablesChange: (variables: PipelineVariable[]) => void;
   variableNodes: Array<{ type: string; config: Record<string, unknown> }>;
@@ -41,9 +42,9 @@ type PipelineSidebarProps = {
 };
 
 /**
- * The editor's left rail: the pipelines in this kind plus the node library, or
- * the open pipeline's variables. It is a pane of the workspace card, not a card
- * of its own — a card inside a card is the nesting the console forbids.
+ * The editor's left rail: the pipeline catalog, the node library, or the open
+ * pipeline's variables — one tab each. It is a pane of the workspace card, not
+ * a card of its own — a card inside a card is the nesting the console forbids.
  */
 export function PipelineSidebar({
   pipelines,
@@ -54,6 +55,7 @@ export function PipelineSidebar({
   onCopyPipeline,
   pipelineUsage,
   onPreviewNode,
+  onBrowseAllNodes,
   variables,
   onVariablesChange,
   variableNodes,
@@ -74,6 +76,7 @@ export function PipelineSidebar({
         <TabList<SidebarTab>
           tabs={[
             { id: "pipelines", label: "Pipelines" },
+            { id: "nodes", label: "Nodes" },
             { id: "variables", label: "Variables" },
           ]}
           active={tab}
@@ -82,9 +85,15 @@ export function PipelineSidebar({
           className="w-full"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* The Nodes tab owns its own scroll (rail + panel), so the shared
+          wrapper must not scroll — each panel manages its own overflow. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "pipelines" ? (
-          <div role="tabpanel" aria-labelledby={tabId("pipelines")}>
+          <div
+            role="tabpanel"
+            aria-labelledby={tabId("pipelines")}
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
             <PipelineCatalog
               pipelines={pipelines}
               selectedPipelineId={selectedPipelineId}
@@ -93,16 +102,24 @@ export function PipelineSidebar({
               onCopy={onCopyPipeline}
               pipelineUsage={pipelineUsage}
             />
+          </div>
+        ) : tab === "nodes" ? (
+          <div role="tabpanel" aria-labelledby={tabId("nodes")} className="min-h-0 flex-1">
             <PipelineNodeLibrary
               catalog={catalog}
               onPreviewNode={onPreviewNode}
+              onBrowseAll={onBrowseAllNodes}
               hasRerankingProvider={hasRerankingProvider}
               rerankingProviderMessage={rerankingProviderMessage}
               knownBackends={knownBackends}
             />
           </div>
         ) : (
-          <div role="tabpanel" aria-labelledby={tabId("variables")} className="p-2">
+          <div
+            role="tabpanel"
+            aria-labelledby={tabId("variables")}
+            className="min-h-0 flex-1 overflow-y-auto p-2"
+          >
             <VariablesPanel
               variables={variables}
               onChange={onVariablesChange}

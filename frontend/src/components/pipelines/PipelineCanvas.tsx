@@ -112,8 +112,10 @@ export function PipelineCanvas({
           </Tooltip>
         </div>
       ) : null}
+      {/* Legend sits bottom-14 below xl: the mobile panel pills float at
+          bottom-center, and the legend must not sit under them. */}
       {dataTypes.length > 0 ? (
-        <div className="card-surface absolute bottom-3 right-3 z-10 flex max-w-[70%] flex-wrap items-center justify-end gap-x-3 gap-y-1 bg-canvas-raised px-2 py-1 shadow-elevation-2">
+        <div className="card-surface absolute bottom-14 right-3 z-10 flex max-w-[70%] flex-wrap items-center justify-end gap-x-3 gap-y-1 bg-canvas-raised px-2 py-1 shadow-elevation-2 xl:bottom-3">
           {dataTypes.map((dataType) => (
             <span key={dataType} className="flex items-center gap-1.5">
               <span

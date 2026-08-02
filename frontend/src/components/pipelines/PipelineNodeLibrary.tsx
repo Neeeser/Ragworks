@@ -1,153 +1,128 @@
 "use client";
 
-import Link from "next/link";
+import { LibraryBig, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
+import { inputClass } from "../ui/field";
 import { InstrumentLabel } from "../ui/instrument-label";
-import { Tooltip } from "../ui/tooltip";
 
-import { IndexBackendIcon } from "./icons/IndexBackendIcon";
-import { backendSupportLabel, restrictedBackends } from "./lib/backend-support";
+import { filterNodeCatalog, type NodeCatalogGroup } from "./lib/node-library-filter";
 import { getNodeFamilyLabel, getNodeFamilyStyles, type NodeFamily } from "./lib/pipeline-theme";
-import { NODE_PRESET_MIME, presetizedSpec } from "./lib/presets";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
+import { NodeLibraryRail } from "./NodeLibraryRail";
+import { NodeLibraryRow } from "./NodeLibraryRow";
 
-import type { IndexBackend, NodePreset, NodeSpec } from "@/lib/types";
-import type { DragEvent } from "react";
+import type { IndexBackend, NodeSpec } from "@/lib/types";
 
 type PipelineNodeLibraryProps = {
-  catalog: Array<{ family: NodeFamily; specs: NodeSpec[] }>;
+  catalog: NodeCatalogGroup[];
   onPreviewNode: (spec: NodeSpec) => void;
+  /** Opens the full node catalog overlay. */
+  onBrowseAll: () => void;
   hasRerankingProvider?: boolean;
   rerankingProviderMessage?: string | null;
   /** Backends this deployment knows about; used to flag backend-restricted nodes. */
   knownBackends?: IndexBackend[];
 };
 
-const NODE_DRAG_TYPE = "application/ragworks-node";
-
+/**
+ * The Nodes tab: a category rail filtering a panel of draggable node rows,
+ * with search across the whole catalog and the catalog overlay's entry point
+ * pinned at the bottom. Built for a catalog that keeps growing — categories
+ * collapse into rail dots instead of stacking section after section.
+ */
 export function PipelineNodeLibrary({
   catalog,
   onPreviewNode,
+  onBrowseAll,
   hasRerankingProvider = true,
   rerankingProviderMessage = RERANKER_PROVIDER_REQUIRED,
   knownBackends = [],
 }: PipelineNodeLibraryProps) {
-  const handleDragStart = (
-    event: DragEvent<HTMLButtonElement>,
-    spec: NodeSpec,
-    preset?: NodePreset,
-  ) => {
-    if (spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.setData(NODE_DRAG_TYPE, spec.type);
-    if (preset) {
-      event.dataTransfer.setData(NODE_PRESET_MIME, preset.id);
-    }
-    event.dataTransfer.effectAllowed = "move";
-  };
+  const [activeFamily, setActiveFamily] = useState<NodeFamily | null>(null);
+  const [search, setSearch] = useState("");
+
+  const families = useMemo(
+    () => catalog.map((group) => ({ family: group.family, count: group.specs.length })),
+    [catalog],
+  );
+  const visible = useMemo(
+    () => filterNodeCatalog(catalog, activeFamily, search),
+    [catalog, activeFamily, search],
+  );
+  const searching = search.trim().length > 0;
 
   return (
-    <div className="border-t border-hairline p-2">
-      <div className="flex items-baseline justify-between gap-2 px-1 py-1">
-        <InstrumentLabel className="text-body">Node library</InstrumentLabel>
-        {/* Kept: drag-to-add is the only affordance the layout cannot show. */}
-        <InstrumentLabel>Drag onto the canvas</InstrumentLabel>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="relative shrink-0 p-2 pb-1.5">
+        <Search
+          className="pointer-events-none absolute left-4 top-1/2 mt-px h-3.5 w-3.5 -translate-y-1/2 text-meta"
+          aria-hidden
+        />
+        <input
+          type="search"
+          aria-label="Search nodes"
+          placeholder="Search nodes"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className={cn(inputClass, "pl-8")}
+        />
       </div>
-      <div className="mt-1 space-y-3">
-        {catalog.map(({ family, specs }) => {
-          const styles = getNodeFamilyStyles(family);
-          return (
-            <div key={family}>
-              <InstrumentLabel className={`px-1 ${styles.badge}`}>
-                {getNodeFamilyLabel(family)}
-              </InstrumentLabel>
-              <div className="mt-1 space-y-1">
-                {specs.map((spec) => {
-                  const unavailable = spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider;
-                  // Restriction is informational: a store-bound node still
-                  // drags onto the canvas so a user can build a pipeline for
-                  // a backend they haven't selected yet — validation is the
-                  // hard gate. The badge just sets expectations up front.
-                  const restricted = restrictedBackends(spec, knownBackends);
-                  return (
-                    <div key={spec.type}>
-                      <button
-                        type="button"
-                        onClick={() => onPreviewNode(spec)}
-                        onDragStart={(event) => handleDragStart(event, spec)}
-                        draggable={!unavailable}
-                        disabled={unavailable}
-                        className={`w-full rounded-control border border-hairline bg-surface px-2 py-1.5 text-left transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-hairline disabled:hover:bg-surface ${styles.border}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-ui font-medium text-primary">
-                              {spec.label}
-                            </p>
-                            {/* A node type id is a literal — mono, verbatim. */}
-                            <p className="truncate font-mono text-instrument text-meta">
-                              {spec.type}
-                            </p>
-                          </div>
-                          {restricted ? (
-                            // One backend logo per store the node works with;
-                            // a single tooltip carries the "only available on"
-                            // detail so the row stays uncluttered and new
-                            // backends just add another icon.
-                            <Tooltip
-                              content={`Only available on ${backendSupportLabel(restricted)}`}
-                              side="left"
-                              triggerClassName="mt-0.5 shrink-0 items-center gap-1"
-                            >
-                              {restricted.map((backend) => (
-                                <IndexBackendIcon
-                                  key={backend}
-                                  backend={backend}
-                                  className="h-3.5 w-3.5 shrink-0"
-                                />
-                              ))}
-                            </Tooltip>
-                          ) : null}
-                        </div>
-                      </button>
-                      {spec.presets && spec.presets.length > 0 ? (
-                        <div className="mt-1 space-y-1 pl-3">
-                          {spec.presets.map((preset) => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              draggable={!unavailable}
-                              onClick={() => onPreviewNode(presetizedSpec(spec, preset))}
-                              onDragStart={(event) => handleDragStart(event, spec, preset)}
-                              className="w-full rounded-control border border-hairline bg-canvas px-2 py-1 text-left transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
-                            >
-                              <span className="block truncate text-instrument font-medium text-body">
-                                {preset.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                      {unavailable ? (
-                        <p className="mt-1 px-1 text-instrument text-muted">
-                          {rerankingProviderMessage}{" "}
-                          <Link
-                            href="/settings"
-                            className="rounded-control text-accent-cyan underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-                          >
-                            Settings
-                          </Link>
-                        </p>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
+      <div className="flex min-h-0 flex-1">
+        <NodeLibraryRail families={families} active={activeFamily} onSelect={setActiveFamily} />
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {visible.length === 0 ? (
+            <p className="px-1 py-2 text-instrument text-muted">
+              No nodes match &ldquo;{search.trim()}&rdquo;.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {visible.map(({ family, specs }) => (
+                <div key={family}>
+                  {/* While one category is pinned the rail already names it, but
+                      search results span categories — the header is what says
+                      where a hit lives. */}
+                  {activeFamily === null || searching ? (
+                    <InstrumentLabel className={cn("px-1", getNodeFamilyStyles(family).badge)}>
+                      {getNodeFamilyLabel(family)}
+                    </InstrumentLabel>
+                  ) : null}
+                  <div className="mt-1 space-y-1">
+                    {specs.map((spec) => (
+                      <NodeLibraryRow
+                        key={spec.type}
+                        spec={spec}
+                        family={family}
+                        unavailable={spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider}
+                        unavailableMessage={rerankingProviderMessage}
+                        knownBackends={knownBackends}
+                        onPreviewNode={onPreviewNode}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          );
-        })}
+          )}
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-hairline p-2">
+        <button
+          type="button"
+          onClick={onBrowseAll}
+          className="flex w-full items-center gap-2 rounded-control border border-hairline bg-surface px-2 py-1.5 text-ui font-medium text-body transition-colors duration-80 ease-standard hover:border-strong hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset"
+        >
+          <LibraryBig className="h-3.5 w-3.5 text-muted" aria-hidden />
+          Browse all nodes
+        </button>
+        {/* Kept: drag-to-add is the only affordance the layout cannot show.
+            xl-only — in the bottom sheet the canvas is covered, so the gesture
+            does not exist and the hint would mislead. */}
+        <InstrumentLabel className="mt-1.5 hidden text-center xl:block">
+          Drag nodes onto the canvas
+        </InstrumentLabel>
       </div>
     </div>
   );

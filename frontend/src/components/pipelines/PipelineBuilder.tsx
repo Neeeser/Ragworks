@@ -28,8 +28,13 @@ import {
   toFlowNodes,
   toPipelineDefinition,
 } from "./lib/pipeline-utils";
-import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
+import {
+  previewWithRerankerGate,
+  RERANKER_NODE_TYPE,
+  RERANKER_PROVIDER_REQUIRED,
+} from "./lib/reranking";
 import { buildIndexVariable } from "./lib/variable-env";
+import { NodeCatalogOverlay } from "./NodeCatalogOverlay";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
 import { PipelineBuilderWorkspace } from "./PipelineBuilderWorkspace";
 import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
@@ -46,20 +51,6 @@ import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type PipelineBuilderProps = {
   kind: PipelineKind;
-};
-
-const previewWithRerankerGate = (
-  spec: NodeSpec,
-  hasRerankingProvider: boolean,
-  rerankingProviderMessage: string | null,
-  previewNodeSpec: (candidate: NodeSpec) => void,
-  setMessage: (message: string | null) => void,
-) => {
-  if (spec.type === RERANKER_NODE_TYPE && !hasRerankingProvider) {
-    setMessage(rerankingProviderMessage ?? RERANKER_PROVIDER_REQUIRED);
-    return;
-  }
-  previewNodeSpec(spec);
 };
 
 export function PipelineBuilder({ kind }: PipelineBuilderProps) {
@@ -107,6 +98,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [variables, setVariables] = useState<PipelineVariable[]>([]);
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [nodeCatalogOpen, setNodeCatalogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
     Node<PipelineNodeData>,
@@ -362,6 +354,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onCopyPipeline: handleCopyPipeline,
           pipelineUsage,
           onPreviewNode: handlePreviewNode,
+          onBrowseAllNodes: () => setNodeCatalogOpen(true),
           variables,
           onVariablesChange: setVariables,
           variableNodes,
@@ -394,6 +387,20 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onInit: setReactFlowInstance,
         }}
       />
+
+      {nodeCatalogOpen ? (
+        <NodeCatalogOverlay
+          catalog={catalogByFamily}
+          onClose={() => setNodeCatalogOpen(false)}
+          onAddNode={(spec) => {
+            handleAddNode(spec);
+            setNodeCatalogOpen(false);
+          }}
+          hasRerankingProvider={hasRerankingProvider}
+          rerankingProviderMessage={rerankingProviderMessage}
+          knownBackends={backends.map((info) => info.backend)}
+        />
+      ) : null}
 
       <NodeEditorDrawer
         node={inspectedNode}
