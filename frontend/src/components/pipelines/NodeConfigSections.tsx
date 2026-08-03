@@ -422,6 +422,7 @@ export function NodeConfigSections({
             <ChunkWindowSummary
               chunkSize={chunkWindow.size}
               chunkOverlap={chunkWindow.overlap}
+              unit={config.tokenizer === "whitespace" ? "words" : "tokens"}
               expression={chunkWindow.expression}
             />
           ) : null}

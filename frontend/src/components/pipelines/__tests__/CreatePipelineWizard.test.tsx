@@ -295,6 +295,26 @@ describe("CreatePipelineWizard", () => {
     });
   }, 15000);
 
+  it("labels the chunk window in tokens, the unit the chunker it builds counts in", async () => {
+    // This wizard scaffolds a `chunker.token` node, and every embedding-limit
+    // check downstream is expressed in tokens — so calling the same numbers
+    // "words" is not merely inconsistent with the setup wizard, it states the
+    // wrong unit for the field it labels.
+    const user = userEvent.setup();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+
+    await user.click(screen.getByRole("button", { name: /Advanced chunking/ }));
+
+    expect(screen.getByLabelText("Chunk size (tokens)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Chunk overlap (tokens)")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/\(words\)/)).not.toBeInTheDocument();
+  }, 15000);
+
   it("blocks creation when a refresh removes the selected connection-model pair", async () => {
     const user = userEvent.setup();
     const selected = makeCatalogModel({

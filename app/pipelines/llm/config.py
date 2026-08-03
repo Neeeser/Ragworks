@@ -89,4 +89,17 @@ class LlmNodeConfig(BaseModel):
     system_prompt: str = ""
     prompt: str = ""
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    #: Sent as the request's `max_tokens`, so it bounds what the model may
+    #: return rather than merely describing it. Unset means unbounded — and a
+    #: node whose fields write into an item's text then adds an amount nothing
+    #: downstream can predict, which is what makes the chunk-window check
+    #: report it as unverifiable instead of silently passing.
+    max_output_tokens: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Maximum tokens the model may return per call. Leave unset for the "
+            "model's own default length."
+        ),
+    )
     output_fields: list[OutputFieldSpec] = Field(default_factory=list)

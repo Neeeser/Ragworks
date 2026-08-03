@@ -22,6 +22,8 @@ const SAVE_NODE = "Save node";
 const CLOSE_EDITOR = "Close node editor";
 const RENAMED_LABEL = "Renamed";
 const NODE_LABEL = "Node label";
+const NODE_TYPE_CHUNKER = "chunker.token";
+const TOKENIZER_SELECT = "Tokenizer";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -290,7 +292,7 @@ describe("NodeEditorDrawer", () => {
     const user = userEvent.setup();
     renderDrawer({
       node: makeNode(
-        "chunker.token",
+        NODE_TYPE_CHUNKER,
         { tokenizer: "wordpiece" },
         {
           properties: {
@@ -308,13 +310,52 @@ describe("NodeEditorDrawer", () => {
       ),
     });
 
-    expect(screen.getByRole("combobox", { name: "Tokenizer" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: TOKENIZER_SELECT })).toBeInTheDocument();
     expect(screen.queryByLabelText("HuggingFace model id")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("combobox", { name: "Tokenizer" }));
+    await user.click(screen.getByRole("combobox", { name: TOKENIZER_SELECT }));
     await user.click(screen.getByRole("option", { name: "HuggingFace" }));
 
     expect(screen.getByLabelText("HuggingFace model id")).toBeInTheDocument();
+  });
+
+  it("counts the chunk window in the unit the configured tokenizer actually measures", async () => {
+    // A whitespace-configured chunker counts whitespace-delimited words, which
+    // is not what a model counts — the embedding guard says as much when it
+    // refuses to enforce a provider limit with that counter. Printing "tokens"
+    // beside those numbers states the wrong unit for the field, and the whole
+    // chunk-window math downstream is expressed in model tokens.
+    const user = userEvent.setup();
+    const chunkerSchema = {
+      properties: {
+        chunk_size: { type: "integer", default: 512 },
+        chunk_overlap: { type: "integer", default: 64 },
+        tokenizer: {
+          type: "string",
+          enum: ["wordpiece", "cl100k", "whitespace", "huggingface"],
+          default: "wordpiece",
+        },
+      },
+    };
+    renderDrawer({
+      node: makeNode(
+        NODE_TYPE_CHUNKER,
+        { chunk_size: 512, chunk_overlap: 64, tokenizer: "wordpiece" },
+        chunkerSchema,
+      ),
+    });
+
+    const windowText = () =>
+      Array.from(document.querySelectorAll("p"))
+        .map((paragraph) => paragraph.textContent ?? "")
+        .find((text) => text.includes("sent to the embedder")) ?? "";
+
+    expect(windowText()).toContain("576 tokens sent to the embedder");
+
+    await user.click(screen.getByRole("combobox", { name: TOKENIZER_SELECT }));
+    await user.click(screen.getByRole("option", { name: "Whitespace" }));
+
+    expect(windowText()).toContain("576 words sent to the embedder");
   });
 
   it("closes directly while clean, via the close button and Escape", () => {
@@ -695,7 +736,7 @@ describe("NodeEditorDrawer", () => {
   it("renders a structured chunk-size error beside the chunk-size field", () => {
     renderDrawer({
       node: makeNode(
-        "chunker.token",
+        NODE_TYPE_CHUNKER,
         { chunk_size: 1024 },
         {
           properties: {

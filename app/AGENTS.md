@@ -149,6 +149,38 @@ colocate a single file with its consumer.
   embedders yields **one** finding bound by the smallest limit — the editor
   renders a single issue per field, so several would hide each other and could
   leave the least restrictive one showing.
+- **Text a node on that path *writes into* items counts against the same
+  limit, and a `replace` field takes the window over rather than extending
+  it.** `app/pipelines/chunk_reach.py` carries each node's
+  `max_output_tokens` (plus its separators) along the walk: a prepend/append
+  accumulates on the chunker's window, so a window that fitted the model
+  until a contextual-retrieval node was wired in stops reporting as fine,
+  while a replace discards the chunk — from that node onward the chunker's
+  size governs nothing, the node's own output is the base, and the finding is
+  addressed to *its* `max_output_tokens` because changing `chunk_size` cannot
+  fix it.
+- **A node writing text with no declared budget is reported as unverifiable,
+  never as zero.** A missing term silently turns an over-limit window into
+  one that looks verified; for a replace nothing about the window is knowable
+  at all, so no comparison is made and the unverifiable finding is the whole
+  answer.
+- **A node's declared budget must be enforced on the request that spends it.**
+  `LlmEngine` sends `max_output_tokens` as the canonical `max_tokens`
+  parameter — the window arithmetic above trusts that number, so a budget the
+  model is free to ignore is worse than none, and a wire spelling
+  (`max_output_tokens`, `num_predict`) is dropped in silence by the parameter
+  filter.
+- **The embedding guard repeats *both* affixes onto every part it splits an
+  item into** (`app/pipelines/nodes/embedding_guard.py`, reading
+  `Item.text_affixes`, which `llm/mapping.py` records on a `prepend` or an
+  `append`). Splitting the whole text leaves the situating context on one end
+  part and every other part carrying content with none of it — the exact
+  inversion of what contextual retrieval is for, and invisible except as a
+  chunk count that doubled. `prepend` and `append` are one bug from two
+  sides, so they are recorded and repeated together rather than one being the
+  special case. The split budget subtracts both affixes so parts stay under
+  the limit; affixes leaving too little room for content are not repeated,
+  and the trace warning says which of the two happened.
 - **PaCMAP runs only in the projection subprocess
   (`app/visualization/insights/projection_worker.py`), never in the app
   process.** pacmap's faiss+numba OpenMP runtimes clash with the sklearn this
