@@ -103,6 +103,11 @@ export function NewRunWizard({
   const truncated = truncatedCutoffs(kSelected, depthCap.depth);
 
   const readyDatasets = datasets.filter((entry) => entry.status === "ready");
+  // The retrieval pipeline has to be one that runs the prompt, or pinning a
+  // version changes nothing — the backend refuses, so say so up front.
+  const retrievalHint = comparison
+    ? `Pick the pipeline whose node runs ${comparison.promptName}. Each version gets its own copy of it.`
+    : null;
   const stepReady = [
     datasetId !== "",
     ingestionId !== "" && retrievalId !== "",
@@ -159,7 +164,11 @@ export function NewRunWizard({
     <WizardShell
       open={open}
       title="Evals"
-      subtitle="New eval run"
+      subtitle={
+        comparison
+          ? `Comparing ${comparison.promptName} v${comparison.versionA} and v${comparison.versionB}`
+          : "New eval run"
+      }
       steps={STEPS}
       activeStepIndex={step}
       message={message}
@@ -173,7 +182,7 @@ export function NewRunWizard({
           onNext={() =>
             step === STEPS.length - 1 ? launch() : dispatch({ type: "set_step", step: step + 1 })
           }
-          nextLabel="Start run"
+          nextLabel={comparison ? "Start both runs" : "Start run"}
           nextDisabled={!stepReady}
           busy={busy}
           onCancel={onClose}
@@ -210,7 +219,10 @@ export function NewRunWizard({
               aria-label="Ingestion pipeline"
             />
           </Field>
-          <Field label="Retrieval pipeline" hint="Queried once per benchmark query.">
+          <Field
+            label="Retrieval pipeline"
+            hint={retrievalHint ?? "Queried once per benchmark query."}
+          >
             <CustomSelect
               value={retrievalId}
               placeholder="Select a retrieval pipeline"
