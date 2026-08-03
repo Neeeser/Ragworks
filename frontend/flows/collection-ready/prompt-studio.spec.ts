@@ -20,6 +20,9 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
+const SYSTEM_PROMPT = "System prompt";
+const FORK_NAME = "My base prompt";
+
 test("built-in prompts are read-only and fork-and-edit versions the draft", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
@@ -40,22 +43,22 @@ test("built-in prompts are read-only and fork-and-edit versions the draft", asyn
   await expect(page.getByText("Built-in · read-only")).toBeVisible();
   await expect(page.getByRole("button", { name: /Save as v/ })).toHaveCount(0);
 
-  const editor = page.getByRole("textbox", { name: "System prompt" });
+  const editor = page.getByRole("textbox", { name: SYSTEM_PROMPT });
   await expect(editor).toBeVisible();
   await editor.fill("You are Ragworks. Address {{user.full_name}} directly.");
   await page.getByRole("button", { name: "Fork and edit" }).click();
 
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Name").fill("My base prompt");
+  await dialog.getByLabel("Name").fill(FORK_NAME);
   await dialog.getByRole("button", { name: "Fork", exact: true }).click();
 
-  await expect(page.getByRole("heading", { name: "My base prompt" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: FORK_NAME })).toBeVisible({
     timeout: 20_000,
   });
   await expect(page.getByRole("tab", { name: /Versions \(1\)/ })).toBeVisible();
 
   // The fork is owned: edit again and save as v2.
-  const forkEditor = page.getByRole("textbox", { name: "System prompt" });
+  const forkEditor = page.getByRole("textbox", { name: SYSTEM_PROMPT });
   await forkEditor.fill("You are Ragworks. Address {{user.full_name}} directly. Be terse.");
   await page.getByLabel("Version label").fill("flow test");
   await page.getByRole("button", { name: /Save as v2/ }).click();
@@ -69,12 +72,12 @@ test("built-in prompts are read-only and fork-and-edit versions the draft", asyn
   // the natural way to compare two prompts, so it has to ask first.
   await page.getByRole("tab", { name: "Editor" }).click();
   await page
-    .getByRole("textbox", { name: "System prompt" })
+    .getByRole("textbox", { name: SYSTEM_PROMPT })
     .fill("A draft that was never saved as a version.");
   await page.getByRole("button", { name: /Contextual Retrieval/ }).click();
   await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("heading", { name: "My base prompt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: FORK_NAME })).toBeVisible();
 });
 
 test("the values view renders variables as chips carrying their sample values", async ({
