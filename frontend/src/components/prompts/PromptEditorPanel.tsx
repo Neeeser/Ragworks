@@ -4,6 +4,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { OutputFieldsEditor } from "@/components/pipelines/OutputFieldsEditor";
+import { MessageBody } from "@/components/ui/message-stack";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -34,6 +35,14 @@ const VIEW_OPTIONS: Array<{ id: VariableView; label: string }> = [
   { id: "values", label: "Values" },
 ];
 
+/** Whether a template box shows its markdown source or the formatted result. */
+type RenderView = "source" | "rendered";
+
+const RENDER_OPTIONS: Array<{ id: RenderView; label: string }> = [
+  { id: "source", label: "Source" },
+  { id: "rendered", label: "Rendered" },
+];
+
 interface TemplateFieldProps {
   label: string;
   hint: string;
@@ -42,20 +51,25 @@ interface TemplateFieldProps {
   onChange: (value: string) => void;
   placeholder: string;
   view: VariableView;
+  /** Whether the box shows markdown source or the formatted result. */
+  render: RenderView;
+  /** The formatted text for this template — variables already substituted. */
+  rendered: string;
   values: Record<string, string>;
   onChipClick: (target: ChipTarget) => void;
-  editorActions?: ReactNode;
   editorRef?: Ref<TemplateEditorHandle>;
   editorClassName?: string;
 }
 
 /**
- * One template, at the panel's full width.
+ * One template, at the panel's full width, in one of two readings.
  *
- * There is deliberately no preview column beside it: the two would differ
- * only where a variable appears, and the `values` view already shows that
- * difference in place. The exact message payload — roles, markdown, what
- * actually goes on the wire — belongs to the Test tab, which sends it.
+ * Source is the editable markdown; Rendered is the same box showing what
+ * that markdown becomes — headings, emphasis, lists — which syntax
+ * highlighting alone does not tell you. Rendered is necessarily read-only,
+ * so the box says so rather than silently swallowing keystrokes. Both
+ * readings honour the variable view: Names keeps `{{text}}` literal,
+ * Values substitutes the sample value.
  */
 function TemplateField({
   label,
@@ -65,9 +79,10 @@ function TemplateField({
   onChange,
   placeholder,
   view,
+  render,
+  rendered,
   values,
   onChipClick,
-  editorActions,
   editorRef,
   editorClassName,
 }: TemplateFieldProps) {
@@ -77,19 +92,87 @@ function TemplateField({
         <span className="shrink-0 text-instrument font-medium text-primary">{label}</span>
         <span className="font-mono text-instrument text-accent-violet">{role}</span>
         <span className="min-w-0 text-instrument text-meta">{hint}</span>
+        {render === "rendered" && (
+          <span className="text-instrument text-meta">Preview — switch to Source to edit.</span>
+        )}
       </div>
-      <TemplateEditor
-        ref={editorRef}
-        ariaLabel={label}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        view={view}
-        values={values}
-        onChipClick={onChipClick}
-        actions={editorActions}
-        className={cn("min-h-[120px]", editorClassName)}
-      />
+      {render === "rendered" ? (
+        <MessageBody
+          content={rendered}
+          view="rendered"
+          className={cn("min-h-[120px]", editorClassName)}
+        />
+      ) : (
+        <TemplateEditor
+          ref={editorRef}
+          ariaLabel={label}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          view={view}
+          values={values}
+          onChipClick={onChipClick}
+          className={cn("min-h-[120px]", editorClassName)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * What each box shows when Rendered.
+ *
+ * Values reads the server's render, so markdown *and* substitution are
+ * previewed exactly as they will be sent; Names previews the formatting
+ * while leaving the references themselves visible.
+ */
+function renderedTemplates(
+  view: VariableView,
+  draft: PromptDraft,
+  preview: PromptRenderResult | null,
+): { body: string; system: string } {
+  if (view !== "values") return { body: draft.body, system: draft.systemBody };
+  return {
+    body: preview?.rendered ?? draft.body,
+    system: preview?.rendered_system ?? draft.systemBody,
+  };
+}
+
+interface ViewControlsProps {
+  view: VariableView;
+  onViewChange: (view: VariableView) => void;
+  render: RenderView;
+  onRenderChange: (render: RenderView) => void;
+  /** Full-screen toggle — panel-level, so it survives the Rendered view. */
+  expand: ReactNode;
+}
+
+/** The two independent readings of a template, and what each one means. */
+function ViewControls({ view, onViewChange, render, onRenderChange, expand }: ViewControlsProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="min-w-0 text-instrument text-meta">
+        {render === "rendered"
+          ? "Markdown as it will be sent."
+          : view === "names"
+            ? "Variables shown by name."
+            : "Variables shown as their sample values — click one to change it."}
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl<RenderView>
+          aria-label="Markdown view"
+          options={RENDER_OPTIONS}
+          value={render}
+          onChange={onRenderChange}
+        />
+        <SegmentedControl<VariableView>
+          aria-label="Variable view"
+          options={VIEW_OPTIONS}
+          value={view}
+          onChange={onViewChange}
+        />
+        {expand}
+      </div>
     </div>
   );
 }
@@ -129,6 +212,7 @@ export function PromptEditorPanel({
   const systemEditorRef = useRef<TemplateEditorHandle | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<VariableView>("names");
+  const [render, setRender] = useState<RenderView>("source");
   const [chip, setChip] = useState<{ target: ChipTarget; field: "body" | "system" } | null>(null);
   const overlayTitleId = useId();
   const hasSystemBody = SYSTEM_BODY_CONTEXTS.includes(detail.context);
@@ -146,21 +230,17 @@ export function PromptEditorPanel({
     <ExpandButton expanded={expanded} onToggle={() => setExpanded((previous) => !previous)} />
   );
 
+  const rendered = renderedTemplates(view, draft, preview);
+
   const content = (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-instrument text-meta">
-          {view === "names"
-            ? "Variables shown by name."
-            : "Variables shown as their sample values — click one to change it."}
-        </span>
-        <SegmentedControl<VariableView>
-          aria-label="Variable view"
-          options={VIEW_OPTIONS}
-          value={view}
-          onChange={setView}
-        />
-      </div>
+      <ViewControls
+        view={view}
+        onViewChange={setView}
+        render={render}
+        onRenderChange={setRender}
+        expand={expandButton}
+      />
       {hasSystemBody && copy.system && (
         <TemplateField
           label={copy.system.label}
@@ -170,6 +250,8 @@ export function PromptEditorPanel({
           onChange={(systemBody) => onDraftChange({ ...draft, systemBody })}
           placeholder="Optional instructions sent as the system role."
           view={view}
+          render={render}
+          rendered={rendered.system}
           values={values}
           onChipClick={(target) => setChip({ target, field: "system" })}
           editorRef={systemEditorRef}
@@ -183,9 +265,10 @@ export function PromptEditorPanel({
         onChange={(body) => onDraftChange({ ...draft, body })}
         placeholder="Write the template. Use {{variable}} placeholders."
         view={view}
+        render={render}
+        rendered={rendered.body}
         values={values}
         onChipClick={(target) => setChip({ target, field: "body" })}
-        editorActions={expandButton}
         editorRef={bodyEditorRef}
         editorClassName="min-h-[260px]"
       />

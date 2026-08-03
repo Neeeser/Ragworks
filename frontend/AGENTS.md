@@ -356,15 +356,22 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
-- **A template and its rendering are one editable surface, not two columns.**
-  The prompt studio shows each template once at full width and toggles how
-  `{{variable}}` reads — its own name, or an atomic chip carrying its sample
-  value (`lib/codemirror.ts`). A side-by-side preview pane differs from its
-  source only where a variable appears, so it spends half the page duplicating
-  text: no shipped prompt has a variable in its system message, which makes
-  that pane a byte-for-byte copy for every prompt in the library. The exact
-  wire payload — roles, markdown, what is actually sent — belongs to the Test
-  tab, which sends it.
+- **A template and its rendering are one surface with two toggles, not two
+  columns.** The prompt studio shows each template once at full width and
+  switches how it reads on two independent axes: `Source ⇄ Rendered` (editable
+  markdown, or the formatted result) and `Names ⇄ Values` (`{{text}}` literal,
+  or an atomic chip carrying its sample value). A side-by-side preview pane
+  differs from its source only where a variable appears, so it spends half the
+  page duplicating text — no shipped prompt has a variable in its system
+  message, which makes that pane a byte-for-byte copy for every prompt in the
+  library. **Rendered is not optional polish**: syntax highlighting shows that
+  `##` is a heading, never what the heading looks like, and a prompt author
+  needs to see the formatting the model will receive.
+- **Rendered is read-only, and says so.** Formatted markdown needs a renderer;
+  the value chips need the editor — they cannot share a box. So Rendered
+  labels itself a preview rather than silently swallowing keystrokes, and any
+  panel-level control (full screen) lives outside the editor's own toolbar, or
+  it disappears with it and strands the user.
 - **A variable's sample value is session state, never part of a version.** It
   is the corpus you are tuning against, not the template, and two people
   editing one prompt test it on different data — so it is excluded from
