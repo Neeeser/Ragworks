@@ -123,3 +123,22 @@ export function effectiveResultDepth(
 export function truncatedCutoffs(kValues: number[], depth: number): number[] {
   return kValues.filter((k) => k > depth);
 }
+
+/**
+ * The selected cutoffs the effective depth can actually score.
+ *
+ * The default selection is a fixed set, but the depth a pipeline serves is a
+ * property of that pipeline — so offering every cutoff regardless opens a run
+ * in a configuration that can never produce the metrics it promises. Filtering
+ * at render time (rather than seeding state once the pipeline loads) keeps the
+ * two in step when the user switches pipeline mid-wizard.
+ *
+ * At least one cutoff always survives: a run with no scorable k has no metrics
+ * at all, which is a worse answer than scoring the smallest one.
+ */
+export function serviceableCutoffs(kValues: number[], depth: number): number[] {
+  const sorted = [...kValues].sort((a, b) => a - b);
+  const serviceable = sorted.filter((k) => k <= depth);
+  if (serviceable.length > 0) return serviceable;
+  return sorted.slice(0, 1);
+}

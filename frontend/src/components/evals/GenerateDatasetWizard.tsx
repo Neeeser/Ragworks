@@ -199,9 +199,8 @@ export function GenerateDatasetWizard({
                     : "border-hairline bg-surface hover:border-strong",
                 )}
               >
-                <p className="text-ui font-medium text-primary">{entry.label}</p>
-                <p className="mt-1 font-mono text-instrument tabular-nums text-muted">
-                  {entry.count} questions
+                <p className="text-ui font-medium text-primary">
+                  <span className="font-mono tabular-nums">{entry.count}</span> questions
                 </p>
               </button>
             ))}

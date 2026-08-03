@@ -20,14 +20,22 @@ export function supportsStructuredOutputs(model: CatalogModel): boolean {
 
 export interface CountPreset {
   key: string;
-  label: string;
   count: number;
 }
 
+/**
+ * How many questions to generate — a single-axis choice, so the count is the
+ * whole of it and each preset is labelled by its own number.
+ *
+ * The abstract sizes these once carried collided with the run wizard's own
+ * Quick/Standard presets, where the same word means a different number in the
+ * same feature; a reader comparing the two screens has no way to tell that
+ * "Quick" is 20 questions here and 50 queries there.
+ */
 export const COUNT_PRESETS: CountPreset[] = [
-  { key: "quick", label: "Quick", count: 20 },
-  { key: "standard", label: "Standard", count: 50 },
-  { key: "deep", label: "Deep", count: 100 },
+  { key: "quick", count: 20 },
+  { key: "standard", count: 50 },
+  { key: "deep", count: 100 },
 ];
 
 /** Default question-type shares, mirroring `DEFAULT_QUESTION_TYPE_MIX`. */

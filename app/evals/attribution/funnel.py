@@ -10,6 +10,7 @@ so it is testable without a database or a pipeline run.
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -20,6 +21,9 @@ from app.evals.attribution.constants import (
 )
 from app.evals.attribution.findings import derive_findings
 from app.schemas.evals import FunnelStage, FunnelSummary
+
+#: Node type ids are `<family>.<variant>`; only this family reads the corpus.
+_RETRIEVER_FAMILY = "retriever"
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,44 @@ class _Accumulator:
     total: int = 0
 
 
+def _corpus_stages(
+    queries: Sequence[QueryFunnelInput],
+    edges: Sequence[tuple[str, str]],
+) -> set[str]:
+    """Return the nodes whose items can carry corpus identity.
+
+    Only a retriever introduces corpus documents into a retrieval graph, so the
+    stages worth measuring are the retrievers and everything downstream of them.
+    Query-side nodes — the query input, the embedder that vectorises it, a
+    query-rewriting transform — also emit `items`, but their one item is the
+    query, which maps to no benchmark document. Measuring gold retention there
+    reports 0% on a node the concept does not apply to, and (worse) hands that
+    0.0 down as the retriever's baseline, so every retriever's drop comes out
+    non-positive and genuine retrieval loss can never be reported.
+
+    Deriving the set by walking forward from the retrievers means a new
+    query-side node type is excluded by construction, where a blocklist of node
+    types would have to be updated for each one.
+    """
+    node_types = {node.node_id: node.node_type for query in queries for node in query.nodes}
+    downstream: dict[str, list[str]] = {}
+    for source, target in edges:
+        downstream.setdefault(source, []).append(target)
+
+    stages = {
+        node_id
+        for node_id, node_type in node_types.items()
+        if node_type.split(".", 1)[0].lower() == _RETRIEVER_FAMILY
+    }
+    queue = deque(stages)
+    while queue:
+        for target in downstream.get(queue.popleft(), []):
+            if target not in stages:
+                stages.add(target)
+                queue.append(target)
+    return stages
+
+
 def build_funnel(
     queries: Sequence[QueryFunnelInput],
     edges: Sequence[tuple[str, str]],
@@ -60,6 +102,7 @@ def build_funnel(
     ingestion = _Accumulator(INGESTION_NODE_ID, INGESTION_NODE_TYPE, INGESTION_LABEL)
     node_accumulators: dict[str, _Accumulator] = {}
     order: list[str] = []
+    corpus_stages = _corpus_stages(queries, edges)
 
     for query in queries:
         gold = query.gold_doc_ids
@@ -67,6 +110,8 @@ def build_funnel(
         ingestion.retained += len(query.indexed_gold_doc_ids & gold)
         ingestion.total += gold_total
         for node in query.nodes:
+            if node.node_id not in corpus_stages:
+                continue
             accumulator = node_accumulators.get(node.node_id)
             if accumulator is None:
                 accumulator = _Accumulator(node.node_id, node.node_type, node.label)

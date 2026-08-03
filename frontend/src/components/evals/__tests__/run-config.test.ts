@@ -6,6 +6,7 @@ import {
   defaultInputValue,
   effectiveResultDepth,
   isDepthVariable,
+  serviceableCutoffs,
   truncatedCutoffs,
 } from "@/components/evals/lib/run-config";
 import { makePipeline } from "@/test/fixtures";
@@ -106,5 +107,23 @@ describe("effectiveResultDepth", () => {
       label: "",
     });
     expect(truncatedCutoffs([1, 5, 10, 25], 25)).toEqual([]);
+  });
+});
+
+describe("serviceableCutoffs", () => {
+  it("drops cutoffs the pipeline's depth cannot serve", () => {
+    // The default cutoffs include 25 while a stock retrieval pipeline returns
+    // 10 results, so a run offered every cutoff opens in a configuration that
+    // can never score @25.
+    expect(serviceableCutoffs([1, 5, 10, 25], 10)).toEqual([1, 5, 10]);
+  });
+
+  it("leaves an uncapped selection untouched", () => {
+    expect(serviceableCutoffs([1, 5, 10, 25], 25)).toEqual([1, 5, 10, 25]);
+  });
+
+  it("always keeps at least the smallest cutoff", () => {
+    // A depth of 0 would otherwise leave a run with no metrics at all.
+    expect(serviceableCutoffs([5, 10], 0)).toEqual([5]);
   });
 });

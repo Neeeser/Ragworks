@@ -66,12 +66,26 @@ describe("NewRunWizard", () => {
     selectOption(RETRIEVAL_PIPELINE, "Retrieval");
     goToStep("Scope");
 
-    // The variable caps at 10, so the default @25 cutoff can never be scored.
-    const warning = screen.getByRole("alert");
-    expect(warning).toHaveTextContent(
-      "Result limit (result_limit) caps results at 10, so @25 will always read as misses. " +
-        "Raise the cap or drop those cutoffs.",
-    );
+    // The variable caps at 10, so @25 is out of reach — and rather than
+    // offering it as a selected cutoff that can only ever score zero, the
+    // wizard makes it unavailable and names what would lift the cap.
+    expect(screen.getByText(/caps results at 10, so @25 is unavailable/)).toBeInTheDocument();
+    expect(screen.getByText("result_limit")).toBeInTheDocument();
+  });
+
+  it("opens with only the cutoffs the pipeline can actually score", () => {
+    // A stock retrieval pipeline returns 10 results while the default
+    // selection reaches @25, so an unfiltered wizard starts every run in a
+    // configuration that promises a metric it will only ever record as a miss.
+    renderWizard();
+    goToStep("Pipelines");
+    selectOption(RETRIEVAL_PIPELINE, "Retrieval");
+    goToStep("Scope");
+
+    const beyondDepth = screen.getByRole("button", { name: "@25" });
+    expect(beyondDepth).toBeDisabled();
+    expect(beyondDepth).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "@10" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("names a capping node by its display name, with no key to show", () => {
@@ -104,8 +118,8 @@ describe("NewRunWizard", () => {
     selectOption(RETRIEVAL_PIPELINE, "Retrieval");
     goToStep("Scope");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Semantic retriever caps results at 5, so @10, @25 will always read as misses.",
-    );
+    expect(
+      screen.getByText(/Semantic retriever caps results at 5, so @10, @25 are unavailable/),
+    ).toBeInTheDocument();
   });
 });
