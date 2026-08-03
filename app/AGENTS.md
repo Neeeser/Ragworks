@@ -1103,12 +1103,40 @@ this file in the same PR.
   type — the call fails before it leaves the process, so no amount of reading
   the HTTP API explains it. State the value: a Pinecone sparse index takes
   `dotproduct`, the only metric it accepts.
-- **Never send OpenRouter an explicit embeddings `dimensions` unless the user asked
-  for one** — most embedding models reject the parameter outright. Set only
-  `model_name` and let the model emit its native dimension; the indexer node alone
-  carries `dimension` (for index creation/validation). When the embeddings envelope
-  carries an `error` instead of `data`, raise `ExternalServiceError` with the
-  provider's message (502), never a bare `ValueError` (500).
+- **Never send an embeddings `dimensions` parameter unless the user asked for
+  one** — most embedding models reject it outright, so an unset
+  `EmbedderConfig.dimension` transmits nothing and the model emits its native
+  width. A set value is a real request (Matryoshka models truncate) and is both
+  transmitted and authoritative. When the embeddings envelope carries an `error`
+  instead of `data`, raise `ExternalServiceError` with the provider's message
+  (502), never a bare `ValueError` (500).
+- **What we transmit is not what the pipeline knows: an empty
+  `EmbedderConfig.dimension` never means the width is unknown.** The model's
+  native width is discoverable, so `app/pipelines/embedding_dimensions.py`
+  compares it with the index's and fails the save on a mismatch. Reading the
+  empty field as "unknown" makes a correct pipeline warn about itself and
+  defers a real mismatch to a per-document ingest failure.
+- **The index's width is the indexer's `dimension` *or the registered index it
+  names*, in that order.** Scaffolded pipelines name an index and leave
+  `dimension` blank, so a node-field-only check is silent on every default
+  pipeline — the common shape, not an edge case. A blank field means "created
+  at whatever the first embedding measures" only while the index does not
+  exist; once it does, it means writing 768d vectors into a 1536d store. The
+  registry lookup is injected into the validator (`index_width`) exactly like
+  the provider resolvers, because `app/pipelines` may not import from
+  `app.services`. An index no registration answers for is genuinely unknown —
+  silent for a native width, advisory for an explicit Matryoshka request.
+- **A model's width is resolved through `resolve_embedding_width` — catalog
+  first, probe second, both answers cached including `None`.** Most providers
+  publish no dimension in their catalog (OpenRouter publishes none for any
+  embedding model), so a catalog-only resolver answers `None` almost
+  everywhere and every width check silently does nothing. What must never sit
+  on the validation path is an *uncached* probe, not the probe: validation
+  re-runs on a debounce while the editor is open, so one live embedding call
+  per keystroke is the failure mode — and `cached_embedding_dimension` drops a
+  `None`, which is why the combined answer is retained in its own cache
+  instead. One probe ever for a resolvable model, one per freshness window
+  otherwise. A width that resolves neither way emits nothing.
 - **Never rely on prompt wording to get machine-readable model output.** When a
   chat call's reply is parsed by code (JSON, scores, labels), enforce the shape
   with the inference feature built for it — structured outputs

@@ -4,6 +4,8 @@ import { EMBEDDING_MODEL_SORTS } from "@/components/models/model-catalog-filter"
 import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
+import { useResolvedEmbeddingDimension } from "./hooks/use-resolved-embedding-dimension";
+
 import type { CatalogModel } from "@/lib/types";
 
 /** Whether the saved selection is missing from the catalog, and the connection label to show. */
@@ -52,13 +54,20 @@ type EmbeddingModelSelectorCardProps = {
   onSelectModel: (model: CatalogModel) => void;
   modelsLoading: boolean;
   modelsError: string | null;
+  /** Resolves the "Dimension" readout for a model the catalog publishes no
+   * width for (OpenRouter publishes none for any embedding model), via a
+   * single memoised endpoint lookup. Omitted callers see the catalog's own
+   * `dimension` only, same as before. */
+  token?: string | null;
 };
 
 /**
  * The embedding model picker: the shared {@link ModelPickerInline} over the
  * embedding catalog, with the vector dimension on every row and beside the
  * controls — dimension is the field that decides whether a model can serve an
- * existing index, so it is the one measure worth carrying everywhere.
+ * existing index, so it is the one measure worth carrying everywhere. Per-row
+ * dimensions (`renderTrailing`) read the catalog only, never probing a whole
+ * list of models; only the one selected model's readout resolves further.
  */
 export function EmbeddingModelSelectorCard({
   models,
@@ -69,6 +78,7 @@ export function EmbeddingModelSelectorCard({
   onSelectModel,
   modelsLoading,
   modelsError,
+  token,
 }: EmbeddingModelSelectorCardProps) {
   const currentModelInfo =
     models.find(
@@ -84,6 +94,12 @@ export function EmbeddingModelSelectorCard({
     modelsLoading,
     modelsError,
   });
+  const resolvedDimension = useResolvedEmbeddingDimension(
+    token ?? null,
+    selectedConnectionId ?? null,
+    selectedModelKey || null,
+    currentModelInfo?.dimension,
+  );
 
   return (
     <ModelPickerInline
@@ -105,8 +121,8 @@ export function EmbeddingModelSelectorCard({
         <div className="flex flex-1 items-center justify-between gap-2 rounded-control border border-hairline bg-surface px-3 py-2">
           <InstrumentLabel>Dimension</InstrumentLabel>
           <span className="font-mono text-ui tabular-nums text-primary">
-            {currentModelInfo?.dimension ? (
-              currentModelInfo.dimension.toLocaleString()
+            {resolvedDimension ? (
+              resolvedDimension.toLocaleString()
             ) : (
               <span className="text-muted">—</span>
             )}

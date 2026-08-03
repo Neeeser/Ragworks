@@ -13,6 +13,10 @@ import { RerankingModelSelectorCard } from "./RerankingModelSelectorCard";
 import type { CatalogModel, ModelCatalogResponse } from "@/lib/types";
 
 export type NodeModelCatalogProps = {
+  /** Resolves the embedding card's own "Dimension" readout for a model the
+   * catalog publishes no width for; omitted callers just see the catalog
+   * value (or none) as before. */
+  token?: string | null;
   embeddingModels: CatalogModel[];
   embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
@@ -45,6 +49,7 @@ export function NodeModelSelectors({
   nodeType,
   config,
   embeddingBoundToVariable,
+  token,
   embeddingModels,
   embeddingCatalog,
   embeddingModelsLoading,
@@ -92,6 +97,7 @@ export function NodeModelSelectors({
         modelsLoading={embeddingModelsLoading}
         modelsError={embeddingModelsError}
         onSelectModel={onSelectEmbeddingModel}
+        token={token}
       />
     );
   }

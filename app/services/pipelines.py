@@ -43,7 +43,9 @@ from app.services.pipeline_upgrades import (
     upgrade_stored_pipeline_definitions as upgrade_stored_pipeline_definitions,
 )
 from app.services.pipeline_validation import (
+    EmbeddingDimensionResolver,
     EmbeddingInputLimitResolver,
+    IndexWidthResolver,
     validate_pipeline_definition,
 )
 
@@ -69,8 +71,10 @@ class PipelineService:
         session: Session,
         *,
         embedding_input_limit: EmbeddingInputLimitResolver | None = None,
+        embedding_dimension: EmbeddingDimensionResolver | None = None,
+        index_width: IndexWidthResolver | None = None,
     ) -> None:
-        """Initialize with an optional provider-limit override for focused tests."""
+        """Initialize with optional provider-metadata overrides for focused tests."""
         self.session = session
         self._pipelines = PipelineRepository(session)
         self._versions = PipelineVersionRepository(session)
@@ -78,6 +82,8 @@ class PipelineService:
         self._bindings = CollectionPipelineBindingRepository(session)
         self._users = UserRepository(session)
         self._embedding_input_limit = embedding_input_limit
+        self._embedding_dimension = embedding_dimension
+        self._index_width = index_width
 
     def validate_definition(
         self,
@@ -90,6 +96,8 @@ class PipelineService:
             user,
             definition,
             embedding_input_limit=self._embedding_input_limit,
+            embedding_dimension=self._embedding_dimension,
+            index_width=self._index_width,
         )
 
     def _validate_before_persisting(
