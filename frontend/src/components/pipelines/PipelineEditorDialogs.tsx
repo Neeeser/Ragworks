@@ -1,12 +1,13 @@
 "use client";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { NamePromptDialog } from "@/components/ui/name-prompt-dialog";
 
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog";
 import { SaveVersionDialog } from "./SaveVersionDialog";
 
 import type { PendingChange } from "./lib/pipeline-diff";
-import type { PipelineValidationIssue, PipelineVersion } from "@/lib/types";
+import type { Pipeline, PipelineValidationIssue, PipelineVersion } from "@/lib/types";
 
 type PipelineEditorDialogsProps = {
   saveOpen: boolean;
@@ -27,11 +28,16 @@ type PipelineEditorDialogsProps = {
   discardOpen: boolean;
   onConfirmDiscard: () => void;
   onCancelDiscard: () => void;
+  renameOpen: boolean;
+  onCloseRename: () => void;
+  /** The pipeline the rename prompt seeds from — the open one. */
+  renamePipeline: Pipeline | null;
+  onRename: (pipeline: Pipeline, name: string) => Promise<boolean>;
 };
 
 /** The top-bar dialogs of the pipeline editor: save version, revision history,
- * and the discard-unsaved-changes prompt. Pure composition -- all state lives
- * in PipelineBuilder. */
+ * rename, and the discard-unsaved-changes prompt. Pure composition -- all state
+ * lives in PipelineBuilder. */
 export function PipelineEditorDialogs({
   saveOpen,
   onCloseSave,
@@ -51,6 +57,10 @@ export function PipelineEditorDialogs({
   discardOpen,
   onConfirmDiscard,
   onCancelDiscard,
+  renameOpen,
+  onCloseRename,
+  renamePipeline,
+  onRename,
 }: PipelineEditorDialogsProps) {
   return (
     <>
@@ -83,6 +93,18 @@ export function PipelineEditorDialogs({
         confirmVariant="danger"
         onConfirm={onConfirmDiscard}
         onCancel={onCancelDiscard}
+      />
+      <NamePromptDialog
+        open={renameOpen && renamePipeline !== null}
+        title="Rename pipeline"
+        submitLabel="Rename"
+        initialValue={renamePipeline?.name ?? ""}
+        seedKey={renamePipeline?.id}
+        selectOnFocus
+        onClose={onCloseRename}
+        onSubmit={(name) =>
+          renamePipeline ? onRename(renamePipeline, name) : Promise.resolve(false)
+        }
       />
     </>
   );

@@ -8,6 +8,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 import { PromptStudio } from "./PromptStudio";
 
+import type { OpenUsage } from "./PromptStudio";
 import type { PromptRead } from "@/lib/types";
 
 interface PromptStudioOverlayProps {
@@ -15,6 +16,8 @@ interface PromptStudioOverlayProps {
   promptId: string;
   /** The user forked; the caller repoints whatever referenced the source. */
   onForked?: (fork: PromptRead) => void;
+  /** Follow a "used by" entry in the surface underneath, without navigating. */
+  onOpenUsage?: OpenUsage;
   onClose: () => void;
 }
 
@@ -26,7 +29,12 @@ interface PromptStudioOverlayProps {
  * graph and their place on the canvas. Here the graph stays mounted
  * underneath and closing returns to it.
  */
-export function PromptStudioOverlay({ promptId, onForked, onClose }: PromptStudioOverlayProps) {
+export function PromptStudioOverlay({
+  promptId,
+  onForked,
+  onOpenUsage,
+  onClose,
+}: PromptStudioOverlayProps) {
   const titleId = useId();
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId}>
@@ -52,6 +60,7 @@ export function PromptStudioOverlay({ promptId, onForked, onClose }: PromptStudi
             onForked={(fork) => {
               onForked?.(fork);
             }}
+            onOpenUsage={onOpenUsage}
           />
         </div>
       </div>

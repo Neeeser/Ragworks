@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
@@ -25,6 +26,7 @@ const io = {
 let lastCanvasProps: Record<string, unknown> | null = null;
 let lastDrawerProps: Record<string, unknown> | null = null;
 let lastSidebarProps: Record<string, unknown> | null = null;
+let lastHeaderProps: Record<string, unknown> | null = null;
 const baseTimestamp = "2024-01-01T00:00:00.000Z";
 const embedderType = "embedder.openrouter";
 const rerankerType = "reranker.model";
@@ -39,6 +41,7 @@ const selectNodeLabel = "Select node";
 const deletePipelineLabel = "Delete pipeline";
 const confirmDeleteLabel = "Confirm delete";
 const hfModelId = "owner/model";
+const renamedName = "Docs ingest";
 const buildDragEvent = (type: string) =>
   ({
     preventDefault: vi.fn(),
@@ -50,8 +53,12 @@ const buildDragEvent = (type: string) =>
     clientY: 150,
   }) as unknown as DragEvent<HTMLDivElement>;
 
+// The editor reads `?pipeline=&node=`; tests set this before rendering.
+let searchParams = new URLSearchParams();
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => searchParams,
 }));
 
 vi.mock("@/providers/auth-provider", async () =>
@@ -242,32 +249,29 @@ vi.mock("@/components/pipelines/PipelineSidebar", () => ({
 }));
 
 vi.mock("@/components/pipelines/PipelineHeader", () => ({
-  PipelineHeader: ({
-    onCreatePipeline,
-    onOpenIndexRegistry,
-    onOpenSave,
-    onOpenHistory,
-  }: {
-    onCreatePipeline: () => void;
-    onOpenIndexRegistry: () => void;
-    onOpenSave: () => void;
-    onOpenHistory: () => void;
-  }) => (
-    <div>
-      <button type="button" onClick={onCreatePipeline}>
-        Create pipeline
-      </button>
-      <button type="button" onClick={onOpenIndexRegistry}>
-        Index registry
-      </button>
-      <button type="button" onClick={onOpenSave}>
-        Open save dialog
-      </button>
-      <button type="button" onClick={onOpenHistory}>
-        Open history
-      </button>
-    </div>
-  ),
+  PipelineHeader: (props: Record<string, unknown>) => {
+    lastHeaderProps = props;
+    const action = (key: string) => props[key] as (() => void) | undefined;
+    return (
+      <div>
+        <button type="button" onClick={action("onCreatePipeline")}>
+          Create pipeline
+        </button>
+        <button type="button" onClick={action("onOpenIndexRegistry")}>
+          Index registry
+        </button>
+        <button type="button" onClick={action("onOpenSave")}>
+          Open save dialog
+        </button>
+        <button type="button" onClick={action("onOpenHistory")}>
+          Open history
+        </button>
+        <button type="button" onClick={action("onRenamePipeline")}>
+          Rename pipeline
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("@/components/pipelines/CreatePipelineWizard", () => ({
@@ -413,9 +417,11 @@ const nodeSpecs: NodeSpec[] = [
 
 describe("PipelineBuilder", () => {
   beforeEach(() => {
+    searchParams = new URLSearchParams();
     lastCanvasProps = null;
     lastDrawerProps = null;
     lastSidebarProps = null;
+    lastHeaderProps = null;
     api.fetchPipelines.mockResolvedValue([pipeline]);
     api.fetchPipelineNodes.mockResolvedValue(nodeSpecs);
     api.fetchCollections.mockResolvedValue([]);
@@ -469,6 +475,64 @@ describe("PipelineBuilder", () => {
     await act(async () => {
       await api.listPipelineVersions.mock.results.at(-1)?.value;
     });
+  });
+
+  it("renames the open pipeline and shows the new name without refetching", async () => {
+    const user = userEvent.setup();
+    api.updatePipeline.mockResolvedValueOnce({ ...pipeline, name: renamedName });
+
+    render(<PipelineBuilder kind="ingestion" />);
+    await waitFor(() => expect(lastHeaderProps?.pipelineName).toBe("Pipeline"));
+    const loadsBefore = api.fetchPipelines.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "Rename pipeline" }));
+    const field = await screen.findByLabelText("Name");
+    await user.clear(field);
+    await user.type(field, renamedName);
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() =>
+      expect(api.updatePipeline).toHaveBeenCalledWith("token", "pipe-1", { name: renamedName }),
+    );
+    // The PATCH response is folded in, so every surface showing the name
+    // updates without a reload that could read the pre-write state back.
+    await waitFor(() => {
+      expect(lastHeaderProps?.pipelineName).toBe(renamedName);
+      expect((lastSidebarProps?.pipelines as Pipeline[])[0]?.name).toBe(renamedName);
+    });
+    expect(api.fetchPipelines.mock.calls).toHaveLength(loadsBefore);
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+
+  it("opens the pipeline and node a deep link names, then never re-applies it", async () => {
+    const linked = makePipeline({
+      id: "pipe-2",
+      name: "Linked",
+      kind: "ingestion",
+      definition: {
+        nodes: [
+          { id: "node-9", type: embedderType, name: "Linked embed", config: {}, position: null },
+        ],
+        edges: [],
+      },
+    });
+    api.fetchPipelines.mockResolvedValueOnce([pipeline, linked]);
+    searchParams = new URLSearchParams("pipeline=pipe-2&node=node-9");
+
+    render(<PipelineBuilder kind="ingestion" />);
+
+    // The link beats the editor's own "first pipeline in the list" default.
+    await waitFor(() => expect(lastHeaderProps?.pipelineName).toBe("Linked"));
+    await waitFor(() =>
+      expect((lastDrawerProps?.node as { id: string } | null)?.id).toBe("node-9"),
+    );
+
+    // Spent: what the user opens next stands, however many renders follow.
+    fireEvent.click(screen.getByRole("button", { name: "Select pipeline" }));
+    await waitFor(() => expect(lastHeaderProps?.pipelineName).toBe("Pipeline"));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open history" }));
+    expect(lastHeaderProps?.pipelineName).toBe("Pipeline");
   });
 
   it("blocks reranker preview and drop without an actual reranking connection", async () => {

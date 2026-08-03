@@ -8,6 +8,7 @@ import { validatePipelineConnection } from "../lib/pipeline-io";
 import { createId } from "../lib/pipeline-utils";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
+import type { PipelineConnectionValidation } from "../lib/pipeline-io";
 import type { ConnectingContext, PipelineNodeData } from "../PipelineNode";
 import type { Connection, Edge, Node, OnConnectStartParams } from "@xyflow/react";
 
@@ -21,7 +22,7 @@ type UseConnectionTypingParams = {
 type UseConnectionTypingResult = {
   /** Live wire-drag context; nodes use it to highlight compatible ports. */
   connecting: ConnectingContext | null;
-  validateConnection: (connection: Connection | Edge) => { valid: boolean; reason?: string };
+  validateConnection: (connection: Connection | Edge) => PipelineConnectionValidation;
   handleConnect: (connection: Connection) => void;
   handleConnectStart: (event: unknown, params: OnConnectStartParams) => void;
   handleConnectEnd: () => void;
@@ -68,7 +69,12 @@ export function useConnectionTyping({
         onInvalidConnection(validation.reason ?? "Invalid connection.");
         return;
       }
+      // Dropping on an occupied single-connection input replaces what is
+      // already there — the removal rides in the same edit, so the editor's
+      // unsaved-changes diff reports the disconnect the user just caused.
+      const replaced = new Set(validation.replaces ?? []);
       setEdges((prev) => {
+        const kept = replaced.size > 0 ? prev.filter((edge) => !replaced.has(edge.id)) : prev;
         const sourceNode = nodes.find((node) => node.id === connection.source);
         const port = sourceNode?.data.outputs.find(
           (entry) => entry.key === connection.sourceHandle,
@@ -76,14 +82,14 @@ export function useConnectionTyping({
         const dataType = port
           ? facetsToken(
               port.data_type,
-              inferGuarantees(nodes, prev).get(`${connection.source}.${port.key}`) ??
+              inferGuarantees(nodes, kept).get(`${connection.source}.${port.key}`) ??
                 port.adds ??
                 [],
             )
           : undefined;
         return addEdge<TypedEdgeType>(
           { ...connection, id: createId(), type: "typed", data: { dataType } },
-          prev,
+          kept,
         );
       });
     },

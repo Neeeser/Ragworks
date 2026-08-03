@@ -12,9 +12,9 @@ import type { Node, ReactFlowInstance } from "@xyflow/react";
 const LAYOUT_SAVE_DEBOUNCE_MS = 700;
 
 type UseLayoutPersistenceParams = {
-  selectedPipelineRef: React.RefObject<Pipeline | null>;
-  nodesRef: React.RefObject<Node<PipelineNodeData>[]>;
-  edgesRef: React.RefObject<TypedEdgeType[]>;
+  selectedPipeline: Pipeline | null;
+  nodes: Node<PipelineNodeData>[];
+  edges: TypedEdgeType[];
   setNodes: (updater: (nodes: Node<PipelineNodeData>[]) => Node<PipelineNodeData>[]) => void;
   reactFlowInstance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType> | null;
   persistLayout: (definition: PipelineDefinition) => Promise<void>;
@@ -33,14 +33,22 @@ type UseLayoutPersistenceResult = {
  * never ride along with a background layout save.
  */
 export function useLayoutPersistence({
-  selectedPipelineRef,
-  nodesRef,
-  edgesRef,
+  selectedPipeline,
+  nodes,
+  edges,
   setNodes,
   reactFlowInstance,
   persistLayout,
 }: UseLayoutPersistenceParams): UseLayoutPersistenceResult {
   const timer = useRef<number | null>(null);
+  // The debounce fires long after the render that scheduled it, so it must
+  // read the graph as it is then — not the snapshot its callback closed over.
+  // Mirrored after commit rather than during render, so nothing reads a ref
+  // mid-render.
+  const latest = useRef({ selectedPipeline, nodes, edges });
+  useEffect(() => {
+    latest.current = { selectedPipeline, nodes, edges };
+  });
 
   useEffect(
     () => () => {
@@ -55,13 +63,10 @@ export function useLayoutPersistence({
     }
     timer.current = window.setTimeout(() => {
       timer.current = null;
-      const pipeline = selectedPipelineRef.current;
+      const pipeline = latest.current.selectedPipeline;
       if (!pipeline) return;
       const positions = new Map(
-        (nodesRef.current ?? []).map((node) => [
-          node.id,
-          { x: node.position.x, y: node.position.y },
-        ]),
+        latest.current.nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
       );
       let changed = false;
       const definition: PipelineDefinition = {
@@ -80,15 +85,15 @@ export function useLayoutPersistence({
         void persistLayout(definition);
       }
     }, LAYOUT_SAVE_DEBOUNCE_MS);
-  }, [selectedPipelineRef, nodesRef, persistLayout]);
+  }, [persistLayout]);
 
   const handleAutoLayout = useCallback(() => {
-    setNodes((prev) => layoutPipelineNodes(prev, edgesRef.current ?? []));
+    setNodes((prev) => layoutPipelineNodes(prev, latest.current.edges));
     window.requestAnimationFrame(() => {
       reactFlowInstance?.fitView({ padding: 0.15, maxZoom: 1, duration: 300 });
     });
     scheduleLayoutSave();
-  }, [setNodes, edgesRef, reactFlowInstance, scheduleLayoutSave]);
+  }, [setNodes, reactFlowInstance, scheduleLayoutSave]);
 
   return { scheduleLayoutSave, handleAutoLayout };
 }
