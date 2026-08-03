@@ -8,32 +8,24 @@ import { useIndexes } from "@/components/indexes/use-indexes";
 import { useAuth } from "@/providers/auth-provider";
 
 import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
-import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
+import { useCanvasSeeding } from "./hooks/use-canvas-seeding";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useExpectedEmbeddingDimension } from "./hooks/use-expected-embedding-dimension";
 import { useIndexBackends } from "./hooks/use-index-backends";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
 import { useLiveValidation } from "./hooks/use-live-validation";
 import { useNodeEditing } from "./hooks/use-node-editing";
+import { useNodeInsertion } from "./hooks/use-node-insertion";
+import { usePipelineDeepLink } from "./hooks/use-pipeline-deep-link";
 import { usePipelineModelCatalogs } from "./hooks/use-pipeline-model-catalogs";
 import { usePipelines } from "./hooks/use-pipelines";
 import { useSidebarWidth } from "./hooks/use-sidebar-width";
 import { useTokenizerConsent } from "./hooks/use-tokenizer-consent";
 import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
 import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
+import { PipelineEditorContext } from "./lib/pipeline-editor-context";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
-import { layoutPipelineNodes, needsAutoLayout } from "./lib/pipeline-layout";
-import {
-  buildNodeCatalog,
-  toFlowEdges,
-  toFlowNodes,
-  toPipelineDefinition,
-} from "./lib/pipeline-utils";
-import {
-  previewWithRerankerGate,
-  RERANKER_NODE_TYPE,
-  RERANKER_PROVIDER_REQUIRED,
-} from "./lib/reranking";
+import { buildNodeCatalog, toPipelineDefinition } from "./lib/pipeline-utils";
 import { buildIndexVariable } from "./lib/variable-env";
 import { NodeCatalogOverlay } from "./NodeCatalogOverlay";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
@@ -47,7 +39,7 @@ import type { TypedEdgeType } from "./flow/TypedEdge";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
-import type { NodeSpec, PipelineKind, PipelineVariable } from "@/lib/types";
+import type { PipelineKind, PipelineVariable } from "@/lib/types";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type PipelineBuilderProps = {
@@ -77,6 +69,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     handlePipelineCreated,
     handleDeletePipeline,
     handleCopyPipeline,
+    handleRenamePipeline,
     cancelDeletePipeline,
     handleConfirmDelete,
     handleSavePipeline,
@@ -101,6 +94,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [nodeCatalogOpen, setNodeCatalogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
     Node<PipelineNodeData>,
     TypedEdgeType
@@ -108,12 +102,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const modalsRef = useRef<PipelineModalsHandle>(null);
   const autoOpenedWizard = useRef(false);
-  // Latest nodes/edges for callbacks that must read fresh state without
-  // re-creating themselves (layout save debounce, auto-layout).
-  const nodesRef = useRef(nodes);
-  nodesRef.current = nodes;
-  const edgesRef = useRef(edges);
-  edgesRef.current = edges;
 
   const {
     selectedNode,
@@ -145,34 +133,20 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const catalogSpecs = useMemo(() => nodeSpecs.filter((spec) => !spec.hidden), [nodeSpecs]);
   const catalogByFamily = useMemo(() => buildNodeCatalog(catalogSpecs), [catalogSpecs]);
 
-  // `dragDrop` is referenced inside `handleAddNode`'s body below but declared after it;
-  // this is safe because handleAddNode only reads `dragDrop` when invoked (from an event
-  // handler), by which point this render has already assigned it via closure.
-  const handleAddNode = (spec: NodeSpec, position?: { x: number; y: number }) => {
-    addNode(spec, position);
-    dragDrop.handleDragLeave();
-  };
-
-  const dragDrop = useCanvasDragDrop({
+  const {
+    addNode: handleAddNode,
+    previewNode: handlePreviewNode,
+    dragDrop,
+  } = useNodeInsertion({
     catalogSpecs,
     reactFlowInstance,
-    onAddNode: handleAddNode,
-    onUnknownNodeType: () => setMessage("Unable to add node: unknown type."),
-    canAddNode: (spec) => spec.type !== RERANKER_NODE_TYPE || hasRerankingProvider,
-    onUnavailableNodeType: () => setMessage(rerankingProviderMessage ?? RERANKER_PROVIDER_REQUIRED),
+    llmModels: modelCatalogs.llmModels,
+    hasRerankingProvider,
+    rerankingProviderMessage,
+    addNode,
+    previewNodeSpec,
+    setMessage,
   });
-
-  const handlePreviewNode = useCallback(
-    (spec: NodeSpec) =>
-      previewWithRerankerGate(
-        spec,
-        hasRerankingProvider,
-        rerankingProviderMessage,
-        previewNodeSpec,
-        setMessage,
-      ),
-    [hasRerankingProvider, previewNodeSpec, rerankingProviderMessage, setMessage],
-  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -188,36 +162,16 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const selectedPipelineId = selectedPipeline?.id ?? null;
   const selectedPipelineVersion = selectedPipeline?.current_version ?? 0;
-  const selectedPipelineRef = useRef(selectedPipeline);
-  selectedPipelineRef.current = selectedPipeline;
 
-  // Rebuild the canvas when the pipeline (or its active revision) changes --
-  // deliberately NOT on every `selectedPipeline` object identity change, so
-  // silent layout saves don't wipe in-progress edits.
-  useEffect(() => {
-    const pipeline = selectedPipelineRef.current;
-    if (!pipeline || nodeSpecs.length === 0 || pipeline.id !== selectedPipelineId) {
-      setNodes([]);
-      setEdges([]);
-      setVariables([]);
-      return;
-    }
-    let flowNodes = toFlowNodes(pipeline.definition, nodeSpecs);
-    const flowEdges = toFlowEdges(pipeline.definition, nodeSpecs);
-    if (needsAutoLayout(flowNodes)) {
-      flowNodes = layoutPipelineNodes(flowNodes, flowEdges);
-    }
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-    setVariables(pipeline.definition.variables ?? []);
-    closeEditor();
-    dragDrop.handleDragLeave();
-    // The camera re-fits via PipelineCanvas's remount key (id+version), which
-    // waits for the freshly mounted nodes to be measured.
-    // dragDrop.handleDragLeave is intentionally omitted: it is stable. Keyed
-    // on id + version so layout-only saves don't reset in-progress edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPipelineId, selectedPipelineVersion, nodeSpecs, setNodes, setEdges, closeEditor]);
+  useCanvasSeeding({
+    selectedPipeline,
+    nodeSpecs,
+    setNodes,
+    setEdges,
+    setVariables,
+    closeEditor,
+    clearDropPreview: dragDrop.handleDragLeave,
+  });
 
   const pendingChanges = useMemo(() => {
     if (!selectedPipeline) return [];
@@ -242,6 +196,15 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     guard(() => setSelectedPipeline(pipeline));
   };
 
+  const openPipelineNode = usePipelineDeepLink({
+    pipelines,
+    nodes,
+    seedPipeline: setSelectedPipeline,
+    switchPipeline: handleSelectPipeline,
+    selectNode,
+  });
+  const editorHandle = useMemo(() => ({ openNode: openPipelineNode }), [openPipelineNode]);
+
   const { connecting, validateConnection, handleConnect, handleConnectStart, handleConnectEnd } =
     useConnectionTyping({
       nodes,
@@ -260,9 +223,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   });
 
   const { scheduleLayoutSave, handleAutoLayout } = useLayoutPersistence({
-    selectedPipelineRef,
-    nodesRef,
-    edgesRef,
+    selectedPipeline,
+    nodes,
+    edges,
     setNodes,
     reactFlowInstance,
     persistLayout,
@@ -316,7 +279,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   }, []);
 
   return (
-    <>
+    <PipelineEditorContext.Provider value={editorHandle}>
       <PipelineModals
         ref={modalsRef}
         kind={kind}
@@ -348,6 +311,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         hasPipeline={Boolean(selectedPipeline)}
         pipelineName={selectedPipeline?.name}
         pipelineVersion={selectedPipeline?.current_version}
+        onRenamePipeline={() => setRenameOpen(true)}
       />
 
       <PipelineBuilderWorkspace
@@ -447,6 +411,10 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         discardOpen={confirmOpen}
         onConfirmDiscard={confirmDiscard}
         onCancelDiscard={cancelDiscard}
+        renameOpen={renameOpen}
+        onCloseRename={() => setRenameOpen(false)}
+        renamePipeline={selectedPipeline}
+        onRename={handleRenamePipeline}
       />
       <TokenizerConsentDialog
         modelId={tokenizerConsent.modelId}
@@ -456,6 +424,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onConfirm={() => void tokenizerConsent.confirm()}
         onCancel={tokenizerConsent.cancel}
       />
-    </>
+    </PipelineEditorContext.Provider>
   );
 }

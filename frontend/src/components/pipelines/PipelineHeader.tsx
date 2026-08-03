@@ -1,12 +1,13 @@
 "use client";
 
-import { History } from "lucide-react";
+import { History, SquarePen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { SectionTabs } from "@/components/ui/tabs";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import { PIPELINE_KIND_LABELS, PIPELINE_KINDS } from "./lib/pipeline-kinds";
 
@@ -26,6 +27,8 @@ type PipelineHeaderProps = {
   /** The open pipeline's name and revision, shown as the bar's live state. */
   pipelineName?: string | null;
   pipelineVersion?: number | null;
+  /** Opens the rename prompt; omitted while there is nothing to rename. */
+  onRenamePipeline?: () => void;
 };
 
 const KIND_TABS: SectionTab[] = PIPELINE_KINDS.map((value) => ({
@@ -52,6 +55,7 @@ export function PipelineHeader({
   hasPipeline,
   pipelineName,
   pipelineVersion,
+  onRenamePipeline,
 }: PipelineHeaderProps) {
   const dirty = unsavedCount > 0;
 
@@ -65,6 +69,21 @@ export function PipelineHeader({
               <InstrumentLabel className="min-w-0 truncate text-body">
                 {pipelineName}
               </InstrumentLabel>
+              {/* The name is stated here, so this is where renaming it lives —
+                  a copied pipeline otherwise keeps its "(copy)" name forever. */}
+              {onRenamePipeline ? (
+                <Tooltip content="Rename pipeline">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0"
+                    onClick={onRenamePipeline}
+                    aria-label={`Rename ${pipelineName}`}
+                  >
+                    <SquarePen className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </Tooltip>
+              ) : null}
               {typeof pipelineVersion === "number" ? (
                 <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
                   v{pipelineVersion}
