@@ -29,6 +29,11 @@ TRANSFORM_PRESETS: tuple[NodePreset, ...] = (
                 "the overall document for the purposes of improving search "
                 "retrieval of the chunk."
             ),
+            # The context is prepended to every chunk, so it spends the
+            # embedding model's input limit. A couple of sentences fit well
+            # inside this; leaving it unset would let one long answer push
+            # every chunk past the limit and into the embedding guard.
+            "max_output_tokens": 150,
             "output_fields": [
                 {
                     "name": "context",

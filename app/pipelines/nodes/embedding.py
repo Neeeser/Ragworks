@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.payloads import Item, ItemBatch, TokenizerSpec, trace_items
+from app.pipelines.nodes.embedding_guard import guard_items_for_embedding
+from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
@@ -29,9 +30,7 @@ from app.pipelines.tracing.summaries import (
     summarize_embeddings,
 )
 from app.pipelines.variables import STATIC_ONLY_EXTRA
-from app.providers.base import effective_embedding_input_limit
 from app.retrieval.embedders.base import Embedder
-from app.retrieval.tokenizers.resources import build_token_counter
 from app.services.errors import (
     InvalidInputError,
     ServiceError,
@@ -42,36 +41,6 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
-
-
-def _rekey_split_items(parts_by_item: list[tuple[Item, list[str]]]) -> list[Item]:
-    """Re-key a batch whose oversized items were split into parts.
-
-    Document-owned batches renumber to the canonical `{document_id}:{order}`
-    scheme so vector ids and per-document deletion stay consistent;
-    free-standing items keep their id, with a `#part` suffix when split.
-    """
-    renumber = all(item.document_id is not None for item, _ in parts_by_item)
-    rekeyed: list[Item] = []
-    for item, parts in parts_by_item:
-        for part_index, text in enumerate(parts):
-            if renumber:
-                order = len(rekeyed)
-                item_id = f"{item.document_id}:{order}"
-            else:
-                order = item.order if item.order is not None else len(rekeyed)
-                item_id = item.id if len(parts) == 1 else f"{item.id}#{part_index}"
-            rekeyed.append(
-                item.model_copy(
-                    update={
-                        "id": item_id,
-                        "text": text,
-                        "order": order,
-                        "metadata": item.metadata.model_copy(deep=True),
-                    }
-                )
-            )
-    return rekeyed
 
 
 class EmbedderConfig(BaseModel):
@@ -237,65 +206,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         if self.config.connection_id is None:  # guarded by run(), kept for type narrowing
             return batch
         published_limit = self._embedding_input_limit(context)
-        return self.guard_items_for_embedding(batch, published_limit, context)
-
-    @staticmethod
-    def guard_items_for_embedding(
-        batch: ItemBatch,
-        published_limit: int | None,
-        context: PipelineRunContext,
-    ) -> ItemBatch:
-        """Split oversized textual items once before they fan out to index planes.
-
-        Split parts of a document-owned item are re-keyed to the canonical
-        `{document_id}:{order}` scheme (the whole batch renumbers, so vector
-        ids and per-document deletion stay consistent); free-standing items
-        keep their id with a `#part` suffix.
-        """
-        if published_limit is None:
-            return batch
-        limit = effective_embedding_input_limit(published_limit)
-        if limit <= 0:
-            return batch
-
-        # A whitespace tokenizer is useful for legacy chunking, but it is not
-        # an estimate of model tokens. The runtime guard must use a real model
-        # tokenizer whenever the configured tokenizer cannot enforce the provider's
-        # limit, otherwise providers may still silently truncate the parts.
-        tokenizer = batch.tokenizer or TokenizerSpec(kind="wordpiece")
-        if tokenizer.kind == "whitespace":
-            tokenizer = TokenizerSpec(kind="wordpiece")
-        counter = build_token_counter(tokenizer, context.storage.base_path)
-
-        split_any = False
-        parts_by_item: list[tuple[Item, list[str]]] = []
-        for original_index, item in enumerate(batch.items):
-            text = item.text or ""
-            token_count = counter.count(text)
-            # Overlap is added to chunk_size, so the size passed here has to
-            # leave room for it — splitting at the full limit plus an overlap
-            # would emit parts over the very limit this guard enforces.
-            guard_overlap = min(32, max(0, limit - 1))
-            if token_count > limit:
-                parts = counter.split(
-                    text,
-                    chunk_size=max(1, limit - guard_overlap),
-                    overlap=guard_overlap,
-                )
-                split_any = True
-                warning = (
-                    f"Item '{item.id}' (index {original_index}) contained "
-                    f"{token_count} tokens, exceeding the {limit}-token embedding limit, "
-                    f"and was split into {len(parts)} parts using the {tokenizer.kind} counter."
-                )
-                if context.trace is not None:
-                    context.trace.record_warning(warning)
-            else:
-                parts = [text]
-            parts_by_item.append((item, parts))
-        if not split_any:
-            return batch
-        return batch.model_copy(update={"items": _rekey_split_items(parts_by_item)})
+        return guard_items_for_embedding(batch, published_limit, context)
 
     def _embedding_input_limit(self, context: PipelineRunContext) -> int | None:
         """Resolve provider metadata, treating recognized lookup failures as unknown."""

@@ -147,6 +147,25 @@ class TestTransform:
         assert batch.items[0].text == "From chapter 2.\n\nchunk body"
         assert "whole document" in chat.requests[0].messages[-1]["content"]
 
+    def test_the_output_budget_is_sent_as_the_request_cap(self, session: Session) -> None:
+        """A budget nothing honours would be worse than none — the window check trusts it."""
+        chat = StubChatProvider(responses=[_content({"topic": "alpha"})])
+        node = LlmTransformNode(_transform_config(max_output_tokens=150))
+        context = _context(session, chat=chat, ingestion=True)
+
+        node.run({"items": _batch("one")}, context)
+
+        assert chat.requests[0].parameters["max_tokens"] == 150
+
+    def test_no_budget_sends_no_cap(self, session: Session) -> None:
+        chat = StubChatProvider(responses=[_content({"topic": "alpha"})])
+        node = LlmTransformNode(_transform_config())
+        context = _context(session, chat=chat, ingestion=True)
+
+        node.run({"items": _batch("one")}, context)
+
+        assert "max_tokens" not in chat.requests[0].parameters
+
     def test_ingestion_is_strict_after_retries(self, session: Session) -> None:
         chat = StubChatProvider(responses=[_rate_limited() for _ in range(5)])
         node = LlmTransformNode(_transform_config())

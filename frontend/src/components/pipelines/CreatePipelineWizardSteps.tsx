@@ -141,7 +141,7 @@ export function WizardProcessingStep({
                   <p className="text-ui font-medium text-primary">{preset.label}</p>
                   <p className="mt-0.5 text-instrument leading-4 text-muted">{preset.hint}</p>
                   <p className="mt-1 font-mono text-instrument tabular-nums text-meta">
-                    {preset.size} words · {preset.overlap} overlap
+                    {preset.size} tokens · {preset.overlap} overlap
                   </p>
                 </button>
               );
@@ -150,7 +150,7 @@ export function WizardProcessingStep({
           <ChunkWindowSummary
             chunkSize={chunkSize}
             chunkOverlap={chunkOverlap}
-            unit="words"
+            unit="tokens"
             className="mt-2"
           />
           <button
@@ -163,7 +163,7 @@ export function WizardProcessingStep({
           </button>
           {showAdvancedChunking ? (
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <Field label="Chunk size (words)">
+              <Field label="Chunk size (tokens)">
                 <TextInput
                   type="number"
                   min={64}
@@ -172,7 +172,7 @@ export function WizardProcessingStep({
                   onChange={(event) => onChunkChange(Number(event.target.value) || 0, chunkOverlap)}
                 />
               </Field>
-              <Field label="Chunk overlap (words)">
+              <Field label="Chunk overlap (tokens)">
                 <TextInput
                   type="number"
                   min={0}
@@ -309,7 +309,7 @@ export function WizardReviewStep({
               <span className="font-mono tabular-nums">
                 {chunkSize}/{chunkOverlap}
               </span>{" "}
-              words
+              tokens
             </dd>
           </div>
         ) : null}

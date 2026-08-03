@@ -167,6 +167,14 @@ class LlmEngine:
         messages.append({"role": "user", "content": user_prompt})
 
         parameters: dict[str, Any] = {"temperature": self._config.temperature}
+        if self._config.max_output_tokens is not None:
+            # `max_tokens` is the canonical chat-parameter spelling every
+            # dialect reads (Ollama renames it to `num_predict`, Anthropic
+            # clamps it to the model's ceiling). A wire spelling here would be
+            # dropped in silence and the declared budget would bound nothing —
+            # which is worse than no budget, because the chunk-window check
+            # trusts it.
+            parameters["max_tokens"] = self._config.max_output_tokens
         tools: list[dict[str, Any]] | None = None
         if self.mechanism == "response_format":
             parameters["response_format"] = {

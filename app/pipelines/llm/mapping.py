@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.pipelines.llm.config import OutputFieldSpec, ScoreTarget, TextTarget
-from app.pipelines.payloads import Item
+from app.pipelines.payloads import Item, TextAffixes
 from app.retrieval.models import DocumentMetadata
 
 
@@ -23,6 +23,7 @@ def apply_annotations(item: Item, fields: list[OutputFieldSpec], values: dict[st
     """
     metadata = dict(item.metadata.data)
     text = item.text
+    affixes = item.text_affixes or TextAffixes()
     score = item.score
     metadata_changed = False
     for spec in fields:
@@ -32,24 +33,43 @@ def apply_annotations(item: Item, fields: list[OutputFieldSpec], values: dict[st
             metadata[target.key] = value
             metadata_changed = True
         elif isinstance(target, TextTarget):
-            text = _apply_text(text, str(value), target)
+            text, affixes = _apply_text(text, affixes, str(value), target)
         elif isinstance(target, ScoreTarget):
             score = float(value)
     return item.model_copy(
         update={
             "metadata": DocumentMetadata(data=metadata) if metadata_changed else item.metadata,
             "text": text,
+            "text_affixes": None if affixes.empty else affixes,
             "score": score,
         }
     )
 
 
-def _apply_text(existing: str | None, value: str, target: TextTarget) -> str:
+def _apply_text(
+    existing: str | None, affixes: TextAffixes, value: str, target: TextTarget
+) -> tuple[str, TextAffixes]:
+    """Return the item's new text and what now surrounds its content.
+
+    The affixes are recorded so the embedding guard can repeat them onto
+    every part of an item it has to split — written context that survives on
+    one part only is the opposite of what writing it was for, and that is as
+    true of an `append` as of a `prepend`. A `replace` discards the content,
+    so nothing surrounds it any more.
+    """
     if target.mode == "replace" or existing is None:
-        return value
+        return value, TextAffixes()
     if target.mode == "prepend":
-        return f"{value}{target.separator}{existing}"
-    return f"{existing}{target.separator}{value}"
+        return (
+            f"{value}{target.separator}{existing}",
+            TextAffixes(
+                prefix=f"{value}{target.separator}{affixes.prefix}", suffix=affixes.suffix
+            ),
+        )
+    return (
+        f"{existing}{target.separator}{value}",
+        TextAffixes(prefix=affixes.prefix, suffix=f"{affixes.suffix}{target.separator}{value}"),
+    )
 
 
 def items_field(fields: list[OutputFieldSpec]) -> OutputFieldSpec | None:
