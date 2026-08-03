@@ -28,12 +28,15 @@ from app.schemas.collections import (
     CollectionCreate,
     CollectionDeleteResponse,
     CollectionIndexesRead,
-    CollectionPromptRead,
-    CollectionPromptUpdate,
     CollectionRead,
     CollectionStatsHistoryRead,
     CollectionStatsRead,
     CollectionUpdate,
+)
+from app.schemas.prompts import (
+    PromptReference,
+    PromptSelectionRead,
+    PromptSelectionUpdate,
 )
 from app.services.collection_deletion import CollectionDeletionService
 from app.services.collection_history import CollectionHistoryService
@@ -137,13 +140,13 @@ def get_collection(
     return _to_schema(session, get_collection_or_404(collection_id, current_user.id, session))
 
 
-@router.get("/{collection_id}/prompt", response_model=CollectionPromptRead)
+@router.get("/{collection_id}/prompt", response_model=PromptSelectionRead)
 def get_collection_prompt(
     collection_id: UUID,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
-) -> CollectionPromptRead:
-    """Return the rendered system prompt for a collection."""
+) -> PromptSelectionRead:
+    """Return the collection's tool prompt selection and its rendering."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
         return CollectionService(session).prompt_read(collection, current_user)
@@ -192,17 +195,18 @@ def update_collection(
     return _to_schema(session, collection)
 
 
-@router.patch("/{collection_id}/prompt", response_model=CollectionPromptRead)
+@router.patch("/{collection_id}/prompt", response_model=PromptSelectionRead)
 def update_collection_prompt(
     collection_id: UUID,
-    payload: CollectionPromptUpdate,
+    payload: PromptSelectionUpdate,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
-) -> CollectionPromptRead:
-    """Update the system prompt template for a collection."""
+) -> PromptSelectionRead:
+    """Point the collection's tool prompt at a library prompt."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
+    reference = PromptReference(prompt_id=payload.prompt_id, version=payload.version)
     try:
-        return CollectionService(session).update_prompt(collection, current_user, payload.template)
+        return CollectionService(session).update_prompt(collection, current_user, reference)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 

@@ -1,251 +1,147 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { PromptEditorOverlay } from "@/components/chat-studio/PromptEditorOverlay";
+import { makePromptRead, makePromptSelection } from "@/test/fixtures";
 
-import type { PromptDetails } from "@/lib/types";
+import type { PromptSection } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
+
+function makeSection(overrides: Partial<PromptSection> = {}): PromptSection {
+  return {
+    id: "base",
+    label: "Base",
+    scope: "base",
+    selection: makePromptSelection(),
+    choice: { promptId: "prompt-1", version: "latest" },
+    choiceBody: "System prompt for {{user}}",
+    hasChanges: false,
+    saving: false,
+    error: null,
+    ...overrides,
+  };
+}
+
+const libraryPrompts = [
+  makePromptRead(),
+  makePromptRead({ id: "prompt-2", name: "Alt base", current_version: 3 }),
+  makePromptRead({ id: "prompt-tool", name: "Tool prompt", context: "chat.tool" }),
+];
 
 describe("PromptEditorOverlay", () => {
-  const details: PromptDetails = {
-    template: "Hello",
-    rendered: "Hello",
-    is_custom: true,
-    variables: [{ name: "collection", description: "Collection name", example: "Support" }],
-    context: { collection: "Support" },
-  };
-
-  it("returns null when closed or empty", () => {
-    const { container, rerender } = render(
+  it("renders nothing while closed", () => {
+    const { container } = render(
       <PromptEditorOverlay
         isOpen={false}
-        onClose={() => undefined}
-        sections={[]}
-        activeSectionId={null}
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
+        onClose={vi.fn()}
+        sections={[makeSection()]}
+        activeSectionId="base"
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={vi.fn()}
+        onSave={vi.fn()}
         promptPreviewMarkdown=""
-        inputRef={React.createRef()}
       />,
     );
-    expect(container.firstChild).toBeNull();
-
-    rerender(
-      <PromptEditorOverlay
-        isOpen
-        onClose={() => undefined}
-        sections={[]}
-        activeSectionId={null}
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
-        promptPreviewMarkdown=""
-        inputRef={React.createRef()}
-      />,
-    );
-    expect(container.firstChild).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders sections, variables, and actions", () => {
-    const onClose = vi.fn();
-    const onSelectSection = vi.fn();
-    const onDraftChange = vi.fn();
-    const onSave = vi.fn();
-    const onReset = vi.fn();
-    const onInsertVariable = vi.fn();
-
+  it("lists only prompts matching the section's context", async () => {
+    const user = userEvent.setup();
     render(
       <PromptEditorOverlay
         isOpen
-        onClose={onClose}
-        sections={[
-          {
-            id: "base",
-            label: "Base",
-            scope: "base",
-            details,
-            draft: "Hello",
-            hasChanges: true,
-            saving: false,
-            error: null,
-          },
-          {
-            id: "tool",
-            label: "Tool",
-            scope: "collection",
-            details: null,
-            draft: "",
-            hasChanges: false,
-            saving: false,
-            error: null,
-          },
-        ]}
+        onClose={vi.fn()}
+        sections={[makeSection()]}
         activeSectionId="base"
-        onSelectSection={onSelectSection}
-        onDraftChange={onDraftChange}
-        onSave={onSave}
-        onReset={onReset}
-        onInsertVariable={onInsertVariable}
-        promptPreviewMarkdown=""
-        inputRef={React.createRef()}
-      />,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Edit prompt sections" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Tool/ }));
-    expect(onSelectSection).toHaveBeenCalledWith("tool");
-
-    fireEvent.click(screen.getByRole("button", { name: "Revert to default" }));
-    expect(onReset).toHaveBeenCalledWith("base");
-
-    fireEvent.change(screen.getByPlaceholderText(/Write instructions/), {
-      target: { value: "Next" },
-    });
-    expect(onDraftChange).toHaveBeenCalledWith("base", "Next");
-
-    fireEvent.click(screen.getByRole("button", { name: /collection/ }));
-    expect(onInsertVariable).toHaveBeenCalledWith("base", "collection");
-
-    fireEvent.click(screen.getByRole("button", { name: "Save prompt" }));
-    expect(onSave).toHaveBeenCalledWith("base");
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("closes on Escape", () => {
-    const onClose = vi.fn();
-    render(
-      <PromptEditorOverlay
-        isOpen
-        onClose={onClose}
-        sections={[
-          {
-            id: "base",
-            label: "Base",
-            scope: "base",
-            details,
-            draft: "Hello",
-            hasChanges: false,
-            saving: false,
-            error: null,
-          },
-        ]}
-        activeSectionId="base"
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
-        promptPreviewMarkdown=""
-        inputRef={React.createRef()}
-      />,
-    );
-
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("shows errors and disables saving", () => {
-    render(
-      <PromptEditorOverlay
-        isOpen
-        onClose={() => undefined}
-        sections={[
-          {
-            id: "base",
-            label: "Base",
-            scope: "base",
-            details,
-            draft: "Hello",
-            hasChanges: false,
-            saving: true,
-            error: "Save failed",
-          },
-        ]}
-        activeSectionId="base"
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={vi.fn()}
+        onSave={vi.fn()}
         promptPreviewMarkdown="Preview"
-        inputRef={React.createRef()}
       />,
     );
-
-    expect(screen.getByText("Save failed")).toBeInTheDocument();
-    const saveButton = screen.getByRole("button", { name: "Save prompt" });
-    expect(saveButton).toBeDisabled();
+    await user.click(screen.getByRole("combobox", { name: "Prompt" }));
+    expect(screen.getByRole("option", { name: "Alt base" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Tool prompt" })).not.toBeInTheDocument();
   });
 
-  it("shows empty variables and context", () => {
+  it("reports a picked prompt as a latest-version choice", async () => {
+    const user = userEvent.setup();
+    const onChoice = vi.fn();
     render(
       <PromptEditorOverlay
         isOpen
-        onClose={() => undefined}
-        sections={[
-          {
-            id: "tool",
-            label: "Tool",
-            scope: "collection",
-            details: { template: "", rendered: "", is_custom: false, variables: [], context: {} },
-            draft: "",
-            hasChanges: false,
-            saving: false,
-            error: null,
-          },
-        ]}
-        activeSectionId="tool"
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
-        promptPreviewMarkdown=""
-        inputRef={React.createRef()}
+        onClose={vi.fn()}
+        sections={[makeSection()]}
+        activeSectionId="base"
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={onChoice}
+        onSave={vi.fn()}
+        promptPreviewMarkdown="Preview"
       />,
     );
-
-    expect(screen.getByText("No template variables available.")).toBeInTheDocument();
-    expect(screen.getByText("Context not available yet.")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Prompt" }));
+    await user.click(screen.getByRole("option", { name: "Alt base" }));
+    expect(onChoice).toHaveBeenCalledWith("base", { promptId: "prompt-2", version: "latest" });
   });
 
-  it("falls back to the first section when active selection is missing", () => {
+  it("pins a concrete version through the version dropdown", async () => {
+    const user = userEvent.setup();
+    const onChoice = vi.fn();
     render(
       <PromptEditorOverlay
         isOpen
-        onClose={() => undefined}
-        sections={[
-          {
-            id: "base",
-            label: "Base",
-            scope: "base",
-            details: null,
-            draft: "",
-            hasChanges: false,
-            saving: false,
-            error: null,
-          },
-        ]}
-        activeSectionId="missing"
-        onSelectSection={() => undefined}
-        onDraftChange={() => undefined}
-        onSave={() => undefined}
-        onReset={() => undefined}
-        onInsertVariable={() => undefined}
-        promptPreviewMarkdown=""
-        inputRef={React.createRef()}
+        onClose={vi.fn()}
+        sections={[makeSection()]}
+        activeSectionId="base"
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={onChoice}
+        onSave={vi.fn()}
+        promptPreviewMarkdown="Preview"
       />,
     );
+    await user.click(screen.getByRole("combobox", { name: "Version" }));
+    await user.click(screen.getByRole("option", { name: "v1" }));
+    expect(onChoice).toHaveBeenCalledWith("base", { promptId: "prompt-1", version: 1 });
+  });
 
-    expect(screen.getByText("Base prompt template")).toBeInTheDocument();
-    expect(screen.getByText("No template variables available.")).toBeInTheDocument();
-    expect(screen.getByText("Context not available yet.")).toBeInTheDocument();
+  it("disables save until the choice differs from the saved reference", () => {
+    render(
+      <PromptEditorOverlay
+        isOpen
+        onClose={vi.fn()}
+        sections={[makeSection({ hasChanges: false })]}
+        activeSectionId="base"
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={vi.fn()}
+        onSave={vi.fn()}
+        promptPreviewMarkdown="Preview"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Use this prompt" })).toBeDisabled();
+  });
+
+  it("saves the active section when a change is pending", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <PromptEditorOverlay
+        isOpen
+        onClose={vi.fn()}
+        sections={[makeSection({ hasChanges: true })]}
+        activeSectionId="base"
+        libraryPrompts={libraryPrompts}
+        onSelectSection={vi.fn()}
+        onChoice={vi.fn()}
+        onSave={onSave}
+        promptPreviewMarkdown="Preview"
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Use this prompt" }));
+    expect(onSave).toHaveBeenCalledWith("base");
   });
 });

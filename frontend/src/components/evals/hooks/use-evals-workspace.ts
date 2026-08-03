@@ -17,6 +17,7 @@ import {
   generateEvalDataset,
   importEvalBenchmark,
   listChatModels,
+  listPrompts,
   uploadEvalDataset,
 } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -48,6 +49,8 @@ export function useEvalsWorkspace() {
     enabled: !!token,
   });
   const chatModels = useApiQuery(() => listChatModels(token!), [token], { enabled: !!token });
+  // Only to name a prompt-comparison intent arriving from the studio.
+  const prompts = useApiQuery(() => listPrompts(token!), [token], { enabled: !!token });
 
   const hasActiveRun = useMemo(
     () => (runs.data ?? []).some((run) => isRunActive(run.status)),
@@ -139,6 +142,7 @@ export function useEvalsWorkspace() {
     generateDataset,
     userCollections,
     chatModels,
+    prompts,
     removeDataset,
     removeRun,
     removeCollection,

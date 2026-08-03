@@ -133,11 +133,19 @@ export function NodeConfigSections({
     const declarationField =
       (isRetrievalInput && field.key === "arguments") ||
       (isRetrievalOutput && field.key === "outputs");
+    // `prompt_ref` belongs here too: the drawer renders it as a prompt +
+    // version picker, so leaving it in the generic list puts a second,
+    // editable copy of the wire shape on screen as raw JSON.
     const llmHidden =
       isLlmNode &&
-      ["connection_id", "model_name", "system_prompt", "prompt", "output_fields"].includes(
-        field.key,
-      );
+      [
+        "connection_id",
+        "model_name",
+        "system_prompt",
+        "prompt",
+        "prompt_ref",
+        "output_fields",
+      ].includes(field.key);
     const filterHidden = isRetrieverNode && field.key === "filter";
     return !(
       embedderHidden ||

@@ -6,7 +6,6 @@ import type {
   Collection,
   CollectionCreatePayload,
   CollectionIndexesRead,
-  CollectionPromptDetails,
   CollectionQueryArgumentsResponse,
   CollectionQueryRequest,
   CollectionQueryResult,
@@ -17,7 +16,8 @@ import type {
   DocumentTrace,
   EndToEndTrace,
   PipelineTraceResponse,
-  PromptDetails,
+  PromptSelection,
+  PromptSelectionUpdatePayload,
 } from "@/lib/types";
 
 export async function fetchCollections(token: string): Promise<Collection[]> {
@@ -61,31 +61,34 @@ export async function fetchCollectionStatsHistory(
 export async function getCollectionPrompt(
   token: string,
   collectionId: string,
-): Promise<CollectionPromptDetails> {
-  return apiFetch<CollectionPromptDetails>(`/api/collections/${collectionId}/prompt`, { token });
+): Promise<PromptSelection> {
+  return apiFetch<PromptSelection>(`/api/collections/${collectionId}/prompt`, { token });
 }
 
-export async function getBasePrompt(token: string): Promise<PromptDetails> {
-  return apiFetch<PromptDetails>("/api/chat/prompt", { token });
+export async function getBasePrompt(token: string): Promise<PromptSelection> {
+  return apiFetch<PromptSelection>("/api/chat/prompt", { token });
 }
 
 export async function updateCollectionPrompt(
   token: string,
   collectionId: string,
-  template: string,
-): Promise<CollectionPromptDetails> {
-  return apiFetch<CollectionPromptDetails>(`/api/collections/${collectionId}/prompt`, {
+  payload: PromptSelectionUpdatePayload,
+): Promise<PromptSelection> {
+  return apiFetch<PromptSelection>(`/api/collections/${collectionId}/prompt`, {
     method: "PATCH",
     token,
-    body: JSON.stringify({ template }),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function updateBasePrompt(token: string, template: string): Promise<PromptDetails> {
-  return apiFetch<PromptDetails>("/api/chat/prompt", {
+export async function updateBasePrompt(
+  token: string,
+  payload: PromptSelectionUpdatePayload,
+): Promise<PromptSelection> {
+  return apiFetch<PromptSelection>("/api/chat/prompt", {
     method: "PATCH",
     token,
-    body: JSON.stringify({ template }),
+    body: JSON.stringify(payload),
   });
 }
 

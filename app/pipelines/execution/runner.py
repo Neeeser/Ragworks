@@ -26,6 +26,7 @@ from app.pipelines.definition import PipelineDefinition
 from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
+from app.pipelines.prompt_refs import resolve_prompt_references
 from app.pipelines.registry import NodeRegistry, default_registry
 from app.pipelines.resolution import resolve_definition
 from app.pipelines.settings import collection_scope
@@ -101,6 +102,12 @@ class PipelineRunner:
             binding=BindingContext(collection=collection_scope(collection)),
         )
         resolved = resolve_definition(definition, environment)
+        # Prompt references resolve after expressions, before the run row
+        # exists — a dangling reference raises and never records a failed
+        # run. Provenance pins `latest` to the concrete version it ran as.
+        resolved, prompt_provenance = resolve_prompt_references(
+            self._session, user.id, resolved
+        )
         # The caller-facing result limit becomes the run's effective request
         # depth at this boundary. Retriever configs still use their precise
         # `top_k` field name and may deliberately over-fetch.
@@ -116,6 +123,7 @@ class PipelineRunner:
             collection_id=collection.id,
             status=models.PipelineRunStatus.RUNNING,
             started_at=utc_now(),
+            prompt_versions=prompt_provenance or None,
         )
         self._session.add(run)
         self._session.flush()

@@ -216,6 +216,11 @@ the same PR.
 - **Effects must not write state they derive.** Computing a value in `useMemo` and
   copying it into `useState` via an effect adds a render per change and a stale
   window. Derive it where you use it.
+- **After a mutation, apply the response — don't immediately refetch.** The
+  backend's request session commits at dependency teardown, after the response
+  is sent, so a GET fired the instant a POST resolves can read the pre-write
+  state and quietly revert the UI. Mutation endpoints return the updated
+  entity; fold that into state, and let any list refetch be cosmetic.
 - **Background refetches must be invisible to in-progress work.** The auth
   provider rotates the token every 12 minutes, re-running every data effect
   keyed on it — a reload must preserve the user's selection (re-find by id, not
@@ -351,6 +356,39 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
+- **A template and its rendering are one surface with two toggles, not two
+  columns.** The prompt studio shows each template once at full width and
+  switches how it reads on two independent axes: `Source ⇄ Rendered` (editable
+  markdown, or the formatted result) and `Names ⇄ Values` (`{{text}}` literal,
+  or an atomic chip carrying its sample value). A side-by-side preview pane
+  differs from its source only where a variable appears, so it spends half the
+  page duplicating text — no shipped prompt has a variable in its system
+  message, which makes that pane a byte-for-byte copy for every prompt in the
+  library. **Rendered is not optional polish**: syntax highlighting shows that
+  `##` is a heading, never what the heading looks like, and a prompt author
+  needs to see the formatting the model will receive.
+- **Rendered is read-only, and says so.** Formatted markdown needs a renderer;
+  the value chips need the editor — they cannot share a box. So Rendered
+  labels itself a preview rather than silently swallowing keystrokes, and any
+  panel-level control (full screen) lives outside the editor's own toolbar, or
+  it disappears with it and strands the user.
+- **A variable's sample value is session state, never part of a version.** It
+  is the corpus you are tuning against, not the template, and two people
+  editing one prompt test it on different data — so it is excluded from
+  "unsaved changes" and survives switching prompts. It reaches the render
+  preview and the test run (`values` on both endpoints); a bench that can only
+  exercise the catalog's stock examples answers "is this prompt well-formed",
+  never "does this prompt work on my data".
+- **An inner-loop editor opens over the work, never instead of it.** Tuning a
+  node's prompt is edit-test-edit, so `PromptStudioOverlay` mounts the studio
+  above the canvas rather than navigating to `/prompts`: a route change there
+  costs the user their unsaved graph and their place. Anything that creates a
+  new entity from inside such an overlay reports it back (`onForked`) so the
+  caller repoints — a fork nothing was repointed at is an edit that silently
+  does nothing.
+- **A picker that repoints at something it just created must refetch its
+  options.** The new entity postdates the list, so the control holds an id it
+  cannot name and renders blank over a perfectly valid reference.
 - **Every model choice renders one of two shared components — there is no third
   way to pick a model.** A pane gets `ModelPickerInline`; a form row gets
   `ModelPickerField`, a trigger showing the selected model that opens the same

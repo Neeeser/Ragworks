@@ -27,7 +27,6 @@ from app.schemas.collections import CollectionCreate, CollectionUpdate
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
-from app.services.prompts import SYSTEM_PROMPT_METADATA_KEY
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
@@ -191,7 +190,7 @@ def test_prompt_read_returns_template(session: Session) -> None:
 
     prompt = CollectionService(session).prompt_read(collection, user)
 
-    assert prompt.template
+    assert prompt.body
     assert prompt.rendered
 
 
@@ -223,33 +222,40 @@ def test_prompt_read_rejects_unresolvable_pipeline(monkeypatch, session: Session
         )
 
 
-def test_update_prompt_persists_and_clears_template(session: Session) -> None:
-    """Prompt updates must survive to the database, not just the request session.
+def test_update_prompt_persists_a_reference(session: Session) -> None:
+    """The reference must survive to the database, not just the request session.
 
     Regression coverage: the JSON ``extra_metadata`` column is reassigned (never
-    mutated in place) so SQLAlchemy tracks the change. Every persistence
+    mutated in place) so SQLAlchemy tracks the change. The persistence
     assertion reads through a FRESH session so it can't pass via object identity.
     """
+    from app.schemas.enums import PromptContext
+    from app.schemas.prompts import PromptCreate, PromptReference
+    from app.services.prompts.library import PromptLibraryService
+    from app.services.prompts.usage import TOOL_PROMPT_REF_KEY
+
     user = _create_user(session)
     collection = _create_collection(session, user)
-    original_updated_at = collection.updated_at
+    library_prompt = PromptLibraryService(session).create(
+        user.id,
+        PromptCreate(
+            name="Tool tone",
+            context=PromptContext.CHAT_TOOL,
+            body="Hello {{collection.name}}",
+        ),
+    )
+    session.commit()
     service = CollectionService(session)
 
-    updated = service.update_prompt(collection, user, "Hello {{collection.name}}")
-    assert updated.template
+    updated = service.update_prompt(
+        collection, user, PromptReference(prompt_id=library_prompt.id, version="latest")
+    )
+    assert updated.body == "Hello {{collection.name}}"
     assert updated.rendered
 
     with Session(session.get_bind()) as fresh:
         persisted = fresh.get(models.Collection, collection.id)
         assert persisted is not None
-        assert persisted.extra_metadata.get(SYSTEM_PROMPT_METADATA_KEY) == "Hello {{collection.name}}"
-        assert persisted.updated_at > original_updated_at
-
-    cleared = service.update_prompt(collection, user, "  ")
-    assert "Tool context" in cleared.rendered
-
-    with Session(session.get_bind()) as fresh:
-        persisted = fresh.get(models.Collection, collection.id)
-        assert persisted is not None
-        assert SYSTEM_PROMPT_METADATA_KEY not in persisted.extra_metadata
+        stored = persisted.extra_metadata.get(TOOL_PROMPT_REF_KEY)
+        assert stored == {"prompt_id": str(library_prompt.id), "version": "latest"}
 

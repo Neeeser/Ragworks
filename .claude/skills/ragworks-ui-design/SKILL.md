@@ -87,6 +87,27 @@ console density still doesn't leak out.
     Verify both viewports back-to-back: resize and screenshot desktop then mobile in
     the same pass, so a phone regression is seen next to the desktop state it drifted
     from.
+12. **Content is never silently truncated.** Prompts, messages, chunks, traces — any
+    text a power user audits — renders in full: cap the *container* with its own
+    scroll, or provide an expand path to the complete text, never a bare `…` or a
+    clipped block with no way in. An unexplained ellipsis hides exactly what a
+    traceability tool exists to show. Truncation is reserved for identity labels
+    (names in rails, breadcrumbs, table cells), and only as a deliberate layout
+    decision. `MessageStack` (`components/ui/message-stack.tsx`) is the primitive for
+    chat payloads — role-labelled full-text blocks with a Rendered ⇄ Raw markdown
+    toggle — use it wherever messages are shown rather than joining them into a pre.
+13. **A preview earns its width by differing from its source.** Two panes showing the
+    same content with one substitution is half the page spent on duplication — render
+    one surface and toggle what it shows (the prompt studio's Source ⇄ Rendered and
+    Names ⇄ Values). Toggling is not an excuse to drop a reading: authored markdown
+    still needs a view of what it *becomes*, since highlighting shows that `##` is a
+    heading and never what the heading looks like. Split panes are for genuinely
+    different things: a template and the *payload* it produces, a version and the one
+    before it.
+14. **Editing something must not cost the user their unsaved work.** An editor reached
+    from the middle of a task opens as an overlay over that task, never a route change —
+    and if it can create a new entity, it hands that back so the caller repoints. A fork
+    nothing was repointed at is an edit that silently did nothing.
 
 ## Copy voice
 
@@ -158,6 +179,7 @@ order — the first three do most of the work:
 | `max-w-6xl` + page padding | Strands ~30% of the viewport |
 | Dropping columns/actions in a redesign | Functionality parity is a hard floor — re-form, don't reduce |
 | An icon-only button with no tooltip | The user has to click it to learn what it does |
+| A `max-h` clip or `…` on message/prompt content | Power users audit full text — internal scroll or an expand control, never a silent cut |
 | A `title="…"` attribute for a tooltip | Can't be themed, ignores motion — use `Tooltip` |
 | Native `<select>` in product UI | The popup can't follow the theme or carry icons — always `CustomSelect` (details in `console.md` §10) |
 

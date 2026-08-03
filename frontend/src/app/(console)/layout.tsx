@@ -1,6 +1,14 @@
 "use client";
 
-import { FolderTree, Gauge, GitBranch, Home, MessageSquare, Shield } from "lucide-react";
+import {
+  FolderTree,
+  Gauge,
+  GitBranch,
+  Home,
+  MessageSquare,
+  ScrollText,
+  Shield,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -18,6 +26,7 @@ const navLinks: RailLink[] = [
   { href: "/collections", label: "Collections", icon: FolderTree },
   { href: "/chat", label: "Chat Studio", icon: MessageSquare },
   { href: "/pipelines", label: "Pipelines", icon: GitBranch },
+  { href: "/prompts", label: "Prompts", icon: ScrollText },
   { href: "/evals", label: "Evals", icon: Gauge },
 ];
 

@@ -12,8 +12,23 @@ from dataclasses import dataclass
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.prompts import PromptTemplateError, referenced_placeholders
+from app.pipelines.llm.prompts import referenced_placeholders
 from app.pipelines.node import PipelineValidationIssue
+from app.prompting import PromptTemplateError
+from app.schemas.enums import PromptContext
+
+#: Write targets each shell allows — declared once, read by the node
+#: shells' `ShellRules` and, via `CONTEXT_TARGETS`, by the prompt library's
+#: version-level output-field validation, so the two can't drift.
+TRANSFORM_TARGETS = frozenset({"metadata", "text"})
+RERANK_TARGETS = frozenset({"score", "metadata"})
+GENERATE_TARGETS = frozenset({"items"})
+
+CONTEXT_TARGETS: dict[PromptContext, frozenset[str]] = {
+    PromptContext.NODE_TRANSFORM: TRANSFORM_TARGETS,
+    PromptContext.NODE_RERANK: RERANK_TARGETS,
+    PromptContext.NODE_GENERATE: GENERATE_TARGETS,
+}
 
 
 @dataclass(frozen=True)
@@ -23,6 +38,10 @@ class ShellRules:
     node_label: str
     allowed_targets: frozenset[str]
     allowed_placeholders: frozenset[str]
+    #: Placeholders that carry the per-item payload. A template referencing
+    #: none of them sends an identical prompt for every item, so the node
+    #: does real work and returns one answer copied across the whole stream.
+    payload_placeholders: frozenset[str] = frozenset({"text"})
     #: Exactly one `items`-target field required (the generate shell).
     requires_items_field: bool = False
 
@@ -66,7 +85,43 @@ def shell_issues(
         )
     issues.extend(_field_issues(node, config, rules))
     issues.extend(_placeholder_issues(node, definition, config, rules))
+    issues.extend(_payload_issues(node, config, rules))
     return issues
+
+
+def _payload_issues(
+    node: PipelineNodeDefinition, config: LlmNodeConfig, rules: ShellRules
+) -> list[PipelineValidationIssue]:
+    """Warn when nothing item-specific reaches the model.
+
+    A template with no payload placeholder renders to the same string for
+    every item, so the node spends a model call each and writes one answer
+    across the whole stream — valid, expensive, and almost never intended.
+    """
+    referenced: set[str] = set()
+    for template in (config.system_prompt, config.prompt):
+        try:
+            referenced |= set(referenced_placeholders(template))
+        except PromptTemplateError:
+            # Already reported as an error by `_placeholder_issues`.
+            return []
+    if any(
+        name in rules.payload_placeholders or name.startswith("metadata.") for name in referenced
+    ):
+        return []
+    expected = ", ".join(f"{{{{{name}}}}}" for name in sorted(rules.payload_placeholders))
+    return [
+        PipelineValidationIssue(
+            message=(
+                f"{rules.node_label} node '{node.id}' references nothing from the item it "
+                f"processes, so every item gets the same prompt and the same answer. "
+                f"Add {expected}."
+            ),
+            severity="warning",
+            node_id=node.id,
+            field="prompt",
+        )
+    ]
 
 
 def _field_issues(
@@ -163,7 +218,7 @@ def _placeholder_issues(
                 issues.append(
                     _error(
                         node,
-                        f"{label} node '{node.id}' uses '{{{name}}}', which this "
+                        f"{label} node '{node.id}' uses '{{{{{name}}}}}', which this "
                         "node type cannot provide.",
                         field=field_name,
                     )
@@ -172,7 +227,7 @@ def _placeholder_issues(
             issues.append(
                 _error(
                     node,
-                    f"{label} node '{node.id}' uses '{{document_text}}' but nothing "
+                    f"{label} node '{node.id}' uses '{{{{document_text}}}}' but nothing "
                     "is wired into its document input. Connect the parser to it.",
                     field=field_name,
                 )

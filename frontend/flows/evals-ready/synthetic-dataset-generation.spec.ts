@@ -13,7 +13,8 @@ import { expect, test } from "@playwright/test";
 
 import { loginViaApi } from "../helpers";
 
-const GENERATION_MODEL = /google\/gemini-3\.5-flash-lite/;
+// Model rows carry an aria-label of the display name, not the raw id.
+const GENERATION_MODEL = /Google: Gemini 3\.5 Flash Lite/;
 
 test("generating a synthetic dataset from the seeded collection", async ({ page }) => {
   test.setTimeout(300_000);

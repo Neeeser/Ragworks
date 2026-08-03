@@ -79,15 +79,24 @@ def test_update_settings_sets_run_settings_order(session: Session) -> None:
     assert user.run_settings_order == [entry.value for entry in order]
 
 
-def test_update_base_prompt_sets_and_clears_template(session: Session) -> None:
+def test_set_base_prompt_points_at_a_library_prompt(session: Session) -> None:
+    from app.schemas.enums import PromptContext
+    from app.schemas.prompts import PromptCreate, PromptReference
+    from app.services.prompts.library import PromptLibraryService
+
     user = _persist_user(session)
+    prompt = PromptLibraryService(session).create(
+        user.id,
+        PromptCreate(name="Alt base", context=PromptContext.CHAT_BASE, body="Hi {{user.email}}"),
+    )
+    session.commit()
 
-    AccountService(session).update_base_prompt(user, "  Custom prompt  ")
+    AccountService(session).set_base_prompt(
+        user, PromptReference(prompt_id=prompt.id, version=1)
+    )
     session.refresh(user)
-    assert user.system_prompt_template == "Custom prompt"
-
-    AccountService(session).update_base_prompt(user, "   ")
-    session.refresh(user)
+    assert user.base_prompt_id == prompt.id
+    assert user.base_prompt_version == 1
     assert user.system_prompt_template is None
 
 

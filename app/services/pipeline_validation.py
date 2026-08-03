@@ -10,6 +10,8 @@ from sqlmodel import Session
 
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.prompt_refs import PromptRefError, resolve_prompt_references
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidationResult, PipelineValidator
 from app.providers.registry import get_provider, resolve_connection
@@ -48,6 +50,22 @@ def validate_pipeline_definition(
             )
             return None
 
+    try:
+        definition, _ = resolve_prompt_references(session, user.id, definition)
+    except PromptRefError as exc:
+        result = PipelineValidator(
+            default_registry(),
+            embedding_input_limit=resolve_limit,
+        ).validate(definition)
+        result.issues.append(
+            PipelineValidationIssue(
+                message=str(exc),
+                severity="error",
+                node_id=exc.node_id,
+                field="prompt_ref",
+            )
+        )
+        return result
     return PipelineValidator(
         default_registry(),
         embedding_input_limit=resolve_limit,

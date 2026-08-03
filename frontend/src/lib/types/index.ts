@@ -13,3 +13,4 @@ export * from "@/lib/types/setup";
 export * from "@/lib/types/providers";
 export * from "@/lib/types/evals";
 export * from "@/lib/types/tools";
+export * from "@/lib/types/prompts";

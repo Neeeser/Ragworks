@@ -83,7 +83,7 @@ def _transform_config(**overrides: Any) -> LlmNodeConfig:
     base: dict[str, Any] = {
         "connection_id": CONNECTION_ID,
         "model_name": "stub-model",
-        "prompt": "Extract from: {text}",
+        "prompt": "Extract from: {{text}}",
         "output_fields": [
             {
                 "name": "topic",
@@ -119,7 +119,7 @@ class TestTransform:
     def test_prepends_context_with_document_text(self, session: Session) -> None:
         chat = StubChatProvider(responses=[_content({"ctx": "From chapter 2."})])
         config = _transform_config(
-            prompt="<doc>{document_text}</doc> <chunk>{text}</chunk>",
+            prompt="<doc>{{document_text}}</doc> <chunk>{{text}}</chunk>",
             output_fields=[
                 {
                     "name": "ctx",
@@ -209,7 +209,7 @@ def _rerank_config(**overrides: Any) -> LlmRerankConfig:
     base: dict[str, Any] = {
         "connection_id": CONNECTION_ID,
         "model_name": "stub-model",
-        "prompt": "Query: {query}\n{items}",
+        "prompt": "Query: {{query}}\n{{items}}",
         "output_fields": [
             {
                 "name": "score",
@@ -285,7 +285,7 @@ def _generate_config(**overrides: Any) -> LlmGenerateConfig:
     base: dict[str, Any] = {
         "connection_id": CONNECTION_ID,
         "model_name": "stub-model",
-        "prompt": "Rewrite: {text}",
+        "prompt": "Rewrite: {{text}}",
         "output_fields": [
             {
                 "name": "queries",

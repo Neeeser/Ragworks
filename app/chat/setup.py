@@ -49,10 +49,10 @@ from app.schemas.enums import IndexBackend, ProviderType
 from app.services.errors import InvalidInputError
 from app.services.prompts import (
     PromptContext,
-    get_system_prompt_template,
     render_system_prompt,
     system_prompt_context,
 )
+from app.services.prompts.selection import resolve_base_prompt, resolve_collection_prompt
 
 
 class ChatSetupBuilder:
@@ -212,7 +212,7 @@ class ChatSetupBuilder:
         history = self.chat_repo.list_messages(session_model.id)
         tool_contexts: list[PromptContext] = []
         for tool_context in tool_collections:
-            template = get_system_prompt_template(tool_context.collection)
+            template, _ = resolve_collection_prompt(self.session, tool_context.collection)
             context = system_prompt_context(
                 tool_context.collection,
                 user,
@@ -221,7 +221,10 @@ class ChatSetupBuilder:
                 tool_name=tool_context.tool_name,
             )
             tool_contexts.append(PromptContext(template=template, context=context))
-        system_prompt = render_system_prompt(tool_contexts, user)
+        base_template, _ = resolve_base_prompt(self.session, user)
+        system_prompt = render_system_prompt(
+            tool_contexts, user, base_template=base_template
+        )
         messages: list[ProviderMessage] = [SystemMessage(content=system_prompt)]
         messages.extend(
             provider_message_from_model(message)

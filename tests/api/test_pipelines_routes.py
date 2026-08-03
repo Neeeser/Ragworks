@@ -27,6 +27,16 @@ def _create_user(session: Session) -> models.User:
     return user
 
 
+def _persist_user(session: Session) -> models.User:
+    """A committed user with shipped prompts seeded (preset refs need them)."""
+    from app.services.prompts.seeding import seed_shipped_prompts
+
+    user = _create_user(session)
+    seed_shipped_prompts(session, user.id)
+    session.commit()
+    return user
+
+
 def _create_pipeline(session: Session, user: models.User) -> models.Pipeline:
     service = PipelineService(session)
     pipeline = service.create_pipeline(
@@ -130,16 +140,20 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
     assert len(versions) == 0
 
 
-def test_list_pipeline_nodes_returns_specs() -> None:
-    response = pipelines_routes.list_pipeline_nodes(_current_user=models.User())
+def test_list_pipeline_nodes_returns_specs(session: Session) -> None:
+    response = pipelines_routes.list_pipeline_nodes(
+        current_user=_persist_user(session), session=session
+    )
 
     assert response.nodes
 
 
-def test_node_specs_carry_port_facets_and_presets() -> None:
+def test_node_specs_carry_port_facets_and_presets(session: Session) -> None:
     """The wire keeps facet declarations and presets — the editor's facet
     mirror and preset library render from exactly these fields."""
-    response = pipelines_routes.list_pipeline_nodes(_current_user=models.User())
+    response = pipelines_routes.list_pipeline_nodes(
+        current_user=_persist_user(session), session=session
+    )
     by_type = {spec.type: spec for spec in response.nodes}
 
     reranker = by_type["llm.rerank"]
@@ -152,7 +166,9 @@ def test_node_specs_carry_port_facets_and_presets() -> None:
     preset_ids = {preset.id for preset in transform.presets}
     assert "contextual-retrieval" in preset_ids
     contextual = next(p for p in transform.presets if p.id == "contextual-retrieval")
-    assert "{document_text}" in str(contextual.config["prompt"])
+    # Seeded users get library references; the shipped body itself lives on
+    # the referenced prompt, not inline in the preset config.
+    assert "prompt_ref" in contextual.config
 
 
 def test_validate_pipeline_returns_success(session: Session) -> None:

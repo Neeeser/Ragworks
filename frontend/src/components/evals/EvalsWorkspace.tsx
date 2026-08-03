@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { CollectionsPanel } from "@/components/evals/CollectionsPanel";
 import { DatasetsPanel } from "@/components/evals/DatasetsPanel";
+import { useComparisonIntent } from "@/components/evals/hooks/use-comparison-intent";
 import { useEvalsWorkspace } from "@/components/evals/hooks/use-evals-workspace";
 import { NewRunWizard } from "@/components/evals/NewRunWizard";
 import { RunsPanel } from "@/components/evals/RunsPanel";
@@ -23,7 +24,8 @@ import { PanelGrid } from "@/components/ui/panel";
  */
 export function EvalsWorkspace() {
   const workspace = useEvalsWorkspace();
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const intent = useComparisonIntent(workspace.prompts.data);
+  const [wizardOpen, setWizardOpen] = useState(intent.requested);
 
   const runs = workspace.runs.data ?? [];
   const datasets = workspace.datasets.data ?? [];
@@ -98,7 +100,11 @@ export function EvalsWorkspace() {
           open
           datasets={datasets}
           pipelines={pipelines}
-          onClose={() => setWizardOpen(false)}
+          comparison={intent.comparison}
+          onClose={() => {
+            intent.clear();
+            setWizardOpen(false);
+          }}
         />
       )}
     </>

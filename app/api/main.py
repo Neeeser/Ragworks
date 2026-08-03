@@ -26,6 +26,7 @@ from app.api.routes import (
     mcp,
     models,
     pipelines,
+    prompts,
     search,
     setup,
     tokenizers,
@@ -98,6 +99,7 @@ app.include_router(connections.router)
 app.include_router(admin.router)
 app.include_router(models.router)
 app.include_router(pipelines.router)
+app.include_router(prompts.router)
 app.include_router(indexes.router)
 app.include_router(collections.router)
 app.include_router(diagnostics.router)

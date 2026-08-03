@@ -42,6 +42,22 @@ class User(SQLModel, TimestampMixin, table=True):
         default=None,
         sa_column=Column(Text, nullable=True),
     )
+    #: Base chat prompt reference; NULL falls back to the shipped default
+    #: prompt. `base_prompt_version` is a pin; NULL means "latest".
+    base_prompt_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey(
+                "prompts.id",
+                name="fk_users_base_prompt_id",
+                ondelete="SET NULL",
+                use_alter=True,
+            ),
+            nullable=True,
+        ),
+    )
+    base_prompt_version: int | None = Field(default=None, nullable=True)
     last_used_chat_model: str | None = Field(
         default=None,
         sa_column=Column(String, nullable=True),

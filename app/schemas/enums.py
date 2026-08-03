@@ -255,6 +255,34 @@ class InsightStatus(str, Enum):
     FAILED = "failed"
 
 
+class PromptContext(str, Enum):
+    """Where a saved prompt is used.
+
+    The context binds a prompt to its variable catalog, the pickers that
+    list it, and the test harness the studio runs it in. It is metadata on
+    the entity, never a constraint on the text — forking across contexts
+    re-validates variables and changes nothing else.
+    """
+
+    CHAT_BASE = "chat.base"
+    CHAT_TOOL = "chat.tool"
+    NODE_TRANSFORM = "node.transform"
+    NODE_RERANK = "node.rerank"
+    NODE_GENERATE = "node.generate"
+
+
+class PromptSource(str, Enum):
+    """Whether a prompt was created by the user or shipped with Ragworks.
+
+    Shipped prompts carry a stable `shipped_key`; a release that improves a
+    default appends a new version to the matching row, so consumers on
+    `latest` pick it up while pinned or forked prompts stay put.
+    """
+
+    USER = "user"
+    SHIPPED = "shipped"
+
+
 class ShortlistEntryType(str, Enum):
     """How a model earned its place on a user's shortlist.
 

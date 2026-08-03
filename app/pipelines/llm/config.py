@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.pipelines.variables import STATIC_ONLY_EXTRA
+from app.schemas.prompts import PromptReference
 
 #: JSON types an output field may declare.
 OutputFieldType = Literal["string", "number", "boolean", "string_list"]
@@ -81,6 +82,10 @@ class LlmNodeConfig(BaseModel):
         json_schema_extra=STATIC_ONLY_EXTRA,
     )
     model_name: str = Field(default="", json_schema_extra=STATIC_ONLY_EXTRA)
+    #: Library reference; resolution fills `system_prompt`/`prompt` from the
+    #: referenced version before validation and execution. Inline text with
+    #: no reference remains valid for historical pipeline versions.
+    prompt_ref: PromptReference | None = None
     system_prompt: str = ""
     prompt: str = ""
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)

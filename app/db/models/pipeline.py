@@ -99,6 +99,13 @@ class PipelineRun(SQLModel, TimestampMixin, table=True):
     )
     started_at: datetime = Field(default_factory=utc_now, nullable=False)
     completed_at: datetime | None = Field(default=None, nullable=True)
+    #: Prompt provenance: `{node_id, prompt_id, version}` per resolved
+    #: reference, with `latest` pinned to the concrete version it ran as —
+    #: what lets evals attribute answer quality to prompt versions.
+    prompt_versions: list[dict[str, Any]] | None = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
 
 
 class PipelineNodeRun(SQLModel, TimestampMixin, table=True):

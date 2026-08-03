@@ -6,7 +6,7 @@ import type {
   ModelEndpointDirectory,
   CatalogModel,
   Pipeline,
-  PromptDetails,
+  PromptSelection,
   ToolCallTrace,
   User,
 } from "@/lib/types";
@@ -148,25 +148,43 @@ export const sessions: ChatSession[] = [
   },
 ];
 
-export const basePromptDetails: PromptDetails = {
-  template: "System prompt for {{user}}",
+export const basePromptDetails: PromptSelection = {
+  reference: { prompt_id: "prompt-base", version: "latest" },
+  prompt: {
+    id: "prompt-base",
+    name: "Base prompt",
+    context: "chat.base",
+    source: "user",
+    current_version: 1,
+    usage_count: 0,
+    created_at: baseTimestamp,
+  },
+  body: "System prompt for {{user}}",
   rendered: "System prompt for user@example.com",
   context: {
     user: "user@example.com",
     "datetime.iso": baseTimestamp,
   },
   variables: [{ name: "user", description: "User email" }],
-  is_custom: true,
 };
 
-export const collectionPromptDetails: PromptDetails = {
-  template: "Collection prompt for {{collection}}",
+export const collectionPromptDetails: PromptSelection = {
+  reference: { prompt_id: "prompt-tool", version: "latest" },
+  prompt: {
+    id: "prompt-tool",
+    name: "Tool prompt",
+    context: "chat.tool",
+    source: "user",
+    current_version: 1,
+    usage_count: 0,
+    created_at: baseTimestamp,
+  },
+  body: "Collection prompt for {{collection}}",
   rendered: "Collection prompt for Alpha",
   context: {
     collection: "Alpha",
   },
   variables: [{ name: "collection", description: "Collection name" }],
-  is_custom: true,
 };
 
 export const modelCatalog: CatalogModel[] = [

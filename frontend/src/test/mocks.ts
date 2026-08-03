@@ -52,7 +52,7 @@ import {
   makePineconeBackendInfo,
   makeVectorIndex,
   makePipeline,
-  makePromptDetails,
+  makePromptSelection,
   makeProviderDirectory,
   makePublicConfig,
   makeQueryResult,
@@ -68,6 +68,7 @@ import {
   makeUser,
   makeValidation,
 } from "@/test/fixtures";
+import { promptApiMocks } from "@/test/prompt-mocks";
 
 import type { PublicConfig, User } from "@/lib/types";
 
@@ -113,10 +114,11 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchCollectionStatsById: vi.fn(async () => makeCollectionStats()),
     fetchCollectionStatsHistory: vi.fn(async () => makeStatsHistory()),
     fetchCollectionDiagnostics: vi.fn(async () => makeCollectionDiagnostics()),
-    getCollectionPrompt: vi.fn(async () => makePromptDetails()),
-    getBasePrompt: vi.fn(async () => makePromptDetails()),
-    updateCollectionPrompt: vi.fn(async () => makePromptDetails()),
-    updateBasePrompt: vi.fn(async () => makePromptDetails()),
+    getCollectionPrompt: vi.fn(async () => makePromptSelection()),
+    getBasePrompt: vi.fn(async () => makePromptSelection()),
+    ...promptApiMocks(),
+    updateCollectionPrompt: vi.fn(async () => makePromptSelection()),
+    updateBasePrompt: vi.fn(async () => makePromptSelection()),
     createCollection: vi.fn(async () => makeCollection()),
     updateCollection: vi.fn(async () => makeCollection()),
     fetchCollectionIndexes: vi.fn(async () => ({ targets: [] })),

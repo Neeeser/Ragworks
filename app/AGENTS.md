@@ -61,6 +61,9 @@ app/
                    settings.py (registry-driven config extraction), defaults.py,
                    payloads.py, execution/ (runner.py — PipelineRunner), tracing/,
                    nodes/ (one module per pipeline stage + validators.py)
+  prompting/       the unified {{variable}} template engine: grammar + per-context
+                   variable catalogs (below pipelines and services, so both render
+                   through one engine)
   providers/       model-provider adapters (descriptor + registry + chat/ providers)
   retrieval/       RAG components: chunkers, embedders, parsers, rerankers — one
                    folder per pluggable stage; chunkers/strategies.py holds every
@@ -387,6 +390,60 @@ architecture" in the root `AGENTS.md`.
 
 The admin settings page renders from the config catalog, so a new field needs no
 frontend form code — only a new `ConfigFieldKind` would.
+
+## The prompt library (`app/prompting/` + `app/services/prompts/`)
+
+- **Every prompt in the app is a `Prompt` row; consumers store
+  `{prompt_id, version|"latest"}` references, never raw text.** There is no
+  detach-to-inline state: a one-off variant is a *fork* (new entity), because a
+  detached string is invisible to the studio — no versions, no "used by", and it
+  drifts silently from the prompt it copied. Historical pipeline versions keep
+  inline text (history is immutable); everything current references.
+- **One grammar, `{{variable}}`, strict at save and lenient at render.** Save-time
+  validation rejects names outside the context's catalog
+  (`app/prompting/catalogs.py`); run-time rendering leaves an unknown variable in
+  place rather than failing a chat turn over a legacy row. Node-context rendering
+  stays strict (an unavailable `{{query}}` on an ingestion run is an error with a
+  reason, never a silent empty section).
+- **Shipped prompts are read-only — editing forks** (`_ensure_editable`). Shipped
+  rows only ever hold shipped versions, so a release appending an improved default
+  (`seed_shipped_prompts`, which appends only bodies no existing version carries)
+  can never shadow a user's edit; the edit lives on a fork, whose v1 may be the
+  caller's draft (`PromptForkCreate.body`). Delete refuses too — seeding would
+  resurrect the row on the next boot, so the delete would only ever look like it
+  worked.
+- **A node-context version's `output_fields` is the prompt's own schema; the node
+  seeds from it but owns its copy.** Prompt text may float on `latest`, structure
+  must not: a pipeline's downstream shape (metadata fields, filters) depends on
+  the node's output fields, so runtime `prompt_refs` resolution fills only
+  `prompt`/`system_prompt` and never rewrites the node's schema. Version-level
+  validation reads the shell's allowed targets from `CONTEXT_TARGETS`
+  (`app/pipelines/llm/validation.py`) — the one declaration the node shells use,
+  so the two gates can't drift.
+- **Node `prompt_ref`s resolve in `PipelineRunner.start` (after `$expr`
+  resolution) and in `validate_pipeline_definition`**, via
+  `app/pipelines/prompt_refs.py` — repositories only, since the engine may not
+  import services. Runs record resolved `{node_id, prompt_id, version}` on
+  `PipelineRun.prompt_versions` with `latest` pinned to the concrete version, so
+  evals can attribute answer quality to prompt versions.
+- **An LLM node whose templates reference nothing from the item it processes
+  is a warning, not a pass.** Each shell declares its `payload_placeholders`
+  (`{{text}}`, or `{{items}}` for the reranker); a template referencing none
+  of them — and no `metadata.<key>`, which is per-item too — renders to the
+  same string for every item, so the node pays for a model call each and
+  writes one answer across the whole stream. Valid, expensive, and almost
+  never intended.
+- **An eval that varies a prompt version runs pipelines that pin it, never a
+  run-time override** (`app/evals/comparison.py`). An eval result outlives the
+  request that produced it, so a run whose behaviour is not written down in
+  the definition it names cannot be read back later — each side gets a real
+  copy of the pipeline with its `prompt_ref`s pinned, named after what it
+  pins. This is the same rule as "a pipeline that must differ is a different
+  pipeline"; a config override layer would reintroduce exactly the invisible
+  divergence that rule exists to prevent.
+- **The node-library endpoint rewrites preset prompt text onto the user's shipped
+  prompt reference** (`app/services/prompts/preset_refs.py`) — a dropped preset
+  reads the library rather than minting an inline copy that drifts from it.
 
 ## LLM pipeline nodes (`app/pipelines/llm/` + `nodes/llm_*.py`)
 

@@ -25,7 +25,7 @@ from app.pipelines.llm.output_schema import (
 from app.pipelines.llm.presets import GENERATE_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
-from app.pipelines.llm.validation import ShellRules, shell_issues
+from app.pipelines.llm.validation import GENERATE_TARGETS, ShellRules, shell_issues
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 _RULES = ShellRules(
     node_label="LLM generator",
-    allowed_targets=frozenset({"items"}),
+    allowed_targets=GENERATE_TARGETS,
     allowed_placeholders=frozenset({"text", "query"}),
     requires_items_field=True,
 )
@@ -105,7 +105,12 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         batch = ItemBatch.model_validate(inputs.get("items"))
         if not batch.items:
             return {"items": batch}
-        engine = LlmEngine(context, self.config, node_label=self.label)
+        engine = LlmEngine(
+            context.providers,
+            self.config,
+            node_label=self.label,
+            strict=context.document is not None,
+        )
         self._mechanism = engine.mechanism
         fields = self.config.output_fields
         source_field = items_field(fields)

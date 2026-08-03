@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.enums import BindingRole, IndexBackend, PipelineMarkerKind
-from app.schemas.prompts import PromptTemplateRead, PromptTemplateUpdate
 
 #: Series key for query events whose pipeline run was never recorded. Grouped
 #: rather than dropped, so a chart's lines always sum to the collection's traffic.
@@ -80,14 +79,6 @@ class CollectionDeleteResponse(BaseModel):
     """Response payload for collection deletion."""
 
     status: str = "deleted"
-
-
-class CollectionPromptRead(PromptTemplateRead):
-    """Prompt template data returned to clients."""
-
-
-class CollectionPromptUpdate(PromptTemplateUpdate):
-    """Payload for updating a collection prompt."""
 
 
 class CollectionStatsRead(DateTimeConfigMixin, BaseModel):

@@ -22,9 +22,9 @@ TRANSFORM_PRESETS: tuple[NodePreset, ...] = (
         config={
             "system_prompt": "",
             "prompt": (
-                "<document>\n{document_text}\n</document>\n\n"
+                "<document>\n{{document_text}}\n</document>\n\n"
                 "Here is the chunk we want to situate within the whole "
-                "document:\n<chunk>\n{text}\n</chunk>\n\n"
+                "document:\n<chunk>\n{{text}}\n</chunk>\n\n"
                 "Give a short succinct context to situate this chunk within "
                 "the overall document for the purposes of improving search "
                 "retrieval of the chunk."
@@ -51,7 +51,7 @@ TRANSFORM_PRESETS: tuple[NodePreset, ...] = (
             "system_prompt": "You extract precise metadata from text.",
             "prompt": (
                 "Extract the requested fields from this text. Use empty "
-                "values where the text states nothing.\n\n{text}"
+                "values where the text states nothing.\n\n{{text}}"
             ),
             "output_fields": [
                 {
@@ -75,7 +75,7 @@ TRANSFORM_PRESETS: tuple[NodePreset, ...] = (
         description="Replace each item's text with a concise summary of it.",
         config={
             "system_prompt": "You write faithful, concise summaries.",
-            "prompt": "Summarize this text in a few sentences:\n\n{text}",
+            "prompt": "Summarize this text in a few sentences:\n\n{{text}}",
             "output_fields": [
                 {
                     "name": "summary",
@@ -102,7 +102,7 @@ RERANK_PRESETS: tuple[NodePreset, ...] = (
                 "passage for how well it answers the query."
             ),
             "prompt": (
-                "Query: {query}\n\nPassages:\n{items}\n\n"
+                "Query: {{query}}\n\nPassages:\n{{items}}\n\n"
                 "Score every passage from 0 (irrelevant) to 1 (directly "
                 "answers the query). Return one result per passage."
             ),
@@ -128,7 +128,7 @@ RERANK_PRESETS: tuple[NodePreset, ...] = (
                 "passage for whether it truly helps answer the query."
             ),
             "prompt": (
-                "Query: {query}\n\nPassages:\n{items}\n\n"
+                "Query: {{query}}\n\nPassages:\n{{items}}\n\n"
                 "Score every passage from 0 (irrelevant) to 1 (directly "
                 "answers the query). Return one result per passage."
             ),
@@ -157,7 +157,7 @@ GENERATE_PRESETS: tuple[NodePreset, ...] = (
             "system_prompt": "You write plausible reference passages.",
             "prompt": (
                 "Write one short passage that would directly answer this "
-                "question, as it might appear in a reference document:\n\n{text}"
+                "question, as it might appear in a reference document:\n\n{{text}}"
             ),
             "include_original": False,
             "output_fields": [
@@ -181,7 +181,7 @@ GENERATE_PRESETS: tuple[NodePreset, ...] = (
             "system_prompt": "You rewrite search queries to improve recall.",
             "prompt": (
                 "Rewrite this search query three different ways — vary the "
-                "phrasing and vocabulary while keeping the meaning:\n\n{text}"
+                "phrasing and vocabulary while keeping the meaning:\n\n{{text}}"
             ),
             "include_original": True,
             "output_fields": [
@@ -208,7 +208,7 @@ GENERATE_PRESETS: tuple[NodePreset, ...] = (
             ),
             "prompt": (
                 "Decompose this question into the distinct search queries "
-                "needed to answer it (one per aspect, at most four):\n\n{text}"
+                "needed to answer it (one per aspect, at most four):\n\n{{text}}"
             ),
             "include_original": False,
             "output_fields": [

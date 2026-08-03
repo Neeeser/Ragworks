@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from typing import Any
 
 from sandbox import config
@@ -273,10 +274,15 @@ def _cmd_flows(args: argparse.Namespace) -> None:
         servers.start_backend()
         servers.start_frontend(mode="prod")
         print(f"running flows for '{name}' …")
+        # The playwright config's baseURL falls back to the default port
+        # (3010); a worktree's sandbox runs on offset ports, so every
+        # relative page.goto would hit a server that isn't there unless the
+        # harness hands the real frontend URL through.
         outcome = subprocess.run(
             ["npx", "playwright", "test", f"flows/{name}"],
             cwd=config.REPO_ROOT / "frontend",
             check=False,
+            env={**os.environ, "SANDBOX_FRONTEND_URL": config.FRONTEND_BASE_URL},
         )
         results[name] = "passed" if outcome.returncode == 0 else "FAILED"
     for line in servers.stop_all():

@@ -47,6 +47,11 @@ for, and validated flows that rerun for free.
   (the frontend is stateless across scenarios). Never run
   `npx playwright test` bare — specs need the seeded DB and handoff that
   `sandbox flows` provides.
+- **The flows runner hands `SANDBOX_FRONTEND_URL` to Playwright.** The
+  playwright config's `baseURL` falls back to the default port, and a
+  worktree's sandbox runs on offset ports — without the env hand-through,
+  every relative `page.goto` in a worktree hits a server that isn't there
+  and the whole suite fails only where concurrent agents run it.
 - **Flows run against a production frontend build** (`next build` +
   `next start`, mode tracked in `.sandbox/frontend.mode`). Dev-mode
   HMR/on-demand compilation emits full-page reloads under Playwright that

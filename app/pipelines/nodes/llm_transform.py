@@ -19,7 +19,7 @@ from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.pipelines.llm.presets import TRANSFORM_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
-from app.pipelines.llm.validation import ShellRules, shell_issues
+from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import ItemBatch, ParsedDocumentPayload, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 _RULES = ShellRules(
     node_label="LLM transform",
-    allowed_targets=frozenset({"metadata", "text"}),
+    allowed_targets=TRANSFORM_TARGETS,
     allowed_placeholders=frozenset({"text", "query", "document_text"}),
 )
 
@@ -96,7 +96,12 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         if not batch.items:
             return {"items": batch}
         document_text = _document_text(inputs)
-        engine = LlmEngine(context, self.config, node_label=self.label)
+        engine = LlmEngine(
+            context.providers,
+            self.config,
+            node_label=self.label,
+            strict=context.document is not None,
+        )
         self._mechanism = engine.mechanism
         fields = self.config.output_fields
         schema = per_item_schema(fields)

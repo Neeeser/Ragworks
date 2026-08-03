@@ -273,13 +273,11 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       onClose={promptEditor.handlePromptEditorClose}
       sections={promptEditor.promptSections}
       activeSectionId={promptEditor.activePromptSectionId}
+      libraryPrompts={promptEditor.libraryPrompts}
       onSelectSection={promptEditor.handlePromptSectionSelect}
-      onDraftChange={promptEditor.handlePromptDraftChange}
+      onChoice={promptEditor.handlePromptChoice}
       promptPreviewMarkdown={promptEditor.promptPreviewMarkdown}
       onSave={promptEditor.handlePromptSave}
-      onReset={promptEditor.handlePromptReset}
-      onInsertVariable={promptEditor.handleInsertPromptVariable}
-      inputRef={promptEditor.promptEditorRef}
     />
   );
 

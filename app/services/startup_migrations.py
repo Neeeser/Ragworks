@@ -27,6 +27,7 @@ from app.services.pipelines import (
     backfill_default_pipelines,
     upgrade_stored_pipeline_definitions,
 )
+from app.services.prompt_migration import migrate_prompt_entities
 from app.services.provider_migration import migrate_provider_connections
 from app.services.tokenizer_migration import migrate_tokenizer_nodes
 
@@ -37,6 +38,10 @@ def run_startup_migrations(session: Session) -> None:
     stamp_llm_throttle_defaults(session)
     migrate_pipeline_bindings(session)
     migrate_insight_settings(session)
+
+    # Rewrites node prompt grammar on raw JSON and entity-fies prompt text,
+    # so it runs before the steps that parse definitions through the schema.
+    migrate_prompt_entities(session)
 
     migrate_tokenizer_nodes(session)
     upgrade_stored_pipeline_definitions(session)
