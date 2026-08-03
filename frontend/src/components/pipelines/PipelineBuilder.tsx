@@ -10,6 +10,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
 import { useCanvasDragDrop } from "./hooks/use-canvas-drag-drop";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
+import { useExpectedEmbeddingDimension } from "./hooks/use-expected-embedding-dimension";
 import { useIndexBackends } from "./hooks/use-index-backends";
 import { useLayoutPersistence } from "./hooks/use-layout-persistence";
 import { useLiveValidation } from "./hooks/use-live-validation";
@@ -297,6 +298,13 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
     : [];
 
+  const expectedDimension = useExpectedEmbeddingDimension({
+    inspectedNode,
+    nodes,
+    edges,
+    modelCatalogs,
+  });
+
   // Declaring an index variable from a node's field: it holds the index that
   // node already named, so the graph still says exactly where data lands.
   const handleDeclareIndexVariable = useCallback((declaration: IndexVariableDeclaration) => {
@@ -414,6 +422,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         variables={variables}
         onDeclareIndexVariable={handleDeclareIndexVariable}
         vectorIndexes={indexes}
+        expectedDimension={expectedDimension}
         onOpenIndexRegistry={handleOpenIndexRegistry}
         {...modelCatalogs}
         onCatalogVisible={modelCatalogs.onEmbeddingCatalogVisible}

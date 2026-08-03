@@ -406,7 +406,13 @@ def test_pipeline_validator_skips_dimension_for_non_embedder_edge() -> None:
     assert result.valid is True
 
 
-def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
+def test_pipeline_validator_is_silent_when_the_model_width_matches_the_index() -> None:
+    """An embedder with no `dimension` is the correct, wizard-produced shape.
+
+    Most embedding models reject an explicit `dimensions` request, so the
+    field stays empty and the model's width is read from the provider's
+    catalog instead — a pipeline whose widths agree must say nothing.
+    """
     registry = NodeRegistry([_ChunkSourceNode, EmbedderNode, IndexerNode])
     definition = PipelineDefinition(
         nodes=[
@@ -444,10 +450,21 @@ def test_pipeline_validator_warns_when_embedder_dimension_missing() -> None:
             ),
         ],
     )
-    result = PipelineValidator(registry).validate(definition)
+    result = PipelineValidator(
+        registry, embedding_dimension=lambda _connection, _model: 768
+    ).validate(definition)
 
     assert result.valid is True
-    assert any("Embedder node" in warning for warning in result.warnings)
+    assert result.warnings == []
+
+    mismatched = PipelineValidator(
+        registry, embedding_dimension=lambda _connection, _model: 384
+    ).validate(definition)
+
+    # The same definition against a narrower model: a save-time error rather
+    # than a per-document ingest failure once the corpus is uploaded.
+    assert mismatched.valid is False
+    assert any("768" in error and "384" in error for error in mismatched.errors)
 
 
 def test_pipeline_validator_requires_retriever_index() -> None:

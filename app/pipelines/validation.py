@@ -12,6 +12,7 @@ from app.pipelines.definition import (
     PipelineDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.embedding_dimensions import embedding_dimension_issues
 from app.pipelines.embedding_limits import embedding_limit_issues
 from app.pipelines.facets import EdgeRef, NodePorts, facet_issues
 from app.pipelines.node import PipelineValidationIssue
@@ -19,8 +20,11 @@ from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition, strip_expressions
 from app.pipelines.validation_variables import collect_variable_issues
+from app.schemas.enums import IndexBackend
 
 EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
+EmbeddingDimensionResolver = Callable[[UUID, str], int | None]
+IndexWidthResolver = Callable[[IndexBackend, str], int | None]
 
 
 class PipelineValidationResult(BaseModel):
@@ -40,10 +44,14 @@ class PipelineValidator:
         registry: NodeRegistry,
         *,
         embedding_input_limit: EmbeddingInputLimitResolver | None = None,
+        embedding_dimension: EmbeddingDimensionResolver | None = None,
+        index_width: IndexWidthResolver | None = None,
     ) -> None:
-        """Initialize with registry metadata and an optional limit resolver."""
+        """Initialize with registry metadata and optional provider resolvers."""
         self._registry = registry
         self._embedding_input_limit = embedding_input_limit
+        self._embedding_dimension = embedding_dimension
+        self._index_width = index_width
 
     def validate(self, definition: PipelineDefinition) -> PipelineValidationResult:
         """Validate the pipeline definition and return any errors."""
@@ -70,6 +78,14 @@ class PipelineValidator:
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(
             embedding_limit_issues(hook_definition, self._registry, self._embedding_input_limit)
+        )
+        issues.extend(
+            embedding_dimension_issues(
+                hook_definition,
+                self._registry,
+                self._embedding_dimension,
+                self._index_width,
+            )
         )
         issues.extend(backend_support_issues(hook_definition, self._registry))
         node_errors = [issue.message for issue in issues if issue.severity == "error"]

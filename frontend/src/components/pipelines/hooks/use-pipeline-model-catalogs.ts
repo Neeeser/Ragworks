@@ -62,6 +62,7 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
   const onRetryLlmModels = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
 
   return {
+    token,
     ...embedding,
     ...reranking,
     ...llm,

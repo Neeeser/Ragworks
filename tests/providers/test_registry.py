@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -9,13 +10,16 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository, UserRepository
+from app.providers.base import ProviderAdapter
 from app.providers.ollama import OllamaAdapter
 from app.providers.registry import (
     ProviderResolver,
     all_descriptors,
     build_adapter,
     get_provider,
+    invalidate_embedding_dimensions,
     resolve_connection,
+    resolve_embedding_width,
 )
 from app.providers.throttled import ThrottledEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
@@ -151,3 +155,90 @@ def test_provider_adapter_kind_gate_uses_instance_kinds(
     adapter.require_kind(ProviderKind.RERANKING)
     with pytest.raises(InvalidInputError, match="do not provide embedding models"):
         adapter.require_kind(ProviderKind.EMBEDDING)
+
+
+class _WidthAdapter:
+    """An embedding adapter whose catalog and probe answers are scripted."""
+
+    def __init__(self, published: int | None, measured: int | None) -> None:
+        self._published = published
+        self._measured = measured
+        self.catalog_calls = 0
+        self.probe_calls = 0
+
+    def catalog_embedding_dimension(self, _model_name: str) -> int | None:
+        self.catalog_calls += 1
+        return self._published
+
+    def embedding_dimension(self, _model_name: str) -> int | None:
+        self.probe_calls += 1
+        return self._measured
+
+
+def test_a_width_the_catalog_does_not_publish_is_measured_instead() -> None:
+    """OpenRouter publishes no dimension for any embedding model.
+
+    A catalog-only resolver answers `None` for the provider this app is most
+    used with, so every check built on the width goes quiet exactly where it
+    is needed.
+    """
+    adapter = _WidthAdapter(published=None, measured=768)
+
+    width = resolve_embedding_width(cast(ProviderAdapter, adapter), uuid4(), "bge-base-en-v1.5")
+
+    assert width == 768
+    assert adapter.probe_calls == 1
+
+
+def test_a_published_width_is_never_probed_for() -> None:
+    """The catalog is free; the probe is a live model call. Order matters."""
+    adapter = _WidthAdapter(published=384, measured=768)
+
+    width = resolve_embedding_width(cast(ProviderAdapter, adapter), uuid4(), "all-minilm")
+
+    assert width == 384
+    assert adapter.probe_calls == 0
+
+
+def test_repeating_an_unresolvable_lookup_does_not_re_probe() -> None:
+    """The runaway guard: validation re-resolves on every keystroke.
+
+    An unresolvable width must cost one probe per freshness window, not one
+    per lookup — a `None` dropped from the cache would embed a probe string
+    on every character typed in the pipeline editor.
+    """
+    adapter = _WidthAdapter(published=None, measured=None)
+    connection_id = uuid4()
+
+    widths = [
+        resolve_embedding_width(cast(ProviderAdapter, adapter), connection_id, "mystery")
+        for _ in range(5)
+    ]
+
+    assert widths == [None] * 5
+    assert adapter.probe_calls == 1
+    assert adapter.catalog_calls == 1
+
+
+def test_a_resolved_width_survives_repeated_lookups() -> None:
+    adapter = _WidthAdapter(published=None, measured=1536)
+    connection_id = uuid4()
+
+    for _ in range(3):
+        assert (
+            resolve_embedding_width(cast(ProviderAdapter, adapter), connection_id, "text-embed")
+            == 1536
+        )
+    assert adapter.probe_calls == 1
+
+
+def test_invalidating_a_connection_drops_its_resolved_widths() -> None:
+    """A re-pointed connection must not keep serving the old server's width."""
+    adapter = _WidthAdapter(published=None, measured=768)
+    connection_id = uuid4()
+
+    resolve_embedding_width(cast(ProviderAdapter, adapter), connection_id, "model")
+    invalidate_embedding_dimensions(connection_id)
+    resolve_embedding_width(cast(ProviderAdapter, adapter), connection_id, "model")
+
+    assert adapter.probe_calls == 2
