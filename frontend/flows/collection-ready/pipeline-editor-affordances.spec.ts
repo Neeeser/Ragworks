@@ -65,10 +65,12 @@ test("rename, deep link, and occupied-port replacement all do something", async 
   // --- restore the seeded name ---------------------------------------------
   // Through the API, not the UI: the drag below leaves unsaved canvas state,
   // and a reload to re-read the header would trip the beforeunload guard.
-  const restore = await page.context().request.patch(
-    `${handoff.backend_url}/api/pipelines/${ingestion.id}`,
-    { headers: { Authorization: `Bearer ${token}` }, data: { name: SEEDED_NAME } },
-  );
+  const restore = await page
+    .context()
+    .request.patch(`${handoff.backend_url}/api/pipelines/${ingestion.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { name: SEEDED_NAME },
+    });
   expect(restore.ok(), "restoring the seeded pipeline name").toBeTruthy();
   await page.goto(`${handoff.frontend_url}/pipelines/ingestion`);
   await expect(page.getByRole("button", { name: `Rename ${SEEDED_NAME}` })).toBeVisible({
