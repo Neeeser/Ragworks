@@ -9,7 +9,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorSelection } from "@codemirror/state";
+import { Compartment, EditorSelection } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -17,33 +17,153 @@ import {
   MatchDecorator,
   placeholder as placeholderExtension,
   ViewPlugin,
+  WidgetType,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
 import type { Extension } from "@codemirror/state";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
 
-const variableMatcher = new MatchDecorator({
-  regexp: /\{\{\s*[a-zA-Z0-9_][a-zA-Z0-9_.-]*\s*\}\}/g,
+/** How `{{variable}}` reads: as its own name, or as its sample value. */
+export type VariableView = "names" | "values";
+
+const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_][a-zA-Z0-9_.-]*)\s*\}\}/g;
+
+/** The attribute a chip carries so click handling can name its variable. */
+export const VARIABLE_ATTRIBUTE = "data-template-variable";
+
+/**
+ * A variable rendered as its value.
+ *
+ * The widget *replaces* the `{{name}}` source, and the range is registered
+ * atomic, so the cursor steps over it and backspace removes the whole
+ * reference — a variable can never be left half-deleted by editing in this
+ * view. The name rides along in a data attribute so a click can address it.
+ */
+class VariableChipWidget extends WidgetType {
+  constructor(
+    readonly name: string,
+    readonly value: string,
+  ) {
+    super();
+  }
+
+  eq(other: VariableChipWidget): boolean {
+    return other.name === this.name && other.value === this.value;
+  }
+
+  toDOM(): HTMLElement {
+    const chip = document.createElement("span");
+    chip.className = "cm-template-chip";
+    chip.setAttribute(VARIABLE_ATTRIBUTE, this.name);
+    chip.setAttribute("role", "button");
+    chip.setAttribute("tabindex", "-1");
+    chip.title = `{{${this.name}}} — click to change the variable or its sample value`;
+    chip.textContent = this.value === "" ? `{{${this.name}}}` : this.value;
+    return chip;
+  }
+
+  /** Let clicks through to the view's own handler. */
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+const nameMatcher = new MatchDecorator({
+  regexp: VARIABLE_PATTERN,
   decoration: Decoration.mark({ class: "cm-template-variable" }),
 });
 
-const variableHighlighter = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
+function valueMatcher(values: Record<string, string>): MatchDecorator {
+  return new MatchDecorator({
+    regexp: VARIABLE_PATTERN,
+    decoration: (match) => {
+      const name = match[1];
+      return Decoration.replace({ widget: new VariableChipWidget(name, values[name] ?? "") });
+    },
+  });
+}
 
-    constructor(view: EditorView) {
-      this.decorations = variableMatcher.createDeco(view);
-    }
+function decoratorPlugin(matcher: MatchDecorator) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
 
-    update(update: ViewUpdate) {
-      this.decorations = variableMatcher.updateDeco(update, this.decorations);
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
+      constructor(view: EditorView) {
+        this.decorations = matcher.createDeco(view);
+      }
+
+      update(update: ViewUpdate) {
+        this.decorations = matcher.updateDeco(update, this.decorations);
+      }
+    },
+    {
+      decorations: (plugin) => plugin.decorations,
+      provide: (plugin) =>
+        EditorView.atomicRanges.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none),
+    },
+  );
+}
+
+/** Swapped at runtime so changing the view never remounts the editor. */
+export const variableViewCompartment = new Compartment();
+
+/** The decoration set for one view mode. */
+export function variableViewExtension(
+  view: VariableView,
+  values: Record<string, string>,
+): Extension {
+  return view === "values" ? decoratorPlugin(valueMatcher(values)) : decoratorPlugin(nameMatcher);
+}
+
+/** One clicked variable chip: which variable, where in the doc, and where on screen. */
+export interface ChipTarget {
+  name: string;
+  pos: number;
+  rect: DOMRect;
+}
+
+/** Report clicks on a value chip. */
+function chipClickHandler(onChipClick: (target: ChipTarget) => void): Extension {
+  return EditorView.domEventHandlers({
+    mousedown: (event, view) => {
+      const target = event.target as HTMLElement | null;
+      const chip = target?.closest?.(`[${VARIABLE_ATTRIBUTE}]`);
+      if (!(chip instanceof HTMLElement)) return false;
+      event.preventDefault();
+      onChipClick({
+        name: chip.getAttribute(VARIABLE_ATTRIBUTE) ?? "",
+        pos: view.posAtDOM(chip),
+        rect: chip.getBoundingClientRect(),
+      });
+      return true;
+    },
+  });
+}
+
+/**
+ * Point the variable reference at `pos` to a different variable.
+ *
+ * Written as an ordinary transaction so the swap joins the undo history
+ * alongside typing — a mis-click is one Cmd-Z away.
+ */
+export function replaceVariableAt(view: EditorView, pos: number, nextName: string): void {
+  const doc = view.state.doc.toString();
+  for (const match of doc.matchAll(VARIABLE_PATTERN)) {
+    const from = match.index ?? 0;
+    const to = from + match[0].length;
+    if (pos < from || pos > to) continue;
+    view.dispatch({ changes: { from, to, insert: `{{${nextName}}}` } });
+    return;
+  }
+}
 
 const ACCENT = "var(--accent-violet)";
+const INK_PRIMARY = "var(--text-primary)";
+
+/** Accent wash at a given strength — the chip and selection share it. */
+const accentWash = (percent: number) =>
+  `color-mix(in oklab, ${ACCENT} ${percent}%, transparent)`;
 
 const consoleTheme = EditorView.theme({
   "&": {
@@ -60,15 +180,27 @@ const consoleTheme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   ".cm-cursor": { borderLeftColor: ACCENT },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: `color-mix(in oklab, ${ACCENT} 22%, transparent)`,
+    backgroundColor: accentWash(22),
   },
   ".cm-placeholder": { color: "var(--text-faint)" },
   ".cm-template-variable": { color: ACCENT, fontWeight: "500" },
+  ".cm-template-chip": {
+    backgroundColor: accentWash(16),
+    border: `1px solid ${accentWash(40)}`,
+    borderRadius: "4px",
+    color: INK_PRIMARY,
+    cursor: "pointer",
+    padding: "0 3px",
+    whiteSpace: "pre-wrap",
+  },
+  ".cm-template-chip:hover": {
+    backgroundColor: accentWash(26),
+  },
 });
 
 const markdownHighlight = HighlightStyle.define([
-  { tag: tags.heading, color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.strong, color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading, color: INK_PRIMARY, fontWeight: "600" },
+  { tag: tags.strong, color: INK_PRIMARY, fontWeight: "600" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.monospace, color: "var(--accent-cyan)" },
   { tag: tags.link, color: "var(--accent-cyan)" },
@@ -80,14 +212,18 @@ const markdownHighlight = HighlightStyle.define([
 export function templateEditorExtensions(options: {
   ariaLabel: string;
   placeholder: string;
+  view: VariableView;
+  values: Record<string, string>;
   onDocChange: (doc: string) => void;
+  onChipClick: (target: ChipTarget) => void;
 }): Extension[] {
   return [
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     markdown(),
     syntaxHighlighting(markdownHighlight),
-    variableHighlighter,
+    variableViewCompartment.of(variableViewExtension(options.view, options.values)),
+    chipClickHandler(options.onChipClick),
     consoleTheme,
     EditorView.lineWrapping,
     placeholderExtension(options.placeholder),

@@ -1,9 +1,9 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
+import { SquarePen } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { PromptStudioOverlay } from "@/components/prompts/PromptStudioOverlay";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { getPrompt, listPrompts, listPromptVersions } from "@/lib/api";
@@ -41,6 +41,24 @@ function parseRef(config: Record<string, unknown>): PromptReference | null {
   return { prompt_id: candidate.prompt_id, version };
 }
 
+/** The resolved template, plus the nudge off any surviving inline text. */
+function PromptRefBody({ body, legacy }: { body: string; legacy: boolean }) {
+  if (!body) return null;
+  return (
+    <>
+      <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
+        {body}
+      </pre>
+      {legacy && (
+        <p className="text-instrument text-meta">
+          This node carries inline prompt text from an older version. Pick a library prompt to
+          replace it.
+        </p>
+      )}
+    </>
+  );
+}
+
 /**
  * The node's prompt as a library reference: which prompt, at which version
  * (latest or a pin), with the resolved template previewed in place. Bodies
@@ -57,6 +75,7 @@ export function PromptRefField({
   const context = NODE_PROMPT_CONTEXTS[nodeType] ?? "node.transform";
   const reference = parseRef(config);
   const [previewBody, setPreviewBody] = useState<string>("");
+  const [studioOpen, setStudioOpen] = useState(false);
 
   const promptsQuery = useApiQuery(
     useCallback(async () => (token ? listPrompts(token, context) : []), [token, context]),
@@ -170,25 +189,27 @@ export function PromptRefField({
         </p>
       )}
       {reference && selected && (
-        <Link
-          href={`/prompts?prompt=${selected.id}`}
-          className="inline-flex items-center gap-1 text-instrument text-accent-cyan hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+        // Opens over the canvas rather than navigating: editing a prompt
+        // must not cost the user their unsaved graph, and forking from
+        // here repoints this node so the edit cannot silently no-op.
+        <button
+          type="button"
+          onClick={() => setStudioOpen(true)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1 text-instrument text-accent-cyan hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet disabled:opacity-60"
         >
+          <SquarePen className="h-3 w-3" aria-hidden />
           Edit in prompt studio
-          <ExternalLink className="h-3 w-3" aria-hidden />
-        </Link>
+        </button>
       )}
-      {(previewBody || inlinePrompt) && (
-        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-control border border-hairline bg-surface p-2 font-mono text-instrument text-body">
-          {previewBody || inlinePrompt}
-        </pre>
+      {studioOpen && reference && (
+        <PromptStudioOverlay
+          promptId={reference.prompt_id}
+          onForked={(fork) => void setReference({ prompt_id: fork.id, version: "latest" })}
+          onClose={() => setStudioOpen(false)}
+        />
       )}
-      {!reference && inlinePrompt && (
-        <p className="text-instrument text-meta">
-          This node carries inline prompt text from an older version. Pick a library prompt to
-          replace it.
-        </p>
-      )}
+      <PromptRefBody body={previewBody || inlinePrompt} legacy={!reference && !!inlinePrompt} />
     </div>
   );
 }

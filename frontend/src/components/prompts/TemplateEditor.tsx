@@ -9,16 +9,22 @@ import { cn } from "@/lib/utils";
 
 import {
   insertSnippet,
+  replaceVariableAt,
   templateEditorExtensions,
   toggleInlineMarker,
   toggleLinePrefix,
+  variableViewCompartment,
+  variableViewExtension,
 } from "./lib/codemirror";
 
+import type { ChipTarget, VariableView } from "./lib/codemirror";
 import type { ReactNode } from "react";
 
 export interface TemplateEditorHandle {
   /** Insert text at the cursor — the variable catalog's click-to-insert. */
   insert: (text: string) => void;
+  /** Point the reference at `pos` at a different variable. */
+  replaceVariable: (pos: number, name: string) => void;
 }
 
 interface TemplateEditorProps {
@@ -26,6 +32,12 @@ interface TemplateEditorProps {
   onChange: (value: string) => void;
   ariaLabel: string;
   placeholder?: string;
+  /** Whether `{{name}}` reads as itself or as its sample value. */
+  view: VariableView;
+  /** Sample value per variable, shown on the chips in `values` view. */
+  values: Record<string, string>;
+  /** A clicked value chip — the panel opens its editor over it. */
+  onChipClick?: (target: ChipTarget) => void;
   /** Extra controls rendered at the toolbar's right edge (e.g. expand). */
   actions?: ReactNode;
   className?: string;
@@ -50,51 +62,72 @@ const TOOLBAR_BUTTONS: Array<{
  * undo history as typing).
  */
 export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorProps>(
-  function TemplateEditor({ value, onChange, ariaLabel, placeholder, actions, className }, ref) {
+  function TemplateEditor(
+    { value, onChange, ariaLabel, placeholder, view, values, onChipClick, actions, className },
+    ref,
+  ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
+    const onChipClickRef = useRef(onChipClick);
     const initialValueRef = useRef(value);
+    // Read at mount only; the compartment below carries every later change.
+    const initialViewRef = useRef({ view, values });
 
     useEffect(() => {
       onChangeRef.current = onChange;
-    }, [onChange]);
+      onChipClickRef.current = onChipClick;
+    }, [onChange, onChipClick]);
 
     useEffect(() => {
       if (!hostRef.current) return;
-      const view = new EditorView({
+      const editor = new EditorView({
         doc: initialValueRef.current,
         parent: hostRef.current,
         extensions: templateEditorExtensions({
           ariaLabel,
           placeholder: placeholder ?? "",
+          view: initialViewRef.current.view,
+          values: initialViewRef.current.values,
           onDocChange: (doc) => onChangeRef.current(doc),
+          onChipClick: (target) => onChipClickRef.current?.(target),
         }),
       });
-      viewRef.current = view;
+      viewRef.current = editor;
       return () => {
         viewRef.current = null;
-        view.destroy();
+        editor.destroy();
       };
       // The view mounts once; label/placeholder changes remount it (they
       // only change when the edited prompt does, which replaces the doc too).
     }, [ariaLabel, placeholder]);
 
+    // Swapping the decoration set through a compartment rather than
+    // remounting keeps the undo history and the cursor across a view toggle.
+    useEffect(() => {
+      viewRef.current?.dispatch({
+        effects: variableViewCompartment.reconfigure(variableViewExtension(view, values)),
+      });
+    }, [view, values]);
+
     // External value changes (loading a version, switching prompts) replace
     // the doc; edits originating in the editor already match and are skipped.
     useEffect(() => {
       initialValueRef.current = value;
-      const view = viewRef.current;
-      if (!view) return;
-      const current = view.state.doc.toString();
+      const editor = viewRef.current;
+      if (!editor) return;
+      const current = editor.state.doc.toString();
       if (current !== value) {
-        view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+        editor.dispatch({ changes: { from: 0, to: current.length, insert: value } });
       }
     }, [value]);
 
     useImperativeHandle(ref, () => ({
       insert: (text: string) => {
         if (viewRef.current) insertSnippet(viewRef.current, text);
+      },
+      replaceVariable: (pos: number, name: string) => {
+        if (viewRef.current) replaceVariableAt(viewRef.current, pos, name);
       },
     }));
 

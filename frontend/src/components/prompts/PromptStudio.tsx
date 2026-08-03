@@ -1,6 +1,7 @@
 "use client";
 
 import { GitFork, Library, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,13 +15,14 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { usePromptStudio } from "./hooks/use-prompt-studio";
 import { CONTEXT_LABELS } from "./lib/contexts";
+import { usageHref } from "./lib/usage";
 import { CreatePromptDialog, ForkPromptDialog } from "./PromptDialogs";
 import { PromptEditorPanel } from "./PromptEditorPanel";
 import { PromptLibraryRail } from "./PromptLibraryRail";
 import { PromptTestBench } from "./PromptTestBench";
 import { PromptVersionsPanel } from "./PromptVersionsPanel";
 
-import type { PromptContext, PromptDetail } from "@/lib/types";
+import type { PromptContext, PromptDetail, PromptRead } from "@/lib/types";
 
 const STUB_BODY = "Write your prompt here.";
 
@@ -44,8 +46,17 @@ function StudioHeader({ detail, isShipped, onFork, onDelete }: StudioHeaderProps
         v{detail.current_version}
       </span>
       {detail.used_by.length > 0 && (
-        <span className="text-instrument text-muted">
-          Used by {detail.used_by.map((usage) => usage.name).join(", ")}
+        <span className="flex flex-wrap items-center gap-1 text-instrument text-muted">
+          Used by
+          {detail.used_by.map((usage) => (
+            <Link
+              key={`${usage.kind}-${usage.id}`}
+              href={usageHref(usage)}
+              className="text-accent-cyan hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              {usage.name}
+            </Link>
+          ))}
         </span>
       )}
       <div className="ml-auto flex items-center gap-2">
@@ -140,24 +151,50 @@ function LibraryOverlay({ open, onClose, children }: LibraryOverlayProps) {
   );
 }
 
+export interface PromptStudioProps {
+  /** Open on this prompt (the pipeline-editor overlay passes the node's). */
+  initialPromptId?: string | null;
+  /** Mirror the selection into the address bar — the page does, the overlay doesn't. */
+  trackUrl?: boolean;
+  /**
+   * Called with the fork when the user forks. The node drawer uses this to
+   * repoint itself, so editing a built-in prompt from a node cannot leave
+   * the node still referencing the original.
+   */
+  onForked?: (fork: PromptRead) => void;
+}
+
 /**
  * The prompt studio: library on the left, the selected prompt's editor,
  * version history, and test bench on the right. Every prompt in the app is
  * one of these entities — consumers reference them by id + version. Built-in
  * prompts are read-only; editing one forks it with the draft carried over.
  */
-export function PromptStudio() {
+export function PromptStudio({ initialPromptId, trackUrl, onForked }: PromptStudioProps = {}) {
   const { token } = useAuth();
-  const studio = usePromptStudio(token);
+  const studio = usePromptStudio(token, { initialPromptId, trackUrl });
   const [tab, setTab] = useState<StudioTab>("editor");
   const [createOpen, setCreateOpen] = useState(false);
   const [forkOpen, setForkOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [versionLabel, setVersionLabel] = useState("");
+  // A pending switch away from an edited draft, held until confirmed —
+  // the rail is the natural way to compare two prompts, and losing an
+  // edit to it silently is the worst thing this page can do.
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
 
   const { detail } = studio;
   const isShipped = detail?.source === "shipped";
+
+  const selectPrompt = (promptId: string) => {
+    setLibraryOpen(false);
+    if (studio.hasChanges && promptId !== studio.selectedId) {
+      setPendingSelectId(promptId);
+      return;
+    }
+    studio.setSelectedId(promptId);
+  };
 
   const handleCreate = async (name: string, context: PromptContext) => {
     const created = await studio.handleCreate({ name, context, body: STUB_BODY });
@@ -169,6 +206,7 @@ export function PromptStudio() {
     if (forked) {
       setForkOpen(false);
       setTab("editor");
+      onForked?.(forked);
     }
   };
 
@@ -177,15 +215,17 @@ export function PromptStudio() {
     if (saved) setVersionLabel("");
   };
 
+  const usageCounts = Object.fromEntries(
+    studio.prompts.map((prompt) => [prompt.id, prompt.usage_count]),
+  );
+
   const rail = (
     <PromptLibraryRail
       prompts={studio.prompts}
       loading={studio.promptsLoading}
       selectedId={studio.selectedId}
-      onSelect={(promptId) => {
-        studio.setSelectedId(promptId);
-        setLibraryOpen(false);
-      }}
+      usageCounts={usageCounts}
+      onSelect={selectPrompt}
       onCreate={() => {
         setLibraryOpen(false);
         setCreateOpen(true);
@@ -258,6 +298,7 @@ export function PromptStudio() {
             )}
             {tab === "versions" && (
               <PromptVersionsPanel
+                detail={detail}
                 versions={studio.versions}
                 currentVersion={detail.current_version}
                 onRestore={(version) => {
@@ -281,22 +322,99 @@ export function PromptStudio() {
         {rail}
       </LibraryOverlay>
 
+      <StudioDialogs
+        detail={detail}
+        isShipped={isShipped}
+        busy={studio.mutating}
+        draftChanged={studio.hasChanges}
+        createOpen={createOpen}
+        forkOpen={forkOpen}
+        deleteOpen={deleteOpen}
+        pendingSelectId={pendingSelectId}
+        onCloseCreate={() => setCreateOpen(false)}
+        onCloseFork={() => setForkOpen(false)}
+        onCloseDelete={() => setDeleteOpen(false)}
+        onCreate={handleCreate}
+        onFork={handleFork}
+        onDelete={async () => {
+          const deleted = await studio.handleDelete();
+          if (deleted) setDeleteOpen(false);
+        }}
+        onCancelSelect={() => setPendingSelectId(null)}
+        onConfirmSelect={() => {
+          if (pendingSelectId) studio.setSelectedId(pendingSelectId);
+          setPendingSelectId(null);
+        }}
+      />
+    </div>
+  );
+}
+
+interface StudioDialogsProps {
+  detail: PromptDetail | null;
+  isShipped: boolean;
+  busy: boolean;
+  draftChanged: boolean;
+  createOpen: boolean;
+  forkOpen: boolean;
+  deleteOpen: boolean;
+  pendingSelectId: string | null;
+  onCloseCreate: () => void;
+  onCloseFork: () => void;
+  onCloseDelete: () => void;
+  onCreate: (name: string, context: PromptContext) => void;
+  onFork: (name: string, context: PromptContext) => void;
+  onDelete: () => Promise<void>;
+  onCancelSelect: () => void;
+  onConfirmSelect: () => void;
+}
+
+/** Every modal the studio can raise, kept out of its render body. */
+function StudioDialogs({
+  detail,
+  isShipped,
+  busy,
+  draftChanged,
+  createOpen,
+  forkOpen,
+  deleteOpen,
+  pendingSelectId,
+  onCloseCreate,
+  onCloseFork,
+  onCloseDelete,
+  onCreate,
+  onFork,
+  onDelete,
+  onCancelSelect,
+  onConfirmSelect,
+}: StudioDialogsProps) {
+  return (
+    <>
+      <ConfirmDialog
+        open={pendingSelectId !== null}
+        title="Discard unsaved changes?"
+        description="This prompt has edits that were never saved as a version. Opening another prompt discards them."
+        confirmLabel="Discard"
+        confirmVariant="danger"
+        onCancel={onCancelSelect}
+        onConfirm={onConfirmSelect}
+      />
       <CreatePromptDialog
         open={createOpen}
-        busy={studio.mutating}
-        onClose={() => setCreateOpen(false)}
-        onCreate={handleCreate}
+        busy={busy}
+        onClose={onCloseCreate}
+        onCreate={onCreate}
       />
       {detail && (
         <ForkPromptDialog
           key={detail.id}
           open={forkOpen}
-          busy={studio.mutating}
+          busy={busy}
           sourceName={detail.name}
           sourceContext={detail.context}
-          draftChanged={studio.hasChanges}
-          onClose={() => setForkOpen(false)}
-          onFork={handleFork}
+          draftChanged={draftChanged}
+          onClose={onCloseFork}
+          onFork={onFork}
         />
       )}
       {detail && !isShipped && (
@@ -306,14 +424,11 @@ export function PromptStudio() {
           description={`Deletes “${detail.name}” and all of its versions. Anything still referencing it blocks the delete.`}
           confirmLabel="Delete"
           confirmVariant="danger"
-          loading={studio.mutating}
-          onCancel={() => setDeleteOpen(false)}
-          onConfirm={async () => {
-            const deleted = await studio.handleDelete();
-            if (deleted) setDeleteOpen(false);
-          }}
+          loading={busy}
+          onCancel={onCloseDelete}
+          onConfirm={onDelete}
         />
       )}
-    </div>
+    </>
   );
 }

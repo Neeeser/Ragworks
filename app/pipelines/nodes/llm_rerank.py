@@ -35,6 +35,7 @@ _RULES = ShellRules(
     node_label="LLM reranker",
     allowed_targets=RERANK_TARGETS,
     allowed_placeholders=frozenset({"items", "query"}),
+    payload_placeholders=frozenset({"items"}),
 )
 
 

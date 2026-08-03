@@ -199,6 +199,7 @@ export function makePromptRead(overrides: Partial<PromptRead> = {}): PromptRead 
     source: "user",
     shipped_key: null,
     current_version: 2,
+    usage_count: 0,
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
     ...overrides,

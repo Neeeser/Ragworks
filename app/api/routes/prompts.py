@@ -38,13 +38,14 @@ from app.schemas.prompts import (
 from app.services.errors import ServiceError
 from app.services.prompts.library import PromptLibraryService
 from app.services.prompts.studio import render_preview, run_test, stream_test
-from app.services.prompts.usage import prompt_usages
+from app.services.prompts.usage import prompt_usages, usage_counts
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
 
 
-def _read(prompt: models.Prompt) -> PromptRead:
-    return PromptRead.model_validate(prompt, from_attributes=True)
+def _read(prompt: models.Prompt, usage_count: int = 0) -> PromptRead:
+    read = PromptRead.model_validate(prompt, from_attributes=True)
+    return read.model_copy(update={"usage_count": usage_count})
 
 
 @router.get("", response_model=list[PromptRead])
@@ -57,7 +58,8 @@ def list_prompts(
     prompts = PromptLibraryService(session).list_for_user(current_user.id)
     if context is not None:
         prompts = [prompt for prompt in prompts if prompt.context == context]
-    return [_read(prompt) for prompt in prompts]
+    counts = usage_counts(session, current_user.id)
+    return [_read(prompt, counts.get(prompt.id, 0)) for prompt in prompts]
 
 
 @router.get("/catalogs", response_model=list[PromptCatalogRead])

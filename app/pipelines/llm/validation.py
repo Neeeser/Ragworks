@@ -38,6 +38,10 @@ class ShellRules:
     node_label: str
     allowed_targets: frozenset[str]
     allowed_placeholders: frozenset[str]
+    #: Placeholders that carry the per-item payload. A template referencing
+    #: none of them sends an identical prompt for every item, so the node
+    #: does real work and returns one answer copied across the whole stream.
+    payload_placeholders: frozenset[str] = frozenset({"text"})
     #: Exactly one `items`-target field required (the generate shell).
     requires_items_field: bool = False
 
@@ -81,7 +85,43 @@ def shell_issues(
         )
     issues.extend(_field_issues(node, config, rules))
     issues.extend(_placeholder_issues(node, definition, config, rules))
+    issues.extend(_payload_issues(node, config, rules))
     return issues
+
+
+def _payload_issues(
+    node: PipelineNodeDefinition, config: LlmNodeConfig, rules: ShellRules
+) -> list[PipelineValidationIssue]:
+    """Warn when nothing item-specific reaches the model.
+
+    A template with no payload placeholder renders to the same string for
+    every item, so the node spends a model call each and writes one answer
+    across the whole stream — valid, expensive, and almost never intended.
+    """
+    referenced: set[str] = set()
+    for template in (config.system_prompt, config.prompt):
+        try:
+            referenced |= set(referenced_placeholders(template))
+        except PromptTemplateError:
+            # Already reported as an error by `_placeholder_issues`.
+            return []
+    if any(
+        name in rules.payload_placeholders or name.startswith("metadata.") for name in referenced
+    ):
+        return []
+    expected = ", ".join(f"{{{{{name}}}}}" for name in sorted(rules.payload_placeholders))
+    return [
+        PipelineValidationIssue(
+            message=(
+                f"{rules.node_label} node '{node.id}' references nothing from the item it "
+                f"processes, so every item gets the same prompt and the same answer. "
+                f"Add {expected}."
+            ),
+            severity="warning",
+            node_id=node.id,
+            field="prompt",
+        )
+    ]
 
 
 def _field_issues(

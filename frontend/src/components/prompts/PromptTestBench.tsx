@@ -62,6 +62,10 @@ export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
           body: draft.body,
           system_body: draft.systemBody || null,
           context: detail.context,
+          // The sample values the editor is showing: a test run answers
+          // "how does this prompt behave on my data", which it cannot do
+          // against the catalog's stock examples.
+          values: draft.values,
           connection_id: model.connection_id,
           model_name: model.id,
           output_fields: structured

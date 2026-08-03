@@ -59,11 +59,19 @@ class PromptVersionRead(BaseModel):
 
 
 class PromptUsageRead(BaseModel):
-    """One consumer that references a prompt."""
+    """One consumer that references a prompt.
+
+    `id` addresses the owning entity (the pipeline, the collection, the
+    user), and for a pipeline node `node_id` and `pipeline_kind` say which
+    node inside which editor section — enough for the studio to link
+    straight back to the graph that runs this prompt.
+    """
 
     kind: Literal["chat_base", "collection_tool", "pipeline_node"]
     name: str
     id: str
+    node_id: str | None = None
+    pipeline_kind: Literal["ingestion", "retrieval"] | None = None
     version: PromptVersionSelector = "latest"
 
 
@@ -77,6 +85,9 @@ class PromptRead(BaseModel):
     source: PromptSource
     shipped_key: str | None = None
     current_version: int
+    #: How many consumers reference this prompt — what the library rail
+    #: shows so "in use" is visible without opening every prompt.
+    usage_count: int = 0
     created_at: datetime
     updated_at: datetime | None = None
 

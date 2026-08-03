@@ -44,6 +44,7 @@ export interface PromptRead {
   source: PromptSource;
   shipped_key?: string | null;
   current_version: number;
+  usage_count: number;
   created_at: string;
   updated_at?: string | null;
 }
@@ -52,6 +53,8 @@ export interface PromptUsage {
   kind: "chat_base" | "collection_tool" | "pipeline_node";
   name: string;
   id: string;
+  node_id?: string | null;
+  pipeline_kind?: "ingestion" | "retrieval" | null;
   version: PromptVersionSelector;
 }
 

@@ -38,6 +38,12 @@ export interface PromptDraft {
   body: string;
   systemBody: string;
   outputFields: LlmOutputField[];
+  /**
+   * Sample value per variable. Local to the session, never a prompt
+   * version: this is the corpus you are tuning against, not part of the
+   * template, and two people editing one prompt test it on different data.
+   */
+  values: Record<string, string>;
 }
 
 /** Normalize a wire `output_fields` list into builder fields. */
@@ -53,9 +59,19 @@ const toWireFields = (fields: LlmOutputField[]): Record<string, unknown>[] | nul
  * detail + versions, the edit draft with its debounced server-rendered
  * preview, and every mutation (create, save version, fork, rename, delete).
  */
-export function usePromptStudio(token: string | null) {
+export interface PromptStudioOptions {
+  /** Open on this prompt instead of the `?prompt=` deep link. */
+  initialPromptId?: string | null;
+  /** Mirror the selection into the address bar (the page, not the overlay). */
+  trackUrl?: boolean;
+}
+
+export function usePromptStudio(token: string | null, options: PromptStudioOptions = {}) {
+  const { initialPromptId = null, trackUrl = false } = options;
   const searchParams = useSearchParams();
-  const deepLinkedPromptId = useRef<string | null>(searchParams?.get("prompt") ?? null);
+  const deepLinkedPromptId = useRef<string | null>(
+    initialPromptId ?? searchParams?.get("prompt") ?? null,
+  );
 
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkedPromptId.current);
   const [detail, setDetail] = useState<PromptDetail | null>(null);
@@ -65,6 +81,7 @@ export function usePromptStudio(token: string | null) {
     body: "",
     systemBody: "",
     outputFields: [],
+    values: {},
   });
   const [preview, setPreview] = useState<PromptRenderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,11 +117,15 @@ export function usePromptStudio(token: string | null) {
         ]);
         setDetail(nextDetail);
         setVersions(nextVersions);
-        setDraft({
+        setDraft((previous) => ({
           body: nextDetail.body,
           systemBody: nextDetail.system_body ?? "",
           outputFields: parseOutputFields(nextDetail.output_fields),
-        });
+          // Sample values survive switching prompts inside one context —
+          // the query you are tuning against does not change because you
+          // opened the neighbouring prompt to compare.
+          values: previous.values,
+        }));
       } catch (loadError) {
         // A prompt created a beat ago can 404 while the create request's
         // session finishes committing — retry briefly before reporting.
@@ -129,6 +150,17 @@ export function usePromptStudio(token: string | null) {
     }
   }, [loadDetail, selectedId]);
 
+  // Keep the address bar on the prompt being edited so a refresh or a
+  // shared link lands where the user was. `replaceState` rather than a
+  // router push: this is where you already are, not a step in history.
+  useEffect(() => {
+    if (!trackUrl || !selectedId || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("prompt") === selectedId) return;
+    url.searchParams.set("prompt", selectedId);
+    window.history.replaceState(window.history.state, "", url);
+  }, [selectedId, trackUrl]);
+
   // If nothing is selected once the list arrives, select the first prompt —
   // re-finding a deep-linked id rather than resetting to [0] on refetch.
   useEffect(() => {
@@ -148,6 +180,7 @@ export function usePromptStudio(token: string | null) {
         body: draft.body,
         system_body: draft.systemBody || null,
         context: detail.context,
+        values: draft.values,
       })
         .then(setPreview)
         .catch(() => {
@@ -155,8 +188,10 @@ export function usePromptStudio(token: string | null) {
         });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [detail, draft.body, draft.systemBody, token]);
+  }, [detail, draft.body, draft.systemBody, draft.values, token]);
 
+  // Sample values are session state, not part of the prompt, so they are
+  // deliberately excluded — typing a test query is not an unsaved change.
   const hasChanges = useMemo(() => {
     if (!detail) return false;
     return (
@@ -164,7 +199,7 @@ export function usePromptStudio(token: string | null) {
       draft.systemBody !== (detail.system_body ?? "") ||
       JSON.stringify(draft.outputFields) !== JSON.stringify(parseOutputFields(detail.output_fields))
     );
-  }, [detail, draft]);
+  }, [detail, draft.body, draft.systemBody, draft.outputFields]);
 
   const runMutation = useCallback(
     async (mutation: () => Promise<void>, fallback: string) => {
@@ -228,21 +263,25 @@ export function usePromptStudio(token: string | null) {
   );
 
   // A fork carries the current draft — fork-and-edit is how a read-only
-  // shipped prompt's changes become v1 of an owned prompt.
+  // shipped prompt's changes become v1 of an owned prompt. It returns the
+  // new prompt so a caller that opened the studio from a node can point
+  // that node at it; otherwise the user's edit is a silent no-op.
   const handleFork = useCallback(
-    async (payload: PromptForkPayload) => {
-      if (!token || !detail) return false;
+    async (payload: PromptForkPayload): Promise<PromptRead | null> => {
+      if (!token || !detail) return null;
       const context = payload.context ?? detail.context;
-      return runMutation(async () => {
-        const fork = await forkPrompt(token, detail.id, {
+      let created: PromptRead | null = null;
+      await runMutation(async () => {
+        created = await forkPrompt(token, detail.id, {
           ...payload,
           body: draft.body,
           system_body: draft.systemBody || null,
           output_fields: isNodeContext(context) ? toWireFields(draft.outputFields) : null,
         });
         await promptsQuery.reload();
-        setSelectedId(fork.id);
+        setSelectedId(created.id);
       }, "Unable to fork the prompt.");
+      return created;
     },
     [detail, draft, promptsQuery, runMutation, token],
   );
@@ -267,16 +306,14 @@ export function usePromptStudio(token: string | null) {
     }, "Unable to delete the prompt.");
   }, [detail, promptsQuery, runMutation, token]);
 
-  const handleRestoreVersion = useCallback(
-    (version: PromptVersionRead) => {
-      setDraft({
-        body: version.body,
-        systemBody: version.system_body ?? "",
-        outputFields: parseOutputFields(version.output_fields),
-      });
-    },
-    [setDraft],
-  );
+  const handleRestoreVersion = useCallback((version: PromptVersionRead) => {
+    setDraft((previous) => ({
+      body: version.body,
+      systemBody: version.system_body ?? "",
+      outputFields: parseOutputFields(version.output_fields),
+      values: previous.values,
+    }));
+  }, []);
 
   return {
     prompts,

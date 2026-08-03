@@ -71,6 +71,56 @@ def prompt_usages(
     return usages
 
 
+def usage_counts(session: Session, user_id: UUID) -> dict[UUID, int]:
+    """How many consumers each of the user's prompts has, in one pass.
+
+    The library list shows this per row, so resolving it prompt-by-prompt
+    would re-read every pipeline once per prompt; the reference stores are
+    walked once here instead.
+    """
+    counts: dict[UUID, int] = {}
+
+    def add(prompt_id: UUID) -> None:
+        counts[prompt_id] = counts.get(prompt_id, 0) + 1
+
+    user = session.get(models.User, user_id)
+    if user is not None and user.base_prompt_id is not None:
+        add(user.base_prompt_id)
+
+    collections = session.exec(
+        select(models.Collection).where(col(models.Collection.user_id) == user_id)
+    ).all()
+    for collection in collections:
+        reference = parse_reference((collection.extra_metadata or {}).get(TOOL_PROMPT_REF_KEY))
+        if reference is not None:
+            add(reference.prompt_id)
+
+    for _pipeline, version_row in _current_pipeline_versions(session, user_id):
+        for _node_id, reference in definition_prompt_references(version_row.definition):
+            add(reference.prompt_id)
+    return counts
+
+
+def _current_pipeline_versions(
+    session: Session, user_id: UUID
+) -> list[tuple[models.Pipeline, models.PipelineVersion]]:
+    """Each of the user's pipelines paired with the version it runs."""
+    pairs: list[tuple[models.Pipeline, models.PipelineVersion]] = []
+    pipelines = session.exec(
+        select(models.Pipeline).where(col(models.Pipeline.user_id) == user_id)
+    ).all()
+    for pipeline in pipelines:
+        version_row = session.exec(
+            select(models.PipelineVersion).where(
+                col(models.PipelineVersion.pipeline_id) == pipeline.id,
+                col(models.PipelineVersion.version) == pipeline.current_version,
+            )
+        ).first()
+        if version_row is not None:
+            pairs.append((pipeline, version_row))
+    return pairs
+
+
 def _chat_base_usages(
     session: Session, user_id: UUID, prompt_id: UUID
 ) -> list[PromptUsageRead]:
@@ -107,16 +157,8 @@ def _collection_usages(
 def _pipeline_usages(
     session: Session, user_id: UUID, prompt_id: UUID
 ) -> list[PromptUsageRead]:
-    statement = select(models.Pipeline).where(col(models.Pipeline.user_id) == user_id)
     usages: list[PromptUsageRead] = []
-    for pipeline in session.exec(statement).all():
-        version_statement = select(models.PipelineVersion).where(
-            col(models.PipelineVersion.pipeline_id) == pipeline.id,
-            col(models.PipelineVersion.version) == pipeline.current_version,
-        )
-        version_row = session.exec(version_statement).first()
-        if version_row is None:
-            continue
+    for pipeline, version_row in _current_pipeline_versions(session, user_id):
         for node_id, reference in definition_prompt_references(version_row.definition):
             if reference.prompt_id == prompt_id:
                 usages.append(
@@ -124,7 +166,19 @@ def _pipeline_usages(
                         kind="pipeline_node",
                         name=f"{pipeline.name} — {node_id}",
                         id=str(pipeline.id),
+                        node_id=node_id,
+                        pipeline_kind=_pipeline_kind(version_row.definition),
                         version=reference.version,
                     )
                 )
     return usages
+
+
+def _pipeline_kind(definition: dict[str, Any]) -> str:
+    """Which editor section a pipeline lives in, from its boundary nodes.
+
+    A pipeline's kind is derived from its definition rather than stored, so
+    a usage link has to derive it the same way to land on the right route.
+    """
+    types = {node.get("type") for node in definition.get("nodes", []) if isinstance(node, dict)}
+    return "ingestion" if "ingestion.input" in types else "retrieval"

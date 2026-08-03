@@ -5,7 +5,8 @@ import { PromptStudio } from "@/components/prompts/PromptStudio";
 export default function PromptsPage() {
   return (
     <Suspense>
-      <PromptStudio />
+      {/* The page owns the address bar; the pipeline-editor overlay does not. */}
+      <PromptStudio trackUrl />
     </Suspense>
   );
 }
