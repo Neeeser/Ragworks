@@ -80,6 +80,17 @@ export interface EvalRunCreatePayload {
   config: EvalRunConfig;
 }
 
+/** Mirrors `PromptComparisonRequest` — A/B two versions of one prompt. */
+export interface PromptComparisonPayload {
+  prompt_id: UUID;
+  version_a: number;
+  version_b: number;
+  dataset_id: UUID;
+  ingestion_pipeline_id: UUID;
+  retrieval_pipeline_id: UUID;
+  config: EvalRunConfig;
+}
+
 /** Mirrors `FunnelStage` — aggregate gold retention at one pipeline node. */
 export interface FunnelStage {
   node_id: string;

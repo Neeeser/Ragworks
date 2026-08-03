@@ -15,11 +15,18 @@ import {
   K_CHOICES,
   truncatedCutoffs,
 } from "@/components/evals/lib/run-config";
+import {
+  PRESETS,
+  presetDistractors,
+  presetQueries,
+  resolveCount,
+  STEPS,
+} from "@/components/evals/lib/run-wizard-presets";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
 import { ParameterId } from "@/components/ui/parameter-label";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { createEvalRun } from "@/lib/api";
+import { comparePromptVersions, createEvalRun } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { humanizeIdentifier } from "@/lib/humanize";
 import { cn } from "@/lib/utils";
@@ -27,56 +34,33 @@ import { useAuth } from "@/providers/auth-provider";
 
 import type { EvalDataset, Pipeline, PipelineVariable } from "@/lib/types";
 
+/** Two versions of one prompt to A/B, carried in from the prompt studio. */
+export interface PromptComparison {
+  promptId: string;
+  promptName: string;
+  versionA: number;
+  versionB: number;
+}
+
 interface NewRunWizardProps {
   open: boolean;
   datasets: EvalDataset[];
   pipelines: Pipeline[];
+  /**
+   * When set, the wizard starts two runs instead of one — the same
+   * dataset and settings against each version of this prompt.
+   */
+  comparison?: PromptComparison | null;
   onClose: () => void;
 }
 
-interface Preset {
-  key: string;
-  label: string;
-  detail: string;
-  queries: number | null; // null = all
-  distractors: number | null;
-}
-
-const PRESETS: Preset[] = [
-  {
-    key: "quick",
-    label: "Quick",
-    detail: "50 queries, 200 distractors",
-    queries: 50,
-    distractors: 200,
-  },
-  {
-    key: "standard",
-    label: "Standard",
-    detail: "500 queries, 2,000 distractors",
-    queries: 500,
-    distractors: 2000,
-  },
-  {
-    key: "full",
-    label: "Full",
-    detail: "every query, full corpus",
-    queries: null,
-    distractors: null,
-  },
-];
-
-const STEPS = [
-  { id: "dataset", label: "Dataset", description: "What the pipelines are measured against." },
-  {
-    id: "pipelines",
-    label: "Pipelines",
-    description: "The ingestion and retrieval pair under test.",
-  },
-  { id: "scope", label: "Scope", description: "How much of the dataset the run covers." },
-];
-
-export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizardProps) {
+export function NewRunWizard({
+  open,
+  datasets,
+  pipelines,
+  comparison,
+  onClose,
+}: NewRunWizardProps) {
   const { token } = useAuth();
   const router = useRouter();
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
@@ -130,24 +114,40 @@ export function NewRunWizard({ open, datasets, pipelines, onClose }: NewRunWizar
     const chosen = PRESETS.find((entry) => entry.key === preset) ?? PRESETS[0];
     dispatch({ type: "launch_started" });
     try {
+      const config = {
+        num_queries: resolveCount(numQueries, chosen.queries, dataset.num_queries),
+        distractor_pool_size: resolveCount(
+          distractors,
+          chosen.distractors,
+          dataset.num_corpus_docs,
+        ),
+        seed: Number(seed) || 0,
+        concurrency,
+        k_values: kSelected,
+        selected_metrics: [],
+        run_inputs: boundInputs,
+      };
+      if (comparison) {
+        // Both sides share this config, so the only difference between the
+        // two runs is the prompt version each pipeline copy pins.
+        await comparePromptVersions(token!, {
+          prompt_id: comparison.promptId,
+          version_a: comparison.versionA,
+          version_b: comparison.versionB,
+          dataset_id: dataset.id,
+          ingestion_pipeline_id: ingestionId,
+          retrieval_pipeline_id: retrievalId,
+          config,
+        });
+        router.push("/evals");
+        return;
+      }
       const run = await createEvalRun(token!, {
         dataset_id: dataset.id,
         ingestion_pipeline_id: ingestionId,
         retrieval_pipeline_id: retrievalId,
         name: `${dataset.name} · ${chosen.label}`,
-        config: {
-          num_queries: resolveCount(numQueries, chosen.queries, dataset.num_queries),
-          distractor_pool_size: resolveCount(
-            distractors,
-            chosen.distractors,
-            dataset.num_corpus_docs,
-          ),
-          seed: Number(seed) || 0,
-          concurrency,
-          k_values: kSelected,
-          selected_metrics: [],
-          run_inputs: boundInputs,
-        },
+        config,
       });
       router.push(`/evals/runs/${run.id}`);
     } catch (err) {
@@ -395,21 +395,4 @@ function inputHint(variable: PipelineVariable, maxK: number): string {
     );
   }
   return variable.description || "Pipeline input, held fixed for every query.";
-}
-
-function presetQueries(presetKey: string, dataset: EvalDataset | null): number {
-  const chosen = PRESETS.find((entry) => entry.key === presetKey) ?? PRESETS[0];
-  return resolveCount("", chosen.queries, dataset?.num_queries ?? 0);
-}
-
-function presetDistractors(presetKey: string, dataset: EvalDataset | null): number {
-  const chosen = PRESETS.find((entry) => entry.key === presetKey) ?? PRESETS[0];
-  return resolveCount("", chosen.distractors, dataset?.num_corpus_docs ?? 0);
-}
-
-function resolveCount(override: string, presetValue: number | null, datasetTotal: number): number {
-  const numeric = Number(override);
-  if (override.trim() !== "" && Number.isInteger(numeric) && numeric > 0) return numeric;
-  if (presetValue === null) return Math.max(datasetTotal, 1);
-  return Math.min(presetValue, Math.max(datasetTotal, 1));
 }

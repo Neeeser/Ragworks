@@ -11,6 +11,7 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import to_http_exception
 from app.db import models
 from app.evals.collections import EvalCollectionService
+from app.evals.comparison import compare_prompt_versions
 from app.evals.dataset_queries import DatasetQueryService
 from app.evals.execution.runner import run_eval
 from app.evals.generation import run_dataset_generation
@@ -29,6 +30,7 @@ from app.schemas.evals import (
     EvalRunRead,
     EvalRunSummary,
     ImportBuiltinDatasetRequest,
+    PromptComparisonRequest,
     UploadDatasetRequest,
 )
 from app.schemas.evals_generation import (
@@ -208,6 +210,29 @@ def create_run(
         raise to_http_exception(exc) from exc
     background_tasks.add_task(run_eval, run.id)
     return to_run_read(run)
+
+
+@router.post("/runs/prompt-comparison", response_model=list[EvalRunRead], status_code=202)
+def compare_prompt(
+    payload: PromptComparisonRequest,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[EvalRunRead]:
+    """Start one eval run per prompt version, over pinned pipeline copies."""
+    service = EvalService(session)
+    try:
+        runs = compare_prompt_versions(
+            session,
+            current_user,
+            payload,
+            start_run=service.create_run,
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    for run in runs:
+        background_tasks.add_task(run_eval, run.id)
+    return [to_run_read(run) for run in runs]
 
 
 @router.get("/runs", response_model=list[EvalRunSummary])

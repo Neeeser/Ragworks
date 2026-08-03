@@ -13,6 +13,7 @@ import type {
   EvalMetricInfo,
   EvalRun,
   EvalRunCreatePayload,
+  PromptComparisonPayload,
   EvalRunItemsResponse,
   EvalRunSummary,
 } from "@/lib/types";
@@ -114,6 +115,22 @@ export async function createEvalRun(
   payload: EvalRunCreatePayload,
 ): Promise<EvalRun> {
   return apiFetch<EvalRun>("/api/evals/runs", {
+    token,
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Start one run per prompt version. The backend copies the pipeline once
+ * per side with that version pinned, so each run names a pipeline that
+ * describes what it did.
+ */
+export async function comparePromptVersions(
+  token: string,
+  payload: PromptComparisonPayload,
+): Promise<EvalRun[]> {
+  return apiFetch<EvalRun[]>("/api/evals/runs/prompt-comparison", {
     token,
     method: "POST",
     body: JSON.stringify(payload),

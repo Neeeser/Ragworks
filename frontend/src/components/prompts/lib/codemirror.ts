@@ -162,8 +162,7 @@ const ACCENT = "var(--accent-violet)";
 const INK_PRIMARY = "var(--text-primary)";
 
 /** Accent wash at a given strength — the chip and selection share it. */
-const accentWash = (percent: number) =>
-  `color-mix(in oklab, ${ACCENT} ${percent}%, transparent)`;
+const accentWash = (percent: number) => `color-mix(in oklab, ${ACCENT} ${percent}%, transparent)`;
 
 const consoleTheme = EditorView.theme({
   "&": {

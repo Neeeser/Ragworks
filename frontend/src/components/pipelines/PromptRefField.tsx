@@ -205,7 +205,13 @@ export function PromptRefField({
       {studioOpen && reference && (
         <PromptStudioOverlay
           promptId={reference.prompt_id}
-          onForked={(fork) => void setReference({ prompt_id: fork.id, version: "latest" })}
+          onForked={(fork) => {
+            promptsQuery.reload();
+            // The fork did not exist when this list was fetched, so
+            // repointing without reloading leaves the picker showing an
+            // id it cannot name — a blank select over a valid reference.
+            void setReference({ prompt_id: fork.id, version: "latest" });
+          }}
           onClose={() => setStudioOpen(false)}
         />
       )}

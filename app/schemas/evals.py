@@ -201,6 +201,24 @@ class EvalRunCreate(BaseModel):
     config: EvalRunConfig
 
 
+class PromptComparisonRequest(BaseModel):
+    """Request to A/B two versions of one prompt.
+
+    `retrieval_pipeline_id` names the pipeline whose nodes reference the
+    prompt; each side runs a copy of it with those references pinned, so
+    the two runs differ in exactly one thing and each names a pipeline
+    that describes what it did.
+    """
+
+    prompt_id: UUID
+    version_a: int = Field(gt=0)
+    version_b: int = Field(gt=0)
+    dataset_id: UUID
+    ingestion_pipeline_id: UUID
+    retrieval_pipeline_id: UUID
+    config: EvalRunConfig
+
+
 # --------------------------------------------------------------------------- #
 # Trace attribution: funnel + findings
 # --------------------------------------------------------------------------- #
