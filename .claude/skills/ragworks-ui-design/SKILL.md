@@ -96,6 +96,15 @@ console density still doesn't leak out.
     decision. `MessageStack` (`components/ui/message-stack.tsx`) is the primitive for
     chat payloads — role-labelled full-text blocks with a Rendered ⇄ Raw markdown
     toggle — use it wherever messages are shown rather than joining them into a pre.
+13. **A preview earns its width by differing from its source.** Two panes showing the
+    same content with one substitution is half the page spent on duplication — render
+    one surface and toggle what it shows (the prompt studio's Names ⇄ Values). Split
+    panes are for genuinely different things: a template and the *payload* it produces,
+    a version and the one before it.
+14. **Editing something must not cost the user their unsaved work.** An editor reached
+    from the middle of a task opens as an overlay over that task, never a route change —
+    and if it can create a new entity, it hands that back so the caller repoints. A fork
+    nothing was repointed at is an edit that silently did nothing.
 
 ## Copy voice
 

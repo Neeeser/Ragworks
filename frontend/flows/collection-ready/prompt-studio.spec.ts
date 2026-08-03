@@ -12,6 +12,9 @@
  *    becomes v1 of the new owned prompt.
  * 5. Edit the fork and save it as v2 with a label; expect the version
  *    count to advance and the Versions tab to diff v1 → v2.
+ * 6. Switching prompts with an unsaved draft asks before discarding it.
+ * 7. On a node prompt, the Values view renders each variable as a chip
+ *    carrying its sample value, and typing a sample value updates it.
  */
 import { expect, test } from "@playwright/test";
 
@@ -61,4 +64,40 @@ test("built-in prompts are read-only and fork-and-edit versions the draft", asyn
   await page.getByRole("tab", { name: /Versions \(2\)/ }).click();
   await expect(page.getByText(/Changes from v1 to v2/)).toBeVisible();
   await expect(page.getByText("flow test")).toBeVisible();
+
+  // An unsaved draft is never lost to a click in the library — the rail is
+  // the natural way to compare two prompts, so it has to ask first.
+  await page.getByRole("tab", { name: "Editor" }).click();
+  await page
+    .getByRole("textbox", { name: "System prompt" })
+    .fill("A draft that was never saved as a version.");
+  await page.getByRole("button", { name: /Contextual Retrieval/ }).click();
+  await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: "My base prompt" })).toBeVisible();
+});
+
+test("the values view renders variables as chips carrying their sample values", async ({
+  page,
+}) => {
+  const handoff = loadHandoff();
+  await loginViaApi(page);
+
+  await page.goto(`${handoff.frontend_url}/prompts`);
+  await page.getByRole("button", { name: /Query Expansion/ }).click();
+  await expect(page.getByRole("heading", { name: "Query Expansion" })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // A node prompt's payload variable is what the sample value stands in for.
+  const sample = page.getByRole("textbox", { name: "Sample value for text" });
+  await sample.fill("carnitine and cardiovascular risk");
+
+  await page.getByRole("button", { name: "Values" }).click();
+  const chip = page.locator("[data-template-variable='text']");
+  await expect(chip).toHaveText("carnitine and cardiovascular risk");
+
+  // Names view shows the reference itself again, with no chip.
+  await page.getByRole("button", { name: "Names" }).click();
+  await expect(page.locator("[data-template-variable='text']")).toHaveCount(0);
 });

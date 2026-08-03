@@ -356,6 +356,32 @@ the same PR.
   indexes feel scattered across the app; a collection that needs a different
   store needs a different pipeline, which is what the catalog's copy action is
   for.
+- **A template and its rendering are one editable surface, not two columns.**
+  The prompt studio shows each template once at full width and toggles how
+  `{{variable}}` reads — its own name, or an atomic chip carrying its sample
+  value (`lib/codemirror.ts`). A side-by-side preview pane differs from its
+  source only where a variable appears, so it spends half the page duplicating
+  text: no shipped prompt has a variable in its system message, which makes
+  that pane a byte-for-byte copy for every prompt in the library. The exact
+  wire payload — roles, markdown, what is actually sent — belongs to the Test
+  tab, which sends it.
+- **A variable's sample value is session state, never part of a version.** It
+  is the corpus you are tuning against, not the template, and two people
+  editing one prompt test it on different data — so it is excluded from
+  "unsaved changes" and survives switching prompts. It reaches the render
+  preview and the test run (`values` on both endpoints); a bench that can only
+  exercise the catalog's stock examples answers "is this prompt well-formed",
+  never "does this prompt work on my data".
+- **An inner-loop editor opens over the work, never instead of it.** Tuning a
+  node's prompt is edit-test-edit, so `PromptStudioOverlay` mounts the studio
+  above the canvas rather than navigating to `/prompts`: a route change there
+  costs the user their unsaved graph and their place. Anything that creates a
+  new entity from inside such an overlay reports it back (`onForked`) so the
+  caller repoints — a fork nothing was repointed at is an edit that silently
+  does nothing.
+- **A picker that repoints at something it just created must refetch its
+  options.** The new entity postdates the list, so the control holds an id it
+  cannot name and renders blank over a perfectly valid reference.
 - **Every model choice renders one of two shared components — there is no third
   way to pick a model.** A pane gets `ModelPickerInline`; a form row gets
   `ModelPickerField`, a trigger showing the selected model that opens the same

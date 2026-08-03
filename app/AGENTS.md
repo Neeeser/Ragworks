@@ -426,6 +426,21 @@ frontend form code — only a new `ConfigFieldKind` would.
   import services. Runs record resolved `{node_id, prompt_id, version}` on
   `PipelineRun.prompt_versions` with `latest` pinned to the concrete version, so
   evals can attribute answer quality to prompt versions.
+- **An LLM node whose templates reference nothing from the item it processes
+  is a warning, not a pass.** Each shell declares its `payload_placeholders`
+  (`{{text}}`, or `{{items}}` for the reranker); a template referencing none
+  of them — and no `metadata.<key>`, which is per-item too — renders to the
+  same string for every item, so the node pays for a model call each and
+  writes one answer across the whole stream. Valid, expensive, and almost
+  never intended.
+- **An eval that varies a prompt version runs pipelines that pin it, never a
+  run-time override** (`app/evals/comparison.py`). An eval result outlives the
+  request that produced it, so a run whose behaviour is not written down in
+  the definition it names cannot be read back later — each side gets a real
+  copy of the pipeline with its `prompt_ref`s pinned, named after what it
+  pins. This is the same rule as "a pipeline that must differ is a different
+  pipeline"; a config override layer would reintroduce exactly the invisible
+  divergence that rule exists to prevent.
 - **The node-library endpoint rewrites preset prompt text onto the user's shipped
   prompt reference** (`app/services/prompts/preset_refs.py`) — a dropped preset
   reads the library rather than minting an inline copy that drifts from it.
