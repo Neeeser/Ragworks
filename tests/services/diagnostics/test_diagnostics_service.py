@@ -147,6 +147,41 @@ def test_fresh_collection_reports_no_index_errors(
     assert all(d.severity == "info" for d in index_findings)
 
 
+def test_duplicate_tool_binding_names_surface_end_to_end(session: Session):
+    """A collection whose two tool bindings already share a base name (legacy
+    data -- bind-time now refuses to *create* this, see
+    `tests/services/test_collection_tools.py`) is surfaced through the real
+    service, not just the rule in isolation."""
+    user = _user(session)
+    collection = _collection_with_models(
+        session, user, ingest_model="same", retrieval_model="same"
+    )
+    connection = add_openrouter_connection(session, user)
+    second_tool = PipelineService(session).create_pipeline(
+        user=user,
+        name="Second Search",
+        description="",
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=connection.id, embedding_model="same"
+        ),
+        change_summary="init",
+    )
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=second_tool.id,
+            role=models.BindingRole.TOOL,
+        )
+    )
+    session.commit()
+
+    response = CollectionDiagnosticsService(session).run(user, collection)
+
+    codes = {d.code for d in response.diagnostics}
+    assert "duplicate_tool_name" in codes
+    assert response.consistent is False
+
+
 def test_signature_busts_on_pipeline_version_change(session: Session):
     """A new pipeline version changes the cache signature (invalidates the entry)."""
     user = _user(session)

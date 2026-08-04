@@ -39,6 +39,7 @@ from app.services.prompts.selection import (
     selection_prompt_read,
     set_collection_prompt,
 )
+from app.services.tool_naming import ensure_unique_tool_names
 from app.telemetry import record
 from app.telemetry.events import CollectionCreated
 
@@ -65,6 +66,12 @@ class CollectionService:
             else [defaults.retrieval.id]
         )
         tool_pipelines = [self._require_tool_pipeline(tool_id, user) for tool_id in tool_ids]
+        # Checked before any row is written: a batch of selections that
+        # collide with each other must never leave a half-created collection
+        # behind, and there is nothing to roll back if nothing was written.
+        ensure_unique_tool_names(
+            (pipeline, self.pipelines.interface_for(pipeline)) for pipeline in tool_pipelines
+        )
 
         collection = models.Collection(
             id=uuid4(),

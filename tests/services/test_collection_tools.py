@@ -27,6 +27,7 @@ from app.services.pipeline_resolution import (
     resolve_primary_tool,
 )
 from app.services.pipelines import PipelineService
+from tests.utils.pipelines import with_tool_name
 from tests.utils.providers import install_default_pipelines
 
 
@@ -50,14 +51,27 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
 
 
 def _create_search_pipeline(
-    session: Session, user: models.User, name: str = "Extra Search"
+    session: Session,
+    user: models.User,
+    name: str = "Extra Search",
+    *,
+    tool_name: str | None = None,
 ) -> models.Pipeline:
+    """Create a retrieval pipeline; `tool_name` gives it a distinct tool identity.
+
+    The default retrieval definition always declares `tool_name: "search"`, so
+    binding two of these to one collection collides unless a caller passes a
+    distinct `tool_name` for the second one.
+    """
+    definition = build_default_retrieval_pipeline(
+        embedding_connection_id=uuid4(), embedding_model="test-embed"
+    )
+    if tool_name is not None:
+        definition = with_tool_name(definition, tool_name)
     pipeline = PipelineService(session).create_pipeline(
         user=user,
         name=name,
-        definition=build_default_retrieval_pipeline(
-            embedding_connection_id=uuid4(), embedding_model="test-embed"
-        ),
+        definition=definition,
         change_summary="Test tool pipeline.",
     )
     session.commit()
@@ -142,7 +156,11 @@ class TestBindingRules:
         service = CollectionToolService(session)
         first = service.add_tool(user, collection, _create_search_pipeline(session, user).id)
         second = service.add_tool(
-            user, collection, _create_search_pipeline(session, user, "Second Search").id
+            user,
+            collection,
+            _create_search_pipeline(
+                session, user, "Second Search", tool_name="second_search"
+            ).id,
         )
         session.commit()
         assert first.is_primary is True
@@ -167,7 +185,11 @@ class TestBindingRules:
         service = CollectionToolService(session)
         first = service.add_tool(user, collection, _create_search_pipeline(session, user).id)
         second = service.add_tool(
-            user, collection, _create_search_pipeline(session, user, "Second Search").id
+            user,
+            collection,
+            _create_search_pipeline(
+                session, user, "Second Search", tool_name="second_search"
+            ).id,
         )
         session.commit()
 
@@ -211,6 +233,79 @@ class TestBindingRules:
 
         enabled = service.list_enabled_tools(collection)
         assert enabled == []
+
+
+class TestDuplicateToolNames:
+    """A collection's tool bindings must not project the same exposed name.
+
+    `search_x` vs `search_x_2` gives the model no stable way to tell two
+    bound tools apart, so a same-collection collision is rejected at bind
+    time rather than papered over with a suffix (unlike the cross-collection
+    case in one chat session, which keeps the `_N` dedup -- see
+    `app/chat/tool_contexts.py`).
+    """
+
+    def test_add_tool_rejects_a_duplicate_base_tool_name(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        first = _create_search_pipeline(session, user, "First Search")
+        second = _create_search_pipeline(session, user, "Second Search")
+        service.add_tool(user, collection, first.id)
+        session.commit()
+
+        with pytest.raises(InvalidInputError) as exc_info:
+            service.add_tool(user, collection, second.id)
+
+        message = str(exc_info.value)
+        assert "First Search" in message
+        assert "Second Search" in message
+        assert "search" in message
+        # The rejected binding never landed.
+        tools = service.list_tools(collection)
+        assert [binding.pipeline_id for binding in tools] == [first.id]
+
+    def test_add_tool_allows_different_base_tool_names(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        first = _create_search_pipeline(session, user, "First Search")
+        second = _create_search_pipeline(
+            session, user, "Second Search", tool_name="second_search"
+        )
+
+        service.add_tool(user, collection, first.id)
+        service.add_tool(user, collection, second.id)
+        session.commit()
+
+        tools = service.list_tools(collection)
+        assert {binding.pipeline_id for binding in tools} == {first.id, second.id}
+
+    def test_add_tool_allows_the_same_tool_name_on_two_different_collections(
+        self, session: Session
+    ) -> None:
+        """A base name colliding across two *different* collections is legal
+        and common -- every collection gets its own default "search" tool."""
+        user = _create_user(session)
+        first_collection = _create_collection(session, user)
+        second_collection = models.Collection(
+            user_id=user.id, name="Second Collection", description="", extra_metadata={}
+        )
+        session.add(second_collection)
+        session.commit()
+        session.refresh(second_collection)
+        service = CollectionToolService(session)
+
+        service.add_tool(
+            user, first_collection, _create_search_pipeline(session, user, "Search A").id
+        )
+        service.add_tool(
+            user, second_collection, _create_search_pipeline(session, user, "Search B").id
+        )
+        session.commit()
+
+        assert len(service.list_tools(first_collection)) == 1
+        assert len(service.list_tools(second_collection)) == 1
 
 
 class TestPurgeTargets:

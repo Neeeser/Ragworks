@@ -25,6 +25,7 @@ from app.services.pipeline_resolution import (
     ResolvedPipeline,
     resolve_ingest_binding,
     resolve_primary_tool,
+    resolve_tool_bindings,
 )
 from app.services.pipeline_validation import validate_pipeline_definition
 
@@ -52,6 +53,12 @@ class DiagnosticContext:
     prober: VectorStoreProber
     ingestion: ResolvedPipeline | None = None
     retrieval: ResolvedPipeline | None = None
+    #: Every *enabled* tool binding, resolved read-only -- the live view of
+    #: what a chat turn would actually expose (chat only loads enabled
+    #: bindings). Used by `DuplicateToolNameRule`; a binding that fails to
+    #: resolve degrades the whole list to `[]` rather than raising, matching
+    #: every other field on this context.
+    tool_bindings: list[ResolvedPipeline] = field(default_factory=list)
     ingestion_error: str | None = None
     retrieval_error: str | None = None
     ingestion_validation: PipelineValidationResult | None = None
@@ -107,6 +114,12 @@ def build_context(
         )
     except PipelineResolutionError as exc:
         ctx.retrieval_error = str(exc)
+    try:
+        ctx.tool_bindings = resolve_tool_bindings(session, user, collection, scaffold=False)
+    except PipelineResolutionError:
+        # A single unresolvable binding (foreign pipeline, no-longer-callable
+        # graph) must not hide every *other* tool binding's diagnostics.
+        ctx.tool_bindings = []
 
     runs = PipelineRunRepository(session)
     ingestion_failures = runs.list_recent_for_collection(

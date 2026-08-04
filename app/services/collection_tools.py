@@ -15,8 +15,10 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import CollectionPipelineBindingRepository
+from app.pipelines.interface import PipelineInterface
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
+from app.services.tool_naming import ensure_unique_tool_names
 
 
 class CollectionToolService:
@@ -56,6 +58,7 @@ class CollectionToolService:
         existing = self.list_tools(collection)
         if any(binding.pipeline_id == pipeline.id for binding in existing):
             raise InvalidInputError("This pipeline is already bound as a tool.")
+        self._reject_duplicate_tool_name(user, existing, pipeline)
         binding = models.CollectionPipelineBinding(
             collection_id=collection.id,
             pipeline_id=pipeline.id,
@@ -142,6 +145,30 @@ class CollectionToolService:
         )
         self.bindings.add(binding)
         return binding
+
+    def _reject_duplicate_tool_name(
+        self,
+        user: models.User,
+        existing: list[models.CollectionPipelineBinding],
+        pipeline: models.Pipeline,
+    ) -> None:
+        """Reject binding `pipeline` if its tool name collides with a sibling.
+
+        Every existing tool binding of the collection is a real, already-bound
+        pipeline (never a stale reference -- a bound pipeline cannot be
+        deleted, see `PipelineService.delete_pipeline`'s in-use gate), so a
+        missing lookup here would indicate a deeper data bug rather than an
+        expected case; it is skipped rather than raised because this check's
+        only job is naming collisions, not referential integrity.
+        """
+        pairs: list[tuple[models.Pipeline, PipelineInterface]] = []
+        for binding in existing:
+            sibling = self.pipelines.get_pipeline(binding.pipeline_id, user.id)
+            if sibling is None:
+                continue
+            pairs.append((sibling, self.pipelines.interface_for(sibling)))
+        pairs.append((pipeline, self.pipelines.interface_for(pipeline)))
+        ensure_unique_tool_names(pairs)
 
     def _require_callable_pipeline(self, user: models.User, pipeline_id: UUID) -> models.Pipeline:
         """Return a user-owned callable pipeline or raise."""

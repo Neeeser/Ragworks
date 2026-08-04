@@ -45,6 +45,26 @@ const secondTool = makePipeline({
     nodes: [{ id: "node-3", type: "node.type", name: "Node", config: {} }],
     edges: [],
   },
+  // A distinct declared tool name -- otherwise it defaults to "search",
+  // colliding with `retrieval` (also undeclared) under the wizard's
+  // pre-submit collision check.
+  interface: {
+    accepts_document: false,
+    callable: true,
+    tool_name: "keyword_search",
+    output_fields: [],
+  },
+});
+const collidingTool = makePipeline({
+  id: "ret-3",
+  name: "Duplicate Search",
+  kind: "retrieval",
+  is_default: false,
+  definition: {
+    nodes: [{ id: "node-4", type: "node.type", name: "Node", config: {} }],
+    edges: [],
+  },
+  // No declared tool_name -- defaults to "search", the same as `retrieval`.
 });
 
 function renderWizard(overrides: Partial<Parameters<typeof CreateCollectionWizard>[0]> = {}) {
@@ -144,6 +164,21 @@ describe("CreateCollectionWizard", () => {
     expect(screen.getByText("Add at least one retrieval pipeline for chat to call.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /3\s*Review/ })).toBeDisabled();
+  });
+
+  it("refuses to add a tool pipeline whose name would collide with one already added", async () => {
+    const user = userEvent.setup();
+    renderWizard({ retrievalPipelines: [retrieval, collidingTool] });
+
+    await user.type(screen.getByPlaceholderText(namePlaceholder), "Collection");
+    await user.click(screen.getByRole("button", { name: /Next/ }));
+
+    await pickPipeline(user, "Retrieval pipeline to add as a tool", "Duplicate Search");
+    await user.click(screen.getByRole("button", { name: /Add tool/ }));
+
+    expect(await screen.findByText(/would both expose the tool name 'search'/)).toBeTruthy();
+    // The colliding pipeline never made it into the bound-tools list.
+    expect(screen.queryByRole("button", { name: /Remove Duplicate Search/ })).toBeNull();
   });
 
   it("fills pipeline defaults when the pipeline lists load after opening", async () => {

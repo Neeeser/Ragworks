@@ -18,12 +18,8 @@ from app.services.pipeline_resolution import (
     resolve_tool_bindings,
 )
 from app.services.prompts import collection_tool_name
-from app.services.tool_projection import (
-    build_parameter_schema,
-    tool_base_name,
-    tool_description,
-    tool_exposed_name,
-)
+from app.services.tool_naming import tool_base_name, tool_exposed_name
+from app.services.tool_projection import build_parameter_schema, tool_description
 
 
 def _tool_context(

@@ -29,6 +29,7 @@ from app.services.diagnostics.rules.runs import (
     RecentIngestionFailuresRule,
     RecentRetrievalFailuresRule,
 )
+from app.services.diagnostics.rules.tool_names import DuplicateToolNameRule
 
 DIAGNOSTIC_RULES: list[DiagnosticRule] = [
     EmbeddingModelMismatchRule(),
@@ -41,6 +42,7 @@ DIAGNOSTIC_RULES: list[DiagnosticRule] = [
     NamespaceMismatchRule(),
     Bm25IndexMismatchRule(),
     HybridTargetMismatchRule(),
+    DuplicateToolNameRule(),
     IndexProbeRule(),
     NodeConfigRule(),
     RecentIngestionFailuresRule(),

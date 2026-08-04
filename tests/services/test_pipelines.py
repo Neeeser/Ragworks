@@ -20,6 +20,7 @@ from app.services.pipelines import (
     DEFAULT_SEARCH_SLUG,
     PipelineService,
 )
+from tests.utils.pipelines import with_tool_name
 from tests.utils.providers import add_openrouter_connection
 
 EMBED_CONNECTION_ID = uuid4()
@@ -300,6 +301,105 @@ def test_update_pipeline_updates_metadata_only(session: Session) -> None:
         select(models.PipelineVersion).where(models.PipelineVersion.pipeline_id == pipeline.id)
     ).all()
     assert len(versions) == 1
+
+
+def _bind_tool(
+    session: Session, collection: models.Collection, pipeline_id: UUID
+) -> models.CollectionPipelineBinding:
+    """Bind a pipeline as a tool directly (bypassing `CollectionToolService`).
+
+    Used to build a collection whose tool bindings already exist -- some
+    tests need siblings the pipeline-save collision check compares against;
+    others need a *pre-existing* collision `CollectionToolService.add_tool`
+    could never have created, to prove an unrelated save still works.
+    """
+    binding = models.CollectionPipelineBinding(
+        collection_id=collection.id,
+        pipeline_id=pipeline_id,
+        role=models.BindingRole.TOOL,
+    )
+    session.add(binding)
+    session.commit()
+    session.refresh(binding)
+    return binding
+
+
+class TestUpdatePipelineToolNameCollisions:
+    """Editing a bound pipeline's tool_name onto a sibling binding's name."""
+
+    def test_rejects_a_rename_onto_a_sibling_bindings_name(self, session: Session) -> None:
+        user = _create_user(session)
+        service = PipelineService(session)
+        alpha = service.create_pipeline(
+            user=user,
+            name="Alpha",
+            definition=with_tool_name(
+                build_default_retrieval_pipeline(
+                    embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+                ),
+                "alpha",
+            ),
+        )
+        beta = service.create_pipeline(
+            user=user,
+            name="Beta",
+            definition=with_tool_name(
+                build_default_retrieval_pipeline(
+                    embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+                ),
+                "beta",
+            ),
+        )
+        session.commit()
+        collection = _create_collection(session, user)
+        _bind_tool(session, collection, alpha.id)
+        _bind_tool(session, collection, beta.id)
+
+        renamed = with_tool_name(service.get_definition(alpha), "beta")
+
+        with pytest.raises(InvalidInputError) as exc_info:
+            service.update_pipeline(pipeline=alpha, definition=renamed, actor_id=user.id)
+
+        message = str(exc_info.value)
+        assert "Alpha" in message
+        assert "Beta" in message
+        assert "beta" in message
+
+    def test_allows_an_unrelated_edit_despite_a_pre_existing_collision(
+        self, session: Session
+    ) -> None:
+        """A collection may already hold two same-named tool bindings (legacy
+        data from before this check existed -- see `DuplicateToolNameRule`).
+        That must not lock either pipeline out of an edit that leaves the
+        name alone."""
+        user = _create_user(session)
+        service = PipelineService(session)
+        first = service.create_pipeline(
+            user=user,
+            name="First",
+            definition=build_default_retrieval_pipeline(
+                embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+            ),
+        )
+        second = service.create_pipeline(
+            user=user,
+            name="Second",
+            definition=build_default_retrieval_pipeline(
+                embedding_connection_id=EMBED_CONNECTION_ID, embedding_model="test-embed"
+            ),
+        )
+        session.commit()
+        collection = _create_collection(session, user)
+        _bind_tool(session, collection, first.id)
+        _bind_tool(session, collection, second.id)
+
+        unrelated = PipelineDefinition.model_validate(service.get_definition(first).model_dump())
+        embedder = next(node for node in unrelated.nodes if node.type == "embedder.text")
+        embedder.config = {**embedder.config, "model_name": "a-different-embed-model"}
+
+        updated = service.update_pipeline(pipeline=first, definition=unrelated, actor_id=user.id)
+
+        assert updated.current_version == 2
 
 
 def test_activate_version_switches_current(session: Session) -> None:

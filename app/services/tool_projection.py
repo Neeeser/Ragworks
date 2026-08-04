@@ -3,15 +3,13 @@
 One place turns a resolved binding into the projection every exposure surface
 uses — chat tool specs, the collection tools API, and the planned MCP listing.
 Naming is collection-namespaced: the pipeline carries a base tool identity
-(`tool_name` on its query-input node, "search" when unset) and the exposed
-name appends the collection slug, so two collections sharing one pipeline
-never collide in a chat session and the pre-tools `search_<collection>`
-contract survives unchanged.
+(`tool_name` on its query-input node, "search" when unset, see
+`app.services.tool_naming`) and the exposed name appends the collection slug,
+so two collections sharing one pipeline never collide in a chat session and
+the pre-tools `search_<collection>` contract survives unchanged.
 """
 
 from __future__ import annotations
-
-import re
 
 from app.db import models
 from app.pipelines.interface import PipelineInterface, ToolOutputKind
@@ -19,26 +17,7 @@ from app.pipelines.variables import PipelineInputArgument, VariableType
 from app.schemas.retrieval import QueryArgumentRead
 from app.schemas.tools import CollectionToolRead
 from app.services.pipeline_resolution import ResolvedPipeline
-
-#: Base identity used when a pipeline's query-input node declares none.
-DEFAULT_TOOL_BASE_NAME = "search"
-
-
-def slugify_tool_name(value: str) -> str:
-    """Reduce a name to the provider-safe tool-name alphabet."""
-    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
-
-
-def tool_base_name(interface: PipelineInterface) -> str:
-    """Return the pipeline's base tool name (editor-declared, else "search")."""
-    declared = slugify_tool_name(interface.tool_name or "")
-    return declared or DEFAULT_TOOL_BASE_NAME
-
-
-def tool_exposed_name(base_name: str, collection_name: str) -> str:
-    """Namespace a base tool name by its collection for exposure."""
-    slug = slugify_tool_name(collection_name)
-    return f"{base_name}_{slug or 'collection'}"
+from app.services.tool_naming import tool_base_name, tool_exposed_name
 
 
 def tool_description(interface: PipelineInterface, collection: models.Collection) -> str:

@@ -27,6 +27,27 @@ from app.schemas.enums import IndexBackend
 DENSE_SLOT = "primary_index"
 SPARSE_SLOT = "bm25_index"
 
+#: Query-input node type id (matches `app.pipelines.nodes.io.RetrievalInputNode.type`).
+_QUERY_INPUT_NODE_TYPE = "retrieval.input"
+
+
+def with_tool_name(definition: PipelineDefinition, tool_name: str) -> PipelineDefinition:
+    """Return `definition` with its query-input node's `tool_name` overridden.
+
+    The default retrieval/tool-defaults definitions all declare an explicit
+    `tool_name` (`"search"`, `"count_documents"`, ...), so two pipelines built
+    from the same template collide on that name unless a test gives one a
+    distinct identity -- this is how tests do that without hand-building a
+    whole definition.
+    """
+    nodes = [
+        node.model_copy(update={"config": {**(node.config or {}), "tool_name": tool_name}})
+        if node.type == _QUERY_INPUT_NODE_TYPE
+        else node
+        for node in definition.nodes
+    ]
+    return definition.model_copy(update={"nodes": nodes})
+
 
 def expose_index_slots(
     session: Session,
