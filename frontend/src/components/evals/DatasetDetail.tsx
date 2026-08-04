@@ -1,5 +1,6 @@
 "use client";
 
+import { CorpusRetryAction } from "@/components/evals/CorpusRetryAction";
 import { DatasetDocumentsTable } from "@/components/evals/DatasetDocumentsTable";
 import { DatasetQueriesTable } from "@/components/evals/DatasetQueriesTable";
 import {
@@ -28,6 +29,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
     dataset,
     collections,
     collectionsLoading,
+    reloadCollections,
     pipelines,
     selected,
     selectCollection,
@@ -174,21 +176,39 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
 
               <div className="min-w-0 flex-1">
                 {selected ? (
-                  <DatasetDocumentsTable
-                    datasetId={datasetId}
-                    page={documents.data ?? null}
-                    loading={documents.loading}
-                    error={
-                      documents.error
-                        ? getErrorMessage(documents.error, "Could not load documents")
-                        : null
-                    }
-                    search={search}
-                    onSearch={setSearch}
-                    offset={offset}
-                    pageSize={DATASET_DOCS_PAGE_SIZE}
-                    onOffset={setOffset}
-                  />
+                  <>
+                    {selected.num_ready_documents < selected.num_documents && (
+                      <div className="flex flex-col gap-2 border-b border-hairline p-3">
+                        <p className="text-ui text-data-warn">
+                          {selected.num_documents - selected.num_ready_documents} of{" "}
+                          {selected.num_documents} materialized documents did not reach the index.
+                          Queries whose gold is among them cannot be scored.
+                        </p>
+                        <CorpusRetryAction
+                          collectionId={selected.id}
+                          onQueued={() => {
+                            reloadCollections();
+                            documents.reload();
+                          }}
+                        />
+                      </div>
+                    )}
+                    <DatasetDocumentsTable
+                      datasetId={datasetId}
+                      page={documents.data ?? null}
+                      loading={documents.loading}
+                      error={
+                        documents.error
+                          ? getErrorMessage(documents.error, "Could not load documents")
+                          : null
+                      }
+                      search={search}
+                      onSearch={setSearch}
+                      offset={offset}
+                      pageSize={DATASET_DOCS_PAGE_SIZE}
+                      onOffset={setOffset}
+                    />
+                  </>
                 ) : null}
               </div>
             </div>

@@ -396,6 +396,71 @@ def test_a_gold_document_that_never_indexed_is_excluded_not_scored_zero(
 
 
 @pytest.mark.usefixtures("stubbed_providers")
+def test_a_later_run_reingests_a_corpus_document_the_first_run_failed(
+    pg_search_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed corpus document is re-attempted by the next run, not skipped.
+
+    The eval collection is cache-keyed by (dataset, ingestion pipeline), and
+    the top-up check asks which sampled documents have no row yet. A failed
+    ingestion leaves its row behind, so it reads as present — which made one
+    bad document permanent for that cache key: every later run reused the
+    collection, skipped the document, and reported the gap as coverage
+    nothing could repair.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    embed_documents = _StubEmbedder.embed_documents
+    embedding_down = True
+
+    def flaky(self, chunks):  # type: ignore[no-untyped-def]
+        # docA is the Paris document; the run's other documents embed fine.
+        if embedding_down and any("Paris" in chunk.text for chunk in chunks):
+            raise RuntimeError("Embedding provider returned 503")
+        return embed_documents(self, chunks)
+
+    monkeypatch.setattr(_StubEmbedder, "embed_documents", flaky)
+    first = _start_run(session, user, concurrency=1)
+    EvalRunner(session).execute(first)
+    dataset = session.get(models.EvalDataset, first.dataset_id)
+    assert dataset is not None
+
+    with Session(session.get_bind()) as fresh:
+        failed_doc = fresh.exec(
+            select(models.Document).where(models.Document.name == "docA.txt")
+        ).one()
+        assert failed_doc.status == models.DocumentStatus.FAILED
+        stored_first = fresh.get(models.EvalRun, first.id)
+        assert stored_first is not None
+        assert stored_first.unscored_count == 1
+
+    # The provider recovers; the same configuration runs again.
+    embedding_down = False
+    second = _start_run(session, user, dataset=dataset, concurrency=1)
+    EvalRunner(session).execute(second)
+
+    assert len(CollectionRepository(session).list_eval_for_user(user.id)) == 1
+    with Session(session.get_bind()) as fresh:
+        doc_a = fresh.exec(
+            select(models.Document).where(models.Document.name == "docA.txt")
+        ).one()
+        assert doc_a.status == models.DocumentStatus.READY
+        assert doc_a.num_chunks > 0
+
+        stored = fresh.get(models.EvalRun, second.id)
+        assert stored is not None
+        assert stored.unscored_count == 0
+        item = fresh.exec(
+            select(models.EvalRunItem).where(
+                models.EvalRunItem.run_id == second.id,
+                models.EvalRunItem.query_external_id == "q1",
+            )
+        ).one()
+        assert item.indexed_gold_doc_ids == ["docA"]
+        assert item.metrics
+
+
+@pytest.mark.usefixtures("stubbed_providers")
 def test_progress_counts_the_phase_that_is_running(pg_search_session: Session) -> None:
     """Corpus documents and queries are different units and never summed.
 

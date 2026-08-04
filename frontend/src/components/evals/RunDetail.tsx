@@ -1,5 +1,6 @@
 "use client";
 
+import { CorpusRetryAction } from "@/components/evals/CorpusRetryAction";
 import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
@@ -98,6 +99,10 @@ function RunView({
  * is what makes the aggregates above a mean over fewer queries than requested.
  */
 function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: string | null }) {
+  const shortCorpus =
+    detail.coverage !== null &&
+    detail.coverage !== undefined &&
+    detail.coverage.corpus_ingested < detail.coverage.corpus_total;
   return (
     <>
       {actionError && <p className="max-w-[66ch] text-ui text-data-neg">{actionError}</p>}
@@ -119,11 +124,16 @@ function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: stri
           retrieval misses, and the aggregates below exclude them.
         </p>
       )}
-      {detail.coverage && detail.coverage.corpus_ingested < detail.coverage.corpus_total && (
+      {shortCorpus && detail.coverage && (
         <p className="max-w-[66ch] text-ui text-data-warn">
           {detail.coverage.corpus_ingested} of {detail.coverage.corpus_total} corpus documents
           indexed. Retrieval was only ever able to return the documents that made it in.
         </p>
+      )}
+      {/* The corpus is the thing that can still be repaired — the run's own
+          numbers are a record of what happened and never change. */}
+      {detail.eval_collection_id && (detail.unscored_count > 0 || shortCorpus) && (
+        <CorpusRetryAction collectionId={detail.eval_collection_id} />
       )}
     </>
   );

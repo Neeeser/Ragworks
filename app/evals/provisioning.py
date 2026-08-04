@@ -15,33 +15,31 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import logging
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, col, select
 
 from app.db import models
-from app.db.engine import session_scope
 from app.db.repositories import (
     CollectionPipelineBindingRepository,
     CollectionRepository,
     DocumentRepository,
 )
+from app.evals.corpus_documents import (
+    ProgressCallback,
+    external_id_from_name,
+    file_name_for,
+    ingest_all,
+    reached_the_index,
+    unindexed_documents,
+)
 from app.schemas.enums import CollectionPurpose
-from app.services.errors import InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
-from app.services.ingestion import IngestionService
 from app.services.pipelines import PipelineService
-
-logger = logging.getLogger(__name__)
 
 EVAL_CACHE_KEY = "eval_cache_key"
 EVAL_DATASET_KEY = "eval_dataset_id"
-
-ProgressCallback = Callable[[], None]
 
 
 @dataclass(frozen=True)
@@ -130,19 +128,27 @@ class EvalProvisioner:
     ) -> ProvisionResult:
         """Ensure an ingested eval collection exists for this cache key.
 
-        On reuse, the retrieval pipeline binding is updated and only the
-        sampled documents not already in the collection are materialized and
-        ingested — a larger run tops up the earlier run's collection. On a
-        fresh provision, every corpus document is ingested. Either way, a
-        document that fails to ingest is recorded (stage-0 funnel loss),
-        never fatal to the run.
+        On reuse, the retrieval pipeline binding is updated, the sampled
+        documents not already in the collection are materialized and ingested
+        — a larger run tops up the earlier run's collection — and the ones an
+        earlier run left out of the index are re-attempted. On a fresh
+        provision, every corpus document is ingested. Either way, a document
+        that fails to ingest is recorded (stage-0 funnel loss), never fatal
+        to the run.
         """
         existing = self.find_existing(user, spec.cache_key)
         if existing is not None:
             self._bind_retrieval(existing, spec.retrieval_pipeline)
-            missing = self._missing_docs(existing.id, corpus_docs)
-            if missing:
-                self._materialize_and_ingest(user, existing, missing, on_document_done, spec)
+            self._materialize_and_ingest(
+                user,
+                existing,
+                self._missing_docs(existing.id, corpus_docs),
+                on_document_done,
+                spec.concurrency,
+            )
+            self._reingest_unindexed(
+                user, existing, corpus_docs, on_document_done, spec.concurrency
+            )
             indexed, failed = self._ingestion_outcomes(existing.id)
             return ProvisionResult(
                 collection=existing,
@@ -183,7 +189,9 @@ class EvalProvisioner:
         self.session.commit()
         self.session.refresh(collection)
 
-        self._materialize_and_ingest(user, collection, corpus_docs, on_document_done, spec)
+        self._materialize_and_ingest(
+            user, collection, corpus_docs, on_document_done, spec.concurrency
+        )
         indexed, failed = self._ingestion_outcomes(collection.id)
         return ProvisionResult(
             collection=collection,
@@ -195,7 +203,7 @@ class EvalProvisioner:
     def document_mapping(self, collection_id: UUID) -> dict[str, str]:
         """Map Ragworks document UUIDs (str) to benchmark external doc ids."""
         return {
-            str(document.id): _external_id_from_name(document.name)
+            str(document.id): external_id_from_name(document.name)
             for document in DocumentRepository(self.session).list_for_collection(collection_id)
         }
 
@@ -211,7 +219,7 @@ class EvalProvisioner:
             document.name
             for document in DocumentRepository(self.session).list_for_collection(collection_id)
         }
-        return [doc for doc in corpus_docs if _file_name_for(doc.external_doc_id) not in present]
+        return [doc for doc in corpus_docs if file_name_for(doc.external_doc_id) not in present]
 
     def _bind_retrieval(
         self, collection: models.Collection, retrieval_pipeline: models.Pipeline
@@ -242,40 +250,51 @@ class EvalProvisioner:
         collection: models.Collection,
         corpus_docs: list[models.EvalDatasetDocument],
         on_document_done: ProgressCallback | None,
-        spec: ProvisionSpec,
+        concurrency: int,
     ) -> None:
-        """Write every corpus doc as a file, then ingest across the worker pool.
+        """Write every corpus doc as a file, then ingest it.
 
         Registration stays serial on the provisioner's session (fast, local,
-        and sibling-name checks want one writer). Ingestion is serial only
-        until the first document succeeds — that first ingest creates the
-        pipeline's indexes, so pooled workers never race index creation — then
-        the remainder fans out, each worker in its own session.
+        and sibling-name checks want one writer).
         """
+        if not corpus_docs:
+            return
         files = FileSystemService(self.session)
         document_ids = [
             self._register(files, user, collection, corpus_doc).id for corpus_doc in corpus_docs
         ]
         self.session.commit()
+        ingest_all(user.id, collection.id, document_ids, on_document_done, concurrency)
 
-        remaining = list(document_ids)
-        while remaining:
-            succeeded = _ingest_one(user.id, collection.id, remaining.pop(0))
-            if on_document_done is not None:
-                on_document_done()
-            if succeeded:
-                break
-        if not remaining:
+    def _reingest_unindexed(
+        self,
+        user: models.User,
+        collection: models.Collection,
+        corpus_docs: list[models.EvalDatasetDocument],
+        on_document_done: ProgressCallback | None,
+        concurrency: int,
+    ) -> None:
+        """Re-attempt sampled documents an earlier run left out of the index.
+
+        `_missing_docs` only sees documents that were never materialized, so a
+        document whose ingestion failed reads as present and is skipped —
+        without this the failure is permanent for this cache key and starting
+        another run could never repair it.
+        """
+        # Ingest workers wrote document statuses in their own sessions; drop
+        # this session's cached instances so the read reflects the database.
+        self.session.expire_all()
+        names = {file_name_for(doc.external_doc_id) for doc in corpus_docs}
+        stale = unindexed_documents(self.session, collection.id, names=names)
+        if not stale:
             return
-        with ThreadPoolExecutor(max_workers=max(spec.concurrency, 1)) as pool:
-            futures = [
-                pool.submit(_ingest_one, user.id, collection.id, document_id)
-                for document_id in remaining
-            ]
-            for future in as_completed(futures):
-                future.result()
-                if on_document_done is not None:
-                    on_document_done()
+        ingest_all(
+            user.id,
+            collection.id,
+            [document.id for document in stale],
+            on_document_done,
+            concurrency,
+        )
 
     @staticmethod
     def _register(
@@ -289,7 +308,7 @@ class EvalProvisioner:
         if corpus_doc.title:
             content = f"{corpus_doc.title}\n\n{corpus_doc.text}"
         spec = UploadSpec(
-            filename=_file_name_for(corpus_doc.external_doc_id),
+            filename=file_name_for(corpus_doc.external_doc_id),
             content_type="text/plain",
         )
         result = files.register_upload(user, collection, spec, io.BytesIO(content.encode("utf-8")))
@@ -308,47 +327,9 @@ class EvalProvisioner:
         indexed: set[str] = set()
         failed: set[str] = set()
         for document in DocumentRepository(self.session).list_for_collection(collection_id):
-            external_id = _external_id_from_name(document.name)
-            if document.status == models.DocumentStatus.READY and document.num_chunks > 0:
+            external_id = external_id_from_name(document.name)
+            if reached_the_index(document):
                 indexed.add(external_id)
             else:
                 failed.add(external_id)
         return indexed, failed
-
-
-def _ingest_one(user_id: UUID, collection_id: UUID, document_id: UUID) -> bool:
-    """Ingest one registered corpus document in its own session.
-
-    Worker-safe: loads its rows fresh and never touches the provisioner's
-    session. A failure is deliberately non-fatal, mirroring background
-    ingestion — the FAILED document row is the recorded outcome (stage-0
-    funnel loss), and one unparseable/failing doc must not kill the run.
-    """
-    with session_scope() as session:
-        user = session.get(models.User, user_id)
-        collection = session.get(models.Collection, collection_id)
-        document = session.get(models.Document, document_id)
-        if user is None or collection is None or document is None:
-            return False
-        try:
-            IngestionService(session).ingest_document(
-                user=user, collection=collection, document=document
-            )
-        except Exception:
-            # Deliberately broad: see docstring.
-            logger.exception("Eval corpus document %s failed to ingest", document.name)
-            return False
-        return True
-
-
-def _file_name_for(external_doc_id: str) -> str:
-    """Build the file name that encodes a corpus doc's external id."""
-    safe = external_doc_id.replace("/", "_")
-    if not safe:
-        raise InvalidInputError("Corpus document has an empty external id.")
-    return f"{safe}.txt"
-
-
-def _external_id_from_name(name: str) -> str:
-    """Recover the external doc id from the file/document name."""
-    return name.removesuffix(".txt")

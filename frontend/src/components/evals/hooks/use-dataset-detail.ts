@@ -72,6 +72,7 @@ export function useDatasetDetail(datasetId: string) {
     dataset,
     collections,
     collectionsLoading: allCollections.loading,
+    reloadCollections: allCollections.reload,
     pipelines,
     selected,
     selectCollection,
