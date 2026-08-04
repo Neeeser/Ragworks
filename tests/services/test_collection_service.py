@@ -27,6 +27,7 @@ from app.schemas.collections import CollectionCreate, CollectionUpdate
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
+from tests.utils.pipelines import with_tool_name
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 
 
@@ -87,8 +88,11 @@ def test_create_binds_tool_pipelines_in_order_with_the_first_primary(session: Se
     second = pipeline_service.create_pipeline(
         user=user,
         name="Second Tool",
-        definition=build_default_retrieval_pipeline(
-            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        definition=with_tool_name(
+            build_default_retrieval_pipeline(
+                embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+            ),
+            "second_tool",
         ),
     )
     session.commit()
@@ -128,6 +132,40 @@ def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
         CollectionService(session).create(
             user, CollectionCreate(name="Invalid", ingest_pipeline_id=retrieval_pipeline.id)
         )
+
+
+def test_create_rejects_two_same_named_tool_pipelines(session: Session) -> None:
+    """Two tool pipelines selected together in the wizard that both default to
+    (or both declare) the same tool name must be refused, naming both -- and
+    must leave no partial collection behind."""
+    user = _create_user(session)
+    pipeline_service = PipelineService(session)
+    defaults = pipeline_service.ensure_default_pipelines(user)
+    colliding = pipeline_service.create_pipeline(
+        user=user,
+        name="Colliding Tool",
+        definition=build_default_retrieval_pipeline(
+            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+        ),
+    )
+    session.commit()
+
+    with pytest.raises(InvalidInputError) as exc_info:
+        CollectionService(session).create(
+            user,
+            CollectionCreate(
+                name="Should Not Exist",
+                tool_pipeline_ids=[defaults.retrieval.id, colliding.id],
+            ),
+        )
+
+    message = str(exc_info.value)
+    assert defaults.retrieval.name in message
+    assert "Colliding Tool" in message
+    names = {
+        collection.name for collection in CollectionRepository(session).list_for_user(user.id)
+    }
+    assert "Should Not Exist" not in names
 
 
 def test_update_updates_fields(session: Session) -> None:

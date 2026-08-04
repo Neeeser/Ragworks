@@ -39,6 +39,7 @@ from app.services.pipeline_defaults import (
 from app.services.pipeline_defaults import (
     backfill_default_pipelines as backfill_default_pipelines,
 )
+from app.services.pipeline_tool_names import reject_tool_name_collision
 from app.services.pipeline_upgrades import (
     upgrade_stored_pipeline_definitions as upgrade_stored_pipeline_definitions,
 )
@@ -270,6 +271,7 @@ class PipelineService:
             if owner is None:
                 raise NotFoundError("Pipeline owner does not exist.")
             self._validate_before_persisting(owner, definition)
+            reject_tool_name_collision(self, pipeline, definition)
         if name is not None:
             pipeline.name = name
         if description is not None:

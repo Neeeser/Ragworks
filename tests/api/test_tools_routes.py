@@ -19,6 +19,7 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.services.pipelines import PipelineService
+from tests.utils.pipelines import with_tool_name
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
@@ -29,15 +30,26 @@ def _create_collection(client: TestClient) -> str:
 
 
 def _create_pipeline(
-    session: Session, user: models.User, *, callable_shape: bool, name: str
+    session: Session,
+    user: models.User,
+    *,
+    callable_shape: bool,
+    name: str,
+    tool_name: str | None = None,
 ) -> models.Pipeline:
+    """Create a pipeline; `tool_name` gives a callable one a distinct tool
+    identity so it can bind alongside a collection's own default "search"
+    tool without colliding."""
     build = build_default_retrieval_pipeline if callable_shape else build_default_ingestion_pipeline
+    definition = build(
+        embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
+    )
+    if tool_name is not None:
+        definition = with_tool_name(definition, tool_name)
     pipeline = PipelineService(session).create_pipeline(
         user=user,
         name=name,
-        definition=build(
-            embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"
-        ),
+        definition=definition,
     )
     session.commit()
     return pipeline
@@ -79,11 +91,33 @@ def test_adding_a_non_callable_pipeline_as_tool_is_rejected(
     assert response.status_code == 400
 
 
+def test_adding_a_duplicate_named_tool_is_rejected(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """A second tool pipeline that defaults to the same base name ("search")
+    as the collection's existing tool is refused over the wire, naming both
+    pipelines."""
+    collection_id = _create_collection(client)
+    duplicate = _create_pipeline(
+        session, auth_user, callable_shape=True, name="Duplicate Search"
+    )
+
+    response = client.post(
+        f"/api/collections/{collection_id}/tools",
+        json={"pipeline_id": str(duplicate.id)},
+    )
+
+    assert response.status_code == 400
+    assert "Duplicate Search" in response.json()["detail"]
+
+
 def test_tool_binding_management_roundtrip(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:
     collection_id = _create_collection(client)
-    second = _create_pipeline(session, auth_user, callable_shape=True, name="Second Search")
+    second = _create_pipeline(
+        session, auth_user, callable_shape=True, name="Second Search", tool_name="second_search"
+    )
 
     created = client.post(
         f"/api/collections/{collection_id}/tools",

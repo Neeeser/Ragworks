@@ -67,6 +67,25 @@ class CollectionPipelineBindingRepository(Repository):
             return None
         return binding
 
+    def list_for_pipeline(
+        self,
+        pipeline_id: UUID,
+        *,
+        role: models.BindingRole | None = None,
+    ) -> list[models.CollectionPipelineBinding]:
+        """List every binding that references a pipeline, optionally by role.
+
+        Used to find every collection a pipeline is bound into (e.g. to check
+        a tool-name edit against sibling bindings in each of those
+        collections) -- `pipeline_is_bound` only answers whether any exist.
+        """
+        statement = select(models.CollectionPipelineBinding).where(
+            col(models.CollectionPipelineBinding.pipeline_id) == pipeline_id,
+        )
+        if role is not None:
+            statement = statement.where(col(models.CollectionPipelineBinding.role) == role)
+        return list(self.session.exec(statement).all())
+
     def pipeline_is_bound(self, pipeline_id: UUID) -> bool:
         """Return True when any collection binds the pipeline (in any role)."""
         statement = (

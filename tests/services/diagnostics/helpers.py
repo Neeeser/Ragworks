@@ -16,6 +16,7 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.interface import PipelineInterface
 from app.pipelines.registry import default_registry
 from app.pipelines.settings import (
     PipelineSettings,
@@ -69,13 +70,30 @@ class _ResolvedStub:
 
     `static_definition` is the binding-resolved graph — the view any rule
     asking "what does this collection actually target?" must read, since the
-    answer varies per binding.
+    answer varies per binding. `interface` is only read by rules that need a
+    tool binding's derived interface (`DuplicateToolNameRule`).
     """
 
     settings: object
     pipeline: models.Pipeline
     static_definition: PipelineDefinition = dataclasses.field(
         default_factory=lambda: PipelineDefinition(nodes=[])
+    )
+    interface: PipelineInterface = dataclasses.field(
+        default_factory=lambda: PipelineInterface(callable=True)
+    )
+
+
+def make_tool_binding(name: str, tool_name: str | None) -> _ResolvedStub:
+    """Build a stand-in tool binding for `DuplicateToolNameRule` tests.
+
+    `tool_name=None` matches an unset query-input node (defaults to
+    "search").
+    """
+    return _ResolvedStub(
+        settings=None,
+        pipeline=models.Pipeline(user_id=uuid4(), name=name),
+        interface=PipelineInterface(callable=True, tool_name=tool_name),
     )
 
 
@@ -93,6 +111,7 @@ def make_context(
     session: object | None = None,
     user: models.User | None = None,
     has_ingestion_run: bool = False,
+    tool_bindings: list[_ResolvedStub] | None = None,
 ) -> DiagnosticContext:
     """Build a `DiagnosticContext` with the given resolved sides.
 
@@ -133,6 +152,7 @@ def make_context(
     ctx.retrieval_validation = retrieval_validation  # type: ignore[assignment]
     ctx.recent_ingestion_failures = recent_ingestion_failures or []
     ctx.recent_retrieval_failures = recent_retrieval_failures or []
+    ctx.tool_bindings = tool_bindings or []  # type: ignore[assignment]
     return ctx
 
 

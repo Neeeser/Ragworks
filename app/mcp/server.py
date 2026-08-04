@@ -28,7 +28,7 @@ from app.schemas.mcp import (
     McpModel,
     ServerCapabilities,
 )
-from app.services.tool_projection import slugify_tool_name
+from app.services.tool_naming import slugify_tool_name
 
 #: Reported as the server implementation version.
 SERVER_VERSION = "1"

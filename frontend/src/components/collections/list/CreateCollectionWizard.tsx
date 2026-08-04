@@ -32,6 +32,22 @@ const steps: WizardStep[] = [
   { id: "review", label: "Review", description: "Confirm and create the collection." },
 ];
 
+/**
+ * A pipeline's base tool identity: its query-input node's declared name, or
+ * "search" when unset. Mirrors the backend's `tool_base_name`
+ * (`app/services/tool_naming.py`) so the wizard can catch a same-collection
+ * name collision before submit instead of only after a 400 comes back.
+ */
+function toolBaseName(pipeline: Pipeline | undefined): string {
+  const declared = pipeline?.interface?.tool_name?.trim() ?? "";
+  const slug = declared
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+/, "")
+    .replace(/_+$/, "");
+  return slug || "search";
+}
+
 export function CreateCollectionWizard({
   open,
   token,
@@ -115,11 +131,28 @@ export function CreateCollectionWizard({
 
   const addTool = () => {
     if (!pipelineToAdd) return;
+    setMessage(null);
+    const candidate = pipelineById.get(pipelineToAdd);
+    const candidateBase = toolBaseName(candidate);
+    const collidingId = toolPipelineIds.find(
+      (id) => toolBaseName(pipelineById.get(id)) === candidateBase,
+    );
+    if (collidingId) {
+      const collidingName = pipelineById.get(collidingId)?.name ?? collidingId;
+      const candidateName = candidate?.name ?? pipelineToAdd;
+      setMessage(
+        `Pipelines '${collidingName}' and '${candidateName}' would both expose the tool ` +
+          `name '${candidateBase}' in this collection. Set a unique tool name (the ` +
+          "'tool_name' field) on the query-input node of one of them before adding it here.",
+      );
+      return;
+    }
     setToolPipelineIds((prev) => (prev.includes(pipelineToAdd) ? prev : [...prev, pipelineToAdd]));
     setPipelineToAdd("");
   };
 
   const removeTool = (pipelineId: string) => {
+    setMessage(null);
     setToolPipelineIds((prev) => prev.filter((id) => id !== pipelineId));
   };
 

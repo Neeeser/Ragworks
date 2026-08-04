@@ -35,8 +35,9 @@ from app.services.diagnostics.rules.runs import (
     RecentIngestionFailuresRule,
     RecentRetrievalFailuresRule,
 )
+from app.services.diagnostics.rules.tool_names import DuplicateToolNameRule
 from app.vectorstores.base import IndexStats
-from tests.services.diagnostics.helpers import StubProber, make_context
+from tests.services.diagnostics.helpers import StubProber, make_context, make_tool_binding
 
 replace = dataclasses.replace
 
@@ -221,6 +222,52 @@ def test_node_config_maps_validation_issues(base_ingestion):
     assert findings[0].severity == "error"
     assert findings[0].summary == "Embedder missing model"
     assert findings[0].resources[0].kind == "node"
+
+
+# -- duplicate tool names ----------------------------------------------------
+
+
+def test_duplicate_tool_name_flags_two_bindings_sharing_a_base_name():
+    """Legacy data (bound before the save-time check existed) is surfaced,
+    naming both pipelines, as a confirmed compatibility error."""
+    ctx = make_context(
+        tool_bindings=[
+            make_tool_binding("First Search", None),
+            make_tool_binding("Second Search", "search"),
+        ]
+    )
+
+    findings = DuplicateToolNameRule().evaluate(ctx)
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.severity == "error"
+    assert finding.confidence == "confirmed"
+    assert finding.category == "pipeline_compatibility"
+    assert "First Search" in finding.summary
+    assert "Second Search" in finding.summary
+    assert len(finding.resources) == 2
+
+
+def test_duplicate_tool_name_silent_when_names_differ():
+    ctx = make_context(
+        tool_bindings=[
+            make_tool_binding("Search", None),
+            make_tool_binding("Count", "count_documents"),
+        ]
+    )
+
+    assert DuplicateToolNameRule().evaluate(ctx) == []
+
+
+def test_duplicate_tool_name_silent_with_zero_or_one_binding():
+    assert DuplicateToolNameRule().evaluate(make_context()) == []
+    assert (
+        DuplicateToolNameRule().evaluate(
+            make_context(tool_bindings=[make_tool_binding("Solo", None)])
+        )
+        == []
+    )
 
 
 # -- run failures -----------------------------------------------------------
