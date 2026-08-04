@@ -167,9 +167,19 @@ class CollectionRepository(Repository):
         return self.session.exec(statement).first() is not None
 
     def count_by_user(self) -> dict[UUID, int]:
-        """Return a mapping of user id -> number of collections they own."""
-        statement = select(
-            models.Collection.user_id,
-            func.count(),
-        ).group_by(col(models.Collection.user_id))
+        """Return a mapping of user id -> number of collections they own.
+
+        Counts what `list_for_user` shows, so the admin roster agrees with
+        the user's own Collections page: eval collections are provisioned
+        scaffolding, and counting them reports storage a user never created
+        and cannot find.
+        """
+        statement = (
+            select(
+                models.Collection.user_id,
+                func.count(),
+            )
+            .where(col(models.Collection.system_purpose).is_(None))
+            .group_by(col(models.Collection.user_id))
+        )
         return dict(self.session.exec(statement).all())

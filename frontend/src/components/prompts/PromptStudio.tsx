@@ -4,6 +4,7 @@ import { GitFork, Library, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 
+import { useBenchModel } from "@/components/prompts/hooks/use-bench-model";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -194,6 +195,8 @@ export function PromptStudio({
 }: PromptStudioProps = {}) {
   const { token } = useAuth();
   const studio = usePromptStudio(token, { initialPromptId, trackUrl });
+  // Above the bench, which unmounts on every switch to the editor.
+  const bench = useBenchModel();
   const [tab, setTab] = useState<StudioTab>("editor");
   const [createOpen, setCreateOpen] = useState(false);
   const [forkOpen, setForkOpen] = useState(false);
@@ -329,7 +332,9 @@ export function PromptStudio({
                 }}
               />
             )}
-            {tab === "test" && <PromptTestBench detail={detail} draft={studio.draft} />}
+            {tab === "test" && (
+              <PromptTestBench detail={detail} draft={studio.draft} bench={bench} />
+            )}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">

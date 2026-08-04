@@ -32,6 +32,13 @@ type StatusDotProps = {
   tone: StatusTone;
   /** Omit for a bare dot inside a row that names the state elsewhere. */
   label?: string;
+  /**
+   * The state in words, for a bare dot that is the *only* thing carrying it.
+   * Domain language ("Covered" / "Not covered"), never the tone — a tone is a
+   * palette key, and the same `pos` means "ready", "covered", or "healthy"
+   * depending on the row.
+   */
+  srLabel?: string;
   className?: string;
 };
 
@@ -43,13 +50,18 @@ type StatusDotProps = {
  * live states. When `label` is given the text is rendered beside it, so the
  * state is readable without colour discrimination. A bare dot is only correct
  * where the state is already named in the same row.
+ *
+ * A bare dot is therefore decorative by default: the row that names the state
+ * is what a screen reader should read, and a second announcement beside it is
+ * noise. Where the dot is the only carrier of the state, the caller passes
+ * `srLabel` in its own domain's words.
  */
-export function StatusDot({ tone, label, className }: StatusDotProps) {
+export function StatusDot({ tone, label, srLabel, className }: StatusDotProps) {
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <span className={cn("h-[7px] w-[7px] shrink-0 rounded-[2px]", DOT[tone])} aria-hidden />
       {label ? <InstrumentLabel className={TEXT[tone]}>{label}</InstrumentLabel> : null}
-      {label ? null : <span className="sr-only">{tone}</span>}
+      {!label && srLabel ? <span className="sr-only">{srLabel}</span> : null}
     </span>
   );
 }
