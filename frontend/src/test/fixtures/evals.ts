@@ -51,6 +51,7 @@ export function makeEvalRunSummary(overrides: Partial<EvalRunSummary> = {}): Eva
     progress_done: 52,
     progress_total: 52,
     failed_count: 0,
+    unscored_count: 0,
     coverage: {
       corpus_ingested: 302,
       corpus_total: 5183,
@@ -84,6 +85,7 @@ export function makeEvalRunItem(overrides: Partial<EvalRunItem> = {}): EvalRunIt
     query_event_id: "qe-1",
     result_count: 2,
     gold_doc_ids: ["docA"],
+    indexed_gold_doc_ids: ["docA"],
     retrieved_document_ids: ["docA", "docB"],
     retrieved: [
       { chunk_id: "uuid-a:0", document_id: "docA", score: 0.91 },

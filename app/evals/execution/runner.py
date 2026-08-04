@@ -152,7 +152,6 @@ class EvalRunner:
         plan = self._build_plan(dataset, config, all_queries, qrels)
 
         run.status = EvalRunStatus.PROVISIONING.value
-        run.progress_total = len(plan.corpus_doc_ids) + len(plan.query_ids)
         self.session.add(run)
         self.session.commit()
 
@@ -160,11 +159,13 @@ class EvalRunner:
         if self._cancelled(run):
             return
 
+        queries = self._sampled_queries(all_queries, plan)
         run.status = EvalRunStatus.RUNNING.value
+        run.progress_total = len(queries)
+        run.progress_done = 0
         self.session.add(run)
         self.session.commit()
 
-        queries = self._sampled_queries(all_queries, plan)
         mapping = EvalProvisioner(self.session).document_mapping(provision.collection.id)
         funnel_inputs = self._evaluate_queries(
             run,
@@ -223,7 +224,12 @@ class EvalRunner:
             self.session.add(run)
             self.session.commit()
 
+        # Progress describes the phase now running, never a sum of the two:
+        # corpus documents and queries are different units, so "99/200" while
+        # ingesting reads as 200 documents and hides which half is moving.
         run.status = EvalRunStatus.INGESTING.value
+        run.progress_total = len(corpus_docs)
+        run.progress_done = 0
         self.session.add(run)
         self.session.commit()
         result = provisioner.provision(
@@ -239,7 +245,7 @@ class EvalRunner:
             on_document_done=bump,
         )
         if result.reused:
-            run.progress_done = len(plan.corpus_doc_ids)
+            run.progress_done = len(corpus_docs)
         run.eval_collection_id = result.collection.id
         self.session.add(run)
         self.session.commit()
@@ -324,6 +330,13 @@ class EvalRunner:
         """
         items = self.runs.list_items(run.id)
         run.failed_count = sum(1 for item in items if item.failed)
+        # Gold that never reached the index: a corpus outcome, counted apart
+        # from `failed_count` so a reader can tell an ingestion problem from a
+        # retrieval one. Their `metrics` is empty, so they contribute nothing
+        # to the mean rather than a zero that would drag it.
+        run.unscored_count = sum(
+            1 for item in items if not item.failed and item.gold_doc_ids and not item.metrics
+        )
         run.aggregate_metrics = aggregate_metrics_mean(
             [item.metrics for item in items if not item.failed]
         )

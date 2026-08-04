@@ -293,6 +293,10 @@ class EvalRunItemRead(BaseModel):
     query_event_id: UUID | None = None
     result_count: int
     gold_doc_ids: list[str]
+    #: The subset of `gold_doc_ids` that reached the index. Fewer than
+    #: `gold_doc_ids` means the query was scored against partial evidence;
+    #: empty (with gold present) means it was excluded from the aggregate.
+    indexed_gold_doc_ids: list[str] = []
     retrieved_document_ids: list[str]
     retrieved: list[EvalRetrievedChunk] = Field(default_factory=list)
     per_node_funnel: list[EvalItemNodeDocs] = Field(default_factory=list)
@@ -340,6 +344,9 @@ class EvalRunRead(BaseModel):
     progress_done: int
     progress_total: int
     failed_count: int = 0
+    #: Queries excluded from `aggregate_metrics` because none of their gold
+    #: documents were indexed — an ingestion outcome, not a retrieval one.
+    unscored_count: int = 0
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     funnel: FunnelSummary = Field(default_factory=FunnelSummary)
@@ -359,6 +366,9 @@ class EvalRunSummary(BaseModel):
     progress_done: int
     progress_total: int
     failed_count: int = 0
+    #: Queries excluded from `aggregate_metrics` because none of their gold
+    #: documents were indexed — an ingestion outcome, not a retrieval one.
+    unscored_count: int = 0
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     created_at: datetime
