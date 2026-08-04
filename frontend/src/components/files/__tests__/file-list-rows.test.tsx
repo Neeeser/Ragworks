@@ -1,10 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FilesBrowser } from "@/components/files/FilesBrowser";
 import * as apiModule from "@/lib/api";
 import { makeFileNode, makeFileTree, makeFolderNode } from "@/test/fixtures";
+import { stubFilesScrollViewport } from "@/test/virtualized-list";
 
 import type { FileIngestion } from "@/lib/types";
 
@@ -76,10 +77,20 @@ function renderBrowser() {
   );
 }
 
+let restoreScrollViewport: () => void;
+
 beforeEach(() => {
   api.fetchFileTree.mockResolvedValue(
     makeFileTree({ nodes: [folder, ready, failed, notIngested] }),
   );
+  // The row list is virtualized: jsdom never lays anything out, so the
+  // scroll container needs a real stubbed height or the list renders no
+  // rows at all, regardless of how few the folder holds.
+  restoreScrollViewport = stubFilesScrollViewport();
+});
+
+afterEach(() => {
+  restoreScrollViewport();
 });
 
 describe("the file list's row information", () => {

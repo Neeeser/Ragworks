@@ -207,9 +207,18 @@ type FileEntryRowProps = {
   onSelectFile: (file: FileNode) => void;
   onRetry: (file: FileNode) => void;
   onContextMenu: (node: FileNode, event: MouseEvent) => void;
+  /** Forwarded to `FileRowDetails` — see its docstring. */
+  onContentResize?: () => void;
 };
 
-/** One entry: a `DataRow`, its drag/drop wrapper, and its expanded chunk detail. */
+/**
+ * One entry: a `DataRow`, its drag/drop wrapper, and its expanded chunk detail.
+ *
+ * Renders as a fragment rather than owning its own list-item element: the
+ * virtualized list (`FileVirtualRows`) supplies the measured, positioned `<li>`
+ * this content sits inside, so the row separator and the measurement ref both
+ * live one level up.
+ */
 export function FileEntryRow({
   node,
   token,
@@ -221,11 +230,12 @@ export function FileEntryRow({
   onSelectFile,
   onRetry,
   onContextMenu,
+  onContentResize,
 }: FileEntryRowProps) {
   const ingestion = node.ingestion;
 
   return (
-    <li className="border-b border-hairline last:border-b-0">
+    <>
       {/* Only the row is draggable — the expanded chunk text below it has to
           stay selectable. */}
       <div
@@ -266,7 +276,9 @@ export function FileEntryRow({
           }
         />
       </div>
-      {expanded && ingestion ? <FileRowDetails ingestion={ingestion} token={token} /> : null}
-    </li>
+      {expanded && ingestion ? (
+        <FileRowDetails ingestion={ingestion} token={token} onContentResize={onContentResize} />
+      ) : null}
+    </>
   );
 }
