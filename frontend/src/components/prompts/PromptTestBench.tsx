@@ -14,12 +14,19 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { isNodeContext } from "./lib/contexts";
 
+import type { UseBenchModelResult } from "./hooks/use-bench-model";
 import type { PromptDraft } from "./hooks/use-prompt-studio";
-import type { CatalogModel, PromptDetail, PromptTestMessage } from "@/lib/types";
+import type { PromptDetail, PromptTestMessage } from "@/lib/types";
 
 interface PromptTestBenchProps {
   detail: PromptDetail;
   draft: PromptDraft;
+  /**
+   * Owned by the studio, not the bench: this component unmounts whenever the
+   * user switches to the editor, so a choice held here is lost on every
+   * edit-test cycle.
+   */
+  bench: UseBenchModelResult;
 }
 
 /**
@@ -40,10 +47,10 @@ interface RunOutcome {
  * structured-output engine path the pipeline nodes use — the engine returns
  * that whole, so it arrives in one piece rather than token by token.
  */
-export function PromptTestBench({ detail, draft }: PromptTestBenchProps) {
+export function PromptTestBench({ detail, draft, bench }: PromptTestBenchProps) {
+  const { model, setModel } = bench;
   const { token, user } = useAuth();
   const { llmModels } = useLlmModelCatalog(token, user?.id);
-  const [model, setModel] = useState<CatalogModel | null>(null);
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
