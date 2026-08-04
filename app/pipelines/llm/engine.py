@@ -30,6 +30,7 @@ from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import ProviderResolver
 from app.providers.throttle import (
     RetryOutcome,
+    RetryPolicy,
     call_with_retries,
     connection_slot,
 )
@@ -39,6 +40,15 @@ logger = logging.getLogger(__name__)
 
 #: Tool name used when structured output is forced through a tool call.
 STRUCTURED_TOOL_NAME = "emit_structured_output"
+
+#: Output-shape failures (truncated JSON, a missing field, an out-of-range
+#: index) are not congestion — there is nothing to back off from, and the
+#: point is to catch a one-off bad generation, not to wait out a provider.
+#: Kept deliberately small and separate from the transport `RetryPolicy`
+#: (see `call_with_retries`'s `retryable` parameter): merging the two would
+#: retry a genuine 429 twice as long as configured, or apply backoff to a
+#: failure with nothing to back off from.
+_OUTPUT_SHAPE_RETRY_POLICY = RetryPolicy(attempts=2, base_delay=0.0, max_delay=0.0)
 
 ValuesT = TypeVar("ValuesT")
 
@@ -81,6 +91,9 @@ class LlmEngine:
         self._provider: ChatProvider = providers.chat(config.connection_id)
         self._concurrency = providers.request_concurrency(config.connection_id)
         self._rpm = providers.request_rpm(config.connection_id)
+        #: Resolved once by the resolver at run construction (see
+        #: `ProviderResolver.__init__`), never re-read per call.
+        self._retry_policy: RetryPolicy = providers.retry_policy
         #: Ingestion runs are strict; query-time runs degrade with warnings.
         self.strict: bool = strict
         self.warnings: list[str] = []
@@ -132,22 +145,48 @@ class LlmEngine:
         schema: dict[str, Any],
         validate: Callable[[dict[str, Any]], ValuesT],
     ) -> LlmCallOutcome[ValuesT]:
-        """One throttled, retried, validated structured call."""
-        outcome = RetryOutcome()
+        """One throttled, retried, validated structured call.
+
+        Two retry layers, deliberately not merged (see
+        `_OUTPUT_SHAPE_RETRY_POLICY`): the transport policy retries
+        `_request` alone, with backoff, on provider faults; the output-shape
+        policy retries the whole request-and-validate pair, without backoff,
+        on `LlmOutputError` — which is why `validate` now runs *inside* the
+        retry rather than after it, and why a schema miss re-issues the
+        request rather than re-validating the same bad payload.
+        """
+        transport_outcome = RetryOutcome()
+        shape_outcome = RetryOutcome()
+
+        def attempt() -> tuple[ValuesT, TokenUsage]:
+            payload, usage = call_with_retries(
+                lambda: self._request(prompt_pair, schema),
+                policy=self._retry_policy,
+                outcome=transport_outcome,
+            )
+            return validate(payload), usage
+
         try:
             with connection_slot(self._connection_id, self._concurrency, rpm=self._rpm):
-                payload, usage = call_with_retries(
-                    lambda: self._request(prompt_pair, schema), outcome=outcome
+                values, usage = call_with_retries(
+                    attempt,
+                    policy=_OUTPUT_SHAPE_RETRY_POLICY,
+                    retryable=_is_output_shape_error,
+                    outcome=shape_outcome,
                 )
-            values = validate(payload)
         except Exception as exc:
             if self.strict or not _is_degradable(exc):
                 raise
-            message = f"{self._node_label}: LLM call failed after retries — {exc}"
+            retries = transport_outcome.retries + shape_outcome.retries
+            message = _failure_message(self._node_label, exc, retries)
             logger.warning("%s", message)
             self.warnings.append(message)
-            return LlmCallOutcome(values=None, retries=outcome.retries, error=str(exc))
-        return LlmCallOutcome(values=values, usage=usage, retries=outcome.retries)
+            return LlmCallOutcome(values=None, retries=retries, error=str(exc))
+        return LlmCallOutcome(
+            values=values,
+            usage=usage,
+            retries=transport_outcome.retries + shape_outcome.retries,
+        )
 
     def _request(
         self, prompt_pair: tuple[str, str], schema: dict[str, Any]
@@ -225,6 +264,26 @@ def _is_degradable(exc: Exception) -> bool:
     return is_external_provider_error(exc) or isinstance(exc, LlmOutputError)
 
 
+def _is_output_shape_error(exc: Exception) -> bool:
+    """The predicate for the output-shape retry layer — never provider faults.
+
+    Kept separate from `is_retryable` (`app.providers.throttle`) on purpose:
+    that predicate is for transport callers and must never learn about a
+    pipeline-engine-specific error type, and this one must never start
+    matching provider exceptions — the two failure classes stay independent.
+    """
+    return isinstance(exc, LlmOutputError)
+
+
+def _failure_message(node_label: str, exc: Exception, retries: int) -> str:
+    """Describe what actually happened — zero retries is not "after retries"."""
+    if retries == 0:
+        return f"{node_label}: LLM call failed — {exc}"
+    if retries == 1:
+        return f"{node_label}: LLM call failed after 1 retry — {exc}"
+    return f"{node_label}: LLM call failed after {retries} retries — {exc}"
+
+
 def _extract_payload(message: dict[str, Any]) -> dict[str, Any]:
     """Read the structured payload from a response message.
 
@@ -249,7 +308,19 @@ def _extract_payload(message: dict[str, Any]) -> dict[str, Any]:
     if isinstance(content, list):
         text = "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
         return parse_payload(text)
-    raise LlmOutputError("Model response carried no content.")
+    # Empty rather than malformed: on a reasoning model, hidden thinking
+    # tokens can consume the entire max_output_tokens budget before any
+    # answer text is produced, which looks identical to this from here —
+    # the completion simply carries no `content` at all. Naming the same
+    # field a truncated-JSON failure names is the actionable fix in both
+    # cases, not a guess: an empty response has no other common cause worth
+    # naming instead.
+    raise LlmOutputError(
+        "Model response carried no content — if this model exposes "
+        "reasoning/thinking tokens, they may have used the entire "
+        "max_output_tokens budget before producing an answer. Raise "
+        "max_output_tokens."
+    )
 
 
 def _token_usage(usage: dict[str, Any]) -> TokenUsage:
